@@ -128,6 +128,17 @@ type AsyncControlFlowStateCore =
         readonly defaultTarget: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "switch-compare";
+        readonly id: number;
+        readonly statement: ts.SwitchStatement;
+        readonly expression: ts.Expression;
+        readonly discriminatorResultSlot: number;
+        readonly caseResultSlot: number | null;
+        readonly match: AsyncControlFlowTarget;
+        readonly miss: AsyncControlFlowTarget;
+        readonly releaseDiscriminatorOnMiss: boolean;
+    }
+    | {
         readonly kind: "catch-bind";
         readonly id: number;
         readonly binding: ts.BindingName | null;
@@ -735,6 +746,54 @@ export function planAsyncControlFlowGraph(
             next,
         }, context.exceptionTarget);
     };
+    const buildExpressionResult = (
+        expression: ts.Expression,
+        resultSlot: number,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        if (!containsAwait(expression)) {
+            const id = reserve();
+            return setState({
+                kind: "expression-complete",
+                id,
+                expression,
+                assignment: null,
+                completion: null,
+                branch: null,
+                switchDispatch: null,
+                resultSlot,
+                awaitExprs: [],
+                next,
+            }, context.exceptionTarget);
+        }
+        return buildConditionalValueExpression(
+            expression,
+            null,
+            next,
+            context,
+            null,
+            null,
+            resultSlot,
+        ) ?? buildLogicalValueExpression(
+            expression,
+            null,
+            next,
+            context,
+            null,
+            null,
+            resultSlot,
+        ) ?? buildExpressionSequence(
+            expression,
+            null,
+            next,
+            context,
+            null,
+            null,
+            null,
+            resultSlot,
+        );
+    };
 
     const buildSequence = (
         sequence: readonly ts.Statement[],
@@ -1109,31 +1168,11 @@ export function planAsyncControlFlowGraph(
             next: nextTarget,
         }, context.exceptionTarget);
         if (sourceResultSlot === null) return init;
-        const sourceEntry = buildConditionalValueExpression(
+        const sourceEntry = buildExpressionResult(
             statement.expression,
-            null,
+            sourceResultSlot,
             init,
             context,
-            null,
-            null,
-            sourceResultSlot,
-        ) ?? buildLogicalValueExpression(
-            statement.expression,
-            null,
-            init,
-            context,
-            null,
-            null,
-            sourceResultSlot,
-        ) ?? buildExpressionSequence(
-            statement.expression,
-            null,
-            init,
-            context,
-            null,
-            null,
-            null,
-            sourceResultSlot,
         );
         if (!sourceEntry) {
             supported = false;
@@ -1282,17 +1321,11 @@ export function planAsyncControlFlowGraph(
         }
         if (ts.isSwitchStatement(statement)) {
             const discriminator = unwrapExpression(statement.expression);
-            const switchAwaitExpr = ts.isAwaitExpression(discriminator) ? discriminator : null;
-            if (switchAwaitExpr) awaitCount++;
             const clauses: { expression: ts.Expression | null; target: AsyncControlFlowTarget }[] =
                 new Array(statement.caseBlock.clauses.length);
             let fallthrough = next;
             for (let index = statement.caseBlock.clauses.length - 1; index >= 0 && supported; index--) {
                 const clause = statement.caseBlock.clauses[index]!;
-                if (ts.isCaseClause(clause) && containsAwait(clause.expression)) {
-                    supported = false;
-                    return next;
-                }
                 const entry = buildSequence(clause.statements, fallthrough, {
                     ...context,
                     breakTarget: next,
@@ -1305,6 +1338,53 @@ export function planAsyncControlFlowGraph(
             }
             const defaultClause = clauses.find((clause) => clause.expression === null);
             const defaultTarget = defaultClause?.target ?? next;
+            const hasAwaitedCase = statement.caseBlock.clauses.some(
+                (clause) => ts.isCaseClause(clause) && containsAwait(clause.expression),
+            );
+            if (hasAwaitedCase) {
+                const discriminatorResultSlot = expressionResults.push(statement.expression) - 1;
+                let testEntry = defaultTarget;
+                let hasLaterCase = false;
+                for (let index = statement.caseBlock.clauses.length - 1; index >= 0; index--) {
+                    const clause = statement.caseBlock.clauses[index]!;
+                    if (!ts.isCaseClause(clause)) continue;
+                    const caseResultSlot = containsAwait(clause.expression)
+                        ? expressionResults.push(clause.expression) - 1
+                        : null;
+                    const compareId = reserve();
+                    const compare = setState({
+                        kind: "switch-compare",
+                        id: compareId,
+                        statement,
+                        expression: clause.expression,
+                        discriminatorResultSlot,
+                        caseResultSlot,
+                        match: clauses[index]!.target,
+                        miss: testEntry,
+                        releaseDiscriminatorOnMiss: !hasLaterCase,
+                    }, context.exceptionTarget);
+                    const caseEntry = caseResultSlot === null
+                        ? compare
+                        : buildExpressionResult(clause.expression, caseResultSlot, compare, context);
+                    if (!caseEntry) {
+                        supported = false;
+                        return next;
+                    }
+                    testEntry = caseEntry;
+                    hasLaterCase = true;
+                }
+                const entry = buildExpressionResult(
+                    statement.expression,
+                    discriminatorResultSlot,
+                    testEntry,
+                    context,
+                );
+                if (entry) return entry;
+                supported = false;
+                return next;
+            }
+            const switchAwaitExpr = ts.isAwaitExpression(discriminator) ? discriminator : null;
+            if (switchAwaitExpr) awaitCount++;
             if (!switchAwaitExpr && containsAwait(discriminator)) {
                 const switchDispatch = { statement, clauses, defaultTarget };
                 const entry = buildConditionalValueExpression(
@@ -1685,6 +1765,9 @@ export function planAsyncControlFlowGraph(
             case "branch":
             case "await-condition":
                 targets.push(state.truthy, state.falsy);
+                break;
+            case "switch-compare":
+                targets.push(state.match, state.miss);
                 break;
             case "iterator-init":
             case "async-iterator-init":

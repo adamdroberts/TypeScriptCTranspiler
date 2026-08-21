@@ -1,0 +1,3 @@
+{
+  "description": "Ordered async CFG switch comparisons support suspending case expressions, default placement, early match, rejection, and awaited finalization"
+}

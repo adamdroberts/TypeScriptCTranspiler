@@ -1,0 +1,5 @@
+first: one A>
+middle: two A>A>B>
+default: default A>A>B>A>B>C>
+string: hit A>A>B>A>B>C>
+rejected: case-failure A>A>B>A>B>C>R>F>

@@ -26461,6 +26461,16 @@ class Emitter {
                     ));
                     if (promiseType.kind !== "promise") return false;
                 }
+            } else if (stateNode.kind === "switch-compare") {
+                this.assertExhaustiveSwitch(stateNode.statement);
+                const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
+                if (!discriminatorType ||
+                    (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
+                        discriminatorType.kind !== "boolean")) return false;
+                if (stateNode.caseResultSlot !== null) {
+                    const caseType = expressionResultTypes[stateNode.caseResultSlot];
+                    if (!caseType || caseType.kind === "void" || caseType.kind === "never") return false;
+                }
             } else if (stateNode.kind === "await-dispose") {
                 for (const declaration of stateNode.declarations) {
                     if (!ts.isIdentifier(declaration.name)) return false;
@@ -26891,6 +26901,38 @@ class Emitter {
                             stateNode.defaultTarget,
                         );
                     }
+                } else if (stateNode.kind === "switch-compare") {
+                    const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
+                    if (!discriminatorType ||
+                        (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
+                            discriminatorType.kind !== "boolean")) return false;
+                    const discriminator = `state->expression_result_${stateNode.discriminatorResultSlot}`;
+                    const caseValue = stateNode.caseResultSlot === null
+                        ? this.emitExpr(stateNode.expression)
+                        : {
+                            c: `state->expression_result_${stateNode.caseResultSlot}`,
+                            ty: expressionResultTypes[stateNode.caseResultSlot]!,
+                        };
+                    const coercedCase = this.coerce(caseValue, discriminatorType, stateNode.expression);
+                    const matches = this.freshTemp("_async_cfg_switch_matches");
+                    callback.line(`bool ${matches} = ${discriminatorType.kind === "string"
+                        ? `tsc_str_eq(${discriminator}, ${coercedCase})`
+                        : `(${discriminator} == ${coercedCase})`};`);
+                    if (stateNode.caseResultSlot !== null) {
+                        const caseType = expressionResultTypes[stateNode.caseResultSlot]!;
+                        callback.line(`state->expression_result_${stateNode.caseResultSlot} = ${this.zeroValue(caseType)};`);
+                        if (caseType.kind === "value") {
+                            callback.line(`state->expression_result_${stateNode.caseResultSlot}_gc_root = NULL;`);
+                        }
+                    }
+                    callback.open(`if (${matches})`);
+                    callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                    emitTransition(stateNode.match.id);
+                    callback.close();
+                    if (stateNode.releaseDiscriminatorOnMiss) {
+                        callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                    }
+                    emitTransition(stateNode.miss.id);
                 } else if (stateNode.kind === "await-condition") {
                     const promiseType = this.prepareType(mapTsType(
                         stateNode.awaitExpr.expression,
