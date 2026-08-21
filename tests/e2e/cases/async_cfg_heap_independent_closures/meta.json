@@ -1,0 +1,3 @@
+{
+  "description": "Heap-independent local synchronous and async closure values retain their own function context while stored across canonical async CFG suspension"
+}

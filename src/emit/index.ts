@@ -26191,6 +26191,24 @@ class Emitter {
                 return type.kind === "string" || type.kind === "number" ||
                     type.kind === "boolean" || type.kind === "bigint";
             },
+            isHeapIndependentNestedFunction: (node) => {
+                if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
+                if (this.collectClosureCaptures(node).length !== 0) return false;
+                let safe = true;
+                const visit = (current: ts.Node): void => {
+                    if (!safe) return;
+                    if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+                    if (current.kind === ts.SyntaxKind.ThisKeyword ||
+                        current.kind === ts.SyntaxKind.SuperKeyword ||
+                        ts.isIdentifier(current) && current.text === "arguments") {
+                        safe = false;
+                        return;
+                    }
+                    ts.forEachChild(current, visit);
+                };
+                visit(node);
+                return safe;
+            },
         });
         if (!graph) return false;
 
@@ -48716,7 +48734,24 @@ class Emitter {
         this.closureEnvScopes.push(envBindings);
         this.argumentValueScopes.push(argumentScope);
         this.argumentValueTypeScopes.push(argumentTypeScope);
+        // A closure implementation is emitted recursively at its creation
+        // site, but executes as a distinct ECMAScript function.  Do not let
+        // the enclosing function's control context reinterpret this body's
+        // return/throw/disposal behavior (in particular, a synchronous
+        // closure created in an async CFG must not return a Promise).
+        const outerAsyncFunctionStack = this.asyncFunctionStack;
+        const outerContinuationReturnTargets = this.asyncAwaitContinuationReturnTargets;
+        const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
+        const outerTailFunctionStack = this.tailFunctionStack;
+        const outerSyncUsingScopes = this.syncUsingScopes;
+        const outerTryDepth = this.tryDepth;
         const outerGeneratorStack = this.generatorStack;
+        this.asyncFunctionStack = [];
+        this.asyncAwaitContinuationReturnTargets = [];
+        this.asyncAwaitContinuationAdapterDepth = 0;
+        this.tailFunctionStack = [];
+        this.syncUsingScopes = [];
+        this.tryDepth = 0;
         this.generatorStack = [];
         try {
             if (isGenerator) {
@@ -48792,6 +48827,12 @@ class Emitter {
             }
         } finally {
             this.generatorStack = outerGeneratorStack;
+            this.tryDepth = outerTryDepth;
+            this.syncUsingScopes = outerSyncUsingScopes;
+            this.tailFunctionStack = outerTailFunctionStack;
+            this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
+            this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;
+            this.asyncFunctionStack = outerAsyncFunctionStack;
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
             this.closureEnvScopes.pop();

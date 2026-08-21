@@ -260,6 +260,7 @@ export interface AsyncControlFlowGraph {
 export interface AsyncControlFlowPlannerOptions {
     readonly isStableSynchronousTail: (expression: ts.Expression) => boolean;
     readonly isStableBeforeSuspension?: (expression: ts.Expression) => boolean;
+    readonly isHeapIndependentNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
 }
 
 interface LoopTargets {
@@ -339,11 +340,16 @@ export function planAsyncControlFlowGraph(
         visit(node);
         return found;
     };
-    const containsNestedFunctionOrClass = (node: ts.Node): boolean => {
+    const containsUnsupportedNestedFunctionOrClass = (node: ts.Node): boolean => {
         let found = false;
         const visit = (current: ts.Node): void => {
             if (found) return;
-            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) {
+            if (current !== node && ts.isFunctionLike(current)) {
+                if (options.isHeapIndependentNestedFunction?.(current)) return;
+                found = true;
+                return;
+            }
+            if (current !== node && ts.isClassLike(current)) {
                 found = true;
                 return;
             }
@@ -1430,7 +1436,7 @@ export function planAsyncControlFlowGraph(
                 return buildLoop(statement.statement, next, context, statement.label.text);
             }
             if ((ts.isForInStatement(statement.statement) || ts.isForOfStatement(statement.statement)) &&
-                !containsNestedFunctionOrClass(statement)) {
+                !containsUnsupportedNestedFunctionOrClass(statement)) {
                 if (!(ts.isForOfStatement(statement.statement) && statement.statement.awaitModifier) &&
                     opaqueSynchronousLoopSupported(statement.statement, statement.label.text)) {
                     const id = reserve();
@@ -1446,7 +1452,7 @@ export function planAsyncControlFlowGraph(
             return buildLoop(statement, next, context, null);
         }
         if ((ts.isForInStatement(statement) || ts.isForOfStatement(statement)) &&
-            !containsNestedFunctionOrClass(statement)) {
+            !containsUnsupportedNestedFunctionOrClass(statement)) {
             if (!(ts.isForOfStatement(statement) && statement.awaitModifier) &&
                 opaqueSynchronousLoopSupported(statement)) {
                 const id = reserve();
@@ -1909,7 +1915,7 @@ export function planAsyncControlFlowGraph(
             }
         }
         if (containsAwait(statement) ||
-            containsNestedFunctionOrClass(statement) ||
+            containsUnsupportedNestedFunctionOrClass(statement) ||
             ((ts.isForInStatement(statement) || ts.isForOfStatement(statement)) &&
                 !opaqueSynchronousLoopSupported(statement)) ||
             ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
