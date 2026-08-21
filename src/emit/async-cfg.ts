@@ -139,10 +139,10 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
-        readonly kind: "switch";
+        readonly kind: "switch-dispatch";
         readonly id: number;
         readonly statement: ts.SwitchStatement;
-        readonly awaitExpr: ts.AwaitExpression | null;
+        readonly discriminatorResultSlot: number;
         readonly clauses: readonly {
             readonly expression: ts.Expression | null;
             readonly target: AsyncControlFlowTarget;
@@ -235,14 +235,6 @@ type AsyncControlFlowStateCore =
             readonly truthy: AsyncControlFlowTarget;
             readonly falsy: AsyncControlFlowTarget;
             readonly nullish?: AsyncControlFlowTarget;
-        } | null;
-        readonly switchDispatch: {
-            readonly statement: ts.SwitchStatement;
-            readonly clauses: readonly {
-                readonly expression: ts.Expression | null;
-                readonly target: AsyncControlFlowTarget;
-            }[];
-            readonly defaultTarget: AsyncControlFlowTarget;
         } | null;
         readonly resultSlot: number | null;
         readonly awaitExprs: readonly ts.AwaitExpression[];
@@ -540,6 +532,13 @@ export function planAsyncControlFlowGraph(
             }
         }
     };
+    const collectDirectLexicalBindings = (
+        statements: readonly ts.Statement[],
+    ): ts.BindingName[] => statements.flatMap((statement) =>
+        ts.isVariableStatement(statement) &&
+            (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0
+            ? statement.declarationList.declarations.map((declaration) => declaration.name)
+            : []);
     const buildExpressionSequence = (
         expression: ts.Expression,
         assignment: ts.Identifier | null,
@@ -551,11 +550,6 @@ export function planAsyncControlFlowGraph(
             readonly truthy: AsyncControlFlowTarget;
             readonly falsy: AsyncControlFlowTarget;
             readonly nullish?: AsyncControlFlowTarget;
-        } | null = null,
-        switchDispatch: {
-            readonly statement: ts.SwitchStatement;
-            readonly clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[];
-            readonly defaultTarget: AsyncControlFlowTarget;
         } | null = null,
         resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
@@ -575,7 +569,6 @@ export function planAsyncControlFlowGraph(
             assignment,
             completion,
             branch,
-            switchDispatch,
             resultSlot,
             awaitExprs: plan.awaitExprs,
             next,
@@ -671,11 +664,6 @@ export function planAsyncControlFlowGraph(
         readonly falsy: AsyncControlFlowTarget;
         readonly nullish?: AsyncControlFlowTarget;
     } | null;
-    type ExpressionSwitchDispatch = {
-        readonly statement: ts.SwitchStatement;
-        readonly clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[];
-        readonly defaultTarget: AsyncControlFlowTarget;
-    } | null;
     const buildConditionRoute3 = (
         expression: ts.Expression,
         truthy: AsyncControlFlowTarget,
@@ -769,7 +757,6 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         completion: ExpressionCompletion = null,
-        switchDispatch: ExpressionSwitchDispatch = null,
         resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
         const current = unwrapExpression(expression);
@@ -781,7 +768,6 @@ export function planAsyncControlFlowGraph(
                 next,
                 context,
                 completion,
-                switchDispatch,
                 resultSlot,
             ) ?? buildLogicalValueExpression(
                 arm,
@@ -789,7 +775,6 @@ export function planAsyncControlFlowGraph(
                 next,
                 context,
                 completion,
-                switchDispatch,
                 resultSlot,
             );
             if (nested) return nested;
@@ -801,7 +786,6 @@ export function planAsyncControlFlowGraph(
                     context,
                     completion,
                     null,
-                    switchDispatch,
                     resultSlot,
                 );
             }
@@ -813,7 +797,6 @@ export function planAsyncControlFlowGraph(
                 assignment,
                 completion,
                 branch: null,
-                switchDispatch,
                 resultSlot,
                 awaitExprs: [],
                 next,
@@ -830,7 +813,6 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         completion: ExpressionCompletion = null,
-        switchDispatch: ExpressionSwitchDispatch = null,
         resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
         const current = unwrapExpression(expression);
@@ -844,14 +826,14 @@ export function planAsyncControlFlowGraph(
             (!ts.isIdentifier(left) && !options.isStableBeforeSuspension?.(left))) return null;
         const complete = (value: ts.Expression): AsyncControlFlowTarget | null => {
             const nested = buildConditionalValueExpression(
-                value, assignment, next, context, completion, switchDispatch, resultSlot,
+                value, assignment, next, context, completion, resultSlot,
             ) ?? buildLogicalValueExpression(
-                value, assignment, next, context, completion, switchDispatch, resultSlot,
+                value, assignment, next, context, completion, resultSlot,
             );
             if (nested) return nested;
             if (containsAwait(value)) {
                 return buildExpressionSequence(
-                    value, assignment, next, context, completion, null, switchDispatch, resultSlot,
+                    value, assignment, next, context, completion, null, resultSlot,
                 );
             }
             const id = reserve();
@@ -862,7 +844,6 @@ export function planAsyncControlFlowGraph(
                 assignment,
                 completion,
                 branch: null,
-                switchDispatch,
                 resultSlot,
                 awaitExprs: [],
                 next,
@@ -884,7 +865,6 @@ export function planAsyncControlFlowGraph(
             assignment: null,
             completion: null,
             branch: takeRight,
-            switchDispatch: null,
             resultSlot: null,
             awaitExprs: [],
             next,
@@ -918,7 +898,6 @@ export function planAsyncControlFlowGraph(
                 assignment: null,
                 completion: null,
                 branch: null,
-                switchDispatch: null,
                 resultSlot,
                 awaitExprs: [],
                 next,
@@ -930,7 +909,6 @@ export function planAsyncControlFlowGraph(
             next,
             context,
             null,
-            null,
             resultSlot,
         ) ?? buildLogicalValueExpression(
             expression,
@@ -938,14 +916,12 @@ export function planAsyncControlFlowGraph(
             next,
             context,
             null,
-            null,
             resultSlot,
         ) ?? buildExpressionSequence(
             expression,
             null,
             next,
             context,
-            null,
             null,
             null,
             resultSlot,
@@ -976,11 +952,7 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
     ): AsyncControlFlowTarget => {
         const entry = buildSequence(block.statements, next, context);
-        const bindings = block.statements.flatMap((statement) =>
-            ts.isVariableStatement(statement) &&
-                (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0
-                ? statement.declarationList.declarations.map((declaration) => declaration.name)
-                : []);
+        const bindings = collectDirectLexicalBindings(block.statements);
         if (bindings.length === 0) return entry;
         const id = reserve();
         return setState({ kind: "scope-enter", id, bindings, next: entry }, context.exceptionTarget);
@@ -1554,7 +1526,6 @@ export function planAsyncControlFlowGraph(
             );
         }
         if (ts.isSwitchStatement(statement)) {
-            const discriminator = unwrapExpression(statement.expression);
             const clauses: { expression: ts.Expression | null; target: AsyncControlFlowTarget }[] =
                 new Array(statement.caseBlock.clauses.length);
             let fallthrough = next;
@@ -1572,11 +1543,12 @@ export function planAsyncControlFlowGraph(
             }
             const defaultClause = clauses.find((clause) => clause.expression === null);
             const defaultTarget = defaultClause?.target ?? next;
+            const discriminatorResultSlot = expressionResults.push(statement.expression) - 1;
             const hasAwaitedCase = statement.caseBlock.clauses.some(
                 (clause) => ts.isCaseClause(clause) && containsAwait(clause.expression),
             );
+            let selectionEntry: AsyncControlFlowTarget;
             if (hasAwaitedCase) {
-                const discriminatorResultSlot = expressionResults.push(statement.expression) - 1;
                 let testEntry = defaultTarget;
                 let hasLaterCase = false;
                 for (let index = statement.caseBlock.clauses.length - 1; index >= 0; index--) {
@@ -1607,56 +1579,39 @@ export function planAsyncControlFlowGraph(
                     testEntry = caseEntry;
                     hasLaterCase = true;
                 }
-                const entry = buildExpressionResult(
-                    statement.expression,
+                selectionEntry = testEntry;
+            } else {
+                const dispatchId = reserve();
+                selectionEntry = setState({
+                    kind: "switch-dispatch",
+                    id: dispatchId,
+                    statement,
                     discriminatorResultSlot,
-                    testEntry,
-                    context,
-                );
-                if (entry) return entry;
-                supported = false;
-                return next;
+                    clauses,
+                    defaultTarget,
+                }, context.exceptionTarget);
             }
-            const switchAwaitExpr = ts.isAwaitExpression(discriminator) ? discriminator : null;
-            if (switchAwaitExpr) awaitCount++;
-            if (!switchAwaitExpr && containsAwait(discriminator)) {
-                const switchDispatch = { statement, clauses, defaultTarget };
-                const entry = buildConditionalValueExpression(
-                    discriminator,
-                    null,
-                    next,
-                    context,
-                    null,
-                    switchDispatch,
-                ) ?? buildLogicalValueExpression(
-                    discriminator,
-                    null,
-                    next,
-                    context,
-                    null,
-                    switchDispatch,
-                ) ?? buildExpressionSequence(
-                    discriminator,
-                    null,
-                    next,
-                    context,
-                    null,
-                    null,
-                    switchDispatch,
-                );
-                if (entry) return entry;
-                supported = false;
-                return next;
-            }
-            const id = reserve();
-            return setState({
-                kind: "switch",
-                id,
-                statement,
-                awaitExpr: switchAwaitExpr,
-                clauses,
-                defaultTarget,
+            const switchBindings = statement.caseBlock.clauses.flatMap((clause) =>
+                collectDirectLexicalBindings(clause.statements));
+            // The CaseBlock environment is created after the discriminator
+            // and before the first case expression, even when no lexical
+            // declarations contribute captured cells.
+            const scopeId = reserve();
+            selectionEntry = setState({
+                kind: "scope-enter",
+                id: scopeId,
+                bindings: switchBindings,
+                next: selectionEntry,
             }, context.exceptionTarget);
+            const entry = buildExpressionResult(
+                statement.expression,
+                discriminatorResultSlot,
+                selectionEntry,
+                context,
+            );
+            if (entry) return entry;
+            supported = false;
+            return next;
         }
         if (ts.isTryStatement(statement)) {
             const buildCatchEntry = (
@@ -2009,9 +1964,7 @@ export function planAsyncControlFlowGraph(
                 targets.push(state.next);
                 break;
             case "expression-complete":
-                if (state.switchDispatch) {
-                    targets.push(...state.switchDispatch.clauses.map((clause) => clause.target), state.switchDispatch.defaultTarget);
-                } else if (state.branch) {
+                if (state.branch) {
                     targets.push(state.branch.truthy, state.branch.falsy);
                     if (state.branch.nullish) targets.push(state.branch.nullish);
                 } else if (state.completion?.kind === "return" && state.completion.target) {
@@ -2042,7 +1995,7 @@ export function planAsyncControlFlowGraph(
             case "logical-condition":
                 targets.push(state.truthy, state.falsy, state.nullish);
                 break;
-            case "switch":
+            case "switch-dispatch":
                 targets.push(...state.clauses.map((clause) => clause.target), state.defaultTarget);
                 break;
             case "throw-route":
@@ -2101,7 +2054,6 @@ export function planAsyncControlFlowGraph(
         state.kind === "await-next" || state.kind === "await-dispose" ||
         state.kind === "async-iterator-next" || state.kind === "async-iterator-close" ||
         state.kind === "expression-await" ||
-        (state.kind === "switch" && state.awaitExpr !== null) ||
         (state.kind === "return-route" && state.completion.awaitExpr !== null)
             ? 1
             : 0

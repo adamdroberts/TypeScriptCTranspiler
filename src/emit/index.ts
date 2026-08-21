@@ -26527,7 +26527,7 @@ class Emitter {
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") return false;
             } else if (stateNode.kind === "expression-complete") {
                 if (stateNode.resultSlot !== null) {
-                    if (stateNode.assignment || stateNode.completion || stateNode.branch || stateNode.switchDispatch) {
+                    if (stateNode.assignment || stateNode.completion || stateNode.branch) {
                         return false;
                     }
                     const storageType = expressionResultTypes[stateNode.resultSlot];
@@ -26539,21 +26539,10 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(stateNode.assignment);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
-                if (stateNode.switchDispatch) {
-                    this.assertExhaustiveSwitch(stateNode.switchDispatch.statement);
-                    const discriminatorType = this.prepareType(mapType(stateNode.expression, this.checker));
-                    if (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                        discriminatorType.kind !== "boolean") return false;
-                }
-            } else if (stateNode.kind === "switch") {
+            } else if (stateNode.kind === "switch-dispatch") {
                 this.assertExhaustiveSwitch(stateNode.statement);
-                const discriminatorType = stateNode.awaitExpr
-                    ? this.prepareType(mapTsType(
-                        stateNode.awaitExpr,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr),
-                        this.checker,
-                    ))
-                    : this.prepareType(mapType(stateNode.statement.expression, this.checker));
+                const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
+                if (!discriminatorType) return false;
                 if (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
                     discriminatorType.kind !== "boolean") return false;
             } else if (stateNode.kind === "switch-compare") {
@@ -27195,33 +27184,19 @@ class Emitter {
                     const truthy = this.truthyC(storedCondition, stateNode.expression);
                     callback.line(`state->pc = (${truthy}) ? ${stateNode.truthy.id} : ${stateNode.falsy.id};`);
                     callback.line("continue;");
-                } else if (stateNode.kind === "switch") {
-                    if (stateNode.awaitExpr) {
-                        const promiseType = this.prepareType(mapTsType(
-                            stateNode.awaitExpr.expression,
-                            this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                            this.checker,
-                        ));
-                        const awaitedType = this.prepareType(mapTsType(
-                            stateNode.awaitExpr,
-                            this.checker.getTypeAtLocation(stateNode.awaitExpr),
-                            this.checker,
-                        ));
-                        emitAwaitSuspension(
-                            stateNode.awaitExpr,
-                            stateNode.exceptionTarget?.target.id ?? null,
-                        );
-                        const fulfilled = awaitFulfilledValue(promiseType);
-                        const value = this.coerce(fulfilled, awaitedType, stateNode.awaitExpr);
-                        callback.line("state->awaiting = false;");
-                        emitSwitchDispatch({ c: value, ty: awaitedType }, stateNode.clauses, stateNode.defaultTarget);
-                    } else {
-                        emitSwitchDispatch(
-                            this.emitExpr(stateNode.statement.expression),
-                            stateNode.clauses,
-                            stateNode.defaultTarget,
-                        );
-                    }
+                } else if (stateNode.kind === "switch-dispatch") {
+                    const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
+                    if (!discriminatorType ||
+                        (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
+                            discriminatorType.kind !== "boolean")) return false;
+                    const discriminator = this.freshTemp("_async_cfg_switch_discriminator");
+                    callback.line(`${discriminatorType.c} const ${discriminator} = state->expression_result_${stateNode.discriminatorResultSlot};`);
+                    callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                    emitSwitchDispatch(
+                        { c: discriminator, ty: discriminatorType },
+                        stateNode.clauses,
+                        stateNode.defaultTarget,
+                    );
                 } else if (stateNode.kind === "switch-compare") {
                     const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
                     if (!discriminatorType ||
@@ -27542,12 +27517,6 @@ class Emitter {
                             callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
                         }
                         emitTransition(stateNode.next.id);
-                    } else if (stateNode.switchDispatch) {
-                        emitSwitchDispatch(
-                            result,
-                            stateNode.switchDispatch.clauses,
-                            stateNode.switchDispatch.defaultTarget,
-                        );
                     } else if (stateNode.branch) {
                         if (stateNode.branch.mode === "tri") {
                             const nullishTarget = stateNode.branch.nullish;

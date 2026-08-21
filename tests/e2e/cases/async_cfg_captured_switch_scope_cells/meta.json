@@ -1,0 +1,3 @@
+{
+  "description": "One CaseBlock scope-entry collection preserves captured clause bindings across direct and awaited case selection, fallthrough, suspension, and repeated runtime switch execution"
+}
