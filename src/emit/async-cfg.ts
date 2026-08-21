@@ -2390,7 +2390,9 @@ export function planAsyncControlFlowGraph(
             containsUnsupportedNestedFunctionOrClass(statement) ||
             ((ts.isForInStatement(statement) || ts.isForOfStatement(statement)) &&
                 !opaqueSynchronousLoopSupported(statement)) ||
-            ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+            (ts.isFunctionDeclaration(statement) &&
+                !options.isSupportedNestedFunction?.(statement)) ||
+            ts.isClassDeclaration(statement)) {
             supported = false;
             return next;
         }

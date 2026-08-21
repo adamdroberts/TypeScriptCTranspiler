@@ -1,0 +1,3 @@
+{
+  "description": "Function-scoped local declarations without outer captures are lifted through the canonical async CFG path, including a nested async declaration with its own suspension graph"
+}

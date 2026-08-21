@@ -1,9 +1,10 @@
-async function unsupportedNestedDeclaration(): Promise<number> {
+async function unsupportedCapturedDeclaration(): Promise<number> {
+    const offset = 2;
     await Promise.resolve(1);
     function nested(): number {
-        return 2;
+        return offset;
     }
     return nested();
 }
 
-unsupportedNestedDeclaration().then(console.log);
+unsupportedCapturedDeclaration().then((value) => console.log(value));

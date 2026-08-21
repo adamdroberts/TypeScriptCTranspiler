@@ -311,6 +311,7 @@ interface AsyncAwaitContinuationReturnTarget {
 
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration =
+    | ts.FunctionDeclaration
     | ts.ArrowFunction
     | ts.FunctionExpression
     | ts.MethodDeclaration
@@ -542,6 +543,7 @@ class Emitter {
     private referencedLocalFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedLocalClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedVariables = new WeakSet<ts.VariableDeclaration>();
+    private localFunctionNames = new WeakMap<ts.FunctionDeclaration, string>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -14961,6 +14963,21 @@ class Emitter {
         };
     }
 
+    private forEachReferencedLocalFunction(
+        sf: ts.SourceFile,
+        visit: (fn: ts.FunctionDeclaration) => void,
+    ): void {
+        const walk = (node: ts.Node): void => {
+            if (ts.isFunctionDeclaration(node) &&
+                !this.isTopLevelValueDeclaration(node) &&
+                this.referencedLocalFunctions.has(node)) {
+                visit(node);
+            }
+            ts.forEachChild(node, walk);
+        };
+        walk(sf);
+    }
+
     private emitModule(sf: ts.SourceFile, modId: string): void {
         this.currentModuleId = modId;
         this.currentSf = sf;
@@ -15022,6 +15039,11 @@ class Emitter {
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowPrototype(lift);
                 }
             }
+            this.forEachReferencedLocalFunction(sf, (local) => {
+                if (this.isSupportedLocalFunctionDeclaration(local)) {
+                    this.emitFunctionPrototype(local);
+                }
+            });
             for (const classExpr of commonJsClassExpressions) {
                 this.emitClassPrototypes(classExpr as unknown as ts.ClassDeclaration);
             }
@@ -15045,6 +15067,11 @@ class Emitter {
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowBody(lift);
                 }
             }
+            this.forEachReferencedLocalFunction(sf, (local) => {
+                if (this.isSupportedLocalFunctionDeclaration(local)) {
+                    this.emitFunctionBody(local);
+                }
+            });
             for (const classExpr of commonJsClassExpressions) {
                 this.emitClassBodies(classExpr as unknown as ts.ClassDeclaration);
             }
@@ -15343,6 +15370,61 @@ class Emitter {
         return mangleIdent(parts.join("_"));
     }
 
+    /**
+     * Local function declarations are emitted as file-scope C functions, so
+     * their source-level names need a deterministic scope-qualified spelling.
+     * The source offset is part of the key because two function-scoped
+     * declarations may legally share the same identifier text.
+     */
+    private localFunctionCName(fd: ts.FunctionDeclaration): string {
+        const existing = this.localFunctionNames.get(fd);
+        if (existing) return existing;
+        const sf = fd.getSourceFile();
+        const moduleId = this.graph.fileToModuleId.get(sf.fileName) ?? "module";
+        const offset = fd.getStart(sf);
+        const name = mangleIdent(`${moduleId}_local_${fd.name?.text ?? "function"}_${offset}`);
+        this.localFunctionNames.set(fd, name);
+        return name;
+    }
+
+    /**
+     * A function-scoped declaration can be lifted without changing observable
+     * scope only when it has no outer captures or dynamic lexical dependencies.
+     * Block-level declarations remain fail-closed until their lexical
+     * environment is represented explicitly by the shared IR.
+     */
+    private isSupportedLocalFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
+        if (!fd.name || !fd.body || this.isTopLevelValueDeclaration(fd) ||
+            !this.isPrunableLocalFunction(fd) || this.isGenericFunction(fd)) {
+            return false;
+        }
+        if (!ts.isBlock(fd.parent)) return false;
+        const owner = fd.parent.parent;
+        const ownerBody = ts.isFunctionDeclaration(owner) ||
+            ts.isFunctionExpression(owner) ||
+            ts.isArrowFunction(owner) ||
+            ts.isMethodDeclaration(owner) ||
+            ts.isGetAccessorDeclaration(owner) ||
+            ts.isSetAccessorDeclaration(owner)
+            ? owner.body
+            : undefined;
+        if (ownerBody !== fd.parent) return false;
+        if (this.collectClosureCaptures(fd).length > 0) return false;
+        let safe = true;
+        const visit = (node: ts.Node): void => {
+            if (!safe || (node !== fd && (ts.isFunctionLike(node) || ts.isClassLike(node)))) return;
+            if (node.kind === ts.SyntaxKind.ThisKeyword ||
+                node.kind === ts.SyntaxKind.SuperKeyword ||
+                (ts.isIdentifier(node) && node.text === "arguments")) {
+                safe = false;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(fd.body);
+        return safe;
+    }
+
     private identifierName(id: ts.Identifier): string {
         const aliasTarget = this.importAliasTargetDeclaration(id);
         const aliasName = aliasTarget ? this.declarationCName(aliasTarget) : null;
@@ -15351,6 +15433,9 @@ class Emitter {
         const asyncLexicalName = sym ? this.asyncAwaitLexicalStorageNames.get(sym) : undefined;
         if (asyncLexicalName) return asyncLexicalName;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isFunctionDeclaration(decl) && !this.isTopLevelValueDeclaration(decl)) {
+            return this.localFunctionCName(decl);
+        }
         if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
             const parts = [...this.declarationNamespaceParts(decl), id.text];
             return mangleIdent(parts.join("_"));
@@ -15651,7 +15736,11 @@ class Emitter {
     }
 
     private functionDeclarationCName(fd: ts.FunctionDeclaration): string {
-        if (fd.name) return this.declaredName(fd.name);
+        if (fd.name) {
+            return this.isTopLevelValueDeclaration(fd)
+                ? this.declaredName(fd.name)
+                : this.localFunctionCName(fd);
+        }
         if (this.isDefaultExportDeclaration(fd)) return this.defaultExportCName(fd);
         unsupported(fd, "anonymous top-level function");
     }
@@ -26198,6 +26287,9 @@ class Emitter {
                     type.kind === "boolean" || type.kind === "bigint";
             },
             isSupportedNestedFunction: (node) => {
+                if (ts.isFunctionDeclaration(node)) {
+                    return this.isSupportedLocalFunctionDeclaration(node);
+                }
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
                 for (const capture of this.collectClosureCaptures(node)) {
                     if (!this.currentFunctionCellForSymbol(capture.symbol) &&
@@ -38541,7 +38633,13 @@ class Emitter {
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
             if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
-            unsupported(stmt, "referenced local function declarations are not supported yet");
+            if (!this.isSupportedLocalFunctionDeclaration(stmt)) {
+                unsupported(stmt, "referenced local function declaration is not supported by the canonical lowering");
+            }
+            // Supported local declarations are emitted as scope-qualified
+            // file-scope C functions.  The declaration itself has no runtime
+            // statement to execute; direct references resolve to that symbol.
+            return;
         }
         if (ts.isClassDeclaration(stmt)) {
             if (!this.shouldEmitLocalClassDeclaration(stmt)) return;
