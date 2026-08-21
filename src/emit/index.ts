@@ -26499,6 +26499,12 @@ class Emitter {
                 if (!binding || !validateCfgBinding(binding)) return false;
             } else if (stateNode.kind === "catch-bind") {
                 if (stateNode.binding && !validateCfgBinding(stateNode.binding)) return false;
+            } else if (stateNode.kind === "binding-init") {
+                if (!validateCfgBinding(stateNode.binding)) return false;
+                const storageType = expressionResultTypes[stateNode.resultSlot];
+                if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                    return false;
+                }
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
                 stateNode.kind === "await-completion" ||
                 stateNode.kind === "await-next" ||
@@ -26521,9 +26527,19 @@ class Emitter {
                     this.checker,
                 ));
                 if (promiseType.kind !== "promise") return false;
-                if (stateNode.kind === "await-next" && stateNode.assignment) {
-                    const symbol = this.symbolForIdentifier(stateNode.assignment);
-                    if (!symbol || (awaitedType.kind !== "void" && !fieldBySymbol.has(symbol))) return false;
+                if (stateNode.kind === "await-next") {
+                    if (stateNode.assignment && stateNode.resultSlot !== null) return false;
+                    if (stateNode.assignment) {
+                        const symbol = this.symbolForIdentifier(stateNode.assignment);
+                        if (!symbol || (awaitedType.kind !== "void" && !fieldBySymbol.has(symbol))) return false;
+                    }
+                    if (stateNode.resultSlot !== null) {
+                        const storageType = expressionResultTypes[stateNode.resultSlot];
+                        if (awaitedType.kind === "void" || awaitedType.kind === "never" ||
+                            !storageType || storageType.kind === "void" || storageType.kind === "never") {
+                            return false;
+                        }
+                    }
                 }
             }
         }
@@ -26668,6 +26684,47 @@ class Emitter {
                 }
                 emitTransition(defaultTarget.id);
             };
+            const emitCfgBinding = (
+                binding: ts.BindingName | ts.Expression,
+                source: EmitResult,
+                label: string,
+            ): void => {
+                const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
+                    const symbol = this.symbolForIdentifier(identifier);
+                    const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                    if (!local) unsupported(identifier, `${label} binding is missing CFG storage`);
+                    callback.line(`state->${local.field} = ${this.coerce(value, local.type, identifier)};`);
+                    if (local.type.kind === "value") {
+                        callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
+                    }
+                };
+                if (ts.isIdentifier(binding)) {
+                    assignIdentifier(binding, source);
+                    return;
+                }
+                if (!ts.isObjectBindingPattern(binding) && !ts.isArrayBindingPattern(binding)) {
+                    unsupported(binding, `${label} requires an identifier or binding pattern`);
+                }
+                const boxedSource = this.freshTemp("_async_cfg_binding_source");
+                callback.line(`tsc_value_t const ${boxedSource} = ${this.coerce(source, T_VALUE, binding)};`);
+                callback.line(`if (tsc_value_is_nullish(${boxedSource})) tsc_throw_str(tsc_str_from_cstr("Cannot destructure null or undefined"));`);
+                if (binding.elements.length === 0) return;
+                if (ts.isObjectBindingPattern(binding)) {
+                    this.emitDynamicObjectBindingsForOf(
+                        callback,
+                        binding,
+                        boxedSource,
+                        (descriptor, value) => assignIdentifier(descriptor.identifier, value),
+                    );
+                } else {
+                    this.emitDynamicArrayBindingPatternForOf(
+                        callback,
+                        binding,
+                        boxedSource,
+                        assignIdentifier,
+                    );
+                }
+            };
             for (const stateNode of [...graph.states].sort((left, right) => left.id - right.id)) {
                 callback.open(`case ${stateNode.id}:`);
                 callback.line(`state->exception_pc = ${stateNode.exceptionTarget?.target.id ?? -1};`);
@@ -26797,39 +26854,12 @@ class Emitter {
                     callback.close();
                     const item = this.freshTemp("_async_cfg_iterator_value");
                     callback.line(`tsc_value_t ${item} = tsc_value_get_prop(${step}, tsc_str_from_lit("value", 5));`);
-                    const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
-                        const symbol = this.symbolForIdentifier(identifier);
-                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (!local) unsupported(identifier, "async iterator binding is missing CFG storage");
-                        callback.line(`state->${local.field} = ${this.coerce(value, local.type, identifier)};`);
-                        if (local.type.kind === "value") {
-                            callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
-                        }
-                    };
                     const initializer = stateNode.statement.initializer;
                     const binding = ts.isVariableDeclarationList(initializer)
                         ? initializer.declarations[0]?.name ?? null
                         : initializer;
                     if (!binding) return false;
-                    if (ts.isIdentifier(binding)) {
-                        assignIdentifier(binding, { c: item, ty: T_VALUE });
-                    } else if (ts.isObjectBindingPattern(binding)) {
-                        this.emitDynamicObjectBindingsForOf(
-                            callback,
-                            binding,
-                            item,
-                            (descriptor, value) => assignIdentifier(descriptor.identifier, value),
-                        );
-                    } else if (ts.isArrayBindingPattern(binding)) {
-                        this.emitDynamicArrayBindingPatternForOf(
-                            callback,
-                            binding,
-                            item,
-                            assignIdentifier,
-                        );
-                    } else {
-                        return false;
-                    }
+                    emitCfgBinding(binding, { c: item, ty: T_VALUE }, "async iterator");
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-close") {
                     const iterator = `state->async_iterator_${stateNode.slot}`;
@@ -27120,7 +27150,16 @@ class Emitter {
                         promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
-                    if (stateNode.assignment) {
+                    if (stateNode.resultSlot !== null) {
+                        const storageType = expressionResultTypes[stateNode.resultSlot];
+                        if (!storageType || storageType.kind === "void" || storageType.kind === "never" ||
+                            awaitedType.kind === "void" || awaitedType.kind === "never") return false;
+                        const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                        callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.coerce(fulfilled, storageType, stateNode.awaitExpr)};`);
+                        if (storageType.kind === "value") {
+                            callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
+                        }
+                    } else if (stateNode.assignment) {
                         const symbol = this.symbolForIdentifier(stateNode.assignment);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (awaitedType.kind !== "void") {
@@ -27315,37 +27354,29 @@ class Emitter {
                     }
                 } else if (stateNode.kind === "catch-bind") {
                     if (stateNode.binding) {
-                        const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
-                            const symbol = this.symbolForIdentifier(identifier);
-                            const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                            if (!local) unsupported(identifier, "catch binding is missing CFG storage");
-                            callback.line(`state->${local.field} = ${this.coerce(value, local.type, identifier)};`);
-                            if (local.type.kind === "value") {
-                                callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
-                            }
-                        };
-                        if (ts.isIdentifier(stateNode.binding)) {
-                            assignIdentifier(stateNode.binding, { c: "state->exception_value", ty: T_VALUE });
-                        } else if (ts.isObjectBindingPattern(stateNode.binding)) {
-                            if (stateNode.binding.elements.length > 0) {
-                                this.emitDynamicObjectBindingsForOf(
-                                    callback,
-                                    stateNode.binding,
-                                    "state->exception_value",
-                                    (descriptor, value) => assignIdentifier(descriptor.identifier, value),
-                                );
-                            }
-                        } else if (stateNode.binding.elements.length > 0) {
-                            this.emitDynamicArrayBindingPatternForOf(
-                                callback,
-                                stateNode.binding,
-                                "state->exception_value",
-                                assignIdentifier,
-                            );
-                        }
+                        emitCfgBinding(
+                            stateNode.binding,
+                            { c: "state->exception_value", ty: T_VALUE },
+                            "catch",
+                        );
                     }
                     callback.line("state->exception_value = tsc_value_undefined();");
                     callback.line("state->exception_value_gc_root = NULL;");
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "binding-init") {
+                    const storageType = expressionResultTypes[stateNode.resultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                    emitCfgBinding(
+                        stateNode.binding,
+                        { c: `state->expression_result_${stateNode.resultSlot}`, ty: storageType },
+                        "declaration",
+                    );
+                    callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.zeroValue(storageType)};`);
+                    if (storageType.kind === "value") {
+                        callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = NULL;`);
+                    }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "throw-route") {
                     const thrown = this.emitExpr(stateNode.expression);

@@ -1,0 +1,3 @@
+values: L:2:E:H:T1,T2:kept:fallback:first:X:last O>A>D>1>2>3>
+typed: typed:5 O>A>D>1>2>3>
+rejected: binding-source-failure O>A>D>1>2>3>F>

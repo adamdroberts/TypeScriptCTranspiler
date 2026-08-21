@@ -109,6 +109,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly awaitExpr: ts.AwaitExpression;
         readonly assignment: ts.Identifier | null;
+        readonly resultSlot: number | null;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -143,6 +144,13 @@ type AsyncControlFlowStateCore =
         readonly kind: "catch-bind";
         readonly id: number;
         readonly binding: ts.BindingName | null;
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "binding-init";
+        readonly id: number;
+        readonly binding: ts.BindingName;
+        readonly resultSlot: number;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -388,13 +396,22 @@ export function planAsyncControlFlowGraph(
         flatten(expression);
         return values.length > 1 ? values : null;
     };
+    const collectBindingIdentifiers = (name: ts.BindingName): readonly ts.Identifier[] => {
+        if (ts.isIdentifier(name)) return [name];
+        const identifiers: ts.Identifier[] = [];
+        for (const element of name.elements) {
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            identifiers.push(...collectBindingIdentifiers(element.name));
+        }
+        return identifiers;
+    };
     const collectDeclarations = (statement: ts.VariableStatement): void => {
         for (const declaration of statement.declarationList.declarations) {
-            if (!ts.isIdentifier(declaration.name)) {
-                supported = false;
-                return;
+            if (ts.isIdentifier(declaration.name)) {
+                declarations.push(declaration);
+            } else {
+                bindingIdentifiers.push(...collectBindingIdentifiers(declaration.name));
             }
-            declarations.push(declaration);
         }
     };
     const buildExpressionSequence = (
@@ -753,6 +770,19 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget | null => {
+        const current = unwrapExpression(expression);
+        if (ts.isAwaitExpression(current)) {
+            const id = reserve();
+            awaitCount++;
+            return setState({
+                kind: "await-next",
+                id,
+                awaitExpr: current,
+                assignment: null,
+                resultSlot,
+                next,
+            }, context.exceptionTarget);
+        }
         if (!containsAwait(expression)) {
             const id = reserve();
             return setState({
@@ -1041,16 +1071,6 @@ export function planAsyncControlFlowGraph(
             entry = buildStatement(initializer, entry, context);
         }
         return entry;
-    };
-
-    const collectBindingIdentifiers = (name: ts.BindingName): readonly ts.Identifier[] => {
-        if (ts.isIdentifier(name)) return [name];
-        const identifiers: ts.Identifier[] = [];
-        for (const element of name.elements) {
-            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
-            identifiers.push(...collectBindingIdentifiers(element.name));
-        }
-        return identifiers;
     };
 
     const buildAsyncIteratorLoop = (
@@ -1597,7 +1617,9 @@ export function planAsyncControlFlowGraph(
             return setState({ kind: "completion", id, completion }, context.exceptionTarget);
         }
         if (ts.isVariableStatement(statement)) {
-            if (statement.declarationList.declarations.length > 1 && containsAwait(statement)) {
+            if (statement.declarationList.declarations.length > 1 &&
+                (containsAwait(statement) || statement.declarationList.declarations.some(
+                    (declaration) => !ts.isIdentifier(declaration.name)))) {
                 // Declaration-list initializers execute from left to right. Split
                 // an await-bearing list into the same ordered declarations so
                 // each suspension is represented by the ordinary declaration
@@ -1619,11 +1641,31 @@ export function planAsyncControlFlowGraph(
                 const initializer = declaration.initializer
                     ? unwrapExpression(declaration.initializer)
                     : null;
-                if (initializer && ts.isAwaitExpression(initializer)) {
-                    if (!ts.isIdentifier(declaration.name)) {
+                if (!ts.isIdentifier(declaration.name)) {
+                    if (!initializer || containsSuspendingBindingExpression(declaration.name)) {
                         supported = false;
                         return next;
                     }
+                    const resultSlot = expressionResults.push(declaration.initializer!) - 1;
+                    const bindId = reserve();
+                    const bind = setState({
+                        kind: "binding-init",
+                        id: bindId,
+                        binding: declaration.name,
+                        resultSlot,
+                        next,
+                    }, context.exceptionTarget);
+                    const entry = buildExpressionResult(
+                        declaration.initializer!,
+                        resultSlot,
+                        bind,
+                        context,
+                    );
+                    if (entry) return entry;
+                    supported = false;
+                    return next;
+                }
+                if (initializer && ts.isAwaitExpression(initializer)) {
                     awaitCount++;
                     const id = reserve();
                     return setState({
@@ -1631,14 +1673,11 @@ export function planAsyncControlFlowGraph(
                         id,
                         awaitExpr: initializer,
                         assignment: declaration.name,
+                        resultSlot: null,
                         next,
                     }, context.exceptionTarget);
                 }
                 if (initializer && containsAwait(initializer)) {
-                    if (!ts.isIdentifier(declaration.name)) {
-                        supported = false;
-                        return next;
-                    }
                     const sequence = buildConditionalValueExpression(
                         initializer,
                         declaration.name,
@@ -1679,6 +1718,7 @@ export function planAsyncControlFlowGraph(
                     id,
                     awaitExpr: expression,
                     assignment: null,
+                    resultSlot: null,
                     next,
                 }, context.exceptionTarget);
             }
@@ -1694,6 +1734,7 @@ export function planAsyncControlFlowGraph(
                         id,
                         awaitExpr: right,
                         assignment: expression.left,
+                        resultSlot: null,
                         next,
                     }, context.exceptionTarget);
                 }
@@ -1761,6 +1802,7 @@ export function planAsyncControlFlowGraph(
             case "await-next":
             case "await-dispose":
             case "catch-bind":
+            case "binding-init":
                 targets.push(state.next);
                 break;
             case "expression-complete":
