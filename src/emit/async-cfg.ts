@@ -21,6 +21,12 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "scope-enter";
+        readonly id: number;
+        readonly bindings: readonly ts.BindingName[];
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
         readonly kind: "branch";
         readonly id: number;
         readonly expression: ts.Expression;
@@ -958,6 +964,22 @@ export function planAsyncControlFlowGraph(
         return entry;
     };
 
+    const buildLexicalBlock = (
+        block: ts.Block,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget => {
+        const entry = buildSequence(block.statements, next, context);
+        const bindings = block.statements.flatMap((statement) =>
+            ts.isVariableStatement(statement) &&
+                (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0
+                ? statement.declarationList.declarations.map((declaration) => declaration.name)
+                : []);
+        if (bindings.length === 0) return entry;
+        const id = reserve();
+        return setState({ kind: "scope-enter", id, bindings, next: entry }, context.exceptionTarget);
+    };
+
     const buildFinalizationRegion = (
         next: AsyncControlFlowTarget,
         context: BuildContext,
@@ -1117,16 +1139,16 @@ export function planAsyncControlFlowGraph(
         const labels = new Map(context.labels);
         if (label) labels.set(label, loopTargets);
         currentLoopDepth++;
-        const loopBody = ts.isBlock(statement.statement)
-            ? statement.statement.statements
-            : [statement.statement];
-        const bodyEntry = buildSequence(loopBody, continueTarget, {
+        const bodyContext: BuildContext = {
             loop: loopTargets,
             breakTarget: loopTargets.breakTarget,
             labels,
             exceptionTarget: context.exceptionTarget,
             returnTarget: context.returnTarget,
-        });
+        };
+        const bodyEntry = ts.isBlock(statement.statement)
+            ? buildLexicalBlock(statement.statement, continueTarget, bodyContext)
+            : buildSequence([statement.statement], continueTarget, bodyContext);
         currentLoopDepth--;
         const rawCondition = unwrapExpression(ts.isForStatement(statement)
             ? statement.condition ?? ts.factory.createTrue()
@@ -1285,16 +1307,16 @@ export function planAsyncControlFlowGraph(
         ]));
         if (label) labels.set(label, loopTargets);
         currentLoopDepth++;
-        const loopBody = ts.isBlock(statement.statement)
-            ? statement.statement.statements
-            : [statement.statement];
-        const bodyEntry = buildSequence(loopBody, nextTarget, {
+        const bodyContext: BuildContext = {
             loop: loopTargets,
             breakTarget: loopTargets.breakTarget,
             labels,
             exceptionTarget: { target: closeThrow },
             returnTarget: closeReturn,
-        });
+        };
+        const bodyEntry = ts.isBlock(statement.statement)
+            ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
+            : buildSequence([statement.statement], nextTarget, bodyContext);
         currentLoopDepth--;
         setState({
             kind: "async-iterator-next",
@@ -1379,16 +1401,16 @@ export function planAsyncControlFlowGraph(
         const labels = new Map(context.labels);
         if (label) labels.set(label, loopTargets);
         currentLoopDepth++;
-        const loopBody = ts.isBlock(statement.statement)
-            ? statement.statement.statements
-            : [statement.statement];
-        const bodyEntry = buildSequence(loopBody, nextTarget, {
+        const bodyContext: BuildContext = {
             loop: loopTargets,
             breakTarget: loopTargets.breakTarget,
             labels,
             exceptionTarget: context.exceptionTarget,
             returnTarget: context.returnTarget,
-        });
+        };
+        const bodyEntry = ts.isBlock(statement.statement)
+            ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
+            : buildSequence([statement.statement], nextTarget, bodyContext);
         currentLoopDepth--;
         setState({
             kind: "iterator-next",
@@ -1429,7 +1451,7 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
-        if (ts.isBlock(statement)) return buildSequence(statement.statements, next, context);
+        if (ts.isBlock(statement)) return buildLexicalBlock(statement, next, context);
         if (ts.isLabeledStatement(statement)) {
             if (ts.isWhileStatement(statement.statement) || ts.isDoStatement(statement.statement) ||
                 ts.isForStatement(statement.statement)) {
@@ -1609,7 +1631,7 @@ export function planAsyncControlFlowGraph(
                 catchNext: AsyncControlFlowTarget,
                 catchContext: BuildContext,
             ): AsyncControlFlowTarget => {
-                let catchEntry = buildSequence(catchClause.block.statements, catchNext, catchContext);
+                let catchEntry = buildLexicalBlock(catchClause.block, catchNext, catchContext);
                 const binding = catchClause.variableDeclaration?.name ?? null;
                 if (binding && containsSuspendingBindingExpression(binding)) {
                     supported = false;
@@ -1637,7 +1659,7 @@ export function planAsyncControlFlowGraph(
                     return next;
                 }
                 const catchEntry = buildCatchEntry(statement.catchClause, next, context);
-                return buildSequence(statement.tryBlock.statements, next, {
+                return buildLexicalBlock(statement.tryBlock, next, {
                     ...context,
                     exceptionTarget: { target: catchEntry },
                 });
@@ -1645,7 +1667,7 @@ export function planAsyncControlFlowGraph(
             return buildFinalizationRegion(
                 next,
                 context,
-                (finallyExit) => buildSequence(statement.finallyBlock!.statements, finallyExit, context),
+                (finallyExit) => buildLexicalBlock(statement.finallyBlock!, finallyExit, context),
                 (normalEnter, throwEnter, protectedContext) => {
                     let tryExceptionTarget = throwEnter;
                     if (statement.catchClause) {
@@ -1655,7 +1677,7 @@ export function planAsyncControlFlowGraph(
                         });
                         tryExceptionTarget = catchEntry;
                     }
-                    return buildSequence(statement.tryBlock.statements, normalEnter, {
+                    return buildLexicalBlock(statement.tryBlock, normalEnter, {
                         ...protectedContext,
                         exceptionTarget: { target: tryExceptionTarget },
                     });
@@ -1944,6 +1966,7 @@ export function planAsyncControlFlowGraph(
         if (state.exceptionTarget) targets.push(state.exceptionTarget.target);
         switch (state.kind) {
             case "sync":
+            case "scope-enter":
             case "expression-sync":
             case "await-next":
             case "await-dispose":

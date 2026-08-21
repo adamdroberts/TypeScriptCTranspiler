@@ -1,0 +1,3 @@
+{
+  "description": "Canonical lexical scope-entry states allocate fresh captured cells for escaped closures in repeated loop, nested, conditional, and protected blocks"
+}

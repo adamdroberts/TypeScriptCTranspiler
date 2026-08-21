@@ -1,3 +1,0 @@
-{
-  "description": "Captured loop-body lexical declarations fail closed until canonical CFG lexical-scope entry states allocate per-execution cells"
-}

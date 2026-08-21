@@ -26240,7 +26240,25 @@ class Emitter {
         visitClosureCaptures(body);
         const localParams: AsyncAwaitContinuationParam[] = [];
         const seenSymbols = new Set(params.map((param) => param.symbol));
-        const capturedCellNeedsScopeEntry = (node: ts.Node): boolean => {
+        const scopeEntrySymbols = new Set<ts.Symbol>();
+        const collectScopeEntrySymbols = (binding: ts.BindingName): void => {
+            if (ts.isIdentifier(binding)) {
+                const symbol = this.symbolForIdentifier(binding);
+                if (symbol) scopeEntrySymbols.add(symbol);
+                return;
+            }
+            for (const element of binding.elements) {
+                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                collectScopeEntrySymbols(element.name);
+            }
+        };
+        for (const state of graph.states) {
+            if (state.kind === "scope-enter") {
+                state.bindings.forEach(collectScopeEntrySymbols);
+            }
+        }
+        const capturedCellNeedsScopeEntry = (node: ts.Node, symbol: ts.Symbol): boolean => {
+            if (scopeEntrySymbols.has(symbol)) return false;
             let declaration: ts.VariableDeclaration | null = null;
             for (let current: ts.Node | undefined = node; current && current !== body; current = current.parent) {
                 if (ts.isVariableDeclaration(current)) {
@@ -26288,7 +26306,7 @@ class Emitter {
             // parameter share the same ECMAScript function-scoped binding.
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell && capturedCellNeedsScopeEntry(declaration)) return false;
+            if (cell && capturedCellNeedsScopeEntry(declaration, symbol)) return false;
             const type = cell?.type ??
                 this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
             if (type.kind === "void" &&
@@ -26311,7 +26329,7 @@ class Emitter {
             if (!symbol) return false;
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell && capturedCellNeedsScopeEntry(identifier)) return false;
+            if (cell && capturedCellNeedsScopeEntry(identifier, symbol)) return false;
             const type = cell?.type ??
                 this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
             if (type.kind === "void" || type.kind === "never" ||
@@ -26483,7 +26501,9 @@ class Emitter {
         // Validate every emitter requirement before appending declarations so
         // a rejected graph fails closed without leaving partial C behind.
         for (const stateNode of graph.states) {
-            if (stateNode.kind === "sync" && ts.isVariableStatement(stateNode.statement)) {
+            if (stateNode.kind === "scope-enter") {
+                if (!stateNode.bindings.every((binding) => validateCfgBinding(binding))) return false;
+            } else if (stateNode.kind === "sync" && ts.isVariableStatement(stateNode.statement)) {
                 for (const declaration of stateNode.statement.declarationList.declarations) {
                     if (!ts.isIdentifier(declaration.name)) return false;
                     const symbol = this.symbolForIdentifier(declaration.name);
@@ -26966,6 +26986,11 @@ class Emitter {
                         }
                     } else {
                         this.emitStmt(callback, stateNode.statement);
+                    }
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "scope-enter") {
+                    for (const binding of stateNode.bindings) {
+                        emitFreshCfgBindingCells(binding);
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "iterator-init") {
