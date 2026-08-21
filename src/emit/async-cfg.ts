@@ -32,6 +32,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForInStatement | ts.ForOfStatement;
         readonly slot: number;
+        readonly sourceResultSlot: number | null;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -1190,10 +1191,6 @@ export function planAsyncControlFlowGraph(
         if (ts.isForOfStatement(statement) && statement.awaitModifier) {
             return buildAsyncIteratorLoop(statement, next, context, label);
         }
-        if (containsAwait(statement.expression)) {
-            supported = false;
-            return next;
-        }
         if (ts.isVariableDeclarationList(statement.initializer)) {
             if (statement.initializer.declarations.length !== 1) {
                 supported = false;
@@ -1213,6 +1210,9 @@ export function planAsyncControlFlowGraph(
         const initId = reserve();
         const nextId = reserve();
         const nextTarget = target(nextId);
+        const sourceResultSlot = containsAwait(statement.expression)
+            ? expressionResults.push(statement.expression) - 1
+            : null;
         const loopTargets = { breakTarget: next, continueTarget: nextTarget };
         const labels = new Map(context.labels);
         if (label) labels.set(label, loopTargets);
@@ -1236,13 +1236,26 @@ export function planAsyncControlFlowGraph(
             body: bodyEntry,
             done: next,
         }, context.exceptionTarget);
-        return setState({
+        const init = setState({
             kind: "iterator-init",
             id: initId,
             statement,
             slot,
+            sourceResultSlot,
             next: nextTarget,
         }, context.exceptionTarget);
+        if (sourceResultSlot === null) return init;
+        const sourceEntry = buildExpressionResult(
+            statement.expression,
+            sourceResultSlot,
+            init,
+            context,
+        );
+        if (!sourceEntry) {
+            supported = false;
+            return next;
+        }
+        return sourceEntry;
     };
 
     const buildStatement = (

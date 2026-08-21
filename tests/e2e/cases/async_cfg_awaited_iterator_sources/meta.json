@@ -1,0 +1,3 @@
+{
+  "description": "Awaited ordinary for-of/for-in sources use reusable CFG expression-result storage with body suspension and rejection routing"
+}

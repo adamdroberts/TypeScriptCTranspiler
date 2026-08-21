@@ -1,0 +1,4 @@
+left: 12
+right: 34
+keys: alpha=1;beta=2;
+rejected: sync-source-failure

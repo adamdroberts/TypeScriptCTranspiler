@@ -26410,6 +26410,13 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(declaration.name);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
+            } else if (stateNode.kind === "iterator-init") {
+                if (stateNode.sourceResultSlot !== null) {
+                    const storageType = expressionResultTypes[stateNode.sourceResultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                }
             } else if (stateNode.kind === "expression-await") {
                 const promiseType = this.prepareType(mapTsType(
                     stateNode.awaitExpr.expression,
@@ -26688,7 +26695,12 @@ class Emitter {
                 } else if (stateNode.kind === "iterator-init") {
                     const plan = iteratorPlans.get(stateNode.slot);
                     if (!plan) return false;
-                    const source = this.emitExpr(plan.statement.expression);
+                    const source = stateNode.sourceResultSlot === null
+                        ? this.emitExpr(plan.statement.expression)
+                        : {
+                            c: `state->expression_result_${stateNode.sourceResultSlot}`,
+                            ty: expressionResultTypes[stateNode.sourceResultSlot]!,
+                        };
                     const sourceValue = this.coerce(source, plan.sourceType, plan.statement.expression);
                     let values: string;
                     if (ts.isForInStatement(plan.statement)) {
@@ -26715,6 +26727,13 @@ class Emitter {
                         callback.line(`tsc_array_materialize_all(state->iterator_values_${stateNode.slot});`);
                     }
                     callback.line(`state->iterator_index_${stateNode.slot} = 0;`);
+                    if (stateNode.sourceResultSlot !== null) {
+                        const storageType = expressionResultTypes[stateNode.sourceResultSlot]!;
+                        callback.line(`state->expression_result_${stateNode.sourceResultSlot} = ${this.zeroValue(storageType)};`);
+                        if (storageType.kind === "value") {
+                            callback.line(`state->expression_result_${stateNode.sourceResultSlot}_gc_root = NULL;`);
+                        }
+                    }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "iterator-next") {
                     const plan = iteratorPlans.get(stateNode.slot);
