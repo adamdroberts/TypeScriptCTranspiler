@@ -38849,8 +38849,8 @@ class Emitter {
 
     /**
      * Emit `e` as a pure int64 C expression. Caller must have verified
-     * isIntegerShape(e). Identifiers resolve to their declared C name (which
-     * for int-spec locals is `int64_t`); numeric literals shed their `.0`;
+     * isIntegerShape(e). Identifiers resolve through the active symbol-value
+     * scope (which may be a heap CFG field rather than a C local); numeric literals shed their `.0`;
      * binary +,-,*,% and parens recurse without going through emitExpr's
      * double-typed path. As a last resort, casts a normally-emitted
      * double expression to int64.
@@ -38892,8 +38892,10 @@ class Emitter {
         if (ts.isIdentifier(cur)) {
             const sym = this.checker.getSymbolAtLocation(cur);
             if (sym && this.intSymbols.has(sym)) {
-                // The declaration was emitted as int64_t; reference as-is.
-                return this.declaredName(cur);
+                // Ordinary locals may use int64_t storage, while the same
+                // proven integer symbol can live in a double-typed async CFG
+                // field. Normalize either representation at this boundary.
+                return `((int64_t)(${this.identifierRead(cur)}))`;
             }
         }
         // Fallback: emit normally as double and cast to int64.
