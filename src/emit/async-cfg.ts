@@ -101,6 +101,7 @@ type AsyncControlFlowStateCore =
         readonly binding: ts.BindingName;
         readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
+        readonly bindingValueSlot: number | null;
         readonly body: AsyncControlFlowTarget;
         readonly done: AsyncControlFlowTarget;
     }
@@ -121,6 +122,7 @@ type AsyncControlFlowStateCore =
         readonly binding: ts.BindingName;
         readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
+        readonly bindingValueSlot: number | null;
         readonly body: AsyncControlFlowTarget;
         readonly done: AsyncControlFlowTarget;
     }
@@ -1080,20 +1082,30 @@ export function planAsyncControlFlowGraph(
         return buildBindingOperation({ kind: "check", valueSlot }, entry, context);
     };
 
+    const buildBindingFromValueSlot = (
+        binding: ts.BindingName,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): { readonly entry: AsyncControlFlowTarget; readonly valueSlot: number } | null => {
+        const valueSlot = bindingValueCount++;
+        const bound = buildBindingName(binding, valueSlot, next, context);
+        if (!bound) return null;
+        return { entry: bound, valueSlot };
+    };
+
     const buildSuspendingBinding = (
         binding: ts.BindingName,
         source: Extract<AsyncBindingOperation, { readonly kind: "source" }>["source"],
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget | null => {
-        const valueSlot = bindingValueCount++;
-        const bound = buildBindingName(binding, valueSlot, next, context);
+        const bound = buildBindingFromValueSlot(binding, next, context);
         if (!bound) return null;
         return buildBindingOperation({
             kind: "source",
             source,
-            valueSlot,
-        }, bound, context);
+            valueSlot: bound.valueSlot,
+        }, bound.entry, context);
     };
 
     const buildSequence = (
@@ -1400,14 +1412,6 @@ export function planAsyncControlFlowGraph(
                 supported = false;
                 return next;
             }
-            // Defaults and computed keys are emitted while assigning each
-            // yielded value. They need their own CFG states before they may
-            // suspend; never let a shared synchronous binding helper consume
-            // an await/yield expression directly.
-            if (containsSuspendingBindingExpression(declaration.name)) {
-                supported = false;
-                return next;
-            }
             binding = declaration.name;
             if (ts.isIdentifier(declaration.name)) {
                 declarations.push(declaration);
@@ -1490,6 +1494,18 @@ export function planAsyncControlFlowGraph(
         const bodyEntry = ts.isBlock(statement.statement)
             ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
             : buildSequence([statement.statement], nextTarget, bodyContext);
+        let bindingEntry = bodyEntry;
+        let bindingValueSlot: number | null = null;
+        if (containsSuspendingBindingExpression(binding)) {
+            const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext);
+            if (!bound) {
+                currentLoopDepth--;
+                supported = false;
+                return next;
+            }
+            bindingEntry = bound.entry;
+            bindingValueSlot = bound.valueSlot;
+        }
         currentLoopDepth--;
         setState({
             kind: "async-iterator-next",
@@ -1498,7 +1514,8 @@ export function planAsyncControlFlowGraph(
             binding,
             assignmentTargets,
             slot,
-            body: bodyEntry,
+            bindingValueSlot,
+            body: bindingEntry,
             done: next,
         }, context.exceptionTarget);
         const init = setState({
@@ -1542,7 +1559,7 @@ export function planAsyncControlFlowGraph(
                 return next;
             }
             const declaration = statement.initializer.declarations[0]!;
-            if (declaration.initializer || containsSuspendingBindingExpression(declaration.name)) {
+            if (declaration.initializer) {
                 supported = false;
                 return next;
             }
@@ -1584,6 +1601,18 @@ export function planAsyncControlFlowGraph(
         const bodyEntry = ts.isBlock(statement.statement)
             ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
             : buildSequence([statement.statement], nextTarget, bodyContext);
+        let bindingEntry = bodyEntry;
+        let bindingValueSlot: number | null = null;
+        if (containsSuspendingBindingExpression(binding)) {
+            const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext);
+            if (!bound) {
+                currentLoopDepth--;
+                supported = false;
+                return next;
+            }
+            bindingEntry = bound.entry;
+            bindingValueSlot = bound.valueSlot;
+        }
         currentLoopDepth--;
         setState({
             kind: "iterator-next",
@@ -1592,7 +1621,8 @@ export function planAsyncControlFlowGraph(
             binding,
             assignmentTargets,
             slot,
-            body: bodyEntry,
+            bindingValueSlot,
+            body: bindingEntry,
             done: next,
         }, context.exceptionTarget);
         const init = setState({

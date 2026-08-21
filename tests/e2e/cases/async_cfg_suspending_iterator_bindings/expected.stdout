@@ -1,0 +1,4 @@
+ordinary: 10:11;20:21
+for-in: a,z
+async: 30,40, 1,3,4,1,3,4,6,6 Snext>Snext>Snext>
+rejection: iterator binding rejected Snext>Snext>Snext>Rnext>Rreturn>

@@ -26570,6 +26570,10 @@ class Emitter {
                     }
                 }
                 if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets)) return false;
+            } else if (stateNode.kind === "iterator-next" || stateNode.kind === "async-iterator-next") {
+                if (stateNode.bindingValueSlot !== null &&
+                    (stateNode.bindingValueSlot < 0 ||
+                        stateNode.bindingValueSlot >= graph.bindingValueCount)) return false;
             } else if (stateNode.kind === "catch-bind") {
                 if (stateNode.binding && !validateCfgBinding(stateNode.binding)) return false;
             } else if (stateNode.kind === "binding-init") {
@@ -27167,12 +27171,20 @@ class Emitter {
                         (plan.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
                         emitFreshCfgBindingCells(plan.binding);
                     }
-                    emitCfgBinding(
-                        plan.binding,
-                        { c: element, ty: plan.elementType },
-                        ts.isForInStatement(plan.statement) ? "for-in" : "for-of",
-                        plan.assignmentTargets,
-                    );
+                    if (stateNode.bindingValueSlot === null) {
+                        emitCfgBinding(
+                            plan.binding,
+                            { c: element, ty: plan.elementType },
+                            ts.isForInStatement(plan.statement) ? "for-in" : "for-of",
+                            plan.assignmentTargets,
+                        );
+                    } else {
+                        emitBindingValueAssignment(
+                            stateNode.bindingValueSlot,
+                            { c: element, ty: plan.elementType },
+                            plan.binding,
+                        );
+                    }
                     callback.line(`${index}++;`);
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-init") {
@@ -27224,12 +27236,20 @@ class Emitter {
                         (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
                         emitFreshCfgBindingCells(stateNode.binding);
                     }
-                    emitCfgBinding(
-                        stateNode.binding,
-                        { c: item, ty: T_VALUE },
-                        "async iterator",
-                        stateNode.assignmentTargets,
-                    );
+                    if (stateNode.bindingValueSlot === null) {
+                        emitCfgBinding(
+                            stateNode.binding,
+                            { c: item, ty: T_VALUE },
+                            "async iterator",
+                            stateNode.assignmentTargets,
+                        );
+                    } else {
+                        emitBindingValueAssignment(
+                            stateNode.bindingValueSlot,
+                            { c: item, ty: T_VALUE },
+                            stateNode.binding,
+                        );
+                    }
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-close") {
                     const iterator = `state->async_iterator_${stateNode.slot}`;

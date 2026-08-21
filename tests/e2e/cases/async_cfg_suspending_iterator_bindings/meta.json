@@ -1,0 +1,3 @@
+{
+  "description": "Ordinary, for-in, and async iterator items seed one reusable binding graph with ordered suspending patterns, per-iteration captured cells, and IteratorClose on rejection"
+}
