@@ -45921,7 +45921,12 @@ class Emitter {
             (op === ts.SyntaxKind.EqualsToken || op === ts.SyntaxKind.PlusEqualsToken)
         ) {
             const sym = this.checker.getSymbolAtLocation(bin.left);
-            if (sym && this.strbufSymbols.has(sym)) {
+            // The source-level strbuf lift owns stack storage in an ordinary
+            // lexical scope. A heap async-CFG continuation instead stores the
+            // string binding in its environment, so it must use the ordinary
+            // symbol-backed assignment path across every resumed state.
+            if (this.asyncAwaitContinuationAdapterDepth === 0 &&
+                sym && this.strbufSymbols.has(sym)) {
                 return this.emitStrbufAssignment(
                     bin.left, bin.right,
                     op === ts.SyntaxKind.PlusEqualsToken,
