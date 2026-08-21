@@ -260,7 +260,7 @@ export interface AsyncControlFlowGraph {
 export interface AsyncControlFlowPlannerOptions {
     readonly isStableSynchronousTail: (expression: ts.Expression) => boolean;
     readonly isStableBeforeSuspension?: (expression: ts.Expression) => boolean;
-    readonly isHeapIndependentNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
+    readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
 }
 
 interface LoopTargets {
@@ -345,7 +345,7 @@ export function planAsyncControlFlowGraph(
         const visit = (current: ts.Node): void => {
             if (found) return;
             if (current !== node && ts.isFunctionLike(current)) {
-                if (options.isHeapIndependentNestedFunction?.(current)) return;
+                if (options.isSupportedNestedFunction?.(current)) return;
                 found = true;
                 return;
             }

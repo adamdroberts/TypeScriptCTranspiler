@@ -300,10 +300,9 @@ interface AsyncAwaitContinuationParam {
     name: string;
     type: CType;
     field: string;
-    cell?: {
-        ptr: string;
-        rootPtr: string | null;
-    };
+    cell?:
+        | { kind: "entry"; ptr: string; rootPtr: string | null }
+        | { kind: "local" };
 }
 
 interface AsyncAwaitContinuationReturnTarget {
@@ -22718,6 +22717,9 @@ class Emitter {
             if (value) return value;
         }
         if (param.cell) {
+            if (param.cell.kind !== "entry") {
+                throw new Error(`async continuation cell ${param.field} has no entry pointer`);
+            }
             return `(tsc_async_cell_ref_t){ (void*)${param.cell.ptr}, ${param.cell.rootPtr ?? "NULL"} }`;
         }
         const root = this.asyncAwaitPreludeDynamicRoots.get(param.symbol);
@@ -24689,9 +24691,6 @@ class Emitter {
                         unsupported(m, "async methods must return Promise<T>");
                     }
                 }
-                const previousDynamicRoots = isAsync
-                    ? this.beginAsyncDynamicRootScope(this.defs, m.parameters)
-                    : null;
                 if (!isStatic(m)) this.currentClass = name;
                 if (isGenerator) {
                     try {
@@ -24707,8 +24706,14 @@ class Emitter {
                         this.currentClass = null;
                     }
                 } else {
+                    const capturedCells = this.capturedCellsFor(m);
                     this.returnStack.push(mappedRet);
                     if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
+                    this.cellScopes.push(capturedCells);
+                    const previousDynamicRoots = isAsync
+                        ? this.beginAsyncDynamicRootScope(this.defs, m.parameters)
+                        : null;
+                    this.emitCapturedParameterCells(this.defs, m.parameters, capturedCells);
                     try {
                         const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
                             this.defs,
@@ -24725,6 +24730,7 @@ class Emitter {
                         }
                     } finally {
                         if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
+                        this.cellScopes.pop();
                         if (isAsync) this.asyncFunctionStack.pop();
                         this.returnStack.pop();
                         this.currentClass = null;
@@ -26191,9 +26197,12 @@ class Emitter {
                 return type.kind === "string" || type.kind === "number" ||
                     type.kind === "boolean" || type.kind === "bigint";
             },
-            isHeapIndependentNestedFunction: (node) => {
+            isSupportedNestedFunction: (node) => {
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
-                if (this.collectClosureCaptures(node).length !== 0) return false;
+                for (const capture of this.collectClosureCaptures(node)) {
+                    if (!this.currentFunctionCellForSymbol(capture.symbol) &&
+                        !this.closureEnvBindingForSymbol(capture.symbol)) return false;
+                }
                 let safe = true;
                 const visit = (current: ts.Node): void => {
                     if (!safe) return;
@@ -26231,6 +26240,28 @@ class Emitter {
         visitClosureCaptures(body);
         const localParams: AsyncAwaitContinuationParam[] = [];
         const seenSymbols = new Set(params.map((param) => param.symbol));
+        const capturedCellNeedsScopeEntry = (node: ts.Node): boolean => {
+            let declaration: ts.VariableDeclaration | null = null;
+            for (let current: ts.Node | undefined = node; current && current !== body; current = current.parent) {
+                if (ts.isVariableDeclaration(current)) {
+                    declaration = current;
+                    break;
+                }
+            }
+            if (!declaration) return false;
+            if (ts.isCatchClause(declaration.parent)) return false;
+            if (!ts.isVariableDeclarationList(declaration.parent) ||
+                (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0) return false;
+            const owner = declaration.parent.parent;
+            if ((ts.isForInStatement(owner) || ts.isForOfStatement(owner)) &&
+                owner.initializer === declaration.parent) return false;
+            for (let current: ts.Node | undefined = declaration.parent; current && current !== body; current = current.parent) {
+                if (ts.isWhileStatement(current) || ts.isDoStatement(current) ||
+                    ts.isForStatement(current) || ts.isForInStatement(current) ||
+                    ts.isForOfStatement(current)) return true;
+            }
+            return false;
+        };
         const symbolHasUseOutsideDeclaration = (
             symbol: ts.Symbol,
             declarationName: ts.Identifier,
@@ -26252,11 +26283,14 @@ class Emitter {
         for (const declaration of graph.declarations) {
             if (!ts.isIdentifier(declaration.name)) return false;
             const symbol = this.symbolForIdentifier(declaration.name);
-            if (!symbol || this.currentFunctionCellForSymbol(symbol)) return false;
+            if (!symbol) return false;
             // Repeated `var` declarations and a `var` redeclaration of a
             // parameter share the same ECMAScript function-scoped binding.
             if (seenSymbols.has(symbol)) continue;
-            const type = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (cell && capturedCellNeedsScopeEntry(declaration)) return false;
+            const type = cell?.type ??
+                this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
             if (type.kind === "void" &&
                 !symbolHasUseOutsideDeclaration(symbol, declaration.name)) {
                 seenSymbols.add(symbol);
@@ -26269,13 +26303,17 @@ class Emitter {
                 name: this.identifierName(declaration.name),
                 type,
                 field: `cfg_local_${localParams.length}`,
+                ...(cell ? { cell: { kind: "local" as const } } : {}),
             });
         }
         for (const identifier of graph.bindingIdentifiers) {
             const symbol = this.symbolForIdentifier(identifier);
-            if (!symbol || this.currentFunctionCellForSymbol(symbol)) return false;
+            if (!symbol) return false;
             if (seenSymbols.has(symbol)) continue;
-            const type = this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (cell && capturedCellNeedsScopeEntry(identifier)) return false;
+            const type = cell?.type ??
+                this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
             if (type.kind === "void" || type.kind === "never" ||
                 !this.isAsyncAwaitPreludeCaptureType(type)) return false;
             seenSymbols.add(symbol);
@@ -26284,6 +26322,7 @@ class Emitter {
                 name: this.identifierName(identifier),
                 type,
                 field: `cfg_local_${localParams.length}`,
+                ...(cell ? { cell: { kind: "local" as const } } : {}),
             });
         }
         const fields = [...params, ...localParams];
@@ -26627,6 +26666,62 @@ class Emitter {
         const scope = new Map<ts.Symbol, string>();
         for (const field of fields) scope.set(field.symbol, this.asyncAwaitContinuationParamRead(field, "state", scope));
         this.argumentValueScopes.push(scope);
+        const emitCfgCellAllocation = (
+            target: CBuf,
+            field: AsyncAwaitContinuationParam,
+            env = "state",
+        ): void => {
+            if (!field.cell) return;
+            const valueCell = this.freshTemp("_async_cfg_cell");
+            target.line(`${field.type.c}* const ${valueCell} = (${field.type.c}*)TSC_GC_MALLOC(sizeof(${field.type.c}));`);
+            target.line(`*${valueCell} = ${this.zeroValue(field.type)};`);
+            let rootCell = "NULL";
+            if (field.type.kind === "value") {
+                const dynamicRootCell = this.freshTemp("_async_cfg_root_cell");
+                target.line(`void** const ${dynamicRootCell} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
+                target.line(`*${dynamicRootCell} = tsc_value_gc_root(*${valueCell});`);
+                rootCell = dynamicRootCell;
+            }
+            target.line(`${env}->${field.field} = (tsc_async_cell_ref_t){ (void*)${valueCell}, ${rootCell} };`);
+        };
+        const cfgFieldValue = (
+            field: AsyncAwaitContinuationParam,
+            env = "state",
+        ): string => field.cell
+            ? `(*(${field.type.c}*)${env}->${field.field}.value_cell)`
+            : `${env}->${field.field}`;
+        const emitCfgFieldAssignment = (
+            target: CBuf,
+            field: AsyncAwaitContinuationParam,
+            value: EmitResult,
+            node: ts.Node,
+            env = "state",
+        ): void => {
+            const lvalue = cfgFieldValue(field, env);
+            target.line(`${lvalue} = ${this.coerce(value, field.type, node)};`);
+            if (field.type.kind !== "value") return;
+            if (field.cell) {
+                target.line(`*${env}->${field.field}.gc_root_cell = tsc_value_gc_root(${lvalue});`);
+            } else {
+                target.line(`${env}->${field.field}_gc_root = tsc_value_gc_root(${lvalue});`);
+            }
+        };
+        const emitFreshCfgBindingCells = (
+            binding: ts.BindingName,
+            assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
+        ): void => {
+            if (ts.isIdentifier(binding)) {
+                if (assignmentTargets.has(binding)) return;
+                const symbol = this.symbolForIdentifier(binding);
+                const field = symbol ? fieldBySymbol.get(symbol) : undefined;
+                if (field?.cell) emitCfgCellAllocation(callback, field);
+                return;
+            }
+            for (const element of binding.elements) {
+                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                emitFreshCfgBindingCells(element.name, assignmentTargets);
+            }
+        };
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
@@ -26818,10 +26913,7 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(identifier);
                     const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                     if (!local) unsupported(identifier, `${label} binding is missing CFG storage`);
-                    callback.line(`state->${local.field} = ${this.coerce(value, local.type, identifier)};`);
-                    if (local.type.kind === "value") {
-                        callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
-                    }
+                    emitCfgFieldAssignment(callback, local, value, identifier);
                 };
                 if (ts.isIdentifier(binding)) {
                     assignIdentifier(binding, source);
@@ -26862,12 +26954,14 @@ class Emitter {
                             if (!local) return false;
                             if (declaration.initializer) {
                                 const initializer = this.emitExpr(declaration.initializer);
-                                callback.line(`state->${local.field} = ${this.coerce(initializer, local.type, declaration.initializer)};`);
+                                emitCfgFieldAssignment(callback, local, initializer, declaration.initializer);
                             } else if ((stateNode.statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) {
-                                callback.line(`state->${local.field} = ${this.zeroValue(local.type)};`);
-                            }
-                            if (local.type.kind === "value") {
-                                callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
+                                emitCfgFieldAssignment(
+                                    callback,
+                                    local,
+                                    { c: this.zeroValue(local.type), ty: local.type },
+                                    declaration,
+                                );
                             }
                         }
                     } else {
@@ -26928,6 +27022,10 @@ class Emitter {
                     const element = plan.elementType.kind === "value"
                         ? `(tsc_array_index_present(${values}, ${index}) ? TSC_ARR(${plan.elementType.c}, ${values}, ${index}) : tsc_value_undefined())`
                         : `TSC_ARR(${plan.elementType.c}, ${values}, ${index})`;
+                    if (ts.isVariableDeclarationList(plan.statement.initializer) &&
+                        (plan.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                        emitFreshCfgBindingCells(plan.binding);
+                    }
                     emitCfgBinding(
                         plan.binding,
                         { c: element, ty: plan.elementType },
@@ -26981,6 +27079,10 @@ class Emitter {
                     callback.close();
                     const item = this.freshTemp("_async_cfg_iterator_value");
                     callback.line(`tsc_value_t ${item} = tsc_value_get_prop(${step}, tsc_str_from_lit("value", 5));`);
+                    if (ts.isVariableDeclarationList(stateNode.statement.initializer) &&
+                        (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                        emitFreshCfgBindingCells(stateNode.binding);
+                    }
                     emitCfgBinding(
                         stateNode.binding,
                         { c: item, ty: T_VALUE },
@@ -27282,10 +27384,7 @@ class Emitter {
                         if (awaitedType.kind !== "void") {
                             if (!local) return false;
                             const fulfilled = awaitFulfilledValue(promiseType);
-                            callback.line(`state->${local.field} = ${this.coerce(fulfilled, local.type, stateNode.awaitExpr)};`);
-                            if (local.type.kind === "value") {
-                                callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
-                            }
+                            emitCfgFieldAssignment(callback, local, fulfilled, stateNode.awaitExpr);
                         }
                     }
                     callback.line("state->awaiting = false;");
@@ -27297,7 +27396,7 @@ class Emitter {
                         const symbol = this.symbolForIdentifier(declaration.name);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local || local.type.kind !== "value") return false;
-                        resourceValues.push(`state->${local.field}`);
+                        resourceValues.push(cfgFieldValue(local));
                     }
                     emitPromiseSuspension(() => {
                         const resources = this.freshTemp("_async_cfg_dispose_resources");
@@ -27433,10 +27532,7 @@ class Emitter {
                         const symbol = this.symbolForIdentifier(stateNode.assignment);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local) return false;
-                        callback.line(`state->${local.field} = ${this.coerce(result, local.type, stateNode.expression)};`);
-                        if (local.type.kind === "value") {
-                            callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
-                        }
+                        emitCfgFieldAssignment(callback, local, result, stateNode.expression);
                         emitTransition(stateNode.next.id);
                     } else if (stateNode.completion?.kind === "return") {
                         result = normalizeCfgReturn(result, stateNode.expression);
@@ -27470,6 +27566,7 @@ class Emitter {
                     }
                 } else if (stateNode.kind === "catch-bind") {
                     if (stateNode.binding) {
+                        emitFreshCfgBindingCells(stateNode.binding);
                         emitCfgBinding(
                             stateNode.binding,
                             { c: "state->exception_value", ty: T_VALUE },
@@ -27689,8 +27786,12 @@ class Emitter {
             }
         }
         for (const local of localParams) {
-            buf.line(`${env}->${local.field} = ${this.zeroValue(local.type)};`);
-            if (local.type.kind === "value") buf.line(`${env}->${local.field}_gc_root = NULL;`);
+            if (local.cell) {
+                emitCfgCellAllocation(buf, local, env);
+            } else {
+                buf.line(`${env}->${local.field} = ${this.zeroValue(local.type)};`);
+                if (local.type.kind === "value") buf.line(`${env}->${local.field}_gc_root = NULL;`);
+            }
         }
         if (thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
         buf.line(`${name}(${env});`);
@@ -27760,11 +27861,19 @@ class Emitter {
             const type = this.prepareType(mapType(param, this.checker));
             if (type.kind === "void" || type.kind === "never") continue;
             const name = mangleIdent(param.name.text);
+            const cell = this.currentFunctionCellForSymbol(symbol);
             params.push({
                 symbol,
                 name,
-                type,
+                type: cell?.type ?? type,
                 field: `param_${name}`,
+                ...(cell ? {
+                    cell: {
+                        kind: "entry",
+                        ptr: cell.cellName,
+                        rootPtr: cell.rootCellName ?? null,
+                    },
+                } : {}),
             });
         }
         return params;
@@ -27782,6 +27891,7 @@ class Emitter {
             type: env.type,
             field: `capture_${name}`,
             cell: {
+                kind: "entry",
                 ptr: env.ptr,
                 rootPtr: env.rootPtr ?? null,
             },
@@ -45979,18 +46089,18 @@ class Emitter {
             const coerced = this.coerce(rhs, lhsType, bin.right);
             if (ts.isIdentifier(bin.left)) {
                 const symbol = this.symbolForIdentifier(bin.left);
-                const root = symbol ? this.asyncAwaitPreludeDynamicRoots.get(symbol) : undefined;
-                if (root && lhsType.kind === "value") {
-                    return {
-                        c: `({ ${lhsC} = ${coerced}; ${root} = tsc_value_gc_root(${lhsC}); ${lhsC}; })`,
-                        ty: lhsType,
-                    };
-                }
                 if (symbol && lhsType.kind === "value") {
                     const rootPtr = this.captureRootPtrForSymbol(symbol);
                     if (rootPtr) {
                         return {
                             c: `({ ${lhsC} = ${coerced}; *${rootPtr} = tsc_value_gc_root(${lhsC}); ${lhsC}; })`,
+                            ty: lhsType,
+                        };
+                    }
+                    const root = this.asyncAwaitPreludeDynamicRoots.get(symbol);
+                    if (root) {
+                        return {
+                            c: `({ ${lhsC} = ${coerced}; ${root} = tsc_value_gc_root(${lhsC}); ${lhsC}; })`,
                             ty: lhsType,
                         };
                     }

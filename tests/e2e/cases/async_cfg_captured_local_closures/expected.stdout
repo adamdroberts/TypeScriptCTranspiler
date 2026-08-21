@@ -1,0 +1,9 @@
+shared: 1:3:10:10
+parameter: 8
+late declaration: 7
+dynamic: inner
+destructured: 11
+iterator: 2-4
+async iterator: 3-5
+catch: caught
+method: 8
