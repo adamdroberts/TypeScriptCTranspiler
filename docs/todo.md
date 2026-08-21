@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **CRITICAL — prove cardinality independently.** Do not enumerate fixture families, successive await/yield/argument/branch counts, or narrate their pass counts as evidence of generality. Prove arbitrary cardinality from the canonical collection/tree/graph/worklist representation and lowering algorithm; verify semantic partitions with compact generated/property tests plus one representative high-depth stress case. A finite fixture inventory may detect regressions, but it must never define the implementation plan, completion units, or proof of coverage.
+
 # TODO — remaining work
 
 Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**.
