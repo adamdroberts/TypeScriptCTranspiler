@@ -1,0 +1,3 @@
+{
+  "description": "One canonical classic-for scope-clone back-edge preserves captured binding identity for arbitrary runtime iteration counts, continue edges, and initializer isolation"
+}

@@ -27,6 +27,12 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "scope-clone";
+        readonly id: number;
+        readonly bindings: readonly ts.BindingName[];
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
         readonly kind: "branch";
         readonly id: number;
         readonly expression: ts.Expression;
@@ -1135,6 +1141,31 @@ export function planAsyncControlFlowGraph(
             );
             if (!supported) return next;
         }
+        let initialIterationTarget: AsyncControlFlowTarget | null = null;
+        if (ts.isForStatement(statement) &&
+            statement.initializer &&
+            ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+            const bindings = statement.initializer.declarations.map((declaration) => declaration.name);
+            // ECMAScript creates one copied environment before the first
+            // condition and another before each update.  They share the same
+            // binding operation but have different successors: routing the
+            // initial edge through the update would skip iteration zero.
+            const backEdgeId = reserve();
+            continueTarget = setState({
+                kind: "scope-clone",
+                id: backEdgeId,
+                bindings,
+                next: continueTarget,
+            }, context.exceptionTarget);
+            const initialId = reserve();
+            initialIterationTarget = setState({
+                kind: "scope-clone",
+                id: initialId,
+                bindings,
+                next: conditionTarget,
+            }, context.exceptionTarget);
+        }
         const loopTargets = { breakTarget: next, continueTarget };
         const labels = new Map(context.labels);
         if (label) labels.set(label, loopTargets);
@@ -1199,7 +1230,9 @@ export function planAsyncControlFlowGraph(
                 exceptionTarget: context.exceptionTarget,
             };
         }
-        let entry = ts.isDoStatement(statement) ? bodyEntry : conditionTarget;
+        let entry = ts.isDoStatement(statement)
+            ? bodyEntry
+            : initialIterationTarget ?? conditionTarget;
         if (ts.isForStatement(statement) && statement.initializer) {
             const initializer = ts.isVariableDeclarationList(statement.initializer)
                 ? ts.factory.createVariableStatement(undefined, statement.initializer)
@@ -1967,6 +2000,7 @@ export function planAsyncControlFlowGraph(
         switch (state.kind) {
             case "sync":
             case "scope-enter":
+            case "scope-clone":
             case "expression-sync":
             case "await-next":
             case "await-dispose":

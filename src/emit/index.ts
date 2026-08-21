@@ -26240,25 +26240,25 @@ class Emitter {
         visitClosureCaptures(body);
         const localParams: AsyncAwaitContinuationParam[] = [];
         const seenSymbols = new Set(params.map((param) => param.symbol));
-        const scopeEntrySymbols = new Set<ts.Symbol>();
-        const collectScopeEntrySymbols = (binding: ts.BindingName): void => {
+        const cfgScopeCellSymbols = new Set<ts.Symbol>();
+        const collectCfgScopeCellSymbols = (binding: ts.BindingName): void => {
             if (ts.isIdentifier(binding)) {
                 const symbol = this.symbolForIdentifier(binding);
-                if (symbol) scopeEntrySymbols.add(symbol);
+                if (symbol) cfgScopeCellSymbols.add(symbol);
                 return;
             }
             for (const element of binding.elements) {
                 if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
-                collectScopeEntrySymbols(element.name);
+                collectCfgScopeCellSymbols(element.name);
             }
         };
         for (const state of graph.states) {
-            if (state.kind === "scope-enter") {
-                state.bindings.forEach(collectScopeEntrySymbols);
+            if (state.kind === "scope-enter" || state.kind === "scope-clone") {
+                state.bindings.forEach(collectCfgScopeCellSymbols);
             }
         }
-        const capturedCellNeedsScopeEntry = (node: ts.Node, symbol: ts.Symbol): boolean => {
-            if (scopeEntrySymbols.has(symbol)) return false;
+        const capturedCellNeedsCfgScope = (node: ts.Node, symbol: ts.Symbol): boolean => {
+            if (cfgScopeCellSymbols.has(symbol)) return false;
             let declaration: ts.VariableDeclaration | null = null;
             for (let current: ts.Node | undefined = node; current && current !== body; current = current.parent) {
                 if (ts.isVariableDeclaration(current)) {
@@ -26306,7 +26306,7 @@ class Emitter {
             // parameter share the same ECMAScript function-scoped binding.
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell && capturedCellNeedsScopeEntry(declaration, symbol)) return false;
+            if (cell && capturedCellNeedsCfgScope(declaration, symbol)) return false;
             const type = cell?.type ??
                 this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
             if (type.kind === "void" &&
@@ -26329,7 +26329,7 @@ class Emitter {
             if (!symbol) return false;
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell && capturedCellNeedsScopeEntry(identifier, symbol)) return false;
+            if (cell && capturedCellNeedsCfgScope(identifier, symbol)) return false;
             const type = cell?.type ??
                 this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
             if (type.kind === "void" || type.kind === "never" ||
@@ -26501,7 +26501,7 @@ class Emitter {
         // Validate every emitter requirement before appending declarations so
         // a rejected graph fails closed without leaving partial C behind.
         for (const stateNode of graph.states) {
-            if (stateNode.kind === "scope-enter") {
+            if (stateNode.kind === "scope-enter" || stateNode.kind === "scope-clone") {
                 if (!stateNode.bindings.every((binding) => validateCfgBinding(binding))) return false;
             } else if (stateNode.kind === "sync" && ts.isVariableStatement(stateNode.statement)) {
                 for (const declaration of stateNode.statement.declarationList.declarations) {
@@ -26690,11 +26690,12 @@ class Emitter {
             target: CBuf,
             field: AsyncAwaitContinuationParam,
             env = "state",
+            initialValue?: string,
         ): void => {
             if (!field.cell) return;
             const valueCell = this.freshTemp("_async_cfg_cell");
             target.line(`${field.type.c}* const ${valueCell} = (${field.type.c}*)TSC_GC_MALLOC(sizeof(${field.type.c}));`);
-            target.line(`*${valueCell} = ${this.zeroValue(field.type)};`);
+            target.line(`*${valueCell} = ${initialValue ?? this.zeroValue(field.type)};`);
             let rootCell = "NULL";
             if (field.type.kind === "value") {
                 const dynamicRootCell = this.freshTemp("_async_cfg_root_cell");
@@ -26740,6 +26741,20 @@ class Emitter {
             for (const element of binding.elements) {
                 if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
                 emitFreshCfgBindingCells(element.name, assignmentTargets);
+            }
+        };
+        const emitClonedCfgBindingCells = (binding: ts.BindingName): void => {
+            if (ts.isIdentifier(binding)) {
+                const symbol = this.symbolForIdentifier(binding);
+                const field = symbol ? fieldBySymbol.get(symbol) : undefined;
+                if (field?.cell) {
+                    emitCfgCellAllocation(callback, field, "state", cfgFieldValue(field));
+                }
+                return;
+            }
+            for (const element of binding.elements) {
+                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                emitClonedCfgBindingCells(element.name);
             }
         };
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -26991,6 +27006,11 @@ class Emitter {
                 } else if (stateNode.kind === "scope-enter") {
                     for (const binding of stateNode.bindings) {
                         emitFreshCfgBindingCells(binding);
+                    }
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "scope-clone") {
+                    for (const binding of stateNode.bindings) {
+                        emitClonedCfgBindingCells(binding);
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "iterator-init") {
