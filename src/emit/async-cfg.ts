@@ -47,6 +47,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForOfStatement;
         readonly slot: number;
+        readonly sourceResultSlot: number | null;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -203,6 +204,7 @@ type AsyncControlFlowStateCore =
             }[];
             readonly defaultTarget: AsyncControlFlowTarget;
         } | null;
+        readonly resultSlot: number | null;
         readonly awaitExprs: readonly ts.AwaitExpression[];
         readonly next: AsyncControlFlowTarget;
     };
@@ -224,6 +226,7 @@ export interface AsyncControlFlowGraph {
     readonly asyncIteratorCount: number;
     readonly expressionAwaits: readonly ts.AwaitExpression[];
     readonly expressionSyncs: readonly ts.Expression[];
+    readonly expressionResults: readonly ts.Expression[];
 }
 
 export interface AsyncControlFlowPlannerOptions {
@@ -262,6 +265,7 @@ export function planAsyncControlFlowGraph(
     const expressionAwaitSlots = new Map<ts.AwaitExpression, number>();
     const expressionSyncs: ts.Expression[] = [];
     const expressionSyncSlots = new Map<ts.Expression, number>();
+    const expressionResults: ts.Expression[] = [];
 
     const reserve = (): number => {
         const id = states.length;
@@ -393,6 +397,7 @@ export function planAsyncControlFlowGraph(
             readonly clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[];
             readonly defaultTarget: AsyncControlFlowTarget;
         } | null = null,
+        resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
         const plan = planAsyncExpressionSequence(expression, {
             unwrap: unwrapExpression,
@@ -411,6 +416,7 @@ export function planAsyncControlFlowGraph(
             completion,
             branch,
             switchDispatch,
+            resultSlot,
             awaitExprs: plan.awaitExprs,
             next,
         }, context.exceptionTarget);
@@ -604,6 +610,7 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         completion: ExpressionCompletion = null,
         switchDispatch: ExpressionSwitchDispatch = null,
+        resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
         const current = unwrapExpression(expression);
         if (!ts.isConditionalExpression(current)) return null;
@@ -615,6 +622,7 @@ export function planAsyncControlFlowGraph(
                 context,
                 completion,
                 switchDispatch,
+                resultSlot,
             ) ?? buildLogicalValueExpression(
                 arm,
                 assignment,
@@ -622,6 +630,7 @@ export function planAsyncControlFlowGraph(
                 context,
                 completion,
                 switchDispatch,
+                resultSlot,
             );
             if (nested) return nested;
             if (containsAwait(arm)) {
@@ -633,6 +642,7 @@ export function planAsyncControlFlowGraph(
                     completion,
                     null,
                     switchDispatch,
+                    resultSlot,
                 );
             }
             const id = reserve();
@@ -644,6 +654,7 @@ export function planAsyncControlFlowGraph(
                 completion,
                 branch: null,
                 switchDispatch,
+                resultSlot,
                 awaitExprs: [],
                 next,
             }, context.exceptionTarget);
@@ -660,6 +671,7 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         completion: ExpressionCompletion = null,
         switchDispatch: ExpressionSwitchDispatch = null,
+        resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
         const current = unwrapExpression(expression);
         if (!ts.isBinaryExpression(current)) return null;
@@ -672,14 +684,14 @@ export function planAsyncControlFlowGraph(
             (!ts.isIdentifier(left) && !options.isStableBeforeSuspension?.(left))) return null;
         const complete = (value: ts.Expression): AsyncControlFlowTarget | null => {
             const nested = buildConditionalValueExpression(
-                value, assignment, next, context, completion, switchDispatch,
+                value, assignment, next, context, completion, switchDispatch, resultSlot,
             ) ?? buildLogicalValueExpression(
-                value, assignment, next, context, completion, switchDispatch,
+                value, assignment, next, context, completion, switchDispatch, resultSlot,
             );
             if (nested) return nested;
             if (containsAwait(value)) {
                 return buildExpressionSequence(
-                    value, assignment, next, context, completion, null, switchDispatch,
+                    value, assignment, next, context, completion, null, switchDispatch, resultSlot,
                 );
             }
             const id = reserve();
@@ -691,6 +703,7 @@ export function planAsyncControlFlowGraph(
                 completion,
                 branch: null,
                 switchDispatch,
+                resultSlot,
                 awaitExprs: [],
                 next,
             }, context.exceptionTarget);
@@ -712,6 +725,7 @@ export function planAsyncControlFlowGraph(
             completion: null,
             branch: takeRight,
             switchDispatch: null,
+            resultSlot: null,
             awaitExprs: [],
             next,
         }, context.exceptionTarget);
@@ -978,10 +992,6 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
-        if (containsAwait(statement.expression)) {
-            supported = false;
-            return next;
-        }
         if (ts.isVariableDeclarationList(statement.initializer)) {
             if (statement.initializer.declarations.length !== 1) {
                 supported = false;
@@ -1018,6 +1028,9 @@ export function planAsyncControlFlowGraph(
         const initId = reserve();
         const nextId = reserve();
         const nextTarget = target(nextId);
+        const sourceResultSlot = containsAwait(statement.expression)
+            ? expressionResults.push(statement.expression) - 1
+            : null;
         const closeStates = new Map<number, AsyncControlFlowTarget>();
         const closeNormal = (closeNext: AsyncControlFlowTarget): AsyncControlFlowTarget => {
             const existing = closeStates.get(closeNext.id);
@@ -1078,13 +1091,46 @@ export function planAsyncControlFlowGraph(
             body: bodyEntry,
             done: next,
         }, context.exceptionTarget);
-        return setState({
+        const init = setState({
             kind: "async-iterator-init",
             id: initId,
             statement,
             slot,
+            sourceResultSlot,
             next: nextTarget,
         }, context.exceptionTarget);
+        if (sourceResultSlot === null) return init;
+        const sourceEntry = buildConditionalValueExpression(
+            statement.expression,
+            null,
+            init,
+            context,
+            null,
+            null,
+            sourceResultSlot,
+        ) ?? buildLogicalValueExpression(
+            statement.expression,
+            null,
+            init,
+            context,
+            null,
+            null,
+            sourceResultSlot,
+        ) ?? buildExpressionSequence(
+            statement.expression,
+            null,
+            init,
+            context,
+            null,
+            null,
+            null,
+            sourceResultSlot,
+        );
+        if (!sourceEntry) {
+            supported = false;
+            return next;
+        }
+        return sourceEntry;
     };
 
     const buildIteratorLoop = (
@@ -1710,5 +1756,6 @@ export function planAsyncControlFlowGraph(
         asyncIteratorCount,
         expressionAwaits,
         expressionSyncs,
+        expressionResults,
     };
 }

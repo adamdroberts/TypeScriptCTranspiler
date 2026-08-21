@@ -1,0 +1,3 @@
+{
+  "description": "Awaited async-iterator sources flow through reusable CFG expression-result storage with selected-branch ordering and rejection propagation"
+}

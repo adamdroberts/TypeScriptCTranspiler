@@ -26327,6 +26327,15 @@ class Emitter {
         const expressionSyncSlot = new Map(
             graph.expressionSyncs.map((expression, slot) => [expression, slot] as const),
         );
+        const expressionResultTypes = graph.expressionResults.map((expression) =>
+            this.asyncAwaitContinuationStorageType(
+                expression,
+                this.prepareType(mapTsType(
+                    expression,
+                    this.checker.getTypeAtLocation(expression),
+                    this.checker,
+                )),
+            ));
         const cfgReturnContextType = this.asyncAwaitReturnContextTypeForBody(body);
         const cfgReturnType = cfgReturnContextType
             ? this.prepareType(mapTsType(body, cfgReturnContextType, this.checker))
@@ -26404,6 +26413,15 @@ class Emitter {
                 const storageType = expressionSyncTypes[stateNode.slot];
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") return false;
             } else if (stateNode.kind === "expression-complete") {
+                if (stateNode.resultSlot !== null) {
+                    if (stateNode.assignment || stateNode.completion || stateNode.branch || stateNode.switchDispatch) {
+                        return false;
+                    }
+                    const storageType = expressionResultTypes[stateNode.resultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                }
                 if (stateNode.assignment) {
                     const symbol = this.symbolForIdentifier(stateNode.assignment);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
@@ -26441,6 +26459,12 @@ class Emitter {
                     if (!local || local.type.kind !== "value") return false;
                 }
             } else if (stateNode.kind === "async-iterator-init") {
+                if (stateNode.sourceResultSlot !== null) {
+                    const storageType = expressionResultTypes[stateNode.sourceResultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                }
                 const initializer = stateNode.statement.initializer;
                 const binding = ts.isVariableDeclarationList(initializer)
                     ? initializer.declarations[0]?.name ?? null
@@ -26513,6 +26537,13 @@ class Emitter {
             this.structDecls.line(`${storageType.c} expression_sync_value_${slot};`);
             if (storageType.kind === "value") {
                 this.structDecls.line(`void* expression_sync_value_${slot}_gc_root;`);
+            }
+        }
+        for (let slot = 0; slot < expressionResultTypes.length; slot++) {
+            const storageType = expressionResultTypes[slot]!;
+            this.structDecls.line(`${storageType.c} expression_result_${slot};`);
+            if (storageType.kind === "value") {
+                this.structDecls.line(`void* expression_result_${slot}_gc_root;`);
             }
         }
         for (let slot = 0; slot < graph.iteratorCount; slot++) {
@@ -26691,9 +26722,21 @@ class Emitter {
                     callback.line(`${index}++;`);
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-init") {
-                    const source = this.emitExpr(stateNode.statement.expression);
+                    const source = stateNode.sourceResultSlot === null
+                        ? this.emitExpr(stateNode.statement.expression)
+                        : {
+                            c: `state->expression_result_${stateNode.sourceResultSlot}`,
+                            ty: expressionResultTypes[stateNode.sourceResultSlot]!,
+                        };
                     callback.line(`state->async_iterator_${stateNode.slot} = tsc_async_iterator_get(${this.coerce(source, T_VALUE, stateNode.statement.expression)});`);
                     callback.line(`state->async_iterator_${stateNode.slot}_gc_root = tsc_value_gc_root(state->async_iterator_${stateNode.slot});`);
+                    if (stateNode.sourceResultSlot !== null) {
+                        const storageType = expressionResultTypes[stateNode.sourceResultSlot]!;
+                        callback.line(`state->expression_result_${stateNode.sourceResultSlot} = ${this.zeroValue(storageType)};`);
+                        if (storageType.kind === "value") {
+                            callback.line(`state->expression_result_${stateNode.sourceResultSlot}_gc_root = NULL;`);
+                        }
+                    }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "async-iterator-next") {
                     const iterator = `state->async_iterator_${stateNode.slot}`;
@@ -27127,7 +27170,17 @@ class Emitter {
                         this.conditionValueScopes.pop();
                         this.awaitExpressionValueScopes.pop();
                     }
-                    if (stateNode.switchDispatch) {
+                    if (stateNode.resultSlot !== null) {
+                        const storageType = expressionResultTypes[stateNode.resultSlot];
+                        if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                            return false;
+                        }
+                        callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.coerce(result, storageType, stateNode.expression)};`);
+                        if (storageType.kind === "value") {
+                            callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
+                        }
+                        emitTransition(stateNode.next.id);
+                    } else if (stateNode.switchDispatch) {
                         emitSwitchDispatch(
                             result,
                             stateNode.switchDispatch.clauses,
@@ -27382,6 +27435,13 @@ class Emitter {
             buf.line(`${env}->expression_sync_value_${slot} = ${this.zeroValue(storageType)};`);
             if (storageType.kind === "value") {
                 buf.line(`${env}->expression_sync_value_${slot}_gc_root = NULL;`);
+            }
+        }
+        for (let slot = 0; slot < expressionResultTypes.length; slot++) {
+            const storageType = expressionResultTypes[slot]!;
+            buf.line(`${env}->expression_result_${slot} = ${this.zeroValue(storageType)};`);
+            if (storageType.kind === "value") {
+                buf.line(`${env}->expression_result_${slot}_gc_root = NULL;`);
             }
         }
         for (let slot = 0; slot < graph.iteratorCount; slot++) {
