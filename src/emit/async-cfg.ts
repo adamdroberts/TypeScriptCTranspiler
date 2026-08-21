@@ -239,10 +239,15 @@ interface LoopTargets {
     readonly continueTarget: AsyncControlFlowTarget;
 }
 
+interface LabelTargets {
+    readonly breakTarget: AsyncControlFlowTarget;
+    readonly continueTarget: AsyncControlFlowTarget | null;
+}
+
 interface BuildContext {
     readonly loop: LoopTargets | null;
     readonly breakTarget: AsyncControlFlowTarget | null;
-    readonly labels: ReadonlyMap<string, LoopTargets>;
+    readonly labels: ReadonlyMap<string, LabelTargets>;
     readonly exceptionTarget: AsyncControlFlowExceptionTarget | null;
     readonly returnTarget: AsyncControlFlowTarget | null;
 }
@@ -821,11 +826,13 @@ export function planAsyncControlFlowGraph(
                 }
                 : null,
             breakTarget: context.breakTarget ? wrapTarget(context.breakTarget) : null,
-            labels: new Map([...context.labels].map(([label, targets]) => [
+            labels: new Map<string, LabelTargets>([...context.labels].map(([label, targets]) => [
                 label,
                 {
                     breakTarget: wrapTarget(targets.breakTarget),
-                    continueTarget: wrapTarget(targets.continueTarget),
+                    continueTarget: targets.continueTarget
+                        ? wrapTarget(targets.continueTarget)
+                        : null,
                 },
             ])),
             returnTarget: returnEnter,
@@ -1063,11 +1070,13 @@ export function planAsyncControlFlowGraph(
             next: context.exceptionTarget?.target ?? null,
         }, context.exceptionTarget);
         const loopTargets = { breakTarget: closeNormal(next), continueTarget: nextTarget };
-        const labels = new Map([...context.labels].map(([outerLabel, targets]) => [
+        const labels = new Map<string, LabelTargets>([...context.labels].map(([outerLabel, targets]) => [
             outerLabel,
             {
                 breakTarget: closeNormal(targets.breakTarget),
-                continueTarget: closeNormal(targets.continueTarget),
+                continueTarget: targets.continueTarget
+                    ? closeNormal(targets.continueTarget)
+                    : null,
             },
         ]));
         if (label) labels.set(label, loopTargets);
@@ -1217,8 +1226,9 @@ export function planAsyncControlFlowGraph(
                 }
                 return buildIteratorLoop(statement.statement, next, context, statement.label.text);
             }
-            supported = false;
-            return next;
+            const labels = new Map(context.labels);
+            labels.set(statement.label.text, { breakTarget: next, continueTarget: null });
+            return buildStatement(statement.statement, next, { ...context, labels });
         }
         if (ts.isWhileStatement(statement) || ts.isDoStatement(statement) || ts.isForStatement(statement)) {
             return buildLoop(statement, next, context, null);
@@ -1394,7 +1404,14 @@ export function planAsyncControlFlowGraph(
                     supported = false;
                     return next;
                 }
-                return ts.isBreakStatement(statement) ? targets.breakTarget : targets.continueTarget;
+                const labelledTarget = ts.isBreakStatement(statement)
+                    ? targets.breakTarget
+                    : targets.continueTarget;
+                if (!labelledTarget) {
+                    supported = false;
+                    return next;
+                }
+                return labelledTarget;
             }
             const targetForCompletion = ts.isBreakStatement(statement)
                 ? context.breakTarget

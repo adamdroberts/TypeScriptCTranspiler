@@ -1,0 +1,4 @@
+outer: ab
+inner: abcd
+finally: work/cleanup
+iterator: item next>return>
