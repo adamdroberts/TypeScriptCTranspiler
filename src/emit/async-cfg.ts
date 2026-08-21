@@ -27,7 +27,8 @@ type AsyncBindingOperation =
         readonly kind: "property";
         readonly sourceSlot: number;
         readonly valueSlot: number;
-        readonly name: ts.PropertyName;
+        readonly name: ts.PropertyName | null;
+        readonly keyResultSlot: number | null;
     }
     | {
         readonly kind: "element";
@@ -1048,16 +1049,31 @@ export function planAsyncControlFlowGraph(
             }
             const propertyName = element.propertyName ??
                 (ts.isIdentifier(element.name) ? element.name : null);
-            if (!propertyName ||
-                (ts.isComputedPropertyName(propertyName) && containsAwait(propertyName.expression))) {
-                return null;
-            }
-            entry = buildBindingOperation({
+            if (!propertyName) return null;
+            const suspendingKey = ts.isComputedPropertyName(propertyName) &&
+                containsAwait(propertyName.expression);
+            const keyResultSlot = suspendingKey
+                ? expressionResults.push(propertyName.expression) - 1
+                : null;
+            const property = buildBindingOperation({
                 kind: "property",
                 sourceSlot: valueSlot,
                 valueSlot: childSlot,
-                name: propertyName,
+                name: suspendingKey ? null : propertyName,
+                keyResultSlot,
             }, child, context);
+            if (suspendingKey) {
+                const keyEntry = buildExpressionResult(
+                    propertyName.expression,
+                    keyResultSlot!,
+                    property,
+                    context,
+                );
+                if (!keyEntry) return null;
+                entry = keyEntry;
+            } else {
+                entry = property;
+            }
         }
         return buildBindingOperation({ kind: "check", valueSlot }, entry, context);
     };

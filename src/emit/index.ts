@@ -26598,10 +26598,17 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(operation.identifier);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
-                if (operation.kind === "property" && ts.isComputedPropertyName(operation.name)) {
-                    const keyType = this.prepareType(mapType(operation.name.expression, this.checker));
-                    if (keyType.kind !== "number" && keyType.kind !== "string" &&
-                        keyType.kind !== "symbol") return false;
+                if (operation.kind === "property") {
+                    if ((operation.name === null) !== (operation.keyResultSlot !== null)) return false;
+                    if (operation.keyResultSlot !== null) {
+                        const keyType = expressionResultTypes[operation.keyResultSlot];
+                        if (!keyType || (keyType.kind !== "number" && keyType.kind !== "string" &&
+                            keyType.kind !== "symbol")) return false;
+                    } else if (operation.name && ts.isComputedPropertyName(operation.name)) {
+                        const keyType = this.prepareType(mapType(operation.name.expression, this.checker));
+                        if (keyType.kind !== "number" && keyType.kind !== "string" &&
+                            keyType.kind !== "symbol") return false;
+                    }
                 }
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
                 stateNode.kind === "await-completion" ||
@@ -27019,8 +27026,23 @@ class Emitter {
             };
             const bindingPropertyValue = (
                 source: string,
-                name: ts.PropertyName,
+                name: ts.PropertyName | null,
+                keyResultSlot: number | null,
             ): EmitResult | null => {
+                if (keyResultSlot !== null) {
+                    const keyType = expressionResultTypes[keyResultSlot];
+                    if (!keyType) return null;
+                    const key = `state->expression_result_${keyResultSlot}`;
+                    if (keyType.kind === "number") {
+                        return { c: `tsc_value_get_index(${source}, ${key})`, ty: T_VALUE };
+                    }
+                    if (keyType.kind === "symbol") {
+                        return { c: `tsc_value_get_symbol_prop(${source}, ${key})`, ty: T_VALUE };
+                    }
+                    if (keyType.kind !== "string") return null;
+                    return { c: `tsc_value_get_prop(${source}, ${key})`, ty: T_VALUE };
+                }
+                if (!name) return null;
                 if (ts.isComputedPropertyName(name)) {
                     const key = this.emitExpr(name.expression);
                     const keyType = this.prepareType(key.ty);
@@ -27708,9 +27730,17 @@ class Emitter {
                         const value = bindingPropertyValue(
                             `state->binding_value_${operation.sourceSlot}`,
                             operation.name,
+                            operation.keyResultSlot,
                         );
                         if (!value) return false;
-                        emitBindingValueAssignment(operation.valueSlot, value, operation.name);
+                        const keyNode = operation.name ??
+                            (operation.keyResultSlot === null
+                                ? null
+                                : graph.expressionResults[operation.keyResultSlot]);
+                        if (!keyNode) return false;
+                        emitBindingValueAssignment(operation.valueSlot, value, keyNode);
+                        if (operation.keyResultSlot !== null &&
+                            !releaseExpressionResult(operation.keyResultSlot)) return false;
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "element") {
                         emitBindingValueAssignment(operation.valueSlot, {

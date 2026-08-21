@@ -1,0 +1,3 @@
+{
+  "description": "Canonical binding property operations consume ordered typed key-result slots once, compose with lazy defaults and nesting, and route key rejection through the CFG"
+}
