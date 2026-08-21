@@ -26442,12 +26442,7 @@ class Emitter {
                 const plan = iteratorPlans.get(stateNode.slot);
                 if (!plan || !validateCfgBinding(plan.binding, plan.assignmentTargets)) return false;
             } else if (stateNode.kind === "expression-await") {
-                const promiseType = this.prepareType(mapTsType(
-                    stateNode.awaitExpr.expression,
-                    this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                    this.checker,
-                ));
-                if (promiseType.kind !== "promise" || expressionAwaitTypes[stateNode.slot]?.kind === "never") {
+                if (expressionAwaitTypes[stateNode.slot]?.kind === "never") {
                     return false;
                 }
             } else if (stateNode.kind === "expression-sync") {
@@ -26484,14 +26479,6 @@ class Emitter {
                     : this.prepareType(mapType(stateNode.statement.expression, this.checker));
                 if (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
                     discriminatorType.kind !== "boolean") return false;
-                if (stateNode.awaitExpr) {
-                    const promiseType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr.expression,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                        this.checker,
-                    ));
-                    if (promiseType.kind !== "promise") return false;
-                }
             } else if (stateNode.kind === "switch-compare") {
                 this.assertExhaustiveSwitch(stateNode.statement);
                 const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
@@ -26536,17 +26523,11 @@ class Emitter {
                         : stateNode.kind === "await-next"
                             ? stateNode.awaitExpr
                             : stateNode.completion.awaitExpr!;
-                const promiseType = this.prepareType(mapTsType(
-                    awaitExpr.expression,
-                    this.checker.getTypeAtLocation(awaitExpr.expression),
-                    this.checker,
-                ));
                 const awaitedType = this.prepareType(mapTsType(
                     awaitExpr,
                     this.checker.getTypeAtLocation(awaitExpr),
                     this.checker,
                 ));
-                if (promiseType.kind !== "promise") return false;
                 if (stateNode.kind === "await-next") {
                     if (stateNode.assignment && stateNode.resultSlot !== null) return false;
                     if (stateNode.assignment) {
@@ -26675,12 +26656,16 @@ class Emitter {
             };
             const emitAwaitSuspension = (
                 awaitExpr: ts.AwaitExpression,
-                promiseType: CType,
                 exceptionTargetId: number | null,
             ): void => emitPromiseSuspension(() => {
                 const source = this.emitExpr(awaitExpr.expression);
-                return this.coerce(source, promiseType, awaitExpr.expression);
+                return this.promiseResolveResult(source, awaitExpr.expression);
             }, exceptionTargetId);
+            const awaitFulfilledValue = (sourceType: CType): EmitResult =>
+                this.promiseFulfilledValue(
+                    sourceType.kind === "promise" ? sourceType.elem : sourceType,
+                    "state->receiver",
+                );
             const emitSwitchDispatch = (
                 discriminator: EmitResult,
                 clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[],
@@ -27057,13 +27042,11 @@ class Emitter {
                             this.checker.getTypeAtLocation(stateNode.awaitExpr),
                             this.checker,
                         ));
-                        if (promiseType.kind !== "promise") return false;
                         emitAwaitSuspension(
                             stateNode.awaitExpr,
-                            promiseType,
                             stateNode.exceptionTarget?.target.id ?? null,
                         );
-                        const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                        const fulfilled = awaitFulfilledValue(promiseType);
                         const value = this.coerce(fulfilled, awaitedType, stateNode.awaitExpr);
                         callback.line("state->awaiting = false;");
                         emitSwitchDispatch({ c: value, ty: awaitedType }, stateNode.clauses, stateNode.defaultTarget);
@@ -27117,17 +27100,15 @@ class Emitter {
                         this.checker.getTypeAtLocation(stateNode.awaitExpr),
                         this.checker,
                     ));
-                    if (promiseType.kind !== "promise") return false;
                     emitAwaitSuspension(
                         stateNode.awaitExpr,
-                        promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     const awaitedValue: EmitResult = awaitedType.kind === "void"
                         ? { c: "tsc_value_undefined()", ty: T_VALUE }
                         : {
                             c: this.coerce(
-                                this.promiseFulfilledValue(promiseType.elem, "state->receiver"),
+                                awaitFulfilledValue(promiseType),
                                 awaitedType,
                                 stateNode.awaitExpr,
                             ),
@@ -27148,17 +27129,15 @@ class Emitter {
                         this.checker.getTypeAtLocation(stateNode.awaitExpr),
                         this.checker,
                     ));
-                    if (promiseType.kind !== "promise") return false;
                     emitAwaitSuspension(
                         stateNode.awaitExpr,
-                        promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     const awaitedValue: EmitResult = awaitedType.kind === "void"
                         ? { c: "tsc_value_undefined()", ty: T_VALUE }
                         : {
                             c: this.coerce(
-                                this.promiseFulfilledValue(promiseType.elem, "state->receiver"),
+                                awaitFulfilledValue(promiseType),
                                 awaitedType,
                                 stateNode.awaitExpr,
                             ),
@@ -27185,10 +27164,8 @@ class Emitter {
                         this.checker.getTypeAtLocation(awaitExpr),
                         this.checker,
                     ));
-                    if (promiseType.kind !== "promise") return false;
                     emitAwaitSuspension(
                         awaitExpr,
-                        promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     if (awaitedType.kind === "void") {
@@ -27207,7 +27184,7 @@ class Emitter {
                             callback.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
                         }
                     } else {
-                        const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                        const fulfilled = awaitFulfilledValue(promiseType);
                         const value = this.coerce(fulfilled, awaitedType, awaitExpr);
                         const valueVar = this.freshTemp("_async_cfg_awaited_completion");
                         callback.line(`${awaitedType.c} ${valueVar} = ${value};`);
@@ -27268,17 +27245,15 @@ class Emitter {
                         this.checker.getTypeAtLocation(stateNode.awaitExpr),
                         this.checker,
                     ));
-                    if (promiseType.kind !== "promise") return false;
                     emitAwaitSuspension(
                         stateNode.awaitExpr,
-                        promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     if (stateNode.resultSlot !== null) {
                         const storageType = expressionResultTypes[stateNode.resultSlot];
                         if (!storageType || storageType.kind === "void" || storageType.kind === "never" ||
                             awaitedType.kind === "void" || awaitedType.kind === "never") return false;
-                        const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                        const fulfilled = awaitFulfilledValue(promiseType);
                         callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.coerce(fulfilled, storageType, stateNode.awaitExpr)};`);
                         if (storageType.kind === "value") {
                             callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
@@ -27288,7 +27263,7 @@ class Emitter {
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (awaitedType.kind !== "void") {
                             if (!local) return false;
-                            const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                            const fulfilled = awaitFulfilledValue(promiseType);
                             callback.line(`state->${local.field} = ${this.coerce(fulfilled, local.type, stateNode.awaitExpr)};`);
                             if (local.type.kind === "value") {
                                 callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
@@ -27320,17 +27295,16 @@ class Emitter {
                         this.checker,
                     ));
                     const storageType = expressionAwaitTypes[stateNode.slot]!;
-                    if (promiseType.kind !== "promise" || storageType.kind === "never") return false;
+                    if (storageType.kind === "never") return false;
                     emitAwaitSuspension(
                         stateNode.awaitExpr,
-                        promiseType,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     let storedValue: EmitResult;
                     if (storageType.kind === "void") {
                         storedValue = { c: "tsc_value_undefined()", ty: T_VALUE };
                     } else {
-                        const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                        const fulfilled = awaitFulfilledValue(promiseType);
                         callback.line(`state->expression_value_${stateNode.slot} = ${this.coerce(fulfilled, storageType, stateNode.awaitExpr)};`);
                         if (storageType.kind === "value") {
                             callback.line(`state->expression_value_${stateNode.slot}_gc_root = tsc_value_gc_root(state->expression_value_${stateNode.slot});`);
@@ -27520,16 +27494,14 @@ class Emitter {
                             this.checker.getTypeAtLocation(awaitExpr),
                             this.checker,
                         ));
-                        if (promiseType.kind !== "promise") return false;
                         emitAwaitSuspension(
                             awaitExpr,
-                            promiseType,
                             stateNode.exceptionTarget?.target.id ?? null,
                         );
                         if (awaitedType.kind === "void") {
                             callback.line("state->pending_return = tsc_promise_resolve(tsc_value_undefined());");
                         } else {
-                            const fulfilled = this.promiseFulfilledValue(promiseType.elem, "state->receiver");
+                            const fulfilled = awaitFulfilledValue(promiseType);
                             const awaitedResult = normalizeCfgReturn(
                                 {
                                     c: this.coerce(fulfilled, awaitedType, awaitExpr),

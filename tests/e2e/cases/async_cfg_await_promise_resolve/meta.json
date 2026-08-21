@@ -1,0 +1,3 @@
+{
+  "description": "Canonical await states apply PromiseResolve to primitive, specialized aggregate, dynamic thenable, return, throw, branch, and expression sources"
+}
