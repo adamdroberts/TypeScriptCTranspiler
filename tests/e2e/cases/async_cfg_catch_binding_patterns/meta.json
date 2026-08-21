@@ -1,0 +1,3 @@
+{
+  "description": "Canonical catch-bind states lower nested object/array patterns and route binding failures through awaited finalization"
+}

@@ -26391,6 +26391,16 @@ class Emitter {
             // a returned Promise<T> to T here would suppress adoption.
             return result;
         };
+        const validateCfgBinding = (name: ts.BindingName | ts.Expression): boolean => {
+            if (ts.isIdentifier(name)) {
+                const symbol = this.symbolForIdentifier(name);
+                return !!symbol && fieldBySymbol.has(symbol);
+            }
+            if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
+            return name.elements.every((element) =>
+                !element || element.kind === ts.SyntaxKind.OmittedExpression ||
+                validateCfgBinding(element.name));
+        };
         // Validate every emitter requirement before appending declarations so
         // a rejected graph fails closed without leaving partial C behind.
         for (const stateNode of graph.states) {
@@ -26469,17 +26479,9 @@ class Emitter {
                 const binding = ts.isVariableDeclarationList(initializer)
                     ? initializer.declarations[0]?.name ?? null
                     : initializer;
-                const validateBinding = (name: ts.BindingName | ts.Expression): boolean => {
-                    if (ts.isIdentifier(name)) {
-                        const symbol = this.symbolForIdentifier(name);
-                        return !!symbol && fieldBySymbol.has(symbol);
-                    }
-                    if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
-                    return name.elements.every((element) =>
-                        !element || element.kind === ts.SyntaxKind.OmittedExpression ||
-                        validateBinding(element.name));
-                };
-                if (!binding || !validateBinding(binding)) return false;
+                if (!binding || !validateCfgBinding(binding)) return false;
+            } else if (stateNode.kind === "catch-bind") {
+                if (stateNode.binding && !validateCfgBinding(stateNode.binding)) return false;
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
                 stateNode.kind === "await-completion" ||
                 stateNode.kind === "await-next" ||
@@ -27252,12 +27254,33 @@ class Emitter {
                     }
                 } else if (stateNode.kind === "catch-bind") {
                     if (stateNode.binding) {
-                        const symbol = this.symbolForIdentifier(stateNode.binding);
-                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (!local) return false;
-                        callback.line(`state->${local.field} = ${this.coerce({ c: "state->exception_value", ty: T_VALUE }, local.type, stateNode.binding)};`);
-                        if (local.type.kind === "value") {
-                            callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
+                        const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
+                            const symbol = this.symbolForIdentifier(identifier);
+                            const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                            if (!local) unsupported(identifier, "catch binding is missing CFG storage");
+                            callback.line(`state->${local.field} = ${this.coerce(value, local.type, identifier)};`);
+                            if (local.type.kind === "value") {
+                                callback.line(`state->${local.field}_gc_root = tsc_value_gc_root(state->${local.field});`);
+                            }
+                        };
+                        if (ts.isIdentifier(stateNode.binding)) {
+                            assignIdentifier(stateNode.binding, { c: "state->exception_value", ty: T_VALUE });
+                        } else if (ts.isObjectBindingPattern(stateNode.binding)) {
+                            if (stateNode.binding.elements.length > 0) {
+                                this.emitDynamicObjectBindingsForOf(
+                                    callback,
+                                    stateNode.binding,
+                                    "state->exception_value",
+                                    (descriptor, value) => assignIdentifier(descriptor.identifier, value),
+                                );
+                            }
+                        } else if (stateNode.binding.elements.length > 0) {
+                            this.emitDynamicArrayBindingPatternForOf(
+                                callback,
+                                stateNode.binding,
+                                "state->exception_value",
+                                assignIdentifier,
+                            );
                         }
                     }
                     callback.line("state->exception_value = tsc_value_undefined();");
@@ -41756,7 +41779,11 @@ class Emitter {
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const computedKeyTemps = new Map<number, string>();
-        const defaultTemps = new Map<number, string>();
+        const defaultTemps = new Map<number, {
+            initialized: string;
+            value: string;
+            fallback: string;
+        }>();
         for (const descriptor of descriptors) {
             for (const segment of descriptor.accessPath) {
                 if (segment.kind !== "computed" || computedKeyTemps.has(segment.id)) continue;
@@ -41776,9 +41803,15 @@ class Emitter {
                     T_VALUE,
                     segment.defaultInitializer,
                 );
+                const initialized = this.freshTemp("_for_of_nested_default_initialized");
                 const fallbackTemp = this.freshTemp("_for_of_nested_default");
-                defaultTemps.set(segment.defaultId, fallbackTemp);
-                buf.line(`tsc_value_t const ${fallbackTemp} = ${fallback};`);
+                defaultTemps.set(segment.defaultId, {
+                    initialized,
+                    value: fallbackTemp,
+                    fallback,
+                });
+                buf.line(`bool ${initialized} = false;`);
+                buf.line(`tsc_value_t ${fallbackTemp} = tsc_value_undefined();`);
             }
         }
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
@@ -41794,13 +41827,15 @@ class Emitter {
                         value = `tsc_value_get_index(${source}, ${segment.value}.0)`;
                     }
                     if (segment.defaultId === undefined) return value;
-                    const fallbackTemp = defaultTemps.get(segment.defaultId);
-                    if (!fallbackTemp) {
+                    const fallback = defaultTemps.get(segment.defaultId);
+                    if (!fallback) {
                         unsupported(segment.defaultInitializer ?? pattern, "for-of nested default was not staged");
                     }
                     const valueTemp = this.freshTemp("_for_of_nested_default_value");
                     return `({ tsc_value_t ${valueTemp} = ${value}; ` +
-                        `tsc_value_is_undefined(${valueTemp}) ? ${fallbackTemp} : ${valueTemp}; })`;
+                        `if (tsc_value_is_undefined(${valueTemp})) { ` +
+                        `if (!${fallback.initialized}) { ${fallback.value} = ${fallback.fallback}; ${fallback.initialized} = true; } ` +
+                        `${valueTemp} = ${fallback.value}; } ${valueTemp}; })`;
                 },
                 sourceVar,
             );

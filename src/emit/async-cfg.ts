@@ -130,7 +130,7 @@ type AsyncControlFlowStateCore =
     | {
         readonly kind: "catch-bind";
         readonly id: number;
-        readonly binding: ts.Identifier | null;
+        readonly binding: ts.BindingName | null;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -1352,11 +1352,17 @@ export function planAsyncControlFlowGraph(
             ): AsyncControlFlowTarget => {
                 let catchEntry = buildSequence(catchClause.block.statements, catchNext, catchContext);
                 const binding = catchClause.variableDeclaration?.name ?? null;
-                if (binding && !ts.isIdentifier(binding)) {
+                if (binding && containsSuspendingBindingExpression(binding)) {
                     supported = false;
                     return catchNext;
                 }
-                if (catchClause.variableDeclaration) declarations.push(catchClause.variableDeclaration);
+                if (catchClause.variableDeclaration) {
+                    if (binding && ts.isIdentifier(binding)) {
+                        declarations.push(catchClause.variableDeclaration);
+                    } else if (binding) {
+                        bindingIdentifiers.push(...collectBindingIdentifiers(binding));
+                    }
+                }
                 const catchBindId = reserve();
                 catchEntry = setState({
                     kind: "catch-bind",
