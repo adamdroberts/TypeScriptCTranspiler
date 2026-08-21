@@ -1217,11 +1217,15 @@ export function planAsyncControlFlowGraph(
                 return next;
             }
             const declaration = statement.initializer.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name) || declaration.initializer) {
+            if (declaration.initializer || containsSuspendingBindingExpression(declaration.name)) {
                 supported = false;
                 return next;
             }
-            declarations.push(declaration);
+            if (ts.isIdentifier(declaration.name)) {
+                declarations.push(declaration);
+            } else {
+                bindingIdentifiers.push(...collectBindingIdentifiers(declaration.name));
+            }
         } else if (!ts.isIdentifier(statement.initializer)) {
             supported = false;
             return next;

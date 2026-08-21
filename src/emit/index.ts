@@ -26274,7 +26274,7 @@ class Emitter {
             statement: ts.ForInStatement | ts.ForOfStatement;
             sourceType: CType;
             elementType: CType;
-            binding: AsyncAwaitContinuationParam;
+            binding: ts.BindingName | ts.Expression;
         }>();
         for (const stateNode of graph.states) {
             if (stateNode.kind !== "iterator-init") continue;
@@ -26282,10 +26282,10 @@ class Emitter {
             const bindingName = ts.isVariableDeclarationList(statement.initializer)
                 ? statement.initializer.declarations[0]?.name
                 : statement.initializer;
-            if (!bindingName || !ts.isIdentifier(bindingName)) return false;
-            const bindingSymbol = this.symbolForIdentifier(bindingName);
-            const binding = bindingSymbol ? fieldBySymbol.get(bindingSymbol) : undefined;
-            if (!binding) return false;
+            if (!bindingName || (!ts.isIdentifier(bindingName) &&
+                !ts.isObjectBindingPattern(bindingName) && !ts.isArrayBindingPattern(bindingName))) {
+                return false;
+            }
             const sourceType = this.prepareType(mapType(statement.expression, this.checker));
             let elementType: CType | null = null;
             if (ts.isForInStatement(statement)) {
@@ -26302,7 +26302,7 @@ class Emitter {
                 elementType = T_VALUE;
             }
             if (!elementType) return false;
-            iteratorPlans.set(stateNode.slot, { statement, sourceType, elementType, binding });
+            iteratorPlans.set(stateNode.slot, { statement, sourceType, elementType, binding: bindingName });
         }
         const expressionAwaitTypes = graph.expressionAwaits.map((awaitExpr) => {
             const awaitedType = this.prepareType(mapTsType(
@@ -26417,6 +26417,8 @@ class Emitter {
                         return false;
                     }
                 }
+                const plan = iteratorPlans.get(stateNode.slot);
+                if (!plan || !validateCfgBinding(plan.binding)) return false;
             } else if (stateNode.kind === "expression-await") {
                 const promiseType = this.prepareType(mapTsType(
                     stateNode.awaitExpr.expression,
@@ -26803,10 +26805,11 @@ class Emitter {
                     const element = plan.elementType.kind === "value"
                         ? `(tsc_array_index_present(${values}, ${index}) ? TSC_ARR(${plan.elementType.c}, ${values}, ${index}) : tsc_value_undefined())`
                         : `TSC_ARR(${plan.elementType.c}, ${values}, ${index})`;
-                    callback.line(`state->${plan.binding.field} = ${this.coerce({ c: element, ty: plan.elementType }, plan.binding.type, plan.statement.initializer)};`);
-                    if (plan.binding.type.kind === "value") {
-                        callback.line(`state->${plan.binding.field}_gc_root = tsc_value_gc_root(state->${plan.binding.field});`);
-                    }
+                    emitCfgBinding(
+                        plan.binding,
+                        { c: element, ty: plan.elementType },
+                        ts.isForInStatement(plan.statement) ? "for-in" : "for-of",
+                    );
                     callback.line(`${index}++;`);
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-init") {

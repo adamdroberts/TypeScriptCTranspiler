@@ -1,0 +1,3 @@
+dynamic: kept:4:T1,T2;fallback:5:U1; D>
+typed: left2;right3; D>
+nullish: Cannot destructure null or undefined
