@@ -1,0 +1,3 @@
+{
+  "description": "Canonical async CFG semantic partitions compose expression suspension, branching, loop completion, switch dispatch, rejection recovery, finally routing, captures, and expression-bodied async functions"
+}

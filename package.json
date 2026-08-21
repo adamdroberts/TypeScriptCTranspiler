@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p .",
+    "check:emitter-reachability": "bun src/tools/check-emitter-method-reachability.ts",
     "test": "bun tests/e2e/run.ts",
     "test:native-addon-smoke": "bun tests/native-addon-smoke/run.ts",
     "bench:check": "bun manual-tests/benchmarks/check-thresholds.ts",

@@ -1,5 +1,6 @@
 # Changelog
 
+- Made the typed async CFG the only ordinary async suspension lowering path: block and expression bodies now either produce the canonical graph or fail closed, and the obsolete fixed-shape recognizer/emitter/type subgraph has been deleted. A source-level reachability guard rooted at the emitter entry point prevents orphaned emitter methods from accumulating, while one semantic-partition regression and the generated depth stress exercise the graph without using fixture inventory as a cardinality proof.
 - Value-producing conditional expressions now lower as recursive generic async CFG branches for declaration/assignment/expression results, return/throw completion, nested values, and switch dispatch, preserving selected-arm-only suspension, side effects, and selector exception routing.
 - Embedded-await branch/loop conditions and switch discriminants now complete through generic async CFG expression branch/dispatch edges, including JavaScript truthiness for non-boolean fulfilled values, callback-containing await sources with callback-only shared-cell captures, reconstructed comparisons, and explicit mixed synchronous/awaited conditional graphs with truthy, falsy, and nullish routing plus observable skipped-source behavior.
 - Await-bearing declaration lists now normalize into ordered generic async CFG states, migrating nested `for` initializer/condition/incrementor families off their legacy continuation templates; locally contained labels on atomic await-free iterator loops are proven and retained inside the same graph.
@@ -17,7 +18,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
-- Balanced runtime exception frames across `longjmp`; added GC-visible companion roots for dynamic async-state fields, parameters, initialized/assigned prelude locals, mutable shared closure cells, and nested object slots; and made pointer-bearing `Set` storage scannable. This removes nondeterministic corruption and crashes from the broad pending-return corpus and a 6,144-suspension declaration/method/arrow/closure stress.
+- Balanced runtime exception frames across `longjmp`; added GC-visible companion roots for dynamic async-state fields, parameters, initialized/assigned prelude locals, mutable shared closure cells, and nested object slots; and made pointer-bearing `Set` storage scannable. This removes nondeterministic corruption and crashes from the semantic GC/lifetime partitions and representative generated depth stress.
 - Fixed GC lifetime of NaN-boxed Promise results and rejection reasons while their reactions are queued.
 - Replaced async loop-body completion flags with typed continue, break, return, and throw edges shared by loop-condition lowering.
 - Lowered leading-await statement chains through a typed suspension graph with explicit successors and a canonical function-completion edge.
@@ -27,7 +28,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
-- Lower suspending ordinary `for...of` / `for...in` bodies through generic CFG iterator initialization and advance states with persistent iterable, index, and typed binding storage; normalize await-bearing comma incrementors into ordered states; admit synchronous comparison leaves in mixed logical conditions; and route expression-bodied async arrows through the same CFG. The 99-case iterator multi-await family now passes through the canonical path.
+- Lower suspending ordinary `for...of` / `for...in` bodies through generic CFG iterator initialization and advance states with persistent iterable, index, and typed binding storage; normalize await-bearing comma incrementors into ordered states; admit synchronous comparison leaves in mixed logical conditions; and route expression-bodied async arrows through the same CFG.
 - Lower value-producing synchronous/awaited conditional arms through recursive generic async CFG routes for declarations, assignments, discarded values, nested conditionals, switch dispatch, and return/throw completion. Contextually typed aggregate returns now retain their declared storage across catch/finally routes while returned Promises still undergo runtime adoption.
 - Route embedded-await return/throw expressions through typed CFG completion states, including catch/finally routing and contextual reconstruction of typed aggregate return values. Tests: `async_await_expression_completion_cfg`, `async_await_branch_block_five_await_expression_fallthrough`, `async_await_branch_block_structural_expression_fallthrough`.
 - Prune unreachable generic async CFG states across normal, exception, and finally edges, and retain self-contained await-free `for...of` / `for...in` loops as atomic synchronous states so settled-await scheduling matches JavaScript. Tests: `async_await_do_body_catch_throw_continue`, `async_await_while_condition`.

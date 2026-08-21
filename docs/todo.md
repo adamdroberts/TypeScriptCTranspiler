@@ -50,7 +50,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
 ## 1. Next-up unblockers
 
 - **Phase 6 — `async`/`await` + libuv event loop**
-  - Replace bounded source-shape recognizers with one control-flow/state-machine lowering for arbitrary suspension graphs in expressions and nested `if`, `switch`, loop, label, and `try` / `catch` / `finally` constructs.
+  - Extend the sole ordinary async control-flow/state-machine lowering across every remaining unsupported suspension graph in expressions and nested `if`, `switch`, loop, label, and `try` / `catch` / `finally` constructs; keep unsupported graphs fail-closed rather than restoring source-shape fallbacks.
   - Compute live locals and captured environments across every suspension and completion edge, including mutation, aliasing, closures, iterator cleanup, and abrupt completion.
   - Complete Promise/thenable adoption, combinator iterable handling, rejection propagation, and microtask ordering for all async function forms without synchronous fallbacks for direct-await shapes.
   - Make `for await...of`, async disposal, and libuv-backed APIs consume the same general async IR instead of dedicated continuation templates.
@@ -85,7 +85,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
   - Validate the arbitrary-`node_modules` target against a versioned real-package compatibility corpus rather than accumulating package-specific source-shape recognizers.
 
 - **Phase 15 — perf & polish** (ongoing)
-  - Compiler architecture debt: introduce explicit typed IR/pass boundaries and extract async/generator lowering, expression planning, module interop, and C emission from the 97k-line `src/emit/index.ts`; split the 18k-line Node runtime by subsystem behind a documented internal ABI, with behavior-preserving differential tests before moving feature ownership.
+  - Compiler architecture debt: continue introducing explicit typed IR/pass boundaries and extract async/generator lowering, expression planning, module interop, and C emission from the large `src/emit/index.ts`; split the Node runtime by subsystem behind a documented internal ABI, with behavior-preserving differential tests before moving feature ownership.
   - Generalize hidden-class/property caches and interprocedural escape analysis across dynamic objects, closures, returns, loops, mutations, and receiver-returning methods without weakening ownership guarantees.
   - Add IR-level dead-code elimination and size optimization after semantic lowering, with equivalence tests that cover side effects, allocation observability, exceptions, and module initialization.
   - Expand sanitizer, GC/no-GC, optimization, compiler, and platform CI across Linux GCC/Clang, macOS, and Windows.
