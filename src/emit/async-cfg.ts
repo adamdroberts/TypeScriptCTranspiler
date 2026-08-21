@@ -43,6 +43,28 @@ type AsyncControlFlowStateCore =
         readonly done: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "async-iterator-init";
+        readonly id: number;
+        readonly statement: ts.ForOfStatement;
+        readonly slot: number;
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "async-iterator-next";
+        readonly id: number;
+        readonly statement: ts.ForOfStatement;
+        readonly slot: number;
+        readonly body: AsyncControlFlowTarget;
+        readonly done: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "async-iterator-close";
+        readonly id: number;
+        readonly slot: number;
+        readonly completion: "normal" | "return" | "throw";
+        readonly next: AsyncControlFlowTarget | null;
+    }
+    | {
         readonly kind: "await-condition";
         readonly id: number;
         readonly awaitExpr: ts.AwaitExpression;
@@ -194,10 +216,12 @@ export interface AsyncControlFlowGraph {
     readonly entry: AsyncControlFlowTarget;
     readonly states: readonly AsyncControlFlowState[];
     readonly declarations: readonly ts.VariableDeclaration[];
+    readonly bindingIdentifiers: readonly ts.Identifier[];
     readonly awaitCount: number;
     readonly loopAwaitDepth: number;
     readonly finallyCount: number;
     readonly iteratorCount: number;
+    readonly asyncIteratorCount: number;
     readonly expressionAwaits: readonly ts.AwaitExpression[];
     readonly expressionSyncs: readonly ts.Expression[];
 }
@@ -226,12 +250,14 @@ export function planAsyncControlFlowGraph(
 ): AsyncControlFlowGraph | null {
     const states: AsyncControlFlowState[] = [];
     const declarations: ts.VariableDeclaration[] = [];
+    const bindingIdentifiers: ts.Identifier[] = [];
     let supported = true;
     let awaitCount = 0;
     let loopAwaitDepth = 0;
     let currentLoopDepth = 0;
     let finallyCount = 0;
     let iteratorCount = 0;
+    let asyncIteratorCount = 0;
     const expressionAwaits: ts.AwaitExpression[] = [];
     const expressionAwaitSlots = new Map<ts.AwaitExpression, number>();
     const expressionSyncs: ts.Expression[] = [];
@@ -255,6 +281,19 @@ export function planAsyncControlFlowGraph(
         const visit = (current: ts.Node): void => {
             if (found || ts.isFunctionLike(current) || ts.isClassLike(current)) return;
             if (ts.isAwaitExpression(current)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return found;
+    };
+    const containsSuspendingBindingExpression = (node: ts.Node): boolean => {
+        let found = false;
+        const visit = (current: ts.Node): void => {
+            if (found || ts.isFunctionLike(current) || ts.isClassLike(current)) return;
+            if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) {
                 found = true;
                 return;
             }
@@ -923,14 +962,141 @@ export function planAsyncControlFlowGraph(
         return entry;
     };
 
+    const collectBindingIdentifiers = (name: ts.BindingName): readonly ts.Identifier[] => {
+        if (ts.isIdentifier(name)) return [name];
+        const identifiers: ts.Identifier[] = [];
+        for (const element of name.elements) {
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            identifiers.push(...collectBindingIdentifiers(element.name));
+        }
+        return identifiers;
+    };
+
+    const buildAsyncIteratorLoop = (
+        statement: ts.ForOfStatement,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+        label: string | null,
+    ): AsyncControlFlowTarget => {
+        if (containsAwait(statement.expression)) {
+            supported = false;
+            return next;
+        }
+        if (ts.isVariableDeclarationList(statement.initializer)) {
+            if (statement.initializer.declarations.length !== 1) {
+                supported = false;
+                return next;
+            }
+            const declaration = statement.initializer.declarations[0]!;
+            if (declaration.initializer) {
+                supported = false;
+                return next;
+            }
+            // Defaults and computed keys are emitted while assigning each
+            // yielded value. They need their own CFG states before they may
+            // suspend; never let a shared synchronous binding helper consume
+            // an await/yield expression directly.
+            if (containsSuspendingBindingExpression(declaration.name)) {
+                supported = false;
+                return next;
+            }
+            if (ts.isIdentifier(declaration.name)) {
+                declarations.push(declaration);
+            } else {
+                bindingIdentifiers.push(...collectBindingIdentifiers(declaration.name));
+            }
+        } else if (!ts.isIdentifier(statement.initializer)) {
+            supported = false;
+            return next;
+        }
+
+        // Cardinality is independent of the iterable: one init/next state pair
+        // is allocated per syntactic loop and every body completion returns to
+        // the same next-state back edge. Runtime iteration count never enters
+        // graph construction.
+        const slot = asyncIteratorCount++;
+        const initId = reserve();
+        const nextId = reserve();
+        const nextTarget = target(nextId);
+        const closeStates = new Map<number, AsyncControlFlowTarget>();
+        const closeNormal = (closeNext: AsyncControlFlowTarget): AsyncControlFlowTarget => {
+            const existing = closeStates.get(closeNext.id);
+            if (existing) return existing;
+            const id = reserve();
+            const close = setState({
+                kind: "async-iterator-close",
+                id,
+                slot,
+                completion: "normal",
+                next: closeNext,
+            }, context.exceptionTarget);
+            closeStates.set(closeNext.id, close);
+            return close;
+        };
+        const closeReturnId = reserve();
+        const closeReturn = setState({
+            kind: "async-iterator-close",
+            id: closeReturnId,
+            slot,
+            completion: "return",
+            next: context.returnTarget,
+        }, context.exceptionTarget);
+        const closeThrowId = reserve();
+        const closeThrow = setState({
+            kind: "async-iterator-close",
+            id: closeThrowId,
+            slot,
+            completion: "throw",
+            next: context.exceptionTarget?.target ?? null,
+        }, context.exceptionTarget);
+        const loopTargets = { breakTarget: closeNormal(next), continueTarget: nextTarget };
+        const labels = new Map([...context.labels].map(([outerLabel, targets]) => [
+            outerLabel,
+            {
+                breakTarget: closeNormal(targets.breakTarget),
+                continueTarget: closeNormal(targets.continueTarget),
+            },
+        ]));
+        if (label) labels.set(label, loopTargets);
+        currentLoopDepth++;
+        const loopBody = ts.isBlock(statement.statement)
+            ? statement.statement.statements
+            : [statement.statement];
+        const bodyEntry = buildSequence(loopBody, nextTarget, {
+            loop: loopTargets,
+            breakTarget: loopTargets.breakTarget,
+            labels,
+            exceptionTarget: { target: closeThrow },
+            returnTarget: closeReturn,
+        });
+        currentLoopDepth--;
+        setState({
+            kind: "async-iterator-next",
+            id: nextId,
+            statement,
+            slot,
+            body: bodyEntry,
+            done: next,
+        }, context.exceptionTarget);
+        return setState({
+            kind: "async-iterator-init",
+            id: initId,
+            statement,
+            slot,
+            next: nextTarget,
+        }, context.exceptionTarget);
+    };
+
     const buildIteratorLoop = (
         statement: ts.ForInStatement | ts.ForOfStatement,
         next: AsyncControlFlowTarget,
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
-        if ((ts.isForOfStatement(statement) && statement.awaitModifier) ||
-            containsAwait(statement.expression)) {
+        if (ts.isForOfStatement(statement) && statement.awaitModifier) {
+            return buildAsyncIteratorLoop(statement, next, context, label);
+        }
+        if (containsAwait(statement.expression)) {
             supported = false;
             return next;
         }
@@ -998,7 +1164,8 @@ export function planAsyncControlFlowGraph(
             }
             if ((ts.isForInStatement(statement.statement) || ts.isForOfStatement(statement.statement)) &&
                 !containsNestedFunctionOrClass(statement)) {
-                if (opaqueSynchronousLoopSupported(statement.statement, statement.label.text)) {
+                if (!(ts.isForOfStatement(statement.statement) && statement.statement.awaitModifier) &&
+                    opaqueSynchronousLoopSupported(statement.statement, statement.label.text)) {
                     const id = reserve();
                     return setState({ kind: "sync", id, statement, next }, context.exceptionTarget);
                 }
@@ -1012,7 +1179,8 @@ export function planAsyncControlFlowGraph(
         }
         if ((ts.isForInStatement(statement) || ts.isForOfStatement(statement)) &&
             !containsNestedFunctionOrClass(statement)) {
-            if (opaqueSynchronousLoopSupported(statement)) {
+            if (!(ts.isForOfStatement(statement) && statement.awaitModifier) &&
+                opaqueSynchronousLoopSupported(statement)) {
                 const id = reserve();
                 return setState({ kind: "sync", id, statement, next }, context.exceptionTarget);
             }
@@ -1450,10 +1618,15 @@ export function planAsyncControlFlowGraph(
                 targets.push(state.truthy, state.falsy);
                 break;
             case "iterator-init":
+            case "async-iterator-init":
                 targets.push(state.next);
                 break;
             case "iterator-next":
+            case "async-iterator-next":
                 targets.push(state.body, state.done);
+                break;
+            case "async-iterator-close":
+                if (state.next) targets.push(state.next);
                 break;
             case "await-logical-condition":
             case "logical-condition":
@@ -1515,7 +1688,9 @@ export function planAsyncControlFlowGraph(
     const reachableStates = states.filter((state) => reachableIds.has(state.id));
     const reachableAwaitCount = reachableStates.reduce((count, state) => count + (
         state.kind === "await-condition" || state.kind === "await-logical-condition" || state.kind === "await-completion" ||
-        state.kind === "await-next" || state.kind === "await-dispose" || state.kind === "expression-await" ||
+        state.kind === "await-next" || state.kind === "await-dispose" ||
+        state.kind === "async-iterator-next" || state.kind === "async-iterator-close" ||
+        state.kind === "expression-await" ||
         (state.kind === "switch" && state.awaitExpr !== null) ||
         (state.kind === "return-route" && state.completion.awaitExpr !== null)
             ? 1
@@ -1527,10 +1702,12 @@ export function planAsyncControlFlowGraph(
         entry,
         states: reachableStates,
         declarations,
+        bindingIdentifiers,
         awaitCount: reachableAwaitCount,
         loopAwaitDepth,
         finallyCount,
         iteratorCount,
+        asyncIteratorCount,
         expressionAwaits,
         expressionSyncs,
     };

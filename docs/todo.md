@@ -53,7 +53,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
   - Extend the sole ordinary async control-flow/state-machine lowering across every remaining unsupported suspension graph in expressions and nested `if`, `switch`, loop, label, and `try` / `catch` / `finally` constructs; keep unsupported graphs fail-closed rather than restoring source-shape fallbacks.
   - Compute live locals and captured environments across every suspension and completion edge, including mutation, aliasing, closures, iterator cleanup, and abrupt completion.
   - Complete Promise/thenable adoption, combinator iterable handling, rejection propagation, and microtask ordering for all async function forms without synchronous fallbacks for direct-await shapes.
-  - Make `for await...of` and libuv-backed APIs consume the same general async IR instead of dedicated continuation templates.
+  - Make libuv-backed APIs consume the same general async IR instead of dedicated continuation templates.
 
 ---
 

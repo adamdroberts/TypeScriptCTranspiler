@@ -1,0 +1,5 @@
+natural: a1b2 N>N>N>
+break: a1 N>N>N>B>B!
+return: a1 N>N>N>B>B!R>R!
+throw: failure N>N>N>B>B!R>R!T>T!
+sync: 3 N>N>N>B>B!R>R!T>T!
