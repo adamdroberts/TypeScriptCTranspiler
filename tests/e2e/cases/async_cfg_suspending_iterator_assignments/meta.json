@@ -1,0 +1,3 @@
+{
+  "description": "Canonical binding assign operations consume normalized iterator property/element targets after ordered suspending keys/defaults and preserve IteratorClose on rejection"
+}

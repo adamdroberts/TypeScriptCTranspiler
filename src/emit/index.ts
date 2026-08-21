@@ -26605,8 +26605,22 @@ class Emitter {
                     }
                 }
                 if (operation.kind === "assign") {
-                    const symbol = this.symbolForIdentifier(operation.identifier);
-                    if (!symbol || !fieldBySymbol.has(symbol)) return false;
+                    if (operation.assignmentTarget) {
+                        if (!validateCfgAssignmentTarget(operation.assignmentTarget.node)) return false;
+                        const staged = operation.assignmentTarget.kind === "element"
+                            ? [operation.assignmentTarget.receiver, operation.assignmentTarget.index]
+                            : [operation.assignmentTarget.receiver];
+                        for (const value of staged) {
+                            const storageType = value.storage === "sync"
+                                ? expressionSyncTypes[value.slot]
+                                : expressionResultTypes[value.slot];
+                            if (!storageType || storageType.kind === "void" ||
+                                storageType.kind === "never") return false;
+                        }
+                    } else {
+                        const symbol = this.symbolForIdentifier(operation.identifier);
+                        if (!symbol || !fieldBySymbol.has(symbol)) return false;
+                    }
                 }
                 if (operation.kind === "property") {
                     if ((operation.name === null) !== (operation.keyResultSlot !== null)) return false;
@@ -26877,16 +26891,22 @@ class Emitter {
                 source: EmitResult,
                 label: string,
                 assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
+                preparedAssignmentTargets: ReadonlyMap<ts.Identifier, {
+                    readonly receiver: EmitResult;
+                    readonly index: EmitResult | null;
+                }> = new Map(),
             ): void => {
                 const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
                     const assignmentTarget = assignmentTargets.get(identifier);
                     if (assignmentTarget) {
+                        const preparedTarget = preparedAssignmentTargets.get(identifier);
                         const valueType = this.prepareType(value.ty);
                         const valueTemp = this.freshTemp("_async_cfg_binding_assignment_value");
                         callback.line(`${valueType.c} ${valueTemp} = ${value.c};`);
                         const stagedValue: EmitResult = { c: valueTemp, ty: valueType };
                         if (ts.isPropertyAccessExpression(assignmentTarget)) {
-                            const receiver = this.emitExpr(assignmentTarget.expression);
+                            const receiver = preparedTarget?.receiver ??
+                                this.emitExpr(assignmentTarget.expression);
                             const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
                             const receiverType = this.prepareType(receiver.ty);
                             callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
@@ -26941,11 +26961,13 @@ class Emitter {
                         if (!ts.isElementAccessExpression(assignmentTarget)) {
                             unsupported(assignmentTarget, `${label} assignment target is not writable`);
                         }
-                        const receiver = this.emitExpr(assignmentTarget.expression);
+                        const receiver = preparedTarget?.receiver ??
+                            this.emitExpr(assignmentTarget.expression);
                         const receiverType = this.prepareType(receiver.ty);
                         const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
                         callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
-                        const index = this.emitExpr(assignmentTarget.argumentExpression);
+                        const index = preparedTarget?.index ??
+                            this.emitExpr(assignmentTarget.argumentExpression);
                         const indexType = this.prepareType(index.ty);
                         const indexTemp = this.freshTemp("_async_cfg_binding_assignment_index");
                         callback.line(`${indexType.c} ${indexTemp} = ${index.c};`);
@@ -27802,11 +27824,67 @@ class Emitter {
                         );
                         callback.line("continue;");
                     } else if (operation.kind === "assign") {
+                        const assignmentTargets = operation.assignmentTarget
+                            ? new Map([[operation.identifier, operation.assignmentTarget.node]])
+                            : new Map<ts.Identifier, ts.Expression>();
+                        const preparedAssignmentTargets = new Map<ts.Identifier, {
+                            readonly receiver: EmitResult;
+                            readonly index: EmitResult | null;
+                        }>();
+                        const preparedSlots: Array<{
+                            readonly storage: "sync" | "result";
+                            readonly slot: number;
+                        }> = [];
+                        if (operation.assignmentTarget) {
+                            const preparedValue = (
+                                staged: typeof operation.assignmentTarget.receiver,
+                            ): EmitResult | null => {
+                                const storageType = staged.storage === "sync"
+                                    ? expressionSyncTypes[staged.slot]
+                                    : expressionResultTypes[staged.slot];
+                                if (!storageType || storageType.kind === "void" ||
+                                    storageType.kind === "never") return null;
+                                preparedSlots.push(staged);
+                                return {
+                                    c: staged.storage === "sync"
+                                        ? `state->expression_sync_value_${staged.slot}`
+                                        : `state->expression_result_${staged.slot}`,
+                                    ty: storageType,
+                                };
+                            };
+                            const receiver = preparedValue(operation.assignmentTarget.receiver);
+                            const index = operation.assignmentTarget.kind === "element"
+                                ? preparedValue(operation.assignmentTarget.index)
+                                : null;
+                            if (!receiver ||
+                                (operation.assignmentTarget.kind === "element" && !index)) return false;
+                            preparedAssignmentTargets.set(operation.identifier, { receiver, index });
+                        }
                         emitCfgBinding(
                             operation.identifier,
                             { c: `state->binding_value_${operation.valueSlot}`, ty: T_VALUE },
-                            "declaration",
+                            operation.assignmentTarget ? "iterator assignment" : "declaration",
+                            assignmentTargets,
+                            preparedAssignmentTargets,
                         );
+                        for (const staged of preparedSlots) {
+                            if (staged.storage === "result") {
+                                if (!releaseExpressionResult(staged.slot)) return false;
+                                continue;
+                            }
+                            const storageType = expressionSyncTypes[staged.slot];
+                            if (!storageType || storageType.kind === "void" ||
+                                storageType.kind === "never") return false;
+                            callback.line(
+                                `state->expression_sync_value_${staged.slot} = ` +
+                                `${this.zeroValue(storageType)};`,
+                            );
+                            if (storageType.kind === "value") {
+                                callback.line(
+                                    `state->expression_sync_value_${staged.slot}_gc_root = NULL;`,
+                                );
+                            }
+                        }
                         emitTransition(stateNode.next.id);
                     } else {
                         callback.line(`state->binding_value_${operation.valueSlot} = tsc_value_undefined();`);

@@ -13,6 +13,25 @@ export interface AsyncControlFlowExceptionTarget {
     readonly target: AsyncControlFlowTarget;
 }
 
+type AsyncBindingStagedExpression = {
+    readonly expression: ts.Expression;
+    readonly storage: "sync" | "result";
+    readonly slot: number;
+};
+
+type AsyncBindingAssignmentTarget =
+    | {
+        readonly kind: "property";
+        readonly node: ts.PropertyAccessExpression;
+        readonly receiver: AsyncBindingStagedExpression;
+    }
+    | {
+        readonly kind: "element";
+        readonly node: ts.ElementAccessExpression;
+        readonly receiver: AsyncBindingStagedExpression;
+        readonly index: AsyncBindingStagedExpression;
+    };
+
 type AsyncBindingOperation =
     | {
         readonly kind: "source";
@@ -51,6 +70,7 @@ type AsyncBindingOperation =
     | {
         readonly kind: "assign";
         readonly identifier: ts.Identifier;
+        readonly assignmentTarget: AsyncBindingAssignmentTarget | null;
         readonly valueSlot: number;
     }
     | {
@@ -992,13 +1012,147 @@ export function planAsyncControlFlowGraph(
         return setState({ kind: "binding-op", id, operation, next }, context.exceptionTarget);
     };
 
+    const planBindingStagedExpression = (
+        expression: ts.Expression,
+    ): AsyncBindingStagedExpression => {
+        if (containsAwait(expression)) {
+            return {
+                expression,
+                storage: "result",
+                slot: expressionResults.push(expression) - 1,
+            };
+        }
+        let slot = expressionSyncSlots.get(expression);
+        if (slot === undefined) {
+            slot = expressionSyncs.length;
+            expressionSyncs.push(expression);
+            expressionSyncSlots.set(expression, slot);
+        }
+        return { expression, storage: "sync", slot };
+    };
+
+    const planBindingAssignmentTarget = (
+        target: ts.Expression | undefined,
+    ): AsyncBindingAssignmentTarget | null => {
+        if (!target) return null;
+        if (ts.isPropertyAccessExpression(target)) {
+            return {
+                kind: "property",
+                node: target,
+                receiver: planBindingStagedExpression(target.expression),
+            };
+        }
+        if (ts.isElementAccessExpression(target)) {
+            return {
+                kind: "element",
+                node: target,
+                receiver: planBindingStagedExpression(target.expression),
+                index: planBindingStagedExpression(target.argumentExpression),
+            };
+        }
+        return null;
+    };
+
+    const buildBindingStagedExpression = (
+        staged: AsyncBindingStagedExpression,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        if (staged.storage === "result") {
+            return buildExpressionResult(staged.expression, staged.slot, next, context);
+        }
+        const id = reserve();
+        return setState({
+            kind: "expression-sync",
+            id,
+            expression: staged.expression,
+            slot: staged.slot,
+            next,
+        }, context.exceptionTarget);
+    };
+
+    const buildBindingAssignmentPreparation = (
+        target: AsyncBindingAssignmentTarget,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        let entry = next;
+        if (target.kind === "element") {
+            const index = buildBindingStagedExpression(target.index, entry, context);
+            if (!index) return null;
+            entry = index;
+        }
+        return buildBindingStagedExpression(target.receiver, entry, context);
+    };
+
+    const buildBindingIdentifier = (
+        identifier: ts.Identifier,
+        valueSlot: number,
+        initializer: ts.Expression | null,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+        assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
+    ): AsyncControlFlowTarget | null => {
+        const targetNode = assignmentTargets.get(identifier);
+        const assignmentTarget = planBindingAssignmentTarget(targetNode);
+        if (targetNode && !assignmentTarget) return null;
+        const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
+        const assign = buildBindingOperation({
+            kind: "assign",
+            identifier,
+            assignmentTarget,
+            valueSlot,
+        }, release, context);
+        let entry = assign;
+        if (initializer) {
+            const resultSlot = expressionResults.push(initializer) - 1;
+            const apply = buildBindingOperation({
+                kind: "default-apply",
+                resultSlot,
+                valueSlot,
+            }, assign, context);
+            const defaultTarget = buildExpressionResult(
+                initializer,
+                resultSlot,
+                apply,
+                context,
+            );
+            if (!defaultTarget) return null;
+            entry = buildBindingOperation({
+                kind: "default-test",
+                valueSlot,
+                defaultTarget,
+            }, assign, context);
+        }
+        return assignmentTarget
+            ? buildBindingAssignmentPreparation(assignmentTarget, entry, context)
+            : entry;
+    };
+
     const buildBindingElement = (
         element: ts.BindingElement,
         valueSlot: number,
         next: AsyncControlFlowTarget,
         context: BuildContext,
+        assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
     ): AsyncControlFlowTarget | null => {
-        const bound = buildBindingName(element.name, valueSlot, next, context);
+        if (ts.isIdentifier(element.name)) {
+            return buildBindingIdentifier(
+                element.name,
+                valueSlot,
+                element.initializer ?? null,
+                next,
+                context,
+                assignmentTargets,
+            );
+        }
+        const bound = buildBindingName(
+            element.name,
+            valueSlot,
+            next,
+            context,
+            assignmentTargets,
+        );
         if (!bound || !element.initializer) return bound;
         const resultSlot = expressionResults.push(element.initializer) - 1;
         const apply = buildBindingOperation({
@@ -1025,22 +1179,32 @@ export function planAsyncControlFlowGraph(
         valueSlot: number,
         next: AsyncControlFlowTarget,
         context: BuildContext,
+        assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
     ): AsyncControlFlowTarget | null => {
-        const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
         if (ts.isIdentifier(binding)) {
-            return buildBindingOperation({
-                kind: "assign",
-                identifier: binding,
+            return buildBindingIdentifier(
+                binding,
                 valueSlot,
-            }, release, context);
+                null,
+                next,
+                context,
+                assignmentTargets,
+            );
         }
+        const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
         let entry = release;
         for (let index = binding.elements.length - 1; index >= 0; index--) {
             const element = binding.elements[index];
             if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
             if (element.dotDotDotToken) return null;
             const childSlot = bindingValueCount++;
-            const child = buildBindingElement(element, childSlot, entry, context);
+            const child = buildBindingElement(
+                element,
+                childSlot,
+                entry,
+                context,
+                assignmentTargets,
+            );
             if (!child) return null;
             if (ts.isArrayBindingPattern(binding)) {
                 entry = buildBindingOperation({
@@ -1086,9 +1250,16 @@ export function planAsyncControlFlowGraph(
         binding: ts.BindingName,
         next: AsyncControlFlowTarget,
         context: BuildContext,
+        assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
     ): { readonly entry: AsyncControlFlowTarget; readonly valueSlot: number } | null => {
         const valueSlot = bindingValueCount++;
-        const bound = buildBindingName(binding, valueSlot, next, context);
+        const bound = buildBindingName(
+            binding,
+            valueSlot,
+            next,
+            context,
+            assignmentTargets,
+        );
         if (!bound) return null;
         return { entry: bound, valueSlot };
     };
@@ -1423,7 +1594,7 @@ export function planAsyncControlFlowGraph(
                 statement.initializer,
                 assignmentTargets,
             );
-            if (!assignmentBinding || containsSuspendingBindingExpression(assignmentBinding)) {
+            if (!assignmentBinding) {
                 supported = false;
                 return next;
             }
@@ -1496,8 +1667,14 @@ export function planAsyncControlFlowGraph(
             : buildSequence([statement.statement], nextTarget, bodyContext);
         let bindingEntry = bodyEntry;
         let bindingValueSlot: number | null = null;
-        if (containsSuspendingBindingExpression(binding)) {
-            const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext);
+        if (containsSuspendingBindingExpression(binding) ||
+            [...assignmentTargets.values()].some(containsSuspendingBindingExpression)) {
+            const bound = buildBindingFromValueSlot(
+                binding,
+                bodyEntry,
+                bodyContext,
+                assignmentTargets,
+            );
             if (!bound) {
                 currentLoopDepth--;
                 supported = false;
@@ -1574,7 +1751,7 @@ export function planAsyncControlFlowGraph(
                 statement.initializer,
                 assignmentTargets,
             );
-            if (!assignmentBinding || containsSuspendingBindingExpression(assignmentBinding)) {
+            if (!assignmentBinding) {
                 supported = false;
                 return next;
             }
@@ -1603,8 +1780,14 @@ export function planAsyncControlFlowGraph(
             : buildSequence([statement.statement], nextTarget, bodyContext);
         let bindingEntry = bodyEntry;
         let bindingValueSlot: number | null = null;
-        if (containsSuspendingBindingExpression(binding)) {
-            const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext);
+        if (containsSuspendingBindingExpression(binding) ||
+            [...assignmentTargets.values()].some(containsSuspendingBindingExpression)) {
+            const bound = buildBindingFromValueSlot(
+                binding,
+                bodyEntry,
+                bodyContext,
+                assignmentTargets,
+            );
             if (!bound) {
                 currentLoopDepth--;
                 supported = false;
