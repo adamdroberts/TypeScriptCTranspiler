@@ -26623,15 +26623,29 @@ class Emitter {
                     }
                 }
                 if (operation.kind === "property") {
-                    if ((operation.name === null) !== (operation.keyResultSlot !== null)) return false;
-                    if (operation.keyResultSlot !== null) {
-                        const keyType = expressionResultTypes[operation.keyResultSlot];
+                    if ((operation.name === null) !== (operation.key !== null) ||
+                        (operation.releaseKey && !operation.key)) return false;
+                    if (operation.key) {
+                        const keyType = operation.key.storage === "sync"
+                            ? expressionSyncTypes[operation.key.slot]
+                            : expressionResultTypes[operation.key.slot];
                         if (!keyType || (keyType.kind !== "number" && keyType.kind !== "string" &&
                             keyType.kind !== "symbol")) return false;
-                    } else if (operation.name && ts.isComputedPropertyName(operation.name)) {
-                        const keyType = this.prepareType(mapType(operation.name.expression, this.checker));
-                        if (keyType.kind !== "number" && keyType.kind !== "string" &&
-                            keyType.kind !== "symbol") return false;
+                    } else if (!operation.name || ts.isComputedPropertyName(operation.name)) return false;
+                }
+                if (operation.kind === "array-rest" && operation.startIndex < 0) return false;
+                if (operation.kind === "object-rest") {
+                    for (const exclusion of operation.exclusions) {
+                        if (exclusion.kind === "name") {
+                            if (ts.isComputedPropertyName(exclusion.name)) return false;
+                            continue;
+                        }
+                        const keyType = exclusion.key.storage === "sync"
+                            ? expressionSyncTypes[exclusion.key.slot]
+                            : expressionResultTypes[exclusion.key.slot];
+                        if (!keyType || (keyType.kind !== "number" && keyType.kind !== "string")) {
+                            return false;
+                        }
                     }
                 }
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
@@ -27056,15 +27070,53 @@ class Emitter {
                 }
                 return true;
             };
+            const bindingStagedValue = (staged: {
+                readonly expression: ts.Expression;
+                readonly storage: "sync" | "result";
+                readonly slot: number;
+            }): EmitResult | null => {
+                const storageType = staged.storage === "sync"
+                    ? expressionSyncTypes[staged.slot]
+                    : expressionResultTypes[staged.slot];
+                if (!storageType || storageType.kind === "void" ||
+                    storageType.kind === "never") return null;
+                return {
+                    c: staged.storage === "sync"
+                        ? `state->expression_sync_value_${staged.slot}`
+                        : `state->expression_result_${staged.slot}`,
+                    ty: storageType,
+                };
+            };
+            const releaseBindingStagedValue = (staged: {
+                readonly storage: "sync" | "result";
+                readonly slot: number;
+            }): boolean => {
+                if (staged.storage === "result") return releaseExpressionResult(staged.slot);
+                const storageType = expressionSyncTypes[staged.slot];
+                if (!storageType || storageType.kind === "void" ||
+                    storageType.kind === "never") return false;
+                callback.line(
+                    `state->expression_sync_value_${staged.slot} = ${this.zeroValue(storageType)};`,
+                );
+                if (storageType.kind === "value") {
+                    callback.line(`state->expression_sync_value_${staged.slot}_gc_root = NULL;`);
+                }
+                return true;
+            };
             const bindingPropertyValue = (
                 source: string,
                 name: ts.PropertyName | null,
-                keyResultSlot: number | null,
+                stagedKey: {
+                    readonly expression: ts.Expression;
+                    readonly storage: "sync" | "result";
+                    readonly slot: number;
+                } | null,
             ): EmitResult | null => {
-                if (keyResultSlot !== null) {
-                    const keyType = expressionResultTypes[keyResultSlot];
-                    if (!keyType) return null;
-                    const key = `state->expression_result_${keyResultSlot}`;
+                if (stagedKey) {
+                    const keyValue = bindingStagedValue(stagedKey);
+                    if (!keyValue) return null;
+                    const keyType = this.prepareType(keyValue.ty);
+                    const key = keyValue.c;
                     if (keyType.kind === "number") {
                         return { c: `tsc_value_get_index(${source}, ${key})`, ty: T_VALUE };
                     }
@@ -27075,18 +27127,7 @@ class Emitter {
                     return { c: `tsc_value_get_prop(${source}, ${key})`, ty: T_VALUE };
                 }
                 if (!name) return null;
-                if (ts.isComputedPropertyName(name)) {
-                    const key = this.emitExpr(name.expression);
-                    const keyType = this.prepareType(key.ty);
-                    if (keyType.kind === "number") {
-                        return { c: `tsc_value_get_index(${source}, ${key.c})`, ty: T_VALUE };
-                    }
-                    if (keyType.kind === "symbol") {
-                        return { c: `tsc_value_get_symbol_prop(${source}, ${key.c})`, ty: T_VALUE };
-                    }
-                    if (keyType.kind !== "string") return null;
-                    return { c: `tsc_value_get_prop(${source}, ${key.c})`, ty: T_VALUE };
-                }
+                if (ts.isComputedPropertyName(name)) return null;
                 const key = ts.isIdentifier(name) || ts.isStringLiteralLike(name)
                     ? name.text
                     : ts.isNumericLiteral(name)
@@ -27799,23 +27840,61 @@ class Emitter {
                         const value = bindingPropertyValue(
                             `state->binding_value_${operation.sourceSlot}`,
                             operation.name,
-                            operation.keyResultSlot,
+                            operation.key,
                         );
                         if (!value) return false;
-                        const keyNode = operation.name ??
-                            (operation.keyResultSlot === null
-                                ? null
-                                : graph.expressionResults[operation.keyResultSlot]);
+                        const keyNode = operation.name ?? operation.key?.expression ?? null;
                         if (!keyNode) return false;
                         emitBindingValueAssignment(operation.valueSlot, value, keyNode);
-                        if (operation.keyResultSlot !== null &&
-                            !releaseExpressionResult(operation.keyResultSlot)) return false;
+                        if (operation.releaseKey && operation.key &&
+                            !releaseBindingStagedValue(operation.key)) return false;
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "element") {
                         emitBindingValueAssignment(operation.valueSlot, {
                             c: `tsc_value_get_index(state->binding_value_${operation.sourceSlot}, ${operation.index}.0)`,
                             ty: T_VALUE,
                         }, body);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "array-rest") {
+                        const rest = this.emitDynamicArrayRestForOf(
+                            callback,
+                            `state->binding_value_${operation.sourceSlot}`,
+                            operation.startIndex,
+                        );
+                        emitBindingValueAssignment(operation.valueSlot, rest, body);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "object-rest") {
+                        const excluded: string[] = [];
+                        for (const exclusion of operation.exclusions) {
+                            if (exclusion.kind === "name") {
+                                const name = ts.isIdentifier(exclusion.name) ||
+                                    ts.isStringLiteralLike(exclusion.name)
+                                    ? exclusion.name.text
+                                    : ts.isNumericLiteral(exclusion.name)
+                                        ? String(Number(exclusion.name.text))
+                                        : null;
+                                if (name === null) return false;
+                                excluded.push(
+                                    `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`,
+                                );
+                                continue;
+                            }
+                            const keyValue = bindingStagedValue(exclusion.key);
+                            if (!keyValue) return false;
+                            const keyType = this.prepareType(keyValue.ty);
+                            if (keyType.kind !== "number" && keyType.kind !== "string") return false;
+                            excluded.push(this.coerce(keyValue, T_STRING, exclusion.key.expression));
+                        }
+                        const rest = this.emitDynamicObjectRestWithExcludedKeys(
+                            callback,
+                            `state->binding_value_${operation.sourceSlot}`,
+                            excluded,
+                        );
+                        emitBindingValueAssignment(operation.valueSlot, rest, body);
+                        for (const exclusion of operation.exclusions) {
+                            if (exclusion.kind === "staged" &&
+                                !releaseBindingStagedValue(exclusion.key)) return false;
+                        }
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "default-test") {
                         callback.line(
@@ -27868,22 +27947,7 @@ class Emitter {
                             preparedAssignmentTargets,
                         );
                         for (const staged of preparedSlots) {
-                            if (staged.storage === "result") {
-                                if (!releaseExpressionResult(staged.slot)) return false;
-                                continue;
-                            }
-                            const storageType = expressionSyncTypes[staged.slot];
-                            if (!storageType || storageType.kind === "void" ||
-                                storageType.kind === "never") return false;
-                            callback.line(
-                                `state->expression_sync_value_${staged.slot} = ` +
-                                `${this.zeroValue(storageType)};`,
-                            );
-                            if (storageType.kind === "value") {
-                                callback.line(
-                                    `state->expression_sync_value_${staged.slot}_gc_root = NULL;`,
-                                );
-                            }
+                            if (!releaseBindingStagedValue(staged)) return false;
                         }
                         emitTransition(stateNode.next.id);
                     } else {
@@ -42326,12 +42390,6 @@ class Emitter {
         restPath: readonly ForOfObjectAccessSegment[],
         computedKeyTemps: ReadonlyMap<number, string>,
     ): EmitResult {
-        const sourceVar = this.freshTemp("_for_of_object_rest_source");
-        const restObject = this.freshTemp("_for_of_object_rest");
-        const restKeys = this.freshTemp("_for_of_object_rest_keys");
-        const restIndex = this.freshTemp("_for_of_object_rest_i");
-        const restKey = this.freshTemp("_for_of_object_rest_key");
-        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const excluded = Array.from(new Set(
             descriptors
                 .filter((descriptor) =>
@@ -42357,6 +42415,20 @@ class Emitter {
                     return [];
                 }),
         ));
+        return this.emitDynamicObjectRestWithExcludedKeys(buf, sourceC, excluded);
+    }
+
+    private emitDynamicObjectRestWithExcludedKeys(
+        buf: CBuf,
+        sourceC: string,
+        excluded: readonly string[],
+    ): EmitResult {
+        const sourceVar = this.freshTemp("_for_of_object_rest_source");
+        const restObject = this.freshTemp("_for_of_object_rest");
+        const restKeys = this.freshTemp("_for_of_object_rest_keys");
+        const restIndex = this.freshTemp("_for_of_object_rest_i");
+        const restKey = this.freshTemp("_for_of_object_rest_key");
+        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const skip = excluded
             .map((property) => `tsc_str_eq(${restKey}, ${property})`)
             .join(" || ");

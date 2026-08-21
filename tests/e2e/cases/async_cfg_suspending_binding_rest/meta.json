@@ -1,0 +1,3 @@
+{
+  "description": "Canonical array/object rest operations compose with suspending declarations, catches, and iterator assignments while sharing computed exclusion keys once"
+}

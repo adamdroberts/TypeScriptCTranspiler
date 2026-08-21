@@ -1,0 +1,3 @@
+declaration rest: 10:30:1:2,3:20:undefined:undefined 1,3
+catch rest: E:40 1,3
+iterator rest: 50:60:70:80,90 1,3,5,6
