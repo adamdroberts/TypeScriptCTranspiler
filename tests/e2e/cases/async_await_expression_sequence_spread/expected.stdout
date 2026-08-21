@@ -1,0 +1,4 @@
+call: abc|call-spread,call-tail
+new: def|new-spread,new-tail
+array: 1,2,3|array-spread,array-tail
+object: gi|object-spread,object-tail,object-spread-second,object-tail-second

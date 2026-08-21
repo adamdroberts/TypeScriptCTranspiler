@@ -1,0 +1,9 @@
+fulfilled start:inner
+shadow inner
+outer outer
+rejected block-error
+first before-reject
+deep root:outer:inner:awaited:outer
+multi multi:one:one:two
+second-rejected second-error
+locals outer#inner|inner:one:middle|inner:one:middle:two

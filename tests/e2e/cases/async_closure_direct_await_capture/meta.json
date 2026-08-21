@@ -1,0 +1,3 @@
+{
+  "description": "captured async closures wire pending direct-await results and preserve shared binding rebinding through their heap continuation environment"
+}

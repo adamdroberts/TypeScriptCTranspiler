@@ -1,0 +1,12 @@
+result immediate
+jump-cleanup 0 1
+jump-cleanup 1 1
+return-throw-cleanup
+jump-tail 1 1
+return-break-cleanup
+result jump-1
+rejected throw-overrode-return
+jump-cleanup 0 2
+result break-overrode-return
+jump-tail 0 2
+result jump-0

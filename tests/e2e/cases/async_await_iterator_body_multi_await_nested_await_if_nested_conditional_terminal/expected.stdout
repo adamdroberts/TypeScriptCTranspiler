@@ -1,4 +1,4 @@
 of-return:of-b-return
-in-throw:in-b-throw
 of-fallthrough:of-fallthrough
+in-throw:in-b-throw
 in-fallthrough:in-fallthrough

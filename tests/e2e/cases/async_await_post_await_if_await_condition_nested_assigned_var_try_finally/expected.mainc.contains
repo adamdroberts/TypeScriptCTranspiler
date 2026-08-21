@@ -1,3 +1,2 @@
-tsc_async_await_awaited_if_condition_after_await
-tsc_str_t* escaped
-tsc_str_t* escapedThrow
+tsc_async_cfg_
+tsc_str_t* cfg_local_

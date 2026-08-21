@@ -1022,6 +1022,21 @@ bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle) {
     return tsc_value_chain_contains(prototype, tsc_value_object((tsc_object_t*)needle));
 }
 
+static void object_prop_store_value(tsc_object_prop_t* prop, tsc_value_t value) {
+    prop->value = value;
+    prop->value_gc_root = tsc_value_gc_root(value);
+}
+
+static void object_prop_store_getter_value(tsc_object_prop_t* prop, tsc_value_t value) {
+    prop->getter_value = value;
+    prop->getter_value_gc_root = tsc_value_gc_root(value);
+}
+
+static void object_prop_store_setter_value(tsc_object_prop_t* prop, tsc_value_t value) {
+    prop->setter_value = value;
+    prop->setter_value_gc_root = tsc_value_gc_root(value);
+}
+
 bool tsc_object_is_prototype_of(const tsc_object_t* prototype, const tsc_object_t* object) {
     if (!prototype || !object) return false;
     return object_chain_contains(object->prototype, prototype);
@@ -1032,20 +1047,20 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
     if (found >= 0) {
         tsc_object_prop_t* prop = &o->props[(size_t)found];
         if (prop->accessor || !prop->writable) return false;
-        prop->value = value;
+        object_prop_store_value(prop, value);
         return true;
     }
     if (!o->extensible) return false;
     object_reserve(o, o->len + 1);
     o->props[o->len].key = key;
-    o->props[o->len].value = value;
+    object_prop_store_value(&o->props[o->len], value);
     o->props[o->len].accessor = false;
     o->props[o->len].getter = NULL;
     o->props[o->len].getter_env = NULL;
-    o->props[o->len].getter_value = tsc_value_undefined();
+    object_prop_store_getter_value(&o->props[o->len], tsc_value_undefined());
     o->props[o->len].setter = NULL;
     o->props[o->len].setter_env = NULL;
-    o->props[o->len].setter_value = tsc_value_undefined();
+    object_prop_store_setter_value(&o->props[o->len], tsc_value_undefined());
     o->props[o->len].writable = true;
     o->props[o->len].enumerable = true;
     o->props[o->len].configurable = true;
@@ -1197,12 +1212,12 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
             p->accessor = false;
             p->getter = NULL;
             p->getter_env = NULL;
-            p->getter_value = tsc_value_undefined();
+            object_prop_store_getter_value(p, tsc_value_undefined());
             p->setter = NULL;
             p->setter_env = NULL;
-            p->setter_value = tsc_value_undefined();
+            object_prop_store_setter_value(p, tsc_value_undefined());
         }
-        if (has_value) p->value = value;
+        if (has_value) object_prop_store_value(p, value);
         if (has_writable) p->writable = writable;
         if (has_enumerable) p->enumerable = enumerable;
         if (has_configurable) p->configurable = configurable;
@@ -1212,14 +1227,14 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
     if (!o->extensible) return false;
     object_reserve(o, o->len + 1);
     o->props[o->len].key = key;
-    o->props[o->len].value = has_value ? value : tsc_value_undefined();
+    object_prop_store_value(&o->props[o->len], has_value ? value : tsc_value_undefined());
     o->props[o->len].accessor = false;
     o->props[o->len].getter = NULL;
     o->props[o->len].getter_env = NULL;
-    o->props[o->len].getter_value = tsc_value_undefined();
+    object_prop_store_getter_value(&o->props[o->len], tsc_value_undefined());
     o->props[o->len].setter = NULL;
     o->props[o->len].setter_env = NULL;
-    o->props[o->len].setter_value = tsc_value_undefined();
+    object_prop_store_setter_value(&o->props[o->len], tsc_value_undefined());
     o->props[o->len].writable = has_writable ? writable : false;
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
@@ -1284,14 +1299,14 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         void* next_setter_env = has_setter ? setter_env : (prop->accessor ? prop->setter_env : NULL);
         bool next_enumerable = has_enumerable ? enumerable : prop->enumerable;
         bool next_configurable = has_configurable ? configurable : prop->configurable;
-        prop->value = tsc_value_undefined();
+        object_prop_store_value(prop, tsc_value_undefined());
         prop->accessor = true;
         prop->getter = next_getter;
         prop->getter_env = next_getter_env;
-        prop->getter_value = value_accessor_getter_identity(next_getter, next_getter_env);
+        object_prop_store_getter_value(prop, value_accessor_getter_identity(next_getter, next_getter_env));
         prop->setter = next_setter;
         prop->setter_env = next_setter_env;
-        prop->setter_value = value_accessor_setter_identity(next_setter, next_setter_env);
+        object_prop_store_setter_value(prop, value_accessor_setter_identity(next_setter, next_setter_env));
         prop->writable = false;
         prop->enumerable = next_enumerable;
         prop->configurable = next_configurable;
@@ -1301,14 +1316,14 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
     if (!o->extensible) return false;
     object_reserve(o, o->len + 1);
     o->props[o->len].key = key;
-    o->props[o->len].value = tsc_value_undefined();
+    object_prop_store_value(&o->props[o->len], tsc_value_undefined());
     o->props[o->len].accessor = true;
     o->props[o->len].getter = has_getter ? getter : NULL;
     o->props[o->len].getter_env = has_getter ? getter_env : NULL;
-    o->props[o->len].getter_value = value_accessor_getter_identity(o->props[o->len].getter, o->props[o->len].getter_env);
+    object_prop_store_getter_value(&o->props[o->len], value_accessor_getter_identity(o->props[o->len].getter, o->props[o->len].getter_env));
     o->props[o->len].setter = has_setter ? setter : NULL;
     o->props[o->len].setter_env = has_setter ? setter_env : NULL;
-    o->props[o->len].setter_value = value_accessor_setter_identity(o->props[o->len].setter, o->props[o->len].setter_env);
+    object_prop_store_setter_value(&o->props[o->len], value_accessor_setter_identity(o->props[o->len].setter, o->props[o->len].setter_env));
     o->props[o->len].writable = false;
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;

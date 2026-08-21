@@ -1,0 +1,31 @@
+result immediate
+source single
+source template-a
+source and-left
+source left
+source template-b
+source or-left
+expression-caught true 11
+source right
+source array-a
+source nullish-left
+expression-finally
+source call-left
+source array-spread
+source nullish-right
+result caught-done
+source call-right
+source object-a
+short 0 kept fallback
+source unary
+source object-spread
+result short-done
+arithmetic 3 7 56 -2
+source property-object
+result arithmetic-done
+source element-array
+source statement-a
+source statement-b
+statement 9 10
+aggregate value:A:B 1,2,3 7 8 12 5
+result aggregate-done

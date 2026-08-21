@@ -69,13 +69,16 @@ typedef enum {
 typedef struct tsc_object_prop {
     tsc_str_t* key;
     tsc_value_t value;
+    void* value_gc_root;
     bool accessor;
     tsc_accessor_getter_t getter;
     void* getter_env;
     tsc_value_t getter_value;
+    void* getter_value_gc_root;
     tsc_accessor_setter_t setter;
     void* setter_env;
     tsc_value_t setter_value;
+    void* setter_value_gc_root;
     bool writable;
     bool enumerable;
     bool configurable;
@@ -182,6 +185,7 @@ typedef struct {
 struct tsc_promise {
     tsc_promise_state_t state;
     tsc_value_t result;
+    /* Typed pointer payload, or the decoded GC root for a NaN-boxed result. */
     void* ptr_result;
     tsc_promise_callback_t* callbacks;
     size_t callbacks_len;

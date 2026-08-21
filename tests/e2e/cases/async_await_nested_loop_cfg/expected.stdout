@@ -1,0 +1,169 @@
+label-outer 0
+for-do 0 0
+result immediate
+label-inner 0
+for-do 0 1
+switch-discriminant 0
+switch-discriminant 1
+switch-discriminant 2
+switch-discriminant 3
+try-caught 0 true 7
+try-caught-runtime runtime-failure
+finally-try 0
+finally-try 1
+finally-try 2
+finally-try 3
+finally-try 4
+finally-catch 4 false runtime-failure
+finally-start 4
+finally-jump-start 0 1 1
+finally-jump-start 1 1 1
+finally-jump-start 2 1 1
+finally-jump-start 3 1 1
+finally-local-loop 0
+finally-local-after
+finally-jump-start 4 1 1
+finally-return-start 0
+finally-return-start 3
+label-outer 1
+awaited-for-init 0
+switch-case-check 0
+switch-case-check 0
+switch-case-check 2
+switch-case-check 3
+switch-case-check 0
+switch-case-check 2
+switch-continue 1
+switch-case-check 0
+switch-case-check 2
+switch-case-check 3
+switch-break 1
+switch-tail 3 1
+try-recovered caught-0
+try-caught 1 true 7
+try-caught 2 true 7
+try-recovered caught-3
+try-success 4 try-ok
+finally-try-done 0
+finally-start 0
+finally-catch 1 true [object Object]
+finally-start 1
+finally-catch 2 true [object Object]
+finally-start 2
+finally-try-done 3
+finally-start 3
+finally-end 4
+finally-after 4
+finally-jump-end 0 1 1
+finally-jump-end 1 1 1
+finally-jump-after-inner 1 1
+finally-jump-end 2 1 1
+finally-jump-end 3 1 1
+finally-jump-tail 3 1
+finally-jump-end 4 1 1
+finally-jump-after-try 4
+finally-return-end 0
+finally-return-start 1
+finally-return-catch true
+finally-return-start 2
+finally-return-end 3
+rejected inner-error
+label-inner 0
+label-tail 2
+for-do 1 0
+result return-awaited
+rejected throw-awaited
+rejected return-rejected
+object-rejected true 7
+awaited-local true 7
+switch-case 0 zero 1
+switch-default 1 1
+switch-after 1 1
+result switch-3
+try-recovered caught-1
+try-recovered caught-2
+finally-end 0
+finally-after 0
+finally-end 1
+finally-after 1
+finally-end 2
+finally-end 3
+finally-no-catch-cleanup
+double-finally-inner
+finally-jump-start 0 1 2
+finally-jump-tail 1 1
+result finally-jump-3
+finally-local-loop 0
+finally-local-after
+finally-jump-start 4 1 2
+result return-sync
+finally-return-end 1
+finally-return-end 2
+double-return-inner
+result label-done
+for-do 1 1
+result local-done
+switch-default 0 1
+switch-after 0 1
+switch-discriminant 2
+finally-rejected 2 true
+finally-rejected 3 finally-override
+finally-no-catch-rejected true
+double-finally-outer
+finally-jump-end 0 1 2
+result finally-jump-1
+finally-jump-start 2 2 1
+finally-jump-end 4 1 2
+finally-jump-after-try 4
+result return-awaited
+result return-caught
+result return-override
+double-return-outer
+result for-init-done
+switch-case-check 0
+switch-case-check 2
+switch-continue 2
+result try-0
+result try-3
+result try-4
+result finally-4
+double-finally-rejected true
+finally-jump-after-inner 0 1
+finally-jump-end 2 2 1
+finally-jump-after-inner 4 1
+result double-return
+for-do-tail 4
+hoisted-var 42
+switch-discriminant 1
+switch-tail 2 2
+result try-1
+result try-2
+result finally-0
+result finally-1
+finally-jump-tail 0 1
+finally-jump-tail 2 2
+finally-jump-tail 4 1
+result for-do-done
+result var-done
+switch-discriminant 0
+switch-case-check 0
+switch-case-check 2
+switch-case-check 3
+result switch-2
+result finally-jump-0
+result finally-jump-2
+result finally-jump-4
+switch-case-check 0
+switch-default 1 2
+switch-after 1 2
+switch-case 0 zero 2
+switch-default 0 2
+switch-after 0 2
+switch-tail 1 2
+result switch-1
+natural-tail 2 22
+switch-tail 0 2
+result natural-done
+result switch-0
+triple-tail 8
+result triple-done

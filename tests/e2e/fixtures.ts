@@ -2519,6 +2519,12 @@ const packages: Record<string, PackageFixture> = {
     }),
 };
 
+const packageNames = Object.keys(packages);
+
+export function referencesE2eNodeModuleFixture(source: string): boolean {
+    return packageNames.some((name) => source.includes(name));
+}
+
 export async function ensureE2eNodeModuleFixtures(): Promise<void> {
     const nodeModules = path.join(rootDir, "node_modules");
     await fs.mkdir(nodeModules, { recursive: true });

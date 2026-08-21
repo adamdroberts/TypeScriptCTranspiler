@@ -1,0 +1,3 @@
+{
+  "description": "Nested lexical if suspension graphs preserve synchronous fallthrough, shadowed bindings, shared tails, rejection, and microtask order"
+}

@@ -1,0 +1,7 @@
+source return-a
+source throw-a
+source return-b
+source throw-b
+return-a:return-b
+finally
+caught:throw-a:throw-b

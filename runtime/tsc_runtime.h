@@ -70,6 +70,14 @@ void* tsc_no_gc_malloc_uninit(size_t n);
 
 typedef uint64_t tsc_value_t;
 
+/* A continuation may retain a mutable closure binding rather than a value
+ * snapshot.  Copying this handle between states preserves both the shared
+ * storage identity and the decoded GC root updated by every writer. */
+typedef struct tsc_async_cell_ref {
+    void* value_cell;
+    void** gc_root_cell;
+} tsc_async_cell_ref_t;
+
 /* ------------- bootstrap ------------- */
 void tsc_bootstrap(int argc, char** argv);
 void tsc_panic(const char* msg);
@@ -680,6 +688,10 @@ tsc_str_t* tsc_value_as_string(tsc_value_t v);
 tsc_array_t* tsc_value_as_array(tsc_value_t v);
 void* tsc_value_as_class(tsc_value_t v);
 bool tsc_value_is_promise(tsc_value_t v);
+/* Return the decoded heap pointer for a NaN-boxed reference value, or NULL
+ * for an immediate value.  Long-lived state that stores tsc_value_t must
+ * retain this companion pointer so a conservative collector can see it. */
+void* tsc_value_gc_root(tsc_value_t v);
 tsc_promise_t* tsc_value_as_promise(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
@@ -1436,9 +1448,9 @@ typedef struct tsc_try_frame {
 
 void tsc_try_push(tsc_try_frame_t* f);
 void tsc_try_pop(void);
-void tsc_throw_str(tsc_str_t* message);
-void tsc_throw_value(tsc_value_t value);
-void tsc_rethrow(void);
+_Noreturn void tsc_throw_str(tsc_str_t* message);
+_Noreturn void tsc_throw_value(tsc_value_t value);
+_Noreturn void tsc_rethrow(void);
 tsc_str_t* tsc_current_error(void);
 tsc_value_t tsc_current_error_value(void);
 

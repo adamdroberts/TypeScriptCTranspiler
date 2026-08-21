@@ -1,10 +1,26 @@
 #include "tsc_internal.h"
 
+/* NaN-boxed pointer payloads are not recognizable conservative-GC roots.
+ * Keep the decoded pointer beside a promise result for as long as that result
+ * is observable.  Typed pointer promises already use the same field. */
+void* tsc_value_gc_root(tsc_value_t value) {
+    if (!value_is_box(value)) return NULL;
+    switch (value_tag(value)) {
+        case TSC_VALUE_TAG_STRING:
+        case TSC_VALUE_TAG_ARRAY:
+        case TSC_VALUE_TAG_OBJECT:
+        case TSC_VALUE_TAG_FUNCTION:
+            return value_ptr(value);
+        default:
+            return NULL;
+    }
+}
+
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_FULFILLED;
     p->result = value;
-    p->ptr_result = NULL;
+    p->ptr_result = tsc_value_gc_root(value);
     p->callbacks = NULL;
     p->callbacks_len = 0;
     p->callbacks_cap = 0;
@@ -973,7 +989,7 @@ tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
     p->state = TSC_PROMISE_REJECTED;
     p->result = reason;
-    p->ptr_result = NULL;
+    p->ptr_result = tsc_value_gc_root(reason);
     p->callbacks = NULL;
     p->callbacks_len = 0;
     p->callbacks_cap = 0;
@@ -1018,7 +1034,7 @@ void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value) {
     if (!p || p->state != TSC_PROMISE_PENDING) return;
     p->state = TSC_PROMISE_FULFILLED;
     p->result = value;
-    p->ptr_result = NULL;
+    p->ptr_result = tsc_value_gc_root(value);
     tsc_promise_trigger_callbacks(p);
 }
 
@@ -1034,7 +1050,7 @@ void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason) {
     if (!p || p->state != TSC_PROMISE_PENDING) return;
     p->state = TSC_PROMISE_REJECTED;
     p->result = reason;
-    p->ptr_result = NULL;
+    p->ptr_result = tsc_value_gc_root(reason);
     tsc_promise_trigger_callbacks(p);
 }
 

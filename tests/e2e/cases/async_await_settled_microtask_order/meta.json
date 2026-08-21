@@ -1,0 +1,3 @@
+{
+  "description": "already-settled fulfilled and rejected await sources resume in queued microtasks rather than synchronously"
+}

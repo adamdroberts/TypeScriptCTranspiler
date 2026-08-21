@@ -1,6 +1,6 @@
-declaration-true: declaration-fallback
 declaration-false: declaration-value
-method-true: method-fallback
 method-false: method-value
-value-true: arrow-fallback
 value-false: arrow-value
+declaration-true: declaration-fallback
+method-true: method-fallback
+value-true: arrow-fallback

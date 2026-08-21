@@ -4,6 +4,12 @@ method-for-initializer
 method-for-initializer
 value-for-initializer
 value-for-initializer
+for-declaration-initializer
+for-declaration-initializer
+method-for-declaration-initializer
+method-for-declaration-initializer
+value-for-declaration-initializer
+value-for-declaration-initializer
 await-while-expressionless-return-true
 await-while-expressionless-return-false
 await-method-expressionless-return-true
@@ -16,12 +22,6 @@ await-method-for-expressionless-return-true
 await-method-for-expressionless-return-false
 await-value-for-expressionless-return-true
 await-value-for-expressionless-return-false
-for-declaration-initializer
-for-declaration-initializer
-method-for-declaration-initializer
-method-for-declaration-initializer
-value-for-declaration-initializer
-value-for-declaration-initializer
 await-while-sync-body-true sync-body
 await-while-sync-body-false sync-fallthrough
 await-for-sync-body-true for-sync-body

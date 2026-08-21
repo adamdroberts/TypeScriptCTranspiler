@@ -1,0 +1,7 @@
+outer 0
+inner 0
+result immediate
+outer 1
+inner 0
+tail 2
+result done

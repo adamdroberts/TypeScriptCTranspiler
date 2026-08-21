@@ -1,0 +1,3 @@
+{
+  "description": "single and multiple await continuation states preserve nested lexical block fallthrough, rejection, shadowing, and locals declared before or between suspensions"
+}

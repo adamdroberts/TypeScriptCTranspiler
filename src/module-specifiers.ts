@@ -239,146 +239,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStringRawTemplate(node.template);
         }
         if (ts.isCallExpression(node)) {
-            const booleanText = resolveStaticBooleanCall(node);
-            if (booleanText.length > 0) return booleanText;
-            const primitiveConstructorText = resolveStaticPrimitiveConstructorCall(node);
-            if (primitiveConstructorText.length > 0) return primitiveConstructorText;
-            const stringStaticText = resolveStaticStringConstructorCall(node);
-            if (stringStaticText.length > 0) return stringStaticText;
-            const stringRawText = resolveStaticStringRawCall(node);
-            if (stringRawText.length > 0) return stringRawText;
-            const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
-            if (regexpEscapeText.length > 0) return regexpEscapeText;
-            const regexpStringText = resolveStaticRegExpStringCall(node);
-            if (regexpStringText.length > 0) return regexpStringText;
-            const regexpTestText = resolveStaticRegExpTestCall(node);
-            if (regexpTestText.length > 0) return regexpTestText;
-            const stringRegExpSearchText = resolveStaticStringRegExpSearchCall(node);
-            if (stringRegExpSearchText.length > 0) return stringRegExpSearchText;
-            const uriText = resolveStaticUriCall(node);
-            if (uriText.length > 0) return uriText;
-            const base64Text = resolveStaticBase64Call(node);
-            if (base64Text.length > 0) return base64Text;
-            const urlCanParseText = resolveStaticUrlCanParseCall(node);
-            if (urlCanParseText.length > 0) return urlCanParseText;
-            const urlStringText = resolveStaticUrlStringCall(node);
-            if (urlStringText.length > 0) return urlStringText;
-            const bufferByteLengthText = resolveStaticBufferByteLengthCall(node);
-            if (bufferByteLengthText.length > 0) return bufferByteLengthText;
-            const bufferIsEncodingText = resolveStaticBufferIsEncodingCall(node);
-            if (bufferIsEncodingText.length > 0) return bufferIsEncodingText;
-            const bufferFromToStringText = resolveStaticBufferFromToStringCall(node);
-            if (bufferFromToStringText.length > 0) return bufferFromToStringText;
-            const bufferConcatToStringText = resolveStaticBufferConcatToStringCall(node);
-            if (bufferConcatToStringText.length > 0) return bufferConcatToStringText;
-            const bufferAllocToStringText = resolveStaticBufferAllocToStringCall(node);
-            if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
-            const bufferToStringText = resolveStaticBufferToStringCall(node);
-            if (bufferToStringText.length > 0) return bufferToStringText;
-            const bufferToLocaleStringText = resolveStaticBufferToLocaleStringCall(node);
-            if (bufferToLocaleStringText.length > 0) return bufferToLocaleStringText;
-            const bufferCompareText = resolveStaticBufferCompareCall(node);
-            if (bufferCompareText.length > 0) return bufferCompareText;
-            const bufferCopyText = resolveStaticBufferCopyCall(node);
-            if (bufferCopyText.length > 0) return bufferCopyText;
-            const bufferWriteText = resolveStaticBufferWriteCall(node);
-            if (bufferWriteText.length > 0) return bufferWriteText;
-            const bufferIntegerWriteText = resolveStaticBufferIntegerWriteCall(node);
-            if (bufferIntegerWriteText.length > 0) return bufferIntegerWriteText;
-            const bufferIntegerReadText = resolveStaticBufferIntegerReadCall(node);
-            if (bufferIntegerReadText.length > 0) return bufferIntegerReadText;
-            const bufferFloatWriteText = resolveStaticBufferFloatWriteCall(node);
-            if (bufferFloatWriteText.length > 0) return bufferFloatWriteText;
-            const bufferFloatReadText = resolveStaticBufferFloatReadCall(node);
-            if (bufferFloatReadText.length > 0) return bufferFloatReadText;
-            const bufferEqualsText = resolveStaticBufferEqualsCall(node);
-            if (bufferEqualsText.length > 0) return bufferEqualsText;
-            const bufferSearchText = resolveStaticBufferSearchCall(node);
-            if (bufferSearchText.length > 0) return bufferSearchText;
-            const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
-            if (bufferIsBufferText.length > 0) return bufferIsBufferText;
-            const textDecoderText = resolveStaticTextDecoderDecodeCall(node);
-            if (textDecoderText.length > 0) return textDecoderText;
-            const numericParserText = resolveStaticNumericParserCall(node);
-            if (numericParserText.length > 0) return numericParserText;
-            const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
-            if (globalNumericPredicateText.length > 0) return globalNumericPredicateText;
-            const numericPredicateText = resolveStaticNumericPredicateCall(node);
-            if (numericPredicateText.length > 0) return numericPredicateText;
-            const arrayPredicateText = resolveStaticArrayPredicateCall(node);
-            if (arrayPredicateText.length > 0) return arrayPredicateText;
-            const arrayMutationText = resolveStaticArrayMutationCall(node);
-            if (arrayMutationText.length > 0) return arrayMutationText;
-            const arraySearchText = resolveStaticArraySearchCall(node);
-            if (arraySearchText.length > 0) return arraySearchText;
-            const arrayReduceText = resolveStaticArrayReduceCall(node);
-            if (arrayReduceText.length > 0) return arrayReduceText;
-            const mapSetText = resolveStaticMapSetCall(node);
-            if (mapSetText.length > 0) return mapSetText;
-            const sameValueText = resolveStaticObjectIsCall(node);
-            if (sameValueText.length > 0) return sameValueText;
-            const ownPredicateText = resolveStaticObjectHasOwnCall(node);
-            if (ownPredicateText.length > 0) return ownPredicateText;
-            const ownPrototypePredicateText = resolveStaticObjectOwnPrototypePredicateCall(node);
-            if (ownPrototypePredicateText.length > 0) return ownPrototypePredicateText;
-            const bufferOwnPrototypePredicateText = resolveStaticBufferOwnPrototypePredicateCall(node);
-            if (bufferOwnPrototypePredicateText.length > 0) return bufferOwnPrototypePredicateText;
-            const objectPrototypeToStringText = resolveStaticObjectPrototypeToStringCall(node);
-            if (objectPrototypeToStringText.length > 0) return objectPrototypeToStringText;
-            const reflectGetText = resolveStaticReflectGetCall(node);
-            if (reflectGetText.length > 0) return reflectGetText;
-            const reflectHasText = resolveStaticReflectHasCall(node);
-            if (reflectHasText.length > 0) return reflectHasText;
-            const integrityPredicateText = resolveStaticObjectIntegrityPredicateCall(node);
-            if (integrityPredicateText.length > 0) return integrityPredicateText;
-            const dateText = resolveStaticDateCall(node);
-            if (dateText.length > 0) return dateText;
-            const dateInstanceText = resolveStaticDateInstanceCall(node);
-            if (dateInstanceText.length > 0) return dateInstanceText;
-            const mathText = resolveStaticMathCall(node);
-            if (mathText.length > 0) return mathText;
-            const pathText = resolvePathCall(node);
-            if (pathText.length > 0) return pathText;
-            const queryStringText = resolveStaticQueryStringCall(node);
-            if (queryStringText.length > 0) return queryStringText;
-            const utilFormatText = resolveStaticUtilFormatCall(node);
-            if (utilFormatText.length > 0) return utilFormatText;
-            const urlSearchParamsText = resolveStaticUrlSearchParamsCall(node);
-            if (urlSearchParamsText.length > 0) return urlSearchParamsText;
-            const jsonStringifyText = resolveStaticJsonStringifyCall(node);
-            if (jsonStringifyText.length > 0) return jsonStringifyText;
-            const atText = resolveStaticArrayAtCall(node);
-            if (atText.length > 0) return atText;
-            const stringIndexText = resolveStaticStringIndexCall(node);
-            if (stringIndexText.length > 0) return stringIndexText;
-            const stringCodeText = resolveStaticStringCodeCall(node);
-            if (stringCodeText.length > 0) return stringCodeText;
-            const stringSearchText = resolveStaticStringSearchCall(node);
-            if (stringSearchText.length > 0) return stringSearchText;
-            const stringLocaleCompareText = resolveStaticStringLocaleCompareCall(node);
-            if (stringLocaleCompareText.length > 0) return stringLocaleCompareText;
-            const stringIdentityText = resolveStaticStringIdentityCall(node);
-            if (stringIdentityText.length > 0) return stringIdentityText;
-            const stringConcatText = resolveStaticStringConcatCall(node);
-            if (stringConcatText.length > 0) return stringConcatText;
-            const joinText = resolveStaticArrayJoinCall(node);
-            if (joinText.length > 0) return joinText;
-            const caseText = resolveStaticStringCaseCall(node);
-            if (caseText.length > 0) return caseText;
-            const trimText = resolveStaticStringTrimCall(node);
-            if (trimText.length > 0) return trimText;
-            const normalizeText = resolveStaticStringNormalizeCall(node);
-            if (normalizeText.length > 0) return normalizeText;
-            const wellFormedText = resolveStaticStringWellFormedCall(node);
-            if (wellFormedText.length > 0) return wellFormedText;
-            const repeatText = resolveStaticStringRepeatCall(node);
-            if (repeatText.length > 0) return repeatText;
-            const padText = resolveStaticStringPadCall(node);
-            if (padText.length > 0) return padText;
-            const rangeText = resolveStaticStringRangeCall(node);
-            if (rangeText.length > 0) return rangeText;
-            const replaceText = resolveStaticStringReplaceCall(node);
-            if (replaceText.length > 0) return replaceText;
+            for (const resolver of staticCallResolvers) {
+                const values = resolver(node);
+                if (values.length > 0) return values;
+            }
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -6119,6 +5983,79 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         seen.delete(decl);
         return value;
     };
+
+    const staticCallResolvers: readonly ((node: ts.CallExpression) => string[])[] = [
+        resolveStaticBooleanCall,
+        resolveStaticPrimitiveConstructorCall,
+        resolveStaticStringConstructorCall,
+        resolveStaticStringRawCall,
+        resolveStaticRegExpEscapeCall,
+        resolveStaticRegExpStringCall,
+        resolveStaticRegExpTestCall,
+        resolveStaticStringRegExpSearchCall,
+        resolveStaticUriCall,
+        resolveStaticBase64Call,
+        resolveStaticUrlCanParseCall,
+        resolveStaticUrlStringCall,
+        resolveStaticBufferByteLengthCall,
+        resolveStaticBufferIsEncodingCall,
+        resolveStaticBufferFromToStringCall,
+        resolveStaticBufferConcatToStringCall,
+        resolveStaticBufferAllocToStringCall,
+        resolveStaticBufferToStringCall,
+        resolveStaticBufferToLocaleStringCall,
+        resolveStaticBufferCompareCall,
+        resolveStaticBufferCopyCall,
+        resolveStaticBufferWriteCall,
+        resolveStaticBufferIntegerWriteCall,
+        resolveStaticBufferIntegerReadCall,
+        resolveStaticBufferFloatWriteCall,
+        resolveStaticBufferFloatReadCall,
+        resolveStaticBufferEqualsCall,
+        resolveStaticBufferSearchCall,
+        resolveStaticBufferIsBufferCall,
+        resolveStaticTextDecoderDecodeCall,
+        resolveStaticNumericParserCall,
+        resolveStaticGlobalNumericPredicateCall,
+        resolveStaticNumericPredicateCall,
+        resolveStaticArrayPredicateCall,
+        resolveStaticArrayMutationCall,
+        resolveStaticArraySearchCall,
+        resolveStaticArrayReduceCall,
+        resolveStaticMapSetCall,
+        resolveStaticObjectIsCall,
+        resolveStaticObjectHasOwnCall,
+        resolveStaticObjectOwnPrototypePredicateCall,
+        resolveStaticBufferOwnPrototypePredicateCall,
+        resolveStaticObjectPrototypeToStringCall,
+        resolveStaticReflectGetCall,
+        resolveStaticReflectHasCall,
+        resolveStaticObjectIntegrityPredicateCall,
+        resolveStaticDateCall,
+        resolveStaticDateInstanceCall,
+        resolveStaticMathCall,
+        resolvePathCall,
+        resolveStaticQueryStringCall,
+        resolveStaticUtilFormatCall,
+        resolveStaticUrlSearchParamsCall,
+        resolveStaticJsonStringifyCall,
+        resolveStaticArrayAtCall,
+        resolveStaticStringIndexCall,
+        resolveStaticStringCodeCall,
+        resolveStaticStringSearchCall,
+        resolveStaticStringLocaleCompareCall,
+        resolveStaticStringIdentityCall,
+        resolveStaticStringConcatCall,
+        resolveStaticArrayJoinCall,
+        resolveStaticStringCaseCall,
+        resolveStaticStringTrimCall,
+        resolveStaticStringNormalizeCall,
+        resolveStaticStringWellFormedCall,
+        resolveStaticStringRepeatCall,
+        resolveStaticStringPadCall,
+        resolveStaticStringRangeCall,
+        resolveStaticStringReplaceCall,
+    ];
 
     return dedupe(resolve(expr));
 }

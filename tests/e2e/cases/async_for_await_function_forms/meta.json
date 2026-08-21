@@ -1,0 +1,3 @@
+{
+  "description": "for-await continuation lowering is shared across declarations, methods, lifted arrows, closures, and object methods"
+}

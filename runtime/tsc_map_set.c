@@ -234,7 +234,9 @@ void tsc_set_add_raw(tsc_set_t* s, const void* v) {
     size_t slot;
     size_t e = set_lookup(s, v, &slot);
     if (e != TSC_BKT_EMPTY) return;
-    set_grow_ordered_atomic(s, s->len + 1);
+    /* Raw sets can contain pointers (strings, objects, or typed references).
+     * Their backing storage must be scanned so entries remain alive. */
+    set_grow_ordered(s, s->len + 1);
     memcpy((char*)s->data + s->len * s->es, v, s->es);
     s->buckets[slot] = s->len;
     s->len++;
@@ -380,5 +382,4 @@ bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b) {
     }
     return true;
 }
-
 

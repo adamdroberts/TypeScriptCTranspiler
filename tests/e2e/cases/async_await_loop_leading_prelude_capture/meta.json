@@ -1,0 +1,3 @@
+{
+  "description": "loop-body leading await chains distinguish body-local prelude captures from outer async environment captures"
+}

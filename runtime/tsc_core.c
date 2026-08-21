@@ -1584,13 +1584,16 @@ void tsc_try_pop(void) {
     if (g_try_top) g_try_top = g_try_top->prev;
 }
 
-void tsc_throw_str(tsc_str_t* message) {
+_Noreturn void tsc_throw_str(tsc_str_t* message) {
     g_current_error = message ? message : tsc_str_from_lit("(unknown error)", 15);
     g_current_error_value = tsc_value_string(g_current_error);
     g_current_error_value_set = true;
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
-        g_try_top = f->prev;
+        /* The setjmp landing path owns the matching tsc_try_pop().  Leaving
+         * the frame installed until control lands keeps push/pop balanced;
+         * popping here as well makes the handler discard its caller's frame
+         * and can leave g_try_top pointing at an expired async stack frame. */
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);
@@ -1599,14 +1602,14 @@ void tsc_throw_str(tsc_str_t* message) {
     exit(1);
 }
 
-void tsc_throw_value(tsc_value_t value) {
+_Noreturn void tsc_throw_value(tsc_value_t value) {
     g_current_error_value = value;
     g_current_error_value_set = true;
     g_current_error = tsc_value_to_string(value);
     if (!g_current_error) g_current_error = tsc_str_from_lit("(unknown error)", 15);
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
-        g_try_top = f->prev;
+        /* The setjmp landing path owns the matching tsc_try_pop(). */
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);
@@ -1615,7 +1618,7 @@ void tsc_throw_value(tsc_value_t value) {
     exit(1);
 }
 
-void tsc_rethrow(void) {
+_Noreturn void tsc_rethrow(void) {
     if (g_current_error_value_set) tsc_throw_value(g_current_error_value);
     if (g_current_error) tsc_throw_str(g_current_error);
     exit(1);

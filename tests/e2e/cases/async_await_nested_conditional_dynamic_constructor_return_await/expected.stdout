@@ -1,6 +1,6 @@
-declaration-true: {"left":"declaration-dynamic-left","right":"declaration-dynamic-right"}
 declaration-false: {"left":"declaration-static-left","right":"declaration-static-right"}
 method-true: {"left":"method-static-left","right":"method-static-right"}
+value-false: {"left":"arrow-static-left","right":"arrow-static-right"}
+declaration-true: {"left":"declaration-dynamic-left","right":"declaration-dynamic-right"}
 method-false: {"left":"method-dynamic-left","right":"method-dynamic-right"}
 value-true: {"left":"arrow-dynamic-left","right":"arrow-dynamic-right"}
-value-false: {"left":"arrow-static-left","right":"arrow-static-right"}

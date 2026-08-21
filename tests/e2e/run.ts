@@ -8,13 +8,15 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { compile, findDispatchLinkOptions } from "../../src/compile";
-import { ensureE2eNodeModuleFixtures } from "./fixtures";
+import { ensureE2eNodeModuleFixtures, referencesE2eNodeModuleFixture } from "./fixtures";
+import { generateE2eCaseSource } from "./generated-cases";
 
 const casesDir = path.resolve(import.meta.dir, "cases");
 
 interface Case {
     name: string;
     entry: string;
+    generatedSource?: string;
     expected?: string;
     expectedStderrContains?: string;
     expectedExitCode?: number;
@@ -54,6 +56,7 @@ async function discoverCases(): Promise<Case[]> {
     for (const d of dirs) {
         if (filterStr && !d.includes(filterStr)) continue;
         const entry = path.join(casesDir, d, "in.ts");
+        const generatedCasePath = path.join(casesDir, d, "generate.json");
         const expectedPath = path.join(casesDir, d, "expected.stdout");
         const expectedStderrContainsPath = path.join(casesDir, d, "expected.stderr.contains");
         const expectedExitPath = path.join(casesDir, d, "expected.exitcode");
@@ -70,7 +73,15 @@ async function discoverCases(): Promise<Case[]> {
         const dispatchSerialPath = path.join(casesDir, d, "compile.dispatch.serial");
         const dispatchNoGcPath = path.join(casesDir, d, "compile.dispatch.no_gc");
         const runEnvPath = path.join(casesDir, d, "run.env");
-        if (!(await exists(entry))) continue;
+        const hasEntry = await exists(entry);
+        const hasGeneratedCase = await exists(generatedCasePath);
+        if (!hasEntry && !hasGeneratedCase) continue;
+        if (hasEntry && hasGeneratedCase) {
+            throw new Error(`e2e case ${d} must use either in.ts or generate.json, not both`);
+        }
+        const generatedSource = hasGeneratedCase
+            ? generateE2eCaseSource(await fs.readFile(generatedCasePath, "utf8"), generatedCasePath)
+            : undefined;
 
         const release = await exists(releasePath);
         const dispatch = await exists(dispatchPath);
@@ -112,6 +123,7 @@ async function discoverCases(): Promise<Case[]> {
             cases.push({
                 name: d,
                 entry,
+                generatedSource,
                 expectedExitCode,
                 expectedStderrContains,
                 expectedMainCContains,
@@ -140,6 +152,7 @@ async function discoverCases(): Promise<Case[]> {
         cases.push({
             name: d,
             entry,
+            generatedSource,
             expected,
             expectedStderrContains,
             expectedMainCContains,
@@ -194,12 +207,35 @@ function runBinary(bin: string, runEnv?: Record<string, string>): Promise<{ code
     });
 }
 
+async function directoryReferencesNodeModuleFixture(directory: string): Promise<boolean> {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+            if (await directoryReferencesNodeModuleFixture(entryPath)) return true;
+            continue;
+        }
+        if (!entry.isFile() || !/\.(?:[cm]?[jt]s|json)$/.test(entry.name)) continue;
+        if (referencesE2eNodeModuleFixture(await fs.readFile(entryPath, "utf8"))) return true;
+    }
+    return false;
+}
+
+async function casesNeedNodeModuleFixtures(cases: readonly Case[]): Promise<boolean> {
+    for (const c of cases) {
+        if (c.generatedSource && referencesE2eNodeModuleFixture(c.generatedSource)) return true;
+        if (await directoryReferencesNodeModuleFixture(path.dirname(c.entry))) return true;
+    }
+    return false;
+}
+
 async function main(): Promise<void> {
-    await ensureE2eNodeModuleFixtures();
     const cases = await discoverCases();
     if (cases.length === 0) {
         console.error("no e2e cases found");
         process.exit(1);
+    }
+    if (await casesNeedNodeModuleFixtures(cases)) {
+        await ensureE2eNodeModuleFixtures();
     }
     const tmpRoot = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "tsc2c-e2e-"));
     let passed = 0;
@@ -209,6 +245,12 @@ async function main(): Promise<void> {
     for (const c of cases) {
         const bin = path.join(tmpRoot, c.name);
         const buildDir = path.join(tmpRoot, c.name + "-build");
+        const entry = c.generatedSource === undefined
+            ? c.entry
+            : path.join(tmpRoot, c.name + ".ts");
+        if (c.generatedSource !== undefined) {
+            await fs.writeFile(entry, c.generatedSource);
+        }
         process.stdout.write(`e2e: ${c.name} … `);
         if (c.dispatch && !c.dispatchSerial && !dispatchAvailable) {
             console.log("SKIP (libdispatch not installed)");
@@ -216,7 +258,7 @@ async function main(): Promise<void> {
             continue;
         }
         const r = await compile({
-            entry: c.entry,
+            entry,
             output: bin,
             buildDir,
             noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",

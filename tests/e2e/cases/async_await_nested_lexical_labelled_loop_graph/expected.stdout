@@ -1,0 +1,17 @@
+do-body 0
+guard-body 0
+branch-body 0
+for-body 0
+do-body 1
+do-tail 2
+result immediate
+guard-body 1
+guard-tail 2
+branch-body 1
+branch-tail 2
+for-body 1
+for-tail 11
+result do-done
+result guard-done
+result for-done
+result branch-done

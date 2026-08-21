@@ -1,0 +1,15 @@
+discriminant one
+discriminant default
+default-entry default outer-default
+case-two default outer-default
+tail default outer-default
+discriminant two
+case-two two outer-two
+tail two outer-two
+discriminant error
+case-one one inner-one
+tail one outer-one
+result done-default
+result done-two
+result done-one
+rejected reject-error
