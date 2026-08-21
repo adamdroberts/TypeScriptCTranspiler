@@ -16,7 +16,9 @@ export interface AsyncControlFlowExceptionTarget {
 type AsyncBindingOperation =
     | {
         readonly kind: "source";
-        readonly resultSlot: number;
+        readonly source:
+            | { readonly kind: "expression-result"; readonly resultSlot: number }
+            | { readonly kind: "exception"; readonly node: ts.Node };
         readonly valueSlot: number;
     }
     | {
@@ -1080,7 +1082,7 @@ export function planAsyncControlFlowGraph(
 
     const buildSuspendingBinding = (
         binding: ts.BindingName,
-        resultSlot: number,
+        source: Extract<AsyncBindingOperation, { readonly kind: "source" }>["source"],
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget | null => {
@@ -1089,7 +1091,7 @@ export function planAsyncControlFlowGraph(
         if (!bound) return null;
         return buildBindingOperation({
             kind: "source",
-            resultSlot,
+            source,
             valueSlot,
         }, bound, context);
     };
@@ -1787,16 +1789,31 @@ export function planAsyncControlFlowGraph(
             ): AsyncControlFlowTarget => {
                 let catchEntry = buildLexicalBlock(catchClause.block, catchNext, catchContext);
                 const binding = catchClause.variableDeclaration?.name ?? null;
-                if (binding && containsSuspendingBindingExpression(binding)) {
-                    supported = false;
-                    return catchNext;
-                }
                 if (catchClause.variableDeclaration) {
                     if (binding && ts.isIdentifier(binding)) {
                         declarations.push(catchClause.variableDeclaration);
                     } else if (binding) {
                         bindingIdentifiers.push(...collectBindingIdentifiers(binding));
                     }
+                }
+                if (binding && containsSuspendingBindingExpression(binding)) {
+                    const bound = buildSuspendingBinding(
+                        binding,
+                        { kind: "exception", node: binding },
+                        catchEntry,
+                        catchContext,
+                    );
+                    if (!bound) {
+                        supported = false;
+                        return catchNext;
+                    }
+                    const scopeId = reserve();
+                    return setState({
+                        kind: "scope-enter",
+                        id: scopeId,
+                        bindings: [binding],
+                        next: bound,
+                    }, catchContext.exceptionTarget);
                 }
                 const catchBindId = reserve();
                 catchEntry = setState({
@@ -1973,7 +1990,7 @@ export function planAsyncControlFlowGraph(
                     if (containsSuspendingBindingExpression(declaration.name)) {
                         bind = buildSuspendingBinding(
                             declaration.name,
-                            resultSlot,
+                            { kind: "expression-result", resultSlot },
                             next,
                             context,
                         );

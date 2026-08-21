@@ -26588,7 +26588,13 @@ class Emitter {
                 if (valueSlots.some((slot) => slot < 0 || slot >= graph.bindingValueCount)) {
                     return false;
                 }
-                if (operation.kind === "source" || operation.kind === "default-apply") {
+                if (operation.kind === "source" && operation.source.kind === "expression-result") {
+                    const storageType = expressionResultTypes[operation.source.resultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                }
+                if (operation.kind === "default-apply") {
                     const storageType = expressionResultTypes[operation.resultSlot];
                     if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
                         return false;
@@ -27708,7 +27714,28 @@ class Emitter {
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "binding-op") {
                     const operation = stateNode.operation;
-                    if (operation.kind === "source" || operation.kind === "default-apply") {
+                    if (operation.kind === "source") {
+                        if (operation.source.kind === "exception") {
+                            emitBindingValueAssignment(operation.valueSlot, {
+                                c: "state->exception_value",
+                                ty: T_VALUE,
+                            }, operation.source.node);
+                            callback.line("state->exception_value = tsc_value_undefined();");
+                            callback.line("state->exception_value_gc_root = NULL;");
+                        } else {
+                            const resultSlot = operation.source.resultSlot;
+                            const storageType = expressionResultTypes[resultSlot];
+                            const expression = graph.expressionResults[resultSlot];
+                            if (!storageType || !expression || storageType.kind === "void" ||
+                                storageType.kind === "never") return false;
+                            emitBindingValueAssignment(operation.valueSlot, {
+                                c: `state->expression_result_${resultSlot}`,
+                                ty: storageType,
+                            }, expression);
+                            if (!releaseExpressionResult(resultSlot)) return false;
+                        }
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "default-apply") {
                         const storageType = expressionResultTypes[operation.resultSlot];
                         const expression = graph.expressionResults[operation.resultSlot];
                         if (!storageType || !expression || storageType.kind === "void" ||
