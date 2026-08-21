@@ -1,3 +1,0 @@
-{
-  "description": "A suspending async-iterator binding default fails closed until binding expressions have explicit CFG states"
-}
