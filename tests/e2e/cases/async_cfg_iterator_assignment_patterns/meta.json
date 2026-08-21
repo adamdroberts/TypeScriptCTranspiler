@@ -1,3 +1,3 @@
 {
-  "description": "Canonical iterator states normalize recursive assignment patterns with identifier, dynamic property, and typed/dynamic element leaves"
+  "description": "Canonical iterator states normalize recursive assignment patterns with identifier, dynamic property, typed field/setter, and typed/dynamic element leaves"
 }

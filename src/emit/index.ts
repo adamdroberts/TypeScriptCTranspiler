@@ -26394,7 +26394,13 @@ class Emitter {
         };
         const validateCfgAssignmentTarget = (target: ts.Expression): boolean => {
             if (ts.isPropertyAccessExpression(target)) {
-                return this.prepareType(mapType(target.expression, this.checker)).kind === "value";
+                const receiverType = this.prepareType(mapType(target.expression, this.checker));
+                if (receiverType.kind === "value") return true;
+                if (receiverType.kind !== "class") return false;
+                const symbol = this.checker.getSymbolAtLocation(target.name);
+                return !!symbol?.declarations?.some((declaration) =>
+                    ts.isPropertyDeclaration(declaration) ||
+                    (ts.isSetAccessorDeclaration(declaration) && !isStatic(declaration)));
             }
             if (ts.isElementAccessExpression(target)) {
                 const receiverType = this.prepareType(mapType(target.expression, this.checker));
@@ -26714,7 +26720,48 @@ class Emitter {
                         if (ts.isPropertyAccessExpression(assignmentTarget)) {
                             const receiver = this.emitExpr(assignmentTarget.expression);
                             const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
-                            callback.line(`tsc_value_t ${receiverTemp} = ${this.coerce(receiver, T_VALUE, assignmentTarget.expression)};`);
+                            const receiverType = this.prepareType(receiver.ty);
+                            callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
+                            if (receiverType.kind === "class") {
+                                const accessor = this.classAccessorForPropertyAccess(assignmentTarget, "set");
+                                if (accessor) {
+                                    const parameter = accessor.decl.parameters[0];
+                                    if (!parameter) unsupported(accessor.decl, "setter must have a value parameter");
+                                    const parameterType = this.prepareType(mapType(parameter, this.checker));
+                                    const assigned = this.freshTemp("_async_cfg_binding_assignment_setter_value");
+                                    callback.line(
+                                        `${parameterType.c} ${assigned} = ` +
+                                        `${this.coerce(stagedValue, parameterType, assignmentTarget)};`,
+                                    );
+                                    const setterName = this.classAccessorCName(accessor.decl.name, "set");
+                                    if (!setterName) unsupported(accessor.decl, "computed accessor names");
+                                    const callee = `${accessor.owner}_${setterName}`;
+                                    const object = accessor.owner === receiverType.className
+                                        ? receiverTemp
+                                        : `((${accessor.owner}_t*)${receiverTemp})`;
+                                    const call = this.classMemberHasDecorators(accessor.decl)
+                                        ? this.decoratedInstanceSetterCallExpr(
+                                            assignmentTarget,
+                                            accessor.decl,
+                                            callee,
+                                            object,
+                                            parameterType,
+                                            assigned,
+                                        )
+                                        : `${callee}(${object}, ${assigned})`;
+                                    callback.line(`${call};`);
+                                    return;
+                                }
+                                const targetType = this.storageType(assignmentTarget);
+                                callback.line(
+                                    `${receiverTemp}->${mangleIdent(assignmentTarget.name.text)} = ` +
+                                    `${this.coerce(stagedValue, targetType, assignmentTarget)};`,
+                                );
+                                return;
+                            }
+                            if (receiverType.kind !== "value") {
+                                unsupported(assignmentTarget, `${label} property assignment target is not writable`);
+                            }
                             const property = assignmentTarget.name.text;
                             callback.line(
                                 `tsc_value_set_prop(${receiverTemp}, ` +

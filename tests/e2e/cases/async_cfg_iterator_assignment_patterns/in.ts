@@ -10,6 +10,20 @@ function targetReceiver(target: any): any {
     return target;
 }
 
+class AssignmentBox {
+    field = "";
+    private stored = "";
+
+    set value(next: string) {
+        trace += "S>";
+        this.stored = next;
+    }
+
+    get value(): string {
+        return this.stored;
+    }
+}
+
 async function ordinaryAssignments(): Promise<string> {
     const rows: any = [
         ["A", { value: "kept" }, "R1", "R2"],
@@ -78,6 +92,16 @@ async function typedElementAssignments(): Promise<string> {
     return target.join(":") + ":" + String(index);
 }
 
+async function typedPropertyAssignments(): Promise<string> {
+    const fieldTarget = new AssignmentBox();
+    const setterTarget = new AssignmentBox();
+    const rows: Array<[string, string]> = [["left", "one"], ["right", "two"]];
+    for ([fieldTarget.field, setterTarget.value] of rows) {
+        await Promise.resolve(fieldTarget.field);
+    }
+    return fieldTarget.field + ":" + setterTarget.value;
+}
+
 async function asyncPropertyAssignments(): Promise<string> {
     const target: any = {};
     const rows: any = [{ value: "first" }, { value: "last" }];
@@ -106,6 +130,10 @@ ordinaryAssignments()
     })
     .then((result) => {
         console.log("typed element:", result, trace);
+        return typedPropertyAssignments();
+    })
+    .then((result) => {
+        console.log("typed property:", result, trace);
         return asyncPropertyAssignments();
     })
     .then((result) => console.log("async property:", result, trace));
