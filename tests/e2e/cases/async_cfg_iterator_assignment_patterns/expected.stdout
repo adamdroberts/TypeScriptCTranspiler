@@ -1,3 +1,6 @@
 ordinary: A:kept:R1,R2;B:fallback:R3; D>
 object: left:2:E1;right:fallback:E2; D>O>
 async: x1y2 D>O>
+property: left7;right8;2 D>O>R>R>R>R>
+typed element: 4:5:2 D>O>R>R>R>R>
+async property: last D>O>R>R>R>R>

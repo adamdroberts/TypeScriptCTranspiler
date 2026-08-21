@@ -1,3 +1,3 @@
 {
-  "description": "Canonical ordinary and async iterator states normalize array/object assignment targets into recursive binding trees"
+  "description": "Canonical iterator states normalize recursive assignment patterns with identifier, dynamic property, and typed/dynamic element leaves"
 }

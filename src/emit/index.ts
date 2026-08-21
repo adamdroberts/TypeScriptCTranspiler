@@ -26275,6 +26275,7 @@ class Emitter {
             sourceType: CType;
             elementType: CType;
             binding: ts.BindingName;
+            assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         }>();
         for (const stateNode of graph.states) {
             if (stateNode.kind !== "iterator-init") continue;
@@ -26296,7 +26297,13 @@ class Emitter {
                 elementType = T_VALUE;
             }
             if (!elementType) return false;
-            iteratorPlans.set(stateNode.slot, { statement, sourceType, elementType, binding: bindingName });
+            iteratorPlans.set(stateNode.slot, {
+                statement,
+                sourceType,
+                elementType,
+                binding: bindingName,
+                assignmentTargets: stateNode.assignmentTargets,
+            });
         }
         const expressionAwaitTypes = graph.expressionAwaits.map((awaitExpr) => {
             const awaitedType = this.prepareType(mapTsType(
@@ -26385,15 +26392,30 @@ class Emitter {
             // a returned Promise<T> to T here would suppress adoption.
             return result;
         };
-        const validateCfgBinding = (name: ts.BindingName | ts.Expression): boolean => {
+        const validateCfgAssignmentTarget = (target: ts.Expression): boolean => {
+            if (ts.isPropertyAccessExpression(target)) {
+                return this.prepareType(mapType(target.expression, this.checker)).kind === "value";
+            }
+            if (ts.isElementAccessExpression(target)) {
+                const receiverType = this.prepareType(mapType(target.expression, this.checker));
+                return receiverType.kind === "value" || receiverType.kind === "array" ||
+                    receiverType.kind === "buffer";
+            }
+            return false;
+        };
+        const validateCfgBinding = (
+            name: ts.BindingName,
+            assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
+        ): boolean => {
             if (ts.isIdentifier(name)) {
+                const assignmentTarget = assignmentTargets.get(name);
+                if (assignmentTarget) return validateCfgAssignmentTarget(assignmentTarget);
                 const symbol = this.symbolForIdentifier(name);
                 return !!symbol && fieldBySymbol.has(symbol);
             }
-            if (!ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)) return false;
             return name.elements.every((element) =>
                 !element || element.kind === ts.SyntaxKind.OmittedExpression ||
-                validateCfgBinding(element.name));
+                validateCfgBinding(element.name, assignmentTargets));
         };
         // Validate every emitter requirement before appending declarations so
         // a rejected graph fails closed without leaving partial C behind.
@@ -26412,7 +26434,7 @@ class Emitter {
                     }
                 }
                 const plan = iteratorPlans.get(stateNode.slot);
-                if (!plan || !validateCfgBinding(plan.binding)) return false;
+                if (!plan || !validateCfgBinding(plan.binding, plan.assignmentTargets)) return false;
             } else if (stateNode.kind === "expression-await") {
                 const promiseType = this.prepareType(mapTsType(
                     stateNode.awaitExpr.expression,
@@ -26488,7 +26510,7 @@ class Emitter {
                         return false;
                     }
                 }
-                if (!validateCfgBinding(stateNode.binding)) return false;
+                if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets)) return false;
             } else if (stateNode.kind === "catch-bind") {
                 if (stateNode.binding && !validateCfgBinding(stateNode.binding)) return false;
             } else if (stateNode.kind === "binding-init") {
@@ -26680,8 +26702,69 @@ class Emitter {
                 binding: ts.BindingName,
                 source: EmitResult,
                 label: string,
+                assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
             ): void => {
                 const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
+                    const assignmentTarget = assignmentTargets.get(identifier);
+                    if (assignmentTarget) {
+                        const valueType = this.prepareType(value.ty);
+                        const valueTemp = this.freshTemp("_async_cfg_binding_assignment_value");
+                        callback.line(`${valueType.c} ${valueTemp} = ${value.c};`);
+                        const stagedValue: EmitResult = { c: valueTemp, ty: valueType };
+                        if (ts.isPropertyAccessExpression(assignmentTarget)) {
+                            const receiver = this.emitExpr(assignmentTarget.expression);
+                            const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
+                            callback.line(`tsc_value_t ${receiverTemp} = ${this.coerce(receiver, T_VALUE, assignmentTarget.expression)};`);
+                            const property = assignmentTarget.name.text;
+                            callback.line(
+                                `tsc_value_set_prop(${receiverTemp}, ` +
+                                `tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}), ` +
+                                `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
+                            );
+                            return;
+                        }
+                        if (!ts.isElementAccessExpression(assignmentTarget)) {
+                            unsupported(assignmentTarget, `${label} assignment target is not writable`);
+                        }
+                        const receiver = this.emitExpr(assignmentTarget.expression);
+                        const receiverType = this.prepareType(receiver.ty);
+                        const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
+                        callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
+                        const index = this.emitExpr(assignmentTarget.argumentExpression);
+                        const indexType = this.prepareType(index.ty);
+                        const indexTemp = this.freshTemp("_async_cfg_binding_assignment_index");
+                        callback.line(`${indexType.c} ${indexTemp} = ${index.c};`);
+                        if (receiverType.kind === "value") {
+                            if (indexType.kind === "number") {
+                                callback.line(
+                                    `tsc_value_set_index(${receiverTemp}, ${indexTemp}, ` +
+                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
+                                );
+                            } else if (indexType.kind === "symbol") {
+                                callback.line(
+                                    `tsc_value_set_symbol_prop(${receiverTemp}, ${indexTemp}, ` +
+                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
+                                );
+                            } else {
+                                callback.line(
+                                    `tsc_value_set_prop(${receiverTemp}, ` +
+                                    `${this.coerce({ c: indexTemp, ty: indexType }, T_STRING, assignmentTarget.argumentExpression)}, ` +
+                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
+                                );
+                            }
+                            return;
+                        }
+                        if (indexType.kind !== "number" ||
+                            (receiverType.kind !== "array" && receiverType.kind !== "buffer")) {
+                            unsupported(assignmentTarget, `${label} element assignment target is not writable`);
+                        }
+                        const elementType = receiverType.kind === "buffer" ? T_NUMBER : receiverType.elem!;
+                        const element = receiverType.kind === "buffer"
+                            ? `TSC_BUF(${receiverTemp}, (size_t)(${indexTemp}))`
+                            : `TSC_ARR(${elementType.c}, ${receiverTemp}, (size_t)(${indexTemp}))`;
+                        callback.line(`${element} = ${this.coerce(stagedValue, elementType, assignmentTarget)};`);
+                        return;
+                    }
                     const symbol = this.symbolForIdentifier(identifier);
                     const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                     if (!local) unsupported(identifier, `${label} binding is missing CFG storage`);
@@ -26799,6 +26882,7 @@ class Emitter {
                         plan.binding,
                         { c: element, ty: plan.elementType },
                         ts.isForInStatement(plan.statement) ? "for-in" : "for-of",
+                        plan.assignmentTargets,
                     );
                     callback.line(`${index}++;`);
                     emitTransition(stateNode.body.id);
@@ -26847,7 +26931,12 @@ class Emitter {
                     callback.close();
                     const item = this.freshTemp("_async_cfg_iterator_value");
                     callback.line(`tsc_value_t ${item} = tsc_value_get_prop(${step}, tsc_str_from_lit("value", 5));`);
-                    emitCfgBinding(stateNode.binding, { c: item, ty: T_VALUE }, "async iterator");
+                    emitCfgBinding(
+                        stateNode.binding,
+                        { c: item, ty: T_VALUE },
+                        "async iterator",
+                        stateNode.assignmentTargets,
+                    );
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-close") {
                     const iterator = `state->async_iterator_${stateNode.slot}`;

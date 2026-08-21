@@ -32,6 +32,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForInStatement | ts.ForOfStatement;
         readonly binding: ts.BindingName;
+        readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
         readonly sourceResultSlot: number | null;
         readonly next: AsyncControlFlowTarget;
@@ -41,6 +42,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForInStatement | ts.ForOfStatement;
         readonly binding: ts.BindingName;
+        readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
         readonly body: AsyncControlFlowTarget;
         readonly done: AsyncControlFlowTarget;
@@ -50,6 +52,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForOfStatement;
         readonly binding: ts.BindingName;
+        readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
         readonly sourceResultSlot: number | null;
         readonly next: AsyncControlFlowTarget;
@@ -59,6 +62,7 @@ type AsyncControlFlowStateCore =
         readonly id: number;
         readonly statement: ts.ForOfStatement;
         readonly binding: ts.BindingName;
+        readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
         readonly slot: number;
         readonly body: AsyncControlFlowTarget;
         readonly done: AsyncControlFlowTarget;
@@ -409,9 +413,20 @@ export function planAsyncControlFlowGraph(
         }
         return identifiers;
     };
-    const normalizeIteratorAssignmentTarget = (expression: ts.Expression): ts.BindingName | null => {
+    let iteratorAssignmentTargetCount = 0;
+    const normalizeIteratorAssignmentTarget = (
+        expression: ts.Expression,
+        assignmentTargets: Map<ts.Identifier, ts.Expression>,
+    ): ts.BindingName | null => {
         const targetExpression = unwrapExpression(expression);
         if (ts.isIdentifier(targetExpression)) return targetExpression;
+        if (ts.isPropertyAccessExpression(targetExpression) || ts.isElementAccessExpression(targetExpression)) {
+            const placeholder = ts.factory.createIdentifier(
+                `__tsc_cfg_assignment_target_${iteratorAssignmentTargetCount++}`,
+            );
+            assignmentTargets.set(placeholder, targetExpression);
+            return placeholder;
+        }
         if (ts.isArrayLiteralExpression(targetExpression)) {
             const elements: (ts.BindingElement | ts.OmittedExpression)[] = [];
             for (let index = 0; index < targetExpression.elements.length; index++) {
@@ -422,7 +437,7 @@ export function planAsyncControlFlowGraph(
                 }
                 if (ts.isSpreadElement(element)) {
                     if (index !== targetExpression.elements.length - 1) return null;
-                    const name = normalizeIteratorAssignmentTarget(element.expression);
+                    const name = normalizeIteratorAssignmentTarget(element.expression, assignmentTargets);
                     if (!name) return null;
                     elements.push(ts.factory.createBindingElement(
                         ts.factory.createToken(ts.SyntaxKind.DotDotDotToken),
@@ -438,7 +453,10 @@ export function planAsyncControlFlowGraph(
                     ? value
                     : null;
                 const defaultValue = assignment?.right;
-                const name = normalizeIteratorAssignmentTarget(assignment?.left ?? value);
+                const name = normalizeIteratorAssignmentTarget(
+                    assignment?.left ?? value,
+                    assignmentTargets,
+                );
                 if (!name) return null;
                 elements.push(ts.factory.createBindingElement(
                     undefined,
@@ -453,7 +471,7 @@ export function planAsyncControlFlowGraph(
             const elements: ts.BindingElement[] = [];
             for (const property of targetExpression.properties) {
                 if (ts.isSpreadAssignment(property)) {
-                    const name = normalizeIteratorAssignmentTarget(property.expression);
+                    const name = normalizeIteratorAssignmentTarget(property.expression, assignmentTargets);
                     if (!name) return null;
                     elements.push(ts.factory.createBindingElement(
                         ts.factory.createToken(ts.SyntaxKind.DotDotDotToken),
@@ -479,7 +497,10 @@ export function planAsyncControlFlowGraph(
                     ? value
                     : null;
                 const defaultValue = assignment?.right;
-                const name = normalizeIteratorAssignmentTarget(assignment?.left ?? value);
+                const name = normalizeIteratorAssignmentTarget(
+                    assignment?.left ?? value,
+                    assignmentTargets,
+                );
                 if (!name) return null;
                 elements.push(ts.factory.createBindingElement(
                     undefined,
@@ -1167,6 +1188,7 @@ export function planAsyncControlFlowGraph(
         label: string | null,
     ): AsyncControlFlowTarget => {
         let binding: ts.BindingName;
+        const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
         if (ts.isVariableDeclarationList(statement.initializer)) {
             if (statement.initializer.declarations.length !== 1) {
                 supported = false;
@@ -1192,7 +1214,10 @@ export function planAsyncControlFlowGraph(
                 bindingIdentifiers.push(...collectBindingIdentifiers(declaration.name));
             }
         } else {
-            const assignmentBinding = normalizeIteratorAssignmentTarget(statement.initializer);
+            const assignmentBinding = normalizeIteratorAssignmentTarget(
+                statement.initializer,
+                assignmentTargets,
+            );
             if (!assignmentBinding || containsSuspendingBindingExpression(assignmentBinding)) {
                 supported = false;
                 return next;
@@ -1270,6 +1295,7 @@ export function planAsyncControlFlowGraph(
             id: nextId,
             statement,
             binding,
+            assignmentTargets,
             slot,
             body: bodyEntry,
             done: next,
@@ -1279,6 +1305,7 @@ export function planAsyncControlFlowGraph(
             id: initId,
             statement,
             binding,
+            assignmentTargets,
             slot,
             sourceResultSlot,
             next: nextTarget,
@@ -1307,6 +1334,7 @@ export function planAsyncControlFlowGraph(
             return buildAsyncIteratorLoop(statement, next, context, label);
         }
         let binding: ts.BindingName;
+        const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
         if (ts.isVariableDeclarationList(statement.initializer)) {
             if (statement.initializer.declarations.length !== 1) {
                 supported = false;
@@ -1324,7 +1352,10 @@ export function planAsyncControlFlowGraph(
             }
             binding = declaration.name;
         } else {
-            const assignmentBinding = normalizeIteratorAssignmentTarget(statement.initializer);
+            const assignmentBinding = normalizeIteratorAssignmentTarget(
+                statement.initializer,
+                assignmentTargets,
+            );
             if (!assignmentBinding || containsSuspendingBindingExpression(assignmentBinding)) {
                 supported = false;
                 return next;
@@ -1358,6 +1389,7 @@ export function planAsyncControlFlowGraph(
             id: nextId,
             statement,
             binding,
+            assignmentTargets,
             slot,
             body: bodyEntry,
             done: next,
@@ -1367,6 +1399,7 @@ export function planAsyncControlFlowGraph(
             id: initId,
             statement,
             binding,
+            assignmentTargets,
             slot,
             sourceResultSlot,
             next: nextTarget,
