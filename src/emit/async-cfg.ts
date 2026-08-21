@@ -88,6 +88,12 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "await-dispose";
+        readonly id: number;
+        readonly declarations: readonly ts.VariableDeclaration[];
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
         readonly kind: "switch";
         readonly id: number;
         readonly statement: ts.SwitchStatement;
@@ -677,11 +683,153 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
+        const firstAwaitUsing = sequence.findIndex((statement) =>
+            ts.isVariableStatement(statement) &&
+            (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing);
+        if (firstAwaitUsing >= 0) {
+            return buildAwaitUsingScope(sequence, firstAwaitUsing, next, context);
+        }
         let entry = next;
         for (let index = sequence.length - 1; index >= 0 && supported; index--) {
             entry = buildStatement(sequence[index]!, entry, context);
         }
         return entry;
+    };
+
+    const buildFinalizationRegion = (
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+        buildFinalizer: (exit: AsyncControlFlowTarget) => AsyncControlFlowTarget,
+        buildProtected: (
+            normalEnter: AsyncControlFlowTarget,
+            throwEnter: AsyncControlFlowTarget,
+            protectedContext: BuildContext,
+        ) => AsyncControlFlowTarget,
+    ): AsyncControlFlowTarget => {
+        const region = finallyCount++;
+        const finallyExitId = reserve();
+        const finallyExitTarget = target(finallyExitId);
+        const finallyEntry = buildFinalizer(finallyExitTarget);
+
+        const normalEnterId = reserve();
+        const normalEnter = setState({
+            kind: "finally-enter",
+            id: normalEnterId,
+            region,
+            completion: "normal",
+            finallyTarget: finallyEntry,
+            normalTarget: next,
+        }, context.exceptionTarget);
+        const throwEnterId = reserve();
+        const throwEnter = setState({
+            kind: "finally-enter",
+            id: throwEnterId,
+            region,
+            completion: "throw",
+            finallyTarget: finallyEntry,
+            normalTarget: next,
+        }, context.exceptionTarget);
+        const returnEnterId = reserve();
+        const returnEnter = setState({
+            kind: "finally-return-enter",
+            id: returnEnterId,
+            region,
+            finallyTarget: finallyEntry,
+        }, context.exceptionTarget);
+        setState({
+            kind: "finally-exit",
+            id: finallyExitId,
+            region,
+            returnTarget: context.returnTarget,
+        }, context.exceptionTarget);
+
+        const wrappedTargets = new Map<number, AsyncControlFlowTarget>([[next.id, normalEnter]]);
+        const wrapTarget = (original: AsyncControlFlowTarget): AsyncControlFlowTarget => {
+            const existing = wrappedTargets.get(original.id);
+            if (existing) return existing;
+            const id = reserve();
+            const wrapped = setState({
+                kind: "finally-enter",
+                id,
+                region,
+                completion: "normal",
+                finallyTarget: finallyEntry,
+                normalTarget: original,
+            }, context.exceptionTarget);
+            wrappedTargets.set(original.id, wrapped);
+            return wrapped;
+        };
+        const protectedContext: BuildContext = {
+            ...context,
+            loop: context.loop
+                ? {
+                    breakTarget: wrapTarget(context.loop.breakTarget),
+                    continueTarget: wrapTarget(context.loop.continueTarget),
+                }
+                : null,
+            breakTarget: context.breakTarget ? wrapTarget(context.breakTarget) : null,
+            labels: new Map([...context.labels].map(([label, targets]) => [
+                label,
+                {
+                    breakTarget: wrapTarget(targets.breakTarget),
+                    continueTarget: wrapTarget(targets.continueTarget),
+                },
+            ])),
+            returnTarget: returnEnter,
+        };
+        return buildProtected(normalEnter, throwEnter, protectedContext);
+    };
+
+    const buildAwaitUsingScope = (
+        sequence: readonly ts.Statement[],
+        firstAwaitUsing: number,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget => {
+        const prefix = sequence.slice(0, firstAwaitUsing);
+        const protectedStatements = sequence.slice(firstAwaitUsing);
+        const resources: ts.VariableDeclaration[] = [];
+        const normalized = protectedStatements.map((statement) => {
+            if (!ts.isVariableStatement(statement) ||
+                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== ts.NodeFlags.AwaitUsing) {
+                return statement;
+            }
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+                    supported = false;
+                    return statement;
+                }
+                resources.push(declaration);
+            }
+            return ts.factory.createVariableStatement(
+                statement.modifiers,
+                ts.factory.createVariableDeclarationList(
+                    statement.declarationList.declarations,
+                    ts.NodeFlags.Const,
+                ),
+            );
+        });
+        if (!supported || resources.length === 0) return next;
+        const protectedEntry = buildFinalizationRegion(
+            next,
+            context,
+            (finallyExit) => {
+                const id = reserve();
+                awaitCount++;
+                return setState({
+                    kind: "await-dispose",
+                    id,
+                    declarations: resources,
+                    next: finallyExit,
+                }, context.exceptionTarget);
+            },
+            (normalEnter, throwEnter, protectedContext) => buildSequence(
+                normalized,
+                normalEnter,
+                { ...protectedContext, exceptionTarget: { target: throwEnter } },
+            ),
+        );
+        return buildSequence(prefix, protectedEntry, context);
     };
 
     const buildLoop = (
@@ -1005,90 +1153,25 @@ export function planAsyncControlFlowGraph(
                     exceptionTarget: { target: catchEntry },
                 });
             }
-            const region = finallyCount++;
-            const finallyExitId = reserve();
-            const finallyExitTarget = target(finallyExitId);
-            const finallyEntry = buildSequence(statement.finallyBlock.statements, finallyExitTarget, context);
-
-            const normalEnterId = reserve();
-            const normalEnter = setState({
-                kind: "finally-enter",
-                id: normalEnterId,
-                region,
-                completion: "normal",
-                finallyTarget: finallyEntry,
-                normalTarget: next,
-            }, context.exceptionTarget);
-            const throwEnterId = reserve();
-            const throwEnter = setState({
-                kind: "finally-enter",
-                id: throwEnterId,
-                region,
-                completion: "throw",
-                finallyTarget: finallyEntry,
-                normalTarget: next,
-            }, context.exceptionTarget);
-            const returnEnterId = reserve();
-            const returnEnter = setState({
-                kind: "finally-return-enter",
-                id: returnEnterId,
-                region,
-                finallyTarget: finallyEntry,
-            }, context.exceptionTarget);
-            setState({
-                kind: "finally-exit",
-                id: finallyExitId,
-                region,
-                returnTarget: context.returnTarget,
-            }, context.exceptionTarget);
-
-            const wrappedTargets = new Map<number, AsyncControlFlowTarget>([[next.id, normalEnter]]);
-            const wrapTarget = (original: AsyncControlFlowTarget): AsyncControlFlowTarget => {
-                const existing = wrappedTargets.get(original.id);
-                if (existing) return existing;
-                const id = reserve();
-                const wrapped = setState({
-                    kind: "finally-enter",
-                    id,
-                    region,
-                    completion: "normal",
-                    finallyTarget: finallyEntry,
-                    normalTarget: original,
-                }, context.exceptionTarget);
-                wrappedTargets.set(original.id, wrapped);
-                return wrapped;
-            };
-            const protectedContext: BuildContext = {
-                ...context,
-                loop: context.loop
-                    ? {
-                        breakTarget: wrapTarget(context.loop.breakTarget),
-                        continueTarget: wrapTarget(context.loop.continueTarget),
+            return buildFinalizationRegion(
+                next,
+                context,
+                (finallyExit) => buildSequence(statement.finallyBlock!.statements, finallyExit, context),
+                (normalEnter, throwEnter, protectedContext) => {
+                    let tryExceptionTarget = throwEnter;
+                    if (statement.catchClause) {
+                        const catchEntry = buildCatchEntry(statement.catchClause, normalEnter, {
+                            ...protectedContext,
+                            exceptionTarget: { target: throwEnter },
+                        });
+                        tryExceptionTarget = catchEntry;
                     }
-                    : null,
-                breakTarget: context.breakTarget ? wrapTarget(context.breakTarget) : null,
-                labels: new Map([...context.labels].map(([label, targets]) => [
-                    label,
-                    {
-                        breakTarget: wrapTarget(targets.breakTarget),
-                        continueTarget: wrapTarget(targets.continueTarget),
-                    },
-                ])),
-                returnTarget: returnEnter,
-            };
-
-            let tryExceptionTarget = throwEnter;
-            if (statement.catchClause) {
-                const catchEntry = buildCatchEntry(statement.catchClause, normalEnter, {
-                    ...protectedContext,
-                    exceptionTarget: { target: throwEnter },
-                });
-                tryExceptionTarget = catchEntry;
-            }
-            return buildSequence(statement.tryBlock.statements, normalEnter, {
-                ...protectedContext,
-                exceptionTarget: { target: tryExceptionTarget },
-            });
+                    return buildSequence(statement.tryBlock.statements, normalEnter, {
+                        ...protectedContext,
+                        exceptionTarget: { target: tryExceptionTarget },
+                    });
+                },
+            );
         }
         if (ts.isBreakStatement(statement) || ts.isContinueStatement(statement)) {
             if (statement.label) {
@@ -1346,6 +1429,7 @@ export function planAsyncControlFlowGraph(
             case "sync":
             case "expression-sync":
             case "await-next":
+            case "await-dispose":
             case "catch-bind":
                 targets.push(state.next);
                 break;
@@ -1431,7 +1515,7 @@ export function planAsyncControlFlowGraph(
     const reachableStates = states.filter((state) => reachableIds.has(state.id));
     const reachableAwaitCount = reachableStates.reduce((count, state) => count + (
         state.kind === "await-condition" || state.kind === "await-logical-condition" || state.kind === "await-completion" ||
-        state.kind === "await-next" || state.kind === "expression-await" ||
+        state.kind === "await-next" || state.kind === "await-dispose" || state.kind === "expression-await" ||
         (state.kind === "switch" && state.awaitExpr !== null) ||
         (state.kind === "return-route" && state.completion.awaitExpr !== null)
             ? 1

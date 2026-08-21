@@ -1,0 +1,3 @@
+{
+  "description": "Lexical async-disposal CFG regions compose awaited acquisition and body work with return, throw, fallthrough, continue, and break completion"
+}

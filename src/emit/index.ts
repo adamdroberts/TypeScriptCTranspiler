@@ -26419,6 +26419,13 @@ class Emitter {
                     ));
                     if (promiseType.kind !== "promise") return false;
                 }
+            } else if (stateNode.kind === "await-dispose") {
+                for (const declaration of stateNode.declarations) {
+                    if (!ts.isIdentifier(declaration.name)) return false;
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                    if (!local || local.type.kind !== "value") return false;
+                }
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
                 stateNode.kind === "await-completion" ||
                 stateNode.kind === "await-next" ||
@@ -26516,14 +26523,12 @@ class Emitter {
                 callback.line("state->awaiting = false;");
                 emitTransition(targetId);
             };
-            const emitAwaitSuspension = (
-                awaitExpr: ts.AwaitExpression,
-                promiseType: CType,
+            const emitPromiseSuspension = (
+                source: () => string,
                 exceptionTargetId: number | null,
             ): void => {
                 callback.open("if (!state->awaiting)");
-                const source = this.emitExpr(awaitExpr.expression);
-                callback.line(`state->receiver = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
+                callback.line(`state->receiver = ${source()};`);
                 callback.line("state->awaiting = true;");
                 callback.line("tsc_try_pop();");
                 callback.open("if (tsc_promise_is_pending(state->receiver))");
@@ -26548,6 +26553,14 @@ class Emitter {
                 callback.line("return;");
                 callback.close();
             };
+            const emitAwaitSuspension = (
+                awaitExpr: ts.AwaitExpression,
+                promiseType: CType,
+                exceptionTargetId: number | null,
+            ): void => emitPromiseSuspension(() => {
+                const source = this.emitExpr(awaitExpr.expression);
+                return this.coerce(source, promiseType, awaitExpr.expression);
+            }, exceptionTargetId);
             const emitSwitchDispatch = (
                 discriminator: EmitResult,
                 clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[],
@@ -26878,6 +26891,22 @@ class Emitter {
                             }
                         }
                     }
+                    callback.line("state->awaiting = false;");
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "await-dispose") {
+                    const resourceValues: string[] = [];
+                    for (const declaration of stateNode.declarations) {
+                        if (!ts.isIdentifier(declaration.name)) return false;
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                        if (!local || local.type.kind !== "value") return false;
+                        resourceValues.push(`state->${local.field}`);
+                    }
+                    emitPromiseSuspension(() => {
+                        const resources = this.freshTemp("_async_cfg_dispose_resources");
+                        callback.line(`tsc_value_t ${resources}[${resourceValues.length}] = { ${resourceValues.join(", ")} };`);
+                        return `tsc_promise_after_async_dispose_many(${resources}, ${resourceValues.length}, tsc_promise_resolve(tsc_value_undefined()))`;
+                    }, stateNode.exceptionTarget?.target.id ?? null);
                     callback.line("state->awaiting = false;");
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "expression-await") {
@@ -27248,7 +27277,6 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         const handlers: readonly (() => boolean)[] = [
-            () => this.emitAsyncUsingSimpleBody(buf, body),
             () => this.emitAsyncControlFlowGraphContinuation(buf, body, parameters, thisValue),
             () => this.emitAsyncAwaitForAwaitReturnContinuation(buf, body, parameters, thisValue),
         ];
@@ -27298,237 +27326,6 @@ class Emitter {
         }
         this.defs.close();
         this.defs.line();
-    }
-
-    private emitAsyncUsingSimpleBody(buf: CBuf, body: ts.Block): boolean {
-        const statements = Array.from(body.statements);
-        const declarations: ts.VariableDeclaration[] = [];
-        let usingStatementCount = 0;
-        for (const statement of statements) {
-            if (!ts.isVariableStatement(statement) ||
-                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== ts.NodeFlags.AwaitUsing) {
-                break;
-            }
-            usingStatementCount++;
-            for (const declaration of statement.declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
-                const storageType = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
-                if (storageType.kind !== "value") return false;
-                declarations.push(declaration);
-            }
-        }
-        if (usingStatementCount === 0 || declarations.length === 0) return false;
-
-        const containsAwait = (node: ts.Node): boolean => {
-            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
-            if (ts.isAwaitExpression(node)) return true;
-            let found = false;
-            node.forEachChild((child) => {
-                if (!found && containsAwait(child)) found = true;
-            });
-            return found;
-        };
-        if (declarations.some((declaration) => containsAwait(declaration.initializer!))) return false;
-        const tail = statements.slice(usingStatementCount);
-        if (tail.some(containsAwait)) return false;
-
-        const simpleBodyStatement = (statement: ts.Statement): boolean =>
-            ts.isExpressionStatement(statement) ||
-            ts.isVariableStatement(statement) ||
-            ts.isEmptyStatement(statement);
-        type CompletionPath = {
-            prefix: ts.Statement[];
-            completion?: ts.ReturnStatement | ts.ThrowStatement;
-            conditional?: {
-                expression: ts.Expression;
-                then: CompletionPath;
-                else: CompletionPath | null;
-            };
-        };
-        const completionPath = (statement: ts.Statement, allowNested: boolean): CompletionPath | null => {
-            const path = ts.isBlock(statement)
-                ? Array.from(statement.statements)
-                : [statement];
-            if (path.length === 0) return null;
-            const prefix = path.slice(0, -1);
-            const completion = path[path.length - 1]!;
-            if (ts.isReturnStatement(completion) || ts.isThrowStatement(completion)) {
-                if (prefix.every(simpleBodyStatement) &&
-                    !prefix.some((entry) => this.statementAlwaysExits(entry))) {
-                    return {
-                        prefix,
-                        completion,
-                    };
-                }
-                if (allowNested && prefix.length > 0) {
-                    let candidateIndex = -1;
-                    for (let index = prefix.length - 1; index >= 0; index--) {
-                        if (ts.isIfStatement(prefix[index]!)) {
-                            candidateIndex = index;
-                            break;
-                        }
-                    }
-                    const candidate = candidateIndex >= 0 ? prefix[candidateIndex]! : null;
-                    const candidatePrefix = candidateIndex >= 0 ? prefix.slice(0, candidateIndex) : [];
-                    const fallbackPrefix = candidateIndex >= 0 ? prefix.slice(candidateIndex + 1) : [];
-                    if (candidate && ts.isIfStatement(candidate) && !candidate.elseStatement &&
-                        candidatePrefix.every(simpleBodyStatement) &&
-                        !candidatePrefix.some((entry) => this.statementAlwaysExits(entry)) &&
-                        fallbackPrefix.every(simpleBodyStatement) &&
-                        !fallbackPrefix.some((entry) => this.statementAlwaysExits(entry))) {
-                        const thenPath = completionPath(candidate.thenStatement, false);
-                        if (!thenPath) return null;
-                        return {
-                            prefix: candidatePrefix,
-                            conditional: {
-                                expression: candidate.expression,
-                                then: thenPath,
-                                else: {
-                                    prefix: fallbackPrefix,
-                                    completion,
-                                },
-                            },
-                        };
-                    }
-                }
-                return null;
-            }
-            if (!allowNested || !ts.isIfStatement(completion)) return null;
-            if (!prefix.every(simpleBodyStatement)) return null;
-            if (prefix.some((entry) => this.statementAlwaysExits(entry))) return null;
-            const thenPath = completionPath(completion.thenStatement, false);
-            const elsePath = completion.elseStatement
-                ? completionPath(completion.elseStatement, false)
-                : null;
-            if (!thenPath || (completion.elseStatement && !elsePath)) return null;
-            return {
-                prefix,
-                conditional: {
-                    expression: completion.expression,
-                    then: thenPath,
-                    else: elsePath,
-                },
-            };
-        };
-        const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
-        const terminalIsReturn = !!terminal && ts.isReturnStatement(terminal);
-        const terminalIsThrow = !!terminal && ts.isThrowStatement(terminal);
-        let conditional: ts.IfStatement | null = null;
-        let conditionalThen: CompletionPath | null = null;
-        let conditionalElse: CompletionPath | null = null;
-        let conditionalFallback: CompletionPath | null = null;
-        let bodyStatements: ts.Statement[];
-        if (terminal && ts.isIfStatement(terminal)) {
-            const thenPath = completionPath(terminal.thenStatement, true);
-            const elsePath = terminal.elseStatement
-                ? completionPath(terminal.elseStatement, true)
-                : null;
-            if (!thenPath || (terminal.elseStatement && !elsePath)) return false;
-            conditional = terminal;
-            conditionalThen = thenPath;
-            conditionalElse = elsePath;
-            bodyStatements = tail.slice(0, -1);
-        } else if (
-            terminalIsReturn || terminalIsThrow
-        ) {
-            const candidate = tail.length > 1 ? tail[tail.length - 2]! : null;
-            const thenPath = candidate && ts.isIfStatement(candidate) && !candidate.elseStatement
-                ? completionPath(candidate.thenStatement, true)
-                : null;
-            if (candidate && ts.isIfStatement(candidate) && thenPath) {
-                conditional = candidate;
-                conditionalThen = thenPath;
-                conditionalFallback = {
-                    prefix: [],
-                    completion: terminal as ts.ReturnStatement | ts.ThrowStatement,
-                };
-                bodyStatements = tail.slice(0, -2);
-            } else {
-                bodyStatements = tail.slice(0, -1);
-            }
-        } else {
-            bodyStatements = tail;
-        }
-        if (!bodyStatements.every(simpleBodyStatement)) return false;
-        if (bodyStatements.some((statement) => this.statementAlwaysExits(statement))) return false;
-        if (!conditional && terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
-
-        const resourceNames: string[] = [];
-        for (const declaration of declarations) {
-            if (!ts.isIdentifier(declaration.name)) return false;
-            const resourceName = mangleIdent(declaration.name.text);
-            const resource = this.emitExpr(declaration.initializer!);
-            buf.line(`tsc_value_t ${resourceName} = ${this.coerce(resource, T_VALUE, declaration.initializer!)};`);
-            resourceNames.push(resourceName);
-        }
-        for (const statement of bodyStatements) this.emitStmt(buf, statement);
-
-        const resultPromise = this.freshTemp("_await_using_result");
-        const emitCompletion = (completion: ts.ReturnStatement | ts.ThrowStatement): void => {
-            if (ts.isReturnStatement(completion)) {
-                if (!completion.expression) {
-                    buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-                } else {
-                    const returned = this.emitExpr(completion.expression);
-                    buf.line(`${resultPromise} = ${this.promiseResolveResult(returned, completion.expression)};`);
-                }
-            } else {
-                const thrown = this.emitExpr(completion.expression);
-                buf.line(`${resultPromise} = tsc_promise_reject(tsc_value_string(${this.coerceToString(thrown, completion.expression)}));`);
-            }
-        };
-        const emitCompletionPath = (path: CompletionPath): void => {
-            for (const statement of path.prefix) this.emitStmt(buf, statement);
-            if (!path.conditional) {
-                emitCompletion(path.completion!);
-                return;
-            }
-            const condition = this.emitExpr(path.conditional.expression);
-            buf.open(`if (${this.coerce(condition, T_BOOLEAN, path.conditional.expression)})`);
-            emitCompletionPath(path.conditional.then);
-            buf.close();
-            buf.open("else");
-            if (path.conditional.else) {
-                emitCompletionPath(path.conditional.else);
-            } else {
-                buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-            }
-            buf.close();
-        };
-        if (conditional) {
-            buf.line(`tsc_promise_t* ${resultPromise};`);
-            const condition = this.emitExpr(conditional.expression);
-            buf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
-            emitCompletionPath(conditionalThen!);
-            buf.close();
-            buf.open("else");
-            if (conditionalElse) {
-                emitCompletionPath(conditionalElse);
-            } else if (conditionalFallback) {
-                emitCompletionPath(conditionalFallback);
-            } else {
-                buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-            }
-            buf.close();
-        } else if (terminalIsReturn) {
-            const returnStatement = terminal as ts.ReturnStatement;
-            if (!returnStatement.expression) {
-                buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-            } else {
-                const returned = this.emitExpr(returnStatement.expression);
-                buf.line(`tsc_promise_t* const ${resultPromise} = ${this.promiseResolveResult(returned, returnStatement.expression)};`);
-            }
-        } else if (terminalIsThrow) {
-            const throwStatement = terminal as ts.ThrowStatement;
-            const thrown = this.emitExpr(throwStatement.expression);
-            buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_reject(tsc_value_string(${this.coerceToString(thrown, throwStatement.expression)}));`);
-        } else {
-            buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-        }
-        const resources = this.freshTemp("_await_using_resources");
-        buf.line(`tsc_value_t ${resources}[${resourceNames.length}] = { ${resourceNames.join(", ")} };`);
-        buf.line(`return tsc_promise_after_async_dispose_many(${resources}, ${resourceNames.length}, ${resultPromise});`);
-        return true;
     }
 
     private asyncAwaitContinuationParameters(
