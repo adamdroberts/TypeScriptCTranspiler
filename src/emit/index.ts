@@ -26274,18 +26274,12 @@ class Emitter {
             statement: ts.ForInStatement | ts.ForOfStatement;
             sourceType: CType;
             elementType: CType;
-            binding: ts.BindingName | ts.Expression;
+            binding: ts.BindingName;
         }>();
         for (const stateNode of graph.states) {
             if (stateNode.kind !== "iterator-init") continue;
             const statement = stateNode.statement;
-            const bindingName = ts.isVariableDeclarationList(statement.initializer)
-                ? statement.initializer.declarations[0]?.name
-                : statement.initializer;
-            if (!bindingName || (!ts.isIdentifier(bindingName) &&
-                !ts.isObjectBindingPattern(bindingName) && !ts.isArrayBindingPattern(bindingName))) {
-                return false;
-            }
+            const bindingName = stateNode.binding;
             const sourceType = this.prepareType(mapType(statement.expression, this.checker));
             let elementType: CType | null = null;
             if (ts.isForInStatement(statement)) {
@@ -26494,11 +26488,7 @@ class Emitter {
                         return false;
                     }
                 }
-                const initializer = stateNode.statement.initializer;
-                const binding = ts.isVariableDeclarationList(initializer)
-                    ? initializer.declarations[0]?.name ?? null
-                    : initializer;
-                if (!binding || !validateCfgBinding(binding)) return false;
+                if (!validateCfgBinding(stateNode.binding)) return false;
             } else if (stateNode.kind === "catch-bind") {
                 if (stateNode.binding && !validateCfgBinding(stateNode.binding)) return false;
             } else if (stateNode.kind === "binding-init") {
@@ -26687,7 +26677,7 @@ class Emitter {
                 emitTransition(defaultTarget.id);
             };
             const emitCfgBinding = (
-                binding: ts.BindingName | ts.Expression,
+                binding: ts.BindingName,
                 source: EmitResult,
                 label: string,
             ): void => {
@@ -26857,12 +26847,7 @@ class Emitter {
                     callback.close();
                     const item = this.freshTemp("_async_cfg_iterator_value");
                     callback.line(`tsc_value_t ${item} = tsc_value_get_prop(${step}, tsc_str_from_lit("value", 5));`);
-                    const initializer = stateNode.statement.initializer;
-                    const binding = ts.isVariableDeclarationList(initializer)
-                        ? initializer.declarations[0]?.name ?? null
-                        : initializer;
-                    if (!binding) return false;
-                    emitCfgBinding(binding, { c: item, ty: T_VALUE }, "async iterator");
+                    emitCfgBinding(stateNode.binding, { c: item, ty: T_VALUE }, "async iterator");
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-close") {
                     const iterator = `state->async_iterator_${stateNode.slot}`;
