@@ -9,7 +9,24 @@
   "scripts": {
     "build": "tsc -p .",
     "check:emitter-reachability": "bun src/tools/check-emitter-method-reachability.ts",
+    "prepare:e2e-fixtures": "bun tests/e2e/prepare-fixtures.ts",
     "test": "bun tests/e2e/run.ts",
+    "test:property": "bun tests/property/run.ts",
+    "compliance:fetch": "bun tests/test262/fetch.ts",
+    "compliance:catalog": "bun tests/test262/spec-catalog.ts",
+    "compliance:catalog:check": "bun tests/test262/spec-catalog.ts --check",
+    "compliance:features": "bun tests/test262/feature-map.ts",
+    "compliance:features:check": "bun tests/test262/feature-map.ts --check",
+    "compliance:matrix:render": "bun tests/test262/render-matrix.ts",
+    "compliance:matrix": "bun tests/test262/check-matrix.ts",
+    "compliance:self-test": "bun test ./tests/test262/self.test.ts",
+    "check:compliance-types": "tsc -p tsconfig.compliance.json",
+    "compliance:inventory": "bun tests/test262/inventory.ts",
+    "test:test262": "bun tests/test262/run.ts",
+    "compliance:test262:merge": "bun tests/test262/merge-results.ts",
+    "compliance:local": "bun tests/test262/local-gates.ts",
+    "compliance:local:merge": "bun tests/test262/merge-local-gates.ts",
+    "compliance:claim": "bun tests/test262/check-claim.ts",
     "test:native-addon-smoke": "bun tests/native-addon-smoke/run.ts",
     "bench:check": "bun manual-tests/benchmarks/check-thresholds.ts",
     "bench:smoke": "bun manual-tests/benchmarks/ci-smoke.ts",
@@ -18,11 +35,14 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "typescript": "^5.6.3"
+    "typescript": "5.9.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^22.7.5"
+    "@types/node": "^22.7.5",
+    "ajv": "8.17.1",
+    "parse5": "8.0.0",
+    "yaml": "2.8.1"
   },
   "engines": {
     "node": ">=18"

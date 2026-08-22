@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "description": "Reserved for a future exact waiver protocol. This array must remain empty; implementation gaps, unsupported features, timeouts, crashes, missing evidence, and missing runner capabilities cannot be waived.",
+  "waivers": []
+}

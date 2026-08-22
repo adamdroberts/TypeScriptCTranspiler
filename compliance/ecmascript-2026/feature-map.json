@@ -1,0 +1,1399 @@
+{
+  "schemaVersion": 1,
+  "test262Commit": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+  "features": [
+    {
+      "tag": "AggregateError",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.fromAsync",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.prototype.at",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.prototype.flat",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.prototype.flatMap",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.prototype.includes",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Array.prototype.values",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "ArrayBuffer",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Atomics",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Atomics.pause",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Atomics.waitAsync",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "BigInt",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getFloat32",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getFloat64",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getInt16",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getInt32",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getInt8",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getUint16",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.getUint32",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "DataView.prototype.setUint8",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Error.isError",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "FinalizationRegistry",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Float16Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Float32Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Float64Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Int16Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Int32Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Int8Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Intl-enumeration",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DateTimeFormat-datetimestyle",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DateTimeFormat-dayPeriod",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DateTimeFormat-extend-timezonename",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DateTimeFormat-formatRange",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DateTimeFormat-fractionalSecondDigits",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DisplayNames",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DisplayNames-v2",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.DurationFormat",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.Era-monthcode",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "Intl.ListFormat",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.Locale",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.Locale-info",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "Intl.NumberFormat-unified",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.NumberFormat-v3",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "Intl.RelativeTimeFormat",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "Intl.Segmenter",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "IsHTMLDDA",
+      "disposition": "harness-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Pinned Test262 host capability tag; clause evidence comes from the tagged test metadata."
+    },
+    {
+      "tag": "Iterator.prototype.join",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "Map",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Math.sumPrecise",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Object.fromEntries",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Object.hasOwn",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Object.is",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Promise",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Promise.allSettled",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Promise.any",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Promise.prototype.finally",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Proxy",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Reflect",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Reflect.construct",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Reflect.set",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Reflect.setPrototypeOf",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "RegExp.escape",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Set",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "ShadowRealm",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "SharedArrayBuffer",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.fromCodePoint",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.at",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.endsWith",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.includes",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.isWellFormed",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.matchAll",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.replaceAll",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.toWellFormed",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.trimEnd",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "String.prototype.trimStart",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.asyncIterator",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.hasInstance",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.isConcatSpreadable",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.iterator",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.match",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.matchAll",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.prototype.description",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.replace",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.search",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.species",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.split",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.toPrimitive",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.toStringTag",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Symbol.unscopables",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Temporal",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "TypedArray",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "TypedArray.prototype.at",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Uint16Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Uint32Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Uint8Array",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "Uint8ClampedArray",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "WeakMap",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "WeakRef",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "WeakSet",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "__getter__",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "__proto__",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "__setter__",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "align-detached-buffer-semantics-with-web-reality",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "arbitrary-module-namespace-names",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "array-find-from-last",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "array-grouping",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "arraybuffer-transfer",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "arrow-function",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "async-functions",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "async-iteration",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "await-dictionary",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "caller",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "canonical-tz",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "change-array-by-copy",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-fields-private",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-fields-private-in",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-fields-public",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-methods-private",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-static-block",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-static-fields-private",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-static-fields-public",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "class-static-methods-private",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "coalesce-expression",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "computed-property-names",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "const",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "cross-realm",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "decorators",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "default-parameters",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "destructuring-assignment",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "destructuring-binding",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "dynamic-import",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "error-cause",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "error-stack-accessor",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "explicit-resource-management",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "exponentiation",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "export-defer",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "export-star-as-namespace-from-module",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "for-in-order",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "for-of",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "generators",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "globalThis",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "hashbang",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "host-gc-required",
+      "disposition": "harness-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Pinned Test262 host capability tag; clause evidence comes from the tagged test metadata."
+    },
+    {
+      "tag": "immutable-arraybuffer",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "import-attributes",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "import-bytes",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "import-defer",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "import-text",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "import.meta",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "intl-normative-optional",
+      "disposition": "ecma402-only",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
+    },
+    {
+      "tag": "iterator-chunking",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "iterator-helpers",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "iterator-includes",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "iterator-sequencing",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "joint-iteration",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "json-modules",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "json-parse-with-source",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "json-superset",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "legacy-regexp",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "let",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "logical-assignment-operators",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "new.target",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "nonextensible-applies-to-private",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "numeric-separator-literal",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "object-rest",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "object-spread",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "optional-catch-binding",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "optional-chaining",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "promise-try",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "promise-with-resolvers",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "proxy-missing-checks",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-dotall",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-duplicate-named-groups",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-lookbehind",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-match-indices",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-modifiers",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-named-groups",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-unicode-property-escapes",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "regexp-v-flag",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "resizable-arraybuffer",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "rest-parameters",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "set-methods",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "source-phase-imports",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "source-phase-imports-module-source",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
+      "clauses": [],
+      "rationale": "Excluded because the pinned Test262 registry classifies this as a post-edition proposal."
+    },
+    {
+      "tag": "stable-array-sort",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "stable-typedarray-sort",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "string-trimming",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "super",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "symbols-as-weakmap-keys",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "tail-call-optimization",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "template",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "top-level-await",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "u180e",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "uint8array-base64",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "upsert",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    },
+    {
+      "tag": "well-formed-json-stringify",
+      "disposition": "standard",
+      "tracking": "todo",
+      "clauses": [],
+      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+    }
+  ]
+}

@@ -1,0 +1,2576 @@
+# ECMAScript 2026 compliance checklist
+
+> Generated from `compliance/ecmascript-2026/matrix.json` and the clause tree extracted from the pinned ECMA-262 source. Edit the JSON matrix, then run `bun run compliance:matrix:render`.
+
+This is a generated open-work checklist, not a support claim. Its boxes are deliberately never checked from authored state; the generated claim JSON is the sole computed verdict after an exhaustive pinned Test262 result and all local gates. Authored tracking states cannot mark a clause conformant.
+
+Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff1865123c9cd`.
+
+## Clause and feature groups
+
+- [ ] **Scope** (`sec-scope`) — tracking: `todo`, scope: `non-observable`
+  - Semantic partitions: published language boundary.
+  - Linked local regression evidence: none linked yet.
+  - Scope rationale: Normative framing; the validator must still confirm that every observable descendant elsewhere is classified.
+  - [ ] `sec-scope` — Scope: exact disposition and partitions missing.
+- [ ] **Conformance** (`sec-conformance`) — tracking: `todo`, scope: `non-observable`
+  - Semantic partitions: required; legacy; normative optional; forbidden extensions.
+  - Linked local regression evidence: none linked yet.
+  - Known blockers: Normative-optional choices and forbidden extensions have not been audited.
+  - Scope rationale: The claim report must disclose optional choices; example subclauses are not implementation requirements.
+  - [ ] `sec-conformance` — Conformance: exact disposition and partitions missing.
+- [ ] **Normative References** (`sec-normative-references`) — tracking: `todo`, scope: `non-observable`
+  - Semantic partitions: Unicode; IEEE 754; referenced Ecma standards.
+  - Linked local regression evidence: none linked yet.
+  - Known blockers: Unicode and numeric dependency versions are not yet attested in run artifacts.
+  - Scope rationale: Dependency identity is attestation evidence rather than a Test262 result.
+  - [ ] `sec-normative-references` — Normative References: exact disposition and partitions missing.
+- [ ] **Overview** (`sec-overview`) — tracking: `todo`, scope: `non-observable`
+  - Semantic partitions: objects; strict language variant; host boundaries.
+  - Linked local regression evidence: none linked yet.
+  - Scope rationale: Descriptive definitions are discharged by the corresponding normative clauses.
+  - [ ] `sec-overview` — Overview: exact disposition and partitions missing.
+  - [ ] `sec-web-scripting` — Web Scripting: exact disposition and partitions missing.
+  - [ ] `sec-hosts-and-implementations` — Hosts and Implementations: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-overview` — ECMAScript Overview: exact disposition and partitions missing.
+  - [ ] `sec-objects` — Objects: exact disposition and partitions missing.
+  - [ ] `sec-strict-variant-of-ecmascript` — The Strict Variant of ECMAScript: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions` — Terms and Definitions: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-implementation-approximated` — implementation-approximated: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-implementation-defined` — implementation-defined: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-host-defined` — host-defined: exact disposition and partitions missing.
+  - [ ] `sec-type` — type: exact disposition and partitions missing.
+  - [ ] `sec-primitive-value` — primitive value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-object` — object: exact disposition and partitions missing.
+  - [ ] `sec-constructor` — constructor: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-prototype` — prototype: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object` — ordinary object: exact disposition and partitions missing.
+  - [ ] `sec-exotic-object` — exotic object: exact disposition and partitions missing.
+  - [ ] `sec-standard-object` — standard object: exact disposition and partitions missing.
+  - [ ] `sec-built-in-object` — built-in object: exact disposition and partitions missing.
+  - [ ] `sec-undefined-value` — undefined value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-undefined-type` — Undefined type: exact disposition and partitions missing.
+  - [ ] `sec-null-value` — null value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-null-type` — Null type: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-boolean-value` — Boolean value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-boolean-type` — Boolean type: exact disposition and partitions missing.
+  - [ ] `sec-boolean-object` — Boolean object: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-string-value` — String value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-string-type` — String type: exact disposition and partitions missing.
+  - [ ] `sec-string-object` — String object: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-number-value` — Number value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-number-type` — Number type: exact disposition and partitions missing.
+  - [ ] `sec-number-object` — Number object: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-infinity` — Infinity: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-nan` — NaN: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-bigint-value` — BigInt value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-bigint-type` — BigInt type: exact disposition and partitions missing.
+  - [ ] `sec-bigint-object` — BigInt object: exact disposition and partitions missing.
+  - [ ] `sec-symbol-value` — Symbol value: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-symbol-type` — Symbol type: exact disposition and partitions missing.
+  - [ ] `sec-symbol-object` — Symbol object: exact disposition and partitions missing.
+  - [ ] `sec-terms-and-definitions-function` — function: exact disposition and partitions missing.
+  - [ ] `sec-built-in-function` — built-in function: exact disposition and partitions missing.
+  - [ ] `sec-built-in-constructor` — built-in constructor: exact disposition and partitions missing.
+  - [ ] `sec-property` — property: exact disposition and partitions missing.
+  - [ ] `sec-method` — method: exact disposition and partitions missing.
+  - [ ] `sec-built-in-method` — built-in method: exact disposition and partitions missing.
+  - [ ] `sec-attribute` — attribute: exact disposition and partitions missing.
+  - [ ] `sec-own-property` — own property: exact disposition and partitions missing.
+  - [ ] `sec-inherited-property` — inherited property: exact disposition and partitions missing.
+  - [ ] `sec-organization-of-this-specification` — Organization of This Specification: exact disposition and partitions missing.
+- [ ] **Notational Conventions** (`sec-notational-conventions`) — tracking: `todo`, scope: `non-observable`
+  - Semantic partitions: grammar notation; algorithm conventions; completion records.
+  - Linked local regression evidence: none linked yet.
+  - Scope rationale: Specification notation is not directly executable; referenced algorithms remain required.
+  - [ ] `sec-notational-conventions` — Notational Conventions: exact disposition and partitions missing.
+  - [ ] `sec-syntactic-and-lexical-grammars` — Syntactic and Lexical Grammars: exact disposition and partitions missing.
+  - [ ] `sec-context-free-grammars` — Context-Free Grammars: exact disposition and partitions missing.
+  - [ ] `sec-lexical-and-regexp-grammars` — The Lexical and RegExp Grammars: exact disposition and partitions missing.
+  - [ ] `sec-numeric-string-grammar` — The Numeric String Grammar: exact disposition and partitions missing.
+  - [ ] `sec-syntactic-grammar` — The Syntactic Grammar: exact disposition and partitions missing.
+  - [ ] `sec-grammar-notation` — Grammar Notation: exact disposition and partitions missing.
+  - [ ] `sec-terminal-symbols` — Terminal Symbols: exact disposition and partitions missing.
+  - [ ] `sec-nonterminal-symbols-and-productions` — Nonterminal Symbols and Productions: exact disposition and partitions missing.
+  - [ ] `sec-optional-symbols` — Optional Symbols: exact disposition and partitions missing.
+  - [ ] `sec-grammatical-parameters` — Grammatical Parameters: exact disposition and partitions missing.
+  - [ ] `sec-one-of` — one of: exact disposition and partitions missing.
+  - [ ] `sec-empty` — [empty]: exact disposition and partitions missing.
+  - [ ] `sec-lookahead-restrictions` — Lookahead Restrictions: exact disposition and partitions missing.
+  - [ ] `sec-no-lineterminator-here` — [no |LineTerminator| here]: exact disposition and partitions missing.
+  - [ ] `sec-but-not` — but not: exact disposition and partitions missing.
+  - [ ] `sec-descriptive-phrases` — Descriptive Phrases: exact disposition and partitions missing.
+  - [ ] `sec-algorithm-conventions` — Algorithm Conventions: exact disposition and partitions missing.
+  - [ ] `sec-evaluation-order` — Evaluation Order: exact disposition and partitions missing.
+  - [ ] `sec-algorithm-conventions-abstract-operations` — Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-algorithm-conventions-syntax-directed-operations` — Syntax-Directed Operations: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics` — Runtime Semantics: exact disposition and partitions missing.
+  - [ ] `sec-completion-ao` — Completion ( _completionRecord_: a Completion Record, ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-throw-an-exception` — Throw an Exception: exact disposition and partitions missing.
+  - [ ] `sec-shorthands-for-unwrapping-completion-records` — Shorthands for Unwrapping Completion Records: exact disposition and partitions missing.
+  - [ ] `sec-implicit-normal-completion` — Implicit Normal Completion: exact disposition and partitions missing.
+  - [ ] `sec-static-semantic-rules` — Static Semantics: exact disposition and partitions missing.
+  - [ ] `sec-mathematical-operations` — Mathematical Operations: exact disposition and partitions missing.
+  - [ ] `sec-value-notation` — Value Notation: exact disposition and partitions missing.
+  - [ ] `sec-identity` — Identity: exact disposition and partitions missing.
+- [ ] **ECMAScript Data Types and Values** (`sec-ecmascript-data-types-and-values`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: primitive types; numeric types; objects; completion and specification types.
+  - Linked local regression evidence: E2E: dynamic_ops, symbols, bigint.
+  - Known blockers: Exact clause evidence and semantic partitions remain unverified against the pinned suite.
+  - [ ] `sec-ecmascript-data-types-and-values` — ECMAScript Data Types and Values: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types` — ECMAScript Language Types: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-undefined-type` — The Undefined Type: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-null-type` — The Null Type: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-boolean-type` — The Boolean Type: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-string-type` — The String Type: exact disposition and partitions missing.
+  - [ ] `sec-stringindexof` — StringIndexOf ( _string_: a String, _searchValue_: a String, _fromIndex_: a non-negative integer, ): a non-negative integer or ~not-found~: exact disposition and partitions missing.
+  - [ ] `sec-stringlastindexof` — StringLastIndexOf ( _string_: a String, _searchValue_: a String, _fromIndex_: a non-negative integer, ): a non-negative integer or ~not-found~: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-symbol-type` — The Symbol Type: exact disposition and partitions missing.
+  - [ ] `sec-well-known-symbols` — Well-Known Symbols: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types` — Numeric Types: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-number-type` — The Number Type: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-unaryMinus` — Number::unaryMinus ( _x_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-bitwiseNOT` — Number::bitwiseNOT ( _x_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-exponentiate` — Number::exponentiate ( _base_: a Number, _exponent_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-multiply` — Number::multiply ( _x_: a Number, _y_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-divide` — Number::divide ( _x_: a Number, _y_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-remainder` — Number::remainder ( _n_: a Number, _d_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-add` — Number::add ( _x_: a Number, _y_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-subtract` — Number::subtract ( _x_: a Number, _y_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-leftShift` — Number::leftShift ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-signedRightShift` — Number::signedRightShift ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-unsignedRightShift` — Number::unsignedRightShift ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-lessThan` — Number::lessThan ( _x_: a Number, _y_: a Number, ): a Boolean or undefined: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-equal` — Number::equal ( _x_: a Number, _y_: a Number, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-sameValue` — Number::sameValue ( _x_: a Number, _y_: a Number, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-sameValueZero` — Number::sameValueZero ( _x_: a Number, _y_: a Number, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-numberbitwiseop` — NumberBitwiseOp ( _op_: &, ^, or |, _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-bitwiseAND` — Number::bitwiseAND ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-bitwiseXOR` — Number::bitwiseXOR ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-bitwiseOR` — Number::bitwiseOR ( _x_: a Number, _y_: a Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-number-tostring` — Number::toString ( _x_: a Number, _radix_: an integer in the inclusive interval from 2 to 36, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-types-bigint-type` — The BigInt Type: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-unaryMinus` — BigInt::unaryMinus ( _x_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-bitwiseNOT` — BigInt::bitwiseNOT ( _x_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-exponentiate` — BigInt::exponentiate ( _base_: a BigInt, _exponent_: a BigInt, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-multiply` — BigInt::multiply ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-divide` — BigInt::divide ( _x_: a BigInt, _y_: a BigInt, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-remainder` — BigInt::remainder ( _n_: a BigInt, _d_: a BigInt, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-add` — BigInt::add ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-subtract` — BigInt::subtract ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-leftShift` — BigInt::leftShift ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-signedRightShift` — BigInt::signedRightShift ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-unsignedRightShift` — BigInt::unsignedRightShift ( _x_: a BigInt, _y_: a BigInt, ): a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-lessThan` — BigInt::lessThan ( _x_: a BigInt, _y_: a BigInt, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-equal` — BigInt::equal ( _x_: a BigInt, _y_: a BigInt, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-binaryand` — BinaryAnd ( _x_: 0 or 1, _y_: 0 or 1, ): 0 or 1: exact disposition and partitions missing.
+  - [ ] `sec-binaryor` — BinaryOr ( _x_: 0 or 1, _y_: 0 or 1, ): 0 or 1: exact disposition and partitions missing.
+  - [ ] `sec-binaryxor` — BinaryXor ( _x_: 0 or 1, _y_: 0 or 1, ): 0 or 1: exact disposition and partitions missing.
+  - [ ] `sec-bigintbitwiseop` — BigIntBitwiseOp ( _op_: &, ^, or |, _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-bitwiseAND` — BigInt::bitwiseAND ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-bitwiseXOR` — BigInt::bitwiseXOR ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-bitwiseOR` — BigInt::bitwiseOR ( _x_: a BigInt, _y_: a BigInt, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numeric-types-bigint-tostring` — BigInt::toString ( _x_: a BigInt, _radix_: an integer in the inclusive interval from 2 to 36, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-object-type` — The Object Type: exact disposition and partitions missing.
+  - [ ] `sec-property-attributes` — Property Attributes: exact disposition and partitions missing.
+  - [ ] `sec-object-internal-methods-and-internal-slots` — Object Internal Methods and Internal Slots: exact disposition and partitions missing.
+  - [ ] `sec-invariants-of-the-essential-internal-methods` — Invariants of the Essential Internal Methods: exact disposition and partitions missing.
+  - [ ] `sec-well-known-intrinsic-objects` — Well-Known Intrinsic Objects: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-specification-types` — ECMAScript Specification Types: exact disposition and partitions missing.
+  - [ ] `sec-enum-specification-type` — The Enum Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-list-and-record-specification-type` — The List and Record Specification Types: exact disposition and partitions missing.
+  - [ ] `sec-set-and-relation-specification-type` — The Set and Relation Specification Types: exact disposition and partitions missing.
+  - [ ] `sec-completion-record-specification-type` — The Completion Record Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-normalcompletion` — NormalCompletion ( _value_: any value except a Completion Record, ): a normal completion: exact disposition and partitions missing.
+  - [ ] `sec-throwcompletion` — ThrowCompletion ( _value_: an ECMAScript language value, ): a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-returncompletion` — ReturnCompletion ( _value_: an ECMAScript language value, ): a return completion: exact disposition and partitions missing.
+  - [ ] `sec-updateempty` — UpdateEmpty ( _completionRecord_: a Completion Record, _value_: any value except a Completion Record, ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-reference-record-specification-type` — The Reference Record Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-ispropertyreference` — IsPropertyReference ( _V_: a Reference Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isunresolvablereference` — IsUnresolvableReference ( _V_: a Reference Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-issuperreference` — IsSuperReference ( _V_: a Reference Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isprivatereference` — IsPrivateReference ( _V_: a Reference Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-getvalue` — GetValue ( _V_: a Reference Record or an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-putvalue` — PutValue ( _V_: a Reference Record or an ECMAScript language value, _W_: an ECMAScript language value, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-getthisvalue` — GetThisValue ( _V_: a Reference Record, ): an ECMAScript language value: exact disposition and partitions missing.
+  - [ ] `sec-initializereferencedbinding` — InitializeReferencedBinding ( _V_: a Reference Record, _W_: an ECMAScript language value, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-makeprivatereference` — MakePrivateReference ( _baseValue_: an ECMAScript language value, _privateIdentifier_: a String, ): a Reference Record: exact disposition and partitions missing.
+  - [ ] `sec-property-descriptor-specification-type` — The Property Descriptor Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-isaccessordescriptor` — IsAccessorDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isdatadescriptor` — IsDataDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isgenericdescriptor` — IsGenericDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-frompropertydescriptor` — FromPropertyDescriptor ( _Desc_: a Property Descriptor or undefined, ): an Object or undefined: exact disposition and partitions missing.
+  - [ ] `sec-topropertydescriptor` — ToPropertyDescriptor ( _Obj_: an ECMAScript language value, ): either a normal completion containing a Property Descriptor or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-completepropertydescriptor` — CompletePropertyDescriptor ( _Desc_: a Property Descriptor, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-lexical-environment-and-environment-record-specification-types` — The Environment Record Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-abstract-closure` — The Abstract Closure Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-data-blocks` — Data Blocks: exact disposition and partitions missing.
+  - [ ] `sec-createbytedatablock` — CreateByteDataBlock ( _size_: a non-negative integer, ): either a normal completion containing a Data Block or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createsharedbytedatablock` — CreateSharedByteDataBlock ( _size_: a non-negative integer, ): either a normal completion containing a Shared Data Block or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-copydatablockbytes` — CopyDataBlockBytes ( _toBlock_: a Data Block or a Shared Data Block, _toIndex_: a non-negative integer, _fromBlock_: a Data Block or a Shared Data Block, _fromIndex_: a non-negative integer, _count_: a non-negative integer, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-privateelement-specification-type` — The PrivateElement Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-classfielddefinition-record-specification-type` — The ClassFieldDefinition Record Specification Type: exact disposition and partitions missing.
+  - [ ] `sec-private-names` — Private Names: exact disposition and partitions missing.
+  - [ ] `sec-classstaticblockdefinition-record-specification-type` — The ClassStaticBlockDefinition Record Specification Type: exact disposition and partitions missing.
+- [ ] **Abstract Operations** (`sec-abstract-operations`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: type conversion; testing and comparison; properties; iteration; host interaction.
+  - Linked local regression evidence: E2E: dynamic_coercions, dynamic_ops, custom_iterator_object.
+  - Known blockers: Abstract-operation coverage must be derived transitively from exact esid mappings and reviewed gap evidence.
+  - [ ] `sec-abstract-operations` — Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-type-conversion` — Type Conversion: exact disposition and partitions missing.
+  - [ ] `sec-toprimitive` — ToPrimitive ( _input_: an ECMAScript language value, optional _preferredType_: ~string~ or ~number~, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinarytoprimitive` — OrdinaryToPrimitive ( _O_: an Object, _hint_: ~string~ or ~number~, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-toboolean` — ToBoolean ( _argument_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-tonumeric` — ToNumeric ( _value_: an ECMAScript language value, ): either a normal completion containing either a Number or a BigInt, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tonumber` — ToNumber ( _argument_: an ECMAScript language value, ): either a normal completion containing a Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tonumber-applied-to-the-string-type` — ToNumber Applied to the String Type: exact disposition and partitions missing.
+  - [ ] `sec-stringtonumber` — StringToNumber ( _str_: a String, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-stringnumericvalue` — Runtime Semantics: StringNumericValue ( ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-roundmvresult` — RoundMVResult ( _n_: a mathematical value, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-tointegerorinfinity` — ToIntegerOrInfinity ( _argument_: an ECMAScript language value, ): either a normal completion containing either an integer, +&infin;, or -&infin;, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-toint32` — ToInt32 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-touint32` — ToUint32 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-toint16` — ToInt16 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-touint16` — ToUint16 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-toint8` — ToInt8 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-touint8` — ToUint8 ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-touint8clamp` — ToUint8Clamp ( _argument_: an ECMAScript language value, ): either a normal completion containing an integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tobigint` — ToBigInt ( _argument_: an ECMAScript language value, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-stringtobigint` — StringToBigInt ( _str_: a String, ): a BigInt or undefined: exact disposition and partitions missing.
+  - [ ] `sec-stringintegerliteral-grammar` — StringIntegerLiteral Grammar: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-mv-for-stringintegerliteral` — Runtime Semantics: MV: exact disposition and partitions missing.
+  - [ ] `sec-tobigint64` — ToBigInt64 ( _argument_: an ECMAScript language value, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tobiguint64` — ToBigUint64 ( _argument_: an ECMAScript language value, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tostring` — ToString ( _argument_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-toobject` — ToObject ( _argument_: an ECMAScript language value, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-topropertykey` — ToPropertyKey ( _argument_: an ECMAScript language value, ): either a normal completion containing a property key or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-tolength` — ToLength ( _argument_: an ECMAScript language value, ): either a normal completion containing a non-negative integral Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-canonicalnumericindexstring` — CanonicalNumericIndexString ( _argument_: a String, ): a Number or undefined: exact disposition and partitions missing.
+  - [ ] `sec-toindex` — ToIndex ( _value_: an ECMAScript language value, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-testing-and-comparison-operations` — Testing and Comparison Operations: exact disposition and partitions missing.
+  - [ ] `sec-requireobjectcoercible` — RequireObjectCoercible ( _argument_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isarray` — IsArray ( _argument_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iscallable` — IsCallable ( _argument_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isconstructor` — IsConstructor ( _argument_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isextensible-o` — IsExtensible ( _O_: an Object, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isregexp` — IsRegExp ( _argument_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isstringwellformedunicode` — Static Semantics: IsStringWellFormedUnicode ( _string_: a String, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-sametype` — SameType ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-samevalue` — SameValue ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-samevaluezero` — SameValueZero ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-samevaluenonnumber` — SameValueNonNumber ( _x_: an ECMAScript language value, but not a Number, _y_: an ECMAScript language value, but not a Number, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-islessthan` — IsLessThan ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, _LeftFirst_: a Boolean, ): either a normal completion containing either a Boolean or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-islooselyequal` — IsLooselyEqual ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isstrictlyequal` — IsStrictlyEqual ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-operations-on-objects` — Operations on Objects: exact disposition and partitions missing.
+  - [ ] `sec-makebasicobject` — MakeBasicObject ( _internalSlotsList_: a List of internal slot names, ): an Object: exact disposition and partitions missing.
+  - [ ] `sec-get-o-p` — Get ( _O_: an Object, _P_: a property key, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getv` — GetV ( _V_: an ECMAScript language value, _P_: a property key, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-set-o-p-v-throw` — Set ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, _Throw_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createdataproperty` — CreateDataProperty ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createdatapropertyorthrow` — CreateDataPropertyOrThrow ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createnonenumerabledatapropertyorthrow` — CreateNonEnumerableDataPropertyOrThrow ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-definepropertyorthrow` — DefinePropertyOrThrow ( _O_: an Object, _P_: a property key, _desc_: a Property Descriptor, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-deletepropertyorthrow` — DeletePropertyOrThrow ( _O_: an Object, _P_: a property key, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getmethod` — GetMethod ( _V_: an ECMAScript language value, _P_: a property key, ): either a normal completion containing either a function object or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hasproperty` — HasProperty ( _O_: an Object, _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hasownproperty` — HasOwnProperty ( _O_: an Object, _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-call` — Call ( _F_: an ECMAScript language value, _V_: an ECMAScript language value, optional _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-construct` — Construct ( _F_: a constructor, optional _argumentsList_: a List of ECMAScript language values, optional _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-setintegritylevel` — SetIntegrityLevel ( _O_: an Object, _level_: ~sealed~ or ~frozen~, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-testintegritylevel` — TestIntegrityLevel ( _O_: an Object, _level_: ~sealed~ or ~frozen~, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createarrayfromlist` — CreateArrayFromList ( _elements_: a List of ECMAScript language values, ): an Array: exact disposition and partitions missing.
+  - [ ] `sec-lengthofarraylike` — LengthOfArrayLike ( _obj_: an Object, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createlistfromarraylike` — CreateListFromArrayLike ( _obj_: an ECMAScript language value, optional _validElementTypes_: ~all~ or ~property-key~, ): either a normal completion containing a List of ECMAScript language values or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-invoke` — Invoke ( _V_: an ECMAScript language value, _P_: a property key, optional _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryhasinstance` — OrdinaryHasInstance ( _C_: an ECMAScript language value, _O_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-speciesconstructor` — SpeciesConstructor ( _O_: an Object, _defaultConstructor_: a constructor, ): either a normal completion containing a constructor or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-enumerableownproperties` — EnumerableOwnProperties ( _O_: an Object, _kind_: ~key~, ~value~, or ~key+value~, ): either a normal completion containing a List of ECMAScript language values or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getfunctionrealm` — GetFunctionRealm ( _obj_: a function object, ): either a normal completion containing a Realm Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-copydataproperties` — CopyDataProperties ( _target_: an Object, _source_: an ECMAScript language value, _excludedItems_: a List of property keys, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-privateelementfind` — PrivateElementFind ( _O_: an Object, _P_: a Private Name, ): a PrivateElement or ~empty~: exact disposition and partitions missing.
+  - [ ] `sec-privatefieldadd` — PrivateFieldAdd ( _O_: an Object, _P_: a Private Name, _value_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-privatemethodoraccessoradd` — PrivateMethodOrAccessorAdd ( _O_: an Object, _method_: a PrivateElement, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hostensurecanaddprivateelement` — HostEnsureCanAddPrivateElement ( _O_: an Object, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-privateget` — PrivateGet ( _O_: an Object, _P_: a Private Name, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-privateset` — PrivateSet ( _O_: an Object, _P_: a Private Name, _value_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-definefield` — DefineField ( _receiver_: an Object, _fieldRecord_: a ClassFieldDefinition Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-initializeinstanceelements` — InitializeInstanceElements ( _O_: an Object, _constructor_: an ECMAScript function object or a built-in function object, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-add-value-to-keyed-group` — AddValueToKeyedGroup ( _groups_: a List of Records with fields [[Key]] (an ECMAScript language value) and [[Elements]] (a List of ECMAScript language values), _key_: an ECMAScript language value, _value_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-groupby` — GroupBy ( _items_: an ECMAScript language value, _callback_: an ECMAScript language value, _keyCoercion_: ~property~ or ~collection~, ): either a normal completion containing a List of Records with fields [[Key]] (an ECMAScript language value) and [[Elements]] (a List of ECMAScript language values), or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getoptionsobject` — GetOptionsObject ( _options_: an ECMAScript language value, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-SetterThatIgnoresPrototypeProperties` — SetterThatIgnoresPrototypeProperties ( _thisValue_: an ECMAScript language value, _home_: an Object, _p_: a property key, _v_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-operations-on-iterator-objects` — Operations on Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-iterator-records` — Iterator Records: exact disposition and partitions missing.
+  - [ ] `sec-getiteratordirect` — GetIteratorDirect ( _obj_: an Object, ): either a normal completion containing an Iterator Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getiteratorfrommethod` — GetIteratorFromMethod ( _obj_: an ECMAScript language value, _method_: a function object, ): either a normal completion containing an Iterator Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getiterator` — GetIterator ( _obj_: an ECMAScript language value, _kind_: ~sync~ or ~async~, ): either a normal completion containing an Iterator Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getiteratorflattenable` — GetIteratorFlattenable ( _obj_: an ECMAScript language value, _primitiveHandling_: ~iterate-string-primitives~ or ~reject-primitives~, ): either a normal completion containing an Iterator Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratornext` — IteratorNext ( _iteratorRecord_: an Iterator Record, optional _value_: an ECMAScript language value, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratorcomplete` — IteratorComplete ( _iteratorResult_: an Object, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratorvalue` — IteratorValue ( _iteratorResult_: an Object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratorstep` — IteratorStep ( _iteratorRecord_: an Iterator Record, ): either a normal completion containing either an Object or ~done~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratorstepvalue` — IteratorStepValue ( _iteratorRecord_: an Iterator Record, ): either a normal completion containing either an ECMAScript language value or ~done~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iteratorclose` — IteratorClose ( _iteratorRecord_: an Iterator Record, _completion_: a Completion Record, ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-iteratorcloseall` — IteratorCloseAll ( _iters_: a List of Iterator Records, _completion_: a Completion Record, ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-ifabruptcloseiterator` — IfAbruptCloseIterator ( _value_, _iteratorRecord_ ): exact disposition and partitions missing.
+  - [ ] `sec-asynciteratorclose` — AsyncIteratorClose ( _iteratorRecord_: an Iterator Record, _completion_: a Completion Record, ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-ifabruptcloseasynciterator` — IfAbruptCloseAsyncIterator ( _value_, _iteratorRecord_ ): exact disposition and partitions missing.
+  - [ ] `sec-createiterresultobject` — CreateIteratorResultObject ( _value_: an ECMAScript language value, _done_: a Boolean, ): an Object that conforms to the IteratorResult interface: exact disposition and partitions missing.
+  - [ ] `sec-createlistiteratorRecord` — CreateListIteratorRecord ( _list_: a List of ECMAScript language values, ): an Iterator Record: exact disposition and partitions missing.
+  - [ ] `sec-iteratortolist` — IteratorToList ( _iteratorRecord_: an Iterator Record, ): either a normal completion containing a List of ECMAScript language values or a throw completion: exact disposition and partitions missing.
+- [ ] **Syntax-Directed Operations** (`sec-syntax-directed-operations`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: static semantics; runtime semantics; abrupt completion propagation.
+  - Linked local regression evidence: E2E: advanced.
+  - Known blockers: There is no complete clause-level mapping for shared syntax-directed operations.
+  - [ ] `sec-syntax-directed-operations` — Syntax-Directed Operations: exact disposition and partitions missing.
+  - [ ] `sec-evaluation` — Runtime Semantics: Evaluation ( ): a Completion Record: exact disposition and partitions missing.
+  - [ ] `sec-syntax-directed-operations-scope-analysis` — Scope Analysis: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-boundnames` — Static Semantics: BoundNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-declarationpart` — Static Semantics: DeclarationPart ( ): a Parse Node: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-isconstantdeclaration` — Static Semantics: IsConstantDeclaration ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-lexicallydeclarednames` — Static Semantics: LexicallyDeclaredNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-lexicallyscopeddeclarations` — Static Semantics: LexicallyScopedDeclarations ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-vardeclarednames` — Static Semantics: VarDeclaredNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-varscopeddeclarations` — Static Semantics: VarScopedDeclarations ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-toplevellexicallydeclarednames` — Static Semantics: TopLevelLexicallyDeclaredNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-toplevellexicallyscopeddeclarations` — Static Semantics: TopLevelLexicallyScopedDeclarations ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-toplevelvardeclarednames` — Static Semantics: TopLevelVarDeclaredNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-toplevelvarscopeddeclarations` — Static Semantics: TopLevelVarScopedDeclarations ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-syntax-directed-operations-labels` — Labels: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-containsduplicatelabels` — Static Semantics: ContainsDuplicateLabels ( _labelSet_: a List of Strings, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-containsundefinedbreaktarget` — Static Semantics: ContainsUndefinedBreakTarget ( _labelSet_: a List of Strings, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-containsundefinedcontinuetarget` — Static Semantics: ContainsUndefinedContinueTarget ( _iterationSet_: a List of Strings, _labelSet_: a List of Strings, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-syntax-directed-operations-function-name-inference` — Function Name Inference: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-hasname` — Static Semantics: HasName ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-isfunctiondefinition` — Static Semantics: IsFunctionDefinition ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isanonymousfunctiondefinition` — Static Semantics: IsAnonymousFunctionDefinition ( _expr_: an |AssignmentExpression| Parse Node, an |Initializer| Parse Node, or an |Expression| Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-isidentifierref` — Static Semantics: IsIdentifierRef ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-namedevaluation` — Runtime Semantics: NamedEvaluation ( _name_: a property key or a Private Name, ): either a normal completion containing a function object or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-syntax-directed-operations-contains` — Contains: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-contains` — Static Semantics: Contains ( _symbol_: a grammar symbol, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-computedpropertycontains` — Static Semantics: ComputedPropertyContains ( _symbol_: a grammar symbol, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-syntax-directed-operations-miscellaneous` — Miscellaneous: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiatefunctionobject` — Runtime Semantics: InstantiateFunctionObject ( _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-bindinginitialization` — Runtime Semantics: BindingInitialization ( _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-initializeboundname` — InitializeBoundName ( _name_: a String, _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-iteratorbindinginitialization` — Runtime Semantics: IteratorBindingInitialization ( _iteratorRecord_: an Iterator Record, _environment_: an Environment Record or undefined, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-assignmenttargettype` — Static Semantics: AssignmentTargetType ( ): ~simple~, ~web-compat~, or ~invalid~: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-propname` — Static Semantics: PropName ( ): a String or ~empty~: exact disposition and partitions missing.
+- [ ] **Executable Code and Execution Contexts** (`sec-executable-code-and-execution-contexts`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: realm and agent state; execution contexts; environment records; jobs.
+  - Linked local regression evidence: E2E: function_closures, runtime_eval.
+  - Known blockers: Fresh Realm and separate Script evaluation are missing from the Test262 host profile.
+  - [ ] `sec-executable-code-and-execution-contexts` — Executable Code and Execution Contexts: exact disposition and partitions missing.
+  - [ ] `sec-environment-records` — Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-the-environment-record-type-hierarchy` — The Environment Record Type Hierarchy: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records` — Declarative Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-hasbinding-n` — HasBinding ( _N_: a String, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-createmutablebinding-n-d` — CreateMutableBinding ( _N_: a String, _D_: a Boolean, ): a normal completion containing ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-createimmutablebinding-n-s` — CreateImmutableBinding ( _N_: a String, _S_: a Boolean, ): a normal completion containing ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-initializebinding-n-v` — InitializeBinding ( _N_: a String, _V_: an ECMAScript language value, ): a normal completion containing ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-setmutablebinding-n-v-s` — SetMutableBinding ( _N_: a String, _V_: an ECMAScript language value, _S_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-getbindingvalue-n-s` — GetBindingValue ( _N_: a String, _S_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-deletebinding-n` — DeleteBinding ( _N_: a String, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-hasthisbinding` — HasThisBinding ( ): false: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-getthisbinding` — GetThisBinding ( ): exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-hassuperbinding` — HasSuperBinding ( ): false: exact disposition and partitions missing.
+  - [ ] `sec-declarative-environment-records-withbaseobject` — WithBaseObject ( ): undefined: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records` — Object Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-hasbinding-n` — HasBinding ( _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-createmutablebinding-n-d` — CreateMutableBinding ( _N_: a String, _D_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-createimmutablebinding-n-s` — CreateImmutableBinding ( _N_, _S_ ): exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-initializebinding-n-v` — InitializeBinding ( _N_: a String, _V_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-setmutablebinding-n-v-s` — SetMutableBinding ( _N_: a String, _V_: an ECMAScript language value, _S_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-getbindingvalue-n-s` — GetBindingValue ( _N_: a String, _S_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-deletebinding-n` — DeleteBinding ( _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-hasthisbinding` — HasThisBinding ( ): false: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-getthisbinding` — GetThisBinding ( ): exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-hassuperbinding` — HasSuperBinding ( ): false: exact disposition and partitions missing.
+  - [ ] `sec-object-environment-records-withbaseobject` — WithBaseObject ( ): an Object or undefined: exact disposition and partitions missing.
+  - [ ] `sec-function-environment-records` — Function Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-bindthisvalue` — BindThisValue ( _envRec_: a Function Environment Record, _V_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-function-environment-records-hasthisbinding` — HasThisBinding ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-function-environment-records-getthisbinding` — GetThisBinding ( ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-function-environment-records-hassuperbinding` — HasSuperBinding ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-getsuperbase` — GetSuperBase ( _envRec_: a Function Environment Record, ): an Object, null, or undefined: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records` — Global Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-hasbinding-n` — HasBinding ( _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-createmutablebinding-n-d` — CreateMutableBinding ( _N_: a String, _D_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-createimmutablebinding-n-s` — CreateImmutableBinding ( _N_: a String, _S_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-initializebinding-n-v` — InitializeBinding ( _N_: a String, _V_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-setmutablebinding-n-v-s` — SetMutableBinding ( _N_: a String, _V_: an ECMAScript language value, _S_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-getbindingvalue-n-s` — GetBindingValue ( _N_: a String, _S_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-deletebinding-n` — DeleteBinding ( _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-hasthisbinding` — HasThisBinding ( ): true: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-getthisbinding` — GetThisBinding ( ): a normal completion containing an Object: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-hassuperbinding` — HasSuperBinding ( ): false: exact disposition and partitions missing.
+  - [ ] `sec-global-environment-records-withbaseobject` — WithBaseObject ( ): undefined: exact disposition and partitions missing.
+  - [ ] `sec-haslexicaldeclaration` — HasLexicalDeclaration ( _envRec_: a Global Environment Record, _N_: a String, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-hasrestrictedglobalproperty` — HasRestrictedGlobalProperty ( _envRec_: a Global Environment Record, _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-candeclareglobalvar` — CanDeclareGlobalVar ( _envRec_: a Global Environment Record, _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-candeclareglobalfunction` — CanDeclareGlobalFunction ( _envRec_: a Global Environment Record, _N_: a String, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createglobalvarbinding` — CreateGlobalVarBinding ( _envRec_: a Global Environment Record, _N_: a String, _D_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createglobalfunctionbinding` — CreateGlobalFunctionBinding ( _envRec_: a Global Environment Record, _N_: a String, _V_: an ECMAScript language value, _D_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-module-environment-records` — Module Environment Records: exact disposition and partitions missing.
+  - [ ] `sec-module-environment-records-getbindingvalue-n-s` — GetBindingValue ( _N_: a String, _S_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-module-environment-records-deletebinding-n` — DeleteBinding ( _N_ ): exact disposition and partitions missing.
+  - [ ] `sec-module-environment-records-hasthisbinding` — HasThisBinding ( ): true: exact disposition and partitions missing.
+  - [ ] `sec-module-environment-records-getthisbinding` — GetThisBinding ( ): a normal completion containing undefined: exact disposition and partitions missing.
+  - [ ] `sec-createimportbinding` — CreateImportBinding ( _envRec_: a Module Environment Record, _N_: a String, _M_: a Module Record, _N2_: a String, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-environment-record-operations` — Environment Record Operations: exact disposition and partitions missing.
+  - [ ] `sec-getidentifierreference` — GetIdentifierReference ( _env_: an Environment Record or null, _name_: a String, _strict_: a Boolean, ): either a normal completion containing a Reference Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-newdeclarativeenvironment` — NewDeclarativeEnvironment ( _E_: an Environment Record or null, ): a Declarative Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-newobjectenvironment` — NewObjectEnvironment ( _O_: an Object, _W_: a Boolean, _E_: an Environment Record or null, ): an Object Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-newfunctionenvironment` — NewFunctionEnvironment ( _F_: an ECMAScript function object, _newTarget_: an Object or undefined, ): a Function Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-newglobalenvironment` — NewGlobalEnvironment ( _G_: an Object, _thisValue_: an Object, ): a Global Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-newmoduleenvironment` — NewModuleEnvironment ( _E_: an Environment Record, ): a Module Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-privateenvironment-records` — PrivateEnvironment Records: exact disposition and partitions missing.
+  - [ ] `sec-privateenvironment-record-operations` — PrivateEnvironment Record Operations: exact disposition and partitions missing.
+  - [ ] `sec-newprivateenvironment` — NewPrivateEnvironment ( _outerPrivateEnv_: a PrivateEnvironment Record or null, ): a PrivateEnvironment Record: exact disposition and partitions missing.
+  - [ ] `sec-resolve-private-identifier` — ResolvePrivateIdentifier ( _privateEnv_: a PrivateEnvironment Record, _identifier_: a String, ): a Private Name: exact disposition and partitions missing.
+  - [ ] `sec-code-realms` — Realms: exact disposition and partitions missing.
+  - [ ] `sec-initializehostdefinedrealm` — InitializeHostDefinedRealm ( ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createintrinsics` — CreateIntrinsics ( _realmRec_: a Realm Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-setdefaultglobalbindings` — SetDefaultGlobalBindings ( _realmRec_: a Realm Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-execution-contexts` — Execution Contexts: exact disposition and partitions missing.
+  - [ ] `sec-getactivescriptormodule` — GetActiveScriptOrModule ( ): a Script Record, a Module Record, or null: exact disposition and partitions missing.
+  - [ ] `sec-resolvebinding` — ResolveBinding ( _name_: a String, optional _env_: an Environment Record or undefined, ): either a normal completion containing a Reference Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getthisenvironment` — GetThisEnvironment ( ): an Environment Record: exact disposition and partitions missing.
+  - [ ] `sec-resolvethisbinding` — ResolveThisBinding ( ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getnewtarget` — GetNewTarget ( ): an Object or undefined: exact disposition and partitions missing.
+  - [ ] `sec-getglobalobject` — GetGlobalObject ( ): an Object: exact disposition and partitions missing.
+  - [ ] `sec-jobs` — Jobs and Host Operations to Enqueue Jobs: exact disposition and partitions missing.
+  - [ ] `sec-jobcallback-records` — JobCallback Records: exact disposition and partitions missing.
+  - [ ] `sec-hostmakejobcallback` — HostMakeJobCallback ( _callback_: a function object, ): a JobCallback Record: exact disposition and partitions missing.
+  - [ ] `sec-hostcalljobcallback` — HostCallJobCallback ( _jobCallback_: a JobCallback Record, _V_: an ECMAScript language value, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hostenqueuegenericjob` — HostEnqueueGenericJob ( _job_: a Job Abstract Closure, _realm_: a Realm Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-hostenqueuepromisejob` — HostEnqueuePromiseJob ( _job_: a Job Abstract Closure, _realm_: a Realm Record or null, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-hostenqueuetimeoutjob` — HostEnqueueTimeoutJob ( _timeoutJob_: a Job Abstract Closure, _realm_: a Realm Record, _milliseconds_: a non-negative finite Number, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-agents` — Agents: exact disposition and partitions missing.
+  - [ ] `sec-agentsignifier` — AgentSignifier ( ): an agent signifier: exact disposition and partitions missing.
+  - [ ] `sec-agentcansuspend` — AgentCanSuspend ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-IncrementModuleAsyncEvaluationCount` — IncrementModuleAsyncEvaluationCount ( ): an integer: exact disposition and partitions missing.
+  - [ ] `sec-agent-clusters` — Agent Clusters: exact disposition and partitions missing.
+  - [ ] `sec-forward-progress` — Forward Progress: exact disposition and partitions missing.
+  - [ ] `sec-weakref-processing-model` — Processing Model of WeakRef and FinalizationRegistry Targets: exact disposition and partitions missing.
+  - [ ] `sec-weakref-invariants` — Objectives: exact disposition and partitions missing.
+  - [ ] `sec-liveness` — Liveness: exact disposition and partitions missing.
+  - [ ] `sec-weakref-execution` — Execution: exact disposition and partitions missing.
+  - [ ] `sec-weakref-host-hooks` — Host Hooks: exact disposition and partitions missing.
+  - [ ] `sec-host-cleanup-finalization-registry` — HostEnqueueFinalizationRegistryCleanupJob ( _finalizationRegistry_: a FinalizationRegistry, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-clear-kept-objects` — ClearKeptObjects ( ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-addtokeptobjects` — AddToKeptObjects ( _value_: an Object or a Symbol, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-cleanup-finalization-registry` — CleanupFinalizationRegistry ( _finalizationRegistry_: a FinalizationRegistry, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-canbeheldweakly` — CanBeHeldWeakly ( _v_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+- [ ] **Ordinary and Exotic Objects Behaviours** (`sec-ordinary-and-exotic-objects-behaviours`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: ordinary internal methods; function objects; arguments; arrays; proxies; module namespace objects.
+  - Linked local regression evidence: E2E: object_descriptors, array_property_descriptors, proxy.
+  - Known blockers: Exotic-object invariants and proxy/module-namespace interactions are not clause-verified.
+  - [ ] `sec-ordinary-and-exotic-objects-behaviours` — Ordinary and Exotic Objects Behaviours: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots` — Ordinary Object Internal Methods and Internal Slots: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing either an Object or null: exact disposition and partitions missing.
+  - [ ] `sec-ordinarygetprototypeof` — OrdinaryGetPrototypeOf ( _O_: an Object, ): an Object or null: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-ordinarysetprototypeof` — OrdinarySetPrototypeOf ( _O_: an Object, _V_: an Object or null, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-isextensible` — [[IsExtensible]] ( ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryisextensible` — OrdinaryIsExtensible ( _O_: an Object, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-preventextensions` — [[PreventExtensions]] ( ): a normal completion containing true: exact disposition and partitions missing.
+  - [ ] `sec-ordinarypreventextensions` — OrdinaryPreventExtensions ( _O_: an Object, ): true: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-ordinarygetownproperty` — OrdinaryGetOwnProperty ( _O_: an Object, _P_: a property key, ): a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinarydefineownproperty` — OrdinaryDefineOwnProperty ( _O_: an Object, _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-iscompatiblepropertydescriptor` — IsCompatiblePropertyDescriptor ( _Extensible_: a Boolean, _Desc_: a Property Descriptor, _Current_: a Property Descriptor or undefined, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-validateandapplypropertydescriptor` — ValidateAndApplyPropertyDescriptor ( _O_: an Object or undefined, _P_: a property key, _extensible_: a Boolean, _Desc_: a Property Descriptor, _current_: a Property Descriptor or undefined, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-hasproperty-p` — [[HasProperty]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryhasproperty` — OrdinaryHasProperty ( _O_: an Object, _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryget` — OrdinaryGet ( _O_: an Object, _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryset` — OrdinarySet ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinarysetwithowndescriptor` — OrdinarySetWithOwnDescriptor ( _O_: an Object, _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, _ownDesc_: a Property Descriptor or undefined, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-delete-p` — [[Delete]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinarydelete` — OrdinaryDelete ( _O_: an Object, _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryownpropertykeys` — OrdinaryOwnPropertyKeys ( _O_: an Object, ): a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryobjectcreate` — OrdinaryObjectCreate ( _proto_: an Object or null, optional _additionalInternalSlotsList_: a List of names of internal slots, ): an Object: exact disposition and partitions missing.
+  - [ ] `sec-ordinarycreatefromconstructor` — OrdinaryCreateFromConstructor ( _constructor_: a function object, _intrinsicDefaultProto_: a String, optional _internalSlotsList_: a List of names of internal slots, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getprototypefromconstructor` — GetPrototypeFromConstructor ( _constructor_: a function object, _intrinsicDefaultProto_: a String, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-requireinternalslot` — RequireInternalSlot ( _O_: an ECMAScript language value, _internalSlot_: an internal slot name, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-function-objects` — ECMAScript Function Objects: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-function-objects-call-thisargument-argumentslist` — [[Call]] ( _thisArgument_: an ECMAScript language value, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-prepareforordinarycall` — PrepareForOrdinaryCall ( _F_: an ECMAScript function object, _newTarget_: an Object or undefined, ): an execution context: exact disposition and partitions missing.
+  - [ ] `sec-ordinarycallbindthis` — OrdinaryCallBindThis ( _F_: an ECMAScript function object, _calleeContext_: an execution context, _thisArgument_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluatebody` — Runtime Semantics: EvaluateBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinarycallevaluatebody` — OrdinaryCallEvaluateBody ( _F_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-function-objects-construct-argumentslist-newtarget` — [[Construct]] ( _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ordinaryfunctioncreate` — OrdinaryFunctionCreate ( _functionPrototype_: an Object, _sourceText_: a sequence of Unicode code points, _ParameterList_: a Parse Node, _Body_: a Parse Node, _thisMode_: ~lexical-this~ or ~non-lexical-this~, _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-addrestrictedfunctionproperties` — AddRestrictedFunctionProperties ( _F_: a function object, _realm_: a Realm Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-%throwtypeerror%` — %ThrowTypeError% ( ): exact disposition and partitions missing.
+  - [ ] `sec-makeconstructor` — MakeConstructor ( _F_: an ECMAScript function object or a built-in function object, optional _writablePrototype_: a Boolean, optional _prototype_: an Object, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-makeclassconstructor` — MakeClassConstructor ( _F_: an ECMAScript function object, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-makemethod` — MakeMethod ( _F_: an ECMAScript function object, _homeObject_: an Object, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-definemethodproperty` — DefineMethodProperty ( _homeObject_: an Object, _key_: a property key or Private Name, _closure_: a function object, _enumerable_: a Boolean, ): either a normal completion containing either a PrivateElement or ~unused~, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-setfunctionname` — SetFunctionName ( _F_: a function object, _name_: a property key or Private Name, optional _prefix_: a String, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-setfunctionlength` — SetFunctionLength ( _F_: a function object, _length_: a non-negative integer or +&infin;, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-functiondeclarationinstantiation` — FunctionDeclarationInstantiation ( _func_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-built-in-function-objects` — Built-in Function Objects: exact disposition and partitions missing.
+  - [ ] `sec-built-in-function-objects-call-thisargument-argumentslist` — [[Call]] ( _thisArgument_: an ECMAScript language value, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-built-in-function-objects-construct-argumentslist-newtarget` — [[Construct]] ( _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-builtincallorconstruct` — BuiltinCallOrConstruct ( _F_: a built-in function object, _thisArgument_: an ECMAScript language value or ~uninitialized~, _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor or undefined, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createbuiltinfunction` — CreateBuiltinFunction ( _behaviour_: an Abstract Closure, a set of algorithm steps, or some other definition of a function's behaviour provided in this specification, _length_: a non-negative integer or +&infin;, _name_: a property key or a Private Name, _additionalInternalSlotsList_: a List of names of internal slots, optional _realm_: a Realm Record, optional _prototype_: an Object or null, optional _prefix_: a String, optional _async_: a Boolean, ): a built-in function object: exact disposition and partitions missing.
+  - [ ] `sec-built-in-exotic-object-internal-methods-and-slots` — Built-in Exotic Object Internal Methods and Slots: exact disposition and partitions missing.
+  - [ ] `sec-bound-function-exotic-objects` — Bound Function Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-bound-function-exotic-objects-call-thisargument-argumentslist` — [[Call]] ( _thisArgument_: an ECMAScript language value, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-bound-function-exotic-objects-construct-argumentslist-newtarget` — [[Construct]] ( _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-boundfunctioncreate` — BoundFunctionCreate ( _targetFunction_: a function object, _boundThis_: an ECMAScript language value, _boundArgs_: a List of ECMAScript language values, ): either a normal completion containing a function object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-array-exotic-objects` — Array Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-array-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arraycreate` — ArrayCreate ( _length_: a non-negative integer, optional _proto_: an Object, ): either a normal completion containing an Array exotic object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arrayspeciescreate` — ArraySpeciesCreate ( _originalArray_: an Object, _length_: a non-negative integer, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arraysetlength` — ArraySetLength ( _A_: an Array, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-string-exotic-objects` — String Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-string-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-string-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-string-exotic-objects-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-stringcreate` — StringCreate ( _value_: a String, _prototype_: an Object, ): a String exotic object: exact disposition and partitions missing.
+  - [ ] `sec-stringgetownproperty` — StringGetOwnProperty ( _S_: an Object that has a [[StringData]] internal slot, _P_: a property key, ): a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects` — Arguments Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arguments-exotic-objects-delete-p` — [[Delete]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-createunmappedargumentsobject` — CreateUnmappedArgumentsObject ( _argumentsList_: a List of ECMAScript language values, ): an ordinary object: exact disposition and partitions missing.
+  - [ ] `sec-createmappedargumentsobject` — CreateMappedArgumentsObject ( _func_: an Object, _formals_: a Parse Node, _argumentsList_: a List of ECMAScript language values, _env_: an Environment Record, ): an arguments exotic object: exact disposition and partitions missing.
+  - [ ] `sec-makearggetter` — MakeArgGetter ( _name_: a String, _env_: an Environment Record, ): a function object: exact disposition and partitions missing.
+  - [ ] `sec-makeargsetter` — MakeArgSetter ( _name_: a String, _env_: an Environment Record, ): a function object: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-exotic-objects` — TypedArray Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-preventextensions` — [[PreventExtensions]] ( ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-getownproperty` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-hasproperty` — [[HasProperty]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-defineownproperty` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-get` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-set` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-delete` — [[Delete]] ( _P_: a property key, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-with-buffer-witness-records` — TypedArray With Buffer Witness Records: exact disposition and partitions missing.
+  - [ ] `sec-maketypedarraywithbufferwitnessrecord` — MakeTypedArrayWithBufferWitnessRecord ( _obj_: a TypedArray, _order_: ~seq-cst~ or ~unordered~, ): a TypedArray With Buffer Witness Record: exact disposition and partitions missing.
+  - [ ] `sec-typedarraycreate` — TypedArrayCreate ( _prototype_: an Object, ): a TypedArray: exact disposition and partitions missing.
+  - [ ] `sec-typedarraybytelength` — TypedArrayByteLength ( _taRecord_: a TypedArray With Buffer Witness Record, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-typedarraylength` — TypedArrayLength ( _taRecord_: a TypedArray With Buffer Witness Record, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-istypedarrayoutofbounds` — IsTypedArrayOutOfBounds ( _taRecord_: a TypedArray With Buffer Witness Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-istypedarrayfixedlength` — IsTypedArrayFixedLength ( _O_: a TypedArray, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isvalidintegerindex` — IsValidIntegerIndex ( _O_: a TypedArray, _index_: a Number, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-typedarraygetelement` — TypedArrayGetElement ( _O_: a TypedArray, _index_: a Number, ): a Number, a BigInt, or undefined: exact disposition and partitions missing.
+  - [ ] `sec-typedarraysetelement` — TypedArraySetElement ( _O_: a TypedArray, _index_: a Number, _value_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isarraybufferviewoutofbounds` — IsArrayBufferViewOutOfBounds ( _O_: a TypedArray or a DataView, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects` — Module Namespace Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing null: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-isextensible` — [[IsExtensible]] ( ): a normal completion containing false: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-preventextensions` — [[PreventExtensions]] ( ): a normal completion containing true: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): either a normal completion containing either a Property Descriptor or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-hasproperty-p` — [[HasProperty]] ( _P_: a property key, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): a normal completion containing false: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-delete-p` — [[Delete]] ( _P_: a property key, ): a normal completion containing a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-modulenamespacecreate` — ModuleNamespaceCreate ( _module_: a Module Record, _exports_: a List of Strings, ): a module namespace exotic object: exact disposition and partitions missing.
+  - [ ] `sec-immutable-prototype-exotic-objects` — Immutable Prototype Exotic Objects: exact disposition and partitions missing.
+  - [ ] `sec-immutable-prototype-exotic-objects-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-set-immutable-prototype` — SetImmutablePrototype ( _O_: an Object, _V_: an Object or null, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots` — Proxy Object Internal Methods and Internal Slots: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-getprototypeof` — [[GetPrototypeOf]] ( ): either a normal completion containing either an Object or null, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-isextensible` — [[IsExtensible]] ( ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-preventextensions` — [[PreventExtensions]] ( ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): either a normal completion containing either a Property Descriptor or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-hasproperty-p` — [[HasProperty]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-delete-p` — [[Delete]] ( _P_: a property key, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-ownpropertykeys` — [[OwnPropertyKeys]] ( ): either a normal completion containing a List of property keys or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-call-thisargument-argumentslist` — [[Call]] ( _thisArgument_: an ECMAScript language value, _argumentsList_: a List of ECMAScript language values, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxy-object-internal-methods-and-internal-slots-construct-argumentslist-newtarget` — [[Construct]] ( _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-validatenonrevokedproxy` — ValidateNonRevokedProxy ( _proxy_: a Proxy exotic object, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-proxycreate` — ProxyCreate ( _target_: an ECMAScript language value, _handler_: an ECMAScript language value, ): either a normal completion containing a Proxy exotic object or a throw completion: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Source Text** (`sec-ecmascript-language-source-code`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Unicode source text; script code; module code; function and eval code; strict mode.
+  - Linked local regression evidence: E2E: line_directives.
+  - Known blockers: Compiler parsing currently depends on the pinned TypeScript parser and is not yet attested for ES2026 source text.
+  - [ ] `sec-ecmascript-language-source-code` — ECMAScript Language: Source Text: exact disposition and partitions missing.
+  - [ ] `sec-source-text` — Source Text: exact disposition and partitions missing.
+  - [ ] `sec-utf16encodecodepoint` — Static Semantics: UTF16EncodeCodePoint ( _cp_: a Unicode code point, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-codepointstostring` — Static Semantics: CodePointsToString ( _text_: a sequence of Unicode code points, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-utf16decodesurrogatepair` — Static Semantics: UTF16SurrogatePairToCodePoint ( _lead_: a code unit, _trail_: a code unit, ): a code point: exact disposition and partitions missing.
+  - [ ] `sec-codepointat` — Static Semantics: CodePointAt ( _string_: a String, _position_: a non-negative integer, ): a Record with fields [[CodePoint]] (a code point), [[CodeUnitCount]] (a positive integer), and [[IsUnpairedSurrogate]] (a Boolean): exact disposition and partitions missing.
+  - [ ] `sec-stringtocodepoints` — Static Semantics: StringToCodePoints ( _string_: a String, ): a List of code points: exact disposition and partitions missing.
+  - [ ] `sec-parsetext` — Static Semantics: ParseText ( _sourceText_: a String or a sequence of Unicode code points, _goalSymbol_: a nonterminal in one of the ECMAScript grammars, ): a Parse Node or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-types-of-source-code` — Types of Source Code: exact disposition and partitions missing.
+  - [ ] `sec-directive-prologues-and-the-use-strict-directive` — Directive Prologues and the Use Strict Directive: exact disposition and partitions missing.
+  - [ ] `sec-strict-mode-code` — Strict Mode Code: exact disposition and partitions missing.
+  - [ ] `sec-isstrict` — Static Semantics: IsStrict ( _node_: a Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-non-ecmascript-functions` — Non-ECMAScript Functions: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Lexical Grammar** (`sec-ecmascript-language-lexical-grammar`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: whitespace and terminators; comments and hashbang; identifiers and keywords; literals; automatic semicolon insertion.
+  - Linked local regression evidence: E2E: arith, regex_pcre2, tagged_templates.
+  - Known blockers: Positive and negative lexical grammar have not been run with exact Test262 parse-phase classification.
+  - [ ] `sec-ecmascript-language-lexical-grammar` — ECMAScript Language: Lexical Grammar: exact disposition and partitions missing.
+  - [ ] `sec-unicode-format-control-characters` — Unicode Format-Control Characters: exact disposition and partitions missing.
+  - [ ] `sec-white-space` — White Space: exact disposition and partitions missing.
+  - [ ] `sec-line-terminators` — Line Terminators: exact disposition and partitions missing.
+  - [ ] `sec-comments` — Comments: exact disposition and partitions missing.
+  - [ ] `sec-hashbang` — Hashbang Comments: exact disposition and partitions missing.
+  - [ ] `sec-tokens` — Tokens: exact disposition and partitions missing.
+  - [ ] `sec-names-and-keywords` — Names and Keywords: exact disposition and partitions missing.
+  - [ ] `sec-identifier-names` — Identifier Names: exact disposition and partitions missing.
+  - [ ] `sec-identifier-names-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-identifiercodepoints` — Static Semantics: IdentifierCodePoints ( ): a List of code points: exact disposition and partitions missing.
+  - [ ] `sec-identifiercodepoint` — Static Semantics: IdentifierCodePoint ( ): a code point: exact disposition and partitions missing.
+  - [ ] `sec-keywords-and-reserved-words` — Keywords and Reserved Words: exact disposition and partitions missing.
+  - [ ] `sec-punctuators` — Punctuators: exact disposition and partitions missing.
+  - [ ] `sec-ecmascript-language-lexical-grammar-literals` — Literals: exact disposition and partitions missing.
+  - [ ] `sec-null-literals` — Null Literals: exact disposition and partitions missing.
+  - [ ] `sec-boolean-literals` — Boolean Literals: exact disposition and partitions missing.
+  - [ ] `sec-literals-numeric-literals` — Numeric Literals: exact disposition and partitions missing.
+  - [ ] `sec-numeric-literals-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-mv` — Static Semantics: MV: exact disposition and partitions missing.
+  - [ ] `sec-numericvalue` — Static Semantics: NumericValue ( ): a Number or a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-literals-string-literals` — String Literals: exact disposition and partitions missing.
+  - [ ] `sec-string-literals-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-sv` — Static Semantics: SV ( ): a String: exact disposition and partitions missing.
+  - [ ] `sec-string-literals-static-semantics-mv` — Static Semantics: MV: exact disposition and partitions missing.
+  - [ ] `sec-literals-regular-expression-literals` — Regular Expression Literals: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-bodytext` — Static Semantics: BodyText ( ): source text: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-flagtext` — Static Semantics: FlagText ( ): source text: exact disposition and partitions missing.
+  - [ ] `sec-template-literal-lexical-components` — Template Literal Lexical Components: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-tv` — Static Semantics: TV ( ): a String or undefined: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-trv` — Static Semantics: TRV ( ): a String: exact disposition and partitions missing.
+  - [ ] `sec-automatic-semicolon-insertion` — Automatic Semicolon Insertion: exact disposition and partitions missing.
+  - [ ] `sec-rules-of-automatic-semicolon-insertion` — Rules of Automatic Semicolon Insertion: exact disposition and partitions missing.
+  - [ ] `sec-examples-of-automatic-semicolon-insertion` — Examples of Automatic Semicolon Insertion: exact disposition and partitions missing.
+  - [ ] `sec-interesting-cases-of-automatic-semicolon-insertion` — Interesting Cases of Automatic Semicolon Insertion: exact disposition and partitions missing.
+  - [ ] `sec-asi-interesting-cases-in-statement-lists` — Interesting Cases of Automatic Semicolon Insertion in Statement Lists: exact disposition and partitions missing.
+  - [ ] `sec-asi-cases-with-no-lineterminator-here` — Cases of Automatic Semicolon Insertion and “[no |LineTerminator| here]”: exact disposition and partitions missing.
+  - [ ] `sec-no-lineterminator-here-automatic-semicolon-insertion-list` — List of Grammar Productions with Optional Operands and “[no |LineTerminator| here]”: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Expressions** (`sec-ecmascript-language-expressions`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: evaluation order; references and calls; operators and coercion; assignment and destructuring; spread and optional chains.
+  - Linked local regression evidence: E2E: call_arg_order, dynamic_ops, rest_spread.
+  - Known blockers: General call-spread, yielded expressions, and remaining suspension graphs are incomplete.
+  - [ ] `sec-ecmascript-language-expressions` — ECMAScript Language: Expressions: exact disposition and partitions missing.
+  - [ ] `sec-identifiers` — Identifiers: exact disposition and partitions missing.
+  - [ ] `sec-identifiers-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-stringvalue` — Static Semantics: StringValue ( ): a String: exact disposition and partitions missing.
+  - [ ] `sec-identifiers-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-primary-expression` — Primary Expression: exact disposition and partitions missing.
+  - [ ] `sec-this-keyword` — The this Keyword: exact disposition and partitions missing.
+  - [ ] `sec-this-keyword-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-identifier-reference` — Identifier Reference: exact disposition and partitions missing.
+  - [ ] `sec-primary-expression-literals` — Literals: exact disposition and partitions missing.
+  - [ ] `sec-literals-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-array-initializer` — Array Initializer: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-arrayaccumulation` — Runtime Semantics: ArrayAccumulation ( _array_: an Array, _nextIndex_: an integer, ): either a normal completion containing an integer or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-array-initializer-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-object-initializer` — Object Initializer: exact disposition and partitions missing.
+  - [ ] `sec-object-initializer-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-iscomputedpropertykey` — Static Semantics: IsComputedPropertyKey ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-propertydefinitionnodes` — Static Semantics: PropertyDefinitionNodes ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-propertynamelist` — Static Semantics: PropertyNameList ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-object-initializer-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-propertydefinitionevaluation` — Runtime Semantics: PropertyDefinitionEvaluation ( _object_: an Object, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-function-defining-expressions` — Function Defining Expressions: exact disposition and partitions missing.
+  - [ ] `sec-primary-expression-regular-expression-literals` — Regular Expression Literals: exact disposition and partitions missing.
+  - [ ] `sec-primary-expression-regular-expression-literals-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-isvalidregularexpressionliteral` — Static Semantics: IsValidRegularExpressionLiteral ( _literal_: a |RegularExpressionLiteral| Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-regular-expression-literals-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-template-literals` — Template Literals: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-template-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-templatestrings` — Static Semantics: TemplateStrings ( _raw_: a Boolean, ): a List of either Strings or undefined: exact disposition and partitions missing.
+  - [ ] `sec-templatestring` — Static Semantics: TemplateString ( _templateToken_: a |NoSubstitutionTemplate| Parse Node, a |TemplateHead| Parse Node, a |TemplateMiddle| Parse Node, or a |TemplateTail| Parse Node, _raw_: a Boolean, ): a String or undefined: exact disposition and partitions missing.
+  - [ ] `sec-gettemplateobject` — GetTemplateObject ( _templateLiteral_: a Parse Node, ): an Array: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-substitutionevaluation` — Runtime Semantics: SubstitutionEvaluation ( ): either a normal completion containing a List of ECMAScript language values or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-template-literals-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-grouping-operator` — The Grouping Operator: exact disposition and partitions missing.
+  - [ ] `sec-grouping-operator-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-grouping-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-left-hand-side-expressions` — Left-Hand-Side Expressions: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics` — Static Semantics: exact disposition and partitions missing.
+  - [ ] `sec-left-hand-side-expressions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-property-accessors` — Property Accessors: exact disposition and partitions missing.
+  - [ ] `sec-property-accessors-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-evaluate-property-access-with-expression-key` — EvaluatePropertyAccessWithExpressionKey ( _baseValue_: an ECMAScript language value, _expression_: an |Expression| Parse Node, _strict_: a Boolean, ): either a normal completion containing a Reference Record or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-evaluate-property-access-with-identifier-key` — EvaluatePropertyAccessWithIdentifierKey ( _baseValue_: an ECMAScript language value, _identifierName_: an |IdentifierName| Parse Node, _strict_: a Boolean, ): a Reference Record: exact disposition and partitions missing.
+  - [ ] `sec-new-operator` — The new Operator: exact disposition and partitions missing.
+  - [ ] `sec-new-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-evaluatenew` — EvaluateNew ( _constructExpr_: a |NewExpression| Parse Node or a |MemberExpression| Parse Node, _arguments_: ~empty~ or an |Arguments| Parse Node, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-function-calls` — Function Calls: exact disposition and partitions missing.
+  - [ ] `sec-function-calls-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-evaluatecall` — EvaluateCall ( _func_: an ECMAScript language value, _ref_: an ECMAScript language value or a Reference Record, _arguments_: a Parse Node, _tailPosition_: a Boolean, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-super-keyword` — The super Keyword: exact disposition and partitions missing.
+  - [ ] `sec-super-keyword-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-getsuperconstructor` — GetSuperConstructor ( ): an ECMAScript language value: exact disposition and partitions missing.
+  - [ ] `sec-makesuperpropertyreference` — MakeSuperPropertyReference ( _actualThis_: an ECMAScript language value, _propertyKey_: an ECMAScript language value, _strict_: a Boolean, ): a Super Reference Record: exact disposition and partitions missing.
+  - [ ] `sec-argument-lists` — Argument Lists: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-argumentlistevaluation` — Runtime Semantics: ArgumentListEvaluation ( ): either a normal completion containing a List of ECMAScript language values or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-optional-chains` — Optional Chains: exact disposition and partitions missing.
+  - [ ] `sec-optional-chaining-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-optional-chaining-chain-evaluation` — Runtime Semantics: ChainEvaluation ( _baseValue_: an ECMAScript language value, _baseReference_: an ECMAScript language value or a Reference Record, ): either a normal completion containing either an ECMAScript language value or a Reference Record, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-import-calls` — Import Calls: exact disposition and partitions missing.
+  - [ ] `sec-import-call-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-evaluate-import-call` — EvaluateImportCall ( _specifierExpression_: a Parse Node, optional _optionsExpression_: a Parse Node, ): either a normal completion containing a Promise or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-ContinueDynamicImport` — ContinueDynamicImport ( _promiseCapability_: a PromiseCapability Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-tagged-templates` — Tagged Templates: exact disposition and partitions missing.
+  - [ ] `sec-tagged-templates-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-meta-properties` — Meta Properties: exact disposition and partitions missing.
+  - [ ] `sec-meta-properties-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-hostgetimportmetaproperties` — HostGetImportMetaProperties ( _moduleRecord_: a Module Record, ): a List of Records with fields [[Key]] (a property key) and [[Value]] (an ECMAScript language value): exact disposition and partitions missing.
+  - [ ] `sec-hostfinalizeimportmeta` — HostFinalizeImportMeta ( _importMeta_: an Object, _moduleRecord_: a Module Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-update-expressions` — Update Expressions: exact disposition and partitions missing.
+  - [ ] `sec-update-expressions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-postfix-increment-operator` — Postfix Increment Operator: exact disposition and partitions missing.
+  - [ ] `sec-postfix-increment-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-postfix-decrement-operator` — Postfix Decrement Operator: exact disposition and partitions missing.
+  - [ ] `sec-postfix-decrement-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-prefix-increment-operator` — Prefix Increment Operator: exact disposition and partitions missing.
+  - [ ] `sec-prefix-increment-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-prefix-decrement-operator` — Prefix Decrement Operator: exact disposition and partitions missing.
+  - [ ] `sec-prefix-decrement-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-unary-operators` — Unary Operators: exact disposition and partitions missing.
+  - [ ] `sec-delete-operator` — The delete Operator: exact disposition and partitions missing.
+  - [ ] `sec-delete-operator-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-delete-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-void-operator` — The void Operator: exact disposition and partitions missing.
+  - [ ] `sec-void-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-typeof-operator` — The typeof Operator: exact disposition and partitions missing.
+  - [ ] `sec-typeof-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-unary-plus-operator` — Unary + Operator: exact disposition and partitions missing.
+  - [ ] `sec-unary-plus-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-unary-minus-operator` — Unary - Operator: exact disposition and partitions missing.
+  - [ ] `sec-unary-minus-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-bitwise-not-operator` — Bitwise NOT Operator ( ~ ): exact disposition and partitions missing.
+  - [ ] `sec-bitwise-not-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-logical-not-operator` — Logical NOT Operator ( ! ): exact disposition and partitions missing.
+  - [ ] `sec-logical-not-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-exp-operator` — Exponentiation Operator: exact disposition and partitions missing.
+  - [ ] `sec-exp-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-multiplicative-operators` — Multiplicative Operators: exact disposition and partitions missing.
+  - [ ] `sec-multiplicative-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-additive-operators` — Additive Operators: exact disposition and partitions missing.
+  - [ ] `sec-addition-operator-plus` — The Addition Operator ( + ): exact disposition and partitions missing.
+  - [ ] `sec-addition-operator-plus-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-subtraction-operator-minus` — The Subtraction Operator ( - ): exact disposition and partitions missing.
+  - [ ] `sec-subtraction-operator-minus-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-bitwise-shift-operators` — Bitwise Shift Operators: exact disposition and partitions missing.
+  - [ ] `sec-left-shift-operator` — The Left Shift Operator ( << ): exact disposition and partitions missing.
+  - [ ] `sec-left-shift-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-signed-right-shift-operator` — The Signed Right Shift Operator ( >> ): exact disposition and partitions missing.
+  - [ ] `sec-signed-right-shift-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-unsigned-right-shift-operator` — The Unsigned Right Shift Operator ( >>> ): exact disposition and partitions missing.
+  - [ ] `sec-unsigned-right-shift-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-relational-operators` — Relational Operators: exact disposition and partitions missing.
+  - [ ] `sec-relational-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-instanceofoperator` — InstanceofOperator ( _V_: an ECMAScript language value, _target_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-equality-operators` — Equality Operators: exact disposition and partitions missing.
+  - [ ] `sec-equality-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-binary-bitwise-operators` — Binary Bitwise Operators: exact disposition and partitions missing.
+  - [ ] `sec-binary-bitwise-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-binary-logical-operators` — Binary Logical Operators: exact disposition and partitions missing.
+  - [ ] `sec-binary-logical-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-conditional-operator` — Conditional Operator ( ? : ): exact disposition and partitions missing.
+  - [ ] `sec-conditional-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-assignment-operators` — Assignment Operators: exact disposition and partitions missing.
+  - [ ] `sec-assignment-operators-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-assignment-operators-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-applystringornumericbinaryoperator` — ApplyStringOrNumericBinaryOperator ( _lVal_: an ECMAScript language value, _opText_: *, `, /, %, +, -, <<, >>, >>>, &, ^, or |`, _rVal_: an ECMAScript language value, ): either a normal completion containing either a String, a BigInt, or a Number, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-evaluatestringornumericbinaryexpression` — EvaluateStringOrNumericBinaryExpression ( _leftOperand_: a Parse Node, _opText_: a sequence of Unicode code points, _rightOperand_: a Parse Node, ): either a normal completion containing either a String, a BigInt, or a Number, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-destructuring-assignment` — Destructuring Assignment: exact disposition and partitions missing.
+  - [ ] `sec-destructuring-assignment-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-destructuringassignmentevaluation` — Runtime Semantics: DestructuringAssignmentEvaluation ( _value_: an ECMAScript language value, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-propertydestructuringassignmentevaluation` — Runtime Semantics: PropertyDestructuringAssignmentEvaluation ( _value_: an ECMAScript language value, ): either a normal completion containing a List of property keys or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-restdestructuringassignmentevaluation` — Runtime Semantics: RestDestructuringAssignmentEvaluation ( _value_: an ECMAScript language value, _excludedNames_: a List of property keys, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-iteratordestructuringassignmentevaluation` — Runtime Semantics: IteratorDestructuringAssignmentEvaluation ( _iteratorRecord_: an Iterator Record, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-keyeddestructuringassignmentevaluation` — Runtime Semantics: KeyedDestructuringAssignmentEvaluation ( _value_: an ECMAScript language value, _propertyName_: a property key, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-comma-operator` — Comma Operator ( , ): exact disposition and partitions missing.
+  - [ ] `sec-comma-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Statements and Declarations** (`sec-ecmascript-language-statements-and-declarations`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: normal control flow; labels and loops; declarations and TDZ; abrupt completion; iterator close; try/catch/finally.
+  - Linked local regression evidence: generated regression: async-binding-default-depth; stress: async-binding-default-depth; E2E: switch_exhaustive, custom_iterator_object.
+  - Known blockers: Generator/async abrupt-completion and iterator-close graphs remain incomplete.
+  - [ ] `sec-ecmascript-language-statements-and-declarations` — ECMAScript Language: Statements and Declarations: exact disposition and partitions missing.
+  - [ ] `sec-statement-semantics` — Statement Semantics: exact disposition and partitions missing.
+  - [ ] `sec-statement-semantics-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-block` — Block: exact disposition and partitions missing.
+  - [ ] `sec-block-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-block-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-blockdeclarationinstantiation` — BlockDeclarationInstantiation ( _code_: a Parse Node, _env_: a Declarative Environment Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-declarations-and-the-variable-statement` — Declarations and the Variable Statement: exact disposition and partitions missing.
+  - [ ] `sec-let-and-const-declarations` — Let and Const Declarations: exact disposition and partitions missing.
+  - [ ] `sec-let-and-const-declarations-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-let-and-const-declarations-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-variable-statement` — Variable Statement: exact disposition and partitions missing.
+  - [ ] `sec-variable-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-destructuring-binding-patterns` — Destructuring Binding Patterns: exact disposition and partitions missing.
+  - [ ] `sec-destructuring-binding-patterns-runtime-semantics-propertybindinginitialization` — Runtime Semantics: PropertyBindingInitialization ( _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, ): either a normal completion containing a List of property keys or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-destructuring-binding-patterns-runtime-semantics-restbindinginitialization` — Runtime Semantics: RestBindingInitialization ( _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, _excludedNames_: a List of property keys, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-keyedbindinginitialization` — Runtime Semantics: KeyedBindingInitialization ( _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, _propertyName_: a property key, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-empty-statement` — Empty Statement: exact disposition and partitions missing.
+  - [ ] `sec-empty-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-expression-statement` — Expression Statement: exact disposition and partitions missing.
+  - [ ] `sec-expression-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-if-statement` — The if Statement: exact disposition and partitions missing.
+  - [ ] `sec-if-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-if-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-iteration-statements` — Iteration Statements: exact disposition and partitions missing.
+  - [ ] `sec-iteration-statements-semantics` — Semantics: exact disposition and partitions missing.
+  - [ ] `sec-loopcontinues` — LoopContinues ( _completion_: a Completion Record, _labelSet_: a List of Strings, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-loopevaluation` — Runtime Semantics: LoopEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-do-while-statement` — The do-while Statement: exact disposition and partitions missing.
+  - [ ] `sec-do-while-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-dowhileloopevaluation` — Runtime Semantics: DoWhileLoopEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-while-statement` — The while Statement: exact disposition and partitions missing.
+  - [ ] `sec-while-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-whileloopevaluation` — Runtime Semantics: WhileLoopEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-for-statement` — The for Statement: exact disposition and partitions missing.
+  - [ ] `sec-for-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-forloopevaluation` — Runtime Semantics: ForLoopEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-forbodyevaluation` — ForBodyEvaluation ( _test_: an |Expression| Parse Node or ~empty~, _increment_: an |Expression| Parse Node or ~empty~, _stmt_: a |Statement| Parse Node, _perIterationBindings_: a List of Strings, _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-createperiterationenvironment` — CreatePerIterationEnvironment ( _perIterationBindings_: a List of Strings, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-for-in-and-for-of-statements` — The for-in, for-of, and for-await-of Statements: exact disposition and partitions missing.
+  - [ ] `sec-for-in-and-for-of-statements-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-isdestructuring` — Static Semantics: IsDestructuring ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-fordeclarationbindinginitialization` — Runtime Semantics: ForDeclarationBindingInitialization ( _value_: an ECMAScript language value, _environment_: an Environment Record or undefined, ): either a normal completion containing ~unused~ or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-fordeclarationbindinginstantiation` — Runtime Semantics: ForDeclarationBindingInstantiation ( _environment_: a Declarative Environment Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-forinofloopevaluation` — Runtime Semantics: ForInOfLoopEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-forinofheadevaluation` — ForIn/OfHeadEvaluation ( _uninitializedBoundNames_: a List of Strings, _expr_: an |Expression| Parse Node or an |AssignmentExpression| Parse Node, _iterationKind_: ~enumerate~, ~iterate~, or ~async-iterate~, ): either a normal completion containing an Iterator Record or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-forin-div-ofbodyevaluation-lhs-stmt-iterator-lhskind-labelset` — ForIn/OfBodyEvaluation ( _lhs_: a Parse Node, _stmt_: a |Statement| Parse Node, _iteratorRecord_: an Iterator Record, _iterationKind_: ~enumerate~ or ~iterate~, _lhsKind_: ~assignment~, ~var-binding~, or ~lexical-binding~, _labelSet_: a List of Strings, optional _iteratorKind_: ~sync~ or ~async~, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-for-in-and-for-of-statements-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-enumerate-object-properties` — EnumerateObjectProperties ( _O_: an Object, ): an iterator object: exact disposition and partitions missing.
+  - [ ] `sec-for-in-iterator-objects` — For-In Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createforiniterator` — CreateForInIterator ( _object_: an Object, ): a For-In Iterator: exact disposition and partitions missing.
+  - [ ] `sec-%foriniteratorprototype%-object` — The %ForInIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%foriniteratorprototype%.next` — %ForInIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-for-in-iterator-instances` — Properties of For-In Iterator Instances: exact disposition and partitions missing.
+  - [ ] `sec-continue-statement` — The continue Statement: exact disposition and partitions missing.
+  - [ ] `sec-continue-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-continue-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-break-statement` — The break Statement: exact disposition and partitions missing.
+  - [ ] `sec-break-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-break-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-return-statement` — The return Statement: exact disposition and partitions missing.
+  - [ ] `sec-return-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-with-statement` — The with Statement: exact disposition and partitions missing.
+  - [ ] `sec-with-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-with-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-switch-statement` — The switch Statement: exact disposition and partitions missing.
+  - [ ] `sec-switch-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-caseblockevaluation` — Runtime Semantics: CaseBlockEvaluation ( _input_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-caseclauseisselected` — CaseClauseIsSelected ( _C_: a |CaseClause| Parse Node, _input_: an ECMAScript language value, ): either a normal completion containing a Boolean or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-switch-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-labelled-statements` — Labelled Statements: exact disposition and partitions missing.
+  - [ ] `sec-labelled-statements-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-islabelledfunction` — Static Semantics: IsLabelledFunction ( _stmt_: a |Statement| Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-labelled-statements-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-labelledevaluation` — Runtime Semantics: LabelledEvaluation ( _labelSet_: a List of Strings, ): either a normal completion containing either an ECMAScript language value or ~empty~, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-throw-statement` — The throw Statement: exact disposition and partitions missing.
+  - [ ] `sec-throw-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-try-statement` — The try Statement: exact disposition and partitions missing.
+  - [ ] `sec-try-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-catchclauseevaluation` — Runtime Semantics: CatchClauseEvaluation ( _thrownValue_: an ECMAScript language value, ): either a normal completion containing either an ECMAScript language value or ~empty~, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-try-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-debugger-statement` — The debugger Statement: exact disposition and partitions missing.
+  - [ ] `sec-debugger-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Functions and Classes** (`sec-ecmascript-language-functions-and-classes`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: ordinary functions; arrows and methods; classes and private state; generators; async functions; async generators.
+  - Linked local regression evidence: generated regression: async-leading-await-chain; stress: async-leading-await-chain; E2E: function_closures, generic_function_values, classes.
+  - Known blockers: General generator state machines, async generators, and remaining async suspension graphs are incomplete.
+  - [ ] `sec-ecmascript-language-functions-and-classes` — ECMAScript Language: Functions and Classes: exact disposition and partitions missing.
+  - [ ] `sec-parameter-lists` — Parameter Lists: exact disposition and partitions missing.
+  - [ ] `sec-parameter-lists-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-containsexpression` — Static Semantics: ContainsExpression ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-issimpleparameterlist` — Static Semantics: IsSimpleParameterList ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-hasinitializer` — Static Semantics: HasInitializer ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-expectedargumentcount` — Static Semantics: ExpectedArgumentCount ( ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-function-definitions` — Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-functionbodycontainsusestrict` — Static Semantics: FunctionBodyContainsUseStrict ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluatefunctionbody` — Runtime Semantics: EvaluateFunctionBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateordinaryfunctionobject` — Runtime Semantics: InstantiateOrdinaryFunctionObject ( _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateordinaryfunctionexpression` — Runtime Semantics: InstantiateOrdinaryFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-arrow-function-definitions` — Arrow Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-arrow-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-concisebodycontainsusestrict` — Static Semantics: ConciseBodyContainsUseStrict ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluateconcisebody` — Runtime Semantics: EvaluateConciseBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiatearrowfunctionexpression` — Runtime Semantics: InstantiateArrowFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-arrow-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-method-definitions` — Method Definitions: exact disposition and partitions missing.
+  - [ ] `sec-method-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-hasdirectsuper` — Static Semantics: HasDirectSuper ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-specialmethod` — Static Semantics: SpecialMethod ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-definemethod` — Runtime Semantics: DefineMethod ( _object_: an Object, optional _functionPrototype_: an Object, ): either a normal completion containing a Record with fields [[Key]] (a property key) and [[Closure]] (an ECMAScript function object) or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-methoddefinitionevaluation` — Runtime Semantics: MethodDefinitionEvaluation ( _object_: an Object, _enumerable_: a Boolean, ): either a normal completion containing either a PrivateElement or ~unused~, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-generator-function-definitions` — Generator Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-generator-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluategeneratorbody` — Runtime Semantics: EvaluateGeneratorBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a throw completion or a return completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiategeneratorfunctionobject` — Runtime Semantics: InstantiateGeneratorFunctionObject ( _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiategeneratorfunctionexpression` — Runtime Semantics: InstantiateGeneratorFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-generator-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-async-generator-function-definitions` — Async Generator Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-async-generator-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluateasyncgeneratorbody` — Runtime Semantics: EvaluateAsyncGeneratorBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a throw completion or a return completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateasyncgeneratorfunctionobject` — Runtime Semantics: InstantiateAsyncGeneratorFunctionObject ( _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateasyncgeneratorfunctionexpression` — Runtime Semantics: InstantiateAsyncGeneratorFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-definitions-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-class-definitions` — Class Definitions: exact disposition and partitions missing.
+  - [ ] `sec-class-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-classelementkind` — Static Semantics: ClassElementKind ( ): ~constructor-method~, ~non-constructor-method~, or ~empty~: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-constructormethod` — Static Semantics: ConstructorMethod ( ): a |ClassElement| Parse Node or ~empty~: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-isstatic` — Static Semantics: IsStatic ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-nonconstructorelements` — Static Semantics: NonConstructorElements ( ): a List of |ClassElement| Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-prototypepropertynamelist` — Static Semantics: PrototypePropertyNameList ( ): a List of property keys: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-allprivateidentifiersvalid` — Static Semantics: AllPrivateIdentifiersValid ( _names_: a List of Strings, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-privateboundidentifiers` — Static Semantics: PrivateBoundIdentifiers ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-containsarguments` — Static Semantics: ContainsArguments ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-classfielddefinitionevaluation` — Runtime Semantics: ClassFieldDefinitionEvaluation ( _homeObject_: an Object, ): either a normal completion containing a ClassFieldDefinition Record or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-classstaticblockdefinitionevaluation` — Runtime Semantics: ClassStaticBlockDefinitionEvaluation ( _homeObject_: an Object, ): a ClassStaticBlockDefinition Record: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluateclassstaticblockbody` — Runtime Semantics: EvaluateClassStaticBlockBody ( _functionObject_: an ECMAScript function object, ): a return completion or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-classelementevaluation` — Runtime Semantics: ClassElementEvaluation ( _object_: an Object, ): either a normal completion containing either a ClassFieldDefinition Record, a ClassStaticBlockDefinition Record, a PrivateElement, or ~unused~, or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-classdefinitionevaluation` — Runtime Semantics: ClassDefinitionEvaluation ( _classBinding_: a String or undefined, _className_: a property key or a Private Name, _sourceText_: ECMAScript source text, ): either a normal completion containing a function object or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-bindingclassdeclarationevaluation` — Runtime Semantics: BindingClassDeclarationEvaluation ( ): either a normal completion containing a function object or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-class-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-async-function-definitions` — Async Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-async-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateasyncfunctionobject` — Runtime Semantics: InstantiateAsyncFunctionObject ( _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateasyncfunctionexpression` — Runtime Semantics: InstantiateAsyncFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluateasyncfunctionbody` — Runtime Semantics: EvaluateAsyncFunctionBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion: exact disposition and partitions missing.
+  - [ ] `sec-async-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-async-arrow-function-definitions` — Async Arrow Function Definitions: exact disposition and partitions missing.
+  - [ ] `sec-async-arrow-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-asyncconcisebodycontainsusestrict` — Static Semantics: AsyncConciseBodyContainsUseStrict ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-evaluateasyncconcisebody` — Runtime Semantics: EvaluateAsyncConciseBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-instantiateasyncarrowfunctionexpression` — Runtime Semantics: InstantiateAsyncArrowFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
+  - [ ] `sec-async-arrow-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-tail-position-calls` — Tail Position Calls: exact disposition and partitions missing.
+  - [ ] `sec-isintailposition` — Static Semantics: IsInTailPosition ( _call_: a |CallExpression| Parse Node, a |MemberExpression| Parse Node, or an |OptionalChain| Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-hascallintailposition` — Static Semantics: HasCallInTailPosition ( _call_: a |CallExpression| Parse Node, a |MemberExpression| Parse Node, or an |OptionalChain| Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-preparefortailcall` — PrepareForTailCall ( ): ~unused~: exact disposition and partitions missing.
+- [ ] **ECMAScript Language: Scripts and Modules** (`sec-ecmascript-language-scripts-and-modules`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: script parsing/evaluation; module linking; live bindings; cycles; async module evaluation.
+  - Linked local regression evidence: E2E: modules, module_re_exports.
+  - Known blockers: The Test262 host cannot yet install harness globals separately for module tests or classify resolution errors.
+  - [ ] `sec-ecmascript-language-scripts-and-modules` — ECMAScript Language: Scripts and Modules: exact disposition and partitions missing.
+  - [ ] `sec-scripts` — Scripts: exact disposition and partitions missing.
+  - [ ] `sec-scripts-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-scriptisstrict` — Static Semantics: ScriptIsStrict ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-script-semantics-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-script-records` — Script Records: exact disposition and partitions missing.
+  - [ ] `sec-parse-script` — ParseScript ( _sourceText_: ECMAScript source text, _realm_: a Realm Record, _hostDefined_: anything, ): a Script Record or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-scriptevaluation` — ScriptEvaluation ( _scriptRecord_: a Script Record, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-globaldeclarationinstantiation` — GlobalDeclarationInstantiation ( _script_: a |Script| Parse Node, _env_: a Global Environment Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-modules` — Modules: exact disposition and partitions missing.
+  - [ ] `sec-module-semantics` — Module Semantics: exact disposition and partitions missing.
+  - [ ] `sec-module-semantics-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-importedlocalnames` — Static Semantics: ImportedLocalNames ( _importEntries_: a List of ImportEntry Records, ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-modulerequest-record` — ModuleRequest Records: exact disposition and partitions missing.
+  - [ ] `sec-ModuleRequestsEqual` — ModuleRequestsEqual ( _left_: a ModuleRequest Record or a LoadedModuleRequest Record, _right_: a ModuleRequest Record or a LoadedModuleRequest Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-modulerequests` — Static Semantics: ModuleRequests ( ): a List of ModuleRequest Records: exact disposition and partitions missing.
+  - [ ] `sec-abstract-module-records` — Abstract Module Records: exact disposition and partitions missing.
+  - [ ] `sec-EvaluateModuleSync` — EvaluateModuleSync ( _module_: a Module Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-cyclic-module-records` — Cyclic Module Records: exact disposition and partitions missing.
+  - [ ] `sec-cyclic-module-record-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
+  - [ ] `sec-LoadRequestedModules` — LoadRequestedModules ( optional _hostDefined_: anything, ): a Promise: exact disposition and partitions missing.
+  - [ ] `sec-InnerModuleLoading` — InnerModuleLoading ( _state_: a GraphLoadingState Record, _module_: a Module Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-ContinueModuleLoading` — ContinueModuleLoading ( _state_: a GraphLoadingState Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-moduledeclarationlinking` — Link ( ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-InnerModuleLinking` — InnerModuleLinking ( _module_: a Module Record, _stack_: a List of Cyclic Module Records, _index_: a non-negative integer, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-moduleevaluation` — Evaluate ( ): a Promise: exact disposition and partitions missing.
+  - [ ] `sec-innermoduleevaluation` — InnerModuleEvaluation ( _module_: a Module Record, _stack_: a List of Cyclic Module Records, _index_: a non-negative integer, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-execute-async-module` — ExecuteAsyncModule ( _module_: a Cyclic Module Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-gather-available-ancestors` — GatherAvailableAncestors ( _module_: a Cyclic Module Record, _execList_: a List of Cyclic Module Records, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-async-module-execution-fulfilled` — AsyncModuleExecutionFulfilled ( _module_: a Cyclic Module Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-async-module-execution-rejected` — AsyncModuleExecutionRejected ( _module_: a Cyclic Module Record, _error_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-example-cyclic-module-record-graphs` — Example Cyclic Module Record Graphs: exact disposition and partitions missing.
+  - [ ] `sec-source-text-module-records` — Source Text Module Records: exact disposition and partitions missing.
+  - [ ] `sec-parsemodule` — ParseModule ( _sourceText_: ECMAScript source text, _realm_: a Realm Record, _hostDefined_: anything, ): a Source Text Module Record or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-source-text-module-record-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
+  - [ ] `sec-getexportednames` — GetExportedNames ( optional _exportStarSet_: a List of Source Text Module Records, ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~: exact disposition and partitions missing.
+  - [ ] `sec-source-text-module-record-cyclic-module-record-methods` — Implementation of Cyclic Module Record Abstract Methods: exact disposition and partitions missing.
+  - [ ] `sec-source-text-module-record-initialize-environment` — InitializeEnvironment ( ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-source-text-module-record-execute-module` — ExecuteModule ( optional _capability_: a PromiseCapability Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-synthetic-module-records` — Synthetic Module Records: exact disposition and partitions missing.
+  - [ ] `sec-create-default-export-synthetic-module` — CreateDefaultExportSyntheticModule ( _defaultExport_: an ECMAScript language value, ): a Synthetic Module Record: exact disposition and partitions missing.
+  - [ ] `sec-parse-json-module` — ParseJSONModule ( _source_: a String, ): either a normal completion containing a Synthetic Module Record, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-setsyntheticmoduleexport` — SetSyntheticModuleExport ( _module_: a Synthetic Module Record, _exportName_: a String, _exportValue_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-smr-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
+  - [ ] `sec-smr-LoadRequestedModules` — LoadRequestedModules ( optional _hostDefined_: anything, ): a Promise: exact disposition and partitions missing.
+  - [ ] `sec-smr-getexportednames` — GetExportedNames ( optional _exportStarSet_: a List of Source Text Module Records, ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-smr-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~: exact disposition and partitions missing.
+  - [ ] `sec-smr-Link` — Link ( ): a normal completion containing ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-smr-Evaluate` — Evaluate ( ): a Promise: exact disposition and partitions missing.
+  - [ ] `sec-GetImportedModule` — GetImportedModule ( _referrer_: a Cyclic Module Record, _request_: a ModuleRequest Record, ): a Module Record: exact disposition and partitions missing.
+  - [ ] `sec-HostLoadImportedModule` — HostLoadImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _hostDefined_: anything, _payload_: a GraphLoadingState Record or a PromiseCapability Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-FinishLoadingImportedModule` — FinishLoadingImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _payload_: a GraphLoadingState Record or a PromiseCapability Record, _result_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-AllImportAttributesSupported` — AllImportAttributesSupported ( _attributes_: a List of ImportAttribute Records, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-hostgetsupportedimportattributes` — HostGetSupportedImportAttributes ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-getmodulenamespace` — GetModuleNamespace ( _module_: an instance of a concrete subclass of Module Record, ): a Module Namespace Object: exact disposition and partitions missing.
+  - [ ] `sec-module-semantics-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-imports` — Imports: exact disposition and partitions missing.
+  - [ ] `sec-imports-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-importentries` — Static Semantics: ImportEntries ( ): a List of ImportEntry Records: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-importentriesformodule` — Static Semantics: ImportEntriesForModule ( _module_: a ModuleRequest Record, ): a List of ImportEntry Records: exact disposition and partitions missing.
+  - [ ] `sec-withclausetoattributes` — Static Semantics: WithClauseToAttributes ( ): a List of ImportAttribute Records: exact disposition and partitions missing.
+  - [ ] `sec-exports` — Exports: exact disposition and partitions missing.
+  - [ ] `sec-exports-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-exportedbindings` — Static Semantics: ExportedBindings ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-exportednames` — Static Semantics: ExportedNames ( ): a List of Strings: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-exportentries` — Static Semantics: ExportEntries ( ): a List of ExportEntry Records: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-exportentriesformodule` — Static Semantics: ExportEntriesForModule ( _module_: a ModuleRequest Record or null, ): a List of ExportEntry Records: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-referencedbindings` — Static Semantics: ReferencedBindings ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-exports-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+- [ ] **Error Handling and Language Extensions** (`sec-error-handling-and-language-extensions`) — tracking: `todo`, scope: `required`
+  - Semantic partitions: native error constructors; forbidden extensions.
+  - Linked local regression evidence: E2E: aggregate_error_constructor.
+  - Known blockers: Exact thrown constructor identity is not exposed by the conformance host.
+  - [ ] `sec-error-handling-and-language-extensions` — Error Handling and Language Extensions: exact disposition and partitions missing.
+  - [ ] `sec-forbidden-extensions` — Forbidden Extensions: exact disposition and partitions missing.
+- [ ] **ECMAScript Standard Built-in Objects** (`sec-ecmascript-standard-built-in-objects`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: callability and construction; property descriptors; prototype identity; realm ownership.
+  - Linked local regression evidence: E2E: function_integrity, object_descriptors.
+  - Known blockers: Broad built-in path evidence must be refined to exact clauses before verification.
+  - [ ] `sec-ecmascript-standard-built-in-objects` — ECMAScript Standard Built-in Objects: exact disposition and partitions missing.
+- [ ] **The Global Object** (`sec-global-object`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: value properties; global functions; constructors; global object semantics.
+  - Linked local regression evidence: E2E: global_number_predicates, runtime_eval.
+  - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance.
+  - [ ] `sec-global-object` — The Global Object: exact disposition and partitions missing.
+  - [ ] `sec-value-properties-of-the-global-object` — Value Properties of the Global Object: exact disposition and partitions missing.
+  - [ ] `sec-globalthis` — globalThis: exact disposition and partitions missing.
+  - [ ] `sec-value-properties-of-the-global-object-infinity` — Infinity: exact disposition and partitions missing.
+  - [ ] `sec-value-properties-of-the-global-object-nan` — NaN: exact disposition and partitions missing.
+  - [ ] `sec-undefined` — undefined: exact disposition and partitions missing.
+  - [ ] `sec-function-properties-of-the-global-object` — Function Properties of the Global Object: exact disposition and partitions missing.
+  - [ ] `sec-eval-x` — eval ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-performeval` — PerformEval ( _x_: an ECMAScript language value, _strictCaller_: a Boolean, _direct_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hostensurecancompilestrings` — HostEnsureCanCompileStrings ( _calleeRealm_: a Realm Record, _parameterStrings_: a List of Strings, _bodyString_: a String, _direct_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-evaldeclarationinstantiation` — EvalDeclarationInstantiation ( _body_: a |ScriptBody| Parse Node, _varEnv_: an Environment Record, _lexEnv_: a Declarative Environment Record, _privateEnv_: a PrivateEnvironment Record or null, _strict_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isfinite-number` — isFinite ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-isnan-number` — isNaN ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-parsefloat-string` — parseFloat ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-parseint-string-radix` — parseInt ( _string_, _radix_ ): exact disposition and partitions missing.
+  - [ ] `sec-uri-handling-functions` — URI Handling Functions: exact disposition and partitions missing.
+  - [ ] `sec-decodeuri-encodeduri` — decodeURI ( _encodedURI_ ): exact disposition and partitions missing.
+  - [ ] `sec-decodeuricomponent-encodeduricomponent` — decodeURIComponent ( _encodedURIComponent_ ): exact disposition and partitions missing.
+  - [ ] `sec-encodeuri-uri` — encodeURI ( _uri_ ): exact disposition and partitions missing.
+  - [ ] `sec-encodeuricomponent-uricomponent` — encodeURIComponent ( _uriComponent_ ): exact disposition and partitions missing.
+  - [ ] `sec-encode` — Encode ( _string_: a String, _extraUnescaped_: a String, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-decode` — Decode ( _string_: a String, _preserveEscapeSet_: a String, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-parsehexoctet` — ParseHexOctet ( _string_: a String, _position_: a non-negative integer, ): either a non-negative integer or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object` — Constructor Properties of the Global Object: exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-aggregate-error` — AggregateError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-array` — Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-arraybuffer` — ArrayBuffer ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-bigint` — BigInt ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-bigint64array` — BigInt64Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-biguint64array` — BigUint64Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-boolean` — Boolean ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-dataview` — DataView ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-date` — Date ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-error` — Error ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-evalerror` — EvalError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-finalization-registry` — FinalizationRegistry ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-float16array` — Float16Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-float32array` — Float32Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-float64array` — Float64Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-function` — Function ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-int8array` — Int8Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-int16array` — Int16Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-int32array` — Int32Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-iterator` — Iterator ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-map` — Map ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-number` — Number ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-object` — Object ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-promise` — Promise ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-proxy` — Proxy ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-rangeerror` — RangeError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-referenceerror` — ReferenceError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-regexp` — RegExp ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-set` — Set ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-sharedarraybuffer` — SharedArrayBuffer ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-string` — String ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-symbol` — Symbol ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-syntaxerror` — SyntaxError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-typeerror` — TypeError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-uint8array` — Uint8Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-uint8clampedarray` — Uint8ClampedArray ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-uint16array` — Uint16Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-uint32array` — Uint32Array ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-urierror` — URIError ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-weakmap` — WeakMap ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-weakref` — WeakRef ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-constructor-properties-of-the-global-object-weakset` — WeakSet ( . . . ): exact disposition and partitions missing.
+  - [ ] `sec-other-properties-of-the-global-object` — Other Properties of the Global Object: exact disposition and partitions missing.
+  - [ ] `sec-atomics` — Atomics: exact disposition and partitions missing.
+  - [ ] `sec-json` — JSON: exact disposition and partitions missing.
+  - [ ] `sec-math` — Math: exact disposition and partitions missing.
+  - [ ] `sec-reflect` — Reflect: exact disposition and partitions missing.
+- [ ] **Fundamental Objects** (`sec-fundamental-objects`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Object; Function; Boolean; Symbol; Error and native errors.
+  - Linked local regression evidence: E2E: object_prototypes, function_prototypes, symbols.
+  - Known blockers: Clause-level descriptor, prototype, and realm behavior remains unverified.
+  - [ ] `sec-fundamental-objects` — Fundamental Objects: exact disposition and partitions missing.
+  - [ ] `sec-object-objects` — Object Objects: exact disposition and partitions missing.
+  - [ ] `sec-object-constructor` — The Object Constructor: exact disposition and partitions missing.
+  - [ ] `sec-object-value` — Object ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-object-constructor` — Properties of the Object Constructor: exact disposition and partitions missing.
+  - [ ] `sec-object.assign` — Object.assign ( _target_, ..._sources_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.create` — Object.create ( _O_, _Properties_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.defineproperties` — Object.defineProperties ( _O_, _Properties_ ): exact disposition and partitions missing.
+  - [ ] `sec-objectdefineproperties` — ObjectDefineProperties ( _O_: an Object, _Properties_: an ECMAScript language value, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object.defineproperty` — Object.defineProperty ( _O_, _P_, _Attributes_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.entries` — Object.entries ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.freeze` — Object.freeze ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.fromentries` — Object.fromEntries ( _iterable_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.getownpropertydescriptor` — Object.getOwnPropertyDescriptor ( _O_, _P_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.getownpropertydescriptors` — Object.getOwnPropertyDescriptors ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.getownpropertynames` — Object.getOwnPropertyNames ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.getownpropertysymbols` — Object.getOwnPropertySymbols ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-getownpropertykeys` — GetOwnPropertyKeys ( _O_: an ECMAScript language value, _type_: ~string~ or ~symbol~, ): either a normal completion containing a List of property keys or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-object.getprototypeof` — Object.getPrototypeOf ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.groupby` — Object.groupBy ( _items_, _callback_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.hasown` — Object.hasOwn ( _O_, _P_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.is` — Object.is ( _value1_, _value2_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.isextensible` — Object.isExtensible ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.isfrozen` — Object.isFrozen ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.issealed` — Object.isSealed ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.keys` — Object.keys ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.preventextensions` — Object.preventExtensions ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype` — Object.prototype: exact disposition and partitions missing.
+  - [ ] `sec-object.seal` — Object.seal ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.setprototypeof` — Object.setPrototypeOf ( _O_, _proto_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.values` — Object.values ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-object-prototype-object` — Properties of the Object Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.constructor` — Object.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.hasownproperty` — Object.prototype.hasOwnProperty ( _V_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.isprototypeof` — Object.prototype.isPrototypeOf ( _V_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.propertyisenumerable` — Object.prototype.propertyIsEnumerable ( _V_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.tolocalestring` — Object.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.tostring` — Object.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.valueof` — Object.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.__proto__` — Object.prototype.__proto__: exact disposition and partitions missing.
+  - [ ] `sec-get-object.prototype.__proto__` — get Object.prototype.__proto__: exact disposition and partitions missing.
+  - [ ] `sec-set-object.prototype.__proto__` — set Object.prototype.__proto__: exact disposition and partitions missing.
+  - [ ] `sec-object.prototype-legacy-accessor-methods` — Legacy Object.prototype Accessor Methods: exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.__defineGetter__` — Object.prototype.__defineGetter__ ( _P_, _getter_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.__defineSetter__` — Object.prototype.__defineSetter__ ( _P_, _setter_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.__lookupGetter__` — Object.prototype.__lookupGetter__ ( _P_ ): exact disposition and partitions missing.
+  - [ ] `sec-object.prototype.__lookupSetter__` — Object.prototype.__lookupSetter__ ( _P_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-object-instances` — Properties of Object Instances: exact disposition and partitions missing.
+  - [ ] `sec-function-objects` — Function Objects: exact disposition and partitions missing.
+  - [ ] `sec-function-constructor` — The Function Constructor: exact disposition and partitions missing.
+  - [ ] `sec-function-p1-p2-pn-body` — Function ( ..._parameterArgs_, _bodyArg_ ): exact disposition and partitions missing.
+  - [ ] `sec-createdynamicfunction` — CreateDynamicFunction ( _constructor_: a constructor, _newTarget_: a constructor or undefined, _kind_: ~normal~, ~generator~, ~async~, or ~async-generator~, _parameterArgs_: a List of ECMAScript language values, _bodyArg_: an ECMAScript language value, ): either a normal completion containing an ECMAScript function object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-function-constructor` — Properties of the Function Constructor: exact disposition and partitions missing.
+  - [ ] `sec-function.prototype` — Function.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-function-prototype-object` — Properties of the Function Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-function.prototype.apply` — Function.prototype.apply ( _thisArg_, _argArray_ ): exact disposition and partitions missing.
+  - [ ] `sec-function.prototype.bind` — Function.prototype.bind ( _thisArg_, ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-function.prototype.call` — Function.prototype.call ( _thisArg_, ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-function.prototype.constructor` — Function.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-function.prototype.tostring` — Function.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-function.prototype-%symbol.hasinstance%` — Function.prototype [ %Symbol.hasInstance% ] ( _V_ ): exact disposition and partitions missing.
+  - [ ] `sec-function-instances` — Function Instances: exact disposition and partitions missing.
+  - [ ] `sec-function-instances-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-function-instances-name` — name: exact disposition and partitions missing.
+  - [ ] `sec-function-instances-prototype` — prototype: exact disposition and partitions missing.
+  - [ ] `sec-hosthassourcetextavailable` — HostHasSourceTextAvailable ( _func_: a function object, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-boolean-objects` — Boolean Objects: exact disposition and partitions missing.
+  - [ ] `sec-boolean-constructor` — The Boolean Constructor: exact disposition and partitions missing.
+  - [ ] `sec-boolean-constructor-boolean-value` — Boolean ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-boolean-constructor` — Properties of the Boolean Constructor: exact disposition and partitions missing.
+  - [ ] `sec-boolean.prototype` — Boolean.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-boolean-prototype-object` — Properties of the Boolean Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-boolean.prototype.constructor` — Boolean.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-boolean.prototype.tostring` — Boolean.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-boolean.prototype.valueof` — Boolean.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-thisbooleanvalue` — ThisBooleanValue ( _value_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-boolean-instances` — Properties of Boolean Instances: exact disposition and partitions missing.
+  - [ ] `sec-symbol-objects` — Symbol Objects: exact disposition and partitions missing.
+  - [ ] `sec-symbol-constructor` — The Symbol Constructor: exact disposition and partitions missing.
+  - [ ] `sec-symbol-description` — Symbol ( [ _description_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-symbol-constructor` — Properties of the Symbol Constructor: exact disposition and partitions missing.
+  - [ ] `sec-symbol.asynciterator` — Symbol.asyncIterator: exact disposition and partitions missing.
+  - [ ] `sec-symbol.for` — Symbol.for ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-symbol.hasinstance` — Symbol.hasInstance: exact disposition and partitions missing.
+  - [ ] `sec-symbol.isconcatspreadable` — Symbol.isConcatSpreadable: exact disposition and partitions missing.
+  - [ ] `sec-symbol.iterator` — Symbol.iterator: exact disposition and partitions missing.
+  - [ ] `sec-symbol.keyfor` — Symbol.keyFor ( _sym_ ): exact disposition and partitions missing.
+  - [ ] `sec-symbol.match` — Symbol.match: exact disposition and partitions missing.
+  - [ ] `sec-symbol.matchall` — Symbol.matchAll: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype` — Symbol.prototype: exact disposition and partitions missing.
+  - [ ] `sec-symbol.replace` — Symbol.replace: exact disposition and partitions missing.
+  - [ ] `sec-symbol.search` — Symbol.search: exact disposition and partitions missing.
+  - [ ] `sec-symbol.species` — Symbol.species: exact disposition and partitions missing.
+  - [ ] `sec-symbol.split` — Symbol.split: exact disposition and partitions missing.
+  - [ ] `sec-symbol.toprimitive` — Symbol.toPrimitive: exact disposition and partitions missing.
+  - [ ] `sec-symbol.tostringtag` — Symbol.toStringTag: exact disposition and partitions missing.
+  - [ ] `sec-symbol.unscopables` — Symbol.unscopables: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-symbol-prototype-object` — Properties of the Symbol Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype.constructor` — Symbol.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype.description` — get Symbol.prototype.description: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype.tostring` — Symbol.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-symboldescriptivestring` — SymbolDescriptiveString ( _sym_: a Symbol, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype.valueof` — Symbol.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-thissymbolvalue` — ThisSymbolValue ( _value_: an ECMAScript language value, ): either a normal completion containing a Symbol or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype-%symbol.toprimitive%` — Symbol.prototype [ %Symbol.toPrimitive% ] ( _hint_ ): exact disposition and partitions missing.
+  - [ ] `sec-symbol.prototype-%symbol.tostringtag%` — Symbol.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-symbol-instances` — Properties of Symbol Instances: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-symbols` — Abstract Operations for Symbols: exact disposition and partitions missing.
+  - [ ] `sec-keyforsymbol` — KeyForSymbol ( _sym_: a Symbol, ): a String or undefined: exact disposition and partitions missing.
+  - [ ] `sec-error-objects` — Error Objects: exact disposition and partitions missing.
+  - [ ] `sec-error-constructor` — The Error Constructor: exact disposition and partitions missing.
+  - [ ] `sec-error-message` — Error ( _message_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-error-constructor` — Properties of the Error Constructor: exact disposition and partitions missing.
+  - [ ] `sec-error.iserror` — Error.isError ( _arg_ ): exact disposition and partitions missing.
+  - [ ] `sec-error.prototype` — Error.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-error-prototype-object` — Properties of the Error Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-error.prototype.constructor` — Error.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-error.prototype.message` — Error.prototype.message: exact disposition and partitions missing.
+  - [ ] `sec-error.prototype.name` — Error.prototype.name: exact disposition and partitions missing.
+  - [ ] `sec-error.prototype.tostring` — Error.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-error-instances` — Properties of Error Instances: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard` — Native Error Types Used in This Standard: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-evalerror` — EvalError: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-rangeerror` — RangeError: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-referenceerror` — ReferenceError: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-syntaxerror` — SyntaxError: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-typeerror` — TypeError: exact disposition and partitions missing.
+  - [ ] `sec-native-error-types-used-in-this-standard-urierror` — URIError: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror-object-structure` — _NativeError_ Object Structure: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror-constructors` — The _NativeError_ Constructors: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror` — _NativeError_ ( _message_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-nativeerror-constructors` — Properties of the _NativeError_ Constructors: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror.prototype` — _NativeError_.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-nativeerror-prototype-objects` — Properties of the _NativeError_ Prototype Objects: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror.prototype.constructor` — _NativeError_.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror.prototype.message` — _NativeError_.prototype.message: exact disposition and partitions missing.
+  - [ ] `sec-nativeerror.prototype.name` — _NativeError_.prototype.name: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-nativeerror-instances` — Properties of _NativeError_ Instances: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error-objects` — AggregateError Objects: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error-constructor` — The AggregateError Constructor: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error` — AggregateError ( _errors_, _message_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-aggregate-error-constructors` — Properties of the AggregateError Constructor: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error.prototype` — AggregateError.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-aggregate-error-prototype-objects` — Properties of the AggregateError Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error.prototype.constructor` — AggregateError.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error.prototype.message` — AggregateError.prototype.message: exact disposition and partitions missing.
+  - [ ] `sec-aggregate-error.prototype.name` — AggregateError.prototype.name: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-aggregate-error-instances` — Properties of AggregateError Instances: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-error-objects` — Abstract Operations for Error Objects: exact disposition and partitions missing.
+  - [ ] `sec-installerrorcause` — InstallErrorCause ( _O_: an Object, _options_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+- [ ] **Numbers and Dates** (`sec-numbers-and-dates`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Number; BigInt; Math; Date.
+  - Linked local regression evidence: E2E: number_constructor, math_more, date_instances, bigint.
+  - Known blockers: IEEE-754 edge behavior and the full Date algorithm surface remain unverified.
+  - [ ] `sec-numbers-and-dates` — Numbers and Dates: exact disposition and partitions missing.
+  - [ ] `sec-number-objects` — Number Objects: exact disposition and partitions missing.
+  - [ ] `sec-number-constructor` — The Number Constructor: exact disposition and partitions missing.
+  - [ ] `sec-number-constructor-number-value` — Number ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-number-constructor` — Properties of the Number Constructor: exact disposition and partitions missing.
+  - [ ] `sec-number.epsilon` — Number.EPSILON: exact disposition and partitions missing.
+  - [ ] `sec-number.isfinite` — Number.isFinite ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.isinteger` — Number.isInteger ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.isnan` — Number.isNaN ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.issafeinteger` — Number.isSafeInteger ( _number_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.max_safe_integer` — Number.MAX_SAFE_INTEGER: exact disposition and partitions missing.
+  - [ ] `sec-number.max_value` — Number.MAX_VALUE: exact disposition and partitions missing.
+  - [ ] `sec-number.min_safe_integer` — Number.MIN_SAFE_INTEGER: exact disposition and partitions missing.
+  - [ ] `sec-number.min_value` — Number.MIN_VALUE: exact disposition and partitions missing.
+  - [ ] `sec-number.nan` — Number.NaN: exact disposition and partitions missing.
+  - [ ] `sec-number.negative_infinity` — Number.NEGATIVE_INFINITY: exact disposition and partitions missing.
+  - [ ] `sec-number.parsefloat` — Number.parseFloat ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.parseint` — Number.parseInt ( _string_, _radix_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.positive_infinity` — Number.POSITIVE_INFINITY: exact disposition and partitions missing.
+  - [ ] `sec-number.prototype` — Number.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-number-prototype-object` — Properties of the Number Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.constructor` — Number.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.toexponential` — Number.prototype.toExponential ( _fractionDigits_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.tofixed` — Number.prototype.toFixed ( _fractionDigits_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.tolocalestring` — Number.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.toprecision` — Number.prototype.toPrecision ( _precision_ ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.tostring` — Number.prototype.toString ( [ _radix_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.valueof` — Number.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-thisnumbervalue` — ThisNumberValue ( _value_: an ECMAScript language value, ): either a normal completion containing a Number or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-number-instances` — Properties of Number Instances: exact disposition and partitions missing.
+  - [ ] `sec-bigint-objects` — BigInt Objects: exact disposition and partitions missing.
+  - [ ] `sec-bigint-constructor` — The BigInt Constructor: exact disposition and partitions missing.
+  - [ ] `sec-bigint-constructor-number-value` — BigInt ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-numbertobigint` — NumberToBigInt ( _number_: a Number, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-bigint-constructor` — Properties of the BigInt Constructor: exact disposition and partitions missing.
+  - [ ] `sec-bigint.asintn` — BigInt.asIntN ( _bits_, _bigint_ ): exact disposition and partitions missing.
+  - [ ] `sec-bigint.asuintn` — BigInt.asUintN ( _bits_, _bigint_ ): exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype` — BigInt.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-bigint-prototype-object` — Properties of the BigInt Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype.constructor` — BigInt.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype.tolocalestring` — BigInt.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype.tostring` — BigInt.prototype.toString ( [ _radix_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype.valueof` — BigInt.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-thisbigintvalue` — ThisBigIntValue ( _value_: an ECMAScript language value, ): either a normal completion containing a BigInt or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-bigint.prototype-%symbol.tostringtag%` — BigInt.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-bigint-instances` — Properties of BigInt Instances: exact disposition and partitions missing.
+  - [ ] `sec-math-object` — The Math Object: exact disposition and partitions missing.
+  - [ ] `sec-value-properties-of-the-math-object` — Value Properties of the Math Object: exact disposition and partitions missing.
+  - [ ] `sec-math.e` — Math.E: exact disposition and partitions missing.
+  - [ ] `sec-math.ln10` — Math.LN10: exact disposition and partitions missing.
+  - [ ] `sec-math.ln2` — Math.LN2: exact disposition and partitions missing.
+  - [ ] `sec-math.log10e` — Math.LOG10E: exact disposition and partitions missing.
+  - [ ] `sec-math.log2e` — Math.LOG2E: exact disposition and partitions missing.
+  - [ ] `sec-math.pi` — Math.PI: exact disposition and partitions missing.
+  - [ ] `sec-math.sqrt1_2` — Math.SQRT1_2: exact disposition and partitions missing.
+  - [ ] `sec-math.sqrt2` — Math.SQRT2: exact disposition and partitions missing.
+  - [ ] `sec-math-%symbol.tostringtag%` — Math [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-function-properties-of-the-math-object` — Function Properties of the Math Object: exact disposition and partitions missing.
+  - [ ] `sec-math.abs` — Math.abs ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.acos` — Math.acos ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.acosh` — Math.acosh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.asin` — Math.asin ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.asinh` — Math.asinh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.atan` — Math.atan ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.atanh` — Math.atanh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.atan2` — Math.atan2 ( _y_, _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.cbrt` — Math.cbrt ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.ceil` — Math.ceil ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.clz32` — Math.clz32 ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.cos` — Math.cos ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.cosh` — Math.cosh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.exp` — Math.exp ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.expm1` — Math.expm1 ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.floor` — Math.floor ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.fround` — Math.fround ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.f16round` — Math.f16round ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.hypot` — Math.hypot ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.imul` — Math.imul ( _x_, _y_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.log` — Math.log ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.log1p` — Math.log1p ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.log10` — Math.log10 ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.log2` — Math.log2 ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.max` — Math.max ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.min` — Math.min ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.pow` — Math.pow ( _base_, _exponent_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.random` — Math.random ( ): exact disposition and partitions missing.
+  - [ ] `sec-math.round` — Math.round ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.sign` — Math.sign ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.sin` — Math.sin ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.sinh` — Math.sinh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.sqrt` — Math.sqrt ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.sumprecise` — Math.sumPrecise ( _items_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.tan` — Math.tan ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.tanh` — Math.tanh ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-math.trunc` — Math.trunc ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-date-objects` — Date Objects: exact disposition and partitions missing.
+  - [ ] `sec-overview-of-date-objects-and-definitions-of-abstract-operations` — Overview of Date Objects and Definitions of Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-time-values-and-time-range` — Time Values and Time Range: exact disposition and partitions missing.
+  - [ ] `sec-time-related-constants` — Time-related Constants: exact disposition and partitions missing.
+  - [ ] `sec-day` — Day ( _t_: a finite time value, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-timewithinday` — TimeWithinDay ( _t_: a finite time value, ): an integral Number in the interval from +0𝔽 (inclusive) to msPerDay (exclusive): exact disposition and partitions missing.
+  - [ ] `sec-daysinyear` — DaysInYear ( _y_: an integral Number, ): 365𝔽 or 366𝔽: exact disposition and partitions missing.
+  - [ ] `sec-dayfromyear` — DayFromYear ( _y_: an integral Number, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-timefromyear` — TimeFromYear ( _y_: an integral Number, ): a time value: exact disposition and partitions missing.
+  - [ ] `sec-yearfromtime` — YearFromTime ( _t_: a finite time value, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-daywithinyear` — DayWithinYear ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 365𝔽: exact disposition and partitions missing.
+  - [ ] `sec-inleapyear` — InLeapYear ( _t_: a finite time value, ): +0𝔽 or 1𝔽: exact disposition and partitions missing.
+  - [ ] `sec-monthfromtime` — MonthFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 11𝔽: exact disposition and partitions missing.
+  - [ ] `sec-datefromtime` — DateFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from 1𝔽 to 31𝔽: exact disposition and partitions missing.
+  - [ ] `sec-weekday` — WeekDay ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 6𝔽: exact disposition and partitions missing.
+  - [ ] `sec-hourfromtime` — HourFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 23𝔽: exact disposition and partitions missing.
+  - [ ] `sec-minfromtime` — MinFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 59𝔽: exact disposition and partitions missing.
+  - [ ] `sec-secfromtime` — SecFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 59𝔽: exact disposition and partitions missing.
+  - [ ] `sec-msfromtime` — msFromTime ( _t_: a finite time value, ): an integral Number in the inclusive interval from +0𝔽 to 999𝔽: exact disposition and partitions missing.
+  - [ ] `sec-getutcepochnanoseconds` — GetUTCEpochNanoseconds ( _year_: an integer, _month_: an integer in the inclusive interval from 1 to 12, _day_: an integer in the inclusive interval from 1 to 31, _hour_: an integer in the inclusive interval from 0 to 23, _minute_: an integer in the inclusive interval from 0 to 59, _second_: an integer in the inclusive interval from 0 to 59, _millisecond_: an integer in the inclusive interval from 0 to 999, _microsecond_: an integer in the inclusive interval from 0 to 999, _nanosecond_: an integer in the inclusive interval from 0 to 999, ): a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-time-zone-identifiers` — Time Zone Identifiers: exact disposition and partitions missing.
+  - [ ] `sec-getnamedtimezoneepochnanoseconds` — GetNamedTimeZoneEpochNanoseconds ( _timeZoneIdentifier_: a String, _year_: an integer, _month_: an integer in the inclusive interval from 1 to 12, _day_: an integer in the inclusive interval from 1 to 31, _hour_: an integer in the inclusive interval from 0 to 23, _minute_: an integer in the inclusive interval from 0 to 59, _second_: an integer in the inclusive interval from 0 to 59, _millisecond_: an integer in the inclusive interval from 0 to 999, _microsecond_: an integer in the inclusive interval from 0 to 999, _nanosecond_: an integer in the inclusive interval from 0 to 999, ): a List of BigInts: exact disposition and partitions missing.
+  - [ ] `sec-getnamedtimezoneoffsetnanoseconds` — GetNamedTimeZoneOffsetNanoseconds ( _timeZoneIdentifier_: a String, _epochNanoseconds_: a BigInt, ): an integer: exact disposition and partitions missing.
+  - [ ] `sec-time-zone-identifier-record` — Time Zone Identifier Record: exact disposition and partitions missing.
+  - [ ] `sec-availablenamedtimezoneidentifiers` — AvailableNamedTimeZoneIdentifiers ( ): a List of Time Zone Identifier Records: exact disposition and partitions missing.
+  - [ ] `sec-systemtimezoneidentifier` — SystemTimeZoneIdentifier ( ): a String: exact disposition and partitions missing.
+  - [ ] `sec-localtime` — LocalTime ( _t_: a finite time value, ): an integral Number: exact disposition and partitions missing.
+  - [ ] `sec-utc-t` — UTC ( _t_: a Number, ): a time value: exact disposition and partitions missing.
+  - [ ] `sec-maketime` — MakeTime ( _hour_: a Number, _min_: a Number, _sec_: a Number, _ms_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-makeday` — MakeDay ( _year_: a Number, _month_: a Number, _date_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-makedate` — MakeDate ( _day_: a Number, _time_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-makefullyear` — MakeFullYear ( _year_: a Number, ): an integral Number or NaN: exact disposition and partitions missing.
+  - [ ] `sec-timeclip` — TimeClip ( _time_: a Number, ): a Number: exact disposition and partitions missing.
+  - [ ] `sec-date-time-string-format` — Date Time String Format: exact disposition and partitions missing.
+  - [ ] `sec-expanded-years` — Expanded Years: exact disposition and partitions missing.
+  - [ ] `sec-time-zone-offset-strings` — Time Zone Offset String Format: exact disposition and partitions missing.
+  - [ ] `sec-istimezoneoffsetstring` — IsTimeZoneOffsetString ( _offsetString_: a String, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-parsetimezoneoffsetstring` — ParseTimeZoneOffsetString ( _offsetString_: a String, ): an integer: exact disposition and partitions missing.
+  - [ ] `sec-date-constructor` — The Date Constructor: exact disposition and partitions missing.
+  - [ ] `sec-date` — Date ( ..._values_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-date-constructor` — Properties of the Date Constructor: exact disposition and partitions missing.
+  - [ ] `sec-date.now` — Date.now ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.parse` — Date.parse ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype` — Date.prototype: exact disposition and partitions missing.
+  - [ ] `sec-date.utc` — Date.UTC ( _year_ [ , _month_ [ , _date_ [ , _hours_ [ , _minutes_ [ , _seconds_ [ , _ms_ ] ] ] ] ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-date-prototype-object` — Properties of the Date Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.constructor` — Date.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getdate` — Date.prototype.getDate ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getday` — Date.prototype.getDay ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getfullyear` — Date.prototype.getFullYear ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.gethours` — Date.prototype.getHours ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getmilliseconds` — Date.prototype.getMilliseconds ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getminutes` — Date.prototype.getMinutes ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getmonth` — Date.prototype.getMonth ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getseconds` — Date.prototype.getSeconds ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.gettime` — Date.prototype.getTime ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.gettimezoneoffset` — Date.prototype.getTimezoneOffset ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcdate` — Date.prototype.getUTCDate ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcday` — Date.prototype.getUTCDay ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcfullyear` — Date.prototype.getUTCFullYear ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutchours` — Date.prototype.getUTCHours ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcmilliseconds` — Date.prototype.getUTCMilliseconds ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcminutes` — Date.prototype.getUTCMinutes ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcmonth` — Date.prototype.getUTCMonth ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getutcseconds` — Date.prototype.getUTCSeconds ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setdate` — Date.prototype.setDate ( _date_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setfullyear` — Date.prototype.setFullYear ( _year_ [ , _month_ [ , _date_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.sethours` — Date.prototype.setHours ( _hour_ [ , _min_ [ , _sec_ [ , _ms_ ] ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setmilliseconds` — Date.prototype.setMilliseconds ( _ms_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setminutes` — Date.prototype.setMinutes ( _min_ [ , _sec_ [ , _ms_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setmonth` — Date.prototype.setMonth ( _month_ [ , _date_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setseconds` — Date.prototype.setSeconds ( _sec_ [ , _ms_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.settime` — Date.prototype.setTime ( _time_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcdate` — Date.prototype.setUTCDate ( _date_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcfullyear` — Date.prototype.setUTCFullYear ( _year_ [ , _month_ [ , _date_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutchours` — Date.prototype.setUTCHours ( _hour_ [ , _min_ [ , _sec_ [ , _ms_ ] ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcmilliseconds` — Date.prototype.setUTCMilliseconds ( _ms_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcminutes` — Date.prototype.setUTCMinutes ( _min_ [ , _sec_ [ , _ms_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcmonth` — Date.prototype.setUTCMonth ( _month_ [ , _date_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setutcseconds` — Date.prototype.setUTCSeconds ( _sec_ [ , _ms_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.todatestring` — Date.prototype.toDateString ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.toisostring` — Date.prototype.toISOString ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.tojson` — Date.prototype.toJSON ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.tolocaledatestring` — Date.prototype.toLocaleDateString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.tolocalestring` — Date.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.tolocaletimestring` — Date.prototype.toLocaleTimeString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.tostring` — Date.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-timestring` — TimeString ( _tv_: a Number, but not NaN, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-datestring` — DateString ( _tv_: a Number, but not NaN, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-timezoneestring` — TimeZoneString ( _tv_: an integral Number, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-todatestring` — ToDateString ( _tv_: an integral Number or NaN, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.totimestring` — Date.prototype.toTimeString ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.toutcstring` — Date.prototype.toUTCString ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.valueof` — Date.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype-%symbol.toprimitive%` — Date.prototype [ %Symbol.toPrimitive% ] ( _hint_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-date-instances` — Properties of Date Instances: exact disposition and partitions missing.
+- [ ] **Text Processing** (`sec-text-processing`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: String; RegExp; Unicode and well-formed strings.
+  - Linked local regression evidence: E2E: string_object_methods, regex_pcre2.
+  - Known blockers: PCRE2 behavior is not yet demonstrated equivalent to every ECMA-262 RegExp algorithm.
+  - [ ] `sec-text-processing` — Text Processing: exact disposition and partitions missing.
+  - [ ] `sec-string-objects` — String Objects: exact disposition and partitions missing.
+  - [ ] `sec-string-constructor` — The String Constructor: exact disposition and partitions missing.
+  - [ ] `sec-string-constructor-string-value` — String ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-string-constructor` — Properties of the String Constructor: exact disposition and partitions missing.
+  - [ ] `sec-string.fromcharcode` — String.fromCharCode ( ..._codeUnits_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.fromcodepoint` — String.fromCodePoint ( ..._codePoints_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype` — String.prototype: exact disposition and partitions missing.
+  - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-string-prototype-object` — Properties of the String Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.at` — String.prototype.at ( _index_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.charat` — String.prototype.charAt ( _pos_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.charcodeat` — String.prototype.charCodeAt ( _pos_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.codepointat` — String.prototype.codePointAt ( _pos_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.concat` — String.prototype.concat ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.constructor` — String.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.endswith` — String.prototype.endsWith ( _searchString_ [ , _endPosition_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.includes` — String.prototype.includes ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.indexof` — String.prototype.indexOf ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.iswellformed` — String.prototype.isWellFormed ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.lastindexof` — String.prototype.lastIndexOf ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.padend` — String.prototype.padEnd ( _maxLength_ [ , _fillString_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.padstart` — String.prototype.padStart ( _maxLength_ [ , _fillString_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-stringpaddingbuiltinsimpl` — StringPaddingBuiltinsImpl ( _O_: an ECMAScript language value, _maxLength_: an ECMAScript language value, _fillString_: an ECMAScript language value, _placement_: ~start~ or ~end~, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-stringpad` — StringPad ( _S_: a String, _maxLength_: a non-negative integer, _fillString_: a String, _placement_: ~start~ or ~end~, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-tozeropaddeddecimalstring` — ToZeroPaddedDecimalString ( _n_: a non-negative integer, _minLength_: a non-negative integer, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.repeat` — String.prototype.repeat ( _count_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.replace` — String.prototype.replace ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-getsubstitution` — GetSubstitution ( _matched_: a String, _str_: a String, _position_: a non-negative integer, _captures_: a List of either Strings or undefined, _namedCaptures_: an Object or undefined, _replacementTemplate_: a String, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.replaceall` — String.prototype.replaceAll ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.search` — String.prototype.search ( _regexp_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.slice` — String.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.split` — String.prototype.split ( _separator_, _limit_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.startswith` — String.prototype.startsWith ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.trim` — String.prototype.trim ( ): exact disposition and partitions missing.
+  - [ ] `sec-trimstring` — TrimString ( _string_: an ECMAScript language value, _where_: ~start~, ~end~, or ~start+end~, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.trimend` — String.prototype.trimEnd ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.trimstart` — String.prototype.trimStart ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.valueof` — String.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-thisstringvalue` — ThisStringValue ( _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype-%symbol.iterator%` — String.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-string-instances` — Properties of String Instances: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-string-instances-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-string-iterator-objects` — String Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-%stringiteratorprototype%-object` — The %StringIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%stringiteratorprototype%.next` — %StringIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%stringiteratorprototype%-%symbol.tostringtag%` — %StringIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-regexp-regular-expression-objects` — RegExp (Regular Expression) Objects: exact disposition and partitions missing.
+  - [ ] `sec-patterns` — Patterns: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-countleftcapturingparenswithin` — Static Semantics: CountLeftCapturingParensWithin ( _node_: a Parse Node, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-countleftcapturingparensbefore` — Static Semantics: CountLeftCapturingParensBefore ( _node_: a Parse Node, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-mightbothparticipate` — Static Semantics: MightBothParticipate ( _x_: a Parse Node, _y_: a Parse Node, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-capturing-group-number` — Static Semantics: CapturingGroupNumber ( ): a positive integer: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-is-character-class` — Static Semantics: IsCharacterClass ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-character-value` — Static Semantics: CharacterValue ( ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-maycontainstrings` — Static Semantics: MayContainStrings ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-groupspecifiersthatmatch` — Static Semantics: GroupSpecifiersThatMatch ( _thisGroupName_: a |GroupName| Parse Node, ): a List of |GroupSpecifier| Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-capturinggroupname` — Static Semantics: CapturingGroupName ( ): a String: exact disposition and partitions missing.
+  - [ ] `sec-regexpidentifiercodepoints` — Static Semantics: RegExpIdentifierCodePoints ( ): a List of code points: exact disposition and partitions missing.
+  - [ ] `sec-regexpidentifiercodepoint` — Static Semantics: RegExpIdentifierCodePoint ( ): a code point: exact disposition and partitions missing.
+  - [ ] `sec-pattern-semantics` — Pattern Semantics: exact disposition and partitions missing.
+  - [ ] `sec-pattern-notation` — Notation: exact disposition and partitions missing.
+  - [ ] `sec-regexp-records` — RegExp Records: exact disposition and partitions missing.
+  - [ ] `sec-compilepattern` — Runtime Semantics: CompilePattern ( _rer_: a RegExp Record, ): an Abstract Closure that takes a List of characters and a non-negative integer and returns either a MatchState or ~failure~: exact disposition and partitions missing.
+  - [ ] `sec-compilesubpattern` — Runtime Semantics: CompileSubpattern ( _rer_: a RegExp Record, _direction_: ~forward~ or ~backward~, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-repeatmatcher-abstract-operation` — RepeatMatcher ( _m_: a Matcher, _min_: a non-negative integer, _max_: a non-negative integer or +&infin;, _greedy_: a Boolean, _x_: a MatchState, _c_: a MatcherContinuation, _parenIndex_: a non-negative integer, _parenCount_: a non-negative integer, ): either a MatchState or ~failure~: exact disposition and partitions missing.
+  - [ ] `sec-emptymatcher` — EmptyMatcher ( ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-matchtwoalternatives` — MatchTwoAlternatives ( _m1_: a Matcher, _m2_: a Matcher, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-matchsequence` — MatchSequence ( _m1_: a Matcher, _m2_: a Matcher, _direction_: ~forward~ or ~backward~, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-compileassertion` — Runtime Semantics: CompileAssertion ( _rer_: a RegExp Record, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-iswordchar-abstract-operation` — IsWordChar ( _rer_: a RegExp Record, _Input_: a List of characters, _e_: an integer, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-compilequantifier` — Runtime Semantics: CompileQuantifier ( ): a Record with fields [[Min]] (a non-negative integer), [[Max]] (a non-negative integer or +&infin;), and [[Greedy]] (a Boolean): exact disposition and partitions missing.
+  - [ ] `sec-compilequantifierprefix` — Runtime Semantics: CompileQuantifierPrefix ( ): a Record with fields [[Min]] (a non-negative integer) and [[Max]] (a non-negative integer or +&infin;): exact disposition and partitions missing.
+  - [ ] `sec-compileatom` — Runtime Semantics: CompileAtom ( _rer_: a RegExp Record, _direction_: ~forward~ or ~backward~, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-charactersetmatcher-abstract-operation` — CharacterSetMatcher ( _rer_: a RegExp Record, _A_: a CharSet, _invert_: a Boolean, _direction_: ~forward~ or ~backward~, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-backreference-matcher` — BackreferenceMatcher ( _rer_: a RegExp Record, _ns_: a List of positive integers, _direction_: ~forward~ or ~backward~, ): a Matcher: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-canonicalize-ch` — Canonicalize ( _rer_: a RegExp Record, _ch_: a character, ): a character: exact disposition and partitions missing.
+  - [ ] `sec-updatemodifiers` — UpdateModifiers ( _rer_: a RegExp Record, _add_: a String, _remove_: a String, ): a RegExp Record: exact disposition and partitions missing.
+  - [ ] `sec-compilecharacterclass` — Runtime Semantics: CompileCharacterClass ( _rer_: a RegExp Record, ): a Record with fields [[CharSet]] (a CharSet) and [[Invert]] (a Boolean): exact disposition and partitions missing.
+  - [ ] `sec-compiletocharset` — Runtime Semantics: CompileToCharSet ( _rer_: a RegExp Record, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-characterrange-abstract-operation` — CharacterRange ( _A_: a CharSet, _B_: a CharSet, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-haseitherunicodeflag-abstract-operation` — HasEitherUnicodeFlag ( _rer_: a RegExp Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-wordcharacters` — WordCharacters ( _rer_: a RegExp Record, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-allcharacters` — AllCharacters ( _rer_: a RegExp Record, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-maybesimplecasefolding` — MaybeSimpleCaseFolding ( _rer_: a RegExp Record, _A_: a CharSet, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-charactercomplement` — CharacterComplement ( _rer_: a RegExp Record, _S_: a CharSet, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-unicodematchproperty-p` — UnicodeMatchProperty ( _rer_: a RegExp Record, _p_: ECMAScript source text, ): a Unicode property name: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-unicodematchpropertyvalue-p-v` — UnicodeMatchPropertyValue ( _p_: ECMAScript source text, _v_: ECMAScript source text, ): a Unicode property value: exact disposition and partitions missing.
+  - [ ] `sec-compileclasssetstring` — Runtime Semantics: CompileClassSetString ( _rer_: a RegExp Record, ): a sequence of characters: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-regexp-creation` — Abstract Operations for RegExp Creation: exact disposition and partitions missing.
+  - [ ] `sec-regexpcreate` — RegExpCreate ( _P_: an ECMAScript language value, _F_: a String or undefined, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-regexpalloc` — RegExpAlloc ( _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-regexpinitialize` — RegExpInitialize ( _obj_: an Object, _pattern_: an ECMAScript language value, _flags_: an ECMAScript language value, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-parsepattern` — Static Semantics: ParsePattern ( _patternText_: a sequence of Unicode code points, _u_: a Boolean, _v_: a Boolean, ): a Parse Node or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-regexp-constructor` — The RegExp Constructor: exact disposition and partitions missing.
+  - [ ] `sec-regexp-pattern-flags` — RegExp ( _pattern_, _flags_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-regexp-constructor` — Properties of the RegExp Constructor: exact disposition and partitions missing.
+  - [ ] `sec-regexp.escape` — RegExp.escape ( _S_ ): exact disposition and partitions missing.
+  - [ ] `sec-encodeforregexpescape` — EncodeForRegExpEscape ( _cp_: a code point, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype` — RegExp.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp-%symbol.species%` — get RegExp [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-regexp-prototype-object` — Properties of the RegExp Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype.constructor` — RegExp.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype.exec` — RegExp.prototype.exec ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.dotAll` — get RegExp.prototype.dotAll: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.flags` — get RegExp.prototype.flags: exact disposition and partitions missing.
+  - [ ] `sec-regexphasflag` — RegExpHasFlag ( _R_: an ECMAScript language value, _codeUnit_: a code unit, ): either a normal completion containing either a Boolean or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.global` — get RegExp.prototype.global: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.hasIndices` — get RegExp.prototype.hasIndices: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.ignorecase` — get RegExp.prototype.ignoreCase: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype-%symbol.match%` — RegExp.prototype [ %Symbol.match% ] ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-regexp-prototype-%symbol.matchall%` — RegExp.prototype [ %Symbol.matchAll% ] ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.multiline` — get RegExp.prototype.multiline: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype-%symbol.replace%` — RegExp.prototype [ %Symbol.replace% ] ( _string_, _replaceValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype-%symbol.search%` — RegExp.prototype [ %Symbol.search% ] ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.source` — get RegExp.prototype.source: exact disposition and partitions missing.
+  - [ ] `sec-escaperegexppattern` — EscapeRegExpPattern ( _P_: a String, _F_: a String, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype-%symbol.split%` — RegExp.prototype [ %Symbol.split% ] ( _string_, _limit_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.sticky` — get RegExp.prototype.sticky: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype.test` — RegExp.prototype.test ( _S_ ): exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype.tostring` — RegExp.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.unicode` — get RegExp.prototype.unicode: exact disposition and partitions missing.
+  - [ ] `sec-get-regexp.prototype.unicodesets` — get RegExp.prototype.unicodeSets: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-regexp-matching` — Abstract Operations for RegExp Matching: exact disposition and partitions missing.
+  - [ ] `sec-regexpexec` — RegExpExec ( _R_: an Object, _S_: a String, ): either a normal completion containing either an Object or null, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-regexpbuiltinexec` — RegExpBuiltinExec ( _R_: an initialized RegExp instance, _S_: a String, ): either a normal completion containing either an Array exotic object or null, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-advancestringindex` — AdvanceStringIndex ( _S_: a String, _index_: a non-negative integer, _unicode_: a Boolean, ): an integer: exact disposition and partitions missing.
+  - [ ] `sec-getstringindex` — GetStringIndex ( _S_: a String, _codePointIndex_: a non-negative integer, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-match-records` — Match Records: exact disposition and partitions missing.
+  - [ ] `sec-getmatchstring` — GetMatchString ( _S_: a String, _match_: a Match Record, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-getmatchindexpair` — GetMatchIndexPair ( _S_: a String, _match_: a Match Record, ): an Array: exact disposition and partitions missing.
+  - [ ] `sec-makematchindicesindexpairarray` — MakeMatchIndicesIndexPairArray ( _S_: a String, _indices_: a List of either Match Records or undefined, _groupNames_: a List of either Strings or undefined, _hasGroups_: a Boolean, ): an Array: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-regexp-instances` — Properties of RegExp Instances: exact disposition and partitions missing.
+  - [ ] `sec-lastindex` — lastIndex: exact disposition and partitions missing.
+  - [ ] `sec-regexp-string-iterator-objects` — RegExp String Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createregexpstringiterator` — CreateRegExpStringIterator ( _R_: an Object, _S_: a String, _global_: a Boolean, _fullUnicode_: a Boolean, ): an Object: exact disposition and partitions missing.
+  - [ ] `sec-%regexpstringiteratorprototype%-object` — The %RegExpStringIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%regexpstringiteratorprototype%.next` — %RegExpStringIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%regexpstringiteratorprototype%-%symbol.tostringtag%` — %RegExpStringIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-regexp-string-iterator-instances` — Properties of RegExp String Iterator Instances: exact disposition and partitions missing.
+- [ ] **Indexed Collections** (`sec-indexed-collections`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Array; typed arrays; iterators; sparse and exotic indexed properties.
+  - Linked local regression evidence: stress: array_literal_stack_alloc_growth; E2E: array_prototypes, array_property_descriptors, array_buffer_dataview.
+  - Known blockers: TypedArray and full array exotic semantics remain unverified.
+  - [ ] `sec-indexed-collections` — Indexed Collections: exact disposition and partitions missing.
+  - [ ] `sec-array-objects` — Array Objects: exact disposition and partitions missing.
+  - [ ] `sec-array-constructor` — The Array Constructor: exact disposition and partitions missing.
+  - [ ] `sec-array` — Array ( ..._values_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-array-constructor` — Properties of the Array Constructor: exact disposition and partitions missing.
+  - [ ] `sec-array.from` — Array.from ( _items_ [ , _mapper_ [ , _thisArg_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.fromasync` — Array.fromAsync ( _items_ [ , _mapper_ [ , _thisArg_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.isarray` — Array.isArray ( _arg_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.of` — Array.of ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype` — Array.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-array-%symbol.species%` — get Array [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-array-prototype-object` — Properties of the Array Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.at` — Array.prototype.at ( _index_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.concat` — Array.prototype.concat ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-isconcatspreadable` — IsConcatSpreadable ( _O_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.constructor` — Array.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.copywithin` — Array.prototype.copyWithin ( _target_, _start_ [ , _end_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.entries` — Array.prototype.entries ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.every` — Array.prototype.every ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.fill` — Array.prototype.fill ( _value_ [ , _start_ [ , _end_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.filter` — Array.prototype.filter ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.find` — Array.prototype.find ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.findindex` — Array.prototype.findIndex ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.findlast` — Array.prototype.findLast ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.findlastindex` — Array.prototype.findLastIndex ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-findviapredicate` — FindViaPredicate ( _O_: an Object, _len_: a non-negative integer, _direction_: ~ascending~ or ~descending~, _predicate_: an ECMAScript language value, _thisArg_: an ECMAScript language value, ): either a normal completion containing a Record with fields [[Index]] (an integral Number) and [[Value]] (an ECMAScript language value) or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.flat` — Array.prototype.flat ( [ _depth_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-flattenintoarray` — FlattenIntoArray ( _target_: an Object, _source_: an Object, _sourceLen_: a non-negative integer, _start_: a non-negative integer, _depth_: a non-negative integer or +&infin;, optional _mapperFunction_: a function object, optional _thisArg_: an ECMAScript language value, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.flatmap` — Array.prototype.flatMap ( _mapperFunction_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.foreach` — Array.prototype.forEach ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.includes` — Array.prototype.includes ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.indexof` — Array.prototype.indexOf ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.join` — Array.prototype.join ( _separator_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.keys` — Array.prototype.keys ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.lastindexof` — Array.prototype.lastIndexOf ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.map` — Array.prototype.map ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.pop` — Array.prototype.pop ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.push` — Array.prototype.push ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.reduce` — Array.prototype.reduce ( _callback_ [ , _initialValue_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.reduceright` — Array.prototype.reduceRight ( _callback_ [ , _initialValue_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.reverse` — Array.prototype.reverse ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.shift` — Array.prototype.shift ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.slice` — Array.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.some` — Array.prototype.some ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.sort` — Array.prototype.sort ( _comparator_ ): exact disposition and partitions missing.
+  - [ ] `sec-sortindexedproperties` — SortIndexedProperties ( _obj_: an Object, _len_: a non-negative integer, _SortCompare_: an Abstract Closure with two parameters, _holes_: ~skip-holes~ or ~read-through-holes~, ): either a normal completion containing a List of ECMAScript language values or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-comparearrayelements` — CompareArrayElements ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, _comparator_: a function object or undefined, ): either a normal completion containing a Number or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.splice` — Array.prototype.splice ( _start_, _deleteCount_, ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.tolocalestring` — Array.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.toreversed` — Array.prototype.toReversed ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.tosorted` — Array.prototype.toSorted ( _comparator_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.tospliced` — Array.prototype.toSpliced ( _start_, _skipCount_, ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.tostring` — Array.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.unshift` — Array.prototype.unshift ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.values` — Array.prototype.values ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype.with` — Array.prototype.with ( _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype-%symbol.iterator%` — Array.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-array.prototype-%symbol.unscopables%` — Array.prototype [ %Symbol.unscopables% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-array-instances` — Properties of Array Instances: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-array-instances-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-array-iterator-objects` — Array Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createarrayiterator` — CreateArrayIterator ( _array_: an Object, _kind_: ~key+value~, ~key~, or ~value~, ): an Object: exact disposition and partitions missing.
+  - [ ] `sec-%arrayiteratorprototype%-object` — The %ArrayIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%arrayiteratorprototype%.next` — %ArrayIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%arrayiteratorprototype%-%symbol.tostringtag%` — %ArrayIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-array-iterator-instances` — Properties of Array Iterator Instances: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-objects` — TypedArray Objects: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%-intrinsic-object` — The %TypedArray% Intrinsic Object: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%` — %TypedArray% ( ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-%typedarray%-intrinsic-object` — Properties of the %TypedArray% Intrinsic Object: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.from` — %TypedArray%.from ( _source_ [ , _mapper_ [ , _thisArg_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.of` — %TypedArray%.of ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype` — %TypedArray%.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%-%symbol.species%` — get %TypedArray% [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-%typedarrayprototype%-object` — Properties of the %TypedArray% Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.at` — %TypedArray%.prototype.at ( _index_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%.prototype.buffer` — get %TypedArray%.prototype.buffer: exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%.prototype.bytelength` — get %TypedArray%.prototype.byteLength: exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%.prototype.byteoffset` — get %TypedArray%.prototype.byteOffset: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.constructor` — %TypedArray%.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.copywithin` — %TypedArray%.prototype.copyWithin ( _target_, _start_ [ , _end_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.entries` — %TypedArray%.prototype.entries ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.every` — %TypedArray%.prototype.every ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.fill` — %TypedArray%.prototype.fill ( _value_ [ , _start_ [ , _end_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.filter` — %TypedArray%.prototype.filter ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.find` — %TypedArray%.prototype.find ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.findindex` — %TypedArray%.prototype.findIndex ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.findlast` — %TypedArray%.prototype.findLast ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.findlastindex` — %TypedArray%.prototype.findLastIndex ( _predicate_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.foreach` — %TypedArray%.prototype.forEach ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.includes` — %TypedArray%.prototype.includes ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.indexof` — %TypedArray%.prototype.indexOf ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.join` — %TypedArray%.prototype.join ( _separator_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.keys` — %TypedArray%.prototype.keys ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.lastindexof` — %TypedArray%.prototype.lastIndexOf ( _searchElement_ [ , _fromIndex_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%.prototype.length` — get %TypedArray%.prototype.length: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.map` — %TypedArray%.prototype.map ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.reduce` — %TypedArray%.prototype.reduce ( _callback_ [ , _initialValue_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.reduceright` — %TypedArray%.prototype.reduceRight ( _callback_ [ , _initialValue_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.reverse` — %TypedArray%.prototype.reverse ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.set` — %TypedArray%.prototype.set ( _source_ [ , _offset_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-settypedarrayfromarraylike` — SetTypedArrayFromArrayLike ( _target_: a TypedArray, _targetOffset_: a non-negative integer or +&infin;, _source_: an ECMAScript language value, but not a TypedArray, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-settypedarrayfromtypedarray` — SetTypedArrayFromTypedArray ( _target_: a TypedArray, _targetOffset_: a non-negative integer or +&infin;, _source_: a TypedArray, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.slice` — %TypedArray%.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.some` — %TypedArray%.prototype.some ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.sort` — %TypedArray%.prototype.sort ( _comparator_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.subarray` — %TypedArray%.prototype.subarray ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.tolocalestring` — %TypedArray%.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.toreversed` — %TypedArray%.prototype.toReversed ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.tosorted` — %TypedArray%.prototype.toSorted ( _comparator_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.tostring` — %TypedArray%.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.values` — %TypedArray%.prototype.values ( ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype.with` — %TypedArray%.prototype.with ( _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-%typedarray%.prototype-%symbol.iterator%` — %TypedArray%.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-get-%typedarray%.prototype-%symbol.tostringtag%` — get %TypedArray%.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-typedarray-objects` — Abstract Operations for TypedArray Objects: exact disposition and partitions missing.
+  - [ ] `sec-typedarraycreatefromconstructor` — TypedArrayCreateFromConstructor ( _constructor_: a constructor, _argumentList_: a List of ECMAScript language values, ): either a normal completion containing a TypedArray or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-create-same-type` — TypedArrayCreateSameType ( _exemplar_: a TypedArray, _length_: a non-negative integer, ): either a normal completion containing a TypedArray or a throw completion: exact disposition and partitions missing.
+  - [ ] `typedarray-species-create` — TypedArraySpeciesCreate ( _exemplar_: a TypedArray, _argumentList_: a List of ECMAScript language values, ): either a normal completion containing a TypedArray or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-validatetypedarray` — ValidateTypedArray ( _O_: an ECMAScript language value, _order_: ~seq-cst~ or ~unordered~, ): either a normal completion containing a TypedArray With Buffer Witness Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarrayelementsize` — TypedArrayElementSize ( _O_: a TypedArray, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-typedarrayelementtype` — TypedArrayElementType ( _O_: a TypedArray, ): a TypedArray element type: exact disposition and partitions missing.
+  - [ ] `sec-comparetypedarrayelements` — CompareTypedArrayElements ( _x_: a Number or a BigInt, _y_: a Number or a BigInt, _comparator_: a function object or undefined, ): either a normal completion containing a Number or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-typedarray-constructors` — The _TypedArray_ Constructors: exact disposition and partitions missing.
+  - [ ] `sec-typedarray` — _TypedArray_ ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-allocatetypedarray` — AllocateTypedArray ( _constructorName_: a String which is the name of a TypedArray constructor in , _newTarget_: a constructor, _defaultProto_: a String, optional _length_: a non-negative integer, ): either a normal completion containing a TypedArray or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-initializetypedarrayfromtypedarray` — InitializeTypedArrayFromTypedArray ( _O_: a TypedArray, _srcArray_: a TypedArray, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-initializetypedarrayfromarraybuffer` — InitializeTypedArrayFromArrayBuffer ( _O_: a TypedArray, _buffer_: an ArrayBuffer or a SharedArrayBuffer, _byteOffset_: an ECMAScript language value, _length_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-initializetypedarrayfromlist` — InitializeTypedArrayFromList ( _O_: a TypedArray, _values_: a List of ECMAScript language values, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-initializetypedarrayfromarraylike` — InitializeTypedArrayFromArrayLike ( _O_: a TypedArray, _arrayLike_: an Object, but not a TypedArray or an ArrayBuffer, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-allocatetypedarraybuffer` — AllocateTypedArrayBuffer ( _O_: a TypedArray, _length_: a non-negative integer, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-typedarray-constructors` — Properties of the _TypedArray_ Constructors: exact disposition and partitions missing.
+  - [ ] `sec-typedarray.bytes_per_element` — _TypedArray_.BYTES_PER_ELEMENT: exact disposition and partitions missing.
+  - [ ] `sec-typedarray.prototype` — _TypedArray_.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-typedarray-prototype-objects` — Properties of the _TypedArray_ Prototype Objects: exact disposition and partitions missing.
+  - [ ] `sec-typedarray.prototype.bytes_per_element` — _TypedArray_.prototype.BYTES_PER_ELEMENT: exact disposition and partitions missing.
+  - [ ] `sec-typedarray.prototype.constructor` — _TypedArray_.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-typedarray-instances` — Properties of _TypedArray_ Instances: exact disposition and partitions missing.
+  - [ ] `sec-uint8array` — Uint8Array Objects: exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-uint8array-constructor` — Additional Properties of the Uint8Array Constructor: exact disposition and partitions missing.
+  - [ ] `sec-uint8array.frombase64` — Uint8Array.fromBase64 ( _string_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-uint8array.fromhex` — Uint8Array.fromHex ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-uint8array-prototype-object` — Additional Properties of the Uint8Array Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-uint8array.prototype.setfrombase64` — Uint8Array.prototype.setFromBase64 ( _string_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-uint8array.prototype.setfromhex` — Uint8Array.prototype.setFromHex ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-uint8array.prototype.tobase64` — Uint8Array.prototype.toBase64 ( [ _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-uint8array.prototype.tohex` — Uint8Array.prototype.toHex ( ): exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-uint8array-objects` — Abstract Operations for Uint8Array Objects: exact disposition and partitions missing.
+  - [ ] `sec-validateuint8array` — ValidateUint8Array ( _ta_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getuint8arraybytes` — GetUint8ArrayBytes ( _ta_: a Uint8Array, ): either a normal completion containing a List of byte values or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-setuint8arraybytes` — SetUint8ArrayBytes ( _into_: a Uint8Array, _bytes_: a List of byte values, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-skipasciiwhitespace` — SkipAsciiWhitespace ( _string_: a String, _index_: a non-negative integer, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-decodefinalbase64chunk` — DecodeFinalBase64Chunk ( _chunk_: a String of length 2 or 3, _throwOnExtraBits_: a Boolean, ): either a normal completion containing a List of byte values, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-decodefulllengthbase64chunk` — DecodeFullLengthBase64Chunk ( _chunk_: a String of length 4, ): a List of byte values of length 3: exact disposition and partitions missing.
+  - [ ] `sec-frombase64` — FromBase64 ( _string_: a String, _alphabet_: "base64" or "base64url", _lastChunkHandling_: "loose", "strict", or "stop-before-partial", optional _maxLength_: a non-negative integer, ): a Record with fields [[Read]] (an integer), [[Bytes]] (a List of byte values), and [[Error]] (a SyntaxError object or ~none~): exact disposition and partitions missing.
+  - [ ] `sec-fromhex` — FromHex ( _string_: a String, optional _maxLength_: a non-negative integer, ): a Record with fields [[Read]] (an integer), [[Bytes]] (a List of byte values), and [[Error]] (a SyntaxError object or ~none~): exact disposition and partitions missing.
+- [ ] **Keyed Collections** (`sec-keyed-collections`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Map; Set; WeakMap; WeakSet; collection iterators.
+  - Linked local regression evidence: E2E: map_set_constructors, map_set_same_value_zero, weak_collections.
+  - Known blockers: All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification.
+  - [ ] `sec-keyed-collections` — Keyed Collections: exact disposition and partitions missing.
+  - [ ] `sec-map-objects` — Map Objects: exact disposition and partitions missing.
+  - [ ] `sec-map-constructor` — The Map Constructor: exact disposition and partitions missing.
+  - [ ] `sec-map-iterable` — Map ( [ _iterable_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-add-entries-from-iterable` — AddEntriesFromIterable ( _target_: an Object, _iterable_: an ECMAScript language value, but not undefined or null, _adder_: a function object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-map-constructor` — Properties of the Map Constructor: exact disposition and partitions missing.
+  - [ ] `sec-map.groupby` — Map.groupBy ( _items_, _callback_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype` — Map.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-map-%symbol.species%` — get Map [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-map-prototype-object` — Properties of the Map Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.clear` — Map.prototype.clear ( ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.constructor` — Map.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.delete` — Map.prototype.delete ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.entries` — Map.prototype.entries ( ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.foreach` — Map.prototype.forEach ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.get` — Map.prototype.get ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.getorinsert` — Map.prototype.getOrInsert ( _key_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.getorinsertcomputed` — Map.prototype.getOrInsertComputed ( _key_, _callback_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.has` — Map.prototype.has ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.keys` — Map.prototype.keys ( ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.set` — Map.prototype.set ( _key_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-map.prototype.size` — get Map.prototype.size: exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.values` — Map.prototype.values ( ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype-%symbol.iterator%` — Map.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype-%symbol.tostringtag%` — Map.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-map-instances` — Properties of Map Instances: exact disposition and partitions missing.
+  - [ ] `sec-map-iterator-objects` — Map Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createmapiterator` — CreateMapIterator ( _map_: an ECMAScript language value, _kind_: ~key+value~, ~key~, or ~value~, ): either a normal completion containing a Generator or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-%mapiteratorprototype%-object` — The %MapIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%mapiteratorprototype%.next` — %MapIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%mapiteratorprototype%-%symbol.tostringtag%` — %MapIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-set-objects` — Set Objects: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-set-objects` — Abstract Operations For Set Objects: exact disposition and partitions missing.
+  - [ ] `sec-set-records` — Set Records: exact disposition and partitions missing.
+  - [ ] `sec-getsetrecord` — GetSetRecord ( _obj_: an ECMAScript language value, ): either a normal completion containing a Set Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-setdatahas` — SetDataHas ( _setData_: a List of either ECMAScript language values or ~empty~, _value_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-setdataindex` — SetDataIndex ( _setData_: a List of either ECMAScript language values or ~empty~, _value_: an ECMAScript language value, ): a non-negative integer or ~not-found~: exact disposition and partitions missing.
+  - [ ] `sec-setdatasize` — SetDataSize ( _setData_: a List of either ECMAScript language values or ~empty~, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-set-constructor` — The Set Constructor: exact disposition and partitions missing.
+  - [ ] `sec-set-iterable` — Set ( [ _iterable_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-set-constructor` — Properties of the Set Constructor: exact disposition and partitions missing.
+  - [ ] `sec-set.prototype` — Set.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-set-%symbol.species%` — get Set [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-set-prototype-object` — Properties of the Set Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.add` — Set.prototype.add ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.clear` — Set.prototype.clear ( ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.constructor` — Set.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.delete` — Set.prototype.delete ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.difference` — Set.prototype.difference ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.entries` — Set.prototype.entries ( ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.foreach` — Set.prototype.forEach ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.has` — Set.prototype.has ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.intersection` — Set.prototype.intersection ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.isdisjointfrom` — Set.prototype.isDisjointFrom ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.issubsetof` — Set.prototype.isSubsetOf ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.issupersetof` — Set.prototype.isSupersetOf ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.keys` — Set.prototype.keys ( ): exact disposition and partitions missing.
+  - [ ] `sec-get-set.prototype.size` — get Set.prototype.size: exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.symmetricdifference` — Set.prototype.symmetricDifference ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.union` — Set.prototype.union ( _other_ ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype.values` — Set.prototype.values ( ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype-%symbol.iterator%` — Set.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-set.prototype-%symbol.tostringtag%` — Set.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-set-instances` — Properties of Set Instances: exact disposition and partitions missing.
+  - [ ] `sec-set-iterator-objects` — Set Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createsetiterator` — CreateSetIterator ( _set_: an ECMAScript language value, _kind_: ~key+value~ or ~value~, ): either a normal completion containing a Generator or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-%setiteratorprototype%-object` — The %SetIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%setiteratorprototype%.next` — %SetIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%setiteratorprototype%-%symbol.tostringtag%` — %SetIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-weakmap-objects` — WeakMap Objects: exact disposition and partitions missing.
+  - [ ] `sec-weakmap-constructor` — The WeakMap Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakmap-iterable` — WeakMap ( [ _iterable_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weakmap-constructor` — Properties of the WeakMap Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype` — WeakMap.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weakmap-prototype-object` — Properties of the WeakMap Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.constructor` — WeakMap.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.delete` — WeakMap.prototype.delete ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.get` — WeakMap.prototype.get ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.getorinsert` — WeakMap.prototype.getOrInsert ( _key_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.getorinsertcomputed` — WeakMap.prototype.getOrInsertComputed ( _key_, _callback_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.has` — WeakMap.prototype.has ( _key_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype.set` — WeakMap.prototype.set ( _key_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakmap.prototype-%symbol.tostringtag%` — WeakMap.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-weakmap-instances` — Properties of WeakMap Instances: exact disposition and partitions missing.
+  - [ ] `sec-weakset-objects` — WeakSet Objects: exact disposition and partitions missing.
+  - [ ] `sec-weakset-constructor` — The WeakSet Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakset-iterable` — WeakSet ( [ _iterable_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weakset-constructor` — Properties of the WeakSet Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype` — WeakSet.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weakset-prototype-object` — Properties of the WeakSet Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype.add` — WeakSet.prototype.add ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype.constructor` — WeakSet.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype.delete` — WeakSet.prototype.delete ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype.has` — WeakSet.prototype.has ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-weakset.prototype-%symbol.tostringtag%` — WeakSet.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-weakset-instances` — Properties of WeakSet Instances: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-keyed-collections` — Abstract Operations for Keyed Collections: exact disposition and partitions missing.
+  - [ ] `sec-canonicalizekeyedcollectionkey` — CanonicalizeKeyedCollectionKey ( _key_: an ECMAScript language value, ): an ECMAScript language value: exact disposition and partitions missing.
+- [ ] **Structured Data** (`sec-structured-data`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: ArrayBuffer; SharedArrayBuffer; DataView; Atomics; JSON.
+  - Linked local regression evidence: E2E: array_buffer_dataview, json.
+  - Known blockers: Shared memory, Atomics, detachment, and complete JSON semantics are not verified.
+  - [ ] `sec-structured-data` — Structured Data: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer-objects` — ArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer-notation` — Notation: exact disposition and partitions missing.
+  - [ ] `sec-fixed-length-and-resizable-arraybuffer-objects` — Fixed-length and Resizable ArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-arraybuffer-objects` — Abstract Operations For ArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-allocatearraybuffer` — AllocateArrayBuffer ( _constructor_: a constructor, _byteLength_: a non-negative integer, optional _maxByteLength_: a non-negative integer or ~empty~, ): either a normal completion containing an ArrayBuffer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-arraybufferbytelength` — ArrayBufferByteLength ( _arrayBuffer_: an ArrayBuffer or SharedArrayBuffer, _order_: ~seq-cst~ or ~unordered~, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffercopyanddetach` — ArrayBufferCopyAndDetach ( _arrayBuffer_: an ECMAScript language value, _newLength_: an ECMAScript language value, _preserveResizability_: ~preserve-resizability~ or ~fixed-length~, ): either a normal completion containing an ArrayBuffer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isdetachedbuffer` — IsDetachedBuffer ( _arrayBuffer_: an ArrayBuffer or a SharedArrayBuffer, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-detacharraybuffer` — DetachArrayBuffer ( _arrayBuffer_: an ArrayBuffer, optional _key_: anything, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-clonearraybuffer` — CloneArrayBuffer ( _srcBuffer_: an ArrayBuffer or a SharedArrayBuffer, _srcByteOffset_: a non-negative integer, _srcLength_: a non-negative integer, ): either a normal completion containing an ArrayBuffer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getarraybuffermaxbytelengthoption` — GetArrayBufferMaxByteLengthOption ( _options_: an ECMAScript language value, ): either a normal completion containing either a non-negative integer or ~empty~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-hostresizearraybuffer` — HostResizeArrayBuffer ( _buffer_: an ArrayBuffer, _newByteLength_: a non-negative integer, ): either a normal completion containing either ~handled~ or ~unhandled~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-isfixedlengtharraybuffer` — IsFixedLengthArrayBuffer ( _arrayBuffer_: an ArrayBuffer or a SharedArrayBuffer, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isunsignedelementtype` — IsUnsignedElementType ( _type_: a TypedArray element type, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isunclampedintegerelementtype` — IsUnclampedIntegerElementType ( _type_: a TypedArray element type, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isbigintelementtype` — IsBigIntElementType ( _type_: a TypedArray element type, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isnotearconfiguration` — IsNoTearConfiguration ( _type_: a TypedArray element type, _order_: ~seq-cst~, ~unordered~, or ~init~, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-rawbytestonumeric` — RawBytesToNumeric ( _type_: a TypedArray element type, _rawBytes_: a List of byte values, _isLittleEndian_: a Boolean, ): a Number or a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-getrawbytesfromsharedblock` — GetRawBytesFromSharedBlock ( _block_: a Shared Data Block, _byteIndex_: a non-negative integer, _type_: a TypedArray element type, _isTypedArray_: a Boolean, _order_: ~seq-cst~ or ~unordered~, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-getvaluefrombuffer` — GetValueFromBuffer ( _arrayBuffer_: an ArrayBuffer or SharedArrayBuffer, _byteIndex_: a non-negative integer, _type_: a TypedArray element type, _isTypedArray_: a Boolean, _order_: ~seq-cst~ or ~unordered~, optional _isLittleEndian_: a Boolean, ): a Number or a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-numerictorawbytes` — NumericToRawBytes ( _type_: a TypedArray element type, _value_: a Number or a BigInt, _isLittleEndian_: a Boolean, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-setvalueinbuffer` — SetValueInBuffer ( _arrayBuffer_: an ArrayBuffer or SharedArrayBuffer, _byteIndex_: a non-negative integer, _type_: a TypedArray element type, _value_: a Number or a BigInt, _isTypedArray_: a Boolean, _order_: ~seq-cst~, ~unordered~, or ~init~, optional _isLittleEndian_: a Boolean, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-getmodifysetvalueinbuffer` — GetModifySetValueInBuffer ( _arrayBuffer_: an ArrayBuffer or a SharedArrayBuffer, _byteIndex_: a non-negative integer, _type_: a TypedArray element type, _value_: a Number or a BigInt, _op_: a read-modify-write modification function, ): a Number or a BigInt: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer-constructor` — The ArrayBuffer Constructor: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer-length` — ArrayBuffer ( _length_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-arraybuffer-constructor` — Properties of the ArrayBuffer Constructor: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.isview` — ArrayBuffer.isView ( _arg_ ): exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype` — ArrayBuffer.prototype: exact disposition and partitions missing.
+  - [ ] `sec-get-arraybuffer-%symbol.species%` — get ArrayBuffer [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-arraybuffer-prototype-object` — Properties of the ArrayBuffer Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-get-arraybuffer.prototype.bytelength` — get ArrayBuffer.prototype.byteLength: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype.constructor` — ArrayBuffer.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-get-arraybuffer.prototype.detached` — get ArrayBuffer.prototype.detached: exact disposition and partitions missing.
+  - [ ] `sec-get-arraybuffer.prototype.maxbytelength` — get ArrayBuffer.prototype.maxByteLength: exact disposition and partitions missing.
+  - [ ] `sec-get-arraybuffer.prototype.resizable` — get ArrayBuffer.prototype.resizable: exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype.resize` — ArrayBuffer.prototype.resize ( _newLength_ ): exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype.slice` — ArrayBuffer.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype.transfer` — ArrayBuffer.prototype.transfer ( [ _newLength_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype.transfertofixedlength` — ArrayBuffer.prototype.transferToFixedLength ( [ _newLength_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-arraybuffer.prototype-%symbol.tostringtag%` — ArrayBuffer.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-arraybuffer-instances` — Properties of ArrayBuffer Instances: exact disposition and partitions missing.
+  - [ ] `sec-resizable-arraybuffer-guidelines` — Resizable ArrayBuffer Guidelines: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer-objects` — SharedArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-fixed-length-and-growable-sharedarraybuffer-objects` — Fixed-length and Growable SharedArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-sharedarraybuffer-objects` — Abstract Operations for SharedArrayBuffer Objects: exact disposition and partitions missing.
+  - [ ] `sec-allocatesharedarraybuffer` — AllocateSharedArrayBuffer ( _constructor_: a constructor, _byteLength_: a non-negative integer, optional _maxByteLength_: a non-negative integer or ~empty~, ): either a normal completion containing a SharedArrayBuffer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-issharedarraybuffer` — IsSharedArrayBuffer ( _obj_: an ArrayBuffer or a SharedArrayBuffer, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isgrowablesharedarraybuffer` — IsGrowableSharedArrayBuffer ( _obj_: an ArrayBuffer or a SharedArrayBuffer, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-hostgrowsharedarraybuffer` — HostGrowSharedArrayBuffer ( _buffer_: a SharedArrayBuffer, _newByteLength_: a non-negative integer, ): either a normal completion containing either ~handled~ or ~unhandled~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer-constructor` — The SharedArrayBuffer Constructor: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer-length` — SharedArrayBuffer ( _length_ [ , _options_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-sharedarraybuffer-constructor` — Properties of the SharedArrayBuffer Constructor: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer.prototype` — SharedArrayBuffer.prototype: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer-%symbol.species%` — get SharedArrayBuffer [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-sharedarraybuffer-prototype-object` — Properties of the SharedArrayBuffer Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-get-sharedarraybuffer.prototype.bytelength` — get SharedArrayBuffer.prototype.byteLength: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer.prototype.constructor` — SharedArrayBuffer.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer.prototype.grow` — SharedArrayBuffer.prototype.grow ( _newLength_ ): exact disposition and partitions missing.
+  - [ ] `sec-get-sharedarraybuffer.prototype.growable` — get SharedArrayBuffer.prototype.growable: exact disposition and partitions missing.
+  - [ ] `sec-get-sharedarraybuffer.prototype.maxbytelength` — get SharedArrayBuffer.prototype.maxByteLength: exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer.prototype.slice` — SharedArrayBuffer.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-sharedarraybuffer.prototype-%symbol.tostringtag%` — SharedArrayBuffer.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-sharedarraybuffer-instances` — Properties of SharedArrayBuffer Instances: exact disposition and partitions missing.
+  - [ ] `sec-growable-sharedarraybuffer-guidelines` — Growable SharedArrayBuffer Guidelines: exact disposition and partitions missing.
+  - [ ] `sec-dataview-objects` — DataView Objects: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-dataview-objects` — Abstract Operations For DataView Objects: exact disposition and partitions missing.
+  - [ ] `sec-dataview-with-buffer-witness-records` — DataView With Buffer Witness Records: exact disposition and partitions missing.
+  - [ ] `sec-makedataviewwithbufferwitnessrecord` — MakeDataViewWithBufferWitnessRecord ( _obj_: a DataView, _order_: ~seq-cst~ or ~unordered~, ): a DataView With Buffer Witness Record: exact disposition and partitions missing.
+  - [ ] `sec-getviewbytelength` — GetViewByteLength ( _viewRecord_: a DataView With Buffer Witness Record, ): a non-negative integer: exact disposition and partitions missing.
+  - [ ] `sec-isviewoutofbounds` — IsViewOutOfBounds ( _viewRecord_: a DataView With Buffer Witness Record, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-getviewvalue` — GetViewValue ( _view_: an ECMAScript language value, _requestIndex_: an ECMAScript language value, _isLittleEndian_: an ECMAScript language value, _type_: a TypedArray element type, ): either a normal completion containing either a Number or a BigInt, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-setviewvalue` — SetViewValue ( _view_: an ECMAScript language value, _requestIndex_: an ECMAScript language value, _isLittleEndian_: an ECMAScript language value, _type_: a TypedArray element type, _value_: an ECMAScript language value, ): either a normal completion containing undefined or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-dataview-constructor` — The DataView Constructor: exact disposition and partitions missing.
+  - [ ] `sec-dataview-buffer-byteoffset-bytelength` — DataView ( _buffer_ [ , _byteOffset_ [ , _byteLength_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-dataview-constructor` — Properties of the DataView Constructor: exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype` — DataView.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-dataview-prototype-object` — Properties of the DataView Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-get-dataview.prototype.buffer` — get DataView.prototype.buffer: exact disposition and partitions missing.
+  - [ ] `sec-get-dataview.prototype.bytelength` — get DataView.prototype.byteLength: exact disposition and partitions missing.
+  - [ ] `sec-get-dataview.prototype.byteoffset` — get DataView.prototype.byteOffset: exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.constructor` — DataView.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getbigint64` — DataView.prototype.getBigInt64 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getbiguint64` — DataView.prototype.getBigUint64 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getfloat16` — DataView.prototype.getFloat16 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getfloat32` — DataView.prototype.getFloat32 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getfloat64` — DataView.prototype.getFloat64 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getint8` — DataView.prototype.getInt8 ( _byteOffset_ ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getint16` — DataView.prototype.getInt16 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getint32` — DataView.prototype.getInt32 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getuint8` — DataView.prototype.getUint8 ( _byteOffset_ ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getuint16` — DataView.prototype.getUint16 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.getuint32` — DataView.prototype.getUint32 ( _byteOffset_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setbigint64` — DataView.prototype.setBigInt64 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setbiguint64` — DataView.prototype.setBigUint64 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setfloat16` — DataView.prototype.setFloat16 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setfloat32` — DataView.prototype.setFloat32 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setfloat64` — DataView.prototype.setFloat64 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setint8` — DataView.prototype.setInt8 ( _byteOffset_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setint16` — DataView.prototype.setInt16 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setint32` — DataView.prototype.setInt32 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setuint8` — DataView.prototype.setUint8 ( _byteOffset_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setuint16` — DataView.prototype.setUint16 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype.setuint32` — DataView.prototype.setUint32 ( _byteOffset_, _value_ [ , _littleEndian_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-dataview.prototype-%symbol.tostringtag%` — DataView.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-dataview-instances` — Properties of DataView Instances: exact disposition and partitions missing.
+  - [ ] `sec-atomics-object` — The Atomics Object: exact disposition and partitions missing.
+  - [ ] `sec-waiter-record` — Waiter Record: exact disposition and partitions missing.
+  - [ ] `sec-waiterlist-records` — WaiterList Records: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-atomics` — Abstract Operations for Atomics: exact disposition and partitions missing.
+  - [ ] `sec-validateintegertypedarray` — ValidateIntegerTypedArray ( _typedArray_: an ECMAScript language value, _waitable_: a Boolean, ): either a normal completion containing a TypedArray With Buffer Witness Record, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-validateatomicaccess` — ValidateAtomicAccess ( _taRecord_: a TypedArray With Buffer Witness Record, _requestIndex_: an ECMAScript language value, ): either a normal completion containing an integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-validateatomicaccessonintegertypedarray` — ValidateAtomicAccessOnIntegerTypedArray ( _typedArray_: an ECMAScript language value, _requestIndex_: an ECMAScript language value, ): either a normal completion containing an integer or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-revalidateatomicaccess` — RevalidateAtomicAccess ( _typedArray_: a TypedArray, _byteIndexInBuffer_: an integer, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getwaiterlist` — GetWaiterList ( _block_: a Shared Data Block, _i_: a non-negative integer that is evenly divisible by 4, ): a WaiterList Record: exact disposition and partitions missing.
+  - [ ] `sec-entercriticalsection` — EnterCriticalSection ( _WL_: a WaiterList Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-leavecriticalsection` — LeaveCriticalSection ( _WL_: a WaiterList Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-addwaiter` — AddWaiter ( _WL_: a WaiterList Record, _waiterRecord_: a Waiter Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-removewaiter` — RemoveWaiter ( _WL_: a WaiterList Record, _waiterRecord_: a Waiter Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-removewaiters` — RemoveWaiters ( _WL_: a WaiterList Record, _c_: a non-negative integer or +&infin;, ): a List of Waiter Records: exact disposition and partitions missing.
+  - [ ] `sec-suspendthisagent` — SuspendThisAgent ( _WL_: a WaiterList Record, _waiterRecord_: a Waiter Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-notifywaiter` — NotifyWaiter ( _WL_: a WaiterList Record, _waiterRecord_: a Waiter Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-enqueueresolveinagentjob` — EnqueueResolveInAgentJob ( _agentSignifier_: an agent signifier, _promiseCapability_: a PromiseCapability Record, _resolution_: "ok" or "timed-out", ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-dowait` — DoWait ( _mode_: ~sync~ or ~async~, _typedArray_: an ECMAScript language value, _index_: an ECMAScript language value, _value_: an ECMAScript language value, _timeout_: an ECMAScript language value, ): either a normal completion containing either an Object, "not-equal", "timed-out", or "ok", or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-enqueueatomicswaitasynctimeoutjob` — EnqueueAtomicsWaitAsyncTimeoutJob ( _WL_: a WaiterList Record, _waiterRecord_: a Waiter Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-atomiccompareexchangeinsharedblock` — AtomicCompareExchangeInSharedBlock ( _block_: a Shared Data Block, _byteIndexInBuffer_: an integer, _elementSize_: a non-negative integer, _expectedBytes_: a List of byte values, _replacementBytes_: a List of byte values, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-atomicreadmodifywrite` — AtomicReadModifyWrite ( _typedArray_: an ECMAScript language value, _index_: an ECMAScript language value, _value_: an ECMAScript language value, _op_: a read-modify-write modification function, ): either a normal completion containing either a Number or a BigInt, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-bytelistbitwiseop` — ByteListBitwiseOp ( _op_: &, ^, or |, _xBytes_: a List of byte values, _yBytes_: a List of byte values, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-bytelistequal` — ByteListEqual ( _xBytes_: a List of byte values, _yBytes_: a List of byte values, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-atomics.add` — Atomics.add ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.and` — Atomics.and ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.compareexchange` — Atomics.compareExchange ( _typedArray_, _index_, _expectedValue_, _replacementValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.exchange` — Atomics.exchange ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.islockfree` — Atomics.isLockFree ( _size_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.load` — Atomics.load ( _typedArray_, _index_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.or` — Atomics.or ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.store` — Atomics.store ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.sub` — Atomics.sub ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.wait` — Atomics.wait ( _typedArray_, _index_, _value_, _timeout_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.waitasync` — Atomics.waitAsync ( _typedArray_, _index_, _value_, _timeout_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.notify` — Atomics.notify ( _typedArray_, _index_, _count_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics.xor` — Atomics.xor ( _typedArray_, _index_, _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-atomics-%symbol.tostringtag%` — Atomics [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-json-object` — The JSON Object: exact disposition and partitions missing.
+  - [ ] `sec-json.israwjson` — JSON.isRawJSON ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-json.parse` — JSON.parse ( _text_ [ , _reviver_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-ParseJSON` — ParseJSON ( _text_: a String, ): either a normal completion containing a Record with fields [[ParseNode]] (a Parse Node) and [[Value]] (an ECMAScript language value), or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-json-parse-record` — JSON Parse Record: exact disposition and partitions missing.
+  - [ ] `sec-createjsonparserecord` — CreateJSONParseRecord ( _parseNode_: a Parse Node, _key_: a property name, _val_: an ECMAScript language value, ): a JSON Parse Record: exact disposition and partitions missing.
+  - [ ] `sec-internalizejsonproperty` — InternalizeJSONProperty ( _holder_: an Object, _name_: a String, _reviver_: a function object, _parseRecord_: a JSON Parse Record or ~empty~, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-shallowestcontainedjsonvalue` — Static Semantics: ShallowestContainedJSONValue ( _root_: a Parse Node, ): a Parse Node or ~empty~: exact disposition and partitions missing.
+  - [ ] `sec-static-semantics-jsonarrayliteralcontentnodes` — Static Semantics: JSONArrayLiteralContentNodes ( ): a List of Parse Nodes: exact disposition and partitions missing.
+  - [ ] `sec-json.rawjson` — JSON.rawJSON ( _text_ ): exact disposition and partitions missing.
+  - [ ] `sec-json.stringify` — JSON.stringify ( _value_ [ , _replacer_ [ , _space_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-json-serialization-record` — JSON Serialization Record: exact disposition and partitions missing.
+  - [ ] `sec-serializejsonproperty` — SerializeJSONProperty ( _state_: a JSON Serialization Record, _key_: a String, _holder_: an Object, ): either a normal completion containing either a String or undefined, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-quotejsonstring` — QuoteJSONString ( _value_: a String, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-unicodeescape` — UnicodeEscape ( _C_: a code unit, ): a String: exact disposition and partitions missing.
+  - [ ] `sec-serializejsonobject` — SerializeJSONObject ( _state_: a JSON Serialization Record, _value_: an Object, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-serializejsonarray` — SerializeJSONArray ( _state_: a JSON Serialization Record, _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-json-%symbol.tostringtag%` — JSON [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+- [ ] **Managing Memory** (`sec-managing-memory`) — tracking: `todo`, scope: `required`
+  - Semantic partitions: WeakRef; FinalizationRegistry; cleanup jobs; implementation-defined collection timing.
+  - Linked local regression evidence: E2E: weak_ref.
+  - Known blockers: The Test262 host lacks the required gc hook and finalization job protocol.
+  - [ ] `sec-managing-memory` — Managing Memory: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref-objects` — WeakRef Objects: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref-constructor` — The WeakRef Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref-target` — WeakRef ( _target_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weak-ref-constructor` — Properties of the WeakRef Constructor: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref.prototype` — WeakRef.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-weak-ref-prototype-object` — Properties of the WeakRef Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref.prototype.constructor` — WeakRef.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-weak-ref.prototype.deref` — WeakRef.prototype.deref ( ): exact disposition and partitions missing.
+  - [ ] `sec-weak-ref.prototype-%symbol.tostringtag%` — WeakRef.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-weakref-abstract-operations` — WeakRef Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-weakrefderef` — WeakRefDeref ( _weakRef_: a WeakRef, ): an ECMAScript language value: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-weak-ref-instances` — Properties of WeakRef Instances: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry-objects` — FinalizationRegistry Objects: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry-constructor` — The FinalizationRegistry Constructor: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry-cleanup-callback` — FinalizationRegistry ( _cleanupCallback_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-finalization-registry-constructor` — Properties of the FinalizationRegistry Constructor: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry.prototype` — FinalizationRegistry.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-finalization-registry-prototype-object` — Properties of the FinalizationRegistry Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry.prototype.constructor` — FinalizationRegistry.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry.prototype.register` — FinalizationRegistry.prototype.register ( _target_, _heldValue_ [ , _unregisterToken_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry.prototype.unregister` — FinalizationRegistry.prototype.unregister ( _unregisterToken_ ): exact disposition and partitions missing.
+  - [ ] `sec-finalization-registry.prototype-%symbol.tostringtag%` — FinalizationRegistry.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-finalization-registry-instances` — Properties of FinalizationRegistry Instances: exact disposition and partitions missing.
+- [ ] **Control Abstraction Objects** (`sec-control-abstraction-objects`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: iterators; generators; promises and jobs; async functions and generators; disposable resources.
+  - Linked local regression evidence: generated regression: async-leading-await-chain, async-binding-default-depth; stress: async-leading-await-chain; E2E: array_from_async, promise_combinators_dynamic.
+  - Known blockers: General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete.
+  - [ ] `sec-control-abstraction-objects` — Control Abstraction Objects: exact disposition and partitions missing.
+  - [ ] `sec-iteration` — Iteration: exact disposition and partitions missing.
+  - [ ] `sec-common-iteration-interfaces` — Common Iteration Interfaces: exact disposition and partitions missing.
+  - [ ] `sec-iterable-interface` — The Iterable Interface: exact disposition and partitions missing.
+  - [ ] `sec-iterator-interface` — The Iterator Interface: exact disposition and partitions missing.
+  - [ ] `sec-asynciterable-interface` — The Async Iterable Interface: exact disposition and partitions missing.
+  - [ ] `sec-asynciterator-interface` — The Async Iterator Interface: exact disposition and partitions missing.
+  - [ ] `sec-iteratorresult-interface` — The IteratorResult Interface: exact disposition and partitions missing.
+  - [ ] `sec-iterator-helper-objects` — Iterator Helper Objects: exact disposition and partitions missing.
+  - [ ] `sec-%iteratorhelperprototype%-object` — The %IteratorHelperPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%iteratorhelperprototype%.next` — %IteratorHelperPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%iteratorhelperprototype%.return` — %IteratorHelperPrototype%.return ( ): exact disposition and partitions missing.
+  - [ ] `sec-%iteratorhelperprototype%-%symbol.tostringtag%` — %IteratorHelperPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-iterator-objects` — Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-iterator-constructor` — The Iterator Constructor: exact disposition and partitions missing.
+  - [ ] `sec-iterator` — Iterator ( ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-iterator-constructor` — Properties of the Iterator Constructor: exact disposition and partitions missing.
+  - [ ] `sec-iterator.concat` — Iterator.concat ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.from` — Iterator.from ( _O_ ): exact disposition and partitions missing.
+  - [ ] `sec-%wrapforvaliditeratorprototype%-object` — The %WrapForValidIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%wrapforvaliditeratorprototype%.next` — %WrapForValidIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%wrapforvaliditeratorprototype%.return` — %WrapForValidIteratorPrototype%.return ( ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype` — Iterator.prototype: exact disposition and partitions missing.
+  - [ ] `sec-%iterator.prototype%-object` — Properties of the Iterator Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.constructor` — Iterator.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-get-iterator.prototype.constructor` — get Iterator.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-set-iterator.prototype.constructor` — set Iterator.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.drop` — Iterator.prototype.drop ( _limit_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.every` — Iterator.prototype.every ( _predicate_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.filter` — Iterator.prototype.filter ( _predicate_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.find` — Iterator.prototype.find ( _predicate_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.flatmap` — Iterator.prototype.flatMap ( _mapper_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.foreach` — Iterator.prototype.forEach ( _procedure_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.map` — Iterator.prototype.map ( _mapper_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.reduce` — Iterator.prototype.reduce ( _reducer_ [ , _initialValue_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.some` — Iterator.prototype.some ( _predicate_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.take` — Iterator.prototype.take ( _limit_ ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype.toarray` — Iterator.prototype.toArray ( ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype-%symbol.iterator%` — Iterator.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-iterator.prototype-%symbol.tostringtag%` — Iterator.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-get-iterator.prototype-%symbol.tostringtag%` — get Iterator.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-set-iterator.prototype-%symbol.tostringtag%` — set Iterator.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-asynciteratorprototype` — The %AsyncIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%asynciteratorprototype%-%symbol.asynciterator%` — %AsyncIteratorPrototype% [ %Symbol.asyncIterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-async-from-sync-iterator-objects` — Async-from-Sync Iterator Objects: exact disposition and partitions missing.
+  - [ ] `sec-createasyncfromsynciterator` — CreateAsyncFromSyncIterator ( _syncIteratorRecord_: an Iterator Record, ): an Iterator Record: exact disposition and partitions missing.
+  - [ ] `sec-%asyncfromsynciteratorprototype%-object` — The %AsyncFromSyncIteratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-%asyncfromsynciteratorprototype%.next` — %AsyncFromSyncIteratorPrototype%.next ( [ _value_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%asyncfromsynciteratorprototype%.return` — %AsyncFromSyncIteratorPrototype%.return ( [ _value_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-%asyncfromsynciteratorprototype%.throw` — %AsyncFromSyncIteratorPrototype%.throw ( [ _value_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-async-from-sync-iterator-instances` — Properties of Async-from-Sync Iterator Instances: exact disposition and partitions missing.
+  - [ ] `sec-asyncfromsynciteratorcontinuation` — AsyncFromSyncIteratorContinuation ( _result_: an Object, _promiseCapability_: a PromiseCapability Record for an intrinsic %Promise%, _syncIteratorRecord_: an Iterator Record, _closeOnRejection_: a Boolean, ): a Promise: exact disposition and partitions missing.
+  - [ ] `sec-promise-objects` — Promise Objects: exact disposition and partitions missing.
+  - [ ] `sec-promise-abstract-operations` — Promise Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-promisecapability-records` — PromiseCapability Records: exact disposition and partitions missing.
+  - [ ] `sec-ifabruptrejectpromise` — IfAbruptRejectPromise ( _value_, _capability_ ): exact disposition and partitions missing.
+  - [ ] `sec-promisereaction-records` — PromiseReaction Records: exact disposition and partitions missing.
+  - [ ] `sec-createresolvingfunctions` — CreateResolvingFunctions ( _toResolve_: a Promise, ): a Record with fields [[Resolve]] (a function object) and [[Reject]] (a function object): exact disposition and partitions missing.
+  - [ ] `sec-fulfillpromise` — FulfillPromise ( _promise_: a Promise, _value_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-newpromisecapability` — NewPromiseCapability ( _C_: an ECMAScript language value, ): either a normal completion containing a PromiseCapability Record or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-ispromise` — IsPromise ( _x_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-rejectpromise` — RejectPromise ( _promise_: a Promise, _reason_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-triggerpromisereactions` — TriggerPromiseReactions ( _reactions_: a List of PromiseReaction Records, _argument_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-host-promise-rejection-tracker` — HostPromiseRejectionTracker ( _promise_: a Promise, _operation_: "reject" or "handle", ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-promise-jobs` — Promise Jobs: exact disposition and partitions missing.
+  - [ ] `sec-newpromisereactionjob` — NewPromiseReactionJob ( _reaction_: a PromiseReaction Record, _argument_: an ECMAScript language value, ): a Record with fields [[Job]] (a Job Abstract Closure) and [[Realm]] (a Realm Record or null): exact disposition and partitions missing.
+  - [ ] `sec-newpromiseresolvethenablejob` — NewPromiseResolveThenableJob ( _promiseToResolve_: a Promise, _thenable_: an Object, _then_: a JobCallback Record, ): a Record with fields [[Job]] (a Job Abstract Closure) and [[Realm]] (a Realm Record): exact disposition and partitions missing.
+  - [ ] `sec-promise-constructor` — The Promise Constructor: exact disposition and partitions missing.
+  - [ ] `sec-promise-executor` — Promise ( _executor_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-promise-constructor` — Properties of the Promise Constructor: exact disposition and partitions missing.
+  - [ ] `sec-promise.all` — Promise.all ( _iterable_ ): exact disposition and partitions missing.
+  - [ ] `sec-getpromiseresolve` — GetPromiseResolve ( _promiseConstructor_: a constructor, ): either a normal completion containing a function object or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-performpromiseall` — PerformPromiseAll ( _iteratorRecord_: an Iterator Record, _constructor_: a constructor, _resultCapability_: a PromiseCapability Record, _promiseResolve_: a function object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-promise.allsettled` — Promise.allSettled ( _iterable_ ): exact disposition and partitions missing.
+  - [ ] `sec-performpromiseallsettled` — PerformPromiseAllSettled ( _iteratorRecord_: an Iterator Record, _constructor_: a constructor, _resultCapability_: a PromiseCapability Record, _promiseResolve_: a function object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-promise.any` — Promise.any ( _iterable_ ): exact disposition and partitions missing.
+  - [ ] `sec-performpromiseany` — PerformPromiseAny ( _iteratorRecord_: an Iterator Record, _constructor_: a constructor, _resultCapability_: a PromiseCapability Record, _promiseResolve_: a function object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype` — Promise.prototype: exact disposition and partitions missing.
+  - [ ] `sec-promise.race` — Promise.race ( _iterable_ ): exact disposition and partitions missing.
+  - [ ] `sec-performpromiserace` — PerformPromiseRace ( _iteratorRecord_: an Iterator Record, _constructor_: a constructor, _resultCapability_: a PromiseCapability Record, _promiseResolve_: a function object, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-promise.reject` — Promise.reject ( _r_ ): exact disposition and partitions missing.
+  - [ ] `sec-promise.resolve` — Promise.resolve ( _x_ ): exact disposition and partitions missing.
+  - [ ] `sec-promise-resolve` — PromiseResolve ( _C_: an Object, _x_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-promise.try` — Promise.try ( _callback_, ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-promise.withResolvers` — Promise.withResolvers ( ): exact disposition and partitions missing.
+  - [ ] `sec-get-promise-%symbol.species%` — get Promise [ %Symbol.species% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-promise-prototype-object` — Properties of the Promise Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype.catch` — Promise.prototype.catch ( _onRejected_ ): exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype.constructor` — Promise.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype.finally` — Promise.prototype.finally ( _onFinally_ ): exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype.then` — Promise.prototype.then ( _onFulfilled_, _onRejected_ ): exact disposition and partitions missing.
+  - [ ] `sec-performpromisethen` — PerformPromiseThen ( _promise_: a Promise, _onFulfilled_: an ECMAScript language value, _onRejected_: an ECMAScript language value, optional _resultCapability_: a PromiseCapability Record, ): an ECMAScript language value: exact disposition and partitions missing.
+  - [ ] `sec-promise.prototype-%symbol.tostringtag%` — Promise.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-promise-instances` — Properties of Promise Instances: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-objects` — GeneratorFunction Objects: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-constructor` — The GeneratorFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction` — GeneratorFunction ( ..._parameterArgs_, _bodyArg_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-generatorfunction-constructor` — Properties of the GeneratorFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction.prototype` — GeneratorFunction.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-generatorfunction-prototype-object` — Properties of the GeneratorFunction Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction.prototype.constructor` — GeneratorFunction.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction.prototype.prototype` — GeneratorFunction.prototype.prototype: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction.prototype-%symbol.tostringtag%` — GeneratorFunction.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-instances` — GeneratorFunction Instances: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-instances-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-instances-name` — name: exact disposition and partitions missing.
+  - [ ] `sec-generatorfunction-instances-prototype` — prototype: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-objects` — AsyncGeneratorFunction Objects: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-constructor` — The AsyncGeneratorFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction` — AsyncGeneratorFunction ( ..._parameterArgs_, _bodyArg_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-asyncgeneratorfunction` — Properties of the AsyncGeneratorFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-prototype` — AsyncGeneratorFunction.prototype: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-asyncgeneratorfunction-prototype` — Properties of the AsyncGeneratorFunction Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-prototype-constructor` — AsyncGeneratorFunction.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-prototype-prototype` — AsyncGeneratorFunction.prototype.prototype: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-prototype-%symbol.tostringtag%` — AsyncGeneratorFunction.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-instances` — AsyncGeneratorFunction Instances: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-instance-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-instance-name` — name: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorfunction-instance-prototype` — prototype: exact disposition and partitions missing.
+  - [ ] `sec-generator-objects` — Generator Objects: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-generator-prototype` — The %GeneratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-generator.prototype.constructor` — %GeneratorPrototype%.constructor: exact disposition and partitions missing.
+  - [ ] `sec-generator.prototype.next` — %GeneratorPrototype%.next ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-generator.prototype.return` — %GeneratorPrototype%.return ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-generator.prototype.throw` — %GeneratorPrototype%.throw ( _exception_ ): exact disposition and partitions missing.
+  - [ ] `sec-generator.prototype-%symbol.tostringtag%` — %GeneratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-generator-instances` — Properties of Generator Instances: exact disposition and partitions missing.
+  - [ ] `sec-generator-abstract-operations` — Generator Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-generatorstart` — GeneratorStart ( _generator_: a Generator, _generatorBody_: a |FunctionBody| Parse Node or an Abstract Closure with no parameters, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-generatorvalidate` — GeneratorValidate ( _generator_: an ECMAScript language value, _generatorBrand_: a String or ~empty~, ): either a normal completion containing one of ~suspended-start~, ~suspended-yield~, or ~completed~, or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-generatorresume` — GeneratorResume ( _generator_: an ECMAScript language value, _value_: an ECMAScript language value or ~empty~, _generatorBrand_: a String or ~empty~, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-generatorresumeabrupt` — GeneratorResumeAbrupt ( _generator_: an ECMAScript language value, _abruptCompletion_: a return completion or a throw completion, _generatorBrand_: a String or ~empty~, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-getgeneratorkind` — GetGeneratorKind ( ): ~non-generator~, ~sync~, or ~async~: exact disposition and partitions missing.
+  - [ ] `sec-generatoryield` — GeneratorYield ( _iteratorResult_: an Object that conforms to the IteratorResult interface, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-yield` — Yield ( _value_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-createiteratorfromclosure` — CreateIteratorFromClosure ( _closure_: an Abstract Closure with no parameters, _generatorBrand_: a String or ~empty~, _generatorPrototype_: an Object, optional _extraSlots_: a List of names of internal slots, ): a Generator: exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-objects` — AsyncGenerator Objects: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-asyncgenerator-prototype` — The %AsyncGeneratorPrototype% Object: exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-prototype-constructor` — %AsyncGeneratorPrototype%.constructor: exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-prototype-next` — %AsyncGeneratorPrototype%.next ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-prototype-return` — %AsyncGeneratorPrototype%.return ( _value_ ): exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-prototype-throw` — %AsyncGeneratorPrototype%.throw ( _exception_ ): exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-prototype-%symbol.tostringtag%` — %AsyncGeneratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-asyncgenerator-intances` — Properties of AsyncGenerator Instances: exact disposition and partitions missing.
+  - [ ] `sec-asyncgenerator-abstract-operations` — AsyncGenerator Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorrequest-records` — AsyncGeneratorRequest Records: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorstart` — AsyncGeneratorStart ( _generator_: an AsyncGenerator, _generatorBody_: a |FunctionBody| Parse Node or an Abstract Closure with no parameters, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorvalidate` — AsyncGeneratorValidate ( _generator_: an ECMAScript language value, _generatorBrand_: a String or ~empty~, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorenqueue` — AsyncGeneratorEnqueue ( _generator_: an AsyncGenerator, _completion_: a Completion Record, _promiseCapability_: a PromiseCapability Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorcompletestep` — AsyncGeneratorCompleteStep ( _generator_: an AsyncGenerator, _completion_: a Completion Record, _done_: a Boolean, optional _realm_: a Realm Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorresume` — AsyncGeneratorResume ( _generator_: an AsyncGenerator, _completion_: a Completion Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorunwrapyieldresumption` — AsyncGeneratorUnwrapYieldResumption ( _resumptionValue_: a Completion Record, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratoryield` — AsyncGeneratorYield ( _value_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratorawaitreturn` — AsyncGeneratorAwaitReturn ( _generator_: an AsyncGenerator, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncgeneratordrainqueue` — AsyncGeneratorDrainQueue ( _generator_: an AsyncGenerator, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-async-function-objects` — AsyncFunction Objects: exact disposition and partitions missing.
+  - [ ] `sec-async-function-constructor` — The AsyncFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-async-function-constructor-arguments` — AsyncFunction ( ..._parameterArgs_, _bodyArg_ ): exact disposition and partitions missing.
+  - [ ] `sec-async-function-constructor-properties` — Properties of the AsyncFunction Constructor: exact disposition and partitions missing.
+  - [ ] `sec-async-function-constructor-prototype` — AsyncFunction.prototype: exact disposition and partitions missing.
+  - [ ] `sec-async-function-prototype-properties` — Properties of the AsyncFunction Prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-async-function-prototype-properties-constructor` — AsyncFunction.prototype.constructor: exact disposition and partitions missing.
+  - [ ] `sec-async-function-prototype-%symbol.tostringtag%` — AsyncFunction.prototype [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-async-function-instances` — AsyncFunction Instances: exact disposition and partitions missing.
+  - [ ] `sec-async-function-instances-length` — length: exact disposition and partitions missing.
+  - [ ] `sec-async-function-instances-name` — name: exact disposition and partitions missing.
+  - [ ] `sec-async-functions-abstract-operations` — Async Functions Abstract Operations: exact disposition and partitions missing.
+  - [ ] `sec-async-functions-abstract-operations-async-function-start` — AsyncFunctionStart ( _promiseCapability_: a PromiseCapability Record, _asyncFunctionBody_: a |FunctionBody| Parse Node, an |ExpressionBody| Parse Node, or an Abstract Closure with no parameters, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-asyncblockstart` — AsyncBlockStart ( _promiseCapability_: a PromiseCapability Record, _asyncBody_: a Parse Node or an Abstract Closure with no parameters, _asyncContext_: an execution context, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `await` — Await ( _value_: an ECMAScript language value, ): either a normal completion containing either an ECMAScript language value or ~empty~, or a throw completion: exact disposition and partitions missing.
+- [ ] **Reflection** (`sec-reflection`) — tracking: `in-progress`, scope: `required`
+  - Semantic partitions: Reflect internal-method forwarding; Proxy traps; invariants and revocation.
+  - Linked local regression evidence: E2E: reflect_dynamic, proxy.
+  - Known blockers: Proxy invariant and abrupt-completion partitions remain unverified.
+  - [ ] `sec-reflection` — Reflection: exact disposition and partitions missing.
+  - [ ] `sec-reflect-object` — The Reflect Object: exact disposition and partitions missing.
+  - [ ] `sec-reflect.apply` — Reflect.apply ( _target_, _thisArgument_, _argumentsList_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.construct` — Reflect.construct ( _target_, _argumentsList_ [ , _newTarget_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.defineproperty` — Reflect.defineProperty ( _target_, _propertyKey_, _attributes_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.deleteproperty` — Reflect.deleteProperty ( _target_, _propertyKey_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.get` — Reflect.get ( _target_, _propertyKey_ [ , _receiver_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.getownpropertydescriptor` — Reflect.getOwnPropertyDescriptor ( _target_, _propertyKey_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.getprototypeof` — Reflect.getPrototypeOf ( _target_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.has` — Reflect.has ( _target_, _propertyKey_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.isextensible` — Reflect.isExtensible ( _target_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.ownkeys` — Reflect.ownKeys ( _target_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.preventextensions` — Reflect.preventExtensions ( _target_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.set` — Reflect.set ( _target_, _propertyKey_, _V_ [ , _receiver_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.setprototypeof` — Reflect.setPrototypeOf ( _target_, _proto_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect-%symbol.tostringtag%` — Reflect [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
+  - [ ] `sec-proxy-objects` — Proxy Objects: exact disposition and partitions missing.
+  - [ ] `sec-proxy-constructor` — The Proxy Constructor: exact disposition and partitions missing.
+  - [ ] `sec-proxy-target-handler` — Proxy ( _target_, _handler_ ): exact disposition and partitions missing.
+  - [ ] `sec-properties-of-the-proxy-constructor` — Properties of the Proxy Constructor: exact disposition and partitions missing.
+  - [ ] `sec-proxy.revocable` — Proxy.revocable ( _target_, _handler_ ): exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-objects` — Module Namespace Objects: exact disposition and partitions missing.
+  - [ ] `sec-%symbol.tostringtag%` — %Symbol.toStringTag%: exact disposition and partitions missing.
+- [ ] **Memory Model** (`sec-memory-model`) — tracking: `todo`, scope: `required`
+  - Semantic partitions: happens-before; tear-free reads; data races; Atomics synchronization.
+  - Linked local regression evidence: none linked yet.
+  - Known blockers: The Test262 host lacks agents and the project has no complete ECMAScript shared-memory implementation.
+  - [ ] `sec-memory-model` — Memory Model: exact disposition and partitions missing.
+  - [ ] `sec-memory-model-fundamentals` — Memory Model Fundamentals: exact disposition and partitions missing.
+  - [ ] `sec-agent-event-records` — Agent Events Records: exact disposition and partitions missing.
+  - [ ] `sec-chosen-value-records` — Chosen Value Records: exact disposition and partitions missing.
+  - [ ] `sec-candidate-executions` — Candidate Executions: exact disposition and partitions missing.
+  - [ ] `sec-abstract-operations-for-the-memory-model` — Abstract Operations for the Memory Model: exact disposition and partitions missing.
+  - [ ] `sec-event-set` — EventSet ( _execution_: a candidate execution, ): a Set of Memory events: exact disposition and partitions missing.
+  - [ ] `sec-sharedatablockeventset` — SharedDataBlockEventSet ( _execution_: a candidate execution, ): a Set of Shared Data Block events: exact disposition and partitions missing.
+  - [ ] `sec-hosteventset` — HostEventSet ( _execution_: a candidate execution, ): a Set of Memory events: exact disposition and partitions missing.
+  - [ ] `sec-composewriteeventbytes` — ComposeWriteEventBytes ( _execution_: a candidate execution, _byteIndex_: a non-negative integer, _Ws_: a List of either WriteSharedMemory or ReadModifyWriteSharedMemory events, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-valueofreadevent` — ValueOfReadEvent ( _execution_: a candidate execution, _R_: a ReadSharedMemory or ReadModifyWriteSharedMemory event, ): a List of byte values: exact disposition and partitions missing.
+  - [ ] `sec-relations-of-candidate-executions` — Relations of Candidate Executions: exact disposition and partitions missing.
+  - [ ] `sec-agent-order` — is-agent-order-before: exact disposition and partitions missing.
+  - [ ] `sec-reads-bytes-from` — reads-bytes-from: exact disposition and partitions missing.
+  - [ ] `sec-reads-from` — reads-from: exact disposition and partitions missing.
+  - [ ] `sec-host-synchronizes-with` — host-synchronizes-with: exact disposition and partitions missing.
+  - [ ] `sec-synchronizes-with` — synchronizes-with: exact disposition and partitions missing.
+  - [ ] `sec-happens-before` — happens-before: exact disposition and partitions missing.
+  - [ ] `sec-properties-of-valid-executions` — Properties of Valid Executions: exact disposition and partitions missing.
+  - [ ] `sec-valid-chosen-reads` — Valid Chosen Reads: exact disposition and partitions missing.
+  - [ ] `sec-coherent-reads` — Coherent Reads: exact disposition and partitions missing.
+  - [ ] `sec-tear-free-aligned-reads` — Tear Free Reads: exact disposition and partitions missing.
+  - [ ] `sec-memory-order` — Sequentially Consistent Atomics: exact disposition and partitions missing.
+  - [ ] `sec-valid-executions` — Valid Executions: exact disposition and partitions missing.
+  - [ ] `sec-races` — Races: exact disposition and partitions missing.
+  - [ ] `sec-data-races` — Data Races: exact disposition and partitions missing.
+  - [ ] `sec-data-race-freedom` — Data Race Freedom: exact disposition and partitions missing.
+  - [ ] `sec-shared-memory-guidelines` — Shared Memory Guidelines: exact disposition and partitions missing.
+- [ ] **Normative Annex B — Additional ECMAScript Features for Web Browsers** (`sec-additional-ecmascript-features-for-web-browsers`) — tracking: `todo`, scope: `required`
+  - Semantic partitions: legacy syntax; legacy built-ins; web compatibility semantics; IsHTMLDDA.
+  - Linked local regression evidence: E2E: string_substr, string_trim_aliases.
+  - Known blockers: An unqualified claim includes Annex B here; IsHTMLDDA and the remaining legacy surface are not implemented.
+  - [ ] `sec-additional-ecmascript-features-for-web-browsers` — Additional ECMAScript Features for Web Browsers: exact disposition and partitions missing.
+  - [ ] `sec-additional-syntax` — Additional Syntax: exact disposition and partitions missing.
+  - [ ] `sec-html-like-comments` — HTML-like Comments: exact disposition and partitions missing.
+  - [ ] `sec-regular-expressions-patterns` — Regular Expressions Patterns: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-early-errors-annexb` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-countleftcapturingparens-annexb` — Static Semantics: CountLeftCapturingParensWithin and CountLeftCapturingParensBefore: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-is-character-class-annexb` — Static Semantics: IsCharacterClass: exact disposition and partitions missing.
+  - [ ] `sec-patterns-static-semantics-character-value-annexb` — Static Semantics: CharacterValue: exact disposition and partitions missing.
+  - [ ] `sec-compilesubpattern-annexb` — Runtime Semantics: CompileSubpattern: exact disposition and partitions missing.
+  - [ ] `sec-compileassertion-annexb` — Runtime Semantics: CompileAssertion: exact disposition and partitions missing.
+  - [ ] `sec-compileatom-annexb` — Runtime Semantics: CompileAtom: exact disposition and partitions missing.
+  - [ ] `sec-compiletocharset-annexb` — Runtime Semantics: CompileToCharSet: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-characterrangeorunion-abstract-operation` — CharacterRangeOrUnion ( _rer_: a RegExp Record, _A_: a CharSet, _B_: a CharSet, ): a CharSet: exact disposition and partitions missing.
+  - [ ] `sec-parsepattern-annexb` — Static Semantics: ParsePattern ( _patternText_, _u_, _v_ ): exact disposition and partitions missing.
+  - [ ] `sec-additional-built-in-properties` — Additional Built-in Properties: exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-global-object` — Additional Properties of the Global Object: exact disposition and partitions missing.
+  - [ ] `sec-escape-string` — escape ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-unescape-string` — unescape ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-string.prototype-object` — Additional Properties of the String.prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.substr` — String.prototype.substr ( _start_, _length_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.anchor` — String.prototype.anchor ( _name_ ): exact disposition and partitions missing.
+  - [ ] `sec-createhtml` — CreateHTML ( _string_: an ECMAScript language value, _tag_: a String, _attribute_: a String, _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.big` — String.prototype.big ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.blink` — String.prototype.blink ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.bold` — String.prototype.bold ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.fixed` — String.prototype.fixed ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.fontcolor` — String.prototype.fontcolor ( _colour_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.fontsize` — String.prototype.fontsize ( _size_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.italics` — String.prototype.italics ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.link` — String.prototype.link ( _url_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.small` — String.prototype.small ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.strike` — String.prototype.strike ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.sub` — String.prototype.sub ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.sup` — String.prototype.sup ( ): exact disposition and partitions missing.
+  - [ ] `String.prototype.trimleft` — String.prototype.trimLeft ( ): exact disposition and partitions missing.
+  - [ ] `String.prototype.trimright` — String.prototype.trimRight ( ): exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-date.prototype-object` — Additional Properties of the Date.prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.getyear` — Date.prototype.getYear ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.setyear` — Date.prototype.setYear ( _year_ ): exact disposition and partitions missing.
+  - [ ] `sec-date.prototype.togmtstring` — Date.prototype.toGMTString ( ): exact disposition and partitions missing.
+  - [ ] `sec-additional-properties-of-the-regexp.prototype-object` — Additional Properties of the RegExp.prototype Object: exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype.compile` — RegExp.prototype.compile ( _pattern_, _flags_ ): exact disposition and partitions missing.
+  - [ ] `sec-other-additional-features` — Other Additional Features: exact disposition and partitions missing.
+  - [ ] `sec-labelled-function-declarations` — Labelled Function Declarations: exact disposition and partitions missing.
+  - [ ] `sec-block-level-function-declarations-web-legacy-compatibility-semantics` — Block-Level Function Declarations Web Legacy Compatibility Semantics: exact disposition and partitions missing.
+  - [ ] `sec-functiondeclarations-in-ifstatement-statement-clauses` — FunctionDeclarations in IfStatement Statement Clauses: exact disposition and partitions missing.
+  - [ ] `sec-variablestatements-in-catch-blocks` — VariableStatements in Catch Blocks: exact disposition and partitions missing.
+  - [ ] `sec-initializers-in-forin-statement-heads` — Initializers in ForIn Statement Heads: exact disposition and partitions missing.
+  - [ ] `sec-IsHTMLDDA-internal-slot` — The [[IsHTMLDDA]] Internal Slot: exact disposition and partitions missing.
+  - [ ] `sec-web-compat-host-make-job-callback` — Non-default behaviour in HostMakeJobCallback: exact disposition and partitions missing.
+  - [ ] `sec-web-compat-host-ensure-can-add-private-field` — Non-default behaviour in HostEnsureCanAddPrivateElement: exact disposition and partitions missing.
+  - [ ] `sec-runtime-errors-for-function-call-assignment-targets` — Runtime Errors for Function Call Assignment Targets: exact disposition and partitions missing.
+
+## Test262 feature-tag mapping
+
+- [ ] `AggregateError` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.fromAsync` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.prototype.at` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.prototype.flat` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.prototype.flatMap` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.prototype.includes` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Array.prototype.values` — standard, tracking: `todo`; no clause mapping.
+- [ ] `ArrayBuffer` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Atomics` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Atomics.pause` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Atomics.waitAsync` — standard, tracking: `todo`; no clause mapping.
+- [ ] `BigInt` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getFloat32` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getFloat64` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getInt16` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getInt32` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getInt8` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getUint16` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.getUint32` — standard, tracking: `todo`; no clause mapping.
+- [ ] `DataView.prototype.setUint8` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Error.isError` — standard, tracking: `todo`; no clause mapping.
+- [ ] `FinalizationRegistry` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Float16Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Float32Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Float64Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Int16Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Int32Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Int8Array` — standard, tracking: `todo`; no clause mapping.
+- `Intl-enumeration` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DateTimeFormat-datetimestyle` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DateTimeFormat-dayPeriod` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DateTimeFormat-extend-timezonename` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DateTimeFormat-formatRange` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DateTimeFormat-fractionalSecondDigits` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DisplayNames` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DisplayNames-v2` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.DurationFormat` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.Era-monthcode` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.ListFormat` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.Locale` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.Locale-info` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.NumberFormat-unified` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.NumberFormat-v3` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.RelativeTimeFormat` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `Intl.Segmenter` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- `IsHTMLDDA` — harness-only, tracking: `ready-for-verification`; no clause mapping.
+- `Iterator.prototype.join` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `Map` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Math.sumPrecise` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Object.fromEntries` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Object.hasOwn` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Object.is` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Promise` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Promise.allSettled` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Promise.any` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Promise.prototype.finally` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Proxy` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Reflect` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Reflect.construct` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Reflect.set` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Reflect.setPrototypeOf` — standard, tracking: `todo`; no clause mapping.
+- [ ] `RegExp.escape` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Set` — standard, tracking: `todo`; no clause mapping.
+- `ShadowRealm` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `SharedArrayBuffer` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.fromCodePoint` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.at` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.endsWith` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.includes` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.isWellFormed` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.matchAll` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.replaceAll` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.toWellFormed` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.trimEnd` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.trimStart` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.asyncIterator` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.hasInstance` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.isConcatSpreadable` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.iterator` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.match` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.matchAll` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.prototype.description` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.replace` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.search` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.species` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.split` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.toPrimitive` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.toStringTag` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.unscopables` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Temporal` — standard, tracking: `todo`; no clause mapping.
+- [ ] `TypedArray` — standard, tracking: `todo`; no clause mapping.
+- [ ] `TypedArray.prototype.at` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Uint16Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Uint32Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Uint8Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Uint8ClampedArray` — standard, tracking: `todo`; no clause mapping.
+- [ ] `WeakMap` — standard, tracking: `todo`; no clause mapping.
+- [ ] `WeakRef` — standard, tracking: `todo`; no clause mapping.
+- [ ] `WeakSet` — standard, tracking: `todo`; no clause mapping.
+- [ ] `__getter__` — standard, tracking: `todo`; no clause mapping.
+- [ ] `__proto__` — standard, tracking: `todo`; no clause mapping.
+- [ ] `__setter__` — standard, tracking: `todo`; no clause mapping.
+- [ ] `align-detached-buffer-semantics-with-web-reality` — standard, tracking: `todo`; no clause mapping.
+- [ ] `arbitrary-module-namespace-names` — standard, tracking: `todo`; no clause mapping.
+- [ ] `array-find-from-last` — standard, tracking: `todo`; no clause mapping.
+- [ ] `array-grouping` — standard, tracking: `todo`; no clause mapping.
+- [ ] `arraybuffer-transfer` — standard, tracking: `todo`; no clause mapping.
+- [ ] `arrow-function` — standard, tracking: `todo`; no clause mapping.
+- [ ] `async-functions` — standard, tracking: `todo`; no clause mapping.
+- [ ] `async-iteration` — standard, tracking: `todo`; no clause mapping.
+- `await-dictionary` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `caller` — standard, tracking: `todo`; no clause mapping.
+- `canonical-tz` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `change-array-by-copy` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-fields-private` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-fields-private-in` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-fields-public` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-methods-private` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-static-block` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-static-fields-private` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-static-fields-public` — standard, tracking: `todo`; no clause mapping.
+- [ ] `class-static-methods-private` — standard, tracking: `todo`; no clause mapping.
+- [ ] `coalesce-expression` — standard, tracking: `todo`; no clause mapping.
+- [ ] `computed-property-names` — standard, tracking: `todo`; no clause mapping.
+- [ ] `const` — standard, tracking: `todo`; no clause mapping.
+- [ ] `cross-realm` — standard, tracking: `todo`; no clause mapping.
+- `decorators` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `default-parameters` — standard, tracking: `todo`; no clause mapping.
+- [ ] `destructuring-assignment` — standard, tracking: `todo`; no clause mapping.
+- [ ] `destructuring-binding` — standard, tracking: `todo`; no clause mapping.
+- [ ] `dynamic-import` — standard, tracking: `todo`; no clause mapping.
+- [ ] `error-cause` — standard, tracking: `todo`; no clause mapping.
+- `error-stack-accessor` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `explicit-resource-management` — standard, tracking: `todo`; no clause mapping.
+- [ ] `exponentiation` — standard, tracking: `todo`; no clause mapping.
+- `export-defer` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `export-star-as-namespace-from-module` — standard, tracking: `todo`; no clause mapping.
+- [ ] `for-in-order` — standard, tracking: `todo`; no clause mapping.
+- [ ] `for-of` — standard, tracking: `todo`; no clause mapping.
+- [ ] `generators` — standard, tracking: `todo`; no clause mapping.
+- [ ] `globalThis` — standard, tracking: `todo`; no clause mapping.
+- [ ] `hashbang` — standard, tracking: `todo`; no clause mapping.
+- `host-gc-required` — harness-only, tracking: `ready-for-verification`; no clause mapping.
+- `immutable-arraybuffer` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `import-attributes` — standard, tracking: `todo`; no clause mapping.
+- `import-bytes` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `import-defer` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `import-text` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `import.meta` — standard, tracking: `todo`; no clause mapping.
+- `intl-normative-optional` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `iterator-chunking` — standard, tracking: `todo`; no clause mapping.
+- [ ] `iterator-helpers` — standard, tracking: `todo`; no clause mapping.
+- [ ] `iterator-includes` — standard, tracking: `todo`; no clause mapping.
+- [ ] `iterator-sequencing` — standard, tracking: `todo`; no clause mapping.
+- [ ] `joint-iteration` — standard, tracking: `todo`; no clause mapping.
+- [ ] `json-modules` — standard, tracking: `todo`; no clause mapping.
+- [ ] `json-parse-with-source` — standard, tracking: `todo`; no clause mapping.
+- [ ] `json-superset` — standard, tracking: `todo`; no clause mapping.
+- `legacy-regexp` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `let` — standard, tracking: `todo`; no clause mapping.
+- [ ] `logical-assignment-operators` — standard, tracking: `todo`; no clause mapping.
+- [ ] `new.target` — standard, tracking: `todo`; no clause mapping.
+- `nonextensible-applies-to-private` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `numeric-separator-literal` — standard, tracking: `todo`; no clause mapping.
+- [ ] `object-rest` — standard, tracking: `todo`; no clause mapping.
+- [ ] `object-spread` — standard, tracking: `todo`; no clause mapping.
+- [ ] `optional-catch-binding` — standard, tracking: `todo`; no clause mapping.
+- [ ] `optional-chaining` — standard, tracking: `todo`; no clause mapping.
+- [ ] `promise-try` — standard, tracking: `todo`; no clause mapping.
+- [ ] `promise-with-resolvers` — standard, tracking: `todo`; no clause mapping.
+- [ ] `proxy-missing-checks` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-dotall` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-duplicate-named-groups` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-lookbehind` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-match-indices` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-modifiers` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-named-groups` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-unicode-property-escapes` — standard, tracking: `todo`; no clause mapping.
+- [ ] `regexp-v-flag` — standard, tracking: `todo`; no clause mapping.
+- [ ] `resizable-arraybuffer` — standard, tracking: `todo`; no clause mapping.
+- [ ] `rest-parameters` — standard, tracking: `todo`; no clause mapping.
+- [ ] `set-methods` — standard, tracking: `todo`; no clause mapping.
+- `source-phase-imports` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- `source-phase-imports-module-source` — post-edition, tracking: `ready-for-verification`; no clause mapping.
+- [ ] `stable-array-sort` — standard, tracking: `todo`; no clause mapping.
+- [ ] `stable-typedarray-sort` — standard, tracking: `todo`; no clause mapping.
+- [ ] `string-trimming` — standard, tracking: `todo`; no clause mapping.
+- [ ] `super` — standard, tracking: `todo`; no clause mapping.
+- [ ] `symbols-as-weakmap-keys` — standard, tracking: `todo`; no clause mapping.
+- [ ] `tail-call-optimization` — standard, tracking: `todo`; no clause mapping.
+- [ ] `template` — standard, tracking: `todo`; no clause mapping.
+- [ ] `top-level-await` — standard, tracking: `todo`; no clause mapping.
+- [ ] `u180e` — standard, tracking: `todo`; no clause mapping.
+- [ ] `uint8array-base64` — standard, tracking: `todo`; no clause mapping.
+- [ ] `upsert` — standard, tracking: `todo`; no clause mapping.
+- [ ] `well-formed-json-stringify` — standard, tracking: `todo`; no clause mapping.
+
+## Completion rule
+
+A group is complete only when every normative descendant clause terminates in executable evidence, every mapped in-scope Test262 scenario/variant passes under a claim-eligible host, and the generated/property, representative stress, negative-diagnostic, and E2E evidence required by the semantic partitions passes for the same clean source revision. Missing mappings, skips, unsupported diagnostics, timeouts, crashes, infrastructure errors, stale results, or a filtered/sharded-only result keep the box open.

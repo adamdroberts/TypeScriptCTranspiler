@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "claim": {
+    "standard": "ECMA-262",
+    "edition": 17,
+    "name": "ECMAScript 2026",
+    "published": "2026-06",
+    "wording": "Conforms to ECMAScript 2026 (ECMA-262, 17th edition)",
+    "includesNormativeAnnexB": true,
+    "excludes": [
+      "ECMA-402 internationalization",
+      "ECMA-404 JSON interchange syntax",
+      "post-ECMAScript-2026 proposals"
+    ]
+  },
+  "ecma262": {
+    "repository": "https://github.com/tc39/ecma262.git",
+    "tag": "es2026",
+    "commit": "0248456c758431e4bb8e5d26333ff1865123c9cd",
+    "tree": "02137fef007dced3167756ba3dbd3e11306ad4bf",
+    "specSource": "spec.html",
+    "specSourceSha256": "ce7bc30174061fd8d212270b81cf6511661180c1e174f6911d10ced0581527b0",
+    "clauseCatalogSha256": "c714e6628740070f3625890d0e30927c360d84d95d172d7628472ba337d23385"
+  },
+  "test262": {
+    "repository": "https://github.com/tc39/test262.git",
+    "commit": "3655e7464de3d52643ecddd4b5f9f4f3e7f62398",
+    "tree": "a2954d0c513262e2a02d56cbdbf1f69b060e2547",
+    "packageVersion": "5.0.0",
+    "interpretationSha256": "d1aa6662ea899cc0594dc48e7424c586e557ec2dba55768834ef62d3c5660f41",
+    "featureRegistrySha256": "2f8dfa3d3ba98ae4618692c30f7c365069fb55d5899add707f50749f648ba039",
+    "discoveryRoots": [
+      "test/language",
+      "test/built-ins",
+      "test/annexB",
+      "test/staging",
+      "test/harness"
+    ],
+    "ecma402Roots": [
+      "test/intl402",
+      "test/staging/intl402"
+    ],
+    "ecma402FeatureTags": [
+      "Intl-enumeration",
+      "Intl.DateTimeFormat-datetimestyle",
+      "Intl.DateTimeFormat-dayPeriod",
+      "Intl.DateTimeFormat-extend-timezonename",
+      "Intl.DateTimeFormat-formatRange",
+      "Intl.DateTimeFormat-fractionalSecondDigits",
+      "Intl.DisplayNames",
+      "Intl.DisplayNames-v2",
+      "Intl.DurationFormat",
+      "Intl.ListFormat",
+      "Intl.Locale",
+      "Intl.NumberFormat-unified",
+      "Intl.RelativeTimeFormat",
+      "Intl.Segmenter",
+      "canonical-tz",
+      "intl-normative-optional"
+    ],
+    "postEditionFeatureTags": [
+      "Intl.Era-monthcode",
+      "Intl.Locale-info",
+      "Intl.NumberFormat-v3",
+      "legacy-regexp",
+      "ShadowRealm",
+      "decorators",
+      "source-phase-imports",
+      "source-phase-imports-module-source",
+      "import-defer",
+      "export-defer",
+      "import-text",
+      "immutable-arraybuffer",
+      "import-bytes",
+      "nonextensible-applies-to-private",
+      "await-dictionary",
+      "error-stack-accessor",
+      "Iterator.prototype.join"
+    ]
+  },
+  "runnerContract": {
+    "version": 1,
+    "requiredCapabilities": [
+      "fresh-realm-per-scenario",
+      "separate-global-script-setup",
+      "script-goal",
+      "module-goal-and-fixtures",
+      "raw-source-preservation",
+      "strict-variant-transform",
+      "async-done-protocol",
+      "structured-negative-phases",
+      "exact-error-constructor",
+      "host-print",
+      "host-$262-global",
+      "host-$262-AbstractModuleSource",
+      "host-$262-createRealm",
+      "host-$262-evalScript",
+      "host-$262-detachArrayBuffer",
+      "host-$262-agent",
+      "can-block-agent-selection",
+      "host-$262-gc",
+      "host-$262-IsHTMLDDA",
+      "no-semantic-delegation"
+    ],
+    "allowedResultStatuses": [
+      "pass",
+      "fail",
+      "timeout",
+      "crash",
+      "unsupported",
+      "infrastructure-error"
+    ],
+    "claimPassingStatus": "pass"
+  },
+  "executionProfile": {
+    "id": "linux-x64-gcc-native",
+    "platform": "linux",
+    "architecture": "x64",
+    "compiler": "gcc",
+    "environment": {
+      "TSC2C_CC": "gcc",
+      "TSC2C_CXX": "g++",
+      "TZ": "UTC",
+      "LC_ALL": "C.UTF-8"
+    }
+  },
+  "localGates": [
+    {
+      "id": "build",
+      "command": ["bun", "run", "build"],
+      "timeoutMs": 600000
+    },
+    {
+      "id": "compliance-types",
+      "command": ["bun", "run", "check:compliance-types"],
+      "timeoutMs": 600000
+    },
+    {
+      "id": "compliance-self-test",
+      "command": ["bun", "run", "compliance:self-test"],
+      "timeoutMs": 600000
+    },
+    {
+      "id": "emitter-reachability",
+      "command": ["bun", "run", "check:emitter-reachability"],
+      "timeoutMs": 300000
+    },
+    {
+      "id": "property",
+      "command": ["bun", "run", "test:property"],
+      "timeoutMs": 3600000
+    },
+    {
+      "id": "e2e-gc",
+      "command": ["bun", "tests/e2e/run.ts", "--fail-on-skip"],
+      "environment": { "TSC2C_NO_GC": "0" },
+      "timeoutMs": 21600000
+    },
+    {
+      "id": "e2e-no-gc",
+      "command": ["bun", "tests/e2e/run.ts", "--fail-on-skip"],
+      "environment": { "TSC2C_NO_GC": "1" },
+      "timeoutMs": 21600000
+    }
+  ]
+}

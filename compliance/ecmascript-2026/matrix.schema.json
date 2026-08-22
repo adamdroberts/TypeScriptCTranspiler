@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://typescriptc.invalid/schemas/ecmascript-2026-matrix.schema.json",
+  "title": "TypeScriptC ECMAScript 2026 support matrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "baseline", "clauseEvidence", "groups"],
+  "$defs": {
+    "stringSet": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "localEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["property", "generatedRegression", "stress", "e2e", "negativeDiagnostics", "declarationSurface", "implementation"],
+      "properties": {
+        "property": { "$ref": "#/$defs/stringSet" },
+        "generatedRegression": { "$ref": "#/$defs/stringSet" },
+        "stress": { "$ref": "#/$defs/stringSet" },
+        "e2e": { "$ref": "#/$defs/stringSet" },
+        "negativeDiagnostics": { "$ref": "#/$defs/stringSet" },
+        "declarationSurface": { "$ref": "#/$defs/stringSet" },
+        "implementation": { "$ref": "#/$defs/stringSet" }
+      }
+    },
+    "queryTerm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "equals"],
+      "properties": {
+        "field": { "enum": ["clause", "esid", "feature", "flag", "mode"] },
+        "equals": { "type": "string", "minLength": 1 }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allOf"],
+      "properties": {
+        "allOf": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/queryTerm" } }
+      }
+    },
+    "coverageEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clause", "partition", "relation"],
+      "properties": {
+        "clause": { "type": "string", "pattern": "^sec-" },
+        "partition": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "relation": { "enum": ["references", "referenced-by"] }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "surface", "cardinality", "test262Queries", "coveredBy", "localEvidence", "rationale"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "surface": { "enum": ["syntax", "algorithm", "intrinsic", "module", "jobs-memory-model", "definition"] },
+        "cardinality": { "enum": ["finite", "unbounded"] },
+        "cardinalityMechanism": { "enum": ["canonical-collection", "tree", "graph", "worklist"] },
+        "test262Queries": { "type": "array", "items": { "$ref": "#/$defs/query" } },
+        "coveredBy": { "type": "array", "items": { "$ref": "#/$defs/coverageEdge" } },
+        "localEvidence": { "$ref": "#/$defs/localEvidence" },
+        "rationale": { "type": "string", "minLength": 1 },
+        "upstreamTestGap": { "type": "string", "pattern": "^https://" }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "baseline": { "const": "baseline.json" },
+    "clauseEvidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clause", "disposition", "partitions", "rationale"],
+        "properties": {
+          "clause": { "type": "string", "pattern": "^sec-" },
+          "disposition": { "enum": ["evidence", "spec-permitted-choice"] },
+          "partitions": { "type": "array", "items": { "$ref": "#/$defs/partition" } },
+          "rationale": { "type": "string", "minLength": 1 },
+          "choice": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "specBasis", "selection"],
+            "properties": {
+              "kind": { "const": "normative-optional-exclusion" },
+              "specBasis": { "type": "string", "pattern": "^https://" },
+              "selection": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "rootClause", "scope", "tracking", "semanticPartitions", "localEvidence", "knownGaps"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "rootClause": { "type": "string", "pattern": "^sec-" },
+          "scope": { "enum": ["required", "non-observable"] },
+          "tracking": { "enum": ["todo", "in-progress", "ready-for-verification"] },
+          "semanticPartitions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "localEvidence": { "$ref": "#/$defs/localEvidence" },
+          "knownGaps": { "$ref": "#/$defs/stringSet" },
+          "rationale": { "type": "string" }
+        }
+      }
+    }
+  }
+}

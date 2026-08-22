@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias or semantic directory rule; exact source-hashed test overrides are only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
+  "esidAliases": [],
+  "pathRules": [],
+  "testOverrides": []
+}

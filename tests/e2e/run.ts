@@ -9,9 +9,7 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { compile, findDispatchLinkOptions } from "../../src/compile";
 import { ensureE2eNodeModuleFixtures, referencesE2eNodeModuleFixture } from "./fixtures";
-import { generateE2eCaseSource } from "./generated-cases";
-
-const casesDir = path.resolve(import.meta.dir, "cases");
+import { discoverE2eCaseManifest, e2eCasesDir as casesDir } from "./case-manifest";
 
 interface Case {
     name: string;
@@ -51,15 +49,11 @@ async function discoverCases(): Promise<Case[]> {
     const filterIdx = process.argv.indexOf('--filter');
     const filterStr = filterIdx >= 0 ? process.argv[filterIdx + 1] : undefined;
 
-    const dirs = await fs.readdir(casesDir);
     const cases: Case[] = [];
-    for (const d of dirs) {
-        if (filterStr && !d.includes(filterStr)) continue;
-        const entry = path.join(casesDir, d, "in.ts");
-        const generatedCasePath = path.join(casesDir, d, "generate.json");
+    for (const manifest of await discoverE2eCaseManifest(filterStr)) {
+        const d = manifest.name;
+        const entry = manifest.entry;
         const expectedPath = path.join(casesDir, d, "expected.stdout");
-        const expectedStderrContainsPath = path.join(casesDir, d, "expected.stderr.contains");
-        const expectedExitPath = path.join(casesDir, d, "expected.exitcode");
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
         const expectedMainCNotContainsPath = path.join(casesDir, d, "expected.mainc.not_contains");
         const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
@@ -73,16 +67,6 @@ async function discoverCases(): Promise<Case[]> {
         const dispatchSerialPath = path.join(casesDir, d, "compile.dispatch.serial");
         const dispatchNoGcPath = path.join(casesDir, d, "compile.dispatch.no_gc");
         const runEnvPath = path.join(casesDir, d, "run.env");
-        const hasEntry = await exists(entry);
-        const hasGeneratedCase = await exists(generatedCasePath);
-        if (!hasEntry && !hasGeneratedCase) continue;
-        if (hasEntry && hasGeneratedCase) {
-            throw new Error(`e2e case ${d} must use either in.ts or generate.json, not both`);
-        }
-        const generatedSource = hasGeneratedCase
-            ? generateE2eCaseSource(await fs.readFile(generatedCasePath, "utf8"), generatedCasePath)
-            : undefined;
-
         const release = await exists(releasePath);
         const dispatch = await exists(dispatchPath);
         const dispatchSerial = await exists(dispatchSerialPath);
@@ -107,24 +91,17 @@ async function discoverCases(): Promise<Case[]> {
         const expectedMainCNotContains = await exists(expectedMainCNotContainsPath)
             ? (await fs.readFile(expectedMainCNotContainsPath, "utf8")).trimEnd()
             : undefined;
-        const expectedStderrContains = await exists(expectedStderrContainsPath)
-            ? (await fs.readFile(expectedStderrContainsPath, "utf8")).trimEnd()
-            : undefined;
+        const expectedStderrContains = manifest.expectedStderrContains;
         const runEnv = await exists(runEnvPath)
             ? parseRunEnv(await fs.readFile(runEnvPath, "utf8"), runEnvPath)
             : undefined;
 
-        if (await exists(expectedExitPath)) {
-            const raw = await fs.readFile(expectedExitPath, "utf8");
-            const expectedExitCode = Number(raw.trim());
-            if (!Number.isInteger(expectedExitCode)) {
-                throw new Error(`invalid expected.exitcode for ${d}: ${raw.trim()}`);
-            }
+        if (manifest.expectedExitCode !== undefined) {
             cases.push({
                 name: d,
                 entry,
-                generatedSource,
-                expectedExitCode,
+                generatedSource: manifest.generatedSource,
+                expectedExitCode: manifest.expectedExitCode,
                 expectedStderrContains,
                 expectedMainCContains,
                 expectedMainCNotContains,
@@ -152,7 +129,7 @@ async function discoverCases(): Promise<Case[]> {
         cases.push({
             name: d,
             entry,
-            generatedSource,
+            generatedSource: manifest.generatedSource,
             expected,
             expectedStderrContains,
             expectedMainCContains,
@@ -229,6 +206,7 @@ async function casesNeedNodeModuleFixtures(cases: readonly Case[]): Promise<bool
 }
 
 async function main(): Promise<void> {
+    const failOnSkip = process.argv.includes("--fail-on-skip");
     const cases = await discoverCases();
     if (cases.length === 0) {
         console.error("no e2e cases found");
@@ -257,25 +235,50 @@ async function main(): Promise<void> {
             skipped++;
             continue;
         }
-        const r = await compile({
-            entry,
-            output: bin,
-            buildDir,
-            noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",
-            dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
-            release: c.release,
-            emitCOnly: c.emitCOnly,
-            nativeAddonManifest: c.nativeAddonManifest,
-            dynamicRequireManifest: c.dynamicRequireManifest,
-            runtimeCodeManifest: c.runtimeCodeManifest,
-            unsafeEval: c.unsafeEval,
-            customConditions: c.customConditions,
-        });
+        let compileStderr = "";
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+            compileStderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+            return (originalStderrWrite as (...writeArgs: unknown[]) => boolean).call(process.stderr, chunk, ...args);
+        }) as typeof process.stderr.write;
+        let r;
+        try {
+            r = await compile({
+                entry,
+                output: bin,
+                buildDir,
+                noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",
+                dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
+                release: c.release,
+                emitCOnly: c.emitCOnly,
+                nativeAddonManifest: c.nativeAddonManifest,
+                dynamicRequireManifest: c.dynamicRequireManifest,
+                runtimeCodeManifest: c.runtimeCodeManifest,
+                unsafeEval: c.unsafeEval,
+                customConditions: c.customConditions,
+            });
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
         if (c.expectedExitCode !== undefined) {
             if (r.exitCode !== c.expectedExitCode) {
                 console.log(`EXIT MISMATCH (expected ${c.expectedExitCode}, got ${r.exitCode})`);
                 failed++;
                 continue;
+            }
+            if (c.expectedStderrContains !== undefined) {
+                const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
+                const missing = needles.find((needle) => !compileStderr.includes(needle));
+                if (missing !== undefined) {
+                    console.log("COMPILE STDERR MISSING EXPECTED SUBSTRING");
+                    console.log("---expected substring---");
+                    process.stdout.write(missing);
+                    console.log("---captured compile stderr---");
+                    process.stdout.write(compileStderr);
+                    console.log("---end---");
+                    failed++;
+                    continue;
+                }
             }
             console.log("OK");
             passed++;
@@ -355,7 +358,7 @@ async function main(): Promise<void> {
         passed++;
     }
     console.log(`\n${passed} passed, ${failed} failed${skipped > 0 ? `, ${skipped} skipped` : ""}`);
-    process.exit(failed === 0 ? 0 : 1);
+    process.exit(failed === 0 && (!failOnSkip || skipped === 0) ? 0 : 1);
 }
 
 await main();

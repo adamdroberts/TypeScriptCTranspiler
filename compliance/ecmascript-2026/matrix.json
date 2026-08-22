@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "baseline": "baseline.json",
+  "clauseEvidence": [],
+  "groups": [
+    {
+      "id": "scope",
+      "title": "Scope",
+      "rootClause": "sec-scope",
+      "scope": "non-observable",
+      "tracking": "todo",
+      "semanticPartitions": ["published language boundary"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": [],
+      "rationale": "Normative framing; the validator must still confirm that every observable descendant elsewhere is classified."
+    },
+    {
+      "id": "conformance",
+      "title": "Conformance",
+      "rootClause": "sec-conformance",
+      "scope": "non-observable",
+      "tracking": "todo",
+      "semanticPartitions": ["required", "legacy", "normative optional", "forbidden extensions"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": ["Normative-optional choices and forbidden extensions have not been audited."],
+      "rationale": "The claim report must disclose optional choices; example subclauses are not implementation requirements."
+    },
+    {
+      "id": "normative-references",
+      "title": "Normative References",
+      "rootClause": "sec-normative-references",
+      "scope": "non-observable",
+      "tracking": "todo",
+      "semanticPartitions": ["Unicode", "IEEE 754", "referenced Ecma standards"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": ["Unicode and numeric dependency versions are not yet attested in run artifacts."],
+      "rationale": "Dependency identity is attestation evidence rather than a Test262 result."
+    },
+    {
+      "id": "overview",
+      "title": "Overview",
+      "rootClause": "sec-overview",
+      "scope": "non-observable",
+      "tracking": "todo",
+      "semanticPartitions": ["objects", "strict language variant", "host boundaries"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": [],
+      "rationale": "Descriptive definitions are discharged by the corresponding normative clauses."
+    },
+    {
+      "id": "notation",
+      "title": "Notational Conventions",
+      "rootClause": "sec-notational-conventions",
+      "scope": "non-observable",
+      "tracking": "todo",
+      "semanticPartitions": ["grammar notation", "algorithm conventions", "completion records"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": [],
+      "rationale": "Specification notation is not directly executable; referenced algorithms remain required."
+    },
+    {
+      "id": "values",
+      "title": "ECMAScript Data Types and Values",
+      "rootClause": "sec-ecmascript-data-types-and-values",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["primitive types", "numeric types", "objects", "completion and specification types"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["dynamic_ops", "symbols", "bigint"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c", "runtime/tsc_object.c"] },
+      "knownGaps": ["Exact clause evidence and semantic partitions remain unverified against the pinned suite."]
+    },
+    {
+      "id": "abstract-operations",
+      "title": "Abstract Operations",
+      "rootClause": "sec-abstract-operations",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["type conversion", "testing and comparison", "properties", "iteration", "host interaction"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["dynamic_coercions", "dynamic_ops", "custom_iterator_object"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
+      "knownGaps": ["Abstract-operation coverage must be derived transitively from exact esid mappings and reviewed gap evidence."]
+    },
+    {
+      "id": "syntax-directed-operations",
+      "title": "Syntax-Directed Operations",
+      "rootClause": "sec-syntax-directed-operations",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["static semantics", "runtime semantics", "abrupt completion propagation"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["advanced"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "knownGaps": ["There is no complete clause-level mapping for shared syntax-directed operations."]
+    },
+    {
+      "id": "execution",
+      "title": "Executable Code and Execution Contexts",
+      "rootClause": "sec-executable-code-and-execution-contexts",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["realm and agent state", "execution contexts", "environment records", "jobs"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c"] },
+      "knownGaps": ["Fresh Realm and separate Script evaluation are missing from the Test262 host profile."]
+    },
+    {
+      "id": "object-semantics",
+      "title": "Ordinary and Exotic Objects Behaviours",
+      "rootClause": "sec-ordinary-and-exotic-objects-behaviours",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["ordinary internal methods", "function objects", "arguments", "arrays", "proxies", "module namespace objects"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["object_descriptors", "array_property_descriptors", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
+      "knownGaps": ["Exotic-object invariants and proxy/module-namespace interactions are not clause-verified."]
+    },
+    {
+      "id": "source-text",
+      "title": "ECMAScript Language: Source Text",
+      "rootClause": "sec-ecmascript-language-source-code",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Unicode source text", "script code", "module code", "function and eval code", "strict mode"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["line_directives"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/program.ts"] },
+      "knownGaps": ["Compiler parsing currently depends on the pinned TypeScript parser and is not yet attested for ES2026 source text."]
+    },
+    {
+      "id": "lexical-grammar",
+      "title": "ECMAScript Language: Lexical Grammar",
+      "rootClause": "sec-ecmascript-language-lexical-grammar",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["whitespace and terminators", "comments and hashbang", "identifiers and keywords", "literals", "automatic semicolon insertion"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["arith", "regex_pcre2", "tagged_templates"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/program.ts"] },
+      "knownGaps": ["Positive and negative lexical grammar have not been run with exact Test262 parse-phase classification."]
+    },
+    {
+      "id": "expressions",
+      "title": "ECMAScript Language: Expressions",
+      "rootClause": "sec-ecmascript-language-expressions",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "knownGaps": ["General call-spread, yielded expressions, and remaining suspension graphs are incomplete."]
+    },
+    {
+      "id": "statements",
+      "title": "ECMAScript Language: Statements and Declarations",
+      "rootClause": "sec-ecmascript-language-statements-and-declarations",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["normal control flow", "labels and loops", "declarations and TDZ", "abrupt completion", "iterator close", "try/catch/finally"],
+      "localEvidence": { "property": [], "generatedRegression": ["async-binding-default-depth"], "stress": ["async-binding-default-depth"], "e2e": ["switch_exhaustive", "custom_iterator_object"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "knownGaps": ["Generator/async abrupt-completion and iterator-close graphs remain incomplete."]
+    },
+    {
+      "id": "functions-classes",
+      "title": "ECMAScript Language: Functions and Classes",
+      "rootClause": "sec-ecmascript-language-functions-and-classes",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["ordinary functions", "arrows and methods", "classes and private state", "generators", "async functions", "async generators"],
+      "localEvidence": { "property": [], "generatedRegression": ["async-leading-await-chain"], "stress": ["async-leading-await-chain"], "e2e": ["function_closures", "generic_function_values", "classes"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "knownGaps": ["General generator state machines, async generators, and remaining async suspension graphs are incomplete."]
+    },
+    {
+      "id": "scripts-modules",
+      "title": "ECMAScript Language: Scripts and Modules",
+      "rootClause": "sec-ecmascript-language-scripts-and-modules",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["script parsing/evaluation", "module linking", "live bindings", "cycles", "async module evaluation"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["modules", "module_re_exports"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/resolve.ts", "src/program.ts"] },
+      "knownGaps": ["The Test262 host cannot yet install harness globals separately for module tests or classify resolution errors."]
+    },
+    {
+      "id": "errors-extensions",
+      "title": "Error Handling and Language Extensions",
+      "rootClause": "sec-error-handling-and-language-extensions",
+      "scope": "required",
+      "tracking": "todo",
+      "semanticPartitions": ["native error constructors", "forbidden extensions"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["aggregate_error_constructor"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
+      "knownGaps": ["Exact thrown constructor identity is not exposed by the conformance host."]
+    },
+    {
+      "id": "built-in-contract",
+      "title": "ECMAScript Standard Built-in Objects",
+      "rootClause": "sec-ecmascript-standard-built-in-objects",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["callability and construction", "property descriptors", "prototype identity", "realm ownership"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["function_integrity", "object_descriptors"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
+      "knownGaps": ["Broad built-in path evidence must be refined to exact clauses before verification."]
+    },
+    {
+      "id": "global-object",
+      "title": "The Global Object",
+      "rootClause": "sec-global-object",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["value properties", "global functions", "constructors", "global object semantics"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["global_number_predicates", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
+      "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance."]
+    },
+    {
+      "id": "fundamental-objects",
+      "title": "Fundamental Objects",
+      "rootClause": "sec-fundamental-objects",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Object", "Function", "Boolean", "Symbol", "Error and native errors"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["object_prototypes", "function_prototypes", "symbols"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
+      "knownGaps": ["Clause-level descriptor, prototype, and realm behavior remains unverified."]
+    },
+    {
+      "id": "numbers-dates",
+      "title": "Numbers and Dates",
+      "rootClause": "sec-numbers-and-dates",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Number", "BigInt", "Math", "Date"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["number_constructor", "math_more", "date_instances", "bigint"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
+      "knownGaps": ["IEEE-754 edge behavior and the full Date algorithm surface remain unverified."]
+    },
+    {
+      "id": "text-processing",
+      "title": "Text Processing",
+      "rootClause": "sec-text-processing",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["String", "RegExp", "Unicode and well-formed strings"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["string_object_methods", "regex_pcre2"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_string.c"] },
+      "knownGaps": ["PCRE2 behavior is not yet demonstrated equivalent to every ECMA-262 RegExp algorithm."]
+    },
+    {
+      "id": "indexed-collections",
+      "title": "Indexed Collections",
+      "rootClause": "sec-indexed-collections",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Array", "typed arrays", "iterators", "sparse and exotic indexed properties"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth"], "e2e": ["array_prototypes", "array_property_descriptors", "array_buffer_dataview"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_array.c", "runtime/tsc_value.c"] },
+      "knownGaps": ["TypedArray and full array exotic semantics remain unverified."]
+    },
+    {
+      "id": "keyed-collections",
+      "title": "Keyed Collections",
+      "rootClause": "sec-keyed-collections",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Map", "Set", "WeakMap", "WeakSet", "collection iterators"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["map_set_constructors", "map_set_same_value_zero", "weak_collections"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_map_set.c"] },
+      "knownGaps": ["All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification."]
+    },
+    {
+      "id": "structured-data",
+      "title": "Structured Data",
+      "rootClause": "sec-structured-data",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["ArrayBuffer", "SharedArrayBuffer", "DataView", "Atomics", "JSON"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["array_buffer_dataview", "json"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c", "runtime/tsc_builtin.c"] },
+      "knownGaps": ["Shared memory, Atomics, detachment, and complete JSON semantics are not verified."]
+    },
+    {
+      "id": "managing-memory",
+      "title": "Managing Memory",
+      "rootClause": "sec-managing-memory",
+      "scope": "required",
+      "tracking": "todo",
+      "semanticPartitions": ["WeakRef", "FinalizationRegistry", "cleanup jobs", "implementation-defined collection timing"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["weak_ref"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
+      "knownGaps": ["The Test262 host lacks the required gc hook and finalization job protocol."]
+    },
+    {
+      "id": "control-abstraction",
+      "title": "Control Abstraction Objects",
+      "rootClause": "sec-control-abstraction-objects",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["iterators", "generators", "promises and jobs", "async functions and generators", "disposable resources"],
+      "localEvidence": { "property": [], "generatedRegression": ["async-leading-await-chain", "async-binding-default-depth"], "stress": ["async-leading-await-chain"], "e2e": ["array_from_async", "promise_combinators_dynamic"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_promise.c", "src/emit/index.ts"] },
+      "knownGaps": ["General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete."]
+    },
+    {
+      "id": "reflection",
+      "title": "Reflection",
+      "rootClause": "sec-reflection",
+      "scope": "required",
+      "tracking": "in-progress",
+      "semanticPartitions": ["Reflect internal-method forwarding", "Proxy traps", "invariants and revocation"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
+      "knownGaps": ["Proxy invariant and abrupt-completion partitions remain unverified."]
+    },
+    {
+      "id": "memory-model",
+      "title": "Memory Model",
+      "rootClause": "sec-memory-model",
+      "scope": "required",
+      "tracking": "todo",
+      "semanticPartitions": ["happens-before", "tear-free reads", "data races", "Atomics synchronization"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
+      "knownGaps": ["The Test262 host lacks agents and the project has no complete ECMAScript shared-memory implementation."]
+    },
+    {
+      "id": "annex-b",
+      "title": "Normative Annex B — Additional ECMAScript Features for Web Browsers",
+      "rootClause": "sec-additional-ecmascript-features-for-web-browsers",
+      "scope": "required",
+      "tracking": "todo",
+      "semanticPartitions": ["legacy syntax", "legacy built-ins", "web compatibility semantics", "IsHTMLDDA"],
+      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["string_substr", "string_trim_aliases"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_string.c"] },
+      "knownGaps": ["An unqualified claim includes Annex B here; IsHTMLDDA and the remaining legacy surface are not implemented."]
+    }
+  ]
+}

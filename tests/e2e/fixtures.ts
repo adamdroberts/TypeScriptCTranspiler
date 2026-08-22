@@ -2517,6 +2517,48 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-exports-this": cjsPackage("tsc2c-cjs-module-exports-this", {
         "index.js": 'exports.label = "this-default";\nexports.count = 42;\nmodule.exports = this;\n',
     }),
+    "tsc2c-cjs-define-properties-finite-key-exports": cjsPackage("tsc2c-cjs-define-properties-finite-key-exports", {
+        "index.js": 'exports.__esModule = true;\n\nconst labelKeys = ["selected", "fallbackSelected"];\nconst fnKeys = ["double", "triple"];\nconst index = Date.now() >= 0 ? 0 : 1;\n\nObject.defineProperties(exports, {\n  [labelKeys[index]]: {\n    value: "finite-define-properties",\n    enumerable: true\n  },\n  [fnKeys[index]]: {\n    value: function double(value) { return value * 17; },\n    enumerable: true\n  }\n});\n',
+    }),
+    "tsc2c-cjs-define-property-finite-key-exports": cjsPackage("tsc2c-cjs-define-property-finite-key-exports", {
+        "index.js": 'exports.__esModule = true;\n\nconst labelKeys = ["selected", "fallbackSelected"];\nconst fnKeys = ["double", "triple"];\nconst index = Date.now() >= 0 ? 0 : 1;\n\nObject.defineProperty(exports, labelKeys[index], {\n  value: "finite-define-property",\n  enumerable: true\n});\n\nObject.defineProperty(module.exports, fnKeys[index], {\n  value: function double(value) { return value * 13; },\n  enumerable: true\n});\n',
+    }),
+    "tsc2c-cjs-runtime-assertion-default-package": {
+        packageJson: { name: "tsc2c-cjs-runtime-assertion-default-package", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'function makeAssertionDefault(): any {\n  return {\n    label: "assertion-default",\n    count: 31,\n    nested: { ok: true }\n  };\n}\n\nmodule.exports = (makeAssertionDefault() as any)!;\n',
+        },
+    },
+    "tsc2c-cjs-runtime-comma-default-package": cjsPackage("tsc2c-cjs-runtime-comma-default-package", {
+        "index.js": 'let commaCount = 0;\n\nfunction commaMark() {\n  commaCount++;\n  return "ignored";\n}\n\nfunction commaMake() {\n  return { label: "comma-default", count: commaCount, nested: { ok: true } };\n}\n\nmodule.exports = (commaMark(), commaMake());\n',
+    }),
+    "tsc2c-cjs-runtime-tagged-template-default-package": cjsPackage("tsc2c-cjs-runtime-tagged-template-default-package", {
+        "index.js": 'function format(strings, label, count) {\n  return {\n    label: strings[0] + label + strings[1],\n    count,\n    raw: String.raw`raw\\n${label}\\t`\n  };\n}\n\nmodule.exports = format`tag-${"default"}-${7}`;\n',
+    }),
+    "tsc2c-js-class-extends": esmPackage("tsc2c-js-class-extends", {
+        "index.js": 'export class Base {\n    constructor(start) {\n        this.value = start;\n    }\n\n    next(delta) {\n        return this.value + delta;\n    }\n}\n\nexport class Child extends Base {\n    constructor(start, bonus) {\n        super(start);\n        this.bonus = bonus;\n    }\n\n    total(delta) {\n        return this.next(delta) + this.bonus;\n    }\n}\n\nexport const label = "js-class-extends";\n',
+    }),
+    "tsc2c-js-default-anonymous-function": esmPackage("tsc2c-js-default-anonymous-function", {
+        "index.js": 'export default function (value) {\n    return value + 7;\n}\n\nexport const label = "js-default-anonymous-function";\n',
+    }),
+    "tsc2c-js-default-arrow": esmPackage("tsc2c-js-default-arrow", {
+        "index.js": 'export default (value) => value * 3;\n\nexport const label = "js-default-arrow";\n',
+    }),
+    "tsc2c-js-default-class": esmPackage("tsc2c-js-default-class", {
+        "index.js": 'export default class Box {\n    constructor(value) {\n        this.value = value;\n    }\n\n    double() {\n        return this.value * 2;\n    }\n}\n\nexport const label = "js-default-class";\n',
+    }),
+    "tsc2c-js-default-function": esmPackage("tsc2c-js-default-function", {
+        "index.js": 'export default function double(value) {\n    return value * 2;\n}\n\nexport const label = "js-default-function";\n',
+    }),
+    "tsc2c-js-named-arrow": esmPackage("tsc2c-js-named-arrow", {
+        "index.js": 'export const label = "js-named-arrow";\nexport const square = (value) => value * value;\n',
+    }),
+    "tsc2c-js-named-class": esmPackage("tsc2c-js-named-class", {
+        "index.js": 'export class Counter {\n    constructor(start) {\n        this.value = start;\n    }\n\n    inc(delta) {\n        this.value = this.value + delta;\n        return this.value;\n    }\n}\n\nexport const label = "js-named-class";\n',
+    }),
+    "tsc2c-js-named-function-expression": esmPackage("tsc2c-js-named-function-expression", {
+        "index.js": 'export const label = "js-named-function-expression";\nexport const inc = function (value) {\n    return value + 1;\n};\n',
+    }),
 };
 
 const packageNames = Object.keys(packages);

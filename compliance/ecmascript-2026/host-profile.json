@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "tsc2c-native-diagnostic-v1",
+  "description": "Current native compiler profile. It is useful for gap discovery but is deliberately not accepted as Test262 conformance evidence.",
+  "command": ["bun", "tests/test262/diagnostic-host.ts"],
+  "implementationFiles": ["tests/test262/diagnostic-host.ts", "tests/test262/protocol.ts"],
+  "claimEligible": false,
+  "semanticDelegation": false,
+  "capabilities": {
+    "fresh-realm-per-scenario": true,
+    "separate-global-script-setup": false,
+    "script-goal": true,
+    "module-goal-and-fixtures": false,
+    "raw-source-preservation": false,
+    "strict-variant-transform": true,
+    "async-done-protocol": false,
+    "structured-negative-phases": false,
+    "exact-error-constructor": false,
+    "host-print": false,
+    "host-$262-global": false,
+    "host-$262-AbstractModuleSource": false,
+    "host-$262-createRealm": false,
+    "host-$262-evalScript": false,
+    "host-$262-detachArrayBuffer": false,
+    "host-$262-agent": false,
+    "can-block-agent-selection": false,
+    "host-$262-gc": false,
+    "host-$262-IsHTMLDDA": false,
+    "no-semantic-delegation": true
+  }
+}
