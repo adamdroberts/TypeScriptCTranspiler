@@ -1,16 +1,16 @@
-interface AsyncLeadingAwaitChainSpec {
+export interface AsyncLeadingAwaitChainSpec {
     generator: "async-leading-await-chain";
     awaitCount: number;
 }
 
-interface AsyncBindingDefaultDepthSpec {
+export interface AsyncBindingDefaultDepthSpec {
     generator: "async-binding-default-depth";
     depth: number;
 }
 
-type GeneratedCaseSpec = AsyncLeadingAwaitChainSpec | AsyncBindingDefaultDepthSpec;
+export type GeneratedCaseSpec = AsyncLeadingAwaitChainSpec | AsyncBindingDefaultDepthSpec;
 
-function parseSpec(raw: string, filename: string): GeneratedCaseSpec {
+export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
     try {
         value = JSON.parse(raw);
@@ -154,7 +154,7 @@ function asyncBindingDefaultDepthSource(depth: number): string {
 }
 
 export function generateE2eCaseSource(raw: string, filename: string): string {
-    const spec = parseSpec(raw, filename);
+    const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);

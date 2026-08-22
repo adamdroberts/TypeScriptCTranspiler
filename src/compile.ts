@@ -360,16 +360,27 @@ interface DispatchLinkOptions {
 export function findDispatchLinkOptions(): DispatchLinkOptions | null {
     const prefixes = process.env.TSC2C_LIBDISPATCH_PREFIX
         ? [process.env.TSC2C_LIBDISPATCH_PREFIX]
-        : ["/usr/local", "/usr"];
+        : ["/usr/local", "/usr", "/usr/share/swift/usr", "/usr/local/swift/usr"];
     for (const prefix of prefixes) {
-        const includeDir = path.join(prefix, "include");
-        if (!fsSync.existsSync(path.join(includeDir, "dispatch", "dispatch.h"))) continue;
-        for (const libDir of [path.join(prefix, "lib"), path.join(prefix, "lib64"), path.join(prefix, "lib", "x86_64-linux-gnu")]) {
-            if (
-                fsSync.existsSync(path.join(libDir, "libdispatch.so")) ||
-                fsSync.existsSync(path.join(libDir, "libdispatch.a"))
-            ) {
-                return { includeDir, libDir };
+        const layouts = [
+            {
+                includeDir: path.join(prefix, "include"),
+                libDirs: [path.join(prefix, "lib"), path.join(prefix, "lib64"), path.join(prefix, "lib", "x86_64-linux-gnu")],
+            },
+            {
+                includeDir: path.join(prefix, "lib", "swift"),
+                libDirs: [path.join(prefix, "lib", "swift", "linux")],
+            },
+        ];
+        for (const layout of layouts) {
+            if (!fsSync.existsSync(path.join(layout.includeDir, "dispatch", "dispatch.h"))) continue;
+            for (const libDir of layout.libDirs) {
+                if (
+                    fsSync.existsSync(path.join(libDir, "libdispatch.so")) ||
+                    fsSync.existsSync(path.join(libDir, "libdispatch.a"))
+                ) {
+                    return { includeDir: layout.includeDir, libDir };
+                }
             }
         }
     }

@@ -2,7 +2,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { LocalGatesReport } from "./local-gates";
-import { argumentValue, defaultArtifactRoot, loadBaseline, sha256File, stableJson } from "./model";
+import { argumentValue, defaultArtifactRoot, loadBaseline, loadRegularFileSnapshot, stableJson } from "./model";
 
 function argumentValues(name: string): string[] {
     const result: string[] = [];
@@ -23,8 +23,10 @@ async function jsonFiles(directory: string): Promise<string[]> {
         const current = worklist.pop()!;
         for (const entry of await fs.readdir(current, { withFileTypes: true })) {
             const filename = path.join(current, entry.name);
+            if (entry.isSymbolicLink()) throw new Error(`local gate input tree contains a symlink: ${filename}`);
             if (entry.isDirectory()) worklist.push(filename);
             else if (entry.isFile() && entry.name.endsWith(".json")) result.push(filename);
+            else if (!entry.isFile()) throw new Error(`local gate input tree contains a non-regular entry: ${filename}`);
         }
     }
     return result.sort();
@@ -43,14 +45,32 @@ async function main(): Promise<void> {
     if (inputs.length === 0) throw new Error("provide local gate reports with --input or --input-dir");
     const baseline = await loadBaseline();
     const output = path.resolve(argumentValue("--output") ?? path.join(defaultArtifactRoot, "local-gates.json"));
-    const reports = await Promise.all(inputs.map(async (filename) => JSON.parse(await fs.readFile(filename, "utf8")) as LocalGatesReport));
+    const loadedInputs = await Promise.all(inputs.map(async (filename) => {
+        const loaded = await loadRegularFileSnapshot(filename, "local gate report");
+        try {
+            return { ...loaded, report: JSON.parse(loaded.bytes.toString("utf8")) as LocalGatesReport };
+        } catch (error) {
+            throw new Error(`invalid local gate report JSON ${filename}: ${String(error)}`);
+        }
+    }));
+    const reports = loadedInputs.map((input) => input.report);
     const first = reports[0]!;
     const gates = new Map<string, LocalGatesReport["gates"][number]>();
     for (const report of reports) {
         if (report.kind !== "ecmascript-local-gates" || report.selection.exhaustive || report.selection.gate === null) {
             throw new Error("local gate merge accepts only single-gate reports");
         }
-        for (const field of ["sourceStart", "sourceEnd", "toolchain", "executionProfile", "generatedEvidenceManifestSha256", "propertyEvidenceManifestSha256"] as const) {
+        for (const field of [
+            "sourceStart",
+            "sourceEnd",
+            "toolchain",
+            "executionProfile",
+            "generatedEvidenceManifestSha256",
+            "propertyEvidenceManifestSha256",
+            "e2eEvidenceManifestSha256",
+            "dependencyManifestSha256",
+            "containment",
+        ] as const) {
             if (!same(report[field], first[field])) throw new Error(`local gate reports disagree on ${field}`);
         }
         if (report.gates.length !== 1 || report.gates[0]!.id !== report.selection.gate || gates.has(report.selection.gate)) {
@@ -67,7 +87,7 @@ async function main(): Promise<void> {
         finishedAt: reports.map((report) => report.finishedAt).sort().at(-1)!,
         selection: { exhaustive: true, gate: null },
         gates: baseline.localGates.map((gate) => gates.get(gate.id)!),
-        mergedInputs: await Promise.all(inputs.map(async (filename) => ({ filename, sha256: await sha256File(filename) }))),
+        mergedInputs: loadedInputs.map((input) => ({ filename: input.filename, sha256: input.sha256 })),
     };
     await fs.mkdir(path.dirname(output), { recursive: true });
     await fs.writeFile(output, stableJson(merged), "utf8");

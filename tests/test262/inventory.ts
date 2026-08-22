@@ -23,7 +23,6 @@ import {
     parseTest262Metadata,
     scenarioSource,
     type NegativePhase,
-    type Test262Metadata,
     type Test262Mode,
 } from "./metadata";
 import type { ClauseCatalog } from "./spec-catalog";
@@ -53,6 +52,7 @@ interface EsidAlias extends ReviewedMapping {
 
 interface PathRule extends ReviewedMapping {
     prefix: string;
+    esid?: string;
 }
 
 interface TestOverride extends ReviewedMapping {
@@ -74,6 +74,7 @@ export interface InventoryIssue {
         | "unknown-feature"
         | "unmapped-feature"
         | "unknown-esid"
+        | "non-normative-esid"
         | "missing-clause-mapping"
         | "missing-harness-include"
         | "invalid-override";
@@ -105,11 +106,16 @@ export interface ScenarioRecord {
     nonDeterministic: boolean;
     clauseIds: string[];
     matrixGroups: string[];
-    moduleDependencies: Array<{ path: string; sha256: string }>;
+    resourceDirectory: string;
+}
+
+export interface ResourceDirectory {
+    directory: string;
+    files: Array<{ path: string; sha256: string }>;
 }
 
 export interface Test262Inventory {
-    schemaVersion: 1;
+    schemaVersion: 2;
     kind: "test262-inventory";
     baseline: {
         edition: 17;
@@ -131,6 +137,7 @@ export interface Test262Inventory {
         harness: string[];
     };
     issues: InventoryIssue[];
+    resourceDirectories: ResourceDirectory[];
     scenarios: ScenarioRecord[];
 }
 
@@ -235,7 +242,7 @@ function scopeFor(
 
 function normalizeMappings(
     overrides: MappingOverrides,
-    clauseIds: ReadonlySet<string>,
+    normativeClauseIds: ReadonlySet<string>,
     issues: InventoryIssue[],
 ): {
     aliases: Map<string, EsidAlias>;
@@ -249,7 +256,7 @@ function normalizeMappings(
         Array.isArray(mapping.clauses) &&
         mapping.clauses.length > 0 &&
         new Set(mapping.clauses).size === mapping.clauses.length &&
-        mapping.clauses.every((id) => clauseIds.has(id)) &&
+        mapping.clauses.every((id) => normativeClauseIds.has(id)) &&
         typeof mapping.reason === "string" &&
         mapping.reason.trim() !== "" &&
         typeof mapping.reviewedBy === "string" &&
@@ -263,6 +270,7 @@ function normalizeMappings(
         } else aliases.set(alias.esid, alias);
     }
     for (const rule of overrides.pathRules ?? []) {
+        const key = `${rule.esid ?? "<missing-esid>"}\0${rule.prefix}`;
         if (
             !validBase(rule) ||
             typeof rule.prefix !== "string" ||
@@ -270,10 +278,11 @@ function normalizeMappings(
             !rule.prefix.endsWith("/") ||
             rule.prefix.includes("..") ||
             /[*?\[\]]/.test(rule.prefix) ||
-            rules.has(rule.prefix)
+            !(rule.esid === undefined || (typeof rule.esid === "string" && rule.esid.trim() !== "")) ||
+            rules.has(key)
         ) {
             invalid(String(rule.prefix), "path rule must be one unique reviewed semantic directory prefix and reference pinned clauses");
-        } else rules.set(rule.prefix, rule);
+        } else rules.set(key, rule);
     }
     for (const override of overrides.testOverrides ?? []) {
         if (
@@ -301,20 +310,25 @@ export function harnessIncludeNames(flags: readonly string[], includes: readonly
     return ["assert.js", "sta.js", ...(flags.includes("async") ? ["doneprintHandle.js"] : []), ...includes];
 }
 
-export function needsModuleDirectory(metadata: Pick<Test262Metadata, "flags" | "features">, source: string): boolean {
-    return metadata.flags.includes("module") ||
-        metadata.features.includes("dynamic-import") ||
-        /\bimport\s*\(/.test(source);
-}
-
-export function siblingModuleResources(
-    test: string,
+export function resourceDirectoriesForTests(
+    tests: readonly string[],
     entries: ReadonlyArray<{ path: string; sha256: string }>,
-): Array<{ path: string; sha256: string }> {
-    return entries
-        .filter((entry) => entry.path !== test && path.posix.dirname(entry.path) === path.posix.dirname(test))
-        .map((entry) => ({ path: entry.path, sha256: entry.sha256 }))
-        .sort((left, right) => left.path.localeCompare(right.path));
+): ResourceDirectory[] {
+    const selected = new Set(tests.map((test) => path.posix.dirname(test)));
+    const grouped = new Map<string, Array<{ path: string; sha256: string }>>();
+    for (const entry of entries) {
+        const directory = path.posix.dirname(entry.path);
+        if (!selected.has(directory)) continue;
+        const files = grouped.get(directory) ?? [];
+        files.push({ path: entry.path, sha256: entry.sha256 });
+        grouped.set(directory, files);
+    }
+    return [...selected]
+        .sort((left, right) => left.localeCompare(right))
+        .map((directory) => ({
+            directory,
+            files: (grouped.get(directory) ?? []).sort((left, right) => left.path.localeCompare(right.path)),
+        }));
 }
 
 async function harnessIncludes(
@@ -368,7 +382,11 @@ export async function buildInventory(options: {
     ]);
     const catalog = JSON.parse(catalogRaw) as ClauseCatalog;
     const clauseById = new Map(catalog.clauses.map((clause) => [clause.id, clause]));
-    const clauseIds = new Set(clauseById.keys());
+    const normativeClauseIds = new Set(
+        catalog.clauses
+            .filter((clause) => clause.classification === "required" || clause.classification === "normative-optional")
+            .map((clause) => clause.id),
+    );
     const anchorById = new Map(catalog.anchors.map((anchor) => [anchor.id, anchor]));
     const groupByRoot = new Map(matrix.groups.map((group) => [group.rootClause, group.id]));
     const registry = parseFeatureRegistry(featureSource);
@@ -385,7 +403,7 @@ export async function buildInventory(options: {
         throw new Error("Test262 proposed-feature registry differs from the reviewed ES2026 baseline");
     }
     const issues: InventoryIssue[] = [];
-    const mappings = normalizeMappings(overrides, clauseIds, issues);
+    const mappings = normalizeMappings(overrides, normativeClauseIds, issues);
     const usedAliases = new Set<string>();
     const usedPathRules = new Set<string>();
     const usedTestOverrides = new Set<string>();
@@ -440,7 +458,9 @@ export async function buildInventory(options: {
         }
         let esidResolution: ScenarioRecord["esidResolution"];
         const exactAnchor = metadata.esid ? anchorById.get(metadata.esid) : undefined;
-        if (metadata.esid && exactAnchor) {
+        const exactClause = exactAnchor ? clauseById.get(exactAnchor.clauseId) : undefined;
+        const exactNormative = exactClause?.classification === "required" || exactClause?.classification === "normative-optional";
+        if (metadata.esid && exactAnchor && exactNormative) {
             mappedClauses = [...new Set([...mappedClauses, exactAnchor.clauseId])].sort();
             mappingSources.push(`esid:${metadata.esid}`);
             esidResolution = {
@@ -449,19 +469,26 @@ export async function buildInventory(options: {
                 kind: "exact",
             };
         } else if (scope.scope === "in-scope") {
-            const alias = metadata.esid ? mappings.aliases.get(metadata.esid) : undefined;
+            const informativeRule = metadata.esid && exactAnchor && !exactNormative
+                ? mappings.pathRules.find((rule) => rule.esid === metadata.esid && test.startsWith(rule.prefix))
+                : undefined;
+            const alias = metadata.esid && !exactAnchor ? mappings.aliases.get(metadata.esid) : undefined;
             const pathRule = metadata.esid === undefined
-                ? mappings.pathRules.find((rule) => test.startsWith(rule.prefix))
+                ? mappings.pathRules.find((rule) => rule.esid === undefined && test.startsWith(rule.prefix))
                 : undefined;
             const override = mappings.tests.get(test);
-            if (alias) {
+            if (informativeRule) {
+                mappedClauses = [...new Set([...mappedClauses, ...informativeRule.clauses])].sort();
+                mappingSources.push(`informative-esid-path:${informativeRule.esid}:${informativeRule.prefix}`);
+                usedPathRules.add(`${informativeRule.esid}\0${informativeRule.prefix}`);
+            } else if (alias) {
                 mappedClauses = [...new Set([...mappedClauses, ...alias.clauses])].sort();
                 mappingSources.push(`esid-alias:${alias.esid}`);
                 usedAliases.add(alias.esid);
             } else if (pathRule) {
                 mappedClauses = [...new Set([...mappedClauses, ...pathRule.clauses])].sort();
                 mappingSources.push(`path-rule:${pathRule.prefix}`);
-                usedPathRules.add(pathRule.prefix);
+                usedPathRules.add(`<missing-esid>\0${pathRule.prefix}`);
             } else if (override) {
                 if (override.sourceSha256 !== sha256Text(source)) {
                     issues.push({
@@ -475,6 +502,13 @@ export async function buildInventory(options: {
                     mappingSources.push(`test-override:${test}`);
                     usedTestOverrides.add(test);
                 }
+            } else if (metadata.esid && exactAnchor) {
+                issues.push({
+                    code: "non-normative-esid",
+                    test,
+                    detail: `esid ${metadata.esid} names ${exactClause?.classification ?? "unknown"} material and has no reviewed semantic-directory mapping to normative clauses`,
+                    claimBlocking: true,
+                });
             } else if (metadata.esid) {
                 issues.push({
                     code: "unknown-esid",
@@ -499,9 +533,6 @@ export async function buildInventory(options: {
             if (group) matrixGroups.add(group);
         }
         const includes = await harnessIncludes(options.test262, test, metadata.flags, metadata.includes, issues);
-        const moduleDependencies = needsModuleDirectory(metadata, source)
-            ? siblingModuleResources(test, corpus.entries)
-            : [];
         const sourceSha256 = sha256Text(source);
         for (const mode of modes) {
             const id = `${test}#${mode}`;
@@ -533,7 +564,7 @@ export async function buildInventory(options: {
                 nonDeterministic: metadata.flags.includes("non-deterministic"),
                 clauseIds: mappedClauses,
                 matrixGroups: [...matrixGroups].sort(),
-                moduleDependencies,
+                resourceDirectory: path.posix.dirname(test),
             });
         }
     }
@@ -542,7 +573,13 @@ export async function buildInventory(options: {
             if (!usedAliases.has(esid)) issues.push({ code: "invalid-override", test: esid, detail: "esid alias is unused by the pinned eligible corpus", claimBlocking: true });
         }
         for (const rule of mappings.pathRules) {
-            if (!usedPathRules.has(rule.prefix)) issues.push({ code: "invalid-override", test: rule.prefix, detail: "path rule is unused by the pinned eligible corpus", claimBlocking: true });
+            const key = `${rule.esid ?? "<missing-esid>"}\0${rule.prefix}`;
+            if (!usedPathRules.has(key)) issues.push({
+                code: "invalid-override",
+                test: rule.esid ? `${rule.esid}:${rule.prefix}` : rule.prefix,
+                detail: "path rule is unused by the pinned eligible corpus",
+                claimBlocking: true,
+            });
         }
         for (const test of mappings.tests.keys()) {
             if (!usedTestOverrides.has(test)) issues.push({ code: "invalid-override", test, detail: "exact test override is unused by the pinned eligible corpus", claimBlocking: true });
@@ -550,8 +587,12 @@ export async function buildInventory(options: {
     }
     scenarios.sort((a, b) => a.id.localeCompare(b.id));
     issues.sort((a, b) => a.test.localeCompare(b.test) || a.code.localeCompare(b.code));
+    const resourceDirectories = resourceDirectoriesForTests(
+        [...new Set(scenarios.map((scenario) => scenario.test))],
+        corpus.entries,
+    );
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         kind: "test262-inventory",
         baseline: {
             edition: 17,
@@ -573,6 +614,7 @@ export async function buildInventory(options: {
             harness: [...registry.harness].sort(),
         },
         issues,
+        resourceDirectories,
         scenarios,
     };
 }

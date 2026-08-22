@@ -4,7 +4,7 @@
   "title": "TypeScriptC ECMAScript 2026 support matrix",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "baseline", "clauseEvidence", "groups"],
+  "required": ["schemaVersion", "baseline", "choiceSelections", "normativeOptionalEvidence", "clauseEvidence", "groups"],
   "$defs": {
     "stringSet": {
       "type": "array",
@@ -45,23 +45,46 @@
     "coverageEdge": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["clause", "partition", "relation"],
+      "required": ["clause", "partition", "relation", "xref"],
       "properties": {
         "clause": { "type": "string", "pattern": "^sec-" },
         "partition": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-        "relation": { "enum": ["references", "referenced-by"] }
+        "relation": { "enum": ["references", "referenced-by"] },
+        "xref": { "type": "string", "pattern": "^xref-[0-9a-f]{64}$" }
       }
     },
     "partition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "surface", "cardinality", "test262Queries", "coveredBy", "localEvidence", "rationale"],
+      "required": ["id", "title", "surface", "cardinality", "choiceObligation", "definition", "normativeOptionalFamilies", "normativeOptionalSites", "test262Queries", "coveredBy", "localEvidence", "rationale"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
         "title": { "type": "string", "minLength": 1 },
         "surface": { "enum": ["syntax", "algorithm", "intrinsic", "module", "jobs-memory-model", "definition"] },
         "cardinality": { "enum": ["finite", "unbounded"] },
         "cardinalityMechanism": { "enum": ["canonical-collection", "tree", "graph", "worklist"] },
+        "choiceObligation": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^choice-[0-9a-f]{64}$" }
+          ]
+        },
+        "definition": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^definition-[0-9a-f]{64}$" }
+          ]
+        },
+        "normativeOptionalFamilies": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^optional-family-[0-9a-f]{64}$" },
+          "uniqueItems": true
+        },
+        "normativeOptionalSites": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^optional-[0-9a-f]{64}$" },
+          "uniqueItems": true
+        },
         "test262Queries": { "type": "array", "items": { "$ref": "#/$defs/query" } },
         "coveredBy": { "type": "array", "items": { "$ref": "#/$defs/coverageEdge" } },
         "localEvidence": { "$ref": "#/$defs/localEvidence" },
@@ -81,17 +104,64 @@
         "required": ["clause", "disposition", "partitions", "rationale"],
         "properties": {
           "clause": { "type": "string", "pattern": "^sec-" },
-          "disposition": { "enum": ["evidence", "spec-permitted-choice"] },
+          "disposition": { "const": "evidence" },
           "partitions": { "type": "array", "items": { "$ref": "#/$defs/partition" } },
           "rationale": { "type": "string", "minLength": 1 },
-          "choice": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["kind", "specBasis", "selection"],
-            "properties": {
-              "kind": { "const": "normative-optional-exclusion" },
-              "specBasis": { "type": "string", "pattern": "^https://" },
-              "selection": { "type": "string", "minLength": 1 }
+          "choice": false
+        }
+      }
+    },
+    "choiceSelections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["obligation", "selection", "rationale", "reviewedBy", "evidence"],
+        "properties": {
+          "obligation": { "type": "string", "pattern": "^choice-[0-9a-f]{64}$" },
+          "selection": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 },
+          "reviewedBy": { "type": "string", "minLength": 1 },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["clause", "partition"],
+              "properties": {
+                "clause": { "type": "string", "pattern": "^sec-" },
+                "partition": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "normativeOptionalEvidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "policy", "rationale", "reviewedBy", "evidence"],
+        "properties": {
+          "family": { "type": "string", "pattern": "^optional-family-[0-9a-f]{64}$" },
+          "policy": { "const": "implemented-all" },
+          "rationale": { "type": "string", "minLength": 1 },
+          "reviewedBy": { "type": "string", "minLength": 1 },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["clause", "partition"],
+              "properties": {
+                "clause": { "type": "string", "pattern": "^sec-" },
+                "partition": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }
+              }
             }
           }
         }

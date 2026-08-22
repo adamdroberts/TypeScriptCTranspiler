@@ -2,8 +2,15 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { buildInventory, type Test262Inventory } from "./inventory";
-import { argumentValue, defaultArtifactRoot, defaultCacheRoot, sha256Text, stableJson } from "./model";
-import type { Test262RunReport } from "./run";
+import {
+    argumentValue,
+    defaultArtifactRoot,
+    defaultCacheRoot,
+    loadRegularFileSnapshot,
+    sha256Text,
+    stableJson,
+} from "./model";
+import type { MergedShardIdentity, Test262RunReport } from "./run";
 
 function argumentValues(name: string): string[] {
     const result: string[] = [];
@@ -28,8 +35,10 @@ async function jsonFiles(directory: string): Promise<string[]> {
         const current = worklist.pop()!;
         for (const entry of await fs.readdir(current, { withFileTypes: true })) {
             const filename = path.join(current, entry.name);
+            if (entry.isSymbolicLink()) throw new Error(`Test262 shard input tree contains a symlink: ${filename}`);
             if (entry.isDirectory()) worklist.push(filename);
             else if (entry.isFile() && entry.name.endsWith(".json")) result.push(filename);
+            else if (!entry.isFile()) throw new Error(`Test262 shard input tree contains a non-regular entry: ${filename}`);
         }
     }
     return result.sort();
@@ -44,7 +53,15 @@ async function main(): Promise<void> {
     if (inputs.length === 0) throw new Error("provide every shard report with repeated --input arguments");
     const test262 = path.resolve(argumentValue("--test262") ?? path.join(defaultCacheRoot, "test262"));
     const output = path.resolve(argumentValue("--output") ?? path.join(defaultArtifactRoot, "test262-run.json"));
-    const reports = await Promise.all(inputs.map(async (filename) => JSON.parse(await fs.readFile(filename, "utf8")) as Test262RunReport));
+    const loadedInputs = await Promise.all(inputs.map(async (filename) => {
+        const loaded = await loadRegularFileSnapshot(filename, "Test262 shard report");
+        try {
+            return { ...loaded, report: JSON.parse(loaded.bytes.toString("utf8")) as Test262RunReport };
+        } catch (error) {
+            throw new Error(`invalid Test262 shard JSON ${filename}: ${String(error)}`);
+        }
+    }));
+    const reports = loadedInputs.map((input) => input.report);
     const first = reports[0]!;
     const shardTotal = first.inventory.selection.shard?.total;
     if (!shardTotal || reports.length !== shardTotal) {
@@ -66,7 +83,7 @@ async function main(): Promise<void> {
         if (report.corpusEndSha256 !== report.inventory.corpusManifestSha256) {
             throw new Error("Test262 shard corpus end identity differs from its inventory");
         }
-        for (const field of ["runnerContractVersion", "sourceStart", "sourceEnd", "toolchain", "executionProfile", "host", "timeoutMs", "corpusEndSha256"] as const) {
+        for (const field of ["runnerContractVersion", "sourceStart", "sourceEnd", "toolchain", "executionProfile", "host", "containment", "timeoutMs", "corpusEndSha256"] as const) {
             if (!same(report[field], first[field])) throw new Error(`shards disagree on ${field}`);
         }
     }
@@ -74,6 +91,25 @@ async function main(): Promise<void> {
         if (!shardIndices.has(index)) throw new Error(`missing Test262 shard ${index}/${shardTotal}`);
     }
     const fullInventory = await buildInventory({ test262, filter: null, shard: null });
+    const fullResourcesByDirectory = new Map(
+        fullInventory.resourceDirectories.map((directory) => [directory.directory, directory]),
+    );
+    for (const report of reports) {
+        const expectedDirectories = new Set(report.inventory.scenarios.map((scenario) => scenario.resourceDirectory));
+        const actualDirectories = new Set(report.inventory.resourceDirectories.map((directory) => directory.directory));
+        if (
+            actualDirectories.size !== report.inventory.resourceDirectories.length ||
+            actualDirectories.size !== expectedDirectories.size ||
+            [...expectedDirectories].some((directory) => !actualDirectories.has(directory))
+        ) {
+            throw new Error("Test262 shard sibling-resource directory set is incomplete or duplicated");
+        }
+        for (const directory of report.inventory.resourceDirectories) {
+            if (!same(directory, fullResourcesByDirectory.get(directory.directory))) {
+                throw new Error(`Test262 shard resource directory differs from fresh pinned inventory: ${directory.directory}`);
+            }
+        }
+    }
     const scenarioById = new Map<string, Test262Inventory["scenarios"][number]>();
     const resultById = new Map<string, Test262RunReport["results"][number]>();
     for (const report of reports) {
@@ -102,14 +138,21 @@ async function main(): Promise<void> {
         if (!expectedResultIds.has(id)) throw new Error(`extra merged result ${id}`);
     }
     const results = [...resultById.values()].sort((a, b) => a.id.localeCompare(b.id));
-    const merged = {
+    const mergedShards: MergedShardIdentity[] = loadedInputs
+        .map((input) => ({
+            index: input.report.inventory.selection.shard!.index,
+            total: input.report.inventory.selection.shard!.total,
+            sha256: input.sha256,
+        }))
+        .sort((left, right) => left.index - right.index);
+    const merged: Test262RunReport = {
         ...first,
         startedAt: reports.map((report) => report.startedAt).sort()[0]!,
         finishedAt: reports.map((report) => report.finishedAt).sort().at(-1)!,
         inventory: fullInventory,
         resultSetSha256: sha256Text(JSON.stringify(results)),
         results,
-        mergedShards: inputs.map((filename, index) => ({ filename, sha256: sha256Text(JSON.stringify(reports[index])) })),
+        mergedShards,
     };
     await fs.mkdir(path.dirname(output), { recursive: true });
     await fs.writeFile(output, stableJson(merged), "utf8");

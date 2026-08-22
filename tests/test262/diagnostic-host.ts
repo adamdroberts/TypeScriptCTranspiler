@@ -1,13 +1,21 @@
 #!/usr/bin/env bun
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { complianceDir, hasArgument, readJson } from "./model";
-import { hostProtocolVersion, type HostDescription, type HostObservation, type HostRequest } from "./protocol";
+import { complianceDir, hasArgument, readJson, recordedEnvironment, sha256Text } from "./model";
+import {
+    hostProtocolVersion,
+    type HostDescription,
+    type HostExecutionContract,
+    type HostObservation,
+    type HostPreparation,
+    type HostRequest,
+} from "./protocol";
 
 interface HostProfile {
     id: string;
     semanticDelegation: boolean;
     capabilities: Record<string, boolean>;
+    executionContract: HostExecutionContract;
 }
 
 async function profileDescription(): Promise<HostDescription> {
@@ -17,6 +25,8 @@ async function profileDescription(): Promise<HostDescription> {
         profileId: profile.id,
         semanticDelegation: profile.semanticDelegation,
         capabilities: profile.capabilities,
+        executionContract: profile.executionContract,
+        effectiveEnvironmentSha256: sha256Text(JSON.stringify(recordedEnvironment(process.env))),
     };
 }
 
@@ -39,7 +49,13 @@ async function main(): Promise<void> {
         detail:
             "tsc2c native host is diagnostic-only: separate same-Realm global Script setup, structured negative phases, module fixtures, async completion, and the required $262 hooks are not all implemented",
     };
-    console.log(JSON.stringify(observation));
+    const preparation: HostPreparation = {
+        protocolVersion: hostProtocolVersion,
+        scenarioId: request.scenarioId,
+        kind: "diagnostic-observation",
+        observation,
+    };
+    console.log(JSON.stringify(preparation));
 }
 
 main().catch((error) => {

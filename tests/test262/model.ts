@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
+import { constants as fsConstants } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
@@ -17,6 +18,14 @@ export interface Baseline {
         published: string;
         wording: string;
         includesNormativeAnnexB: boolean;
+        normativeOptionalPolicy: "implemented-all";
+        provenance: {
+            provider: "github-artifact-attestation";
+            repository: string;
+            signerWorkflow: string;
+            verifierCommand: string;
+            denySelfHostedRunners: true;
+        };
         excludes: string[];
     };
     ecma262: PinnedRepository & {
@@ -45,6 +54,7 @@ export interface Baseline {
         platform: string;
         architecture: string;
         compiler: string;
+        environmentAllowlist: string[];
         environment: Record<string, string>;
     };
     localGates: Array<{
@@ -65,6 +75,75 @@ export interface ProcessResult {
     code: number;
     stdout: string;
     stderr: string;
+}
+
+export interface ExecutableIdentity {
+    command: string;
+    resolvedPath: string;
+    realPath: string;
+    sha256: string;
+}
+
+export interface LoadedRegularFile {
+    filename: string;
+    bytes: Buffer;
+    sha256: string;
+}
+
+export const canonicalEvidenceEnvironmentAllowlist = ["HOME", "PATH", "TMPDIR"] as const;
+
+export function sanitizedEvidenceEnvironment(
+    allowlist: readonly string[],
+    overrides: Readonly<Record<string, string>>,
+): NodeJS.ProcessEnv {
+    if (
+        JSON.stringify(allowlist) !== JSON.stringify(canonicalEvidenceEnvironmentAllowlist) ||
+        Object.keys(overrides).some((key) => !/^[A-Z][A-Z0-9_]*$/.test(key))
+    ) {
+        throw new Error("evidence environment differs from the canonical reviewed allowlist");
+    }
+    const environment: NodeJS.ProcessEnv = {};
+    for (const key of allowlist) {
+        const value = process.env[key];
+        if (value !== undefined) environment[key] = value;
+    }
+    for (const key of Object.keys(overrides).sort()) environment[key] = overrides[key];
+    return environment;
+}
+
+export function recordedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(environment)
+            .filter((entry): entry is [string, string] => entry[1] !== undefined)
+            .sort(([left], [right]) => left.localeCompare(right)),
+    );
+}
+
+export async function resolveExecutableIdentity(
+    command: string,
+    environment: NodeJS.ProcessEnv,
+): Promise<ExecutableIdentity> {
+    const candidates = command === "bun"
+        ? [process.execPath]
+        : command.includes(path.sep)
+            ? [path.resolve(projectRoot, command)]
+            : (environment.PATH ?? "").split(path.delimiter).filter(Boolean).map((directory) => path.join(directory, command));
+    let resolvedPath: string | null = null;
+    for (const candidate of candidates) {
+        try {
+            const stat = await fs.stat(candidate);
+            await fs.access(candidate, fs.constants.X_OK);
+            if (stat.isFile()) {
+                resolvedPath = path.resolve(candidate);
+                break;
+            }
+        } catch {
+            // Continue through the explicit PATH worklist.
+        }
+    }
+    if (!resolvedPath) throw new Error(`cannot resolve evidence executable ${command}`);
+    const realPath = await fs.realpath(resolvedPath);
+    return { command, resolvedPath, realPath, sha256: await sha256File(realPath) };
 }
 
 export async function readJson<T>(filename: string): Promise<T> {
@@ -92,6 +171,35 @@ export async function sha256File(filename: string): Promise<string> {
     return sha256Text(await fs.readFile(filename));
 }
 
+/** Read one exact regular, non-symlink file snapshot and bind its identity. */
+export async function loadRegularFileSnapshot(filename: string, label: string): Promise<LoadedRegularFile> {
+    const before = await fs.lstat(filename);
+    if (before.isSymbolicLink() || !before.isFile()) {
+        throw new Error(`${label} must be a regular non-symbolic-link file: ${filename}`);
+    }
+    const handle = await fs.open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    try {
+        const opened = await handle.stat();
+        if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
+            throw new Error(`${label} changed identity while it was being opened: ${filename}`);
+        }
+        const bytes = await handle.readFile();
+        const after = await handle.stat();
+        if (
+            after.dev !== opened.dev ||
+            after.ino !== opened.ino ||
+            after.size !== opened.size ||
+            after.mtimeMs !== opened.mtimeMs ||
+            after.ctimeMs !== opened.ctimeMs
+        ) {
+            throw new Error(`${label} changed while its bytes were being read: ${filename}`);
+        }
+        return { filename, bytes, sha256: sha256Text(bytes) };
+    } finally {
+        await handle.close();
+    }
+}
+
 export async function fileManifestSha256(files: readonly string[], root = projectRoot): Promise<string> {
     const entries: Array<{ path: string; sha256: string }> = [];
     for (const filename of [...files].sort()) {
@@ -108,6 +216,31 @@ export async function pathExists(filename: string): Promise<boolean> {
         return true;
     } catch {
         return false;
+    }
+}
+
+export async function trackedProjectFiles(): Promise<Set<string>> {
+    return new Set((await git(projectRoot, ["ls-files", "-z"])).split("\0").filter(Boolean));
+}
+
+export async function requireTrackedRegularProjectFile(
+    filename: string,
+    trackedFiles: ReadonlySet<string>,
+    label: string,
+): Promise<void> {
+    const segments = filename.split("/");
+    if (
+        path.isAbsolute(filename) ||
+        filename.includes("\\") ||
+        segments.some((segment) => segment === "." || segment === "..") ||
+        path.posix.normalize(filename) !== filename ||
+        !trackedFiles.has(filename)
+    ) {
+        throw new Error(`${label} is not a normalized tracked project file: ${filename}`);
+    }
+    const stat = await fs.lstat(path.join(projectRoot, filename));
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+        throw new Error(`${label} is not a regular non-symlink project file: ${filename}`);
     }
 }
 

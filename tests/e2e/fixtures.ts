@@ -2586,8 +2586,41 @@ export async function ensureE2eNodeModuleFixtures(): Promise<void> {
                     writeFileIfChanged(path.join(packageRoot, relative), content),
                 ),
             );
+            await validateFixtureTree(name, packageRoot, fixture);
         }),
     );
+}
+
+async function validateFixtureTree(name: string, packageRoot: string, fixture: PackageFixture): Promise<void> {
+    const expected = new Set(Object.keys(fixture.files).map((filename) => filename.split(path.sep).join("/")));
+    if (fixture.packageJson) expected.add("package.json");
+    const observed = new Set<string>();
+    const worklist = [packageRoot];
+    while (worklist.length > 0) {
+        const directory = worklist.pop()!;
+        for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+            const filename = path.join(directory, entry.name);
+            if (entry.isSymbolicLink()) {
+                throw new Error(`E2E fixture package ${name} contains a symlink: ${path.relative(packageRoot, filename)}`);
+            }
+            if (entry.isDirectory()) {
+                worklist.push(filename);
+                continue;
+            }
+            if (!entry.isFile()) {
+                throw new Error(`E2E fixture package ${name} contains a non-regular input: ${path.relative(packageRoot, filename)}`);
+            }
+            observed.add(path.relative(packageRoot, filename).split(path.sep).join("/"));
+        }
+    }
+    const unexpected = [...observed].find((filename) => !expected.has(filename));
+    const missing = [...expected].find((filename) => !observed.has(filename));
+    if (unexpected || missing) {
+        throw new Error(
+            `E2E fixture package ${name} differs from its canonical worklist` +
+            `${unexpected ? `; unexpected ${unexpected}` : ""}${missing ? `; missing ${missing}` : ""}`,
+        );
+    }
 }
 
 async function writeFileIfChanged(fileName: string, content: string): Promise<void> {

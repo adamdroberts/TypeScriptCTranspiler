@@ -1,7 +1,36 @@
 {
   "schemaVersion": 1,
-  "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias or semantic directory rule; exact source-hashed test overrides are only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
+  "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias or semantic-directory rule; an esid-qualified directory rule may redirect pinned informative metadata to its exact normative requirement. Exact source-hashed test overrides are only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
   "esidAliases": [],
-  "pathRules": [],
+  "pathRules": [
+    {
+      "prefix": "test/language/expressions/async-generator/",
+      "esid": "sec-strict-mode-of-ecmascript",
+      "clauses": ["sec-async-generator-function-definitions-static-semantics-early-errors"],
+      "reason": "The pinned informative strict-mode annex test in this semantic directory exercises the normative AsyncGeneratorExpression formal-parameter early error.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/language/expressions/function/",
+      "esid": "sec-strict-mode-of-ecmascript",
+      "clauses": ["sec-function-definitions-static-semantics-early-errors"],
+      "reason": "The pinned informative strict-mode annex tests in this semantic directory exercise the normative FunctionExpression formal-parameter restriction.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/language/statements/function/",
+      "esid": "sec-strict-mode-of-ecmascript",
+      "clauses": ["sec-function-definitions-static-semantics-early-errors"],
+      "reason": "The pinned informative strict-mode annex tests in this semantic directory exercise the normative FunctionDeclaration formal-parameter restriction.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/language/statements/try/",
+      "esid": "sec-strict-mode-of-ecmascript",
+      "clauses": ["sec-try-statement-static-semantics-early-errors"],
+      "reason": "The pinned informative strict-mode annex tests in this semantic directory exercise the normative CatchParameter early errors.",
+      "reviewedBy": "tsc2c compliance review"
+    }
+  ],
   "testOverrides": []
 }

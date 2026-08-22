@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://typescriptc.invalid/schemas/ecmascript-2026-evidence-registry.schema.json",
+  "title": "TypeScriptC ECMAScript 2026 reciprocal evidence registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifacts"],
+  "$defs": {
+    "target": {
+      "type": "string",
+      "pattern": "^sec-[^#]+#[a-z0-9][a-z0-9-]*$"
+    },
+    "stressReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "parameter", "representativeHighDepth", "rationale", "reviewedBy"],
+      "properties": {
+        "dimension": { "type": "string", "minLength": 1 },
+        "parameter": { "type": "string", "minLength": 1 },
+        "representativeHighDepth": { "type": "integer", "minimum": 2 },
+        "rationale": { "type": "string", "minLength": 1 },
+        "reviewedBy": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "targets"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "property",
+              "generatedRegression",
+              "stress",
+              "e2e",
+              "negativeDiagnostics",
+              "declarationSurface",
+              "implementation"
+            ]
+          },
+          "id": { "type": "string", "minLength": 1 },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/target" }
+          },
+          "stressReview": { "$ref": "#/$defs/stressReview" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "stress" } }, "required": ["kind"] },
+            "then": { "required": ["stressReview"], "properties": { "stressReview": {} } },
+            "else": { "not": { "required": ["stressReview"], "properties": { "stressReview": {} } } }
+          }
+        ]
+      }
+    }
+  }
+}

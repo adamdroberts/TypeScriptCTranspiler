@@ -7,6 +7,14 @@
     "published": "2026-06",
     "wording": "Conforms to ECMAScript 2026 (ECMA-262, 17th edition)",
     "includesNormativeAnnexB": true,
+    "normativeOptionalPolicy": "implemented-all",
+    "provenance": {
+      "provider": "github-artifact-attestation",
+      "repository": "adamdroberts/TypeScriptCTranspiler",
+      "signerWorkflow": ".github/workflows/ecmascript-conformance.yml",
+      "verifierCommand": "/usr/bin/gh",
+      "denySelfHostedRunners": true
+    },
     "excludes": [
       "ECMA-402 internationalization",
       "ECMA-404 JSON interchange syntax",
@@ -20,7 +28,7 @@
     "tree": "02137fef007dced3167756ba3dbd3e11306ad4bf",
     "specSource": "spec.html",
     "specSourceSha256": "ce7bc30174061fd8d212270b81cf6511661180c1e174f6911d10ced0581527b0",
-    "clauseCatalogSha256": "c714e6628740070f3625890d0e30927c360d84d95d172d7628472ba337d23385"
+    "clauseCatalogSha256": "db57dc27c5bc089eadc2ec9e62909d98241de213fdbbe57be6a220009d61a754"
   },
   "test262": {
     "repository": "https://github.com/tc39/test262.git",
@@ -79,7 +87,7 @@
     ]
   },
   "runnerContract": {
-    "version": 1,
+    "version": 4,
     "requiredCapabilities": [
       "fresh-realm-per-scenario",
       "separate-global-script-setup",
@@ -90,6 +98,7 @@
       "async-done-protocol",
       "structured-negative-phases",
       "exact-error-constructor",
+      "failure-origin",
       "host-print",
       "host-$262-global",
       "host-$262-AbstractModuleSource",
@@ -117,9 +126,11 @@
     "platform": "linux",
     "architecture": "x64",
     "compiler": "gcc",
+    "environmentAllowlist": ["HOME", "PATH", "TMPDIR"],
     "environment": {
       "TSC2C_CC": "gcc",
       "TSC2C_CXX": "g++",
+      "TSC2C_LIBDISPATCH_PREFIX": "/usr/share/swift/usr",
       "TZ": "UTC",
       "LC_ALL": "C.UTF-8"
     }

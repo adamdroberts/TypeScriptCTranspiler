@@ -4,6 +4,8 @@
   "description": "Current native compiler profile. It is useful for gap discovery but is deliberately not accepted as Test262 conformance evidence.",
   "command": ["bun", "tests/test262/diagnostic-host.ts"],
   "implementationFiles": ["tests/test262/diagnostic-host.ts", "tests/test262/protocol.ts"],
+  "executionContract": "diagnostic-only-v1",
+  "environmentAllowlist": ["HOME", "PATH", "TMPDIR"],
   "claimEligible": false,
   "semanticDelegation": false,
   "capabilities": {
@@ -16,6 +18,7 @@
     "async-done-protocol": false,
     "structured-negative-phases": false,
     "exact-error-constructor": false,
+    "failure-origin": false,
     "host-print": false,
     "host-$262-global": false,
     "host-$262-AbstractModuleSource": false,

@@ -56,22 +56,17 @@ async function discoverCases(): Promise<Case[]> {
         const expectedPath = path.join(casesDir, d, "expected.stdout");
         const expectedMainCContainsPath = path.join(casesDir, d, "expected.mainc.contains");
         const expectedMainCNotContainsPath = path.join(casesDir, d, "expected.mainc.not_contains");
-        const emitCOnlyPath = path.join(casesDir, d, "compile.emit_c_only");
         const nativeAddonManifestPath = path.join(casesDir, d, "native-addon-manifest.json");
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
         const customConditionsPath = path.join(casesDir, d, "compile.custom_conditions");
-        const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
-        const dispatchPath = path.join(casesDir, d, "compile.dispatch");
-        const dispatchSerialPath = path.join(casesDir, d, "compile.dispatch.serial");
-        const dispatchNoGcPath = path.join(casesDir, d, "compile.dispatch.no_gc");
         const runEnvPath = path.join(casesDir, d, "run.env");
         const release = await exists(releasePath);
-        const dispatch = await exists(dispatchPath);
-        const dispatchSerial = await exists(dispatchSerialPath);
-        const dispatchNoGc = await exists(dispatchNoGcPath);
-        const emitCOnly = await exists(emitCOnlyPath);
+        const dispatch = manifest.dispatch;
+        const dispatchSerial = manifest.dispatchSerial;
+        const dispatchNoGc = manifest.dispatchNoGc;
+        const emitCOnly = manifest.emitCOnly;
         const nativeAddonManifest = await exists(nativeAddonManifestPath)
             ? nativeAddonManifestPath
             : undefined;
@@ -81,7 +76,7 @@ async function discoverCases(): Promise<Case[]> {
         const runtimeCodeManifest = await exists(runtimeCodeManifestPath)
             ? runtimeCodeManifestPath
             : undefined;
-        const unsafeEval = await exists(unsafeEvalPath);
+        const unsafeEval = manifest.unsafeEval;
         const customConditions = await exists(customConditionsPath)
             ? parseCustomConditions(await fs.readFile(customConditionsPath, "utf8"), customConditionsPath)
             : undefined;
@@ -143,6 +138,8 @@ async function discoverCases(): Promise<Case[]> {
             customConditions,
             runEnv,
             dispatch,
+            dispatchSerial,
+            dispatchNoGc,
         });
     }
     return cases.sort((a, b) => a.name.localeCompare(b.name));

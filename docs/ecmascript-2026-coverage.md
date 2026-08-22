@@ -2369,6 +2369,163 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-web-compat-host-ensure-can-add-private-field` — Non-default behaviour in HostEnsureCanAddPrivateElement: exact disposition and partitions missing.
   - [ ] `sec-runtime-errors-for-function-call-assignment-targets` — Runtime Errors for Function Call Assignment Targets: exact disposition and partitions missing.
 
+## Specification choice obligations
+
+Each entry is independently extracted from normative marked text, normative host-hook declarations, or the Host Layering Points inventory. A selection must cite executable clause partitions; there is no authored not-applicable escape.
+
+- [ ] `choice-001eeb265d76825bb0f7e5af29698a88144268134d2f28537e1b0c10f08a0ed2` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-014e4490dac1fd395dd6be4d90cb328590fcfb0462f9f351e7ef282128c925c1` — implementation-approximated, marked-text, source `sec-math.tanh`: exact evidenced selection missing.
+- [ ] `choice-0586d595c5b873a6379ff53c27b23a5ae292cd8e234d98feb253531f2701e347` — implementation-approximated, marked-text, source `sec-math.acosh`: exact evidenced selection missing.
+- [ ] `choice-06e897ffeb440aecdaf696f1c0bab4c9825c0357af0aa70b14c2776591d9698d` — implementation-approximated, marked-text, source `sec-math.expm1`: exact evidenced selection missing.
+- [ ] `choice-093e1b057c45f00f2c10b83f997c10af891262e422cb0fcfbde9e44bd03bd45f` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-0cd6247f59b331223caf2a4db514167b791af362c8f8200b11ecb8ddceb05f27` — host-defined, host-hook-declaration, source `sec-HostLoadImportedModule`: exact evidenced selection missing.
+- [ ] `choice-0cf3d17f18f0c9ee63c4f855228850ec92026bdb9e4374783ea587c7698fffd3` — host-defined, host-hook-declaration, source `sec-hosthassourcetextavailable`: exact evidenced selection missing.
+- [ ] `choice-0d8d449282bc6a6dff7f1ad4f025abf4279984ae6734ba76e64d88aff36b7cf5` — implementation-defined, host-hook-declaration, source `sec-systemtimezoneidentifier`: exact evidenced selection missing.
+- [ ] `choice-1398034495469f5aeb7d735c5c3748aac1d260e9bc7a2036cfa4b57ecd4d80d0` — implementation-defined, marked-text, source `sec-hostenqueuepromisejob`: exact evidenced selection missing.
+- [ ] `choice-16d410f73e59321f75eaa25ac9cd25e3ee3fb1270a60686fbbf347f9f944ac5b` — implementation-defined, marked-text, source `sec-hostenqueuepromisejob`: exact evidenced selection missing.
+- [ ] `choice-1e027ba77f9de16815e0ef51b348bcc5d7bd54e9d140ef77cd533e9111343ec5` — implementation-defined, marked-text, source `sec-debugger-statement-runtime-semantics-evaluation`: exact evidenced selection missing.
+- [ ] `choice-1e94794f36196504a34dbf3abe5277c5396a945ee3d449127f88ddc75bd5d646` — implementation-defined, marked-text, source `sec-dowait`: exact evidenced selection missing.
+- [ ] `choice-1f21bfe9db9a977cecbef9d9d51e92ac4f4b879d14f00687b8b6b74ec13a9977` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-1fc0530f6cec5c4e12e9b5e90d3e10a16f8c5e7e2e81f9312e9b450917bb0c58` — implementation-defined, marked-text, source `sec-parsetext`: exact evidenced selection missing.
+- [ ] `choice-21abb1ac11955ed33b4ffd8c32409a3ecc41aaf883ae81e681708ca144a96809` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-22d28308f8ca60bac97d9c1dfdda7c7989aab4d0b80a68e5354dc4057254a5f1` — host-defined, host-hook-declaration, source `sec-hostresizearraybuffer`: exact evidenced selection missing.
+- [ ] `choice-27327415128e50be9d3e24f0f112be6b8d0cf7cfdfa12d88ca98954019ab08ea` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-27bb7d435ad778382a9d842b9bbeb0c27022de07204633b521418f7005e57ed8` — implementation-approximated, marked-text, source `sec-math.atan`: exact evidenced selection missing.
+- [ ] `choice-287be0ae3b0660c84c80c898f149b821704186383dd60b64106c4e8340e086fc` — host-defined, host-hook-declaration, source `sec-hostenqueuegenericjob`: exact evidenced selection missing.
+- [ ] `choice-302f754d5ed17bbe9ddd06fd53867f8054a89f3cfa3cfd0b6171d58e89ac4683` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
+- [ ] `choice-3054b9e7adf78779fd375d35010f44f886338d0c524a1b3e52dae0e1798c99da` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-324c60895ca345800100a3244c564f07959bd6f832eb6706c8cae136ef0ab22d` — implementation-approximated, marked-text, source `sec-numeric-types-number-exponentiate`: exact evidenced selection missing.
+- [ ] `choice-330a4bfa84d174086ceddf8e25642366e916db26290ebfc0e5a2f7105d05c496` — implementation-approximated, marked-text, source `sec-math.atan`: exact evidenced selection missing.
+- [ ] `choice-35278cf0db6030fc41ffb055f7c2567da95f8f60fad008a38e63b4c110eab475` — implementation-defined, marked-text, source `sec-hostgrowsharedarraybuffer`: exact evidenced selection missing.
+- [ ] `choice-3594e1388b87ea923472cf453c31e8aa8e20302d441219ec6100ae6b75ad299e` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-377669b16f565553125abaed8b8574f2ce1a998595e6a1eb48547f4508797ee3` — implementation-defined, host-hook-declaration, source `sec-getnamedtimezoneepochnanoseconds`: exact evidenced selection missing.
+- [ ] `choice-38d242aaf94b45d60db654bf5fe5212ac2af8a3de15c52e8d05ece5047c3a75d` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-3b84a1735c8a17c7a264af2a607487bfa2b075fbfd2f34986dbd39ccc95cfac2` — implementation-defined, marked-text, source `sec-date.prototype.tolocalestring`: exact evidenced selection missing.
+- [ ] `choice-3cada645fb558364a4380c3e05da49b383a0c8b9b1073c7b3883c51acf347d8a` — host-defined, host-hook-declaration, source `sec-hostgetsupportedimportattributes`: exact evidenced selection missing.
+- [ ] `choice-3d113746e09caf9195627048a27a4d8b7dc5d0c94203f2d212709317401d437d` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-3d50cf176e2629cb6dcb6d83c71de0b25360267e4d9380a86aabfeecc27b70b3` — host-defined, marked-text, source `sec-jobcallback-records`: exact evidenced selection missing.
+- [ ] `choice-4167a70d06da053b1f21b436e3ce86f31f6c9ed131d3552d9a08bc7f4eaac204` — implementation-defined, marked-text, source `sec-string.prototype.localecompare`: exact evidenced selection missing.
+- [ ] `choice-446a11e436a699191a45058f1d314962a600f888816dae7cd6d250dbc6b60d1b` — implementation-approximated, marked-text, source `sec-math.cbrt`: exact evidenced selection missing.
+- [ ] `choice-47fd92fa2251e707c7af114005bd844ef00fb362b2fd2aab444192673c144bc4` — implementation-approximated, marked-text, source `sec-math.cos`: exact evidenced selection missing.
+- [ ] `choice-4a252cf14043daca355aba8d33887523c0e86be67472c20de697a05147a5593f` — host-defined, marked-text, source `sec-IsHTMLDDA-internal-slot`: exact evidenced selection missing.
+- [ ] `choice-4d255c186178888d7f90561dd3fb73e40736ce9cc1ee8e5bfece2a776f06864a` — host-defined, host-hook-declaration, source `sec-hostensurecanaddprivateelement`: exact evidenced selection missing.
+- [ ] `choice-4df105ec2685cbaa980cb83b7c64be11b079628e6e04192522a2c3c6bf0f1eed` — host-defined, host-hook-declaration, source `sec-hostenqueuepromisejob`: exact evidenced selection missing.
+- [ ] `choice-5160e8f7bab61bb310b086e506f7ea869bd068e130a17fc165ae8bbfeb0b7f0d` — implementation-approximated, marked-text, source `sec-math.sin`: exact evidenced selection missing.
+- [ ] `choice-57c1717d11ccc0a8ee96f08183b5192454d121a05c07856ae28ba29907e72fb1` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-58c7b15847695b0db7b2d0d7049ec847eb0f15cc1760a5fec3739ee972ad132b` — implementation-approximated, marked-text, source `sec-math.atanh`: exact evidenced selection missing.
+- [ ] `choice-5a8979369e2d2dd4412ed26038d50cddd618b465ee9b8a644b4e6bfd221ffab6` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
+- [ ] `choice-5e2618c2bb8bf0b1b624fd6ce3246fca191da9ae755c8b1162bce3dbb9413680` — implementation-approximated, marked-text, source `sec-math.cosh`: exact evidenced selection missing.
+- [ ] `choice-5e557a1530d9599280375d7948c044ee061d26d541bd9db3728cbb4306ccad01` — host-defined, marked-text, source `sec-cyclic-module-records`: exact evidenced selection missing.
+- [ ] `choice-5ed9ddf47726bd5ac5f7a892edafbe84cc361b61cb255264085b369e12e51dbb` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-61f0a98469ff09bea1f551db7476d78485f5633b2c41d95a3dc317ff298b5bbe` — host-defined, host-hook-declaration, source `sec-hostenqueuetimeoutjob`: exact evidenced selection missing.
+- [ ] `choice-61f0adb7590c6f85126a18667f5686456e2f1a7c8c6bdcfcd14d3d3b3110fe3e` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
+- [ ] `choice-62f41272f09269bc0206e5ff63f652f4055151abd45265ecdf2979b0b9b57ad2` — host-defined, marked-text, source `sec-jobs`: exact evidenced selection missing.
+- [ ] `choice-6492158f38efa289b0f8bc088641d04b3e77ac8b9712ed5945d76786671fc460` — implementation-defined, marked-text, source `sec-string.prototype.localecompare`: exact evidenced selection missing.
+- [ ] `choice-66a8d3abffac3a2a97e1d05d3acd06050ccc3d422d655d4034ba2ec3dfc7b49b` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-6756ea32f67d6120496fd59dea46f2c2461fcdfa4302186c43d7d5d94987f2ad` — implementation-approximated, marked-text, source `sec-math.exp`: exact evidenced selection missing.
+- [ ] `choice-6893b7f1fcd20743f01117665db445260a5c7c935f242bd6251d9e4b54288a44` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1` — implementation-defined, marked-text, source `sec-number.prototype.tolocalestring`: exact evidenced selection missing.
+- [ ] `choice-6caad900ef9e94b89098e511114a60dec4f31624b7802d6ba8e41a0072b91c99` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
+- [ ] `choice-6ec4e12eafa100f803928451b958c0f16ecee037cf68dcd149b11d9058a9dfed` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-71d669fed37199b9e33cb90fed2352f63bd0bee4168c9fe8c3f1f4c1d071bc6e` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7` — host-defined, host-hook-declaration, source `sec-hostfinalizeimportmeta`: exact evidenced selection missing.
+- [ ] `choice-76781d698005dd8a94833a598222e4c814418feed5552cd5c13b5be64b279b02` — implementation-approximated, marked-text, source `sec-math.tan`: exact evidenced selection missing.
+- [ ] `choice-76c4f9e7237f5ac04525a6c5f3918ee50b3943e0a1aecbfe362c5a9305b3345d` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-76d2e1b61072cbadafa0338d95c90173fa84699fe471c0999e012fff8c4f691c` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-77b75c55438919970cf8e3ecc1729cc36afa658b669cc4d71c3a094b1743cb89` — implementation-defined, marked-text, source `sec-timezoneestring`: exact evidenced selection missing.
+- [ ] `choice-7d5cc887e461ddb4a1d71347a72f0c04b2d4844cb580fdbf26aeb4906ac523d2` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-7e96575e07da5e37d1ff968b81cb6ed3cedebe76000df10b74b01a7749af0495` — host-defined, marked-text, source `sec-global-object`: exact evidenced selection missing.
+- [ ] `choice-7ed21bd195e7164298f710d94db475f46d67bd83c25615fc241c5958e17e26e3` — implementation-defined, marked-text, source `sec-date.prototype.tolocaledatestring`: exact evidenced selection missing.
+- [ ] `choice-7fabc4839caf705d6449eacf30e8ebb044d1c470529c47b8e538cb2f88a76d08` — implementation-defined, marked-text, source `sec-math.random`: exact evidenced selection missing.
+- [ ] `choice-7fc8ecd877026ea7e71bd79428c56dd820034bb873bf7b92a308e5d6e2961299` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-8035282728cb638fc394452e4f21f7c2ed72da3617251debe6437d6b3a575226` — implementation-defined, marked-text, source `sec-array.prototype.tolocalestring`: exact evidenced selection missing.
+- [ ] `choice-80b0d3e95f0b794ed7b3ed3db41adb4a4cb6c00761ce5d5dd595a3fec8870c54` — implementation-defined, marked-text, source `sec-timezoneestring`: exact evidenced selection missing.
+- [ ] `choice-813b1959bdc96836f96faee95f62a2418c70dd3a0f45ad7323e4f6febc7449fb` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-81ccae84c219d07f15933156727dc8427a6b97a06f9187a1c8b15d6617ac93c6` — host-defined, host-hook-declaration, source `sec-host-promise-rejection-tracker`: exact evidenced selection missing.
+- [ ] `choice-8507b26b11477f7e650e2d518c8ad42f25527c46c76ba0a426f1fe2f8bc174c9` — implementation-defined, marked-text, source `sec-bigint.prototype.tolocalestring`: exact evidenced selection missing.
+- [ ] `choice-85b880ca94b0d06eff6e62a0fa5d623d7c854ae493335ffb096139554c3efb23` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-8809b9fb961956165f74f6edb3d76383a89b8ebbfabf219cd10943b16a34dfb3` — host-defined, marked-text, source `sec-initializehostdefinedrealm`: exact evidenced selection missing.
+- [ ] `choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a` — host-defined, host-hook-declaration, source `sec-hostgetimportmetaproperties`: exact evidenced selection missing.
+- [ ] `choice-8bfda4b5d650daa6233be4c0a9be8f995dac3079c4d1c128b50879dea7e6691a` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-8c42b7901c56964506e8b98c9098151116110cd966da5ae5bedd05740bae686b` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-9168ad849a01a4be28c03d13d3697d6b540bbc927db9a59e3dcf6315ae4e9eee` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-92219c122d8dcc6e89743d6253ed915a021f58699c2a7d4f44c88ab185df818c` — implementation-defined, marked-text, source `sec-ecmascript-language-types-number-type`: exact evidenced selection missing.
+- [ ] `choice-9428abb743b6373e7274ba932da27ca5d88ec02547ac3dbb0ca11726709d7c90` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-95d866f8531357077d89c5a4ad2616cfc04fa704bb3a61d7146b2636c22c42a4` — host-defined, host-hook-declaration, source `sec-hostensurecancompilestrings`: exact evidenced selection missing.
+- [ ] `choice-9a0826719614d9cb508227ef652a8e5a0b5cfdbccd59da4c9e56825aed44c003` — implementation-approximated, marked-text, source `sec-math.asinh`: exact evidenced selection missing.
+- [ ] `choice-9a55f4a390040153bb05482a89ccdbef9724b94c37a3a7c1e500128a3ade6cfa` — host-defined, host-layering-point, source `sec-host-defined-objects-summary`: exact evidenced selection missing.
+- [ ] `choice-9aba4a91db4f0468aeb7aa1675a57026d1fda2b290ac7020148a626fbbe6a3a5` — host-defined, marked-text, source `sec-hostensurecanaddprivateelement`: exact evidenced selection missing.
+- [ ] `choice-9b5dce69533e903f31fbe88306e93501fd397fc2d3a468f31d8ae59c19504034` — host-defined, host-hook-declaration, source `sec-hostgrowsharedarraybuffer`: exact evidenced selection missing.
+- [ ] `choice-9efb0afb6994c5c06a72452b949d17b46934756bd56982f5dc996e85c6c6f60c` — implementation-approximated, marked-text, source `sec-math.log2`: exact evidenced selection missing.
+- [ ] `choice-9f67e3d3d4f69c40e3f3c85ddb34ae657c81c0b262e4176b01e05c7fc26ad69a` — host-defined, host-hook-declaration, source `sec-hostmakejobcallback`: exact evidenced selection missing.
+- [ ] `choice-a0de35c1ef5144bb8edcc5480f57f5450889329fe48099062d71703bf5eca900` — host-defined, marked-text, source `sec-initializehostdefinedrealm`: exact evidenced selection missing.
+- [ ] `choice-a123b4a9d7d4b86e6405e1329130268cfb08df0b2053e2e509227a92ab71f049` — implementation-approximated, marked-text, source `sec-math.log1p`: exact evidenced selection missing.
+- [ ] `choice-a3612013d410b050ab9aa569f9df1b6cab5f1ddfc673610950a1b0f4fa40191b` — host-defined, host-hook-declaration, source `sec-hostcalljobcallback`: exact evidenced selection missing.
+- [ ] `choice-a4f1ded90e933e49f8f5a36ebd985a7dcbb9bc7207d5003540dedb823c0fa85b` — host-defined, marked-text, source `sec-jobs`: exact evidenced selection missing.
+- [ ] `choice-a57b1d334d0358cda9d81aa5990f6400914ba2bfc74e5d14742ab8284e64dd4d` — implementation-approximated, marked-text, source `sec-math.acos`: exact evidenced selection missing.
+- [ ] `choice-a6ac7f418e7e88d7de911a45fe6a316d133dc122bc59727e56d3a94137a2c2ff` — implementation-defined, marked-text, source `sec-completion-record-specification-type`: exact evidenced selection missing.
+- [ ] `choice-aaccd442f6839bc1884b472d2702c08bb112e8cd0fae9668afde9ee91adbc356` — implementation-defined, marked-text, source `sec-roundmvresult`: exact evidenced selection missing.
+- [ ] `choice-ab6288e1d697cab5bad1984ade46cd4f70e6a0126e0faf2d3c8dbaa2618d81c8` — implementation-approximated, marked-text, source `sec-math.atan`: exact evidenced selection missing.
+- [ ] `choice-ac14898c59f398df2bc5df4cbe56ae7df748ecb35851f3c2a73c888914a3881c` — implementation-defined, host-hook-declaration, source `sec-getnamedtimezoneoffsetnanoseconds`: exact evidenced selection missing.
+- [ ] `choice-ac673e667424f3fcc9601c95aeb9c040e6ab566d5de1af1fdb7bc98427b62969` — implementation-approximated, marked-text, source `sec-parseint-string-radix`: exact evidenced selection missing.
+- [ ] `choice-ae04590395e3e72ea9d21b9ea28a2fe9f1b797e8a63e99b8744b50b6e93c69fa` — implementation-defined, marked-text, source `sec-hostresizearraybuffer`: exact evidenced selection missing.
+- [ ] `choice-af2912b292c91c6f082ac0e471b0298b51c01f2891c4e557f27a061e6893c2b1` — implementation-approximated, marked-text, source `sec-math.log10`: exact evidenced selection missing.
+- [ ] `choice-b1e74e0066fbf57862ac09fb8572e60b45c09a5d95f70bb74f945374996a1d61` — host-defined, marked-text, source `sec-hostensurecanaddprivateelement`: exact evidenced selection missing.
+- [ ] `choice-b2564ca8a112d0b9948cb72926019c06fc7c5a0db861db835dadb277363154a1` — host-defined, marked-text, source `sec-host-cleanup-finalization-registry`: exact evidenced selection missing.
+- [ ] `choice-b43e6f78b2fe7a0c2c586fdf7c3f2efed85b3f7280f9d15257ea2a9da7f45fc4` — implementation-defined, marked-text, source `sec-function.prototype.tostring`: exact evidenced selection missing.
+- [ ] `choice-b58895bf3d55d0bc802b6ebba2daaddd93bb4c7851048f7176a489a594414965` — implementation-approximated, marked-text, source `sec-math.asin`: exact evidenced selection missing.
+- [ ] `choice-bb6b632d4f211cfaf59c6efd481b2ed2c2cc374c793b7b0f31ce7a79965d83a7` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-bb96adc9a106a3ebad1a99bb36c4d81c749fe95ab04c2224d8806d99114ee020` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-bc7224a1b2e9f7d78496cede02a23a3972ce93de5b0835f73d76cc5c152db5ef` — host-defined, marked-text, source `sec-error-handling-and-language-extensions`: exact evidenced selection missing.
+- [ ] `choice-bed99667a44dfa5d86d2b8d3e6ab848fe9c060df5633f238ecbb641f2fd90222` — host-defined, marked-text, source `sec-non-ecmascript-functions`: exact evidenced selection missing.
+- [ ] `choice-c3c207a0e3665cfbe9665d180a5d13e37f91f5aaac435699756b9cebb4a33596` — implementation-defined, marked-text, source `sec-builtincallorconstruct`: exact evidenced selection missing.
+- [ ] `choice-c76ebdd45d06830c360b1ff41b2fe6d35d8cc81f5e1eb36904c2a1a193b0ab65` — implementation-defined, marked-text, source `sec-function.prototype.tostring`: exact evidenced selection missing.
+- [ ] `choice-c8937a1de74db9cebf3b74a462fedf29005b4599379141a8134d1df41a8fef4a` — host-defined, host-layering-point, source `sec-host-running-jobs`: exact evidenced selection missing.
+- [ ] `choice-cad427da75b666d12d8fa0fba67dc22d20ca591c73fc1310d02b71dd5b8f9a6b` — implementation-approximated, marked-text, source `sec-math.hypot`: exact evidenced selection missing.
+- [ ] `choice-cbee5f716b50e00f9a7512e3fd68e6ce2624ab8bf2fde1961e0e65a3d7282229` — host-defined, marked-text, source `sec-HostLoadImportedModule`: exact evidenced selection missing.
+- [ ] `choice-cf33f035839f1f8985508121af31ca65a8d71980b579bb7eae5ff78253ffaa31` — implementation-defined, marked-text, source `sec-agents`: exact evidenced selection missing.
+- [ ] `choice-d0b1119021b353dbc4815eaf5f585d13337ac09c1d68c14c4e97dca3f8fb2d9c` — implementation-defined, marked-text, source `sec-date.prototype.tolocaletimestring`: exact evidenced selection missing.
+- [ ] `choice-d1491eb457260e96309dd0cd10aa7e8d99558555a9e1d4f174fd98ae77fedbff` — implementation-defined, marked-text, source `sec-date.parse`: exact evidenced selection missing.
+- [ ] `choice-d1b8af372d713990973b60add762d4d529a6153fa9e7eb44af2ed070cc5ceef4` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-d2f0ab9c908bd5f32474e2740c7a6c0a13d68026b6b8765518d86f5f9fc64e59` — host-defined, marked-text, source `sec-HostLoadImportedModule`: exact evidenced selection missing.
+- [ ] `choice-d3168df7ad153896ff679b4877cefbabed26b5fed7814bc2781c993c8e6ba18c` — implementation-approximated, marked-text, source `sec-math.log`: exact evidenced selection missing.
+- [ ] `choice-d467d72b7a8b8c8caa291c3b69822e6080b33b99fbac24002d0cf6b431b0f518` — implementation-defined, marked-text, source `sec-debugger-statement-runtime-semantics-evaluation`: exact evidenced selection missing.
+- [ ] `choice-d4ca70914bd358654ef21b51628bb6678afd4a9415c0fcd0fa2930f4b7b40906` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-d6229aa02034ec45ce9ebfadef016128fb315a3c63a2fe4ec13eabf2c5ecb647` — host-defined, marked-text, source `sec-error-handling-and-language-extensions`: exact evidenced selection missing.
+- [ ] `choice-dac863e95fa5ab33436be4d15708f839b4bfbee78f7b0aafb4d9560be46f3c24` — host-defined, host-hook-declaration, source `sec-host-cleanup-finalization-registry`: exact evidenced selection missing.
+- [ ] `choice-dc71609ff96e61d5c42075fddc6a9db1e478a2d263b573c3f87338483903b43b` — host-defined, marked-text, source `sec-initializehostdefinedrealm`: exact evidenced selection missing.
+- [ ] `choice-de7309aa33bbb0341006c414020c6269486b0b8a7a4c49f2c7ad7d243716b944` — host-defined, marked-text, source `sec-jobcallback-records`: exact evidenced selection missing.
+- [ ] `choice-e0c0b09b5820ec36f4edc0ad7cd82d9a1f93373e764dbfdf0527768ad4dae033` — host-defined, host-layering-point, source `sec-host-internal-methods-of-exotic-objects`: exact evidenced selection missing.
+- [ ] `choice-e24e531deab7fd9baf51d868baf0e42e8f11e20b989dd1ad787b5efbb64e220e` — implementation-defined, marked-text, source `sec-roundmvresult`: exact evidenced selection missing.
+- [ ] `choice-e2ed96c74e3d8f81830157df550c175fe0b0a72b9399e21caec3f3ce74d09504` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-e3abbf183c4eee4da364747013843e2adeeb544f0cfbf9b628d52b208c02b5fd` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-e45b3fb1d52151af77f0b272f81627eb7ba5894210c9663b5828183f8e14ec87` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-e467ae1598687a5f44ed60298e3e4c7312887d5bb7fe55f8880f09fcff58b510` — implementation-defined, marked-text, source `sec-parsetext`: exact evidenced selection missing.
+- [ ] `choice-ebc070f47fc08ff4e531e4dd42d1e1b526dac8c1421da5465f200096a85d0fd9` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
+- [ ] `choice-ec9255829e4935bb8e86d849373166d6b58d009eaefa56260d598cf75939fee5` — implementation-defined, marked-text, source `sec-debugger-statement-runtime-semantics-evaluation`: exact evidenced selection missing.
+- [ ] `choice-ecdbaa62896271c10cd84acc60170a9ea26494086e4cd54d370d8932dacaa0c6` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
+- [ ] `choice-f752026188d6ab1e97d1b3aa3069a6d357dd9b38cec4d594d009d320226d61bb` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
+- [ ] `choice-f9912e7e5ceeeaa0b960f8322b0fa239d75680eef3ef8e32f12b9a4c2bb9a04d` — implementation-approximated, marked-text, source `sec-math.sinh`: exact evidenced selection missing.
+- [ ] `choice-fc2209c9614ffd2d3daed5188f8992740cfc5cdb18708fa42932ac289a14e4b1` — implementation-approximated, marked-text, source `sec-numeric-types-number-exponentiate`: exact evidenced selection missing.
+- [ ] `choice-fcc2eafca5a20ebb00a5bdc456fef0872cb6762c770c06ef335eb4c578f2abd8` — host-defined, host-layering-point, source `sec-host-built-in-objects-and-methods`: exact evidenced selection missing.
+- [ ] `choice-fcf94af5e38c3d30fccb696716623c68ecdeaab5be638d3cb05cec6402ef2645` — host-defined, marked-text, source `sec-error-handling-and-language-extensions`: exact evidenced selection missing.
+- [ ] `choice-fd30d77cec6c9e67be6d558d0db374607bce3e44d1699194f84680fa9ed1a213` — implementation-defined, host-hook-declaration, source `sec-availablenamedtimezoneidentifiers`: exact evidenced selection missing.
+- [ ] `choice-fdf647074d3071a145acd55711150ec8ae9861bbe34ecf6e45430e35660d9f00` — host-defined, marked-text, source `sec-global-object`: exact evidenced selection missing.
+- [ ] `choice-fed2283399ce87ce8276731e6df536eac6ccac2e2b0cc2f4dac9279b6174dba9` — implementation-defined, marked-text, source `sec-performeval`: exact evidenced selection missing.
+
+## Atomic normative-optional families
+
+The claim profile implements all normative-optional material, including inline algorithm and grammar insertion points. Every mechanically extracted site belongs to one feature family, and each family must terminate as one implemented-all unit in reciprocally bound partition evidence.
+
+- [ ] `optional-family-36d5ba64edbe615205dde1a9f158778ef5619407b1f191948e127f3fe74c89a2` — referenced-feature, feature `sec-labelled-function-declarations`: partition evidence missing.
+- [ ] `optional-family-4d583fdf7f0884f70d84e0a955134e60c26b99486fb3c0f341bc00cefdba4d62` — normative-optional-clause, feature `sec-object.prototype-legacy-accessor-methods`: partition evidence missing.
+- [ ] `optional-family-63dda3ee68d09bbba65d48a8ade46a6063c635e9e25eb796a138ff5f6181b308` — referenced-feature, feature `sec-IsHTMLDDA-internal-slot`: partition evidence missing.
+- [ ] `optional-family-805da0052d928e6bd58c0e155ad97d9e314ce826e7e67eb672401cfcc61a65b2` — normative-optional-clause, feature `sec-weak-ref.prototype.constructor`: partition evidence missing.
+- [ ] `optional-family-8d36f96630fd30fb063eb9ef555e41134147c61e3017edded89b2a391ec026d9` — normative-optional-clause, feature `sec-object.prototype.__proto__`: partition evidence missing.
+- [ ] `optional-family-b614b2245f3c0ecb058bb20e314ab72c4a41e6fbeb317009902b06be63e0602e` — referenced-feature, feature `sec-runtime-errors-for-function-call-assignment-targets`: partition evidence missing.
+- [ ] `optional-family-b6c150699e87830b7720181ece0ad438d97f0a5fe371970167a0348d89613c41` — referenced-feature, feature `sec-block-level-function-declarations-web-legacy-compatibility-semantics`: partition evidence missing.
+- [ ] `optional-family-c1af8ddd70a2cd5286b343cea64d5f5da6c52a7eff854e2c45c4d29710cd4c8a` — referenced-feature, feature `sec-variablestatements-in-catch-blocks`: partition evidence missing.
+
 ## Test262 feature-tag mapping
 
 - [ ] `AggregateError` — standard, tracking: `todo`; no clause mapping.
@@ -2573,4 +2730,4 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 
 ## Completion rule
 
-A group is complete only when every normative descendant clause terminates in executable evidence, every mapped in-scope Test262 scenario/variant passes under a claim-eligible host, and the generated/property, representative stress, negative-diagnostic, and E2E evidence required by the semantic partitions passes for the same clean source revision. Missing mappings, skips, unsupported diagnostics, timeouts, crashes, infrastructure errors, stale results, or a filtered/sharded-only result keep the box open.
+A group is complete only when every normative descendant clause terminates in executable evidence or an inherited definition bound to one exact normative definition and xref record, every mapped in-scope Test262 scenario/variant passes under a claim-eligible host, and the generated/property, representative stress, negative-diagnostic, and E2E evidence required by the semantic partitions passes for the same clean source revision. Missing mappings, skips, unsupported diagnostics, timeouts, crashes, infrastructure errors, stale results, or a filtered/sharded-only result keep the box open.
