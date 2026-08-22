@@ -1,0 +1,308 @@
+name: ECMAScript 2026 conformance evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+env:
+  TEST262_SHARDS: 8
+
+jobs:
+  preflight:
+    name: Claim eligibility preflight
+    runs-on: ubuntu-24.04
+    outputs:
+      eligible: ${{ steps.host.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Read complete reviewed host eligibility
+        id: host
+        run: >-
+          bun -e 'const profile = await Bun.file("compliance/ecmascript-2026/host-profile.json").json();
+          const baseline = await Bun.file("compliance/ecmascript-2026/baseline.json").json();
+          const eligible = profile.claimEligible === true && profile.semanticDelegation === false &&
+          profile.executionContract === "tsc2c-runner-owned-native-v1" &&
+          JSON.stringify(profile.environmentAllowlist) === JSON.stringify(baseline.executionProfile.environmentAllowlist) &&
+          baseline.runnerContract.requiredCapabilities.every((capability) => profile.capabilities[capability] === true);
+          console.log(`eligible=${eligible}`)' >> "$GITHUB_OUTPUT"
+
+      - name: Install blocked-claim dependencies
+        if: steps.host.outputs.eligible != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Restore deterministic tracked test fixtures
+        if: steps.host.outputs.eligible != 'true'
+        run: bun run prepare:e2e-fixtures
+
+      - name: Fetch and verify immutable pins
+        if: steps.host.outputs.eligible != 'true'
+        run: bun run compliance:fetch
+
+      - name: Compute explicit blocked claim
+        if: steps.host.outputs.eligible != 'true'
+        continue-on-error: true
+        run: bun run compliance:claim
+
+      - name: Seal blocked claim bytes
+        if: steps.host.outputs.eligible != 'true'
+        run: chmod 0444 artifacts/ecmascript-2026/claim.json
+
+      - name: Attest blocked claim provenance
+        if: steps.host.outputs.eligible != 'true'
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/claim.json
+
+      - name: Upload blocked claim report
+        if: steps.host.outputs.eligible != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ecmascript-2026-claim-${{ github.sha }}
+          path: artifacts/ecmascript-2026/claim.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Keep ineligible release evidence red
+        if: steps.host.outputs.eligible != 'true'
+        run: exit 1
+
+  test262:
+    name: Pinned Test262 shard ${{ matrix.shard }}
+    needs: preflight
+    if: needs.preflight.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install native and JS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make libgc-dev libssl-dev libicu-dev libuv1-dev libpcre2-dev libgmp-dev pkg-config
+          bun install --frozen-lockfile
+
+      - name: Restore deterministic tracked test fixtures
+        run: bun run prepare:e2e-fixtures
+
+      - name: Verify execution-profile libdispatch
+        run: |
+          test -f /usr/share/swift/usr/lib/swift/dispatch/dispatch.h
+          test -f /usr/share/swift/usr/lib/swift/linux/libdispatch.so
+
+      - name: Fetch and verify immutable pins
+        run: bun run compliance:fetch
+
+      - name: Run deterministic shard
+        continue-on-error: true
+        run: >-
+          bun tests/test262/run.ts
+          --shard ${{ matrix.shard }}/${{ env.TEST262_SHARDS }}
+          --output artifacts/ecmascript-2026/test262-${{ matrix.shard }}.json
+
+      - name: Seal shard report bytes
+        run: chmod 0444 artifacts/ecmascript-2026/test262-${{ matrix.shard }}.json
+
+      - name: Attest shard report provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/test262-${{ matrix.shard }}.json
+
+      - name: Upload shard evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test262-${{ matrix.shard }}
+          path: artifacts/ecmascript-2026/test262-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  local-gates:
+    name: Local evidence ${{ matrix.gate }}
+    needs: preflight
+    if: needs.preflight.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 390
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [build, compliance-types, compliance-self-test, emitter-reachability, property, e2e-gc, e2e-no-gc]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install native and JS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make libgc-dev libssl-dev libicu-dev libuv1-dev libpcre2-dev libgmp-dev pkg-config
+          bun install --frozen-lockfile
+
+      - name: Restore deterministic tracked test fixtures
+        run: bun run prepare:e2e-fixtures
+
+      - name: Verify execution-profile libdispatch
+        run: |
+          test -f /usr/share/swift/usr/lib/swift/dispatch/dispatch.h
+          test -f /usr/share/swift/usr/lib/swift/linux/libdispatch.so
+
+      - name: Run exact local gate
+        continue-on-error: true
+        run: >-
+          bun tests/test262/local-gates.ts
+          --gate ${{ matrix.gate }}
+          --output artifacts/ecmascript-2026/local-${{ matrix.gate }}.json
+
+      - name: Seal local report bytes
+        run: chmod 0444 artifacts/ecmascript-2026/local-${{ matrix.gate }}.json
+
+      - name: Attest local report provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/local-${{ matrix.gate }}.json
+
+      - name: Upload local evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: local-${{ matrix.gate }}
+          path: artifacts/ecmascript-2026/local-${{ matrix.gate }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  claim:
+    name: Merge exact evidence and check claim
+    needs: [preflight, test262, local-gates]
+    if: needs.preflight.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install native and JS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ make libgc-dev libssl-dev libicu-dev libuv1-dev libpcre2-dev libgmp-dev pkg-config
+          bun install --frozen-lockfile
+
+      - name: Restore deterministic tracked test fixtures
+        run: bun run prepare:e2e-fixtures
+
+      - name: Verify execution-profile libdispatch
+        run: |
+          test -f /usr/share/swift/usr/lib/swift/dispatch/dispatch.h
+          test -f /usr/share/swift/usr/lib/swift/linux/libdispatch.so
+
+      - name: Verify pinned provenance verifier
+        run: test -x /usr/bin/gh
+
+      - name: Fetch and verify immutable pins
+        run: bun run compliance:fetch
+
+      - name: Download Test262 shards
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: test262-*
+          path: artifacts/test262-shards
+          merge-multiple: true
+
+      - name: Download local gate reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: local-*
+          path: artifacts/local-gates
+          merge-multiple: true
+
+      - name: Verify signed source-workflow provenance of every input report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for report in artifacts/test262-shards/*.json artifacts/local-gates/*.json; do
+            /usr/bin/gh attestation verify "$report" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ecmascript-conformance.yml" \
+              --signer-digest "$GITHUB_SHA" \
+              --source-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners
+          done
+
+      - name: Merge Test262 shards by exact scenario identity
+        run: >-
+          bun tests/test262/merge-results.ts
+          --input-dir artifacts/test262-shards
+          --output artifacts/ecmascript-2026/test262-run.json
+
+      - name: Merge exact local gate worklist
+        run: >-
+          bun tests/test262/merge-local-gates.ts
+          --input-dir artifacts/local-gates
+          --output artifacts/ecmascript-2026/local-gates.json
+
+      - name: Seal merged evidence bytes
+        run: chmod 0444 artifacts/ecmascript-2026/test262-run.json artifacts/ecmascript-2026/local-gates.json
+
+      - name: Attest merged Test262 report
+        id: attest-test262
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/test262-run.json
+
+      - name: Attest merged local-gates report
+        id: attest-local
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/local-gates.json
+
+      - name: Compute fail-closed conformance claim
+        id: claim
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          bun tests/test262/check-claim.ts
+          --test262-attestation ${{ steps.attest-test262.outputs.bundle-path }}
+          --local-attestation ${{ steps.attest-local.outputs.bundle-path }}
+
+      - name: Seal final claim bytes
+        if: always()
+        run: chmod 0444 artifacts/ecmascript-2026/claim.json
+
+      - name: Attest final claim provenance
+        if: always()
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/ecmascript-2026/claim.json
+
+      - name: Upload merged evidence and claim report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ecmascript-2026-claim-${{ github.sha }}
+          path: artifacts/ecmascript-2026/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Require eligible claim
+        if: steps.claim.outcome != 'success'
+        run: exit 1

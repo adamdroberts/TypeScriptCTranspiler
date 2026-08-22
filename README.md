@@ -6,7 +6,7 @@ Goal: take a Node.js-style TypeScript app and get back a standalone executable t
 
 ## Status
 
-Substantial working subset, verified by **822 passing end-to-end tests** including a real word-count CLI that tokenizes via regex, counts via `Map`, sorts by a user comparator, and reads `process.env`. ~43,100 LOC across the TypeScript compiler (~28,800 LOC), C/C++ runtime (~12,750 LOC), and `@types/node` replacement shim (~1,580 LOC).
+Substantial working subset, backed by native end-to-end regressions including a real word-count CLI. This repository **does not currently claim full ECMAScript 2026 conformance**: the pinned Test262 host and exact clause/partition matrix intentionally fail closed until every remaining language and runner gap is resolved. See the generated [ECMAScript 2026 checklist](docs/ecmascript-2026-coverage.md).
 
 **Phases complete:**
 
@@ -21,8 +21,8 @@ Substantial working subset, verified by **822 passing end-to-end tests** includi
 | 2.5 | Interfaces (incl. `extends`), object literals with typed shape, computed property names, `Object.keys`/`values`/`entries`/`fromEntries`/`groupBy` | ✅ |
 | 4 | Multi-file module graph — flat namespace, local imports, topological init, type-only imports, barrel/star/default re-exports, default class/anonymous-function/export-assignment imports | ✅ |
 | 5 | Exceptions — `throw` / `try` / `catch` / `finally` via setjmp/longjmp, full `Error`/`TypeError`/`RangeError`/`SyntaxError`/`ReferenceError`/`EvalError`/`URIError`/`AggregateError` object subset | ✅ |
-| 6 (immediate) | **Promise + `async`/`await` (immediate subset)** — `new Promise(executor)` synchronous executor, `Promise.resolve`/`reject` with native adoption, `Promise.try`, `.then`/`.catch`/`.finally` with handler passthrough, callback-returned native Promise adoption, `finally` returned-Promise state adoption, and throw→rejection conversion, settled-array `Promise.all`/`allSettled`/`race`/`any` (incl. AggregateError + pending propagation), `async function`/method/value returning immediate Promise records, immediate `await` over native promises and non-Promise values, `try`/`catch` over rejected awaits, bounded before-exit `queueMicrotask(callback)` draining after `process.nextTick`, bounded zero-delay `setTimeout(callback, 0|-0|undefined|void 0, ...args)` with cancellable numeric handles (`clearTimeout` / `clearInterval`) and undefined no-op clears, and bounded before-exit `setImmediate(callback, ...args)` with cancellable numeric handles and undefined no-op clears draining after next ticks, microtasks, and zero-delay timeouts. Suspend/resume state machines, Promise microtask scheduling, and libuv timers still deferred. | ✅ |
-| 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero numeric keys, `new Set(array)`/`new Map(Object.entries(...))`/`new Map(map)`/`new Set(set)`, typed `WeakMap<K,V>`/`WeakSet<T>`/`WeakRef<T>`/`FinalizationRegistry<T>` (register/unregister; cleanup never fires in AOT), `Set.keys`, ES2025 Set composition (`union`/`intersection`/`difference`/`symmetricDifference`/`isSubsetOf`/`isSupersetOf`/`isDisjointFrom`), ES2024 `Map.groupBy`/`Object.groupBy`, collection `forEach` (inline/named/closure), collection `toString`/`toLocaleString`/`valueOf`, direct `for...of` over strings/Map/Set, **custom iterable classes** (array-backed and class-iterator-object form), **direct self-iterable iterator objects**, inherited `next()`, `ObjectEntry<T>` destructuring, **eager `function*` generators** (yield, `yield*` over arrays/strings/dynamic iterables, `.next()`/`.return(value)`/`.throw(error)`; lazy suspend/resume still deferred) | ✅ |
+| 6 (partial) | **Promise + `async`/`await` typed suspension subset** — the canonical heap-backed async CFG is the sole lowering for admitted suspension graphs; central PromiseResolve/adoption handles native promises, non-Promise values, and supported dynamic thenables; rejection, `try`/`catch`/awaited-finally completion, async iteration, and queued resumption compose through graph edges. Promise combinators and the bounded before-exit task queues remain available. Unsupported async graphs fail closed; broader host event-loop scheduling and nonzero-delay timers remain deferred. | ✅ |
+| 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero keys, weak collections/references, Set composition, grouping, collection iteration, custom iterable classes and self-iterable iterator objects, plus **lazy `function*` generators** with heap-backed suspend/resume, `yield`/`yield*`, and supported `.next(value)`/`.return(value)`/`.throw(error)` control and expression graphs. Async generators and remaining generator/iterator semantic partitions remain deferred. | ✅ |
 | 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects; object-property omission for `undefined`/function values) + JSON.parse via dynamic values | ✅ |
 | 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `new RegExp(pattern, flags?)`, `RegExp.escape`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`/`replaceAll`/`match`/`matchAll`/`search`/`split` with both string and RegExp patterns and full replacement-token expansion `$&`/`$1`/`$<name>`/`` $` ``/`$'`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
 | 9 | **Proxy + Reflect over dynamic values** — all object traps, callable/constructable proxy paths, revocation, own-key/descriptor/prototype/extensibility invariants, and dynamic `Reflect.apply` / `Reflect.construct` validation | ✅ |
@@ -37,13 +37,13 @@ Substantial working subset, verified by **822 passing end-to-end tests** includi
 **Still deferred:**
 
 - **Phase 3 remainder** — hidden classes / shape trees, inline caches and diagnostics, complete built-in prototype semantics for arbitrary npm-shaped objects.
-- **Phase 6 remainder** — real suspend/resume `await` state-machine lowering, microtask-scheduled `.then` dispatch beyond the bounded before-exit `queueMicrotask` queue, nonzero-delay/libuv-backed `setTimeout`, `setInterval`, and real event-loop-backed `setImmediate`, arbitrary thenable assimilation.
-- **Phase 7 remainder** — lazy generator state machines with suspend/resume `yield`, bidirectional `.next(value)`, async generators (`async function*`), broader iterator-protocol edge cases.
+- **Phase 6 remainder** — unresolved async semantic partitions identified by the compliance matrix, microtask scheduling beyond the bounded before-exit queues, nonzero-delay/libuv-backed timers, and broader event-loop integration.
+- **Phase 7 remainder** — remaining lazy-generator expression/control partitions, async generators (`async function*`), and broader iterator-protocol edge cases.
 - **Phases 11–13 remainder** — libuv-backed async `fs.promises` scheduling, broader `events` async iterator helpers, full readable/writable/transform `stream`, `http`/`https`/`http2` (OpenSSL), `net` sockets/connect/listen, async `child_process` lifecycle handles, `cluster`, `worker_threads`.
 - **Phase 14 remainder** — broader CommonJS wrapper semantics, dual CJS/ESM interop edge cases, broader untyped JavaScript package patterns, and additional AOT require/export metadata shapes. Dependency init stays eager through the AOT module graph by design.
 - **Decorators** — broader replacement edge cases beyond the covered computed-name, proxy-backed, and erased-generic constructor forms.
 
-See `~/.claude/plans/make-a-typescript-to-floating-comet.md` for the full 15-phase plan, and [`docs/todo.md`](docs/todo.md) for the active remaining work.
+See [`docs/todo.md`](docs/todo.md) for the active remaining work and its dependency order.
 
 ## Documentation
 
@@ -55,6 +55,7 @@ Full docs live in [`docs/`](docs/). Fast routing:
 - [`docs/cli.md`](docs/cli.md) — CLI flags, exit codes, env vars
 - [`docs/runtime-reference.md`](docs/runtime-reference.md) — every `tsc_*` C symbol
 - [`docs/testing.md`](docs/testing.md) — e2e harness and how to add a case
+- [`docs/ecmascript-2026-coverage.md`](docs/ecmascript-2026-coverage.md) — generated clause/feature compliance checklist
 - [`CHANGELOG.md`](CHANGELOG.md) — session-by-session history
 - [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) — LLM-oriented index + full bundle
 - [`examples/README.md`](examples/README.md) — 7 runnable demo programs
@@ -94,7 +95,7 @@ See [`docs/cli.md`](docs/cli.md) for exit codes and environment variables.
 
 ## Feature tour
 
-Each of the following compiles and runs end-to-end. See [`tests/e2e/cases/`](tests/e2e/cases/) for the full 822-case suite and [`docs/done.md`](docs/done.md) for the complete capability inventory.
+Each of the following compiles and runs end-to-end. See [`tests/e2e/cases/`](tests/e2e/cases/) for the regression corpus and [`docs/done.md`](docs/done.md) for implementation history. Neither is a full-language conformance claim.
 
 ### Classes with inheritance + static
 
@@ -182,7 +183,7 @@ const items = [{ k: "a", v: 1 }, { k: "b", v: 2 }, { k: "a", v: 3 }];
 Map.groupBy(items, (it) => it.k);   // Map { "a" => [...], "b" => [...] }
 ```
 
-### Generators (eager) + custom iterators
+### Generators (lazy subset) + custom iterators
 
 ```ts
 function* range(n: number): Generator<number> {
@@ -201,13 +202,13 @@ class Counter implements Iterable<number> {
 }
 ```
 
-### Promise + async/await (immediate subset)
+### Promise + async/await (typed suspension subset)
 
 ```ts
 async function fetchValue(): Promise<number> { return 42; }
 async function main(): Promise<void> {
     try {
-        const v = await fetchValue();         // immediate await over a fulfilled value
+        const v = await fetchValue();         // resumes through the typed async CFG
         console.log(v);
     } catch (e) { console.log("err", e); }
 }
@@ -324,7 +325,7 @@ The entry file plus every reachable `.ts` / supported `.js` (and resolved Common
              FinalizationRegistry, PCRE2 regex, GMP BigInt, ICU normalization
            • console / process / fs / fs.promises immediate / path / Math /
              os / Date / Number / Buffer / URL / dns / net / child_process
-           • EventEmitter, Error hierarchy, Promise (immediate), generators (eager)
+           • EventEmitter, Error hierarchy, Promise/typed async CFG, lazy generators
            • exceptions (setjmp / longjmp + single-string error state)
            • Boehm GC behind a wrapper (malloc fallback for --no-gc)
    │
@@ -361,7 +362,7 @@ Some TS/JS features require build-time proof, an explicit security allow list, o
 TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 
-822 e2e cases under [`tests/e2e/cases/`](tests/e2e/cases/), each a directory containing `in.ts` (and any support files) plus `expected.stdout` / `expected.exitcode`. The harness compiles each case, executes the binary, and diffs the output. See [`docs/testing.md`](docs/testing.md) for how to add a case and [`docs/done.md`](docs/done.md) for what each one exercises.
+The cases under [`tests/e2e/cases/`](tests/e2e/cases/) are auto-discovered regressions. The harness compiles each case, executes the binary, and diffs the output. Aggregate case totals are not evidence of general language coverage; see [`docs/testing.md`](docs/testing.md) for the regression and pinned-conformance workflows.
 
 Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.
 
@@ -380,10 +381,12 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, 
 | `src/emit/mangle.ts` | Identifier mangling (avoids C keywords) |
 | `src/link/cc.ts` | Spawns gcc with our flags |
 | `src/diagnostics.ts` | User-facing error reporting |
-| `runtime/` | Full C/C++ runtime (~12,750 LOC): strings, arrays, maps/sets/weak collections, regex, BigInt, exceptions, JSON, console, process, fs + fs.promises, path, Math, os, Date, Number, Buffer, URL, EventEmitter, Event/EventTarget, Error hierarchy, Promise (immediate), generators (eager), dns, net, child_process, and embedded Node bridge |
+| `runtime/` | Full C/C++ runtime (~12,750 LOC): strings, arrays, maps/sets/weak collections, regex, BigInt, exceptions, JSON, console, process, fs + fs.promises, path, Math, os, Date, Number, Buffer, URL, EventEmitter, Event/EventTarget, Error hierarchy, Promise/async suspension support, lazy generators, dns, net, child_process, and embedded Node bridge |
 | `stdlib/lib.core.d.ts` | Type shim (~1,580 LOC; replaces `@types/node`) |
 | `examples/` | 7 runnable demo programs |
-| `tests/e2e/cases/` | 822 test dirs — `in.ts` + optional support files + `expected.stdout` or `expected.exitcode` |
+| `tests/e2e/cases/` | Auto-discovered native regressions — `in.ts` + optional support files + expected output/diagnostic |
+| `tests/test262/` | Pinned Test262 inventory, runner protocol, shard merging, matrix and claim gates |
+| `compliance/ecmascript-2026/` | Immutable baseline pins plus canonical clause, feature, host, mapping, and evidence policy |
 | `tests/e2e/run.ts` | E2E harness: compile, execute, diff |
 | `manual-tests/` | Manual smoke + benchmark sources |
 | `docs/` | Browsable documentation set |
@@ -391,11 +394,11 @@ Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, 
 
 ## What's next
 
-The plan file at `~/.claude/plans/make-a-typescript-to-floating-comet.md` sequences the remaining phases. With Phase 6 (immediate subset), Phase 7 (eager generators), Phases 11–13 (immediate stdlib subsets), and Phase 14 (TypeScript + basic JS + CommonJS package sources) landed, the highest-leverage remaining work is:
+[`docs/todo.md`](docs/todo.md) sequences the remaining phases. With the typed async CFG, lazy-generator subset, Phases 11–13 stdlib subsets, and Phase 14 package-source work landed, the highest-leverage remaining work is:
 
 1. **Phase 3 polish** — hidden classes / shape trees + inline caches. Lifts perf for arbitrary-shape objects toward `v8`-class speed.
-2. **Phase 6 suspend/resume** — real async state-machine lowering on top of the existing immediate subset, Promise microtask scheduling, libuv timers and async I/O.
-3. **Phase 7 lazy generators** — suspend/resume `yield`, bidirectional `.next(value)`, `async function*`.
+2. **Phase 6 completion** — resolve the remaining matrix partitions around Promise scheduling, timers, host integration, and async I/O on the canonical async CFG.
+3. **Phase 7 completion** — broaden the lazy-generator CFG and iterator protocol, including `async function*`.
 4. **Phase 14 polish** — broader CommonJS wrapper semantics, dual CJS/ESM interop, broader untyped JS package patterns, and additional AOT require/export metadata shapes.
 5. **Phase 11–13 polish** — libuv-backed async fs scheduling, full `stream`, `http`/`https` (OpenSSL), `net` sockets, async `child_process` lifecycle, `worker_threads`.
 6. **Decorator polish** — remaining replacement edge cases after the current standard decorator, proxy-backed decorator, and AOT constructor replacement coverage.

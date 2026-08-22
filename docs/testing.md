@@ -1,10 +1,10 @@
 # Testing
 
-`tsc2c` uses a single end-to-end test harness: **compile each TS case, execute the resulting binary, diff stdout against an expected file**. Expected compile-failure cases use `expected.exitcode` instead, and opt-in runtime diagnostics can assert a stderr substring. No separate unit test layer yet — by design. Every feature has at least one black-box test proving it produces correct output or the intended diagnostic.
+The primary regression harness compiles each TypeScript case, executes the resulting binary, and diffs stdout against an expected file. Expected compile-failure cases use `expected.exitcode`, and opt-in runtime diagnostics can assert stderr. Separate compliance self-tests validate Test262 metadata, execution modes, the host protocol, and independent specification extraction.
 
-The harness recreates its tiny `node_modules` package fixtures before case discovery, so running `bun install` does not remove the package-source cases needed by the Phase 14 tests.
+The harness recreates its tiny `node_modules` package fixtures before case execution, so running `bun install` does not remove the package-source cases needed by the Phase 14 tests.
 
-Any directory under `tests/e2e/cases/` with an `in.ts` file is a real case. It must also have `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`; malformed cases fail discovery instead of being silently skipped.
+A directory under `tests/e2e/cases/` enters the canonical worklist when it has exactly one of `in.ts` or `generate.json`. It must also have `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`; malformed cases fail discovery instead of being silently skipped.
 
 ## Running the suite
 
@@ -15,7 +15,7 @@ only when the change has broad cross-cutting risk or you explicitly need release
 confidence.
 
 ```bash
-cd /home/adam/dev/innovation/TypeScriptC
+cd /path/to/TypeScriptC
 
 # with libgc-dev installed:
 bun tests/e2e/run.ts
@@ -24,278 +24,47 @@ bun tests/e2e/run.ts
 TSC2C_NO_GC=1 bun tests/e2e/run.ts
 ```
 
-Expected output:
+The harness streams each discovered case result and exits non-zero if any compile, runtime, diagnostic, or output assertion fails. The final tally is a regression-run diagnostic only; its aggregate value is never language-coverage evidence.
 
-```
-e2e: advanced … OK
-e2e: arith … OK
-e2e: array_static_dynamic … OK
-...
-e2e: buffer … OK
-e2e: buffer_object_methods … OK
-e2e: bigint … OK
-e2e: bitwise_assign … OK
-e2e: class_computed_members … OK
-e2e: computed_props … OK
-e2e: custom_iterator_entry_destructure … OK
-e2e: custom_iterator_inherited_next … OK
-e2e: custom_iterator_object … OK
-e2e: custom_iterator_self … OK
-e2e: custom_predicates … OK
-e2e: discriminated_union_nested … OK
-e2e: discriminated_unions … OK
-e2e: discriminated_union_switch … OK
-e2e: array_concat_values … OK
-e2e: array_copy_within … OK
-e2e: array_fill … OK
-e2e: array_at … OK
-e2e: array_find_last … OK
-e2e: array_from_map … OK
-e2e: array_from_set … OK
-e2e: array_from_string … OK
-e2e: array_includes_same_value_zero … OK
-e2e: array_is_array_narrowing … OK
-e2e: array_keys_values … OK
-e2e: array_last_index_of … OK
-e2e: array_of … OK
-e2e: array_own_properties … OK
-e2e: array_property_descriptors … OK
-e2e: array_prototypes … OK
-e2e: array_reduce_no_initial … OK
-e2e: array_reduce_right … OK
-e2e: array_search_from_index … OK
-e2e: array_to_reversed … OK
-e2e: array_to_sorted … OK
-e2e: array_to_spliced … OK
-e2e: array_value_of … OK
-e2e: array_with … OK
-e2e: dynamic_array_methods … OK
-e2e: dynamic_array_copy_within … OK
-e2e: dynamic_array_fill … OK
-e2e: dynamic_array_find_last … OK
-e2e: dynamic_array_flat … OK
-e2e: dynamic_array_to_reversed … OK
-e2e: dynamic_array_to_sorted … OK
-e2e: dynamic_array_to_sorted_comparator … OK
-e2e: dynamic_array_to_spliced … OK
-e2e: dynamic_array_with … OK
-e2e: dynamic_bitwise_ops … OK
-e2e: dynamic_array_flatmap … OK
-e2e: dynamic_for_of … OK
-e2e: dynamic_for_of_entries … OK
-e2e: dynamic_for_of_rest … OK
-e2e: dynamic_array_hof … OK
-e2e: dynamic_array_hof_more … OK
-e2e: dynamic_array_keys_values … OK
-e2e: dynamic_array_of … OK
-e2e: dynamic_array_object_enumeration … OK
-e2e: dynamic_array_extensibility … OK
-e2e: dynamic_array_reduce … OK
-e2e: dynamic_array_reduce_no_initial … OK
-e2e: dynamic_array_reduce_right … OK
-e2e: dynamic_array_slice_reverse … OK
-e2e: dynamic_array_sort … OK
-e2e: dynamic_array_sort_comparator … OK
-e2e: dynamic_array_splice … OK
-e2e: dynamic_array_spread … OK
-e2e: dynamic_string_match … OK
-e2e: dynamic_string_match_string … OK
-e2e: dynamic_array_at … OK
-e2e: dynamic_coercions … OK
-e2e: dynamic_index_assignment … OK
-e2e: dynamic_last_index_of … OK
-e2e: dynamic_methods … OK
-e2e: dynamic_ops … OK
-e2e: dynamic_property_assignment … OK
-e2e: dynamic_property_logical_assign … OK
-e2e: dynamic_property_ops … OK
-e2e: dynamic_search_positions … OK
-e2e: dynamic_string_search … OK
-e2e: dynamic_string_at … OK
-e2e: dynamic_string_code_point_at … OK
-e2e: dynamic_string_concat … OK
-e2e: dynamic_string_locale_compare … OK
-e2e: dynamic_string_normalize … OK
-e2e: dynamic_string_object_enumeration … OK
-e2e: dynamic_string_pad_repeat … OK
-e2e: dynamic_string_replace … OK
-e2e: dynamic_string_replace_regex … OK
-e2e: dynamic_string_replace_regex_groups … OK
-e2e: dynamic_string_replace_string_tokens … OK
-e2e: dynamic_string_split … OK
-e2e: dynamic_string_split_limit … OK
-e2e: dynamic_string_split_regex … OK
-e2e: dynamic_string_substr … OK
-e2e: dynamic_string_substring … OK
-e2e: dynamic_string_trim_edges … OK
-e2e: dynamic_unary_ops … OK
-e2e: dynamic_update_ops … OK
-e2e: exponent_assign … OK
-e2e: dynamic_require … OK
-e2e: function_integrity … OK
-e2e: function_prototypes … OK
-e2e: function_value_spread … OK
-e2e: generic_classes … OK
-e2e: generic_function_values … OK
-e2e: global_number_predicates … OK
-e2e: in_operator_narrowing … OK
-e2e: interface_inheritance … OK
-e2e: weak_collections … OK
-e2e: weak_ref … OK
-e2e: line_directives … OK
-e2e: logical_assign … OK
-e2e: map_constructor_from_map … OK
-e2e: map_set_constructors … OK
-e2e: map_set_for_each … OK
-e2e: map_set_for_each_refs … OK
-e2e: map_set_same_value_zero … OK
-e2e: native_addon … OK
-e2e: namespaces … OK
-e2e: number_constants … OK
-e2e: number_constructor … OK
-e2e: number_static_more … OK
-e2e: number_to_exponential … OK
-e2e: number_to_fixed … OK
-e2e: number_to_precision … OK
-e2e: math_constants_more … OK
-e2e: math_int32_float … OK
-e2e: math_more … OK
-e2e: regex_pcre2 … OK
-e2e: release_build … OK
-e2e: rest_spread … OK
-e2e: runtime_eval … OK
-e2e: runtime_eval_unsafe_bridge … OK
-e2e: runtime_function_constructor … OK
-e2e: runtime_function_constructor_unsafe_bridge … OK
-e2e: runtime_function_unsafe_bridge … OK
-e2e: set_constructor_from_set … OK
-e2e: set_keys … OK
-e2e: set_immediate … OK
-e2e: set_timeout_zero … OK
-e2e: string_at … OK
-e2e: string_char_code_at … OK
-e2e: string_concat … OK
-e2e: string_for_of … OK
-e2e: string_last_index_of … OK
-e2e: string_locale_compare … OK
-e2e: string_raw … OK
-e2e: switch_exhaustive … OK
-e2e: switch_exhaustive_missing … OK
-e2e: symbols … OK
-e2e: tagged_templates … OK
-e2e: tail_calls … OK
-e2e: string_match_all … OK
-e2e: string_match_string … OK
-e2e: string_from_code_point … OK
-e2e: string_normalize … OK
-e2e: string_object_enumeration … OK
-e2e: string_object_methods … OK
-e2e: string_replace_regex_groups … OK
-e2e: string_replace_string_tokens … OK
-e2e: string_search_positions … OK
-e2e: string_search_regex … OK
-e2e: string_search_string … OK
-e2e: string_split_limit … OK
-e2e: string_substr … OK
-e2e: string_substring … OK
-e2e: string_boolean_constructors … OK
-e2e: string_trim_aliases … OK
-e2e: string_trim_edges … OK
-e2e: array_to_string … OK
-e2e: object_accessor_arrows … OK
-e2e: object_accessor_closures … OK
-e2e: object_accessor_preserve … OK
-e2e: object_accessor_redefine … OK
-e2e: object_accessors … OK
-e2e: object_array_enumeration … OK
-e2e: object_assign_array_target … OK
-e2e: object_assign_array_string … OK
-e2e: object_create_descriptors … OK
-e2e: object_define_properties … OK
-e2e: object_define_property … OK
-e2e: object_descriptor_defaults … OK
-e2e: object_descriptor_kind_transition … OK
-e2e: object_descriptor_redefine … OK
-e2e: object_descriptor_shorthand … OK
-e2e: object_descriptors … OK
-e2e: dynamic_object_entries … OK
-e2e: dynamic_object_from_entries … OK
-e2e: dynamic_array_to_string … OK
-e2e: dynamic_array_value_of … OK
-e2e: object_entries … OK
-e2e: object_extensibility … OK
-e2e: object_from_entries_map … OK
-e2e: object_get_own_property_descriptors … OK
-e2e: object_has_own_property … OK
-e2e: object_is … OK
-e2e: object_is_prototype_of … OK
-e2e: object_property_is_enumerable … OK
-e2e: object_prototype_call … OK
-e2e: object_prototype_is_prototype_of_call … OK
-e2e: object_prototype_nullish_call … OK
-e2e: object_prototype_to_locale_string_call … OK
-e2e: object_prototype_to_string_call … OK
-e2e: object_prototype_value_of_call … OK
-e2e: object_prototypes … OK
-e2e: object_seal_freeze … OK
-e2e: object_static_methods … OK
-e2e: object_to_locale_string … OK
-e2e: object_to_string … OK
-e2e: object_value_of … OK
-e2e: primitive_object_methods … OK
-e2e: dynamic_number_to_string … OK
-e2e: symbol_bigint_object_methods … OK
-e2e: collection_object_methods … OK
-e2e: comma_operator … OK
-e2e: promise_callback_adopt … OK
-e2e: promise_finally_adopt … OK
-e2e: promise_try … OK
-e2e: proxy_array_mutation_forward … OK
-e2e: proxy_array_extensibility_forward … OK
-e2e: proxy_array_seal_freeze_forward … OK
-e2e: proxy_array_extensibility_trap_invariants … OK
-e2e: proxy_array_ownkeys_invariants … OK
-e2e: proxy_array_descriptor_invariants … OK
-e2e: proxy_array_define_invariants … OK
-e2e: proxy_array_get_set_invariants … OK
-e2e: proxy_array_has_delete_invariants … OK
-e2e: proxy_array_object_helpers … OK
-e2e: proxy_array_is_array … OK
-e2e: proxy_array_prototype_invariants … OK
-e2e: proxy_array_to_string_tag … OK
-e2e: proxy_callable_to_string_tag … OK
-e2e: proxy_function_prototype_invariants … OK
-e2e: reflect_apply … OK
-e2e: reflect_construct … OK
-e2e: reflect_dynamic … OK
-e2e: reflect_get_own_property_descriptor … OK
-e2e: regexp_escape … OK
-e2e: regexp_exec … OK
-e2e: regexp_extra_flags … OK
-e2e: regexp_object_methods … OK
-e2e: typed_object_has_own … OK
-e2e: typed_object_methods … OK
-e2e: typed_object_property_names … OK
-e2e: typed_property_descriptor … OK
-e2e: typed_property_descriptors … OK
-e2e: typed_reflect_get … OK
-e2e: typed_reflect_has … OK
-e2e: typed_reflect_own_keys … OK
-e2e: typed_reflect_set … OK
-e2e: string_well_formed … OK
-e2e: typeof_boolean_union … OK
-e2e: typeof_guards … OK
-e2e: url_base … OK
-e2e: url_can_parse … OK
-e2e: url_object_methods … OK
-e2e: url_parse … OK
-e2e: void_operator … OK
-e2e: wordcount … OK
+## ECMAScript 2026 conformance evidence
 
-822 passed, 0 failed
+The native E2E corpus remains a required regression layer, but it cannot establish complete language coverage. The full claim gate additionally uses the exact ECMA-262 2026 source revision, an exact Test262 Git tree, a generated normative clause/choice/optional-family catalog, a canonical feature-tag map, reciprocal evidence registrations, and independently evidenced semantic partitions.
+
+```bash
+# Materialize and verify the exact spec and Test262 revisions.
+bun run prepare:e2e-fixtures
+bun run compliance:fetch
+
+# Static/generated policy integrity.
+bun run compliance:catalog:check
+bun run compliance:features:check
+bun run compliance:self-test
+bun run compliance:matrix
+
+# Inspect the exhaustive scenario inventory. Classification issues are claim blockers.
+bun run compliance:inventory -- --fail-on-issues
+
+# A targeted diagnostic run is useful while the native host is incomplete.
+bun run test:test262 -- --allow-ineligible-host --filter test/path-fragment
+
+# These are release-evidence commands. The checked-in diagnostic host and the
+# intentionally empty property suite currently keep them fail-closed.
+bun run test:test262
+bun run compliance:local
+bun run compliance:claim
 ```
 
-Non-zero exit if any case fails.
+The targeted command above produces diagnostic, non-claimable evidence. The property gate is implemented and recursively discovers `tests/property/**/*.property.test.ts`, but deliberately exits non-zero until real registered property specifications exist.
+
+The runner expands the official strict, non-strict, Module, raw, async, and `[[CanBlock]]` modes; evaluates harness files as separate same-Realm global Scripts; supplies one independently attested sibling-resource directory for every scenario so Module and computed/eval dynamic-import resolution do not depend on source-shape scanning; and requires exact negative phase, origin, and constructor observations. An unavailable hook is an infrastructure error, never a skip. The host does not receive expected negative metadata, and the claim checker independently derives each verdict from its recorded observation. Under protocol 4, a future eligible host may only prepare artifacts in an ephemeral runner-owned directory. Every host/local command runs under a rebuilt Linux child-subreaper supervisor, and runtime observations come from a sealed, dynamically loaded native executable only after the rebuilt seccomp guard proves activation through a private handshake and kernel-state check. The guard prevents new processes and executable mappings; the supervisor rejects detached survivors. The runner rehashes the artifacts and authors the transcript, and the claim checker rebuilds and compares the containment identities. Capability booleans or host-reported hashes cannot turn the diagnostic host into evidence.
+
+Large runs may be split by deterministic path hash. `compliance:test262:merge` and `compliance:local:merge` accept `--input-dir`; they require exact shard/gate set equality before producing the exhaustive reports consumed by `compliance:claim`. A filtered run is useful only for development and can never satisfy the claim. Local JSON reports are diagnostic: an eligible claim additionally requires GitHub Sigstore artifact-attestation bundles for both merged reports, restricted to the exact repository, conformance workflow, source revision, and GitHub-hosted runner policy.
+
+[`ecmascript-2026-coverage.md`](ecmascript-2026-coverage.md) is generated from the canonical matrix. Work by semantic partition and the project’s cardinality rule: one general representation/lowering, compact property evidence, and a separate representative stress case. Each local artifact must be registered in `compliance/ecmascript-2026/evidence-registry.json` with reciprocal exact partition targets. A claim-bearing stress record names one exact generated positive native-runtime case; its reviewed high-depth value must equal the numeric parameter independently parsed from the tracked `generate.json`. The existing generated cases are regression/stress inputs, not property proof. The property gate exists but remains intentionally empty and failing until semantic-partition specifications are registered.
+
+The manual **ECMAScript 2026 conformance evidence** GitHub Actions workflow is the release evidence path. Dispatch it for the exact source revision being assessed. It seals and cryptographically attests each source report before transport, verifies every input before merging, attests the merged reports consumed by the checker, and attests the final claim. The checker verifies an immutable copy of the exact bytes it parsed and requires that digest in the signed statement. Verify a downloaded claim with `gh attestation verify <claim.json> --repo adamdroberts/TypeScriptCTranspiler --signer-workflow adamdroberts/TypeScriptCTranspiler/.github/workflows/ecmascript-conformance.yml`. While the checked-in host is ineligible, preflight is expected to finish red and upload a signed blocked diagnostic as `ecmascript-2026-claim-<source-sha>`; an eligible host additionally produces and merges the shorter-lived Test262 shard and local-gate artifacts before the claim job. A red blocked artifact is evidence of unresolved work, not a conformance result. Signatures bind evidence to the exact reviewed source and trusted workflow; they do not make an unreviewed or intentionally dishonest runner revision trustworthy.
+
+The exact E2E evidence gates use `--fail-on-skip`. The release profile fixes `TSC2C_LIBDISPATCH_PREFIX=/usr/share/swift/usr`, verifies the Swift libdispatch header/library before evidence work, and records their exact file identities with the rest of the toolchain. If that dependency is absent, the release claim remains blocked rather than silently narrowing its regressions.
 
 ## Test layout
 
@@ -315,7 +84,7 @@ tests/e2e/
         └── expected.stdout
 ```
 
-Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discovers every directory with `in.ts` plus either `expected.stdout` or `expected.exitcode`. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring, or `expected.mainc.not_contains` to assert that one substring per line is absent; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment, and `expected.stderr.contains` asserts that the captured stderr includes each non-empty diagnostic substring line. A `compile.release` marker compiles that case with `--release`.
+Each subdirectory under `tests/e2e/cases/` is one test when it has exactly one of `in.ts` or `generate.json`, plus `expected.stdout`, `expected.exitcode`, or `compile.emit_c_only`. The shared case-manifest module is the canonical worklist used by both the runner and the compliance evidence validator; probe/asset-only directories are not evidence. A case may also include `expected.mainc.contains` to assert that generated `main.c` contains a substring, or `expected.mainc.not_contains` to assert that one substring per line is absent; `{{ENTRY}}` expands to the case entry path. `run.env` adds `KEY=VALUE` pairs to the binary execution environment. For an expected compile failure, `expected.stderr.contains` checks captured compiler diagnostics; for a runtime case, it checks captured binary stderr. A `compile.release` marker compiles that case with `--release`.
 
 ## How the harness works
 
@@ -324,7 +93,7 @@ Each subdirectory under `tests/e2e/cases/` is one test. The harness auto-discove
 1. Discover all test directories.
 2. For each case:
    - Call `compile({ entry: in.ts, output: /tmp/<case>, buildDir: /tmp/<case>-build, noGc: env, release: marker })`.
-   - If `expected.exitcode` exists, compare the compile exit code and skip binary execution.
+   - If `expected.exitcode` exists, compare the compile exit code, check any exact `expected.stderr.contains` assertion, and skip binary execution.
    - If compile exits non-zero unexpectedly → print the error → mark **COMPILE FAIL**.
    - If `expected.mainc.contains` or `expected.mainc.not_contains` exists, check the generated C before running the binary.
    - Run the binary with no stdin, plus any environment entries from `run.env`.
@@ -383,7 +152,7 @@ If your test imports other files, add them to the same directory. They're auto-p
 - **Multi-config matrix** — `--no-gc`, default, one `--release` case, and Linux gcc/clang CI lanes are covered. macOS / Windows jobs aren't exercised yet.
 - **Binary size / perf regressions** — release builds on Linux use section-level garbage collection, and the manual benchmark harness records `tsc2c` output binary bytes and timing/ops data; `bun run bench:check -- <results.json> [policy.json]` can enforce thresholds from a JSON policy, with `MAX_BINARY_BYTES`, `MAX_TSC2C_MS`, `MIN_VS_BUN`, and `MIN_VS_NODE` as local overrides. `bun run bench:smoke` uses `manual-tests/benchmarks/thresholds-smoke.json` for the default local/CI smoke, and `bun run bench:long` uses `manual-tests/benchmarks/thresholds-long.json` for scheduled/manual broader benchmark policy. Linux GitHub Actions matrix wiring runs gcc and clang build, no-GC e2e, benchmark smoke, and scheduled/manual long benchmark policy. macOS / Windows matrix jobs still remain.
 - **Inline-cache baselines** — `TSC_DYNAMIC_STATS=1` makes compiled binaries print dynamic property-operation counters, object shape-update counters, and dynamic property cache hit/miss counters to stderr at process exit. `dynamic_runtime_stats` covers the opt-in path plus repeated cached literal property reads, string-key element reads, receiver-aware `Reflect.get` reads, direct dynamic writes, and three- and four-argument dynamic `Reflect.set` writes. Deeper polymorphic/hidden-class cache work remains Phase 15 work.
-- **Stdlib edge cases** at scale — we test "happy path" for each feature. Fuzz / property-based testing would improve coverage.
+- **Property evidence specifications** — the standalone recursive property gate is implemented and fail-closed, but no `*.property.test.ts` semantic-partition specifications are registered yet. Terminal compliance partitions remain unresolved until they link real property evidence retained alongside generated stress and E2E.
 
 These are candidate Phase 15 work. See [`todo.md`](todo.md).
 
