@@ -2247,7 +2247,7 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
             tsc_str_t* out = tsc_str_from_lit("[", 1);
             for (size_t i = 0; i < a->len; i++) {
                 if (i > 0) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
-                out = tsc_str_concat(out, tsc_value_json_stringify(TSC_ARR(tsc_value_t, a, i)));
+                out = tsc_str_concat(out, tsc_value_json_stringify(tsc_value_get_index(v, (double)i)));
             }
             return tsc_str_concat(out, tsc_str_from_lit("]", 1));
         }

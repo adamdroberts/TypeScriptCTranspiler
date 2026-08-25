@@ -82,6 +82,7 @@ function source(): string {
         console.log(${JSON.stringify(`${plan.label}:identity:`)} + String(alias_${plan.label} === values_${plan.label}));
         applyOperations(alias_${plan.label}, [${plan.operations.map(operationLiteral).join(",")}]);
         console.log(${JSON.stringify(`${plan.label}:state:`)} + values_${plan.label}.join("|") + ":" + Object.keys(alias_${plan.label}).join("|"));
+        console.log(${JSON.stringify(`${plan.label}:json:`)} + stringifyDynamic(values_${plan.label}));
         const iterator_${plan.label}: any = values_${plan.label}.values();
         console.log(${JSON.stringify(`${plan.label}:values:`)} + iterator_${plan.label}.join("|") + ":" + Object.keys(iterator_${plan.label}).join("|"));
     `);
@@ -94,11 +95,14 @@ function source(): string {
                 else values.reverse();
             }
         }
+        function stringifyDynamic(value: any): string {
+            return JSON.stringify(value);
+        }
         ${declarations.join("\n")}
     `;
 }
 
-function expectedState(plan: RepresentationPlan): string {
+function finalEntries(plan: RepresentationPlan): ReadonlyMap<number, Element> {
     let entries = new Map<number, Element>(plan.initial.map((value, index) => [index, value]));
     for (const operation of plan.operations) {
         if (operation.kind === "set") entries.set(operation.index, operation.value);
@@ -109,11 +113,24 @@ function expectedState(plan: RepresentationPlan): string {
             );
         }
     }
+    return entries;
+}
+
+function expectedState(plan: RepresentationPlan): string {
+    const entries = finalEntries(plan);
     const joined = Array.from({ length: plan.initial.length }, (_, index) =>
         entries.has(index) ? String(entries.get(index)) : ""
     ).join("|");
     const keys = [...entries.keys()].sort((left, right) => left - right).join("|");
     return `${plan.label}:state:${joined}:${keys}`;
+}
+
+function expectedJson(plan: RepresentationPlan): string {
+    const entries = finalEntries(plan);
+    const values = Array.from({ length: plan.initial.length }, (_, index) =>
+        entries.has(index) ? entries.get(index) : null
+    );
+    return `${plan.label}:json:${JSON.stringify(values)}`;
 }
 
 function expectedIterator(plan: RepresentationPlan): string {
@@ -131,6 +148,7 @@ test("array aliases share one representation codec", async () => {
         const expected = plans.flatMap((plan) => [
             `${plan.label}:identity:true`,
             expectedState(plan),
+            expectedJson(plan),
             expectedIterator(plan),
         ]);
         for (const noGc of [false, true]) {
