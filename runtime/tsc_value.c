@@ -1271,9 +1271,65 @@ tsc_value_t tsc_global_object(void) {
     return tsc_value_object(global);
 }
 
-void tsc_global_declare_var(tsc_str_t* key) {
+typedef struct tsc_global_lexical_binding {
+    tsc_str_t* name;
+    tsc_value_t value;
+    void* value_gc_root;
+    bool initialized;
+    bool mutable;
+    struct tsc_global_lexical_binding* next;
+} tsc_global_lexical_binding_t;
+
+static tsc_global_lexical_binding_t* g_global_lexical_bindings = NULL;
+
+static tsc_global_lexical_binding_t* global_lexical_find(const tsc_str_t* key) {
+    for (tsc_global_lexical_binding_t* binding = g_global_lexical_bindings;
+         binding;
+         binding = binding->next) {
+        if (binding->name == key || tsc_str_eq(binding->name, key)) return binding;
+    }
+    return NULL;
+}
+
+static tsc_object_t* global_object_record(void) {
+    return (tsc_object_t*)value_ptr(tsc_global_object());
+}
+
+static const tsc_object_prop_t* global_own_property(const tsc_str_t* key) {
+    tsc_object_t* global = global_object_record();
+    ssize_t index = object_find(global, key);
+    return index >= 0 ? &global->props[(size_t)index] : NULL;
+}
+
+static bool global_can_declare_var(const tsc_str_t* key) {
+    return global_own_property(key) != NULL || global_object_record()->extensible;
+}
+
+static bool global_can_declare_function(const tsc_str_t* key) {
+    const tsc_object_prop_t* existing = global_own_property(key);
+    if (!existing) return global_object_record()->extensible;
+    if (existing->configurable) return true;
+    return !existing->accessor && existing->writable && existing->enumerable;
+}
+
+static void global_create_lexical(const tsc_global_declaration_t* declaration) {
+    if (global_lexical_find(declaration->name)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("global lexical binding already exists"));
+    }
+    tsc_global_lexical_binding_t* binding =
+        (tsc_global_lexical_binding_t*)TSC_GC_MALLOC(sizeof(tsc_global_lexical_binding_t));
+    binding->name = declaration->name;
+    binding->value = tsc_value_undefined();
+    binding->value_gc_root = NULL;
+    binding->initialized = false;
+    binding->mutable = declaration->kind == TSC_GLOBAL_DECL_LEXICAL_MUTABLE;
+    binding->next = g_global_lexical_bindings;
+    g_global_lexical_bindings = binding;
+}
+
+static void global_create_var(tsc_str_t* key) {
     tsc_value_t global = tsc_global_object();
-    if (tsc_value_has_own_prop(global, key)) return;
+    if (tsc_value_has_own_prop(global, key) || !tsc_value_is_extensible(global)) return;
     if (!tsc_value_define_property_desc(
         global,
         key,
@@ -1290,29 +1346,160 @@ void tsc_global_declare_var(tsc_str_t* key) {
     }
 }
 
-void tsc_global_declare_function(tsc_str_t* key, tsc_value_t value) {
+static void global_create_function(tsc_str_t* key, tsc_value_t value) {
     tsc_value_t global = tsc_global_object();
+    const tsc_object_prop_t* existing = global_own_property(key);
+    bool replace_descriptor = !existing || existing->configurable;
     if (!tsc_value_define_property_desc(
         global,
         key,
         value,
         true,
         true,
+        replace_descriptor,
         true,
-        true,
-        true,
+        replace_descriptor,
         false,
-        true
+        replace_descriptor
     )) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot create global function binding"));
     }
+    (void)tsc_value_set_prop(global, key, value);
+}
+
+static bool global_declaration_is_lexical(tsc_global_declaration_kind_t kind) {
+    return kind == TSC_GLOBAL_DECL_LEXICAL_MUTABLE ||
+        kind == TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE;
+}
+
+static void global_throw_declaration_error(tsc_error_kind_t kind, const char* message) {
+    tsc_throw_error(kind, tsc_str_from_cstr(message));
+}
+
+void tsc_global_declaration_instantiation(
+    tsc_global_declaration_t* declarations,
+    size_t length
+) {
+    /* Keep every function object visible to the conservative collector for
+     * the entire preflight/create transaction. */
+    for (size_t index = 0; index < length; index++) {
+        declarations[index].value_gc_root = tsc_value_gc_root(declarations[index].value);
+    }
+
+    /* GlobalDeclarationInstantiation performs every collision/definability
+     * check before it creates the first binding.  The generated collection is
+     * therefore atomic for the runtime's ordinary global object. */
+    for (size_t index = 0; index < length; index++) {
+        const tsc_global_declaration_t* declaration = &declarations[index];
+        if (!global_declaration_is_lexical(declaration->kind)) continue;
+        for (size_t other = 0; other < length; other++) {
+            if (other == index || !tsc_str_eq(declaration->name, declarations[other].name)) continue;
+            global_throw_declaration_error(
+                TSC_ERROR_SYNTAX,
+                "global lexical declaration conflicts with another declaration"
+            );
+        }
+        const tsc_object_prop_t* existing = global_own_property(declaration->name);
+        if (global_lexical_find(declaration->name) || (existing && !existing->configurable)) {
+            global_throw_declaration_error(
+                TSC_ERROR_SYNTAX,
+                "global lexical declaration conflicts with an existing binding"
+            );
+        }
+    }
+    for (size_t index = 0; index < length; index++) {
+        const tsc_global_declaration_t* declaration = &declarations[index];
+        if (global_declaration_is_lexical(declaration->kind)) continue;
+        if (global_lexical_find(declaration->name)) {
+            global_throw_declaration_error(
+                TSC_ERROR_SYNTAX,
+                "global var declaration conflicts with an existing lexical binding"
+            );
+        }
+    }
+    for (size_t index = 0; index < length; index++) {
+        const tsc_global_declaration_t* declaration = &declarations[index];
+        if (declaration->kind == TSC_GLOBAL_DECL_FUNCTION &&
+            !global_can_declare_function(declaration->name)) {
+            global_throw_declaration_error(
+                TSC_ERROR_TYPE,
+                "global function declaration is not definable"
+            );
+        }
+    }
+    for (size_t index = 0; index < length; index++) {
+        const tsc_global_declaration_t* declaration = &declarations[index];
+        if (declaration->kind == TSC_GLOBAL_DECL_VAR &&
+            !global_can_declare_var(declaration->name)) {
+            global_throw_declaration_error(TSC_ERROR_TYPE, "global var declaration is not definable");
+        }
+    }
+
+    for (size_t index = 0; index < length; index++) {
+        if (global_declaration_is_lexical(declarations[index].kind)) {
+            global_create_lexical(&declarations[index]);
+        }
+    }
+    for (size_t index = 0; index < length; index++) {
+        if (declarations[index].kind == TSC_GLOBAL_DECL_FUNCTION) {
+            global_create_function(declarations[index].name, declarations[index].value);
+        }
+    }
+    for (size_t index = 0; index < length; index++) {
+        if (declarations[index].kind == TSC_GLOBAL_DECL_VAR) {
+            global_create_var(declarations[index].name);
+        }
+    }
+}
+
+tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value) {
+    tsc_global_lexical_binding_t* binding = global_lexical_find(key);
+    if (!binding || binding->initialized) {
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("global lexical binding is not uninitialized"));
+    }
+    binding->value = value;
+    binding->value_gc_root = tsc_value_gc_root(value);
+    binding->initialized = true;
+    return value;
+}
+
+static tsc_value_t global_lexical_get(tsc_global_lexical_binding_t* binding) {
+    if (!binding->initialized) {
+        tsc_throw_error(
+            TSC_ERROR_REFERENCE,
+            tsc_str_from_cstr("Cannot access global lexical binding before initialization")
+        );
+    }
+    return binding->value;
+}
+
+static tsc_value_t global_lexical_set(
+    tsc_global_lexical_binding_t* binding,
+    tsc_value_t value
+) {
+    if (!binding->initialized) {
+        tsc_throw_error(
+            TSC_ERROR_REFERENCE,
+            tsc_str_from_cstr("Cannot access global lexical binding before initialization")
+        );
+    }
+    if (!binding->mutable) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Assignment to constant global binding"));
+    }
+    binding->value = value;
+    binding->value_gc_root = tsc_value_gc_root(value);
+    return value;
 }
 
 tsc_value_t tsc_global_binding_get(tsc_str_t* key) {
+    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
+    if (lexical) return global_lexical_get(lexical);
     return tsc_value_get_prop(tsc_global_object(), key);
 }
 
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value) {
+    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
+    if (lexical) return global_lexical_set(lexical, value);
     if (!tsc_value_set_prop(tsc_global_object(), key, value)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot assign global binding"));
     }
@@ -1320,6 +1507,8 @@ tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value) {
 }
 
 tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
+    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
+    if (lexical) return global_lexical_get(lexical);
     tsc_value_t global = tsc_global_object();
     if (!tsc_value_has_prop(global, key)) {
         tsc_throw_error(
@@ -1331,6 +1520,8 @@ tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
 }
 
 tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
+    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
+    if (lexical) return global_lexical_set(lexical, value);
     tsc_value_t global = tsc_global_object();
     if (!tsc_value_has_prop(global, key) && strict) {
         tsc_throw_error(
@@ -1345,11 +1536,14 @@ tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool str
 }
 
 bool tsc_global_reference_delete(tsc_str_t* key) {
+    if (global_lexical_find(key)) return false;
     tsc_value_t global = tsc_global_object();
     return !tsc_value_has_prop(global, key) || tsc_value_delete_prop(global, key);
 }
 
 tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key) {
+    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
+    if (lexical) return tsc_value_typeof(global_lexical_get(lexical));
     tsc_value_t global = tsc_global_object();
     return tsc_value_has_prop(global, key)
         ? tsc_value_typeof(tsc_value_get_prop(global, key))

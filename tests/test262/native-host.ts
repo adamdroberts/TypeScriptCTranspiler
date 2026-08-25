@@ -863,6 +863,11 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
 
         const buildDirectory = path.join(request.artifactDirectory, "build");
         const executable = path.join(request.artifactDirectory, "program");
+        const scriptEntries = [
+            ...setupEntries,
+            ...(request.goal === "script" ? [testEntry] : []),
+            ...evalScriptRoots,
+        ];
         let diagnostics = "";
         const result = await compile({
             entry: testEntry,
@@ -871,7 +876,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             additionalRoots: [...setupEntries, ...evalScriptRoots],
             initializationEntries: [...setupEntries, testEntry],
             moduleRoots,
-            isolatedScriptRoots: evalScriptRoots,
+            isolatedScriptRoots: scriptEntries,
             ignoreCheckJsDirectiveRoots: [...new Set([
                 ...setupEntries,
                 testEntry,
@@ -884,6 +889,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 setupEntries,
                 testEntry,
                 async: request.async,
+                scriptEntries,
                 evalScriptEntries,
             },
             diagnosticWriter: (message) => {

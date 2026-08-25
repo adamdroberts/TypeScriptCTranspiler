@@ -406,12 +406,13 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 
 ## Test262 native host
 
-Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls and stringifies only its first argument as required by Test262, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
+Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. Binder-isolated Script records submit a `tsc_global_declaration_t` collection to `tsc_global_declaration_instantiation`, which preflights the complete collection before creating object-backed or declarative bindings in the shared Global Environment Record. Declarative values retain TDZ, mutability, and an explicit decoded GC root. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls and stringifies only its first argument as required by Test262, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_test262_begin()` | `void` | Starts observation capture and installs the reviewed host-global binding collection |
 | `tsc_test262_host_object()` | `tsc_value_t` | Returns the stable `$262` object for the current native process/Realm, including the hidden `%AbstractModuleSource%` intrinsic reference and implemented host hooks |
+| `tsc_global_declaration_instantiation(declarations, length)` | `void` | Atomically preflights and creates one Script's lexical, function, and `var` binding collection in the shared Global Environment Record |
 | `tsc_test262_set_eval_script_callback(callback)` | `void` | Installs the generated exact-source dispatcher for the finite AOT `$262.evalScript` source graph; runtime sources outside that graph fail closed |
 | `tsc_test262_write_normal(...)` / `tsc_test262_write_throw(...)` | `void` | Emits the single structured observation owned by the native execution boundary |
 

@@ -795,10 +795,26 @@ tsc_value_t tsc_number_constructor_value(void);
 tsc_value_t tsc_boolean_constructor_value(void);
 tsc_value_t tsc_bigint_constructor_value(void);
 tsc_value_t tsc_symbol_constructor_value(void);
-/* One canonical ECMAScript global object and its object-backed Script bindings. */
+/* One canonical ECMAScript Global Environment Record.  Generated Script
+ * records submit one declaration collection so preflight remains atomic and
+ * independent of declaration cardinality. */
+typedef enum {
+    TSC_GLOBAL_DECL_LEXICAL_MUTABLE,
+    TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE,
+    TSC_GLOBAL_DECL_FUNCTION,
+    TSC_GLOBAL_DECL_VAR,
+} tsc_global_declaration_kind_t;
+
+typedef struct {
+    tsc_str_t* name;
+    tsc_global_declaration_kind_t kind;
+    tsc_value_t value;
+    void* value_gc_root;
+} tsc_global_declaration_t;
+
 tsc_value_t tsc_global_object(void);
-void tsc_global_declare_var(tsc_str_t* key);
-void tsc_global_declare_function(tsc_str_t* key, tsc_value_t value);
+void tsc_global_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
+tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_binding_get(tsc_str_t* key);
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_reference_get(tsc_str_t* key);

@@ -452,6 +452,8 @@ export interface Test262NativeObservationPlan {
     /** The root Script or Module record under test. */
     readonly testEntry: string;
     readonly async: boolean;
+    /** Exact separately parsed Script records sharing the current Realm. */
+    readonly scriptEntries?: readonly string[];
     /** Finite AOT ParseScript records dispatched by exact runtime source text. */
     readonly evalScriptEntries?: readonly Test262EvalScriptEntry[];
 }
@@ -703,13 +705,16 @@ class Emitter {
         private graph: ModuleGraph,
         private options: EmitProgramOptions = {},
     ) {
-        this.test262EvalScriptEntryPaths = new Set(
-            (options.test262Observation?.evalScriptEntries ?? [])
-                .flatMap((entry) => entry.entry ? [path.resolve(entry.entry)] : []),
+        this.test262ScriptEntryPaths = new Set(
+            [
+                ...(options.test262Observation?.scriptEntries ?? []),
+                ...(options.test262Observation?.evalScriptEntries ?? [])
+                    .flatMap((entry) => entry.entry ? [entry.entry] : []),
+            ].map((entry) => path.resolve(entry)),
         );
     }
 
-    private readonly test262EvalScriptEntryPaths: ReadonlySet<string>;
+    private readonly test262ScriptEntryPaths: ReadonlySet<string>;
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
@@ -14856,6 +14861,16 @@ class Emitter {
 
     private isUnshadowedGlobalIdentifier(id: ts.Identifier, name: string): boolean {
         if (id.text !== name) return false;
+        if (
+            this.options.test262Observation &&
+            this.isTest262ScriptSourceFile(id.getSourceFile()) &&
+            this.isTest262OutOfBandIdentifier(id)
+        ) {
+            // A separately parsed Script's free name is resolved against the
+            // shared Global Environment Record at runtime.  A prior Script
+            // may have installed a lexical binding that shadows an intrinsic.
+            return false;
+        }
         const sym = this.symbolForIdentifier(id);
         if (!sym) return true;
         const source = id.getSourceFile();
@@ -15506,6 +15521,7 @@ class Emitter {
                     this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
                     this.emitClassDecorators(initBuf, inner, metadata, initializers);
                     this.emitDecoratorInitializers(initBuf, initializers);
+                    if (this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner)) continue;
                     this.emitModuleClassLexicalInitializer(initBuf, inner);
                     continue;
                 }
@@ -15795,7 +15811,7 @@ class Emitter {
     private declaredName(name: ts.Identifier): string {
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
-        if (this.test262EvalScriptEntryPaths.has(path.resolve(source.fileName))) {
+        if (this.test262ScriptEntryPaths.has(path.resolve(source.fileName))) {
             const moduleId = this.graph.fileToModuleId.get(source.fileName) ?? "eval_script";
             parts.unshift(moduleId);
         }
@@ -23967,17 +23983,21 @@ class Emitter {
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
         return !!this.options.test262Observation &&
             this.isJavaScriptSourceFile(sf) &&
-            (!ts.isExternalModule(sf) || this.test262EvalScriptEntryPaths.has(path.resolve(sf.fileName)));
+            (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
     }
 
-    private isTest262ScriptGlobalVarDeclaration(
+    private isTest262ScriptGlobalVarScopedDeclaration(
         decl: ts.Node,
-    ): decl is ts.VariableDeclaration & { name: ts.Identifier } {
+    ): decl is ts.VariableDeclaration {
         if (
             !ts.isVariableDeclaration(decl) ||
-            !ts.isIdentifier(decl.name) ||
             !ts.isVariableDeclarationList(decl.parent) ||
-            (decl.parent.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0
+            (decl.parent.flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) !== 0
         ) {
             return false;
         }
@@ -23995,6 +24015,31 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private isTest262ScriptGlobalVarDeclaration(
+        decl: ts.Node,
+    ): decl is ts.VariableDeclaration & { name: ts.Identifier } {
+        return this.isTest262ScriptGlobalVarScopedDeclaration(decl) && ts.isIdentifier(decl.name);
+    }
+
+    private isTest262ScriptGlobalLexicalDeclaration(
+        decl: ts.Node,
+    ): decl is (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier } {
+        if (!this.isTest262ScriptSourceFile(decl.getSourceFile())) return false;
+        if (ts.isClassDeclaration(decl)) {
+            return !!decl.name && ts.isSourceFile(decl.parent);
+        }
+        return ts.isVariableDeclaration(decl) && ts.isIdentifier(decl.name) &&
+            ts.isVariableDeclarationList(decl.parent) &&
+            (decl.parent.flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) !== 0 &&
+            ts.isVariableStatement(decl.parent.parent) &&
+            ts.isSourceFile(decl.parent.parent.parent);
     }
 
     private isTest262ScriptGlobalFunctionDeclaration(
@@ -24305,7 +24350,8 @@ class Emitter {
         for (const declaration of symbol.declarations ?? []) declarations.add(declaration);
         for (const declaration of declarations) {
             if (this.isTest262ScriptGlobalVarDeclaration(declaration) ||
-                this.isTest262ScriptGlobalFunctionDeclaration(declaration)) {
+                this.isTest262ScriptGlobalFunctionDeclaration(declaration) ||
+                this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
         }
@@ -24316,37 +24362,119 @@ class Emitter {
         return `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
     }
 
-    /** Script GlobalDeclarationInstantiation is derived from one source-tree
-     * traversal.  Nested functions/classes are lexical boundaries; every
-     * remaining `var` declaration is hoisted independently of nesting depth. */
+    /** Derive one normalized GlobalDeclarationInstantiation collection from
+     * Script static semantics. Nested functions/classes are declaration-scope
+     * boundaries; every remaining `var` declaration is discovered by the same
+     * source-tree worklist independently of statement nesting depth. */
     private test262ScriptGlobalDeclarations(sf: ts.SourceFile): {
-        vars: string[];
+        lexicals: Array<{
+            declaration: (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier };
+            immutable: boolean;
+        }>;
         functions: ts.FunctionDeclaration[];
+        vars: ts.Identifier[];
     } {
-        if (!this.isTest262ScriptSourceFile(sf)) return { vars: [], functions: [] };
-        const vars = new Set<string>();
-        const functions: ts.FunctionDeclaration[] = [];
+        if (!this.isTest262ScriptSourceFile(sf)) {
+            return { lexicals: [], functions: [], vars: [] };
+        }
+        const lexicals: Array<{
+            declaration: (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier };
+            immutable: boolean;
+        }> = [];
+        for (const statement of sf.statements) {
+            if (ts.isClassDeclaration(statement)) {
+                if (statement.name) {
+                    lexicals.push({ declaration: statement as typeof statement & { name: ts.Identifier }, immutable: false });
+                }
+                continue;
+            }
+            if (!ts.isVariableStatement(statement)) continue;
+            const flags = statement.declarationList.flags;
+            if ((flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) === 0) continue;
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name)) {
+                    unsupported(
+                        declaration,
+                        "global lexical binding patterns require canonical Global Environment destructuring",
+                    );
+                }
+                lexicals.push({
+                    declaration: declaration as typeof declaration & { name: ts.Identifier },
+                    immutable: (flags & (
+                        ts.NodeFlags.Const |
+                        ts.NodeFlags.Using |
+                        ts.NodeFlags.AwaitUsing
+                    )) !== 0,
+                });
+            }
+        }
+
+        const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration> = [];
         const visit = (node: ts.Node): void => {
             if (ts.isFunctionDeclaration(node)) {
                 if (this.isTest262ScriptGlobalFunctionDeclaration(node)) {
-                    functions.push(node);
+                    varDeclarations.push(node);
                 }
                 return;
             }
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
-            if (this.isTest262ScriptGlobalVarDeclaration(node)) {
-                vars.add(node.name.text);
+            if (this.isTest262ScriptGlobalVarScopedDeclaration(node)) {
+                if (!ts.isIdentifier(node.name)) {
+                    unsupported(
+                        node,
+                        "global var binding patterns require canonical Global Environment destructuring",
+                    );
+                }
+                varDeclarations.push(node);
             }
             ts.forEachChild(node, visit);
         };
         visit(sf);
-        return { vars: [...vars], functions };
+
+        const functionNames = new Set<string>();
+        const functions: ts.FunctionDeclaration[] = [];
+        for (let index = varDeclarations.length - 1; index >= 0; index--) {
+            const declaration = varDeclarations[index]!;
+            if (!ts.isFunctionDeclaration(declaration) || !declaration.name ||
+                functionNames.has(declaration.name.text)) continue;
+            functionNames.add(declaration.name.text);
+            functions.unshift(declaration);
+        }
+        const varNames = new Set<string>();
+        const vars: ts.Identifier[] = [];
+        for (const declaration of varDeclarations) {
+            if (!ts.isVariableDeclaration(declaration) || !ts.isIdentifier(declaration.name) ||
+                functionNames.has(declaration.name.text) || varNames.has(declaration.name.text)) continue;
+            varNames.add(declaration.name.text);
+            vars.push(declaration.name);
+        }
+        return { lexicals, functions, vars };
     }
 
     private emitTest262ScriptGlobalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         const declarations = this.test262ScriptGlobalDeclarations(sf);
-        for (const name of declarations.vars) {
-            buf.line(`tsc_global_declare_var(${this.test262GlobalBindingKey(name)});`);
+        const length = declarations.lexicals.length + declarations.functions.length + declarations.vars.length;
+        if (length === 0) return;
+        const plan = this.freshTemp("_global_declarations");
+        buf.line(
+            `tsc_global_declaration_t* ${plan} = ` +
+            `(tsc_global_declaration_t*)TSC_GC_MALLOC(sizeof(tsc_global_declaration_t) * ${length});`,
+        );
+        let index = 0;
+        for (const lexical of declarations.lexicals) {
+            const kind = lexical.immutable
+                ? "TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE"
+                : "TSC_GLOBAL_DECL_LEXICAL_MUTABLE";
+            buf.line(
+                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                `${this.test262GlobalBindingKey(lexical.declaration.name.text)}, ${kind}, ` +
+                `tsc_value_undefined(), NULL };`,
+            );
         }
         for (const declaration of declarations.functions) {
             const name = declaration.name!;
@@ -24354,9 +24482,48 @@ class Emitter {
             const closure = this.emitFunctionReferenceClosure(name, type);
             const value = this.coerce(closure, T_VALUE, name);
             buf.line(
-                `tsc_global_declare_function(${this.test262GlobalBindingKey(name.text)}, ${value});`,
+                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_FUNCTION, ${value}, NULL };`,
             );
         }
+        for (const name of declarations.vars) {
+            buf.line(
+                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_VAR, ` +
+                `tsc_value_undefined(), NULL };`,
+            );
+        }
+        buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
+    }
+
+    private emitTest262ScriptGlobalLexicalInitializer(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+    ): boolean {
+        if (!this.isTest262ScriptGlobalLexicalDeclaration(declaration)) return false;
+        const value = declaration.initializer
+            ? this.emitExpr(declaration.initializer)
+            : { c: "tsc_value_undefined()", ty: T_VALUE };
+        buf.line(
+            `tsc_global_lexical_initialize(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `${this.coerce(value, T_VALUE, declaration.initializer ?? declaration.name)});`,
+        );
+        return true;
+    }
+
+    private emitTest262ScriptGlobalClassLexicalInitializer(
+        buf: CBuf,
+        declaration: ts.ClassDeclaration,
+    ): boolean {
+        if (!this.isTest262ScriptGlobalLexicalDeclaration(declaration)) return false;
+        const value = this.classHasDecorators(declaration)
+            ? this.classDecoratorValue(declaration)
+            : this.classConstructorValue(declaration);
+        buf.line(
+            `tsc_global_lexical_initialize(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `${this.coerce(value, T_VALUE, declaration)});`,
+        );
+        return true;
     }
 
     private emitTest262ScriptGlobalVarInitializer(
@@ -40605,6 +40772,7 @@ class Emitter {
     ): void {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
+            if (this.emitTest262ScriptGlobalLexicalInitializer(initBuf, d)) continue;
             if (this.emitTest262ScriptGlobalVarInitializer(initBuf, d)) continue;
             if (this.emitModuleLexicalInitializer(initBuf, d)) continue;
             if (this.emitModuleVarInitializer(initBuf, d)) continue;
@@ -46622,9 +46790,9 @@ class Emitter {
         if (expr.kind === ts.SyntaxKind.ThisKeyword) {
             const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
             if (!this.currentClass && !fnThis && this.options.test262Observation) {
-                return ts.isExternalModule(expr.getSourceFile())
-                    ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                    : { c: "tsc_global_object()", ty: T_VALUE };
+                return this.isTest262ScriptSourceFile(expr.getSourceFile())
+                    ? { c: "tsc_global_object()", ty: T_VALUE }
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
             }
             if (!this.currentClass && !fnThis)
                 unsupported(expr, "`this` outside of a class method or function this parameter");
@@ -47037,7 +47205,10 @@ class Emitter {
         const moduleLexical = ts.isIdentifier(to.expression)
             ? this.moduleLexicalBindingForIdentifier(to.expression)
             : null;
-        const staticResult = moduleLexical
+        const scriptGlobal = ts.isIdentifier(to.expression)
+            ? this.test262ScriptGlobalBindingName(to.expression)
+            : null;
+        const staticResult = moduleLexical || scriptGlobal
             ? null
             : this.sideEffectFreeTypeofString(to.expression, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
@@ -75459,6 +75630,13 @@ class Emitter {
         }
         if (recv.ty.kind === "array" && pa.name.text === "length") {
             return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "array") {
+            const key = this.stringLit(pa.name.text);
+            return {
+                c: `tsc_value_get_prop(tsc_value_array(${recv.c}), ${key})`,
+                ty: T_VALUE,
+            };
         }
         if (recv.ty.kind === "map" && pa.name.text === "size") {
             return { c: `tsc_map_size(${recv.c})`, ty: T_NUMBER };
