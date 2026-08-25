@@ -2,17 +2,6 @@
 
 /* ---------------- arrays ---------------- */
 
-static bool array_prototype_initializing = false;
-static bool array_prototype_initialized = false;
-/* `tsc_value_t` stores pointers in a NaN-boxed payload that a conservative
- * collector cannot recognize.  Keep the singleton's decoded pointer in a
- * static slot for as long as any array can reach it through [[Prototype]]. */
-static tsc_array_t* volatile array_prototype_gc_root = NULL;
-static bool array_constructor_initialized = false;
-static tsc_value_t array_constructor_value;
-static bool array_unscopables_initialized = false;
-static tsc_value_t array_unscopables_value;
-
 typedef struct {
     bool initialized;
     bool present;
@@ -23,8 +12,59 @@ typedef struct {
     bool configurable;
 } tsc_array_prototype_symbol_slot_t;
 
-static tsc_array_prototype_symbol_slot_t array_prototype_symbol_iterator_slot;
-static tsc_array_prototype_symbol_slot_t array_prototype_symbol_unscopables_slot;
+typedef struct {
+    bool prototype_initializing;
+    bool prototype_initialized;
+    bool default_prototype_initialized;
+    tsc_value_t default_prototype;
+    /* `tsc_value_t` stores pointers in a NaN-boxed payload that a
+     * conservative collector cannot recognize. */
+    tsc_array_t* volatile prototype_gc_root;
+    bool constructor_initialized;
+    tsc_value_t constructor;
+    bool unscopables_initialized;
+    tsc_value_t unscopables;
+    tsc_array_prototype_symbol_slot_t symbol_iterator_slot;
+    tsc_array_prototype_symbol_slot_t symbol_unscopables_slot;
+} tsc_array_intrinsics_t;
+
+static const char array_intrinsics_realm_state_key = 0;
+
+static tsc_array_intrinsics_t* array_intrinsics_for_current_realm(void) {
+    tsc_array_intrinsics_t* intrinsics =
+        (tsc_array_intrinsics_t*)tsc_realm_state_get(
+            &array_intrinsics_realm_state_key
+        );
+    if (intrinsics) return intrinsics;
+    tsc_runtime_lock();
+    intrinsics = (tsc_array_intrinsics_t*)tsc_realm_state_get(
+        &array_intrinsics_realm_state_key
+    );
+    if (!intrinsics) {
+        intrinsics = (tsc_array_intrinsics_t*)TSC_GC_MALLOC(sizeof(*intrinsics));
+        memset(intrinsics, 0, sizeof(*intrinsics));
+        tsc_realm_state_set(&array_intrinsics_realm_state_key, intrinsics);
+    }
+    tsc_runtime_unlock();
+    return intrinsics;
+}
+
+#define array_prototype_initializing (array_intrinsics_for_current_realm()->prototype_initializing)
+#define array_prototype_initialized (array_intrinsics_for_current_realm()->prototype_initialized)
+#define array_prototype_gc_root (array_intrinsics_for_current_realm()->prototype_gc_root)
+#define array_constructor_initialized (array_intrinsics_for_current_realm()->constructor_initialized)
+#define array_constructor_value (array_intrinsics_for_current_realm()->constructor)
+#define array_unscopables_initialized (array_intrinsics_for_current_realm()->unscopables_initialized)
+#define array_unscopables_value (array_intrinsics_for_current_realm()->unscopables)
+#define array_prototype_symbol_iterator_slot (array_intrinsics_for_current_realm()->symbol_iterator_slot)
+#define array_prototype_symbol_unscopables_slot (array_intrinsics_for_current_realm()->symbol_unscopables_slot)
+
+static tsc_value_t array_constructor_result(tsc_array_t* result, tsc_value_t receiver) {
+    if (!tsc_value_is_undefined(tsc_value_current_new_target())) {
+        result->prototype = tsc_value_get_prototype_of(receiver);
+    }
+    return tsc_value_array(result);
+}
 
 static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
@@ -40,7 +80,7 @@ static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, ts
             tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), (size_t)length);
             tsc_value_t undef = tsc_value_undefined();
             for (size_t i = 0; i < (size_t)length; i++) tsc_array_push_raw(out, &undef);
-            return tsc_value_array(out);
+            return array_constructor_result(out, this_arg);
         }
     }
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
@@ -48,7 +88,7 @@ static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, ts
         tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
         tsc_array_push_raw(out, &value);
     }
-    return tsc_value_array(out);
+    return array_constructor_result(out, this_arg);
 }
 
 static tsc_value_t array_constructor_species_getter(void* env, tsc_value_t receiver) {
@@ -132,6 +172,8 @@ tsc_value_t tsc_array_constructor_value(void) {
             1.0,
             tsc_str_from_lit("Array", 5)
         );
+        ((tsc_function_identity_t*)value_ptr(array_constructor_value))
+            ->construct_default_prototype = TSC_INTRINSIC_DEFAULT_ARRAY_PROTOTYPE;
         (void)tsc_value_define_accessor_desc(
             array_constructor_value,
             tsc_symbol_property_key(tsc_symbol_species()),
@@ -1099,10 +1141,9 @@ tsc_value_t tsc_array_symbol_unscopables_descriptor(void) {
 }
 
 static tsc_value_t tsc_array_default_prototype(void) {
-    static bool initialized = false;
-    static tsc_value_t prototype;
+    tsc_array_intrinsics_t* intrinsics = array_intrinsics_for_current_realm();
     tsc_runtime_lock();
-    if (!initialized) {
+    if (!intrinsics->default_prototype_initialized) {
         array_prototype_initializing = true;
         tsc_array_t* proto = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
         proto->len = 0;
@@ -1171,12 +1212,12 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto->props, "reduce", 6, 1.0, array_prototype_reduce);
         array_prototype_define_method(proto->props, "reduceRight", 11, 1.0, array_prototype_reduce_right);
         array_prototype_gc_root = proto;
-        prototype = tsc_value_array(proto);
+        intrinsics->default_prototype = tsc_value_array(proto);
         array_prototype_initialized = true;
         (void)tsc_value_set_prop(
             tsc_array_constructor_value(),
             tsc_str_from_lit("prototype", 9),
-            prototype
+            intrinsics->default_prototype
         );
         tsc_object_define(
             proto->props,
@@ -1187,10 +1228,10 @@ static tsc_value_t tsc_array_default_prototype(void) {
             true
         );
         array_prototype_initializing = false;
-        initialized = true;
+        intrinsics->default_prototype_initialized = true;
     }
     tsc_runtime_unlock();
-    return prototype;
+    return intrinsics->default_prototype;
 }
 
 tsc_array_t* tsc_array_prototype(void) {

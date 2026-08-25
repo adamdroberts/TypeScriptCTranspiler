@@ -148,8 +148,15 @@ static tsc_value_t tsc_value_function_named_kind(
     tsc_function_identity_kind_t kind
 ) {
     if (!name) name = tsc_str_from_lit("", 0);
+    tsc_realm_t* realm = tsc_realm_current();
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == kind && cur->code.generic == fn && cur->construct == construct && cur->env == env) {
+        if (
+            cur->kind == kind &&
+            cur->realm == realm &&
+            cur->code.generic == fn &&
+            cur->construct == construct &&
+            cur->env == env
+        ) {
             if (length > cur->length) {
                 cur->length = length;
                 (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("length", 6), tsc_value_num(length), true, false, false, false, false, false, false);
@@ -163,12 +170,15 @@ static tsc_value_t tsc_value_function_named_kind(
     }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     id->kind = kind;
+    id->realm = realm;
+    id->construct_default_prototype = TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE;
     id->extensible = true;
     id->sealed = false;
     id->frozen = false;
     id->func_prototype_writable = true;
     tsc_function_identity_set_prototype(id, tsc_function_default_prototype());
     tsc_function_identity_set_own_prototype(id, tsc_value_undefined());
+    id->func_prototype_initialized = false;
     id->construct = construct;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
@@ -251,6 +261,43 @@ static tsc_value_t bound_function_apply(void* raw_env, tsc_value_t this_arg, tsc
     );
 }
 
+static tsc_realm_t* tsc_value_function_realm(tsc_value_t function) {
+    /* Bound functions and callable proxies form a canonical target chain.
+     * Neither can be retargeted after creation, so following that chain is
+     * cardinality-independent and cannot manufacture a cycle. */
+    for (;;) {
+        if (value_is_box(function) && value_tag(function) == TSC_VALUE_TAG_FUNCTION) {
+            tsc_function_identity_t* identity =
+                (tsc_function_identity_t*)value_ptr(function);
+            if (identity && identity->kind == TSC_FUNCTION_IDENTITY_BOUND) {
+                tsc_bound_function_env_t* bound =
+                    (tsc_bound_function_env_t*)identity->env;
+                if (bound) {
+                    function = bound->target;
+                    continue;
+                }
+            }
+            return identity && identity->realm
+                ? identity->realm
+                : tsc_realm_current();
+        }
+        if (value_is_box(function) && value_tag(function) == TSC_VALUE_TAG_OBJECT) {
+            tsc_object_t* object = (tsc_object_t*)value_ptr(function);
+            if (object && object->is_proxy) {
+                if (object->proxy_revoked) {
+                    tsc_throw_error(
+                        TSC_ERROR_TYPE,
+                        tsc_str_from_cstr("Cannot determine Realm of a revoked Proxy")
+                    );
+                }
+                function = object->proxy_target;
+                continue;
+            }
+        }
+        return tsc_realm_current();
+    }
+}
+
 tsc_value_t tsc_value_bind_function(
     tsc_value_t target,
     tsc_value_t bound_this,
@@ -306,6 +353,7 @@ tsc_value_t tsc_value_bind_function(
         TSC_FUNCTION_IDENTITY_BOUND
     );
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
+    identity->realm = tsc_value_function_realm(target);
     tsc_function_identity_set_prototype(identity, tsc_value_get_prototype_of(target));
     return result;
 }
@@ -319,7 +367,7 @@ typedef struct {
     tsc_value_t constructor;
 } tsc_error_intrinsic_t;
 
-static tsc_error_intrinsic_t error_intrinsics[TSC_ERROR_KIND_COUNT] = {
+static const tsc_error_intrinsic_t error_intrinsic_templates[TSC_ERROR_KIND_COUNT] = {
     { TSC_ERROR_ERROR, "Error", 5, 1.0, NULL, 0 },
     { TSC_ERROR_TYPE, "TypeError", 9, 1.0, NULL, 0 },
     { TSC_ERROR_RANGE, "RangeError", 10, 1.0, NULL, 0 },
@@ -331,16 +379,45 @@ static tsc_error_intrinsic_t error_intrinsics[TSC_ERROR_KIND_COUNT] = {
     { TSC_ERROR_SUPPRESSED, "SuppressedError", 15, 3.0, NULL, 0 },
 };
 
-static bool error_intrinsics_initialized = false;
+typedef struct {
+    int initialization_state;
+    tsc_error_intrinsic_t intrinsics[TSC_ERROR_KIND_COUNT];
+} tsc_error_intrinsics_state_t;
+
+static const char error_intrinsics_realm_state_key = 0;
 
 static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args);
 static tsc_value_t error_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args);
+
+static tsc_error_intrinsics_state_t* error_intrinsics_for_current_realm(void) {
+    tsc_error_intrinsics_state_t* state =
+        (tsc_error_intrinsics_state_t*)tsc_realm_state_get(
+            &error_intrinsics_realm_state_key
+        );
+    if (state) return state;
+    tsc_runtime_lock();
+    state = (tsc_error_intrinsics_state_t*)tsc_realm_state_get(
+        &error_intrinsics_realm_state_key
+    );
+    if (!state) {
+        state = (tsc_error_intrinsics_state_t*)TSC_GC_MALLOC(sizeof(*state));
+        memset(state, 0, sizeof(*state));
+        memcpy(
+            state->intrinsics,
+            error_intrinsic_templates,
+            sizeof(error_intrinsic_templates)
+        );
+        tsc_realm_state_set(&error_intrinsics_realm_state_key, state);
+    }
+    tsc_runtime_unlock();
+    return state;
+}
 
 static tsc_error_intrinsic_t* error_intrinsic(tsc_error_kind_t kind) {
     if (kind < TSC_ERROR_ERROR || kind >= TSC_ERROR_KIND_COUNT) {
         kind = TSC_ERROR_ERROR;
     }
-    return &error_intrinsics[(size_t)kind];
+    return &error_intrinsics_for_current_realm()->intrinsics[(size_t)kind];
 }
 
 static bool error_name_matches(const tsc_str_t* name, const tsc_error_intrinsic_t* intrinsic) {
@@ -350,8 +427,8 @@ static bool error_name_matches(const tsc_str_t* name, const tsc_error_intrinsic_
 
 static tsc_error_kind_t error_kind_from_name(const tsc_str_t* name) {
     for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
-        if (error_name_matches(name, &error_intrinsics[i])) {
-            return error_intrinsics[i].kind;
+        if (error_name_matches(name, &error_intrinsic_templates[i])) {
+            return error_intrinsic_templates[i].kind;
         }
     }
     return TSC_ERROR_ERROR;
@@ -385,9 +462,12 @@ static tsc_value_t error_prototype_to_string(void* env, tsc_value_t this_arg, ts
 }
 
 static void error_intrinsics_initialize(void) {
-    if (error_intrinsics_initialized) return;
+    tsc_error_intrinsics_state_t* state = error_intrinsics_for_current_realm();
+    if (state->initialization_state == 2) return;
     tsc_runtime_lock();
-    if (!error_intrinsics_initialized) {
+    if (state->initialization_state == 0) {
+        state->initialization_state = 1;
+        tsc_error_intrinsic_t* error_intrinsics = state->intrinsics;
         for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
             error_intrinsics[i].prototype = tsc_object_new();
         }
@@ -439,6 +519,10 @@ static void error_intrinsics_initialize(void) {
             );
             tsc_function_identity_t* identity =
                 (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
+            identity->construct_default_prototype =
+                (tsc_intrinsic_default_prototype_kind_t)(
+                    TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE + intrinsic->kind
+                );
             tsc_function_identity_set_own_prototype(
                 identity,
                 tsc_value_object(intrinsic->prototype)
@@ -452,7 +536,7 @@ static void error_intrinsics_initialize(void) {
                 true
             );
         }
-        error_intrinsics_initialized = true;
+        state->initialization_state = 2;
     }
     tsc_runtime_unlock();
 }
@@ -543,11 +627,50 @@ typedef struct {
     bool constructor_initialized;
 } tsc_primitive_descriptor_t;
 
-static tsc_primitive_descriptor_t primitive_boolean = { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false };
-static tsc_primitive_descriptor_t primitive_number = { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false };
-static tsc_primitive_descriptor_t primitive_string = { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false };
-static tsc_primitive_descriptor_t primitive_bigint = { TSC_PRIMITIVE_BIGINT, "BigInt", 6, NULL, 0, false };
-static tsc_primitive_descriptor_t primitive_symbol = { TSC_PRIMITIVE_SYMBOL, "Symbol", 6, NULL, 0, false };
+static const tsc_primitive_descriptor_t primitive_descriptor_templates[] = {
+    { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false },
+    { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false },
+    { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false },
+    { TSC_PRIMITIVE_BIGINT, "BigInt", 6, NULL, 0, false },
+    { TSC_PRIMITIVE_SYMBOL, "Symbol", 6, NULL, 0, false },
+};
+
+typedef struct {
+    tsc_primitive_descriptor_t descriptors[
+        sizeof(primitive_descriptor_templates) / sizeof(primitive_descriptor_templates[0])
+    ];
+} tsc_primitive_intrinsics_state_t;
+
+static const char primitive_intrinsics_realm_state_key = 0;
+
+static tsc_primitive_intrinsics_state_t* primitive_intrinsics_for_current_realm(void) {
+    tsc_primitive_intrinsics_state_t* state =
+        (tsc_primitive_intrinsics_state_t*)tsc_realm_state_get(
+            &primitive_intrinsics_realm_state_key
+        );
+    if (state) return state;
+    tsc_runtime_lock();
+    state = (tsc_primitive_intrinsics_state_t*)tsc_realm_state_get(
+        &primitive_intrinsics_realm_state_key
+    );
+    if (!state) {
+        state = (tsc_primitive_intrinsics_state_t*)TSC_GC_MALLOC(sizeof(*state));
+        memcpy(
+            state->descriptors,
+            primitive_descriptor_templates,
+            sizeof(primitive_descriptor_templates)
+        );
+        tsc_realm_state_set(&primitive_intrinsics_realm_state_key, state);
+    }
+    tsc_runtime_unlock();
+    return state;
+}
+
+#define primitive_boolean (primitive_intrinsics_for_current_realm()->descriptors[0])
+#define primitive_number (primitive_intrinsics_for_current_realm()->descriptors[1])
+#define primitive_string (primitive_intrinsics_for_current_realm()->descriptors[2])
+#define primitive_bigint (primitive_intrinsics_for_current_realm()->descriptors[3])
+#define primitive_symbol (primitive_intrinsics_for_current_realm()->descriptors[4])
 
 static bool primitive_matches(tsc_primitive_kind_t kind, tsc_value_t value) {
     if (kind == TSC_PRIMITIVE_NUMBER) return !value_is_box(value);
@@ -826,7 +949,24 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
         TSC_FUNCTION_IDENTITY_BUILTIN
     );
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
-    if (tsc_value_is_undefined(identity->func_prototype)) {
+    switch (descriptor->kind) {
+        case TSC_PRIMITIVE_BOOLEAN:
+            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE;
+            break;
+        case TSC_PRIMITIVE_NUMBER:
+            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE;
+            break;
+        case TSC_PRIMITIVE_STRING:
+            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_STRING_PROTOTYPE;
+            break;
+        case TSC_PRIMITIVE_BIGINT:
+            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE;
+            break;
+        case TSC_PRIMITIVE_SYMBOL:
+            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE;
+            break;
+    }
+    if (!identity->func_prototype_initialized) {
         tsc_function_identity_set_own_prototype(identity, primitive_prototype(descriptor));
         tsc_object_define(
             descriptor->prototype,
@@ -1046,6 +1186,20 @@ static tsc_value_t object_constructor_apply(void* env, tsc_value_t this_arg, tsc
     return object_constructor_box_primitive(descriptor, value);
 }
 
+static tsc_value_t object_constructor_construct(
+    void* env,
+    tsc_value_t receiver,
+    tsc_array_t* args
+) {
+    /* Object's derived-newTarget branch returns the object already created by
+     * OrdinaryCreateFromConstructor.  The active-function branch retains the
+     * ordinary Object(value) conversion behavior. */
+    if (tsc_value_current_new_target() != tsc_value_current_callee()) {
+        return receiver;
+    }
+    return object_constructor_apply(env, receiver, args);
+}
+
 static void object_static_require_target(tsc_value_t target, const char* method) {
     if (tsc_value_is_nullish(target)) {
         char message[128];
@@ -1139,25 +1293,52 @@ static void object_constructor_define_static_method(
     );
 }
 
+typedef struct {
+    int initialization_state;
+    tsc_value_t constructor;
+} tsc_object_constructor_intrinsic_t;
+
+static const char object_constructor_realm_state_key = 0;
+
 tsc_value_t tsc_object_constructor_value(void) {
-    static bool initialized = false;
-    static tsc_value_t constructor;
-    if (!initialized) {
+    tsc_object_constructor_intrinsic_t* intrinsic =
+        (tsc_object_constructor_intrinsic_t*)tsc_realm_state_get(
+            &object_constructor_realm_state_key
+        );
+    if (!intrinsic) {
         tsc_runtime_lock();
-        if (!initialized) {
-            constructor = tsc_value_function_generic_named(
+        intrinsic = (tsc_object_constructor_intrinsic_t*)tsc_realm_state_get(
+            &object_constructor_realm_state_key
+        );
+        if (!intrinsic) {
+            intrinsic = (tsc_object_constructor_intrinsic_t*)TSC_GC_MALLOC(
+                sizeof(tsc_object_constructor_intrinsic_t)
+            );
+            memset(intrinsic, 0, sizeof(*intrinsic));
+            tsc_realm_state_set(&object_constructor_realm_state_key, intrinsic);
+        }
+        tsc_runtime_unlock();
+    }
+    if (intrinsic->initialization_state == 0) {
+        tsc_runtime_lock();
+        if (intrinsic->initialization_state == 0) {
+            intrinsic->initialization_state = 1;
+            intrinsic->constructor = tsc_value_function_named_kind(
                 object_constructor_apply,
+                object_constructor_construct,
                 NULL,
                 1.0,
-                tsc_str_from_lit("Object", 6)
+                tsc_str_from_lit("Object", 6),
+                TSC_FUNCTION_IDENTITY_BUILTIN
             );
-            tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+            tsc_function_identity_t* identity =
+                (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
             tsc_value_t prototype = tsc_value_object_prototype();
             tsc_function_identity_set_own_prototype(identity, prototype);
             (void)tsc_value_define_property_desc(
                 prototype,
                 tsc_str_from_lit("constructor", 11),
-                constructor,
+                intrinsic->constructor,
                 true,
                 true,
                 true,
@@ -1171,13 +1352,16 @@ tsc_value_t tsc_object_constructor_value(void) {
                 index < sizeof(object_static_methods) / sizeof(object_static_methods[0]);
                 index++
             ) {
-                object_constructor_define_static_method(constructor, &object_static_methods[index]);
+                object_constructor_define_static_method(
+                    intrinsic->constructor,
+                    &object_static_methods[index]
+                );
             }
-            initialized = true;
+            intrinsic->initialization_state = 2;
         }
         tsc_runtime_unlock();
     }
-    return constructor;
+    return intrinsic->constructor;
 }
 
 typedef struct {
@@ -1663,6 +1847,7 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
 typedef struct tsc_callee_frame {
     struct tsc_callee_frame* prev;
     tsc_value_t value;
+    tsc_value_t new_target;
 } tsc_callee_frame_t;
 
 static TSC_TLS tsc_callee_frame_t* value_current_callee = NULL;
@@ -1673,12 +1858,61 @@ tsc_value_t tsc_value_current_callee(void) {
         : tsc_value_undefined();
 }
 
+tsc_value_t tsc_value_current_new_target(void) {
+    return value_current_callee
+        ? value_current_callee->new_target
+        : tsc_value_undefined();
+}
+
 void* tsc_value_callee_checkpoint(void) {
     return value_current_callee;
 }
 
 void tsc_value_callee_restore(void* checkpoint) {
     value_current_callee = (tsc_callee_frame_t*)checkpoint;
+}
+
+static tsc_value_t date_prototype_value(void);
+
+static tsc_value_t value_intrinsic_default_prototype(
+    tsc_intrinsic_default_prototype_kind_t kind
+) {
+    switch (kind) {
+        case TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE:
+            return tsc_value_object_prototype();
+        case TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE:
+            return tsc_function_default_prototype();
+        case TSC_INTRINSIC_DEFAULT_ARRAY_PROTOTYPE:
+            return tsc_value_array(tsc_array_prototype());
+        case TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE:
+            return primitive_prototype(&primitive_boolean);
+        case TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE:
+            return primitive_prototype(&primitive_number);
+        case TSC_INTRINSIC_DEFAULT_STRING_PROTOTYPE:
+            return primitive_prototype(&primitive_string);
+        case TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE:
+            return primitive_prototype(&primitive_bigint);
+        case TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE:
+            return primitive_prototype(&primitive_symbol);
+        case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
+            return date_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_SYNTAX_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_REFERENCE_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_EVAL_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_URI_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_AGGREGATE_ERROR_PROTOTYPE:
+        case TSC_INTRINSIC_DEFAULT_SUPPRESSED_ERROR_PROTOTYPE: {
+            tsc_error_kind_t error_kind = (tsc_error_kind_t)(
+                kind - TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE
+            );
+            error_intrinsics_initialize();
+            return tsc_value_object(error_intrinsic(error_kind)->prototype);
+        }
+    }
+    tsc_panic("unknown intrinsic default prototype");
 }
 
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
@@ -1709,8 +1943,13 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     }
     tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
     tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
+    tsc_realm_t* previous_realm = tsc_realm_swap(
+        ident->realm ? ident->realm : tsc_realm_current()
+    );
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
-        return ident->code.getter(ident->env, this_arg);
+        tsc_value_t result = ident->code.getter(ident->env, this_arg);
+        (void)tsc_realm_swap(previous_realm);
+        return result;
     }
     if (
         ident->kind == TSC_FUNCTION_IDENTITY_GENERIC ||
@@ -1721,25 +1960,31 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         tsc_callee_frame_t frame = {
             .prev = value_current_callee,
             .value = fn,
+            .new_target = tsc_value_undefined(),
         };
         value_current_callee = &frame;
         tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
         value_current_callee = frame.prev;
+        (void)tsc_realm_swap(previous_realm);
         return result;
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
         ident->code.event_listener.fn(ident->env, NULL, list);
+        (void)tsc_realm_swap(previous_realm);
         return tsc_value_undefined();
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER) {
         ident->code.event_raw_identity.fn(ident->env, NULL, list);
+        (void)tsc_realm_swap(previous_realm);
         return tsc_value_undefined();
     }
     if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
+        (void)tsc_realm_swap(previous_realm);
         tsc_panic("Reflect.apply target is not a callable function identity");
     }
     tsc_value_t value = list->len > 0 ? TSC_ARR(tsc_value_t, list, 0) : tsc_value_undefined();
     ident->code.setter(ident->env, this_arg, value);
+    (void)tsc_realm_swap(previous_realm);
     return tsc_value_undefined();
 }
 
@@ -1776,13 +2021,31 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
-            tsc_value_t receiver = tsc_value_object(tsc_object_new());
             tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
-            if (value_is_valid_prototype(new_target_proto) && !value_is_null_value(new_target_proto)) {
-                (void)tsc_value_set_prototype_of(receiver, new_target_proto);
+            if (!value_is_valid_prototype(new_target_proto) || value_is_null_value(new_target_proto)) {
+                tsc_realm_t* new_target_realm = tsc_value_function_realm(new_target);
+                tsc_realm_t* previous_realm = tsc_realm_swap(new_target_realm);
+                new_target_proto = value_intrinsic_default_prototype(
+                    ident->construct_default_prototype
+                );
+                (void)tsc_realm_swap(previous_realm);
             }
+            tsc_value_t receiver = tsc_value_object(
+                tsc_object_new_with_prototype(new_target_proto)
+            );
             tsc_generic_function_t construct = ident->construct ? ident->construct : ident->code.generic;
+            tsc_realm_t* previous_realm = tsc_realm_swap(
+                ident->realm ? ident->realm : tsc_realm_current()
+            );
+            tsc_callee_frame_t frame = {
+                .prev = value_current_callee,
+                .value = target,
+                .new_target = new_target,
+            };
+            value_current_callee = &frame;
             tsc_value_t result = construct(ident->env, receiver, list);
+            value_current_callee = frame.prev;
+            (void)tsc_realm_swap(previous_realm);
             if (
                 value_is_box(result) &&
                 (
@@ -1897,7 +2160,7 @@ static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, ts
 
 static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, tsc_value_t fn) {
     if (!ident) return tsc_value_undefined();
-    if (tsc_value_is_undefined(ident->func_prototype)) {
+    if (!ident->func_prototype_initialized) {
         tsc_object_t* proto = tsc_object_new();
         tsc_object_set(proto, tsc_str_from_lit("constructor", 11), fn);
         tsc_function_identity_set_own_prototype(ident, tsc_value_object(proto));
@@ -5304,9 +5567,36 @@ static const tsc_date_method_descriptor_t date_prototype_methods[] = {
 #undef TSC_DATE_METHOD
 #undef TSC_DATE_ALIAS_METHOD
 
-static tsc_object_t* date_prototype_object = NULL;
-static tsc_value_t date_constructor;
-static bool date_intrinsic_initialized = false;
+typedef struct {
+    tsc_object_t* prototype_object;
+    tsc_value_t constructor;
+    bool initialized;
+} tsc_date_intrinsics_state_t;
+
+static const char date_intrinsics_realm_state_key = 0;
+
+static tsc_date_intrinsics_state_t* date_intrinsics_for_current_realm(void) {
+    tsc_date_intrinsics_state_t* state =
+        (tsc_date_intrinsics_state_t*)tsc_realm_state_get(
+            &date_intrinsics_realm_state_key
+        );
+    if (state) return state;
+    tsc_runtime_lock();
+    state = (tsc_date_intrinsics_state_t*)tsc_realm_state_get(
+        &date_intrinsics_realm_state_key
+    );
+    if (!state) {
+        state = (tsc_date_intrinsics_state_t*)TSC_GC_MALLOC(sizeof(*state));
+        memset(state, 0, sizeof(*state));
+        tsc_realm_state_set(&date_intrinsics_realm_state_key, state);
+    }
+    tsc_runtime_unlock();
+    return state;
+}
+
+#define date_prototype_object (date_intrinsics_for_current_realm()->prototype_object)
+#define date_constructor (date_intrinsics_for_current_realm()->constructor)
+#define date_intrinsic_initialized (date_intrinsics_for_current_realm()->initialized)
 
 static tsc_value_t date_argument(const tsc_array_t* args, size_t index) {
     return args && index < args->len
@@ -5562,6 +5852,8 @@ static void date_intrinsic_initialize(void) {
         );
         tsc_function_identity_t* constructor_identity =
             (tsc_function_identity_t*)value_ptr(date_constructor);
+        constructor_identity->construct_default_prototype =
+            TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE;
         tsc_function_identity_set_own_prototype(constructor_identity, prototype);
         constructor_identity->func_prototype_writable = false;
         tsc_object_define(
@@ -7365,8 +7657,36 @@ static tsc_value_t math_intrinsic_apply(void* env, tsc_value_t this_arg, tsc_arr
     return tsc_value_num(result);
 }
 
+typedef struct {
+    tsc_object_t* math;
+    tsc_object_t* json;
+    tsc_object_t* reflect;
+} tsc_namespace_intrinsics_state_t;
+
+static const char namespace_intrinsics_realm_state_key = 0;
+
+static tsc_namespace_intrinsics_state_t* namespace_intrinsics_for_current_realm(void) {
+    tsc_namespace_intrinsics_state_t* state =
+        (tsc_namespace_intrinsics_state_t*)tsc_realm_state_get(
+            &namespace_intrinsics_realm_state_key
+        );
+    if (state) return state;
+    tsc_runtime_lock();
+    state = (tsc_namespace_intrinsics_state_t*)tsc_realm_state_get(
+        &namespace_intrinsics_realm_state_key
+    );
+    if (!state) {
+        state = (tsc_namespace_intrinsics_state_t*)TSC_GC_MALLOC(sizeof(*state));
+        memset(state, 0, sizeof(*state));
+        tsc_realm_state_set(&namespace_intrinsics_realm_state_key, state);
+    }
+    tsc_runtime_unlock();
+    return state;
+}
+
 tsc_value_t tsc_builtin_math(void) {
-    static tsc_object_t* math = NULL;
+    tsc_namespace_intrinsics_state_t* state = namespace_intrinsics_for_current_realm();
+    tsc_object_t* math = state->math;
     if (!math) {
         tsc_runtime_lock();
         if (!math) {
@@ -7393,6 +7713,7 @@ tsc_value_t tsc_builtin_math(void) {
                     false
                 );
             }
+            state->math = built;
             math = built;
         }
         tsc_runtime_unlock();
@@ -7415,13 +7736,15 @@ static tsc_value_t json_stringify_apply(void* env, tsc_value_t this_arg, tsc_arr
 }
 
 tsc_value_t tsc_builtin_json(void) {
-    static tsc_object_t* json = NULL;
+    tsc_namespace_intrinsics_state_t* state = namespace_intrinsics_for_current_realm();
+    tsc_object_t* json = state->json;
     if (!json) {
         tsc_runtime_lock();
         if (!json) {
             tsc_object_t* built = tsc_object_new();
             intrinsic_define_method(built, "parse", 5, 2.0, json_parse_apply, NULL);
             intrinsic_define_method(built, "stringify", 9, 3.0, json_stringify_apply, NULL);
+            state->json = built;
             json = built;
         }
         tsc_runtime_unlock();
@@ -7540,7 +7863,8 @@ static void reflect_define_method(tsc_object_t* reflect, const char* name, size_
 }
 
 tsc_value_t tsc_builtin_reflect(void) {
-    static tsc_object_t* reflect = NULL;
+    tsc_namespace_intrinsics_state_t* state = namespace_intrinsics_for_current_realm();
+    tsc_object_t* reflect = state->reflect;
     if (!reflect) {
         tsc_runtime_lock();
         if (reflect) {
@@ -7561,6 +7885,7 @@ tsc_value_t tsc_builtin_reflect(void) {
         reflect_define_method(built, "preventExtensions", 17, 1.0, reflect_prevent_extensions_method);
         reflect_define_method(built, "set", 3, 3.0, reflect_set_method);
         reflect_define_method(built, "setPrototypeOf", 14, 2.0, reflect_set_prototype_of_method);
+        state->reflect = built;
         reflect = built;
         tsc_runtime_unlock();
     }

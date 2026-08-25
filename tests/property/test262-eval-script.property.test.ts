@@ -100,6 +100,13 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const realmMutationSource = "realmLexical += 1; realmVar += 1;";
     const realmObservationSource = "({ lexical: realmLexical, variable: realmVar, object: realmObject });";
     const realmThrowSource = "throw realmSentinel;";
+    const realmCallableSource = `
+        globalThis.realmGlobalReader = function realmGlobalReader() { return globalThis; };
+        var realmSetPrototypeOf = Object.setPrototypeOf;
+        globalThis.realmThrower = function realmThrower() { return realmSetPrototypeOf(null, null); };
+        globalThis.realmNewTarget = function RealmNewTarget() {};
+        realmNewTarget.prototype = null;
+    `;
     const lexicalSource = `
         var sawTdz = false;
         try { evalTdz; } catch (error) { sawTdz = error instanceof ReferenceError; }
@@ -201,6 +208,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["realm-mutation.js", realmMutationSource],
         ["realm-observation.js", realmObservationSource],
         ["realm-throw.js", realmThrowSource],
+        ["realm-callables.js", realmCallableSource],
         ["lexical.js", lexicalSource],
         ["shadow.js", shadowSource],
         ["var-collision.js", varCollisionSource],
@@ -410,6 +418,98 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             catch (error) { realmThrowExact = error === sentinel; }
             if (!realmThrowExact || globalThis !== defaultRealmGlobal || $262.global !== defaultRealmGlobal) {
                 throw new Error("abrupt cross-Realm evaluation did not restore the caller Realm");
+            }
+
+            var realmConstructorNames = [
+                "Object", "Function", "Array", "String", "Number", "Boolean",
+                "BigInt", "Symbol", "Date", "Error", "TypeError", "RangeError",
+                "SyntaxError", "ReferenceError", "EvalError", "URIError",
+                "AggregateError", "SuppressedError"
+            ];
+            for (var realmConstructorIndex = 0;
+                realmConstructorIndex < realmConstructorNames.length;
+                realmConstructorIndex += 1) {
+                var realmConstructorName = realmConstructorNames[realmConstructorIndex];
+                var defaultConstructor = defaultRealmGlobal[realmConstructorName];
+                var realmAConstructor = realmA.global[realmConstructorName];
+                var realmBConstructor = realmB.global[realmConstructorName];
+                if (realmAConstructor === defaultConstructor ||
+                    realmBConstructor === defaultConstructor ||
+                    realmAConstructor === realmBConstructor ||
+                    realmAConstructor.prototype === defaultConstructor.prototype ||
+                    realmBConstructor.prototype === defaultConstructor.prototype ||
+                    realmAConstructor.prototype === realmBConstructor.prototype) {
+                    throw new Error("Realm constructor/prototype identity was shared: " + realmConstructorName);
+                }
+            }
+            var realmNamespaceNames = ["Math", "JSON", "Reflect"];
+            for (var realmNamespaceIndex = 0;
+                realmNamespaceIndex < realmNamespaceNames.length;
+                realmNamespaceIndex += 1) {
+                var realmNamespaceName = realmNamespaceNames[realmNamespaceIndex];
+                if (realmA.global[realmNamespaceName] === defaultRealmGlobal[realmNamespaceName] ||
+                    realmB.global[realmNamespaceName] === defaultRealmGlobal[realmNamespaceName] ||
+                    realmA.global[realmNamespaceName] === realmB.global[realmNamespaceName]) {
+                    throw new Error("Realm namespace identity was shared: " + realmNamespaceName);
+                }
+            }
+            var realmObjectMethodName = "defineProperty";
+            if (realmA.global.Object[realmObjectMethodName] === Object[realmObjectMethodName] ||
+                realmA.global.Array.prototype.map === Array.prototype.map ||
+                realmA.global.Symbol.iterator !== Symbol.iterator) {
+                throw new Error("Realm method or well-known Symbol identity differed");
+            }
+            realmA.evalScript(${JSON.stringify(realmCallableSource)});
+            if (realmA.global.realmGlobalReader() !== realmA.global ||
+                realmA.global.realmGlobalReader.bind(null)() !== realmA.global) {
+                throw new Error("function or bound-function [[Realm]] differed");
+            }
+            var realmTypeError;
+            try { realmA.global.realmThrower(); }
+            catch (error) { realmTypeError = error; }
+            if (!(realmTypeError instanceof realmA.global.TypeError) ||
+                realmTypeError instanceof TypeError) {
+                throw new Error("abrupt completion used the caller error intrinsic");
+            }
+            var realmConstructed = Reflect.construct(
+                Object,
+                [],
+                realmA.global.realmNewTarget
+            );
+            if (Object.getPrototypeOf(realmConstructed) !== realmA.global.Object.prototype) {
+                throw new Error("fallback prototype did not use the newTarget Realm");
+            }
+            var realmFallbackPrototypeValues = [undefined, null, true, "str", Symbol(), 1];
+            for (var realmFallbackIndex = 0;
+                realmFallbackIndex < realmFallbackPrototypeValues.length;
+                realmFallbackIndex += 1) {
+                realmA.global.realmNewTarget.prototype =
+                    realmFallbackPrototypeValues[realmFallbackIndex];
+                var realmArrayConstructed = Reflect.construct(
+                    Array,
+                    [],
+                    realmA.global.realmNewTarget
+                );
+                if (Object.getPrototypeOf(realmArrayConstructed) !== realmA.global.Array.prototype) {
+                    throw new Error("Array fallback prototype did not use the newTarget Realm");
+                }
+            }
+            var realmWorklist = [realmA, realmB];
+            for (var realmStressIndex = 0; realmStressIndex < 24; realmStressIndex += 1) {
+                var realmStress = $262.createRealm();
+                realmStress.global.realmStressMark = realmStressIndex;
+                if (realmStress.global.Object === Object ||
+                    realmStress.global.Object.prototype === Object.prototype ||
+                    realmStress.global.realmStressMark !== realmStressIndex) {
+                    throw new Error("Realm state worklist lost isolation");
+                }
+                realmWorklist.push(realmStress);
+            }
+            for (var realmCheckIndex = 0; realmCheckIndex < realmWorklist.length; realmCheckIndex += 1) {
+                if (realmWorklist[realmCheckIndex].global.Object === Object ||
+                    realmWorklist[realmCheckIndex].global.globalThis !== realmWorklist[realmCheckIndex].global) {
+                    throw new Error("Realm worklist identity differed");
+                }
             }
 
             $262.evalScript(${JSON.stringify(mutationSource)});

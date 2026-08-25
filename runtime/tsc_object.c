@@ -173,14 +173,21 @@ static void object_prototype_define_method(tsc_object_t* prototype, const char* 
 }
 
 tsc_value_t tsc_value_object_prototype(void) {
-    static tsc_object_t* prototype = NULL;
+    static const char object_prototype_realm_state_key = 0;
+    tsc_object_t* prototype = (tsc_object_t*)tsc_realm_state_get(
+        &object_prototype_realm_state_key
+    );
     /* No unlocked fast path: the method definitions below re-enter this
      * getter through tsc_object_new, so `prototype` must be published before
      * they run. The recursive runtime lock (no-op without TSC_THREADS) keeps
      * other threads from observing the partially built prototype. */
     tsc_runtime_lock();
+    prototype = (tsc_object_t*)tsc_realm_state_get(
+        &object_prototype_realm_state_key
+    );
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
+        tsc_realm_state_set(&object_prototype_realm_state_key, prototype);
         object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property);
         object_prototype_define_method(prototype, "isPrototypeOf", 13, 1.0, object_prototype_is_prototype_of);
         object_prototype_define_method(prototype, "propertyIsEnumerable", 20, 1.0, object_prototype_property_is_enumerable);
@@ -218,6 +225,10 @@ static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, c
 
 tsc_object_t* tsc_object_new(void) {
     return tsc_object_alloc(tsc_value_object_prototype());
+}
+
+tsc_object_t* tsc_object_new_with_prototype(tsc_value_t prototype) {
+    return tsc_object_alloc(prototype);
 }
 
 tsc_object_t* tsc_module_namespace_new(void) {

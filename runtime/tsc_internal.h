@@ -121,6 +121,27 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_BOUND,
 } tsc_function_identity_kind_t;
 
+typedef enum {
+    TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_ARRAY_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_STRING_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_SYNTAX_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_REFERENCE_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_EVAL_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_URI_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_AGGREGATE_ERROR_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_SUPPRESSED_ERROR_PROTOTYPE,
+} tsc_intrinsic_default_prototype_kind_t;
+
 typedef struct {
     tsc_value_t target;
     void* target_keepalive;
@@ -132,11 +153,19 @@ typedef struct {
 
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
+    /* ECMAScript functions retain the Realm in which they were created.
+     * Calls and construction enter this context; bound functions retain the
+     * Realm of their target through GetFunctionRealm. */
+    tsc_realm_t* realm;
+    /* OrdinaryCreateFromConstructor resolves this intrinsic in newTarget's
+     * Realm whenever newTarget.prototype is not an Object. */
+    tsc_intrinsic_default_prototype_kind_t construct_default_prototype;
     bool is_html_dda;
     bool extensible;
     bool sealed;
     bool frozen;
     bool func_prototype_writable;
+    bool func_prototype_initialized;
     double length;
     tsc_str_t* name;
     tsc_value_t prototype;
@@ -171,6 +200,7 @@ typedef struct tsc_function_identity {
 
 bool tsc_value_is_html_dda(tsc_value_t value);
 void tsc_value_mark_html_dda(tsc_value_t value);
+tsc_object_t* tsc_object_new_with_prototype(tsc_value_t prototype);
 
 
 
