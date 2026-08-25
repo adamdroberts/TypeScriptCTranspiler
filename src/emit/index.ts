@@ -984,13 +984,8 @@ class Emitter {
     }
 
     private isPrunableTopLevelLiftedArrow(decl: ts.VariableDeclaration): boolean {
-        if (!decl.initializer) return false;
-        if (!ts.isArrowFunction(decl.initializer) && !ts.isFunctionExpression(decl.initializer)) {
-            return false;
-        }
+        if (!this.isTopLevelLiftedArrowDeclaration(decl)) return false;
         if (!ts.isIdentifier(decl.name)) return false;
-        if (!ts.isVariableStatement(decl.parent.parent)) return false;
-        if (!this.isTopLevelValueDeclaration(decl)) return false;
         const modifiers = ts.canHaveModifiers(decl.parent.parent)
             ? ts.getModifiers(decl.parent.parent)
             : undefined;
@@ -1008,7 +1003,7 @@ class Emitter {
         info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
     ): boolean {
         const decl = ts.isVariableDeclaration(info.name.parent) ? info.name.parent : null;
-        if (decl && this.isTest262ScriptGlobalVarDeclaration(decl)) return true;
+        if (decl && !this.isTopLevelLiftedArrowDeclaration(decl)) return false;
         return !decl ||
             !this.isPrunableTopLevelLiftedArrow(decl) ||
             this.referencedTopLevelLiftedArrows.has(decl);
@@ -15427,10 +15422,14 @@ class Emitter {
                     this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
                     continue;
                 }
-                // Module-scope lifted functions can be referenced directly by
-                // their C identity.  Script `var` initializers are observable
-                // object-environment writes and must still install that value.
-                if (this.getLiftableArrow(inner) && !this.isTest262ScriptSourceFile(sf)) continue;
+                // Immutable module/script lexical function bindings are
+                // represented directly by their lifted C identity. Mutable
+                // bindings take the ordinary variable-storage path below.
+                const lifted = this.getLiftableArrow(inner);
+                const liftedDecl = lifted && ts.isVariableDeclaration(lifted.name.parent)
+                    ? lifted.name.parent
+                    : null;
+                if (liftedDecl && this.isTopLevelLiftedArrowDeclaration(liftedDecl)) continue;
                 if (ts.isVariableStatement(inner)) {
                     this.emitTopLevelVarStmt(initBuf, inner);
                     continue;
@@ -23090,7 +23089,7 @@ class Emitter {
                 ),
             );
             if (ts.isVariableDeclaration(decl)) {
-                return this.variableStorageType(base);
+                return this.variableDeclarationStorageType(decl, base);
             }
             // Int-shape specialization: the C-level storage of this symbol
             // is int64_t, not double. Surface that to the assignment / read
@@ -23107,6 +23106,28 @@ class Emitter {
     private variableStorageType(base: CType): CType {
         if (base.kind === "void") return T_VALUE;
         return base;
+    }
+
+    /**
+     * Select one physical representation for a source variable independently
+     * of control-flow narrowing at any particular read. JavaScript permits a
+     * non-const binding initialized with a function to be reassigned to any
+     * value, so that write domain must use the canonical NaN-boxed storage.
+     */
+    private variableDeclarationStorageType(
+        declaration: ts.VariableDeclaration,
+        base: CType,
+    ): CType {
+        if (
+            this.isJavaScriptSourceFile(declaration.getSourceFile()) &&
+            (declaration.parent.flags & ts.NodeFlags.Const) === 0 &&
+            declaration.initializer &&
+            (ts.isArrowFunction(declaration.initializer) ||
+                ts.isFunctionExpression(declaration.initializer))
+        ) {
+            return T_VALUE;
+        }
+        return this.variableStorageType(base);
     }
 
     private isAsyncAwaitPreludeCaptureType(type: CType): boolean {
@@ -23582,13 +23603,16 @@ class Emitter {
                         (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
                     this.isCapturableValueDeclaration(decl)
                 ) {
-                    const type = this.prepareType(
+                    const declaredType = this.prepareType(
                         mapTsType(
                             decl,
                             this.checker.getTypeOfSymbolAtLocation(sym, decl),
                             this.checker,
                         ),
                     );
+                    const type = ts.isVariableDeclaration(decl)
+                        ? this.variableDeclarationStorageType(decl, declaredType)
+                        : declaredType;
                     const field = `${mangleIdent(node.text)}_${captures.size}`;
                     captures.set(sym, { symbol: sym, type, field });
                 }
@@ -39469,7 +39493,7 @@ class Emitter {
             const sourceJavaScriptFunction = d.initializer
                 ? this.javaScriptFunctionLikeForExpression(d.initializer)
                 : null;
-            const baseCt = sourceJavaScriptFunction
+            const inferredCt = sourceJavaScriptFunction
                 ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
                 : requireType
                 ? this.variableStorageType(requireType)
@@ -39486,6 +39510,7 @@ class Emitter {
                     this.isUntypedJsArrayLiteral(d.initializer)
                 ? T_VALUE
                 : this.variableStorageType(this.prepareType(mapType(d, this.checker)));
+            const baseCt = this.variableDeclarationStorageType(d, inferredCt);
 
             // If this number is provably integer-shape, store as int64_t.
             // C's implicit conversion handles boundaries (calls, etc.).
@@ -40242,6 +40267,7 @@ class Emitter {
             } else {
                 ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
             }
+            ct = this.variableDeclarationStorageType(d, ct);
             // Int-shape specialization: when the symbol is provably integer
             // and would otherwise be `double`, store as `int64_t`. Closures
             // (cell-allocated) keep the original double type — capture cells
@@ -50209,6 +50235,10 @@ class Emitter {
         ) {
             return false;
         }
+        // A lifted function has no assignable variable slot. Restrict that
+        // representation to bindings whose write domain is exactly their
+        // initializer; mutable bindings use ordinary closure/value storage.
+        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         return this.isTopLevelValueDeclaration(decl);
     }
