@@ -315,6 +315,117 @@ describe("host result contract", () => {
         }
     });
 
+    test("reports exact runtime constructors from the canonical source-origin worklist", async () => {
+        interface RuntimeOriginCase {
+            readonly label: string;
+            readonly expectedOrigin: "setup-script" | "test-source" | "module-graph" | "async-completion";
+            readonly expectedConstructor: string;
+            readonly setupSource?: string;
+            readonly testSource: string;
+            readonly moduleSource?: string;
+            readonly async: boolean;
+            readonly goal: "script" | "module";
+        }
+        const cases: RuntimeOriginCase[] = [
+            {
+                label: "setup",
+                expectedOrigin: "setup-script",
+                expectedConstructor: "TypeError",
+                setupSource: 'throw new TypeError("setup");\n',
+                testSource: "0;\n",
+                async: false,
+                goal: "script",
+            },
+            {
+                label: "test",
+                expectedOrigin: "test-source",
+                expectedConstructor: "RangeError",
+                testSource: 'throw new RangeError("test");\n',
+                async: false,
+                goal: "script",
+            },
+            {
+                label: "module",
+                expectedOrigin: "module-graph",
+                expectedConstructor: "URIError",
+                testSource: 'import "./runtime-origin-dependency.js";\n',
+                moduleSource: 'throw new URIError("module");\n',
+                async: false,
+                goal: "module",
+            },
+            {
+                label: "async",
+                expectedOrigin: "async-completion",
+                expectedConstructor: "EvalError",
+                testSource: 'queueMicrotask(function () { throw new EvalError("async"); });\n',
+                async: true,
+                goal: "script",
+            },
+        ];
+
+        await Promise.all(cases.map(async (runtimeCase) => {
+            const root = await fs.mkdtemp(path.join(os.tmpdir(), `tsc2c-native-origin-${runtimeCase.label}-`));
+            const artifactDirectory = path.join(root, "artifacts");
+            await fs.mkdir(artifactDirectory);
+            const testPath = `test/runtime-origin-${runtimeCase.label}.js`;
+            const dependencyPath = "test/runtime-origin-dependency.js";
+            const moduleFiles = runtimeCase.moduleSource === undefined ? [] : [{
+                path: dependencyPath,
+                sha256: sha256Text(runtimeCase.moduleSource),
+                encoding: "base64" as const,
+                data: Buffer.from(runtimeCase.moduleSource).toString("base64"),
+            }];
+            const setupScripts = runtimeCase.setupSource === undefined ? [] : [{
+                path: `harness/runtime-origin-${runtimeCase.label}.js`,
+                sha256: sha256Text(runtimeCase.setupSource),
+                source: runtimeCase.setupSource,
+            }];
+            const request: HostRequest = {
+                protocolVersion: hostProtocolVersion,
+                scenarioId: `${testPath}#${runtimeCase.goal === "module" ? "module" : "sloppy"}`,
+                testPath,
+                moduleBasePath: "test",
+                moduleFiles,
+                mode: runtimeCase.goal === "module" ? "module" : "sloppy",
+                goal: runtimeCase.goal,
+                raw: false,
+                setupScripts,
+                testSource: runtimeCase.testSource,
+                testSourceSha256: sha256Text(runtimeCase.testSource),
+                async: runtimeCase.async,
+                canBlock: null,
+                timeoutMs: 30_000,
+                artifactDirectory,
+            };
+            try {
+                const preparation = await prepareNativeRequest(request);
+                expect(preparation.kind).toBe("prepared-native");
+                if (preparation.kind !== "prepared-native") return;
+                const child = Bun.spawn([path.join(artifactDirectory, preparation.executablePath)], {
+                    stdout: "pipe",
+                    stderr: "pipe",
+                });
+                const [exitCode, stdout, stderr] = await Promise.all([
+                    child.exited,
+                    new Response(child.stdout).text(),
+                    new Response(child.stderr).text(),
+                ]);
+                expect(exitCode).toBe(0);
+                expect(stderr).toBe("");
+                expect(parseHostObservation(JSON.parse(stdout))).toMatchObject({
+                    protocolVersion: hostProtocolVersion,
+                    scenarioId: request.scenarioId,
+                    kind: "throw",
+                    phase: "runtime",
+                    origin: runtimeCase.expectedOrigin,
+                    errorConstructor: runtimeCase.expectedConstructor,
+                });
+            } finally {
+                await fs.rm(root, { recursive: true, force: true });
+            }
+        }));
+    }, 90_000);
+
     test("requires one canonical exact-byte identity for every merged shard", () => {
         const canonical = [
             { index: 0, total: 2, sha256: "a".repeat(64) },
