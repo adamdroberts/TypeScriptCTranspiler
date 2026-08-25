@@ -528,6 +528,7 @@ class Emitter {
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private valueFunctionAdapters = new Map<string, string>();
+    private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
@@ -46289,9 +46290,13 @@ class Emitter {
         }
 
         const rawRecv = this.emitExpr(recvExpr);
+        const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : rawRecv;
+            : (rawRecv.ty.kind === "array" && rawRecv.ty.elem?.kind === "value") ||
+                (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value")
+                ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
+                : rawRecv;
         if (recv.ty.kind !== "value") return null;
 
         const specs: SequencedCallArg[] = [
@@ -47706,9 +47711,13 @@ class Emitter {
         }
 
         const rawRecv = this.emitExpr(recvExpr);
+        const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : rawRecv;
+            : (rawRecv.ty.kind === "array" && rawRecv.ty.elem?.kind === "value") ||
+                (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value")
+                ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
+                : rawRecv;
         if (recv.ty.kind !== "value") return null;
 
         const rhs = this.emitExpr(bin.right);
@@ -68178,11 +68187,8 @@ class Emitter {
             emptyEnumerableBuiltinObjectArg ||
             mapped.kind === "fsstats" ||
             mapped.kind === "fsdirent";
-        const dynamicObjectArg = (value: string): string => {
-            if (mapped.kind === "array") return `tsc_value_array(${value})`;
-            if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
-            if (mapped.kind === "class") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
-            return value;
+        const dynamicObjectArg = (value: string, actual: CType = mapped): string => {
+            return this.boxObjectIdentity(value, actual, arg);
         };
         if (name === "assign") {
             if (mapped.kind === "void") {
@@ -69081,9 +69087,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+                { value: obj, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_extensible(${dynamicObjectArg(o!, obj.ty)})`);
         }
         if (name === "isSealed") {
             if (args.length < 1) unsupported(call, "Object.isSealed expects object");
@@ -69105,9 +69111,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+                { value: obj, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_sealed(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_sealed(${dynamicObjectArg(o!, obj.ty)})`);
         }
         if (name === "isFrozen") {
             if (args.length < 1) unsupported(call, "Object.isFrozen expects object");
@@ -69129,9 +69135,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+                { value: obj, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_frozen(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_frozen(${dynamicObjectArg(o!, obj.ty)})`);
         }
         if (name === "preventExtensions") {
             if (args.length < 1) unsupported(call, "Object.preventExtensions expects object");
@@ -69151,12 +69157,13 @@ class Emitter {
                 unsupported(arg, "Object.preventExtensions currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(mapped, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
+            return this.emitSequencedExpr(resultType, [
+                { value: obj, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
-                const result = o;
+                const target = dynamicObjectArg(o!, obj.ty);
+                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
                 return `({ if (!tsc_value_prevent_extensions(${target})) tsc_throw_str(tsc_str_from_cstr("Object.preventExtensions failed")); ${result}; })`;
             });
         }
@@ -69178,12 +69185,13 @@ class Emitter {
                 unsupported(arg, "Object.seal currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(mapped, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
+            return this.emitSequencedExpr(resultType, [
+                { value: obj, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
-                const result = o;
+                const target = dynamicObjectArg(o!, obj.ty);
+                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
                 return `({ if (!tsc_value_seal(${target})) tsc_throw_str(tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
             });
         }
@@ -69213,13 +69221,14 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             const proto = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(mapped.kind === "value" ? T_VALUE : mapped, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            const resultType = obj.ty.kind === "value" || mapped.kind === "value" ? T_VALUE : mapped;
+            return this.emitSequencedExpr(resultType, [
+                { value: obj, node: arg },
                 { value: proto, target: T_VALUE, node: args[1]! },
                 ...ignored,
             ], ([o, p]) => {
-                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
-                const result = o;
+                const target = dynamicObjectArg(o!, obj.ty);
+                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
                 return `({ tsc_value_object_set_prototype_of(${target}, ${p}); ${result}; })`;
             });
         }
@@ -69241,12 +69250,13 @@ class Emitter {
                 unsupported(arg, "Object.freeze currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(mapped, [
-                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
+            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
+            return this.emitSequencedExpr(resultType, [
+                { value: obj, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
-                const result = o;
+                const target = dynamicObjectArg(o!, obj.ty);
+                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
                 return `({ if (!tsc_value_freeze(${target})) tsc_throw_str(tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
             });
         }
@@ -71433,9 +71443,9 @@ class Emitter {
                     ], ([t]) => `((void)${t}, true)`);
                 }
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class") ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_is_extensible(${this.boxObjectIdentity(t!, target.ty, args[0]!)})`);
             }
             case "ownKeys": {
                 if (args.length < 1) unsupported(call, "Reflect.ownKeys expects target");
@@ -71528,9 +71538,9 @@ class Emitter {
                 }
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: mapped.kind === "array" ? undefined : T_VALUE, node: args[0]! },
+                    { value: target, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_prevent_extensions(${this.boxObjectIdentity(t!, target.ty, args[0]!)})`);
             }
             case "set": {
                 if (args.length < 3) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
@@ -74330,6 +74340,63 @@ class Emitter {
         unsupported(node, `cannot stringify ${r.ty.c}`);
     }
 
+    private ensureArrayValueCodec(
+        elementType: CType,
+        node: ts.Node,
+    ): { box: string; unbox: string } | null {
+        if (elementType.kind === "value") return null;
+        if (!(["number", "boolean", "string"] as const).includes(
+            elementType.kind as "number" | "boolean" | "string",
+        )) {
+            return null;
+        }
+        const key = `${this.typeKey(elementType)}_${elementType.c}`;
+        const existing = this.arrayValueCodecs.get(key);
+        if (existing) return existing;
+        const ordinal = this.arrayValueCodecs.size;
+        const codec = {
+            box: `tsc_array_box_element_${ordinal}`,
+            unbox: `tsc_array_unbox_element_${ordinal}`,
+        };
+        this.arrayValueCodecs.set(key, codec);
+
+        this.protos.line(`static tsc_value_t ${codec.box}(const void* element);`);
+        this.protos.line(`static bool ${codec.unbox}(tsc_value_t value, void* element);`);
+        const buf = new CBuf();
+        buf.open(`static tsc_value_t ${codec.box}(const void* element)`);
+        buf.line(`${elementType.c} current = *(const ${elementType.c}*)element;`);
+        buf.line(`return ${this.coerce({ c: "current", ty: elementType }, T_VALUE, node)};`);
+        buf.close();
+        buf.line();
+        buf.open(`static bool ${codec.unbox}(tsc_value_t value, void* element)`);
+        buf.line(`*(${elementType.c}*)element = ${this.coerce({ c: "value", ty: T_VALUE }, elementType, node)};`);
+        buf.line("return true;");
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return codec;
+    }
+
+    private arrayWithValueCodec(value: string, type: CType, node: ts.Node): string | null {
+        if (type.kind !== "array" || !type.elem || type.elem.kind === "value") return value;
+        const codec = this.ensureArrayValueCodec(type.elem, node);
+        return codec
+            ? `tsc_array_set_value_codec(${value}, ${codec.box}, ${codec.unbox})`
+            : null;
+    }
+
+    private boxObjectIdentity(value: string, type: CType, node: ts.Node): string {
+        // Integrity and prototype operations observe the object itself. Typed
+        // arrays therefore keep their original allocation instead of using the
+        // general array-to-dynamic conversion, which changes element layout by
+        // constructing a replacement array.
+        if (type.kind === "array") {
+            return `tsc_value_array(${this.arrayWithValueCodec(value, type, node) ?? value})`;
+        }
+        if (type.kind === "value") return value;
+        return this.coerce({ c: value, ty: type }, T_VALUE, node);
+    }
+
     private coerce(r: EmitResult, target: CType, node: ts.Node): string {
         if (r.ty.kind === target.kind) {
             if (
@@ -74338,6 +74405,10 @@ class Emitter {
                 target.elem &&
                 !sameCType(r.ty.elem, target.elem)
             ) {
+                if (target.elem.kind === "value") {
+                    const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
+                    if (aliased) return aliased;
+                }
                 if (r.lazyGenerator || this.isLazyGeneratorPassthroughParameter(node)) {
                     return this.coerceLazyGeneratorArray(r, target, node);
                 }
@@ -74462,6 +74533,10 @@ class Emitter {
                 case "string":
                     return `tsc_value_string(${r.c})`;
                 case "array": {
+                    const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
+                    if (aliased && r.ty.elem?.kind !== "value") {
+                        return `tsc_value_array(${aliased})`;
+                    }
                     if (r.ty.elem && r.ty.elem.kind !== "value") {
                         if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
                             const tmpIn = this.freshTemp("_arrIn");

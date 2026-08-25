@@ -1212,6 +1212,8 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
+    a->box_element = NULL;
+    a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -1239,8 +1241,29 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
+    a->box_element = NULL;
+    a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
+}
+
+tsc_array_t* tsc_array_set_value_codec(
+    tsc_array_t* array,
+    tsc_array_box_element_fn box_element,
+    tsc_array_unbox_element_fn unbox_element
+) {
+    if (!array || !box_element || !unbox_element) {
+        tsc_panic("array value codec must be complete");
+    }
+    if (
+        (array->box_element && array->box_element != box_element) ||
+        (array->unbox_element && array->unbox_element != unbox_element)
+    ) {
+        tsc_panic("array element representation conflict");
+    }
+    array->box_element = box_element;
+    array->unbox_element = unbox_element;
+    return array;
 }
 
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n) {
@@ -1568,6 +1591,8 @@ tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double del
     size_t insert_len = items ? items->len : 0;
     size_t new_len = a->len - (size_t)del + insert_len;
     tsc_array_t* out = tsc_array_new(a->es, new_len > 0 ? new_len : 1);
+    out->box_element = a->box_element;
+    out->unbox_element = a->unbox_element;
     if (at > 0) {
         memcpy(out->data, a->data, (size_t)at * a->es);
         out->len = (size_t)at;
@@ -1647,6 +1672,8 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     if (i0 > i1) i0 = i1;
     size_t n = (size_t)(i1 - i0);
     tsc_array_t* r = tsc_array_new(a->es, n > 0 ? n : 1);
+    r->box_element = a->box_element;
+    r->unbox_element = a->unbox_element;
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
     if (a->holes) {

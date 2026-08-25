@@ -572,6 +572,9 @@ tsc_str_t* tsc_json_num(double n);  /* JSON-safe number formatting */
 typedef struct tsc_object tsc_object_t;
 
 /* ------------- arrays ------------- */
+typedef tsc_value_t (*tsc_array_box_element_fn)(const void* element);
+typedef bool (*tsc_array_unbox_element_fn)(tsc_value_t value, void* element);
+
 typedef struct tsc_array {
     size_t len;
     size_t cap;
@@ -594,6 +597,8 @@ typedef struct tsc_array {
     tsc_value_t lazy_close_value;
     tsc_object_t* props;
     tsc_object_t* holes;
+    tsc_array_box_element_fn box_element;
+    tsc_array_unbox_element_fn unbox_element;
     void* data;
 } tsc_array_t;
 
@@ -627,6 +632,11 @@ void tsc_value_callee_restore(void* checkpoint);
 
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
+tsc_array_t* tsc_array_set_value_codec(
+    tsc_array_t* array,
+    tsc_array_box_element_fn box_element,
+    tsc_array_unbox_element_fn unbox_element
+);
 tsc_array_t* tsc_array_prototype(void);
 tsc_value_t tsc_array_constructor_value(void);
 tsc_value_t tsc_array_unscopables_value(void);
