@@ -33,6 +33,11 @@ export interface StringCodeUnitListWidthSpec {
     width: number;
 }
 
+export interface SwitchClauseWorklistWidthSpec {
+    generator: "switch-clause-worklist-width";
+    width: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -40,7 +45,8 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
-    | StringCodeUnitListWidthSpec;
+    | StringCodeUnitListWidthSpec
+    | SwitchClauseWorklistWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -114,6 +120,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-code-unit-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "switch-clause-worklist-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -345,6 +361,32 @@ function stringCodeUnitListWidthSource(width: number): string {
     ].join("\n");
 }
 
+function switchClauseWorklistWidthSource(width: number): string {
+    const cases = Array.from({ length: width - 1 }, (_, index) =>
+        `    case select(${index + 1}, ${index + 2}): result = "wrong"; break;`,
+    );
+    return [
+        "let evaluations = 0;",
+        "let ordered = true;",
+        "let result = \"unselected\";",
+        "function select(index: number, value: any): any {",
+        "    ordered = ordered && index === evaluations;",
+        "    evaluations++;",
+        "    return value;",
+        "}",
+        "",
+        "switch (\"1\") {",
+        "    case select(0, 1): result = \"coerced\"; break;",
+        ...cases,
+        `    case select(${width}, "1"): result = "strict"; break;`,
+        "    default: result = \"default\";",
+        "}",
+        `const valid = result === "strict" && ordered && evaluations === ${width + 1};`,
+        'console.log("switch clause worklist:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -362,5 +404,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return uriPercentCodecLengthSource(spec.length);
         case "string-code-unit-list-width":
             return stringCodeUnitListWidthSource(spec.width);
+        case "switch-clause-worklist-width":
+            return switchClauseWorklistWidthSource(spec.width);
     }
 }

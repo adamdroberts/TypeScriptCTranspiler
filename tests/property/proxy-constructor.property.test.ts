@@ -13,6 +13,7 @@ const expectedLines = [
     "validation:TypeError:TypeError:TypeError",
     "target-partitions:object:true:true:13",
     "callable-native-source:true:true",
+    "native-source-spellings:function () { [native code] }|function apply() { [native code] }",
     "handler-partitions:true:true",
     "trap-errors:TypeError:TypeError",
     "revocation:true:true:TypeError",
@@ -107,6 +108,10 @@ function subjectSource(): string {
                 directCallableSource.indexOf("function") === 0 &&
                     directCallableSource.indexOf("[native code]") > 0,
             ].join(":"));
+            print("native-source-spellings:" + [
+                String(new Proxy(function () {}, {})),
+                String(new Proxy(function () {}, { apply: function () {} }).apply),
+            ].join("|"));
 
             var arrayHandlerProxy = new Proxy({ value: 17 }, []);
             var functionHandlerProxy = new Proxy({ value: 19 }, function () {});

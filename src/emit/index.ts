@@ -818,41 +818,52 @@ class Emitter {
     }
 
     private analyzeReferencedTopLevelFunctions(emitOrder: readonly string[]): void {
-        let changed = false;
+        /* Reachability is a graph problem, not a bounded fixed point.  Source
+         * roots are visited once; each newly reachable declaration is queued
+         * exactly once and contributes its outgoing value-reference edges.
+         * The cursor form avoids recursion and is independent of dependency
+         * chain depth or declaration order. */
+        const worklist: ts.Node[] = [];
+        const queued = new WeakSet<ts.Node>();
+        const enqueue = (node: ts.Node): void => {
+            if (queued.has(node)) return;
+            queued.add(node);
+            worklist.push(node);
+        };
         const markTopLevelFunction = (decl: ts.FunctionDeclaration): void => {
             if (this.referencedTopLevelFunctions.has(decl)) return;
             this.referencedTopLevelFunctions.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markTopLevelLiftedArrow = (decl: ts.VariableDeclaration): void => {
             if (this.referencedTopLevelLiftedArrows.has(decl)) return;
             this.referencedTopLevelLiftedArrows.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markTopLevelClass = (decl: ts.ClassDeclaration): void => {
             if (this.referencedTopLevelClasses.has(decl)) return;
             this.referencedTopLevelClasses.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markTopLevelVariable = (decl: ts.VariableDeclaration): void => {
             if (this.referencedTopLevelVariables.has(decl)) return;
             this.referencedTopLevelVariables.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markLocalFunction = (decl: ts.FunctionDeclaration): void => {
             if (this.referencedLocalFunctions.has(decl)) return;
             this.referencedLocalFunctions.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markLocalClass = (decl: ts.ClassDeclaration): void => {
             if (this.referencedLocalClasses.has(decl)) return;
             this.referencedLocalClasses.add(decl);
-            changed = true;
+            enqueue(decl);
         };
         const markVariable = (decl: ts.VariableDeclaration): void => {
             if (this.referencedVariables.has(decl)) return;
             this.referencedVariables.add(decl);
-            changed = true;
+            enqueue(decl);
         };
 
         const visitStatementList = (statements: readonly ts.Statement[]): void => {
@@ -922,7 +933,12 @@ class Emitter {
                 visitStatementList(node.statements);
                 return;
             }
-            if (ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+            if (ts.isCaseClause(node)) {
+                visit(node.expression);
+                visitStatementList(node.statements);
+                return;
+            }
+            if (ts.isDefaultClause(node)) {
                 visitStatementList(node.statements);
                 return;
             }
@@ -1057,14 +1073,13 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
 
-        let safety = 0;
-        do {
-            changed = false;
-            for (const modId of emitOrder) {
-                const info = this.graph.modules.get(modId);
-                if (info) visit(info.sf);
-            }
-        } while (changed && safety++ < 64);
+        for (const modId of emitOrder) {
+            const info = this.graph.modules.get(modId);
+            if (info) visit(info.sf);
+        }
+        for (let cursor = 0; cursor < worklist.length; cursor++) {
+            visit(worklist[cursor]!);
+        }
     }
 
     private isValueReferenceIdentifier(id: ts.Identifier): boolean {
@@ -1272,6 +1287,13 @@ class Emitter {
         if (!ts.isIdentifier(decl.name)) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         if (!this.isTopLevelValueDeclaration(decl)) return false;
+        /* ScriptEvaluation always executes these initializers and publishes
+         * their bindings through the Global Environment Record.  Seed their
+         * complete initializer dependency graph even when another isolated
+         * Script is the only eventual observer. */
+        if (this.isTest262ScriptGlobalVariableRuntimeRoot(decl)) {
+            return false;
+        }
         const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
         const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
         if (!isConst && !isLet) return false;
@@ -15132,6 +15154,10 @@ class Emitter {
         if (!ts.isIdentifier(decl.name)) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         if (this.isTopLevelValueDeclaration(decl)) return false;
+        /* A block-nested Script `var` still initializes the runtime Global
+         * Environment when control reaches it; its initializer is therefore
+         * a reachability root, not a removable C local. */
+        if (this.isTest262ScriptGlobalVarScopedVariable(decl)) return false;
         const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
         const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
         if (!isConst && !isLet) return false;
@@ -24056,14 +24082,18 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
-        if (
-            this.isJavaScriptSourceFile(declaration.getSourceFile()) &&
-            (declaration.parent.flags & ts.NodeFlags.Const) === 0 &&
-            declaration.initializer &&
-            (ts.isArrowFunction(declaration.initializer) ||
-                ts.isFunctionExpression(declaration.initializer))
-        ) {
-            return T_VALUE;
+        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) && declaration.initializer) {
+            const sourceFunction = this.javaScriptFunctionLikeForExpression(declaration.initializer);
+            if (sourceFunction) {
+                /* JavaScript syntax owns the call ABI.  The checker may infer
+                 * a narrower return type, but capture cells, local storage,
+                 * and the emitted closure must share one physical function
+                 * type.  Mutable bindings still use boxed value storage
+                 * because their write domain is not function-only. */
+                return (declaration.parent.flags & ts.NodeFlags.Const) === 0
+                    ? T_VALUE
+                    : this.javaScriptFunctionValueType(sourceFunction);
+            }
         }
         return this.variableStorageType(base);
     }
@@ -24155,7 +24185,10 @@ class Emitter {
 
     private isTest262ScriptEvaluationNode(node: ts.Node): boolean {
         const source = node.getSourceFile();
-        if (!this.isTest262ScriptSourceFile(source)) return false;
+        // Async/other normalized control-flow graphs may carry synthesized
+        // statements that deliberately have no source-file parent chain.
+        // Such nodes cannot be top-level ScriptEvaluation completions.
+        if (!source || !this.isTest262ScriptSourceFile(source)) return false;
         for (let current: ts.Node | undefined = node.parent; current && current !== source; current = current.parent) {
             if (
                 ts.isFunctionLike(current) ||
@@ -24199,6 +24232,12 @@ class Emitter {
         return false;
     }
 
+    private isTest262ScriptGlobalVarScopedVariable(
+        declaration: ts.VariableDeclaration,
+    ): boolean {
+        return this.isTest262ScriptGlobalVarScopedDeclaration(declaration);
+    }
+
     private isTest262ScriptGlobalVarDeclaration(
         decl: ts.Node,
     ): decl is ts.VariableDeclaration & { name: ts.Identifier } {
@@ -24235,6 +24274,13 @@ class Emitter {
         }
         return ts.isVariableStatement(declaration.parent.parent) &&
             ts.isSourceFile(declaration.parent.parent.parent);
+    }
+
+    private isTest262ScriptGlobalVariableRuntimeRoot(
+        declaration: ts.VariableDeclaration,
+    ): boolean {
+        return this.isTest262ScriptGlobalLexicalVariableDeclaration(declaration) ||
+            this.isTest262ScriptGlobalVarScopedDeclaration(declaration);
     }
 
     /** BoundNames is one source-ordered tree worklist shared by declaration
@@ -35672,17 +35718,12 @@ class Emitter {
                     : null;
             const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
             const hasYieldedCase = this.lazyGeneratorSwitchHasYieldedCase(stmt);
-            const isDynamic = disc.ty.kind === "value" || hasYieldedCase;
-            const isStr = disc.ty.kind === "string";
-            const isBool = disc.ty.kind === "boolean";
-            if (!isDynamic && !isStr && !isBool) requireNumber(stmt.expression, disc.ty);
             const switchResumeInfo = this.lazyGeneratorSwitchResumeInfos.get(stmt);
             if (hasYieldedCase && !switchResumeInfo) {
                 unsupported(stmt, "lazy generator yielded switch cases require a resumable switch environment");
             }
             buf.open("");
-            const discType = isDynamic ? T_VALUE : disc.ty;
-            const discC = isDynamic ? this.coerce(disc, T_VALUE, stmt.expression) : disc.c;
+            const discC = this.coerce(disc, T_VALUE, stmt.expression);
             const discVar = this.freshTemp("_sw");
             const discRef = switchResumeInfo
                 ? `${envLocalName}->${switchResumeInfo.field}`
@@ -35691,7 +35732,7 @@ class Emitter {
                 if (!envLocalName) unsupported(stmt, "lazy generator yielded switch cases require an environment");
                 buf.line(`${discRef} = ${discC};`);
             } else {
-                buf.line(`${discType.c} ${discVar} = ${discC};`);
+                buf.line(`${T_VALUE.c} ${discVar} = ${discC};`);
             }
 
             const buildCond = (caseExpr: ts.Expression): string => {
@@ -35732,16 +35773,7 @@ class Emitter {
                                 envLocalName,
                             )!
                         : this.emitExpr(caseExpr);
-                if (isDynamic) {
-                    return `tsc_value_eq(${discRef}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;
-                }
-                if (isStr) {
-                    return `tsc_str_eq(${discRef}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-                }
-                if (isBool) {
-                    return `(${discRef} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-                }
-                return `(${discRef} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                return this.switchStrictEqualityCondition(discRef, caseVal, caseExpr);
             };
             let defaultIndex = -1;
             const caseIndices: number[] = [];
@@ -47050,24 +47082,15 @@ class Emitter {
             return;
         }
         const disc = this.emitExpr(sw.expression);
-        const isStr = disc.ty.kind === "string";
-        const isBool = disc.ty.kind === "boolean";
-        if (!isStr && !isBool) requireNumber(sw.expression, disc.ty);
         const dv = this.freshTemp("_sw");
         const start = this.freshTemp("_switch_start");
         const endLabel = this.freshTemp("_switch_end");
         buf.open("");
-        buf.line(`${disc.ty.c} ${dv} = ${disc.c};`);
+        buf.line(`${T_VALUE.c} ${dv} = ${this.coerce(disc, T_VALUE, sw.expression)};`);
         buf.line(`int ${start} = -1;`);
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
-            if (isStr) {
-                return `tsc_str_eq(${dv}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-            }
-            if (isBool) {
-                return `(${dv} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
-            }
-            return `(${dv} == ${caseVal.c})`;
+            return this.switchStrictEqualityCondition(dv, caseVal, caseExpr);
         };
         this.activeBreakTargets.push(endLabel);
         try {
@@ -47101,6 +47124,18 @@ class Emitter {
         }
         buf.line(`${endLabel}:;`);
         buf.close();
+    }
+
+    private switchStrictEqualityCondition(
+        discriminant: string,
+        caseValue: EmitResult,
+        caseExpression: ts.Expression,
+    ): string {
+        /* CaseBlock evaluation uses Strict Equality without converting either
+         * operand.  Box both sides into the runtime's canonical ECMAScript
+         * value representation so every Type pairing follows one comparison
+         * path, including mixed primitive Types and object identity. */
+        return `tsc_value_eq(${discriminant}, ${this.coerce(caseValue, T_VALUE, caseExpression)})`;
     }
 
     private staticSwitchSelectedStatements(

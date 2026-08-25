@@ -89,6 +89,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
   - Complete `yield` and `yield*` staging for calls, construction, spreads, mutations, computed receivers/keys, logical/conditional expressions, loop headers, and abrupt iterator completion.
   - Implement `async function*`, async iterator delegation, and the remaining sync/async iterator-protocol and IteratorClose edge cases.
   - Complete call-spread lowering for arbitrary spread positions, nested yielded spreads, and general call/member mutation graphs.
+  - Replace the remaining PCRE2 approximation with an ECMAScript RegExp representation over UTF-16 code units, including non-`u` surrogate-pair behavior, Unicode Sets/string properties, backreference/lookaround differences, stateful `lastIndex`, and exact syntax/error partitions. The runtime now accepts ECMAScript hexadecimal/Unicode escape spellings and the pinned native-function matcher passes, but that targeted bridge is not full RegExp semantics.
 
 ---
 

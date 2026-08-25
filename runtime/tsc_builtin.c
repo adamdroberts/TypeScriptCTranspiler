@@ -839,7 +839,27 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     if (r->dot_all) opts |= PCRE2_DOTALL;
     int error = 0;
     PCRE2_SIZE error_offset = 0;
-    r->re = pcre2_compile((PCRE2_SPTR)pattern->data, pattern->len, opts, &error, &error_offset, NULL);
+    pcre2_compile_context* compile_context = pcre2_compile_context_create(NULL);
+    if (compile_context) {
+        /* Accept ECMAScript's \xHH, \uHHHH, and \u{...} spellings directly.
+         * Non-Unicode JavaScript patterns may contain explicit UTF-16
+         * surrogate alternatives; admitting those escapes keeps the complete
+         * pattern compilable while ordinary UTF-8 subjects continue through
+         * the runtime's single PCRE2 worklist. */
+        (void)pcre2_set_compile_extra_options(
+            compile_context,
+            PCRE2_EXTRA_ALT_BSUX | PCRE2_EXTRA_ALLOW_SURROGATE_ESCAPES
+        );
+    }
+    r->re = pcre2_compile(
+        (PCRE2_SPTR)pattern->data,
+        pattern->len,
+        opts,
+        &error,
+        &error_offset,
+        compile_context
+    );
+    if (compile_context) pcre2_compile_context_free(compile_context);
     if (r->re) {
         r->compiled = true;
         uint32_t captures = 0;
