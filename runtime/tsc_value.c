@@ -938,6 +938,87 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
     return tsc_value_object(descriptor->prototype);
 }
 
+static tsc_value_t string_static_from_char_code_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    return tsc_value_string(tsc_str_from_char_code_values(args));
+}
+
+static tsc_value_t string_static_from_code_point_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    return tsc_value_string(tsc_str_from_code_point_values(args));
+}
+
+static tsc_value_t string_static_raw_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t template_value = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    size_t substitution_count = args && args->len > 1 ? args->len - 1 : 0;
+    tsc_array_t* substitutions = tsc_array_new(
+        sizeof(tsc_value_t),
+        substitution_count ? substitution_count : 1
+    );
+    for (size_t index = 0; index < substitution_count; index++) {
+        tsc_array_push_value(substitutions, TSC_ARR(tsc_value_t, args, index + 1));
+    }
+    return tsc_value_string(tsc_str_raw(template_value, substitutions));
+}
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_generic_function_t apply;
+} tsc_string_static_method_t;
+
+static const tsc_string_static_method_t string_static_methods[] = {
+    { "fromCharCode", 12, 1.0, string_static_from_char_code_apply },
+    { "fromCodePoint", 13, 1.0, string_static_from_code_point_apply },
+    { "raw", 3, 1.0, string_static_raw_apply },
+};
+
+static void string_constructor_install_static_methods(tsc_value_t constructor) {
+    for (
+        size_t index = 0;
+        index < sizeof(string_static_methods) / sizeof(string_static_methods[0]);
+        index++
+    ) {
+        const tsc_string_static_method_t* method = &string_static_methods[index];
+        (void)tsc_value_define_property_desc(
+            constructor,
+            tsc_str_from_lit(method->name, method->name_len),
+            tsc_value_function_builtin_named(
+                method->apply,
+                NULL,
+                method->arity,
+                tsc_str_from_lit(method->name, method->name_len)
+            ),
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true
+        );
+    }
+}
+
 static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descriptor) {
     if (descriptor->constructor_initialized) return descriptor->constructor;
     tsc_value_t constructor = tsc_value_function_named_kind(
@@ -976,6 +1057,9 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
             false,
             true
         );
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_STRING) {
+        string_constructor_install_static_methods(constructor);
     }
     descriptor->constructor = constructor;
     descriptor->constructor_initialized = true;

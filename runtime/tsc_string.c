@@ -427,9 +427,10 @@ tsc_str_t* tsc_str_from_bool(bool b) {
 }
 
 uint16_t to_uint16_code_unit(double n) {
-    if (isnan(n) || isinf(n)) return 0;
-    int64_t i = (int64_t)n;
-    return (uint16_t)(i & 0xffff);
+    if (!isfinite(n) || n == 0.0) return 0;
+    double modulo = fmod(trunc(n), 65536.0);
+    if (modulo < 0.0) modulo += 65536.0;
+    return (uint16_t)modulo;
 }
 
 size_t utf8_len_for_code_point(uint32_t cp) {
@@ -587,67 +588,74 @@ uint32_t surrogate_pair_to_code_point(uint16_t hi, uint16_t lo) {
     return 0x10000u + ((((uint32_t)hi - 0xd800u) << 10) | ((uint32_t)lo - 0xdc00u));
 }
 
-tsc_str_t* tsc_str_from_char_code_n(size_t n, ...) {
-    uint16_t* units = (uint16_t*)TSC_GC_MALLOC_ATOMIC(sizeof(uint16_t) * (n ? n : 1));
-    va_list ap;
-    va_start(ap, n);
-    for (size_t i = 0; i < n; i++) {
-        units[i] = to_uint16_code_unit(va_arg(ap, double));
+static tsc_str_t* string_from_numeric_values(
+    const tsc_array_t* values,
+    bool code_points
+) {
+    size_t count = values ? values->len : 0;
+    if (count > SIZE_MAX / sizeof(uint32_t) || count > SIZE_MAX / 4) {
+        tsc_panic("String static argument collection is too large");
     }
-    va_end(ap);
+    uint32_t* units = (uint32_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(uint32_t) * (count ? count : 1)
+    );
+    for (size_t index = 0; index < count; index++) {
+        double numeric = tsc_value_to_number(TSC_ARR(tsc_value_t, values, index));
+        units[index] = code_points
+            ? to_valid_code_point(numeric)
+            : (uint32_t)to_uint16_code_unit(numeric);
+    }
 
     size_t len = 0;
-    for (size_t i = 0; i < n; i++) {
-        uint32_t cp = units[i];
-        if (is_high_surrogate(units[i]) && i + 1 < n && is_low_surrogate(units[i + 1])) {
-            cp = surrogate_pair_to_code_point(units[i], units[i + 1]);
-            i++;
+    for (size_t index = 0; index < count; index++) {
+        uint32_t code_point = units[index];
+        if (units[index] <= 0xffff && is_high_surrogate((uint16_t)units[index]) &&
+            index + 1 < count && units[index + 1] <= 0xffff &&
+            is_low_surrogate((uint16_t)units[index + 1])) {
+            code_point = surrogate_pair_to_code_point(
+                (uint16_t)units[index],
+                (uint16_t)units[index + 1]
+            );
+            index++;
         }
-        len += utf8_len_for_code_point(cp);
+        len += utf8_len_for_code_point(code_point);
     }
 
-    tsc_str_t* s = str_alloc(len);
-    char* out = (char*)s->data;
-    size_t pos = 0;
-    for (size_t i = 0; i < n; i++) {
-        uint32_t cp = units[i];
-        if (is_high_surrogate(units[i]) && i + 1 < n && is_low_surrogate(units[i + 1])) {
-            cp = surrogate_pair_to_code_point(units[i], units[i + 1]);
-            i++;
+    tsc_str_t* result = str_alloc(len);
+    char* output = (char*)result->data;
+    size_t offset = 0;
+    for (size_t index = 0; index < count; index++) {
+        uint32_t code_point = units[index];
+        if (units[index] <= 0xffff && is_high_surrogate((uint16_t)units[index]) &&
+            index + 1 < count && units[index + 1] <= 0xffff &&
+            is_low_surrogate((uint16_t)units[index + 1])) {
+            code_point = surrogate_pair_to_code_point(
+                (uint16_t)units[index],
+                (uint16_t)units[index + 1]
+            );
+            index++;
         }
-        pos += write_utf8_code_point(out + pos, cp);
+        offset += write_utf8_code_point(output + offset, code_point);
     }
-    return s;
+    return result;
 }
 
 uint32_t to_valid_code_point(double n) {
     if (!isfinite(n) || floor(n) != n || n < 0.0 || n > 0x10ffff) {
-        tsc_throw_str(tsc_str_from_cstr("String.fromCodePoint: invalid code point"));
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_cstr("String.fromCodePoint: invalid code point")
+        );
     }
     return (uint32_t)n;
 }
 
-tsc_str_t* tsc_str_from_code_point_n(size_t n, ...) {
-    uint32_t* cps = (uint32_t*)TSC_GC_MALLOC_ATOMIC(sizeof(uint32_t) * (n ? n : 1));
-    va_list ap;
-    va_start(ap, n);
-    for (size_t i = 0; i < n; i++) {
-        cps[i] = to_valid_code_point(va_arg(ap, double));
-    }
-    va_end(ap);
+tsc_str_t* tsc_str_from_char_code_values(const tsc_array_t* values) {
+    return string_from_numeric_values(values, false);
+}
 
-    size_t len = 0;
-    for (size_t i = 0; i < n; i++) {
-        len += utf8_len_for_code_point(cps[i]);
-    }
-
-    tsc_str_t* s = str_alloc(len);
-    char* out = (char*)s->data;
-    size_t pos = 0;
-    for (size_t i = 0; i < n; i++) {
-        pos += write_utf8_code_point(out + pos, cps[i]);
-    }
-    return s;
+tsc_str_t* tsc_str_from_code_point_values(const tsc_array_t* values) {
+    return string_from_numeric_values(values, true);
 }
 
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b) {

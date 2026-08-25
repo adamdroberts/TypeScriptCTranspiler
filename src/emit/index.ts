@@ -2353,7 +2353,7 @@ class Emitter {
         ) {
             if (method === "fromCharCode") {
                 return call.arguments.every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+                    this.sideEffectFreePrimitiveNumberValue(arg, seenConsts) !== null
                 );
             }
             if (method === "fromCodePoint") {
@@ -14251,6 +14251,18 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): number | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (
+            ts.isPropertyAccessExpression(unwrapped) &&
+            unwrapped.name.text === "length"
+        ) {
+            const stringText = this.sideEffectFreeStringLiteralText(unwrapped.expression, seenConsts);
+            if (stringText !== null) return stringText.length;
+            const arrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
+                unwrapped.expression,
+                seenConsts,
+            );
+            if (arrayLength !== null) return arrayLength;
+        }
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression)
@@ -54955,7 +54967,10 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Number") {
             return this.emitNumberStatic(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "String") {
+        if (
+            ts.isIdentifier(recvExpr) &&
+            this.isUnshadowedGlobalIdentifier(recvExpr, "String")
+        ) {
             return this.emitStringStatic(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Symbol") {
@@ -56246,56 +56261,52 @@ class Emitter {
                     ([target]) => `tsc_value_method_value_of(${target})`,
                 );
         }
-        const specs: SequencedCallArg[] = [
-            { value: recv, target: T_VALUE, node: call.expression },
-        ];
         if (args.some((arg) => ts.isSpreadElement(arg))) {
-            if (optionalReceiver) {
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: recv, target: T_VALUE, node: call.expression }],
-                    ([target]) => {
-                        const argList = this.emitSpreadCallArgumentList(args);
-                        const fn = this.freshTemp("_dyn_call_fn");
-                        const cache = this.freshTemp("_prop_cache");
-                        const invoke = `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${argList.c})); })`;
-                        return `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invoke}`;
-                    },
-                );
-            }
-            const argList = this.emitSpreadCallArgumentList(args);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: recv, target: T_VALUE, node: call.expression },
-                { value: argList, node: call },
-            ], ([target, list]) => {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv, target: T_VALUE, node: call.expression }],
+                ([target]) => {
+                    const argList = this.emitSpreadCallArgumentList(args);
+                    const list = this.freshTemp("_dyn_call_args");
+                    const fn = this.freshTemp("_dyn_call_fn");
+                    const cache = this.freshTemp("_prop_cache");
+                    const invoke = `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_array_t* ${list} = ${argList.c}; tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
+                    return optionalReceiver
+                        ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invoke}`
+                        : invoke;
+                },
+            );
+        }
+        const argumentSpecs: SequencedCallArg[] = args.map((arg) => ({
+            value: this.emitExpr(arg),
+            target: T_VALUE,
+            node: arg,
+        }));
+        return this.emitSequencedExpr(
+            T_VALUE,
+            [{ value: recv, target: T_VALUE, node: call.expression }],
+            ([target]) => {
                 const fn = this.freshTemp("_dyn_call_fn");
                 const cache = this.freshTemp("_prop_cache");
-                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list})); })`;
-            });
-        }
-        for (const arg of args) {
-            specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
-        }
-        return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
-            const av = this.freshTemp("_dyn_call_args");
-            const fn = this.freshTemp("_dyn_call_fn");
-            const cache = this.freshTemp("_prop_cache");
-            const pieces = [
-                `static tsc_prop_cache_t ${cache}`,
-                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
-            ];
-            for (const value of values) {
-                const tmp = this.freshTemp("_dyn_call_arg");
-                pieces.push(`tsc_value_t ${tmp} = ${value}`);
-                pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
-            }
-            pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`);
-            pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
-            const body = `({ ${pieces.join("; ")}; })`;
-            return optionalReceiver
-                ? `(tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${body})`
-                : body;
-        });
+                const invocation = this.emitSequencedExpr(T_VALUE, argumentSpecs, (values) => {
+                    const av = this.freshTemp("_dyn_call_args");
+                    const pieces = [
+                        `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`,
+                    ];
+                    for (const value of values) {
+                        const tmp = this.freshTemp("_dyn_call_arg");
+                        pieces.push(`tsc_value_t ${tmp} = ${value}`);
+                        pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
+                    }
+                    pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
+                    return `({ ${pieces.join("; ")}; })`;
+                });
+                const body = `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); ${invocation.c}; })`;
+                return optionalReceiver
+                    ? `(tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${body})`
+                    : body;
+            },
+        );
     }
 
     private emitDynamicArraySort(
@@ -65397,54 +65408,21 @@ class Emitter {
     }
 
     private emitStringStatic(call: ts.CallExpression, name: string): EmitResult {
-        switch (name) {
-            case "raw": {
-                if (call.arguments.length < 1) unsupported(call, "String.raw expects a template object");
-                const specs = call.arguments.map((arg) => ({
-                    value: this.emitExpr(arg),
-                    target: T_VALUE,
-                    node: arg,
-                }));
-                return this.emitSequencedExpr(T_STRING, specs, (values) => {
-                    const substitutions = this.freshTemp("_string_raw_substitutions");
-                    const pieces = [
-                        `tsc_array_t* ${substitutions} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length - 1)})`,
-                    ];
-                    for (const value of values.slice(1)) {
-                        pieces.push(`tsc_array_push_raw(${substitutions}, &${value})`);
-                    }
-                    pieces.push(`tsc_str_raw(${values[0]}, ${substitutions})`);
-                    return `({ ${pieces.join("; ")}; })`;
-                });
-            }
-            case "fromCharCode": {
-                const specs = call.arguments.map((arg) => {
-                    const r = this.emitExpr(arg);
-                    requireNumber(arg, r.ty);
-                    return { value: r, target: T_NUMBER, node: arg };
-                });
-                return this.emitSequencedCall(
-                    "tsc_str_from_char_code_n",
-                    T_STRING,
-                    specs,
-                    [call.arguments.length.toString()],
-                );
-            }
-            case "fromCodePoint": {
-                const specs = call.arguments.map((arg) => {
-                    const r = this.emitExpr(arg);
-                    requireNumber(arg, r.ty);
-                    return { value: r, target: T_NUMBER, node: arg };
-                });
-                return this.emitSequencedCall(
-                    "tsc_str_from_code_point_n",
-                    T_STRING,
-                    specs,
-                    [call.arguments.length.toString()],
-                );
-            }
+        if (name !== "raw" && name !== "fromCharCode" && name !== "fromCodePoint") {
+            unsupported(call, `String.${name}`);
         }
-        unsupported(call, `String.${name}`);
+        const constructor = this.freshTemp("_string_constructor");
+        const functionValue = this.freshTemp("_string_static");
+        const argumentsTemp = this.freshTemp("_string_arguments");
+        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+        const key = this.stringLit(name);
+        return {
+            c: `({ tsc_value_t ${constructor} = tsc_string_constructor_value(); ` +
+                `tsc_value_t ${functionValue} = tsc_value_get_prop(${constructor}, ${key}); ` +
+                `tsc_array_t* ${argumentsTemp} = ${argumentsList.c}; ` +
+                `tsc_value_apply_function(${functionValue}, ${constructor}, tsc_value_array(${argumentsTemp})); })`,
+            ty: T_VALUE,
+        };
     }
 
     private emitNumberMethod(
@@ -72434,8 +72412,10 @@ class Emitter {
             if (key.ty.kind !== "string") {
                 const obj = this.emitExpr(arg);
                 const descriptor = this.emitExpr(args[2]!);
-                const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
-                const resultType = mapped.kind === "function" || mapped.kind === "array" ? mapped : T_VALUE;
+                const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
+                const resultType = obj.ty.kind === "value"
+                    ? T_VALUE
+                    : mapped.kind === "function" || mapped.kind === "array" ? mapped : T_VALUE;
                 return this.emitSequencedExpr(resultType, [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
                     { value: key, target: T_VALUE, node: args[1]! },
@@ -72461,11 +72441,13 @@ class Emitter {
             if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array" && mapped.kind !== "void" && !primitiveObjectArg) {
                 unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
             }
-            const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
             if (!ts.isObjectLiteralExpression(args[2]!)) {
                 const descValue = this.emitExpr(args[2]!);
                 const obj = this.emitExpr(arg);
-                const objectDefineReturnType = (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
+                const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
+                const objectDefineReturnType = obj.ty.kind === "value"
+                    ? T_VALUE
+                    : (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
                 return this.emitSequencedExpr(
                     objectDefineReturnType,
                     [
@@ -72474,12 +72456,15 @@ class Emitter {
                         { value: descValue, target: T_VALUE, node: args[2]! },
                         ...ignored,
                     ],
-                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!)}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
+                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!, obj.ty)}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
                 );
             }
             const desc = this.descriptorData(args[2]!);
             const obj = this.emitExpr(arg);
-            const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
+            const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
+            const objectDefineReturnType = obj.ty.kind === "value"
+                ? T_VALUE
+                : mapped.kind === "function" ? mapped : T_VALUE;
             if (desc.kind === "accessor") {
                 const specs: SequencedCallArg[] = [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
@@ -72502,7 +72487,7 @@ class Emitter {
                         const k = vals[1]!;
                         const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                         const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o)}; })`;
+                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o, obj.ty)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o, obj.ty)}; })`;
                     },
                 );
             }
@@ -72518,7 +72503,7 @@ class Emitter {
                     ...ignored,
                 ],
                 ([o, k, v]) => {
-                    return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                    return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!, obj.ty)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
                 },
             );
         }
@@ -77074,7 +77059,20 @@ class Emitter {
         }
         if (recv.ty.kind === "string") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            requireNumber(ea.argumentExpression, idx.ty);
+            if (idx.ty.kind !== "number") {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, node: ea.expression },
+                        { value: idx, target: T_VALUE, node: ea.argumentExpression },
+                    ],
+                    ([string, key]) => isOpt
+                        ? `${string} != NULL ? ` +
+                            `tsc_value_get_computed_prop(tsc_value_string(${string}), ${key}) : ` +
+                            "tsc_value_undefined()"
+                        : `tsc_value_get_computed_prop(tsc_value_string(${string}), ${key})`,
+                );
+            }
             if (isOpt) {
                 return this.emitSequencedExpr(
                     T_STRING,

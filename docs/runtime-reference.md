@@ -38,8 +38,8 @@ typedef struct tsc_str {
 | `tsc_str_from_num_exponential` | `(double, double, bool) -> tsc_str_t*` | `Number.prototype.toExponential(fractionDigits?)` scientific formatting with JS-style exponent normalization. |
 | `tsc_str_from_num_precision` | `(double, double, bool) -> tsc_str_t*` | `Number.prototype.toPrecision(precision?)` significant-digit formatting with fixed/exponential selection. |
 | `tsc_str_from_bool` | `(bool) -> tsc_str_t*` | `"true"` / `"false"`. |
-| `tsc_str_from_char_code_n` | `(size_t n, ...) -> tsc_str_t*` | `String.fromCharCode(...)`, encoding UTF-16 code units as UTF-8. |
-| `tsc_str_from_code_point_n` | `(size_t n, ...) -> tsc_str_t*` | `String.fromCodePoint(...)`, validating Unicode scalar values and encoding UTF-8. |
+| `tsc_str_from_char_code_values` | `(const tsc_array_t*) -> tsc_str_t*` | `String.fromCharCode(...)`, applying ordered `ToNumber`/modulo-2^16 conversion to one arbitrary value collection and encoding UTF-16 code units as WTF-8. |
+| `tsc_str_from_code_point_values` | `(const tsc_array_t*) -> tsc_str_t*` | `String.fromCodePoint(...)`, applying ordered `ToNumber`, validating integer code points with native `RangeError`, and encoding WTF-8. |
 
 ### Equality and comparison
 

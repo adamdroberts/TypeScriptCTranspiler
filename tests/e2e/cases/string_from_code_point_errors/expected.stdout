@@ -1,5 +1,5 @@
-negative: String.fromCodePoint: invalid code point
-high: String.fromCodePoint: invalid code point
-fraction: String.fromCodePoint: invalid code point
-infinity: String.fromCodePoint: invalid code point
+negative: RangeError: String.fromCodePoint: invalid code point
+high: RangeError: String.fromCodePoint: invalid code point
+fraction: RangeError: String.fromCodePoint: invalid code point
+infinity: RangeError: String.fromCodePoint: invalid code point
 valid: A!

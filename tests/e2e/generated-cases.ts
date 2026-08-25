@@ -28,13 +28,19 @@ export interface UriPercentCodecLengthSpec {
     length: number;
 }
 
+export interface StringCodeUnitListWidthSpec {
+    generator: "string-code-unit-list-width";
+    width: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | GlobalNumberParseLengthSpec
-    | UriPercentCodecLengthSpec;
+    | UriPercentCodecLengthSpec
+    | StringCodeUnitListWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -105,6 +111,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             length,
+        };
+    }
+    if (spec.generator === "string-code-unit-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
         };
     }
     throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
@@ -312,6 +328,23 @@ function uriPercentCodecLengthSource(length: number): string {
     ].join("\n");
 }
 
+function stringCodeUnitListWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const units: number[] = [];",
+        "for (let index = 0; index < width; index++) units.push(65 + index % 26);",
+        "const chars = String.fromCharCode(...units);",
+        "const points = String.fromCodePoint(...units);",
+        "const valid =",
+        "    chars === points &&",
+        "    chars.length === width &&",
+        "    chars.charCodeAt(0) === 65 &&",
+        "    chars.charCodeAt(width - 1) === units[width - 1];",
+        'console.log("string code-unit list width:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -327,5 +360,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return globalNumberParseLengthSource(spec.length);
         case "uri-percent-codec-length":
             return uriPercentCodecLengthSource(spec.length);
+        case "string-code-unit-list-width":
+            return stringCodeUnitListWidthSource(spec.width);
     }
 }
