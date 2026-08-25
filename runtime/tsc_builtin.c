@@ -427,6 +427,56 @@ tsc_bigint_t* tsc_bigint_from_bool(bool v) {
     return b;
 }
 
+double tsc_bigint_to_number(const tsc_bigint_t* value) {
+    if (!value || mpz_sgn(value->value) == 0) return 0.0;
+
+    const int sign = mpz_sgn(value->value);
+    mpz_t magnitude;
+    mpz_init(magnitude);
+    mpz_abs(magnitude, value->value);
+    const size_t bit_length = mpz_sizeinbase(magnitude, 2);
+
+    if (bit_length <= 53) {
+        const double exact = mpz_get_d(magnitude);
+        mpz_clear(magnitude);
+        return sign < 0 ? -exact : exact;
+    }
+    if (bit_length > 1024) {
+        mpz_clear(magnitude);
+        return sign < 0 ? -INFINITY : INFINITY;
+    }
+
+    mp_bitcnt_t shift = (mp_bitcnt_t)(bit_length - 53);
+    mpz_t significand;
+    mpz_t remainder;
+    mpz_t halfway;
+    mpz_init(significand);
+    mpz_init(remainder);
+    mpz_init_set_ui(halfway, 1u);
+    mpz_fdiv_q_2exp(significand, magnitude, shift);
+    mpz_fdiv_r_2exp(remainder, magnitude, shift);
+    mpz_mul_2exp(halfway, halfway, shift - 1);
+
+    const int halfway_comparison = mpz_cmp(remainder, halfway);
+    if (
+        halfway_comparison > 0 ||
+        (halfway_comparison == 0 && mpz_odd_p(significand))
+    ) {
+        mpz_add_ui(significand, significand, 1u);
+    }
+    if (mpz_sizeinbase(significand, 2) > 53) {
+        mpz_fdiv_q_2exp(significand, significand, 1);
+        shift++;
+    }
+
+    const double rounded = ldexp(mpz_get_d(significand), (int)shift);
+    mpz_clear(halfway);
+    mpz_clear(remainder);
+    mpz_clear(significand);
+    mpz_clear(magnitude);
+    return sign < 0 ? -rounded : rounded;
+}
+
 tsc_bigint_t* tsc_bigint_neg(const tsc_bigint_t* a) {
     tsc_bigint_t* r = bigint_alloc();
     mpz_neg(r->value, a->value);

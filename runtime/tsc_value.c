@@ -4623,7 +4623,7 @@ double tsc_value_number_constructor(tsc_value_t input) {
         TSC_TO_PRIMITIVE_NUMBER
     );
     if (value_is_bigint(primitive)) {
-        return mpz_get_d(((const tsc_bigint_t*)value_ptr(primitive))->value);
+        return tsc_bigint_to_number((const tsc_bigint_t*)value_ptr(primitive));
     }
     return tsc_value_as_num(primitive);
 }

@@ -34,6 +34,76 @@ interface StressValue {
     readonly time: number;
 }
 
+interface BigIntRoundingProbe {
+    readonly value: bigint;
+    readonly expected: number;
+}
+
+function bigintToBinary64Oracle(value: bigint): number {
+    if (value === 0n) return 0;
+    const negative = value < 0n;
+    const magnitude = negative ? -value : value;
+    const bitLength = magnitude.toString(2).length;
+    if (bitLength <= 53) {
+        const exact = Number(magnitude);
+        return negative ? -exact : exact;
+    }
+    if (bitLength > 1024) return negative ? -Infinity : Infinity;
+
+    let shift = BigInt(bitLength - 53);
+    let significand = magnitude >> shift;
+    const remainder = magnitude - (significand << shift);
+    const halfway = 1n << (shift - 1n);
+    if (remainder > halfway || (remainder === halfway && (significand & 1n) !== 0n)) {
+        significand += 1n;
+    }
+    if (significand === 1n << 53n) {
+        significand >>= 1n;
+        shift += 1n;
+    }
+    const rounded = Number(significand) * (2 ** Number(shift));
+    return negative ? -rounded : rounded;
+}
+
+function bigintRoundingPlan(seed: number): BigIntRoundingProbe[] {
+    const values = new Set<bigint>([
+        0n,
+        1n,
+        -1n,
+        (1n << 53n) - 1n,
+        -((1n << 53n) - 1n),
+    ]);
+    let state = seed >>> 0;
+    for (const bitLength of [54, 64, 100, 512, 1024]) {
+        const shift = BigInt(bitLength - 53);
+        const halfway = 1n << (shift - 1n);
+        state = (Math.imul(state, 22695477) + 1) >>> 0;
+        const trailing = BigInt(state & 0xfffff);
+        const significand = (1n << 52n) + (trailing << 1n) + BigInt(state & 1);
+        for (const remainder of [halfway - 1n, halfway, halfway + 1n]) {
+            const positive = (significand << shift) + remainder;
+            values.add(positive);
+            values.add(-positive);
+        }
+    }
+    const maximumSignificand = (1n << 53n) - 1n;
+    values.add((maximumSignificand << 971n) + ((1n << 970n) - 1n));
+    values.add((maximumSignificand << 971n) + (1n << 970n));
+    values.add(1n << 1024n);
+    values.add(-(1n << 1024n));
+    return [...values].map((value) => ({
+        value,
+        expected: bigintToBinary64Oracle(value),
+    }));
+}
+
+function numberSource(value: number): string {
+    if (value === Infinity) return "Infinity";
+    if (value === -Infinity) return "-Infinity";
+    if (Object.is(value, -0)) return "-0";
+    return String(value);
+}
+
 function stressPlan(seed: number, length: number): StressValue[] {
     const partitions: readonly StressValue[] = [
         { expression: "null", time: 0 },
@@ -50,7 +120,10 @@ function stressPlan(seed: number, length: number): StressValue[] {
     return worklist;
 }
 
-function subjectSource(stress: readonly StressValue[]): string {
+function subjectSource(
+    stress: readonly StressValue[],
+    rounding: readonly BigIntRoundingProbe[],
+): string {
     const dateLines = dateProbes.map((probe) =>
         `print("date:${probe.label}:" + formatNumber(new Date(${probe.expression}).getTime()));`
     ).join("\n");
@@ -107,6 +180,18 @@ function subjectSource(stress: readonly StressValue[]): string {
         print("number-exotic:" + formatNumber(Number(numberExotic)) + ":" + numberHint);
         print("number-ordinary:" + formatNumber(Number(numberOrdinary)));
         print("number-bigint:" + formatNumber(Number(9007199254740993n)));
+        print("number-bigint-sequence:" + [
+            Number(0n), +(new Number(0n)),
+            Number(2n**53n), Number(2n**53n + 1n), Number(2n**53n + 2n),
+            Number(2n**53n + 3n), Number(2n**53n + 4n),
+            Number(-(2n**53n)), Number(-(2n**53n + 1n)), Number(-(2n**53n + 2n)),
+            Number(-(2n**53n + 3n)), Number(-(2n**53n + 4n))
+        ].join(","));
+        var bigintRoundingOk = true;
+        ${rounding.map(({ value, expected }) =>
+            `bigintRoundingOk = bigintRoundingOk && Object.is(Number(${value}n), ${numberSource(expected)});`
+        ).join("\n")}
+        print("number-bigint-rounding:" + String(bigintRoundingOk));
         print("number-symbol:" + errorResult(function () { Number(Symbol()); }, sentinel));
         print("number-abrupt:" + errorResult(function () { Number(abrupt); }, sentinel));
         print("global-isnan:" + String(isNaN({ valueOf: function () { return "nan"; } })));
@@ -131,6 +216,8 @@ function expectedOutput(stress: readonly StressValue[]): string {
         "number-exotic:12.5:number",
         "number-ordinary:14.5",
         "number-bigint:9007199254740992",
+        "number-bigint-sequence:0,0,9007199254740992,9007199254740992,9007199254740994,9007199254740996,9007199254740996,-9007199254740992,-9007199254740992,-9007199254740994,-9007199254740996,-9007199254740996",
+        "number-bigint-rounding:true",
         "number-symbol:TypeError",
         "number-abrupt:identity",
         "global-isnan:true",
@@ -142,11 +229,12 @@ function expectedOutput(stress: readonly StressValue[]): string {
 
 test("Date and Number consume the shared ToPrimitive conversion model", async () => {
     const stress = stressPlan(0xc0e2ce26, 43);
+    const rounding = bigintRoundingPlan(0xb16b00b5);
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-conversion-consumers-property-"));
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/conversion-consumers.js#sloppy";
     try {
-        await fs.writeFile(entry, subjectSource(stress), "utf8");
+        await fs.writeFile(entry, subjectSource(stress, rounding), "utf8");
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);

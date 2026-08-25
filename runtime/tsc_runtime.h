@@ -300,6 +300,7 @@ tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s);
 tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* s);
 tsc_bigint_t* tsc_bigint_from_num(double n);
 tsc_bigint_t* tsc_bigint_from_bool(bool b);
+double tsc_bigint_to_number(const tsc_bigint_t* value);
 tsc_bigint_t* tsc_bigint_neg(const tsc_bigint_t* a);
 tsc_bigint_t* tsc_bigint_add(const tsc_bigint_t* a, const tsc_bigint_t* b);
 tsc_bigint_t* tsc_bigint_sub(const tsc_bigint_t* a, const tsc_bigint_t* b);
