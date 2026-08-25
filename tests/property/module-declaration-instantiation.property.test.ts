@@ -120,3 +120,82 @@ test("Module var bindings share one declaration-instantiation worklist", async (
         await fs.rm(temporary, { recursive: true, force: true });
     }
 }, 90_000);
+
+function cyclicModuleGraph(depth: number): Map<string, string> {
+    const sources = new Map<string, string>();
+    sources.set(
+        "root.js",
+        [
+            'import { result } from "./cycle-0.js";',
+            'if (result !== "undefined:undefined:true:ready") {',
+            '    throw new Error("cyclic Module bindings were not instantiated before evaluation: " + result);',
+            "}",
+            'console.log("cyclic-module-instantiation-ok");',
+            "",
+        ].join("\n"),
+    );
+    sources.set(
+        "cycle-0.js",
+        [
+            'import { beforeValue, beforeCall, sawLexicalTdz } from "./cycle-1.js";',
+            'export var entryValue = "ready";',
+            'export let entryLexical = "lexical-ready";',
+            "export function readEntry() { return entryValue; }",
+            'export const result = typeof beforeValue + ":" + typeof beforeCall + ":" + sawLexicalTdz + ":" + readEntry();',
+            "",
+        ].join("\n"),
+    );
+    for (let index = 1; index + 1 < depth; index++) {
+        sources.set(
+            `cycle-${index}.js`,
+            `export { beforeValue, beforeCall, sawLexicalTdz } from "./cycle-${index + 1}.js";\n`,
+        );
+    }
+    sources.set(
+        `cycle-${depth - 1}.js`,
+        [
+            'import { entryValue, entryLexical, readEntry } from "./cycle-0.js";',
+            "export const beforeValue = entryValue;",
+            "export const beforeCall = readEntry();",
+            "let lexicalTdz = false;",
+            "try { entryLexical; } catch (error) { lexicalTdz = error instanceof ReferenceError; }",
+            "export const sawLexicalTdz = lexicalTdz;",
+            "",
+        ].join("\n"),
+    );
+    return sources;
+}
+
+test("cyclic Module graphs instantiate every binding before any evaluation", async () => {
+    // This depth is a representative stack-safety guard for the same explicit
+    // graph worklist; it is not a completion counter or a fixture family.
+    const sources = cyclicModuleGraph(97);
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-module-cycle-property-"));
+    try {
+        await Promise.all([...sources].map(([relative, source]) =>
+            fs.writeFile(path.join(temporary, relative), source, "utf8")
+        ));
+        const entry = path.join(temporary, "root.js");
+        const moduleRoots = [...sources.keys()].map((relative) => path.join(temporary, relative));
+        for (const noGc of [false, true]) {
+            const mode = noGc ? "no-gc" : "gc";
+            const executable = path.join(temporary, `subject-${mode}`);
+            const result = await compile({
+                entry,
+                output: executable,
+                buildDir: path.join(temporary, `build-${mode}`),
+                initializationEntries: [entry],
+                moduleRoots,
+                ignoreCheckJsDirectiveRoots: moduleRoots,
+                noGc,
+            });
+            expect(result.exitCode).toBe(0);
+            const child = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
+            expect(child.exitCode).toBe(0);
+            expect(child.stderr.toString()).toBe("");
+            expect(child.stdout.toString()).toBe("cyclic-module-instantiation-ok\n");
+        }
+    } finally {
+        await fs.rm(temporary, { recursive: true, force: true });
+    }
+}, 120_000);

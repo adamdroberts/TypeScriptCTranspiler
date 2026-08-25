@@ -196,20 +196,11 @@ export function buildModuleGraph(
         throw new Error(`entry not found in module graph: ${entry}`);
     }
 
-    // DFS topological sort: deps first, entry last.
+    // DFS topological sort: deps first, entry last.  Explicit frames make the
+    // graph algorithm independent of dependency depth while preserving the
+    // source-order back-edge behavior required by cyclic Module evaluation.
     const topo: string[] = [];
     const visited = new Set<string>();
-    const visiting = new Set<string>();
-    function visit(id: string): void {
-        if (visited.has(id)) return;
-        if (visiting.has(id)) return; // cycle — stop the back edge, pick up caller's recursion
-        visiting.add(id);
-        const m = modules.get(id);
-        if (m) for (const dep of m.imports) visit(dep);
-        visiting.delete(id);
-        visited.add(id);
-        topo.push(id);
-    }
     const initializationEntries = options_.initializationEntries ?? [entry];
     const seenInitializationEntries = new Set<string>();
     for (const initializationEntry of initializationEntries) {
@@ -220,7 +211,25 @@ export function buildModuleGraph(
         seenInitializationEntries.add(absolute);
         const rootId = fileToModuleId.get(absolute);
         if (!rootId) throw new Error(`initialization entry not found in module graph: ${initializationEntry}`);
-        visit(rootId);
+        if (visited.has(rootId)) continue;
+        const active = new Set<string>([rootId]);
+        const frames: Array<{ readonly id: string; next: number }> = [{ id: rootId, next: 0 }];
+        while (frames.length > 0) {
+            const frame = frames[frames.length - 1]!;
+            const dependencies = modules.get(frame.id)?.imports ?? [];
+            if (frame.next < dependencies.length) {
+                const dependency = dependencies[frame.next++]!;
+                if (visited.has(dependency) || active.has(dependency)) continue;
+                active.add(dependency);
+                frames.push({ id: dependency, next: 0 });
+                continue;
+            }
+            frames.pop();
+            active.delete(frame.id);
+            if (visited.has(frame.id)) continue;
+            visited.add(frame.id);
+            topo.push(frame.id);
+        }
     }
 
     return { modules, emitOrder: [...modules.keys()], topoOrder: topo, entryModuleId, fileToModuleId };

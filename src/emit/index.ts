@@ -531,8 +531,9 @@ class Emitter {
     private defs = new CBuf();
     private closureDefs = new CBuf();
     private genericDefs = new CBuf();
-    /** Per-module init bodies. Keys are module ids. */
+    /** Per-source-record evaluation and Module instantiation bodies. */
     private modInits = new Map<string, CBuf>();
+    private modInstantiations = new Map<string, CBuf>();
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
     private generatorStack: GeneratorContext[] = [];
@@ -15134,6 +15135,7 @@ class Emitter {
             out.line();
         }
         for (const modId of emitOrder) {
+            out.line(`static bool mod_instantiated_${modId} = false;`);
             out.line(`static int mod_state_${modId} = 0;`);
             out.line(`static tsc_value_t mod_error_${modId};`);
             out.line(`static void* volatile mod_error_root_${modId} = NULL;`);
@@ -15141,6 +15143,7 @@ class Emitter {
         out.line();
         // Forward declarations for mod_inits and user functions.
         for (const modId of emitOrder) {
+            out.line(`static void mod_instantiate_${modId}(void);`);
             out.line(`static void mod_init_${modId}(void);`);
         }
         out.line();
@@ -15160,7 +15163,20 @@ class Emitter {
             out.write(this.genericDefs.toString());
             out.line();
         }
-        // Module init function bodies.
+        // ModuleDeclarationInstantiation and evaluation are deliberately
+        // separate.  Every reachable Module Record gets its bindings before
+        // any record in that graph executes, including cyclic SCCs.
+        for (const modId of emitOrder) {
+            const body = this.modInstantiations.get(modId);
+            if (!body) continue;
+            out.line(`static void mod_instantiate_${modId}(void) {`);
+            out.line(`    if (mod_instantiated_${modId}) return;`);
+            out.line(`    mod_instantiated_${modId} = true;`);
+            out.write(body.toString());
+            out.line("}");
+            out.line();
+        }
+        // Module evaluation function bodies.
         for (const modId of emitOrder) {
             const body = this.modInits.get(modId);
             if (!body) continue;
@@ -15207,6 +15223,26 @@ class Emitter {
                     : modId === testId
                         ? "test-source"
                         : "module-graph";
+                const frame = `_test262_instantiation_frame_${index}`;
+                out.line("    {");
+                out.line(`        TSC_TRY_FRAME(${frame});`);
+                out.line(`        tsc_try_push(&${frame});`);
+                out.line(`        if (setjmp(${frame}.jb) == 0) {`);
+                out.line(`            mod_instantiate_${modId}();`);
+                out.line("            tsc_try_pop();");
+                out.line("        } else {");
+                out.line("            tsc_try_pop();");
+                out.line(`            tsc_test262_write_throw("${scenario}", "${origin}", tsc_current_error_value());`);
+                out.line("            return 0;");
+                out.line("        }");
+                out.line("    }");
+            }
+            for (const [index, modId] of this.graph.topoOrder.entries()) {
+                const origin = setupIds.has(modId)
+                    ? "setup-script"
+                    : modId === testId
+                        ? "test-source"
+                        : "module-graph";
                 const frame = `_test262_frame_${index}`;
                 out.line("    {");
                 out.line(`        TSC_TRY_FRAME(${frame});`);
@@ -15235,6 +15271,9 @@ class Emitter {
             out.line("    }");
             out.line(`    tsc_test262_write_normal("${scenario}", ${observation.async ? "true" : "false"});`);
         } else {
+            for (const modId of this.graph.topoOrder) {
+                out.line(`    mod_instantiate_${modId}();`);
+            }
             for (const modId of this.graph.topoOrder) {
                 out.line(`    mod_init_${modId}();`);
             }
@@ -15268,6 +15307,9 @@ class Emitter {
     private emitModule(sf: ts.SourceFile, modId: string): void {
         this.currentModuleId = modId;
         this.currentSf = sf;
+        const instantiationBuf = new CBuf();
+        instantiationBuf.indent = 1;
+        this.modInstantiations.set(modId, instantiationBuf);
         const initBuf = new CBuf();
         initBuf.indent = 1;
         this.modInits.set(modId, initBuf);
@@ -15278,8 +15320,8 @@ class Emitter {
             if (!binding) unsupported(sf, "JSON module binding plan is unavailable");
             this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
             this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
-            initBuf.line(`${binding.cName} = tsc_value_undefined();`);
-            initBuf.line(`${binding.gcRoot} = NULL;`);
+            instantiationBuf.line(`${binding.cName} = tsc_value_undefined();`);
+            instantiationBuf.line(`${binding.gcRoot} = NULL;`);
             initBuf.line(`${binding.cName} = tsc_json_parse(${this.stringLit(sf.text)});`);
             initBuf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
             return;
@@ -15295,9 +15337,9 @@ class Emitter {
             );
             this.analyzeIntegerSymbols(sf);
             this.analyzeStrbufSymbols(sf);
-            this.emitModuleVarDeclarationInstantiation(initBuf, sf);
-            this.emitModuleLexicalDeclarationInstantiation(initBuf, sf);
-            this.emitModuleDefaultExportDeclarationInstantiation(initBuf, sf);
+            this.emitModuleVarDeclarationInstantiation(instantiationBuf, sf);
+            this.emitModuleLexicalDeclarationInstantiation(instantiationBuf, sf);
+            this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
@@ -50727,7 +50769,11 @@ class Emitter {
             body.open(`${emittedBranch ? "else if" : "if"} (${condition})`);
             emittedBranch = true;
             body.line(`tsc_dynamic_import_validate_resource(state->attributes, ${/\.json$/i.test(target.fileName) ? "true" : "false"});`);
-            for (const moduleId of this.dynamicModuleInitializationOrder(target)) {
+            const initializationOrder = this.dynamicModuleInitializationOrder(target);
+            for (const moduleId of initializationOrder) {
+                body.line(`mod_instantiate_${moduleId}();`);
+            }
+            for (const moduleId of initializationOrder) {
                 body.line(`mod_init_${moduleId}();`);
             }
             body.line(`tsc_promise_fulfill_in_place(state->promise, ${namespace.factory}());`);
