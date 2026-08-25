@@ -4,6 +4,12 @@ import {
     createEcmaSourceFile,
     ecmaImportAttributesParserShadow,
 } from "../../src/ecmascript-source";
+import {
+    type ModuleRequest,
+    moduleRequestFromDeclaration,
+    moduleRequestsEqual,
+    uniqueModuleRequests,
+} from "../../src/module-request";
 import { analyzeModuleGraph } from "../test262/native-host";
 
 type ResolutionPartition = "direct" | "same-binding" | "ambiguous" | "missing";
@@ -215,4 +221,140 @@ test("module linking derives JSON synthetic-module resolution from strict source
         origin: "module-graph",
         diagnostics: expect.stringContaining("invalid JSON module"),
     });
+});
+
+function parsedModuleRequest(source: string): ModuleRequest {
+    const sourceFile = createEcmaSourceFile(
+        "request.js",
+        source,
+        ts.ScriptTarget.ESNext,
+        true,
+        ts.ScriptKind.JS,
+    );
+    const declaration = sourceFile.statements[0]!;
+    expect(ts.isImportDeclaration(declaration)).toBeTrue();
+    const parsed = moduleRequestFromDeclaration(declaration as ts.ImportDeclaration);
+    expect(parsed?.error).toBeNull();
+    return parsed!.request!;
+}
+
+function shuffled<T>(values: readonly T[], seed: number): T[] {
+    const result = [...values];
+    let state = seed >>> 0;
+    for (let index = result.length - 1; index > 0; index--) {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        const other = state % (index + 1);
+        [result[index], result[other]] = [result[other]!, result[index]!];
+    }
+    return result;
+}
+
+test("ModuleRequest identity is derived from one sorted attribute collection", () => {
+    const attributes = Array.from({ length: 37 }, (_, index) => ({
+        key: `key_${String(index).padStart(3, "0")}`,
+        value: `value_${(index * 17) % 41}`,
+    }));
+    for (const seed of [0x10293847, 0x55667788, 0x90abcdef, 0xfedcba09]) {
+        const declaration = (entries: readonly typeof attributes[number][]): string =>
+            `import "./fixture.js" with { ${entries.map(({ key, value }) =>
+                `${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(", ")} };`;
+        const left = parsedModuleRequest(declaration(shuffled(attributes, seed)));
+        const right = parsedModuleRequest(declaration(shuffled(attributes, seed ^ 0x9e3779b9)));
+        expect(left.attributes.map(({ key }) => key)).toEqual(attributes.map(({ key }) => key));
+        expect(moduleRequestsEqual(left, right)).toBeTrue();
+        expect(moduleRequestsEqual(left, {
+            specifier: right.specifier,
+            attributes: [...right.attributes].reverse(),
+        })).toBeTrue();
+
+        const changed = parsedModuleRequest(declaration([
+            ...attributes.slice(0, -1),
+            { ...attributes.at(-1)!, value: "different" },
+        ]));
+        expect(moduleRequestsEqual(left, changed)).toBeFalse();
+        expect(uniqueModuleRequests([left, right, changed])).toEqual([left, changed]);
+    }
+});
+
+test("static ModuleRequest linking covers attribute and resource-type partitions", () => {
+    const plans: readonly {
+        readonly declaration: string;
+        readonly dependencyPath: string;
+        readonly dependencySource: string;
+        readonly expected: null | { phase: "parse" | "resolution"; origin: "test-source" | "module-graph" };
+    }[] = [
+        {
+            declaration: 'import value from "./value.js";',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: null,
+        },
+        {
+            declaration: 'import value from "./value.js" with { type: "javascript" };',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: null,
+        },
+        {
+            declaration: 'import value from "./value.json" with { type: "json" };',
+            dependencyPath: "test/value.json",
+            dependencySource: "1",
+            expected: null,
+        },
+        {
+            declaration: 'import value from "./value.js" with { unknown: "value" };',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: { phase: "resolution", origin: "module-graph" },
+        },
+        {
+            declaration: 'import value from "./value.json";',
+            dependencyPath: "test/value.json",
+            dependencySource: "1",
+            expected: { phase: "resolution", origin: "module-graph" },
+        },
+        {
+            declaration: 'import value from "./value.json" with { type: "javascript" };',
+            dependencyPath: "test/value.json",
+            dependencySource: "1",
+            expected: { phase: "resolution", origin: "module-graph" },
+        },
+        {
+            declaration: 'import value from "./value.js" with { type: "json" };',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: { phase: "resolution", origin: "module-graph" },
+        },
+        {
+            declaration: 'import value from "./value.js" with { type: "json", "typ\\u0065": "json" };',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: { phase: "parse", origin: "test-source" },
+        },
+        {
+            declaration: 'import value from "./value.js" assert { type: "javascript" };',
+            dependencyPath: "test/value.js",
+            dependencySource: "export default 1;",
+            expected: { phase: "parse", origin: "test-source" },
+        },
+    ];
+
+    for (const plan of plans) {
+        const failure = analyzeModuleGraph("test/root.js", new Map([
+            ["test/root.js", `${plan.declaration}\nvoid value;\n`],
+            [plan.dependencyPath, plan.dependencySource],
+        ]));
+        if (plan.expected === null) expect(failure).toBeNull();
+        else expect(failure).toMatchObject(plan.expected);
+    }
+});
+
+test("duplicate decoded import-attribute keys in a dependency retain resolution origin", () => {
+    const failure = analyzeModuleGraph("test/root.js", new Map([
+        ["test/root.js", 'import "./dependency.js";'],
+        ["test/dependency.js", 'import "./leaf.js" with { type: "javascript", "typ\\u0065": "javascript" };'],
+        ["test/leaf.js", "export {};"],
+    ]));
+    expect(failure).toMatchObject({ phase: "resolution", origin: "module-graph" });
+    expect(failure?.diagnostics).toContain("duplicate import attribute key");
 });

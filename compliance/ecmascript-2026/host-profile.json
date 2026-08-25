@@ -36,6 +36,7 @@
     "src/emit/types.ts",
     "src/json-syntax.ts",
     "src/link/cc.ts",
+    "src/module-request.ts",
     "src/module-specifiers.ts",
     "src/native-addons.ts",
     "src/program.ts",

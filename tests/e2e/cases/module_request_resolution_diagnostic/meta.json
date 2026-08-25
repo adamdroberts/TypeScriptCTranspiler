@@ -1,0 +1,3 @@
+{
+  "description": "Unsupported static import attributes fail closed during module resolution"
+}

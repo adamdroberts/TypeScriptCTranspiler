@@ -6,6 +6,12 @@ import { compile } from "../../src/compile";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
+    type ModuleRequest,
+    moduleRequestFromDeclaration,
+    moduleRequestKey,
+    staticModuleRequestResolutionError,
+} from "../../src/module-request";
+import {
     complianceDir,
     hasArgument,
     readJson,
@@ -35,22 +41,22 @@ export interface ParseFailure {
 }
 
 interface ModuleImportEntry {
-    readonly moduleRequest: string;
+    readonly moduleRequest: ModuleRequest;
     readonly importName: string | "namespace";
 }
 
 interface ModuleIndirectExportEntry {
-    readonly moduleRequest: string;
+    readonly moduleRequest: ModuleRequest;
     readonly importName: string | "namespace";
 }
 
 interface ModuleRecord {
     readonly path: string;
-    readonly requestedModules: string[];
+    readonly requestedModules: ModuleRequest[];
     readonly imports: ModuleImportEntry[];
     readonly localExports: Map<string, string>;
     readonly indirectExports: Map<string, ModuleIndirectExportEntry>;
-    readonly starExports: string[];
+    readonly starExports: ModuleRequest[];
 }
 
 type ExportResolution =
@@ -275,18 +281,28 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
         true,
         ts.ScriptKind.JS,
     );
-    const requestedModules: string[] = [];
+    const requestedModules = new Map<string, ModuleRequest>();
+    const declarationRequests = new Map<ts.ImportDeclaration | ts.ExportDeclaration, ModuleRequest>();
     const imports: ModuleImportEntry[] = [];
     const importedLocals = new Map<string, ModuleImportEntry>();
     const localExports = new Map<string, string>();
     const indirectExports = new Map<string, ModuleIndirectExportEntry>();
-    const starExports: string[] = [];
+    const starExports: ModuleRequest[] = [];
     let error: string | null = null;
 
-    const addRequested = (specifier: ts.Expression | undefined): string | null => {
-        if (!specifier || !ts.isStringLiteralLike(specifier)) return null;
-        requestedModules.push(specifier.text);
-        return specifier.text;
+    const addRequested = (declaration: ts.ImportDeclaration | ts.ExportDeclaration): ModuleRequest | null => {
+        const parsed = moduleRequestFromDeclaration(declaration);
+        if (!parsed) return null;
+        if (parsed.request === null) {
+            const location = sourceFile.getLineAndCharacterOfPosition(declaration.getStart(sourceFile));
+            error ??= `${filename}:${location.line + 1}:${location.character + 1}: ${parsed.error}`;
+            return null;
+        }
+        const key = moduleRequestKey(parsed.request);
+        const canonical = requestedModules.get(key) ?? parsed.request;
+        requestedModules.set(key, canonical);
+        declarationRequests.set(declaration, canonical);
+        return canonical;
     };
     const addImport = (localName: string, entry: ModuleImportEntry): void => {
         imports.push(entry);
@@ -309,7 +325,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
     // is normalized to the same indirect binding as `export { x } from ...`.
     for (const statement of sourceFile.statements) {
         if (ts.isImportDeclaration(statement)) {
-            const moduleRequest = addRequested(statement.moduleSpecifier);
+            const moduleRequest = addRequested(statement);
             if (!moduleRequest || !statement.importClause) continue;
             if (statement.importClause.name) {
                 addImport(statement.importClause.name.text, { moduleRequest, importName: "default" });
@@ -326,7 +342,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
                 }
             }
         } else if (ts.isExportDeclaration(statement)) {
-            addRequested(statement.moduleSpecifier);
+            addRequested(statement);
         }
     }
 
@@ -336,9 +352,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
             continue;
         }
         if (ts.isExportDeclaration(statement)) {
-            const moduleRequest = statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier)
-                ? statement.moduleSpecifier.text
-                : null;
+            const moduleRequest = declarationRequests.get(statement) ?? null;
             if (!statement.exportClause) {
                 if (moduleRequest) starExports.push(moduleRequest);
                 continue;
@@ -381,7 +395,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
     return {
         record: error ? null : {
             path: filename,
-            requestedModules,
+            requestedModules: [...requestedModules.values()],
             imports,
             localExports,
             indirectExports,
@@ -424,9 +438,9 @@ function moduleResolutionFailure(filename: string, detail: string): ParseFailure
 function resolvedModule(
     records: ReadonlyMap<string, ModuleRecord>,
     importer: ModuleRecord,
-    specifier: string,
+    request: ModuleRequest,
 ): ModuleRecord | null {
-    const resolved = resolveRequestModulePath(importer.path, specifier);
+    const resolved = resolveRequestModulePath(importer.path, request.specifier);
     return resolved ? records.get(resolved) ?? null : null;
 }
 
@@ -526,12 +540,19 @@ export function analyzeModuleGraph(
             discovery.pop();
             continue;
         }
-        const specifier = frame.record.requestedModules[frame.next++]!;
-        const dependencyPath = resolveRequestModulePath(frame.record.path, specifier);
+        const request = frame.record.requestedModules[frame.next++]!;
+        const dependencyPath = resolveRequestModulePath(frame.record.path, request.specifier);
         if (!dependencyPath || !sources.has(dependencyPath)) {
             return moduleResolutionFailure(
                 frame.record.path,
-                `cannot resolve attested module specifier ${JSON.stringify(specifier)}`,
+                `cannot resolve attested module specifier ${JSON.stringify(request.specifier)}`,
+            );
+        }
+        const requestError = staticModuleRequestResolutionError(request, dependencyPath);
+        if (requestError) {
+            return moduleResolutionFailure(
+                frame.record.path,
+                `${requestError} for ${JSON.stringify(request.specifier)}`,
             );
         }
         if (records.has(dependencyPath)) continue;
@@ -548,8 +569,8 @@ export function analyzeModuleGraph(
     while (instantiation.length > 0) {
         const frame = instantiation[instantiation.length - 1]!;
         if (frame.next < frame.record.requestedModules.length) {
-            const specifier = frame.record.requestedModules[frame.next++]!;
-            const dependency = resolvedModule(records, frame.record, specifier)!;
+            const request = frame.record.requestedModules[frame.next++]!;
+            const dependency = resolvedModule(records, frame.record, request)!;
             if (!states.has(dependency.path)) {
                 states.set(dependency.path, "visiting");
                 instantiation.push({ record: dependency, next: 0 });

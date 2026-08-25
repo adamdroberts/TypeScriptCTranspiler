@@ -38,6 +38,10 @@ import {
     formatUnsupported,
     UnsupportedError,
 } from "./diagnostics";
+import {
+    moduleRequestFromDeclaration,
+    staticModuleRequestResolutionError,
+} from "./module-request";
 
 export interface CompileOptions {
     entry: string;
@@ -200,6 +204,24 @@ function permanentLimitDiagnostics(
         const visit = (node: ts.Node): void => {
             if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
                 const spec = node.moduleSpecifier;
+                const moduleRequest = moduleRequestFromDeclaration(node);
+                if (moduleRequest?.error) {
+                    diagnostics.push({ node: node.attributes ?? node, message: moduleRequest.error });
+                } else if (moduleRequest?.request && spec && ts.isStringLiteralLike(spec)) {
+                    const resolved = ts.resolveModuleName(
+                        moduleRequest.request.specifier,
+                        sf.fileName,
+                        program.getCompilerOptions(),
+                        ts.sys,
+                    ).resolvedModule;
+                    if (resolved) {
+                        const message = staticModuleRequestResolutionError(
+                            moduleRequest.request,
+                            resolved.resolvedFileName,
+                        );
+                        if (message) diagnostics.push({ node: node.attributes ?? spec, message });
+                    }
+                }
                 if (spec && ts.isStringLiteral(spec) && isNativeAddonSpecifier(spec.text)) {
                     if (!opts.nativeAddons || !nativeAddonPathForSpecifier(opts.nativeAddons, spec.text, sf.fileName)) {
                         diagnostics.push({

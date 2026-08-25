@@ -22,7 +22,8 @@ Every step maps to a file under `src/`:
 | Stage | File | Responsibility |
 |-------|------|---------------|
 | Parse + type-check | `src/program.ts` | wraps `ts.createProgram` with our compiler options and `stdlib/lib.core.d.ts` as the ambient lib |
-| Module graph | `src/resolve.ts` | walks `ts.Program.getSourceFiles()`, resolves imports via `ts.resolveModuleName`, topologically sorts |
+| Module requests | `src/module-request.ts` | normalizes specifiers plus sorted import attributes, proves request equality/deduplication, and enforces the static resource-type policy |
+| Module graph | `src/resolve.ts` | walks `ts.Program.getSourceFiles()`, resolves canonical Module Requests via `ts.resolveModuleName`, topologically sorts |
 | Emit | `src/emit/index.ts` | AST → C via the `Emitter` class |
 | Link | `src/link/cc.ts` | spawns gcc with the right flags |
 | Orchestrate | `src/compile.ts` | drives all of the above |

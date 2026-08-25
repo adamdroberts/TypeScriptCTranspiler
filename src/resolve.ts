@@ -13,12 +13,22 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
+import {
+    type ModuleRequest,
+    moduleRequestFromDeclaration,
+    moduleRequestKey,
+    staticModuleRequestResolutionError,
+} from "./module-request";
 
 export interface ModuleInfo {
     sf: ts.SourceFile;
     moduleId: string;
     /** moduleIds this module imports from (direct deps). */
     imports: string[];
+    /** Canonical ECMA-262 ModuleRequest Records in first-occurrence order. */
+    moduleRequests: ModuleRequest[];
+    /** Canonical ModuleRequest identity to resolved module id. */
+    resolvedModuleRequests: Map<string, string>;
     /** Literal module specifier to resolved module id for import/export edges. */
     resolvedSpecifiers: Map<string, string>;
     /** Literal module specifier to resolved module id for CommonJS require edges. */
@@ -83,6 +93,8 @@ export function buildModuleGraph(
             sf,
             moduleId: id,
             imports: [],
+            moduleRequests: [],
+            resolvedModuleRequests: new Map(),
             resolvedSpecifiers: new Map(),
             resolvedRequireSpecifiers: new Map(),
             fileName: sf.fileName,
@@ -95,16 +107,26 @@ export function buildModuleGraph(
     for (const [id, info] of modules) {
         const moduleAliases = commonJsModuleAliases(info.sf);
         const requireAliases = commonJsRequireAliases(info.sf, moduleAliases);
+        const requests = new Map<string, ModuleRequest>();
         for (const stmt of info.sf.statements) {
-            const importSpecs: string[] = [];
+            const importRequests: ModuleRequest[] = [];
             const requireSpecs: string[] = [];
             if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt)) {
                 if (isTypeOnlyModuleEdge(stmt)) continue;
-                const m = stmt.moduleSpecifier;
-                if (m && ts.isStringLiteral(m)) importSpecs.push(m.text);
+                const parsed = moduleRequestFromDeclaration(stmt);
+                if (parsed?.error) {
+                    throw new Error(`${info.sf.fileName}: ${parsed.error}`);
+                }
+                if (parsed?.request) {
+                    const key = moduleRequestKey(parsed.request);
+                    const request = requests.get(key) ?? parsed.request;
+                    requests.set(key, request);
+                    importRequests.push(request);
+                }
             }
             requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires, info.sf.fileName));
-            for (const spec of importSpecs) {
+            for (const request of importRequests) {
+                const spec = request.specifier;
                 const resolved = ts.resolveModuleName(
                     spec,
                     info.sf.fileName,
@@ -113,7 +135,12 @@ export function buildModuleGraph(
                 );
                 const mod = resolved.resolvedModule;
                 const depId = mod ? fileToModuleId.get(mod.resolvedFileName) : undefined;
-                if (depId) {
+                if (mod && depId) {
+                    const requestError = staticModuleRequestResolutionError(request, mod.resolvedFileName);
+                    if (requestError) {
+                        throw new Error(`${info.sf.fileName}: ${requestError} for ${JSON.stringify(spec)}`);
+                    }
+                    info.resolvedModuleRequests.set(moduleRequestKey(request), depId);
                     info.resolvedSpecifiers.set(spec, depId);
                     if (depId !== id && !info.imports.includes(depId)) {
                         info.imports.push(depId);
@@ -135,6 +162,7 @@ export function buildModuleGraph(
                 }
             }
         }
+        info.moduleRequests.push(...requests.values());
     }
 
     const entryModuleId = fileToModuleId.get(entry);
