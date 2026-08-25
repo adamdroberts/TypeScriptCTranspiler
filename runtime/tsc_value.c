@@ -5278,12 +5278,6 @@ tsc_value_t tsc_value_div(tsc_value_t a, tsc_value_t b) { return value_numeric_b
 tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_MOD); }
 tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_POW); }
 
-tsc_value_t tsc_value_pos(tsc_value_t value) {
-    return tsc_value_num(tsc_value_as_num(
-        value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_NUMBER)
-    ));
-}
-
 tsc_value_t tsc_value_inc(tsc_value_t value) {
     value = tsc_value_to_numeric(value);
     return value_is_bigint(value)

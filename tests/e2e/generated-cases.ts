@@ -262,9 +262,12 @@ function globalNumberParseLengthSource(length: number): string {
     return [
         `const integerSource = ${JSON.stringify(`${whitespace}${zeros}42tail`)};`,
         `const decimalSource = ${JSON.stringify(`${whitespace}${zeros}1.25tail`)};`,
+        `const numericSource = ${JSON.stringify(`${whitespace}${zeros}1${whitespace}`)};`,
         "const valid =",
         "    parseInt(integerSource, 10) === 42 &&",
-        "    parseFloat(decimalSource) === 1.25;",
+        "    parseFloat(decimalSource) === 1.25 &&",
+        "    Number(numericSource) === 1 &&",
+        "    isFinite(numericSource) && !isNaN(numericSource);",
         'console.log("global number parse length:", valid);',
         "",
     ].join("\n");

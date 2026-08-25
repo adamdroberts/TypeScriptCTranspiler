@@ -39419,12 +39419,7 @@ class Emitter {
                 requireNumber(expr, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusToken:
-                if (inner.ty.kind === "value") return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
-                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
-                    return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
-                }
-                requireNumber(expr, inner.ty);
-                return { c: `(+${inner.c})`, ty: T_NUMBER };
+                return this.emitUnaryPlusConversion(inner, expr.operand);
             case ts.SyntaxKind.TildeToken:
                 if (inner.ty.kind === "value") return { c: `tsc_value_bit_not(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
                 if (inner.ty.kind === "bigint") return { c: `tsc_bigint_bit_not(${inner.c})`, ty: T_BIGINT };
@@ -40263,14 +40258,7 @@ class Emitter {
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             }
             if (op === ts.SyntaxKind.PlusToken) {
-                if (inner.ty.kind === "value") {
-                    return { c: `tsc_value_pos(${inner.c})`, ty: T_VALUE };
-                }
-                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
-                    return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
-                }
-                requireNumber(expr, inner.ty);
-                return { c: `(+${inner.c})`, ty: T_NUMBER };
+                return this.emitUnaryPlusConversion(inner, expr.operand);
             }
             if (op === ts.SyntaxKind.TildeToken) {
                 if (inner.ty.kind === "value") {
@@ -48627,18 +48615,7 @@ class Emitter {
                 requireNumber(pu, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusToken:
-                if (inner.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_pos", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_pos", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `(+${inner.c})`, ty: T_NUMBER };
+                return this.emitUnaryPlusConversion(inner, pu.operand);
             case ts.SyntaxKind.PlusPlusToken:
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
                     const update = `${inner.c} = tsc_value_inc(${inner.c})`;
@@ -48699,6 +48676,13 @@ class Emitter {
                 return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
         }
         unsupported(pu, `prefix operator ${ts.SyntaxKind[op]}`);
+    }
+
+    private emitUnaryPlusConversion(inner: EmitResult, operand: ts.Expression): EmitResult {
+        if (inner.ty.kind === "number") return { c: `(+${inner.c})`, ty: T_NUMBER };
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: inner, target: T_VALUE, node: operand },
+        ], ([value]) => `tsc_value_to_number(${value})`);
     }
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
@@ -65585,17 +65569,10 @@ class Emitter {
         if (value.ty.kind === "number") {
             return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], ([v]) => `(${fn}(${v}))`);
         }
-        if (value.ty.kind === "void" || value.ty.kind === "never") {
-            return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], () => name === "isNaN" ? "true" : "false");
-        }
-        const boxable: CType["kind"][] = ["value", "string", "boolean", "array"];
-        if (boxable.includes(value.ty.kind)) {
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value, target: T_VALUE, node: arg },
-                ...ignored,
-            ], ([v]) => `(${fn}(tsc_value_to_number(${v})))`);
-        }
-        return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], () => name === "isNaN" ? "true" : "false");
+        return this.emitSequencedExpr(T_BOOLEAN, [
+            { value, target: T_VALUE, node: arg },
+            ...ignored,
+        ], ([v]) => `(${fn}(tsc_value_to_number(${v})))`);
     }
 
     private emitBooleanMethod(

@@ -7509,20 +7509,7 @@ double tsc_value_as_num(tsc_value_t v) {
     if (value_tag(v) == TSC_VALUE_TAG_TRUE) return 1.0;
     if (value_tag(v) == TSC_VALUE_TAG_FALSE || value_tag(v) == TSC_VALUE_TAG_NULL) return 0.0;
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* s = (tsc_str_t*)value_ptr(v);
-        char* text = cstr_dup(s);
-        char* p = text;
-        while (isspace((unsigned char)*p)) p++;
-        if (*p == '\0') {
-            free(text);
-            return 0.0;
-        }
-        char* end = NULL;
-        double n = strtod(p, &end);
-        while (end && isspace((unsigned char)*end)) end++;
-        if (!end || end == p || *end != '\0') n = NAN;
-        free(text);
-        return n;
+        return tsc_string_to_number((const tsc_str_t*)value_ptr(v));
     }
     if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert a BigInt value to a number"));

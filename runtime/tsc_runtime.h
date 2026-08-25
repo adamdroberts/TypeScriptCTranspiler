@@ -289,6 +289,7 @@ static inline double tsc_num_mod(double a, double b) {
 }
 double tsc_parse_float(const tsc_str_t* s);
 double tsc_parse_int(const tsc_str_t* s, double radix);
+double tsc_string_to_number(const tsc_str_t* s);
 double tsc_math_random(void);
 double tsc_math_round(double x);
 double tsc_math_sign(double x);
@@ -1179,7 +1180,6 @@ tsc_value_t tsc_value_mul(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_div(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b);
-tsc_value_t tsc_value_pos(tsc_value_t v);
 tsc_value_t tsc_value_to_numeric(tsc_value_t v);
 tsc_value_t tsc_value_inc(tsc_value_t v);
 tsc_value_t tsc_value_dec(tsc_value_t v);

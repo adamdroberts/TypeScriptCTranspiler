@@ -184,17 +184,33 @@ bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token) {
 /* ---------------- numbers ---------------- */
 /* tsc_num_mod is defined as `static inline` in tsc_runtime.h. */
 
-double tsc_parse_float(const tsc_str_t* s) {
-    if (!s) return NAN;
-    const tsc_str_t* input = tsc_str_trim_start(s);
+typedef enum {
+    TSC_NUMERIC_PREFIX_INVALID,
+    TSC_NUMERIC_PREFIX_DECIMAL,
+    TSC_NUMERIC_PREFIX_INFINITY,
+} tsc_numeric_prefix_kind_t;
+
+typedef struct {
+    tsc_numeric_prefix_kind_t kind;
+    size_t end;
+    bool negative;
+} tsc_numeric_prefix_t;
+
+static tsc_numeric_prefix_t scan_decimal_numeric_prefix(const tsc_str_t* input) {
     size_t cursor = 0;
+    bool negative = false;
     if (cursor < input->len &&
         (input->data[cursor] == '+' || input->data[cursor] == '-')) {
+        negative = input->data[cursor] == '-';
         cursor++;
     }
     if (cursor + 8 <= input->len &&
         memcmp(input->data + cursor, "Infinity", 8) == 0) {
-        return input->len > 0 && input->data[0] == '-' ? -INFINITY : INFINITY;
+        return (tsc_numeric_prefix_t) {
+            .kind = TSC_NUMERIC_PREFIX_INFINITY,
+            .end = cursor + 8,
+            .negative = negative,
+        };
     }
 
     size_t digits = 0;
@@ -211,7 +227,13 @@ double tsc_parse_float(const tsc_str_t* s) {
             digits++;
         }
     }
-    if (digits == 0) return NAN;
+    if (digits == 0) {
+        return (tsc_numeric_prefix_t) {
+            .kind = TSC_NUMERIC_PREFIX_INVALID,
+            .end = 0,
+            .negative = negative,
+        };
+    }
 
     size_t prefix_end = cursor;
     if (cursor < input->len &&
@@ -228,18 +250,105 @@ double tsc_parse_float(const tsc_str_t* s) {
         }
         if (exponent > exponent_digits) prefix_end = exponent;
     }
-
-    char* prefix = (char*)TSC_GC_MALLOC_ATOMIC(prefix_end + 1);
-    memcpy(prefix, input->data, prefix_end);
-    prefix[prefix_end] = '\0';
-    return strtod(prefix, NULL);
+    return (tsc_numeric_prefix_t) {
+        .kind = TSC_NUMERIC_PREFIX_DECIMAL,
+        .end = prefix_end,
+        .negative = negative,
+    };
 }
 
-static int parse_digit_value(unsigned char value) {
-    if (value >= '0' && value <= '9') return (int)(value - '0');
-    if (value >= 'a' && value <= 'z') return (int)(value - 'a') + 10;
-    if (value >= 'A' && value <= 'Z') return (int)(value - 'A') + 10;
-    return -1;
+static double validated_ascii_decimal_to_number(const char* data, size_t length) {
+    if (length == SIZE_MAX) tsc_panic("numeric literal is too large");
+    char* literal = (char*)malloc(length + 1);
+    if (!literal) tsc_panic("numeric literal allocation failed");
+    memcpy(literal, data, length);
+    literal[length] = '\0';
+
+    locale_t c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+    if (!c_locale) tsc_panic("numeric conversion could not create the C locale");
+    locale_t previous_locale = uselocale(c_locale);
+    if (!previous_locale) tsc_panic("numeric conversion could not select the C locale");
+    char* end = NULL;
+    double result = strtod(literal, &end);
+    if (!uselocale(previous_locale)) tsc_panic("numeric conversion could not restore the locale");
+    freelocale(c_locale);
+    if (end != literal + length) tsc_panic("validated numeric literal was not fully consumed");
+    free(literal);
+    return result;
+}
+
+static size_t accumulate_integer_digits(
+    const tsc_str_t* input,
+    size_t cursor,
+    int32_t base,
+    mpz_t integer,
+    size_t* digit_count
+) {
+    size_t digits = 0;
+    while (cursor < input->len) {
+        unsigned char value = (unsigned char)input->data[cursor];
+        int digit = value >= '0' && value <= '9'
+            ? (int)(value - '0')
+            : value >= 'a' && value <= 'z'
+                ? (int)(value - 'a') + 10
+                : value >= 'A' && value <= 'Z'
+                    ? (int)(value - 'A') + 10
+                    : -1;
+        if (digit < 0 || digit >= base) break;
+        mpz_mul_ui(integer, integer, (unsigned long)base);
+        mpz_add_ui(integer, integer, (unsigned long)digit);
+        cursor++;
+        digits++;
+    }
+    if (digit_count) *digit_count = digits;
+    return cursor;
+}
+
+double tsc_parse_float(const tsc_str_t* s) {
+    if (!s) return NAN;
+    const tsc_str_t* input = tsc_str_trim_start(s);
+    tsc_numeric_prefix_t prefix = scan_decimal_numeric_prefix(input);
+    if (prefix.kind == TSC_NUMERIC_PREFIX_INVALID) return NAN;
+    if (prefix.kind == TSC_NUMERIC_PREFIX_INFINITY) {
+        return prefix.negative ? -INFINITY : INFINITY;
+    }
+    return validated_ascii_decimal_to_number(input->data, prefix.end);
+}
+
+double tsc_string_to_number(const tsc_str_t* s) {
+    if (!s) return NAN;
+    const tsc_str_t* input = tsc_str_trim(s);
+    if (input->len == 0) return 0.0;
+
+    if (input->len >= 2 && input->data[0] == '0') {
+        int32_t base = 0;
+        switch (input->data[1]) {
+            case 'b': case 'B': base = 2; break;
+            case 'o': case 'O': base = 8; break;
+            case 'x': case 'X': base = 16; break;
+            default: break;
+        }
+        if (base != 0) {
+            tsc_bigint_t integer;
+            mpz_init_set_ui(integer.value, 0u);
+            size_t digits = 0;
+            size_t end = accumulate_integer_digits(input, 2, base, integer.value, &digits);
+            if (digits == 0 || end != input->len) {
+                mpz_clear(integer.value);
+                return NAN;
+            }
+            double result = tsc_bigint_to_number(&integer);
+            mpz_clear(integer.value);
+            return result;
+        }
+    }
+
+    tsc_numeric_prefix_t prefix = scan_decimal_numeric_prefix(input);
+    if (prefix.kind == TSC_NUMERIC_PREFIX_INVALID || prefix.end != input->len) return NAN;
+    if (prefix.kind == TSC_NUMERIC_PREFIX_INFINITY) {
+        return prefix.negative ? -INFINITY : INFINITY;
+    }
+    return validated_ascii_decimal_to_number(input->data, input->len);
 }
 
 double tsc_parse_int(const tsc_str_t* s, double radix) {
@@ -267,14 +376,7 @@ double tsc_parse_int(const tsc_str_t* s, double radix) {
     tsc_bigint_t integer;
     mpz_init_set_ui(integer.value, 0u);
     size_t digits = 0;
-    while (cursor < input->len) {
-        int digit = parse_digit_value((unsigned char)input->data[cursor]);
-        if (digit < 0 || digit >= base) break;
-        mpz_mul_ui(integer.value, integer.value, (unsigned long)base);
-        mpz_add_ui(integer.value, integer.value, (unsigned long)digit);
-        cursor++;
-        digits++;
-    }
+    cursor = accumulate_integer_digits(input, cursor, base, integer.value, &digits);
     if (digits == 0) {
         mpz_clear(integer.value);
         return NAN;

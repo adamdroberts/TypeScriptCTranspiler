@@ -90,6 +90,7 @@ typedef struct tsc_str {
 | `tsc_num_mod` | `(double, double) -> double` | `fmod` — JS-style modulo for the `%` operator. |
 | `tsc_parse_float` | `(const tsc_str_t*) -> double` | Length-driven `parseFloat` decimal/Infinity-prefix scan with ECMAScript leading whitespace, partial parsing, signed zero, and `NaN` on failure. |
 | `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Length-driven `parseInt` digit scan with ECMAScript leading whitespace, ToInt32 radix inference/validation, exact GMP accumulation, and binary64 rounding. |
+| `tsc_string_to_number` | `(const tsc_str_t*) -> double` | Complete-input StringNumericLiteral conversion after ECMAScript trimming, with locale-stable decimal parsing and exact arbitrary-length binary/octal/hex rounding. |
 | `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
 | `tsc_math_round` | `(double) -> double` | `Math.round()`, preserving JavaScript negative zero. |
 | `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
@@ -159,7 +160,8 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_is_nullish(v)` | `bool` | Dynamic `??` null/undefined test |
 | `tsc_value_is_array(v)` | `bool` | Runtime check used by dynamic `Array.isArray` |
 | `tsc_value_add/sub/mul/div/mod/pow(a, b)` | `tsc_value_t` | Dynamic arithmetic and `+` string concatenation |
-| `tsc_value_pos/neg/bit_not(v)` | `tsc_value_t` | Dynamic unary `+`, `-`, and `~` using JS-style numeric coercion |
+| `tsc_value_to_number(v)` | `double` | Object-aware `ToNumber`, including ordinary/exotic primitive conversion and StringNumericLiteral parsing |
+| `tsc_value_neg/bit_not(v)` | `tsc_value_t` | Dynamic unary `-` and `~` using JS-style numeric coercion |
 | `tsc_value_bit_and/bit_or/bit_xor/shl/shr/ushr(a, b)` | `tsc_value_t` | Dynamic bitwise operators with JS-style numeric coercion, int32/uint32 conversion, and masked shift counts |
 | `tsc_value_eq(a, b)` | `bool` | Strict dynamic equality for numbers, booleans, strings, nullish sentinels, object identity, and boxed function identity |
 | `tsc_value_abstract_eq(a, b)` | `bool` | Abstract dynamic equality over the runtime value representation, including primitive coercion and the Test262 HTMLDDA host object's nullish-equality exception |
