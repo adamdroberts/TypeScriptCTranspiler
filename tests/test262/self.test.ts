@@ -150,6 +150,11 @@ describe("host result contract", () => {
         ].join("\n");
         const testSource = [
             "if ($262.global !== globalThis || this !== globalThis) throw new TypeError('bad global identity');",
+            "var hostBindingDescriptor = Object.getOwnPropertyDescriptor(globalThis, '$262');",
+            "if (!hostBindingDescriptor || hostBindingDescriptor.value !== $262 || !hostBindingDescriptor.writable || hostBindingDescriptor.enumerable || !hostBindingDescriptor.configurable) throw new TypeError('bad $262 global binding descriptor');",
+            "var printBindingDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'print');",
+            "if (!printBindingDescriptor || printBindingDescriptor.value !== print || !printBindingDescriptor.writable || printBindingDescriptor.enumerable || !printBindingDescriptor.configurable) throw new TypeError('bad print global binding descriptor');",
+            "if (typeof print !== 'function' || print.name !== 'print' || print.length !== 1) throw new TypeError('bad print function metadata');",
             "var globalDescriptor = Object.getOwnPropertyDescriptor($262, 'global');",
             "if (!globalDescriptor || globalDescriptor.value !== globalThis || !globalDescriptor.writable || globalDescriptor.enumerable || !globalDescriptor.configurable) throw new TypeError('bad global hook descriptor');",
             "if (globalThis.Object !== Object || globalThis.Function !== Function || globalThis.Array !== Array) throw new TypeError('bad global intrinsics');",
@@ -201,7 +206,16 @@ describe("host result contract", () => {
             "if (!(htmlDDA == null) || !(null == htmlDDA) || !(htmlDDA == undefined) || !(undefined == htmlDDA)) throw new TypeError('bad IsHTMLDDA abstract equality');",
             "if (htmlDDA === null || htmlDDA === undefined || !Object.is(htmlDDA, htmlDDA)) throw new TypeError('bad IsHTMLDDA object identity');",
             "if ((htmlDDA ?? 42) !== htmlDDA || htmlDDA() !== null || htmlDDA('') !== null) throw new TypeError('bad IsHTMLDDA ordinary object or call behavior');",
-            "print('native-ok');",
+            "var originalPrint = print;",
+            "print = $262.gc;",
+            "if (globalThis.print !== $262.gc) throw new TypeError('host global assignment did not reflect to property');",
+            "globalThis.print = originalPrint;",
+            "if (print !== originalPrint) throw new TypeError('host global property write did not reflect to identifier');",
+            "var aliasPrint = print;",
+            "aliasPrint('native-ok');",
+            "globalThis.print('member', 42);",
+            "aliasPrint.call(null, 'call');",
+            "aliasPrint.apply(null, ['apply', true, undefined]);",
             "",
         ].join("\n");
         const scenarioId = "test/native-host-separate-scripts.js#sloppy";
@@ -228,6 +242,11 @@ describe("host result contract", () => {
         };
         try {
             const preparation = await prepareNativeRequest(request);
+            if (preparation.kind === "diagnostic-observation") {
+                throw new Error(preparation.observation.kind === "unsupported"
+                    ? preparation.observation.detail
+                    : JSON.stringify(preparation.observation));
+            }
             expect(preparation.kind).toBe("prepared-native");
             if (preparation.kind !== "prepared-native") return;
             const attestations = await attestScenarioArtifactSet(artifactDirectory, preparation.artifactPaths);
@@ -257,7 +276,7 @@ describe("host result contract", () => {
                 scenarioId,
                 kind: "normal",
                 asyncCompletion: undefined,
-                stdout: "native-ok\n",
+                stdout: "native-ok\nmember 42\ncall\napply true undefined\n",
                 stderr: undefined,
                 nativeTranscript: undefined,
             });

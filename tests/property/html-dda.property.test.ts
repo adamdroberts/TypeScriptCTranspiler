@@ -12,6 +12,11 @@ interface SemanticProbe {
 }
 
 const probes: readonly SemanticProbe[] = [
+    { label: "host-global-identity", expression: "globalThis.$262 === $262", expected: "true" },
+    { label: "host-global-descriptor", expression: "hostDescriptor.value === $262 && hostDescriptor.writable && !hostDescriptor.enumerable && hostDescriptor.configurable", expected: "true" },
+    { label: "print-global-identity", expression: "globalThis.print === emit", expected: "true" },
+    { label: "print-global-descriptor", expression: "printDescriptor.value === emit && printDescriptor.writable && !printDescriptor.enumerable && printDescriptor.configurable", expected: "true" },
+    { label: "print-metadata", expression: "emit.name === 'print' && emit.length === 1", expected: "true" },
     { label: "typeof", expression: "typeof htmlDDA", expected: "undefined" },
     { label: "boolean", expression: "Boolean(htmlDDA)", expected: "false" },
     { label: "logical-not", expression: "!htmlDDA", expected: "true" },
@@ -40,18 +45,21 @@ const probes: readonly SemanticProbe[] = [
 
 function source(): string {
     return [
+        "var emit = print;",
+        "var hostDescriptor = Object.getOwnPropertyDescriptor(globalThis, '$262');",
+        "var printDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'print');",
         "var htmlDDA = $262.IsHTMLDDA;",
         "var ordinary = {};",
         "var unboundReferenceThrows = false;",
         "try { unresolved; } catch (error) { unboundReferenceThrows = error instanceof ReferenceError; }",
         ...probes.map((probe) =>
-            `print(${JSON.stringify(`${probe.label}:`)} + String(${probe.expression}));`
+            `emit(${JSON.stringify(`${probe.label}:`)} + String(${probe.expression}));`
         ),
         "",
     ].join("\n");
 }
 
-test("[[IsHTMLDDA]] follows one canonical Annex B semantic partition", async () => {
+test("Test262 host globals and [[IsHTMLDDA]] follow canonical semantic paths", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-html-dda-property-"));
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/html-dda.js#sloppy";

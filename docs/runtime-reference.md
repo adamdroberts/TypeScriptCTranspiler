@@ -400,6 +400,16 @@ if (setjmp(_eh0.jb) == 0) {
 
 The emitter stringifies each argument to `tsc_str_t*` at the call site, then invokes with the count plus the pointers.
 
+## Test262 native host
+
+Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_test262_begin()` | `void` | Starts observation capture and installs the reviewed host-global binding collection |
+| `tsc_test262_host_object()` | `tsc_value_t` | Returns the stable `$262` object for the current native process/Realm |
+| `tsc_test262_write_normal(...)` / `tsc_test262_write_throw(...)` | `void` | Emits the single structured observation owned by the native execution boundary |
+
 ## Process
 
 | Symbol | Signature | JS equivalent |

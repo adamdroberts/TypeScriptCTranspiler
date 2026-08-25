@@ -1237,7 +1237,6 @@ void tsc_console_error_n(size_t n, ...);
 /* Test262 native-host observation boundary. Linked only for conformance runs. */
 void tsc_test262_begin(void);
 tsc_value_t tsc_test262_host_object(void);
-void tsc_test262_print_n(size_t n, ...);
 void tsc_test262_write_normal(const char* scenario_id, bool async_test);
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error);
 tsc_str_t* tsc_util_format_n(size_t n, ...);

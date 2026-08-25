@@ -3,6 +3,27 @@
 static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
 
+static void test262_capture_print_args(tsc_array_t* args) {
+    if (!g_test262_started) {
+        tsc_jsonbuf_init(&g_test262_stdout);
+        g_test262_started = true;
+    }
+    size_t length = args ? args->len : 0;
+    for (size_t index = 0; index < length; index++) {
+        if (index > 0) tsc_jsonbuf_byte(&g_test262_stdout, ' ');
+        tsc_str_t* text = tsc_value_to_string(TSC_ARR(tsc_value_t, args, index));
+        if (text) tsc_jsonbuf_append(&g_test262_stdout, text->data, text->len);
+    }
+    tsc_jsonbuf_byte(&g_test262_stdout, '\n');
+}
+
+static tsc_value_t test262_host_print(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    test262_capture_print_args(args);
+    return tsc_value_undefined();
+}
+
 static tsc_value_t test262_host_gc(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
@@ -220,22 +241,46 @@ static async_markers_t scan_async_markers(void) {
 }
 
 void tsc_test262_begin(void) {
-    tsc_jsonbuf_init(&g_test262_stdout);
-    g_test262_started = true;
-}
-
-void tsc_test262_print_n(size_t n, ...) {
-    if (!g_test262_started) tsc_test262_begin();
-    va_list args;
-    va_start(args, n);
-    for (size_t index = 0; index < n; index++) {
-        if (index > 0) tsc_jsonbuf_byte(&g_test262_stdout, ' ');
-        tsc_value_t value = va_arg(args, tsc_value_t);
-        tsc_str_t* text = tsc_value_to_string(value);
-        if (text) tsc_jsonbuf_append(&g_test262_stdout, text->data, text->len);
+    if (!g_test262_started) {
+        tsc_jsonbuf_init(&g_test262_stdout);
+        g_test262_started = true;
     }
-    va_end(args);
-    tsc_jsonbuf_byte(&g_test262_stdout, '\n');
+
+    typedef struct {
+        const char* name;
+        size_t length;
+        tsc_value_t value;
+    } test262_global_binding_t;
+    const test262_global_binding_t bindings[] = {
+        { "$262", 4, tsc_test262_host_object() },
+        {
+            "print",
+            5,
+            tsc_value_function_builtin_named(
+                test262_host_print,
+                NULL,
+                1.0,
+                tsc_str_from_lit("print", 5)
+            )
+        },
+    };
+    tsc_value_t global = tsc_global_object();
+    for (size_t index = 0; index < sizeof(bindings) / sizeof(bindings[0]); index++) {
+        if (!tsc_value_define_property_desc(
+            global,
+            tsc_str_from_lit(bindings[index].name, bindings[index].length),
+            bindings[index].value,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true
+        )) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot install Test262 host global"));
+        }
+    }
 }
 
 void tsc_test262_write_normal(const char* scenario_id, bool async_test) {
