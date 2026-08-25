@@ -208,8 +208,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["script parsing/evaluation", "module linking", "live bindings", "cycles", "async module evaluation"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["modules", "module_re_exports"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/resolve.ts", "src/program.ts"] },
-      "knownGaps": ["The Test262 host cannot yet install harness globals separately for module tests or classify resolution errors."]
+      "localEvidence": { "property": ["tests/property/module-declaration-instantiation.property.test.ts", "tests/property/module-linking.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["modules", "module_re_exports"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/resolve.ts", "src/program.ts"] },
+      "knownGaps": ["Exact clause partitions remain incomplete for imported live bindings, module namespace exotics, cyclic evaluation, dynamic import, and top-level await."]
     },
     {
       "id": "errors-extensions",

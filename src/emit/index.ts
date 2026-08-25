@@ -456,6 +456,14 @@ interface Test262GlobalReferencePlan {
     readonly remove: string;
 }
 
+interface ModuleVarBindingPlan {
+    readonly symbol: ts.Symbol;
+    readonly name: ts.Identifier;
+    readonly declarations: ts.VariableDeclaration[];
+    readonly cName: string;
+    readonly gcRoot: string;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -542,6 +550,10 @@ class Emitter {
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
     /** Exact emitted C storage chosen for a source binding. */
     private symbolStorageTypes = new Map<ts.Symbol, CType>();
+    /** Module `var` bindings are allocated once from a source-tree worklist,
+     * independently of the statement that first evaluates a declaration. */
+    private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
+    private moduleVarDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -15130,6 +15142,7 @@ class Emitter {
             );
             this.analyzeIntegerSymbols(sf);
             this.analyzeStrbufSymbols(sf);
+            this.emitModuleVarDeclarationInstantiation(initBuf, sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
@@ -23209,6 +23222,111 @@ class Emitter {
             !!decl.name &&
             ts.isSourceFile(decl.parent) &&
             this.isTest262ScriptSourceFile(decl.getSourceFile());
+    }
+
+    /** ECMAScript ModuleDeclarationInstantiation derives every `var` binding
+     * from VarScopedDeclarations before evaluation begins.  One tree walk is
+     * shared by direct declarations, nested blocks, and loop declarations;
+     * function, class, and namespace bodies are independent declaration
+     * scopes and therefore terminate the walk. */
+    private collectModuleVarBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
+        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
+        const plans: ModuleVarBindingPlan[] = [];
+        const visit = (node: ts.Node): void => {
+            if (
+                node !== sf &&
+                (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node))
+            ) {
+                return;
+            }
+            if (
+                ts.isVariableDeclaration(node) &&
+                ts.isVariableDeclarationList(node.parent) &&
+                (node.parent.flags & (
+                    ts.NodeFlags.Const |
+                    ts.NodeFlags.Let |
+                    ts.NodeFlags.Using |
+                    ts.NodeFlags.AwaitUsing
+                )) === 0
+            ) {
+                if (!ts.isIdentifier(node.name)) {
+                    unsupported(
+                        node.name,
+                        "module var declaration instantiation requires identifier bindings",
+                    );
+                }
+                const symbol = this.symbolForIdentifier(node.name);
+                if (!symbol) {
+                    unsupported(node.name, "module var binding could not be resolved");
+                }
+                let plan = this.moduleVarBindings.get(symbol);
+                if (!plan) {
+                    const cName = this.declaredName(node.name);
+                    plan = {
+                        symbol,
+                        name: node.name,
+                        declarations: [],
+                        cName,
+                        gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`),
+                    };
+                    this.moduleVarBindings.set(symbol, plan);
+                    plans.push(plan);
+                }
+                plan.declarations.push(node);
+                this.moduleVarDeclarationSymbols.set(node, symbol);
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sf);
+        return plans;
+    }
+
+    private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
+        for (const binding of this.collectModuleVarBindings(sf)) {
+            this.symbolStorageTypes.set(binding.symbol, T_VALUE);
+            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
+            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.globalDynamicRoots.set(binding.symbol, binding.gcRoot);
+            buf.line(`${binding.cName} = tsc_value_undefined();`);
+            buf.line(`${binding.gcRoot} = NULL;`);
+        }
+    }
+
+    private moduleVarBindingForDeclaration(
+        declaration: ts.VariableDeclaration,
+    ): ModuleVarBindingPlan | null {
+        const symbol = this.moduleVarDeclarationSymbols.get(declaration);
+        return symbol ? this.moduleVarBindings.get(symbol) ?? null : null;
+    }
+
+    private emitModuleVarWrite(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+        value: EmitResult,
+        valueNode: ts.Node,
+    ): boolean {
+        const binding = this.moduleVarBindingForDeclaration(declaration);
+        if (!binding) return false;
+        const boxed = this.coerce(value, T_VALUE, valueNode);
+        buf.line(`${binding.cName} = ${boxed};`);
+        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+        return true;
+    }
+
+    private emitModuleVarInitializer(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+    ): boolean {
+        if (!this.moduleVarBindingForDeclaration(declaration)) return false;
+        if (declaration.initializer) {
+            this.emitModuleVarWrite(
+                buf,
+                declaration,
+                this.emitExpr(declaration.initializer),
+                declaration.initializer,
+            );
+        }
+        return true;
     }
 
     /** Resolve through the checker so every occurrence of one Script binding
@@ -39479,6 +39597,7 @@ class Emitter {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(initBuf, d)) continue;
+            if (this.emitModuleVarInitializer(initBuf, d)) continue;
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
                     this.emitTopLevelCommonJsModuleDestructuring(initBuf, d);
@@ -40111,6 +40230,7 @@ class Emitter {
             (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
+            if (this.emitModuleVarInitializer(buf, d)) continue;
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
                     this.emitLocalCommonJsModuleDestructuring(buf, d, isConst);
@@ -40647,6 +40767,7 @@ class Emitter {
                     (fs.initializer.flags & ts.NodeFlags.Const) !== 0;
                 for (const d of fs.initializer.declarations) {
                     if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
+                    if (this.emitModuleVarInitializer(buf, d)) continue;
                     if (!ts.isIdentifier(d.name))
                         unsupported(d, "destructuring in for-init");
                     const name = this.identifierName(d.name);
@@ -40803,6 +40924,17 @@ class Emitter {
                 `tsc_global_binding_set(${this.test262GlobalBindingKey(globalName)}, ` +
                 `tsc_value_string(TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})));`,
             );
+        } else if (
+            declaration &&
+            this.emitModuleVarWrite(
+                buf,
+                declaration,
+                { c: `TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})`, ty: T_STRING },
+                declaration.name,
+            )
+        ) {
+            // The shared module binding was assigned rather than redeclared
+            // in the loop's C block.
         } else {
             const qual = bindingIsConst ? " const" : "";
             buf.line(
@@ -40989,6 +41121,17 @@ class Emitter {
                 `tsc_global_binding_set(${this.test262GlobalBindingKey(globalName)}, ` +
                 `${this.coerce({ c: element, ty: elemType }, T_VALUE, declaration!.name)});`,
             );
+        } else if (
+            declaration &&
+            this.emitModuleVarWrite(
+                buf,
+                declaration,
+                { c: element, ty: elemType },
+                declaration.name,
+            )
+        ) {
+            // The shared module binding was assigned rather than redeclared
+            // for each iteration.
         } else {
             buf.line(
                 `${elemType.c}${qual} ${bindingName} = ${element};`,
