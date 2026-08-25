@@ -167,8 +167,8 @@ static tsc_value_t tsc_value_function_named_kind(
     id->sealed = false;
     id->frozen = false;
     id->func_prototype_writable = true;
-    id->prototype = tsc_function_default_prototype();
-    id->func_prototype = tsc_value_undefined();
+    tsc_function_identity_set_prototype(id, tsc_function_default_prototype());
+    tsc_function_identity_set_own_prototype(id, tsc_value_undefined());
     id->construct = construct;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
@@ -306,7 +306,7 @@ tsc_value_t tsc_value_bind_function(
         TSC_FUNCTION_IDENTITY_BOUND
     );
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
-    identity->prototype = tsc_value_get_prototype_of(target);
+    tsc_function_identity_set_prototype(identity, tsc_value_get_prototype_of(target));
     return result;
 }
 
@@ -439,7 +439,10 @@ static void error_intrinsics_initialize(void) {
             );
             tsc_function_identity_t* identity =
                 (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
-            identity->func_prototype = tsc_value_object(intrinsic->prototype);
+            tsc_function_identity_set_own_prototype(
+                identity,
+                tsc_value_object(intrinsic->prototype)
+            );
             tsc_object_define(
                 intrinsic->prototype,
                 tsc_str_from_lit("constructor", 11),
@@ -824,7 +827,7 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
     );
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
     if (tsc_value_is_undefined(identity->func_prototype)) {
-        identity->func_prototype = primitive_prototype(descriptor);
+        tsc_function_identity_set_own_prototype(identity, primitive_prototype(descriptor));
         tsc_object_define(
             descriptor->prototype,
             tsc_str_from_lit("constructor", 11),
@@ -1090,6 +1093,15 @@ static tsc_value_t object_static_get_own_property_names(void* env, tsc_value_t t
     return tsc_value_array(values);
 }
 
+static tsc_value_t object_static_set_prototype_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    tsc_value_t prototype = object_constructor_arg(args, 1);
+    (void)tsc_value_object_set_prototype_of(target, prototype);
+    return target;
+}
+
 typedef struct {
     const char* name;
     size_t name_len;
@@ -1101,6 +1113,7 @@ static const tsc_object_static_method_t object_static_methods[] = {
     { "defineProperty", 14, 3.0, object_static_define_property },
     { "getOwnPropertyDescriptor", 24, 2.0, object_static_get_own_property_descriptor },
     { "getOwnPropertyNames", 19, 1.0, object_static_get_own_property_names },
+    { "setPrototypeOf", 14, 2.0, object_static_set_prototype_of },
 };
 
 static void object_constructor_define_static_method(
@@ -1140,7 +1153,7 @@ tsc_value_t tsc_object_constructor_value(void) {
             );
             tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
             tsc_value_t prototype = tsc_value_object_prototype();
-            identity->func_prototype = prototype;
+            tsc_function_identity_set_own_prototype(identity, prototype);
             (void)tsc_value_define_property_desc(
                 prototype,
                 tsc_str_from_lit("constructor", 11),
@@ -1670,7 +1683,7 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
     if (tsc_value_is_undefined(ident->func_prototype)) {
         tsc_object_t* proto = tsc_object_new();
         tsc_object_set(proto, tsc_str_from_lit("constructor", 11), fn);
-        ident->func_prototype = tsc_value_object(proto);
+        tsc_function_identity_set_own_prototype(ident, tsc_value_object(proto));
     }
     return ident->func_prototype;
 }
@@ -2071,7 +2084,7 @@ static bool tsc_value_define_function_metadata_desc(const tsc_function_identity_
     if (has_writable && writable && !current_writable) return false;
     if (!current_writable && has_value && !tsc_value_object_is(value, current)) return false;
     if (current_writable && has_value) {
-        ((tsc_function_identity_t*)fn)->func_prototype = value;
+        tsc_function_identity_set_own_prototype((tsc_function_identity_t*)fn, value);
     }
     if (str_lit_eq(key, "prototype") && has_writable && !writable) {
         ((tsc_function_identity_t*)fn)->func_prototype_writable = false;
@@ -2812,7 +2825,7 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         if (fn->prototype == prototype) return true;
         if (!fn->extensible) return false;
         if (tsc_value_chain_contains(prototype, v)) return false;
-        fn->prototype = prototype;
+        tsc_function_identity_set_prototype(fn, prototype);
         return true;
     }
     return false;
@@ -2820,13 +2833,13 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
 
 void tsc_value_object_require_valid_prototype(tsc_value_t prototype) {
     if (!value_is_valid_prototype(prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.setPrototypeOf prototype must be an object or null"));
     }
 }
 
 bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     if (tsc_value_is_nullish(v)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf target must not be null or undefined"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.setPrototypeOf target must not be null or undefined"));
     }
     tsc_value_object_require_valid_prototype(prototype);
     if (
@@ -2836,7 +2849,7 @@ bool tsc_value_object_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         return true;
     }
     if (!tsc_value_set_prototype_of(v, prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.setPrototypeOf failed"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.setPrototypeOf failed"));
     }
     return true;
 }
@@ -2918,7 +2931,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
         }
         if (str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(fn)) {
             if (fn->frozen || !fn->func_prototype_writable) return false;
-            fn->func_prototype = value;
+            tsc_function_identity_set_own_prototype(fn, value);
             return true;
         }
         if (tsc_function_metadata_key(fn, key)) return false;
@@ -3046,6 +3059,21 @@ bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
 bool tsc_reflect_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value) {
     require_reflect_object_target(v, "Reflect.set target must be an object");
     return tsc_value_set_symbol_prop(v, key, value);
+}
+
+bool tsc_reflect_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_computed_prop(v, key, value);
+}
+
+bool tsc_reflect_set_computed_prop_receiver(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t value,
+    tsc_value_t receiver
+) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_computed_prop_receiver(v, key, value, receiver);
 }
 
 bool tsc_reflect_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache) {
@@ -3299,6 +3327,20 @@ bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t val
     return tsc_value_set_prop(v, (tsc_str_t*)value_ptr(key), value);
 }
 
+bool tsc_value_set_computed_prop_receiver(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t value,
+    tsc_value_t receiver
+) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        tsc_str_t* internal_key = value_known_symbol_internal_key((tsc_symbol_t*)value_ptr(key));
+        return internal_key ? tsc_value_set_prop_receiver(v, internal_key, value, receiver) : false;
+    }
+    return tsc_value_set_prop_receiver(v, (tsc_str_t*)value_ptr(key), value, receiver);
+}
+
 bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key) {
     key = tsc_value_to_property_key(key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
@@ -3323,6 +3365,11 @@ bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key) {
 bool tsc_reflect_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
     return tsc_value_delete_symbol_prop(v, key);
+}
+
+bool tsc_reflect_delete_computed_prop(tsc_value_t v, tsc_value_t key) {
+    require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
+    return tsc_value_delete_computed_prop(v, key);
 }
 
 bool tsc_value_is_extensible(tsc_value_t v) {
@@ -3756,10 +3803,13 @@ tsc_value_t value_descriptors_from_function(const tsc_function_identity_t* fn) {
     return tsc_value_object(out);
 }
 
-tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
-    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OWN_KEYS);
+/* Produce the implementation's canonical internal PropertyKey list. Known
+ * symbols use reserved internal strings in object storage; public Object and
+ * Reflect APIs project this one list into string-only or string-or-Symbol
+ * arrays without maintaining a second namespace-export inventory. */
+static tsc_array_t* value_raw_own_keys(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return value_object_string_keys((tsc_object_t*)value_ptr(v), false);
+        return tsc_object_own_keys_dyn((tsc_object_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return value_array_keys((const tsc_array_t*)value_ptr(v), true);
@@ -3786,13 +3836,24 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
             for (size_t i = 0; i < side_keys->len; i++) {
                 tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
                 if (tsc_str_is_length_key(key) || str_lit_eq(key, "name")) continue;
-                if (value_is_known_symbol_internal_key(key)) continue;
                 tsc_array_push_raw(out, &key);
             }
         }
         return out;
     }
     return tsc_array_new(sizeof(tsc_str_t*), 1);
+}
+
+tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OWN_KEYS);
+    tsc_array_t* raw = value_raw_own_keys(v);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), raw->len ? raw->len : 1);
+    for (size_t i = 0; i < raw->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, raw, i);
+        if (value_is_known_symbol_internal_key(key)) continue;
+        tsc_array_push_raw(out, &key);
+    }
+    return out;
 }
 
 tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v) {
@@ -3850,7 +3911,16 @@ tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v) {
 
 tsc_array_t* tsc_reflect_own_keys(tsc_value_t v) {
     require_reflect_object_target(v, "Reflect.ownKeys target must be an object");
-    return tsc_value_own_keys(v);
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_OWN_KEYS);
+    tsc_array_t* raw = value_raw_own_keys(v);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), raw->len ? raw->len : 1);
+    for (size_t i = 0; i < raw->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, raw, i);
+        tsc_symbol_t* symbol = value_known_symbol_from_internal_key(key);
+        tsc_value_t public_key = symbol ? tsc_value_symbol(symbol) : tsc_value_string(key);
+        tsc_array_push_raw(out, &public_key);
+    }
+    return out;
 }
 
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop) {
@@ -3864,6 +3934,21 @@ tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop) {
     }
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(prop->enumerable));
     tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(prop->configurable));
+    return tsc_value_object(desc);
+}
+
+static tsc_value_t value_descriptor_from_module_namespace_prop(
+    const tsc_object_t* object,
+    const tsc_object_prop_t* prop
+) {
+    tsc_object_t* desc = tsc_object_new();
+    tsc_value_t value = prop->getter
+        ? prop->getter(prop->getter_env, tsc_value_object((tsc_object_t*)object))
+        : tsc_value_undefined();
+    tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(true));
+    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true));
+    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
     return tsc_value_object(desc);
 }
 
@@ -3896,6 +3981,9 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     }
     for (size_t i = 0; i < o->len; i++) {
         if (!tsc_str_eq(o->props[i].key, key)) continue;
+        if (o->is_module_namespace && o->props[i].accessor) {
+            return value_descriptor_from_module_namespace_prop(o, &o->props[i]);
+        }
         volatile tsc_value_t* mapped = tsc_object_arguments_mapped_cell(o, key);
         if (mapped && !o->props[i].accessor) {
             tsc_object_prop_t effective = o->props[i];
@@ -5012,7 +5100,7 @@ static void date_intrinsic_initialize(void) {
         );
         tsc_function_identity_t* constructor_identity =
             (tsc_function_identity_t*)value_ptr(date_constructor);
-        constructor_identity->func_prototype = prototype;
+        tsc_function_identity_set_own_prototype(constructor_identity, prototype);
         constructor_identity->func_prototype_writable = false;
         tsc_object_define(
             date_prototype_object,
@@ -6952,7 +7040,7 @@ static tsc_value_t reflect_own_keys_method(void* env, tsc_value_t this_arg, tsc_
     (void)env;
     (void)this_arg;
     tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_array(value_array_from_string_array(tsc_reflect_own_keys(target)));
+    return tsc_value_array(tsc_reflect_own_keys(target));
 }
 
 static tsc_value_t reflect_prevent_extensions_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -6969,7 +7057,7 @@ static tsc_value_t reflect_set_method(void* env, tsc_value_t this_arg, tsc_array
     tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     tsc_value_t value = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
     tsc_value_t receiver = args->len > 3 ? TSC_ARR(tsc_value_t, args, 3) : target;
-    return tsc_value_bool(tsc_reflect_set_prop_receiver(target, tsc_value_to_string(key), value, receiver));
+    return tsc_value_bool(tsc_reflect_set_computed_prop_receiver(target, key, value, receiver));
 }
 
 static tsc_value_t reflect_set_prototype_of_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {

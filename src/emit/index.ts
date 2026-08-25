@@ -481,6 +481,20 @@ interface ModuleDefaultExportBindingPlan {
     readonly gcRoot: string;
 }
 
+interface ModuleNamespaceExportPlan {
+    readonly name: string;
+    readonly declaration: ts.Node;
+    readonly getter: string;
+}
+
+interface ModuleNamespacePlan {
+    readonly source: ts.SourceFile;
+    readonly moduleId: string;
+    readonly factory: string;
+    exports: ModuleNamespaceExportPlan[];
+    emitted: boolean;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -586,6 +600,9 @@ class Emitter {
      * identity before the ordinary class passes run. The synthetic spelling
      * never becomes the observable function name. */
     private anonymousDefaultClassDeclarations = new WeakSet<ts.ClassDeclaration>();
+    /** GetModuleNamespace is represented once per resolved Module Record.
+     * Every import and namespace re-export reaches the same lazy singleton. */
+    private moduleNamespacePlans = new WeakMap<ts.SourceFile, ModuleNamespacePlan>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -22464,6 +22481,307 @@ class Emitter {
         return null;
     }
 
+    private moduleNamespaceExportDeclaration(symbol: ts.Symbol): ts.Node | null {
+        let current = symbol;
+        const seen = new Set<ts.Symbol>();
+        while ((current.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(current)) {
+            seen.add(current);
+            try {
+                current = this.checker.getAliasedSymbol(current);
+            } catch {
+                break;
+            }
+        }
+        const declarations = [
+            current.valueDeclaration,
+            ...(current.declarations ?? []),
+        ].filter((declaration): declaration is ts.Declaration => !!declaration);
+        return declarations.find((declaration) =>
+            ts.isSourceFile(declaration) ||
+            ts.isExportAssignment(declaration) ||
+            ts.isVariableDeclaration(declaration) ||
+            ts.isFunctionDeclaration(declaration) ||
+            ts.isClassDeclaration(declaration) ||
+            ts.isEnumDeclaration(declaration),
+        ) ?? declarations[0] ?? null;
+    }
+
+    private moduleSymbol(source: ts.SourceFile): ts.Symbol | null {
+        return this.checker.getSymbolAtLocation(source) ??
+            (source as ts.SourceFile & { symbol?: ts.Symbol }).symbol ??
+            null;
+    }
+
+    private moduleExplicitRuntimeExportNames(source: ts.SourceFile): Set<string> {
+        const names = new Set<string>();
+        const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
+            !!(ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)
+                ?.some((modifier) => modifier.kind === kind);
+        const addBindingName = (name: ts.BindingName): void => {
+            if (ts.isIdentifier(name)) {
+                names.add(name.text);
+                return;
+            }
+            for (const element of name.elements) {
+                if (!ts.isOmittedExpression(element)) addBindingName(element.name);
+            }
+        };
+        for (const statement of source.statements) {
+            if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+                names.add("default");
+                continue;
+            }
+            if (ts.isExportDeclaration(statement)) {
+                if (statement.isTypeOnly || !statement.exportClause) continue;
+                if (ts.isNamespaceExport(statement.exportClause)) {
+                    names.add(statement.exportClause.name.text);
+                    continue;
+                }
+                for (const element of statement.exportClause.elements) {
+                    if (!element.isTypeOnly) names.add(element.name.text);
+                }
+                continue;
+            }
+            if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+            if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+                names.add("default");
+                continue;
+            }
+            if (ts.isVariableStatement(statement)) {
+                for (const declaration of statement.declarationList.declarations) {
+                    addBindingName(declaration.name);
+                }
+                continue;
+            }
+            if (
+                (ts.isFunctionDeclaration(statement) ||
+                    ts.isClassDeclaration(statement) ||
+                    ts.isEnumDeclaration(statement)) &&
+                statement.name
+            ) {
+                names.add(statement.name.text);
+            }
+        }
+        return names;
+    }
+
+    /** ResolveExport over the AOT Module Record graph. The checker supplies
+     * binding identity, while this traversal independently rejects star
+     * ambiguity instead of accepting the checker's first enumerated symbol. */
+    private resolveModuleNamespaceExport(
+        info: ModuleInfo,
+        exportName: string,
+        resolveSet = new Set<string>(),
+    ): ts.Node | null | "ambiguous" {
+        const resolutionKey = `${info.moduleId}\0${exportName}`;
+        if (resolveSet.has(resolutionKey)) return null;
+        const nextResolveSet = new Set(resolveSet);
+        nextResolveSet.add(resolutionKey);
+
+        if (this.moduleExplicitRuntimeExportNames(info.sf).has(exportName)) {
+            const moduleSymbol = this.moduleSymbol(info.sf);
+            const symbol = moduleSymbol
+                ? this.checker.getExportsOfModule(moduleSymbol)
+                    .find((candidate) => candidate.getName() === exportName)
+                : undefined;
+            return symbol ? this.moduleNamespaceExportDeclaration(symbol) : null;
+        }
+        if (exportName === "default") return null;
+
+        let resolved: ts.Node | null = null;
+        for (const statement of info.sf.statements) {
+            if (
+                !ts.isExportDeclaration(statement) ||
+                statement.isTypeOnly ||
+                statement.exportClause ||
+                !statement.moduleSpecifier ||
+                !ts.isStringLiteralLike(statement.moduleSpecifier)
+            ) {
+                continue;
+            }
+            const target = this.resolvedModuleInfoForSpecifier(
+                statement.moduleSpecifier.text,
+                info.sf.fileName,
+            );
+            if (!target) unsupported(statement, "namespace star export target is outside the AOT module graph");
+            const candidate = this.resolveModuleNamespaceExport(
+                target,
+                exportName,
+                new Set(nextResolveSet),
+            );
+            if (candidate === "ambiguous") return "ambiguous";
+            if (!candidate) continue;
+            if (resolved && resolved !== candidate) return "ambiguous";
+            resolved = candidate;
+        }
+        return resolved;
+    }
+
+    private moduleNamespaceExportRead(declaration: ts.Node): EmitResult {
+        if (ts.isSourceFile(declaration)) {
+            const moduleId = this.graph.fileToModuleId.get(declaration.fileName);
+            const info = moduleId ? this.graph.modules.get(moduleId) : undefined;
+            if (!info) unsupported(declaration, "namespace re-export target is outside the AOT module graph");
+            const nested = this.ensureModuleNamespacePlan(info);
+            return { c: `${nested.factory}()`, ty: T_VALUE };
+        }
+        if (ts.isExportAssignment(declaration)) {
+            const binding = this.moduleDefaultExportBindings.get(declaration);
+            return {
+                c: binding
+                    ? this.moduleDefaultExportRead(binding)
+                    : this.defaultExportCName(declaration),
+                ty: binding ? T_VALUE : this.defaultExportAssignmentCType(declaration),
+            };
+        }
+        if (ts.isClassDeclaration(declaration)) {
+            const lexical = this.moduleLexicalBindingForDeclaration(declaration);
+            if (lexical) return { c: this.moduleLexicalRead(lexical), ty: T_VALUE };
+            const binding = this.moduleDefaultExportBindings.get(declaration);
+            if (binding) return { c: this.moduleDefaultExportRead(binding), ty: T_VALUE };
+            if (declaration.name) return this.emitExpr(declaration.name);
+        }
+        if (ts.isFunctionDeclaration(declaration)) {
+            const type = this.closureDeclarationCType(declaration);
+            return this.emitFunctionDeclarationReferenceClosure(declaration, type);
+        }
+        if (
+            (ts.isVariableDeclaration(declaration) || ts.isEnumDeclaration(declaration)) &&
+            declaration.name &&
+            ts.isIdentifier(declaration.name)
+        ) {
+            return this.emitExpr(declaration.name);
+        }
+        unsupported(declaration, "module namespace export has no runtime binding representation");
+    }
+
+    private emitModuleNamespacePlan(plan: ModuleNamespacePlan): void {
+        if (plan.emitted) return;
+        plan.emitted = true;
+        const moduleSymbol = this.moduleSymbol(plan.source);
+        if (!moduleSymbol) unsupported(plan.source, "could not resolve Module Record exports for namespace creation");
+        const moduleInfo = this.graph.modules.get(plan.moduleId);
+        if (!moduleInfo) unsupported(plan.source, "module namespace source is outside the AOT module graph");
+        const exported = this.checker.getExportsOfModule(moduleSymbol)
+            .map((symbol) => {
+                const name = symbol.getName();
+                const declaration = this.resolveModuleNamespaceExport(moduleInfo, name);
+                return { name, declaration };
+            })
+            .filter((entry): entry is { name: string; declaration: ts.Node } =>
+                entry.name !== "export=" &&
+                entry.declaration !== "ambiguous" &&
+                !!entry.declaration,
+            )
+            .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+
+        plan.exports = exported.map((entry, index) => ({
+            name: entry.name,
+            declaration: entry.declaration,
+            getter: `${plan.factory}_get_${index}`,
+        }));
+
+        for (const entry of plan.exports) {
+            const signature = `static tsc_value_t ${entry.getter}(void* env, tsc_value_t receiver)`;
+            this.protos.line(`${signature};`);
+            const read = this.moduleNamespaceExportRead(entry.declaration);
+            const body = new CBuf();
+            body.open(signature);
+            body.line("(void)env;");
+            body.line("(void)receiver;");
+            body.line(`return ${this.coerce(read, T_VALUE, entry.declaration)};`);
+            body.close();
+            body.line();
+            this.closureDefs.write(body.toString());
+        }
+
+        const signature = `static tsc_value_t ${plan.factory}(void)`;
+        this.protos.line(`${signature};`);
+        const body = new CBuf();
+        body.open(signature);
+        body.line("static tsc_object_t* namespace_object = NULL;");
+        body.open("if (!namespace_object)");
+        body.line("namespace_object = tsc_module_namespace_new();");
+        for (const entry of plan.exports) {
+            body.line(
+                `if (!tsc_module_namespace_define(namespace_object, ` +
+                `tsc_str_from_lit("${escapeCString(entry.name)}", ${utf8ByteLen(entry.name)}), ` +
+                `${entry.getter})) ` +
+                `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module namespace export definition failed"));`,
+            );
+        }
+        body.line("tsc_module_namespace_finalize(namespace_object);");
+        body.close();
+        body.line("return tsc_value_object(namespace_object);");
+        body.close();
+        body.line();
+        this.closureDefs.write(body.toString());
+    }
+
+    private ensureModuleNamespacePlan(info: ModuleInfo): ModuleNamespacePlan {
+        const existing = this.moduleNamespacePlans.get(info.sf);
+        if (existing) return existing;
+        const plan: ModuleNamespacePlan = {
+            source: info.sf,
+            moduleId: info.moduleId,
+            factory: `${info.moduleId}_module_namespace`,
+            exports: [],
+            emitted: false,
+        };
+        this.moduleNamespacePlans.set(info.sf, plan);
+        this.emitModuleNamespacePlan(plan);
+        return plan;
+    }
+
+    private moduleNamespacePlanForIdentifier(id: ts.Identifier): ModuleNamespacePlan | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        for (const declaration of raw?.declarations ?? []) {
+            if (!ts.isNamespaceImport(declaration) || declaration.name.text !== id.text) continue;
+            const importDeclaration = declaration.parent.parent;
+            const specifier = importDeclaration.moduleSpecifier;
+            if (!ts.isStringLiteralLike(specifier)) return null;
+            const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
+            return info ? this.ensureModuleNamespacePlan(info) : null;
+        }
+        let target = raw;
+        const seen = new Set<ts.Symbol>();
+        while (target && (target.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(target)) {
+            seen.add(target);
+            try {
+                target = this.checker.getAliasedSymbol(target);
+            } catch {
+                break;
+            }
+        }
+        for (const declaration of target?.declarations ?? []) {
+            if (ts.isSourceFile(declaration)) {
+                const moduleId = this.graph.fileToModuleId.get(declaration.fileName);
+                const info = moduleId ? this.graph.modules.get(moduleId) : undefined;
+                if (info) return this.ensureModuleNamespacePlan(info);
+            }
+            if (!ts.isNamespaceExport(declaration)) continue;
+            const exportDeclaration = declaration.parent;
+            const specifier = exportDeclaration.moduleSpecifier;
+            if (!specifier || !ts.isStringLiteralLike(specifier)) continue;
+            const info = this.resolvedModuleInfoForSpecifier(
+                specifier.text,
+                exportDeclaration.getSourceFile().fileName,
+            );
+            if (info) return this.ensureModuleNamespacePlan(info);
+        }
+        const reExport = this.moduleNamespaceReExportInfo(id);
+        if (!reExport) return null;
+        const info = this.resolvedModuleInfoForSpecifier(reExport.specifier, reExport.containingFile);
+        return info ? this.ensureModuleNamespacePlan(info) : null;
+    }
+
+    private moduleNamespacePlanForExpression(expression: ts.Expression): ModuleNamespacePlan | null {
+        const unwrapped = this.unwrapTransparentExpression(expression);
+        return ts.isIdentifier(unwrapped)
+            ? this.moduleNamespacePlanForIdentifier(unwrapped)
+            : null;
+    }
+
     private moduleNamespaceReExportInfo(id: ts.Identifier): { specifier: string; containingFile: string } | null {
         const sym = this.checker.getSymbolAtLocation(id);
         for (const decl of sym?.declarations ?? []) {
@@ -22540,6 +22858,14 @@ class Emitter {
     }
 
     private moduleNamespaceReExportMemberCName(access: CommonJsExportAccess): string | null {
+        if (
+            ts.isPropertyAccessExpression(access) &&
+            ts.isPropertyAccessExpression(access.expression) &&
+            ts.isIdentifier(access.expression.expression) &&
+            this.moduleNamespacePlanForIdentifier(access.expression.expression)
+        ) {
+            return null;
+        }
         const member = this.moduleNamespaceReExportMemberDeclaration(access);
         return member ? this.commonJsExportedDeclarationCName(member.decl, member.name) : null;
     }
@@ -22637,6 +22963,12 @@ class Emitter {
     }
 
     private moduleNamespaceMemberCName(access: CommonJsExportAccess): string | null {
+        if (
+            ts.isIdentifier(access.expression) &&
+            this.moduleNamespacePlanForIdentifier(access.expression)
+        ) {
+            return null;
+        }
         const decl = this.moduleNamespaceMemberDeclaration(access);
         if (decl && ts.isSourceFile(decl)) {
             const spec = ts.isIdentifier(access.expression)
@@ -46150,6 +46482,10 @@ class Emitter {
                     };
                 }
             }
+            const moduleNamespace = this.moduleNamespacePlanForIdentifier(expr);
+            if (moduleNamespace) {
+                return { c: `${moduleNamespace.factory}()`, ty: T_VALUE };
+            }
             const moduleLexical = this.moduleLexicalBindingForIdentifier(expr);
             if (moduleLexical) {
                 return { c: this.moduleLexicalRead(moduleLexical), ty: T_VALUE };
@@ -47113,6 +47449,19 @@ class Emitter {
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
         const expr = del.expression;
+        const finishPropertyDelete = (
+            receiver: ts.Expression,
+            result: EmitResult,
+        ): EmitResult => {
+            if (!this.moduleNamespacePlanForExpression(receiver)) return result;
+            const deleted = this.freshTemp("_namespace_deleted");
+            return {
+                c: `({ bool ${deleted} = ${result.c}; if (!${deleted}) ` +
+                    `tsc_throw_error(TSC_ERROR_TYPE, ` +
+                    `tsc_str_from_cstr("Cannot delete module namespace export")); true; })`,
+                ty: T_BOOLEAN,
+            };
+        };
         if (ts.isIdentifier(expr)) {
             const reference = this.test262GlobalReferencePlan(expr);
             if (reference) return { c: reference.remove, ty: T_BOOLEAN };
@@ -47145,10 +47494,10 @@ class Emitter {
             if (mapped.kind === "array") {
                 return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.name);
             }
-            return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
+            return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
                 { value: key, target: T_STRING, node: expr.name },
-            ]);
+            ]));
         }
         if (ts.isElementAccessExpression(expr)) {
             const recvType = this.expressionDeclaredOrCurrentType(expr.expression);
@@ -47156,24 +47505,24 @@ class Emitter {
             const recv = this.emitExpr(expr.expression);
             const key = this.emitExpr(expr.argumentExpression);
             if (key.ty.kind === "symbol") {
-                return this.emitSequencedCall("tsc_value_delete_symbol_prop", T_BOOLEAN, [
+                return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_symbol_prop", T_BOOLEAN, [
                     { value: recv, target: T_VALUE, node: expr.expression },
                     { value: key, target: T_SYMBOL, node: expr.argumentExpression },
-                ]);
+                ]));
             }
             if (key.ty.kind === "value") {
-                return this.emitSequencedCall("tsc_value_delete_computed_prop", T_BOOLEAN, [
+                return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_computed_prop", T_BOOLEAN, [
                     { value: recv, target: T_VALUE, node: expr.expression },
                     { value: key, target: T_VALUE, node: expr.argumentExpression },
-                ]);
+                ]));
             }
             if (mapped.kind === "array") {
                 return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression);
             }
-            return this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
+            return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
                 { value: key, target: T_STRING, node: expr.argumentExpression },
-            ]);
+            ]));
         }
         unsupported(del, "delete currently supports dynamic property/element access only");
     }
@@ -48735,6 +49084,7 @@ class Emitter {
         }
 
         const rawRecv = this.emitExpr(recvExpr);
+        const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
@@ -48829,6 +49179,10 @@ class Emitter {
                     : computedAssignment
                         ? `tsc_value_set_computed_prop(${obj}, ${keyC}, ${value})`
                         : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
+            const setStatement = (value: string) => moduleNamespaceAssignment
+                ? `if (!${set(value)}) tsc_throw_error(TSC_ERROR_TYPE, ` +
+                    `tsc_str_from_cstr("Cannot assign to module namespace object"))`
+                : `(void)${set(value)}`;
             const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
             if (logicalOp) {
                 const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
@@ -48838,19 +49192,19 @@ class Emitter {
                         : op === ts.SyntaxKind.BarBarEqualsToken
                             ? `!tsc_value_is_truthy(${out})`
                             : `tsc_value_is_nullish(${out})`;
-                return `({ ${prefix}tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${set(out)}; } ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${setStatement(out)}; } ${out}; })`;
             }
             const value = values[keyExpr ? 2 : 1]!;
             if (indexAssignment) {
                 if (op === ts.SyntaxKind.EqualsToken) {
-                    return `({ tsc_value_t ${out} = ${value}; tsc_value_set_index(${obj}, ${keyC}, ${out}); ${out}; })`;
+                    return `({ tsc_value_t ${out} = ${value}; ${setStatement(out)}; ${out}; })`;
                 }
-                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
+                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${setStatement(out)}; ${out}; })`;
             }
             if (op === ts.SyntaxKind.EqualsToken) {
-                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${set(out)}; ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${setStatement(out)}; ${out}; })`;
             }
-            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${set(out)}; ${out}; })`;
+            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${setStatement(out)}; ${out}; })`;
         });
     }
 
@@ -51139,6 +51493,35 @@ class Emitter {
         if (type.kind !== "function") unsupported(id, "function reference type expected");
         this.prepareType(type);
         const adapter = this.ensureFunctionReferenceAdapter(id, type);
+        return this.emitStaticFunctionReferenceClosure(
+            type,
+            adapter,
+            this.isLazyGeneratorFunctionValue(id) || this.isLazyGeneratorPassthroughFunctionValue(id),
+        );
+    }
+
+    private emitFunctionDeclarationReferenceClosure(
+        declaration: ts.FunctionDeclaration,
+        type: CType,
+    ): EmitResult {
+        if (type.kind !== "function") unsupported(declaration, "function declaration type expected");
+        this.prepareType(type);
+        const adapter = this.ensureFunctionDeclarationReferenceAdapter(declaration, type);
+        return this.emitStaticFunctionReferenceClosure(
+            type,
+            adapter,
+            this.isGeneratorDeclaration(declaration) || this.isLazyGeneratorPassthroughFunction(declaration),
+        );
+    }
+
+    /** One stable closure cell represents a declaration binding.  Boxing that
+     * cell therefore reaches the runtime's canonical function identity rather
+     * than manufacturing an identity on each namespace getter invocation. */
+    private emitStaticFunctionReferenceClosure(
+        type: CType,
+        adapter: string,
+        lazyGeneratorFactory: boolean,
+    ): EmitResult {
         const key = `${adapter}:${this.typeKey(type)}`;
         let staticName = this.functionRefClosureStatics.get(key);
         if (!staticName) {
@@ -51152,7 +51535,7 @@ class Emitter {
                 `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; } ` +
                 `&${staticName}; })`,
             ty: type,
-            lazyGeneratorFactory: this.isLazyGeneratorFunctionValue(id) || this.isLazyGeneratorPassthroughFunctionValue(id),
+            lazyGeneratorFactory,
         };
     }
 
@@ -51210,6 +51593,40 @@ class Emitter {
             );
             callee = this.ensureGenericSpecialization(genericDecl, bindings);
         }
+        return this.ensureFunctionReferenceAdapterForCallee(
+            id,
+            callee,
+            type,
+            this.directCallableThisType(id),
+        );
+    }
+
+    private ensureFunctionDeclarationReferenceAdapter(
+        declaration: ts.FunctionDeclaration,
+        type: CType,
+    ): string {
+        if (this.isGenericFunction(declaration)) {
+            unsupported(declaration, "generic anonymous default function namespace binding");
+        }
+        const signature = this.checker.getSignatureFromDeclaration(declaration);
+        if (!signature) unsupported(declaration, "could not resolve function declaration signature");
+        return this.ensureFunctionReferenceAdapterForCallee(
+            declaration,
+            this.functionDeclarationCName(declaration),
+            type,
+            this.signatureThisType(signature, declaration),
+        );
+    }
+
+    private ensureFunctionReferenceAdapterForCallee(
+        node: ts.Node,
+        callee: string,
+        type: CType,
+        thisType: CType | null,
+    ): string {
+        if (type.kind !== "function" || !type.ret) {
+            unsupported(node, "function reference type expected");
+        }
         const key = `${callee}:${this.typeKey(type)}`;
         const existing = this.functionRefAdapters.get(key);
         if (existing) return existing;
@@ -51217,7 +51634,6 @@ class Emitter {
         this.functionRefAdapters.set(key, name);
         const ret = this.prepareType(type.ret);
         const params = type.params ?? [];
-        const thisType = this.directCallableThisType(id);
         const envParam = this.freshTemp("_envp");
         const paramDecls = params.map((p, i) => `${p.c} _p${i}`);
         const thisDecl = type.thisParam ? [`${type.thisParam.c} __tsc_this`] : [];
@@ -70378,7 +70794,7 @@ class Emitter {
             ], ([o]) => {
                 const target = dynamicObjectArg(o!, obj.ty);
                 const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ if (!tsc_value_seal(${target})) tsc_throw_str(tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
+                return `({ if (!tsc_value_seal(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
             });
         }
         if (name === "setPrototypeOf") {
@@ -70443,7 +70859,7 @@ class Emitter {
             ], ([o]) => {
                 const target = dynamicObjectArg(o!, obj.ty);
                 const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ if (!tsc_value_freeze(${target})) tsc_throw_str(tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
+                return `({ if (!tsc_value_freeze(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
             });
         }
         if (name === "defineProperty") {
@@ -70479,7 +70895,7 @@ class Emitter {
                         { value: descValue, target: T_VALUE, node: args[2]! },
                         ...ignored,
                     ],
-                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!)}, ${k}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
+                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!)}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
                 );
             }
             const desc = this.descriptorData(args[2]!);
@@ -70508,7 +70924,7 @@ class Emitter {
                         const k = vals[1]!;
                         const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                         const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o)}; })`;
+                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o)}; })`;
                     },
                 );
             }
@@ -70527,7 +70943,7 @@ class Emitter {
                     const fn = key.ty.kind === "symbol"
                         ? "tsc_value_define_symbol_property_desc"
                         : "tsc_value_define_property_desc";
-                    return `({ if (!${fn}(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                    return `({ if (!${fn}(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
                 },
             );
         }
@@ -72391,6 +72807,13 @@ class Emitter {
                         ...ignored,
                     ], ([t, k]) => `tsc_reflect_delete_symbol_prop(${t}, ${k})`);
                 }
+                if (key.ty.kind === "value") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_VALUE, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_delete_computed_prop(${t}, ${k})`);
+                }
                 if (mapped.kind === "array") {
                     return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!, ignored);
                 }
@@ -72565,7 +72988,8 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
-                if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
+                const reflectHasKeyType = this.prepareType(mapType(args[1]!, this.checker));
+                if (this.isSupportedWellKnownSymbolExpression(args[1]!) || reflectHasKeyType.kind === "symbol") {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -72709,7 +73133,7 @@ class Emitter {
                     );
                 }
                 const target = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
+                return this.emitSequencedExpr(arrayType(T_VALUE), [
                     { value: target, target: T_VALUE, node: args[0]! },
                     ...ignored,
                 ], ([t]) => `tsc_reflect_own_keys(${t})`);
@@ -72772,6 +73196,18 @@ class Emitter {
                             ...ignored,
                         ],
                         ([t, k, v]) => `tsc_reflect_set_symbol_prop(${t}, ${k}, ${v})`,
+                    );
+                }
+                if (key.ty.kind === "value") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_VALUE, node: args[1]! },
+                            { value, target: T_VALUE, node: args[2]! },
+                            ...ignored,
+                        ],
+                        ([t, k, v]) => `tsc_reflect_set_computed_prop(${t}, ${k}, ${v})`,
                     );
                 }
                 return this.emitSequencedExpr(
@@ -74574,6 +75010,21 @@ class Emitter {
             }
         }
         if (recv.ty.kind === "value") {
+            if (this.moduleNamespacePlanForExpression(pa.expression)) {
+                const key = this.stringLit(pa.name.text);
+                if (isOpt) {
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [{ value: recv }],
+                        ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_get_prop(${obj}, ${key})`,
+                    );
+                }
+                const cache = this.freshTemp("_module_namespace_prop_cache");
+                return {
+                    c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, ${key}, &${cache}); })`,
+                    ty: T_VALUE,
+                };
+            }
             if (isOpt) {
                 const key = this.stringLit(pa.name.text);
                 return this.emitSequencedExpr(
@@ -74983,7 +75434,7 @@ class Emitter {
                     accessKind = "index";
                 } else if (idx.ty.kind === "string") {
                     accessKind = "prop";
-                } else if (idx.ty.kind === "symbol" && this.isSupportedWellKnownSymbolExpression(ea.argumentExpression)) {
+                } else if (idx.ty.kind === "symbol") {
                     accessKind = "symbol";
                 } else if (idx.ty.kind === "value") {
                     accessKind = "computed";
@@ -75015,7 +75466,7 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
-            if (idx.ty.kind === "symbol" && this.isSupportedWellKnownSymbolExpression(ea.argumentExpression)) {
+            if (idx.ty.kind === "symbol") {
                 return {
                     c: `tsc_value_get_symbol_prop(${recv.c}, ${idx.c})`,
                     ty: T_VALUE,
@@ -75792,6 +76243,8 @@ class Emitter {
                 case "function": {
                     const sourceFunction = ts.isExpression(node)
                         ? this.javaScriptFunctionLikeForExpression(node)
+                        : ts.isFunctionDeclaration(node)
+                        ? node
                         : null;
                     const length = sourceFunction
                         ? this.javaScriptFunctionLength(sourceFunction)
@@ -75890,6 +76343,8 @@ class Emitter {
             } else {
                 name = current.text;
             }
+        } else if (ts.isFunctionDeclaration(current)) {
+            name = current.name?.text ?? (this.isDefaultExportDeclaration(current) ? "default" : "");
         } else if (ts.isFunctionExpression(current) && current.name) {
             name = current.name.text;
         } else if (
@@ -75956,6 +76411,8 @@ class Emitter {
         this.prepareType(type);
         const sourceFunction = ts.isExpression(node)
             ? this.javaScriptFunctionLikeForExpression(node)
+            : ts.isFunctionDeclaration(node)
+            ? node
             : null;
         const createsActivation = !!sourceFunction && !ts.isArrowFunction(sourceFunction);
         const normalizesSloppyThis = createsActivation &&

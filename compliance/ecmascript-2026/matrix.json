@@ -43,6 +43,346 @@
         }
       ],
       "rationale": "One direct terminal partition binds the pinned IsStrictlyEqual scenarios to independent semantic, cardinality, and implementation evidence."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "namespace-exotic-slot-invariants",
+        "title": "Module namespace slot identity, null prototype, non-extensibility, and @@toStringTag dispatch",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_module_namespace_new"] },
+        "rationale": "The property specification crosses namespace identity, prototype, integrity, symbol, descriptor, and live-binding behavior. The generated width case independently stresses construction from the canonical export collection."
+      }],
+      "rationale": "The observable namespace exotic contract is bound to pinned Test262 metadata plus independent local semantic, cardinality, and implementation evidence."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-getprototypeof",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "null-prototype",
+        "title": "The namespace prototype is always null",
+        "surface": "algorithm",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-getprototypeof" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_get_prototype_of"] },
+        "rationale": "The property specification observes the null prototype through direct and Object reflection paths; the separate generated export-width case proves the invariant is independent of namespace cardinality."
+      }],
+      "rationale": "The complete observable prototype result is one finite semantic partition over namespaces of arbitrary export width."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-setprototypeof-v",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "same-null-vs-other-prototype",
+        "title": "Setting null succeeds without change; every different prototype is rejected",
+        "surface": "algorithm",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-setprototypeof-v" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_set_prototype_of"] },
+        "rationale": "The property specification crosses Object and Reflect paths for the existing null prototype and a different object prototype. Namespace size is independently stressed."
+      }],
+      "rationale": "The same-prototype and changed-prototype outcomes form the exact observable partition."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-isextensible",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "always-nonextensible",
+        "title": "Every completed namespace is non-extensible",
+        "surface": "algorithm",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-isextensible" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_is_extensible"] },
+        "rationale": "The property specification observes the invariant through Object.isExtensible; the generated case proves finalization is independent of export width."
+      }],
+      "rationale": "The specified false result is directly evidenced for the canonical namespace representation."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-preventextensions",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "idempotent-prevention",
+        "title": "PreventExtensions succeeds on the already non-extensible namespace",
+        "surface": "algorithm",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-preventextensions" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_prevent_extensions"] },
+        "rationale": "The property specification exercises integrity operations over a finalized namespace, while the generated case independently stresses finalization over a wide export collection."
+      }],
+      "rationale": "The idempotent success result is directly bound to the shared object integrity implementation."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-getownproperty-p",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "export-absent-symbol-and-tdz",
+        "title": "Export descriptors are live writable data descriptors; absent and symbol keys retain their specified behavior and TDZ",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-getownproperty-p" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c#tsc_value_get_own_property_descriptor"] },
+        "rationale": "The property specification crosses initialized and uninitialized live exports, absent keys, symbols, and descriptor attributes. The generated case stresses descriptor-bearing export cardinality."
+      }],
+      "rationale": "Property-key and binding-state semantics are one partition over the canonical export collection."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-defineownproperty-p-desc",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "compatible-vs-incompatible-descriptors",
+        "title": "Compatible export redefinitions succeed without mutation; incompatible or absent definitions fail",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-defineownproperty-p-desc" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_define_desc"] },
+        "rationale": "The property specification crosses empty, same-value, changed-value, and throwing Object/Boolean Reflect outcomes. The generated namespace width is a distinct cardinality proof."
+      }],
+      "rationale": "Descriptor compatibility, rather than fixture shape, defines this terminal partition."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-hasproperty-p",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "export-absent-and-symbol-keys",
+        "title": "Presence follows the namespace export set without reading an absent or symbol binding",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-hasproperty-p" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_has"] },
+        "rationale": "The property specification crosses exported, absent, unknown-symbol, and well-known-symbol keys. The generated case independently stresses the canonical export-key collection."
+      }],
+      "rationale": "Presence is derived from the one canonical PropertyKey collection."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-get-p-receiver",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "live-export-symbol-and-absent-reads",
+        "title": "Export reads resolve the current binding value; absent and unsupported symbol reads yield undefined",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-get-p-receiver" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_get_receiver"] },
+        "rationale": "The property specification mutates live bindings and crosses data, function, class, absent, and symbol reads. The generated case stresses reads from a wide canonical export collection."
+      }],
+      "rationale": "Live binding lookup and non-export keys are crossed in one property-key partition."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-set-p-v-receiver",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "all-writes-rejected",
+        "title": "Every namespace write returns false regardless of key or receiver",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-set-p-v-receiver" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_set_receiver"] },
+        "rationale": "The property specification crosses exported, absent, and symbol writes through strict assignment and Reflect. The generated width case proves rejection is independent of export cardinality."
+      }],
+      "rationale": "All receiver and PropertyKey forms converge on the namespace [[Set]] rejection path."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-delete-p",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "export-vs-absent-delete",
+        "title": "Deleting an export fails and deleting an absent property key succeeds",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-delete-p" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_object_delete"] },
+        "rationale": "The property specification crosses exported, absent, and symbol deletion through strict syntax and Reflect. The generated case independently stresses the canonical export collection."
+      }],
+      "rationale": "Export membership determines the exact delete outcome for every PropertyKey."
+    },
+    {
+      "clause": "sec-module-namespace-exotic-objects-ownpropertykeys",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "sorted-exports-then-tostringtag",
+        "title": "OwnPropertyKeys returns sorted export strings followed by @@toStringTag",
+        "surface": "algorithm",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-exotic-objects-ownpropertykeys" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c#tsc_reflect_own_keys"] },
+        "rationale": "The property specification checks public PropertyKey types and ordering. The generated width case is the independent representative stress for arbitrary export-list width."
+      }],
+      "rationale": "One canonical raw PropertyKey list feeds the Object and Reflect projections."
+    },
+    {
+      "clause": "sec-modulenamespacecreate",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "canonical-export-plan-and-singleton",
+        "title": "One sorted resolved export plan creates one finalized namespace object per Module Record",
+        "surface": "module",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-modulenamespacecreate" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts#emitModuleNamespacePlan"] },
+        "rationale": "The emitter consumes one resolved export collection, emits live getters, and lazily memoizes one namespace factory. Property and generated evidence cover semantic partitions and representative export width."
+      }],
+      "rationale": "The creation algorithm is represented by one canonical export plan and one cardinality-independent factory emitter."
+    },
+    {
+      "clause": "sec-resolveexport",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "local-indirect-star-default-ambiguity-and-cycles",
+        "title": "ResolveExport follows explicit and star edges, excludes default from stars, detects ambiguity, and terminates cycles",
+        "surface": "module",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "graph",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-resolveexport" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts#resolveModuleNamespaceExport"] },
+        "rationale": "The property specification crosses explicit, indirect, namespace, deep star, default-exclusion, ambiguity, and cycle-safe self-import semantics. The generated width case is independent stress."
+      }],
+      "rationale": "Resolution is proved from the Module Record graph and declaration identity, not from enumerated re-export fixture families."
+    },
+    {
+      "clause": "sec-smr-resolveexport",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "source-text-module-export-graph",
+        "title": "Source Text Module ResolveExport traverses the canonical Module Record graph by binding identity",
+        "surface": "module",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "graph",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-smr-resolveexport" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts#resolveModuleNamespaceExport"] },
+        "rationale": "The property specification exercises Source Text Module local, indirect, star, ambiguous, and namespace resolutions using checker declaration identity; a distinct generated case stresses export width."
+      }],
+      "rationale": "The source-text specialization shares the one cycle-guarded ResolveExport graph traversal."
+    },
+    {
+      "clause": "sec-getmodulenamespace",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "module-record-namespace-singleton",
+        "title": "GetModuleNamespace returns the lazily created singleton for the resolved Module Record",
+        "surface": "module",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "graph",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-getmodulenamespace" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts#ensureModuleNamespacePlan"] },
+        "rationale": "The property specification checks repeated imports and deep namespace re-exports for identity. The generated case independently stresses singleton creation over a wide export collection."
+      }],
+      "rationale": "A WeakMap keyed by the canonical Source Text Module record selects one lazily emitted namespace plan."
+    },
+    {
+      "clause": "sec-module-namespace-objects",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "observable-module-namespace-contract",
+        "title": "Reflection exposes the Module Namespace Exotic Object contract without substituting an ordinary object",
+        "surface": "module",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-module-namespace-objects" }] }],
+        "coveredBy": [],
+        "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c#tsc_module_namespace_new"] },
+        "rationale": "The property specification exercises Object and Reflect observation of namespace internal methods and keys; the generated width case independently stresses the underlying export collection."
+      }],
+      "rationale": "The Reflection contract is tied to the same non-ordinary runtime representation and exact observable tests."
     }
   ],
   "groups": [
@@ -148,8 +488,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary internal methods", "function objects", "arguments", "arrays", "proxies", "module namespace objects"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["object_descriptors", "array_property_descriptors", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
-      "knownGaps": ["Exotic-object invariants and proxy/module-namespace interactions are not clause-verified."]
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["object_descriptors", "array_property_descriptors", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
+      "knownGaps": ["Pinned namespace scenarios that depend on general super lowering or captured for-of closure bindings remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified."]
     },
     {
       "id": "source-text",
@@ -208,8 +548,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["script parsing/evaluation", "module linking", "live bindings", "cycles", "async module evaluation"],
-      "localEvidence": { "property": ["tests/property/module-class-binding.property.test.ts", "tests/property/module-declaration-instantiation.property.test.ts", "tests/property/module-default-binding.property.test.ts", "tests/property/module-default-class-binding.property.test.ts", "tests/property/module-import-binding.property.test.ts", "tests/property/module-lexical-binding.property.test.ts", "tests/property/module-linking.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["modules", "module_re_exports"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/resolve.ts", "src/program.ts"] },
-      "knownGaps": ["Exact clause partitions remain incomplete for module namespace exotics, cyclic evaluation beyond binding instantiation, dynamic import, and top-level await."]
+      "localEvidence": { "property": ["tests/property/module-class-binding.property.test.ts", "tests/property/module-declaration-instantiation.property.test.ts", "tests/property/module-default-binding.property.test.ts", "tests/property/module-default-class-binding.property.test.ts", "tests/property/module-import-binding.property.test.ts", "tests/property/module-lexical-binding.property.test.ts", "tests/property/module-linking.property.test.ts", "tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["modules", "module_re_exports"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/resolve.ts", "src/program.ts"] },
+      "knownGaps": ["Cyclic evaluation beyond binding instantiation, dynamic import, top-level await, and namespace scenarios blocked by general super/captured-loop lowering remain incomplete."]
     },
     {
       "id": "errors-extensions",
@@ -328,7 +668,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Reflect internal-method forwarding", "Proxy traps", "invariants and revocation"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
       "knownGaps": ["Proxy invariant and abrupt-completion partitions remain unverified."]
     },
     {

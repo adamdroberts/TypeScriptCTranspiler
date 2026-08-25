@@ -32,6 +32,140 @@
       "kind": "implementation",
       "id": "runtime/tsc_value.c#tsc_value_eq",
       "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-namespace-exotic.property.test.ts",
+      "targets": [
+        "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",
+        "sec-module-namespace-exotic-objects-getprototypeof#null-prototype",
+        "sec-module-namespace-exotic-objects-setprototypeof-v#same-null-vs-other-prototype",
+        "sec-module-namespace-exotic-objects-isextensible#always-nonextensible",
+        "sec-module-namespace-exotic-objects-preventextensions#idempotent-prevention",
+        "sec-module-namespace-exotic-objects-getownproperty-p#export-absent-symbol-and-tdz",
+        "sec-module-namespace-exotic-objects-defineownproperty-p-desc#compatible-vs-incompatible-descriptors",
+        "sec-module-namespace-exotic-objects-hasproperty-p#export-absent-and-symbol-keys",
+        "sec-module-namespace-exotic-objects-get-p-receiver#live-export-symbol-and-absent-reads",
+        "sec-module-namespace-exotic-objects-set-p-v-receiver#all-writes-rejected",
+        "sec-module-namespace-exotic-objects-delete-p#export-vs-absent-delete",
+        "sec-module-namespace-exotic-objects-ownpropertykeys#sorted-exports-then-tostringtag",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton",
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph",
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-module-namespace-objects#observable-module-namespace-contract"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_namespace_export_width",
+      "targets": [
+        "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",
+        "sec-module-namespace-exotic-objects-getprototypeof#null-prototype",
+        "sec-module-namespace-exotic-objects-setprototypeof-v#same-null-vs-other-prototype",
+        "sec-module-namespace-exotic-objects-isextensible#always-nonextensible",
+        "sec-module-namespace-exotic-objects-preventextensions#idempotent-prevention",
+        "sec-module-namespace-exotic-objects-getownproperty-p#export-absent-symbol-and-tdz",
+        "sec-module-namespace-exotic-objects-defineownproperty-p-desc#compatible-vs-incompatible-descriptors",
+        "sec-module-namespace-exotic-objects-hasproperty-p#export-absent-and-symbol-keys",
+        "sec-module-namespace-exotic-objects-get-p-receiver#live-export-symbol-and-absent-reads",
+        "sec-module-namespace-exotic-objects-set-p-v-receiver#all-writes-rejected",
+        "sec-module-namespace-exotic-objects-delete-p#export-vs-absent-delete",
+        "sec-module-namespace-exotic-objects-ownpropertykeys#sorted-exports-then-tostringtag",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton",
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph",
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-module-namespace-objects#observable-module-namespace-contract"
+      ],
+      "stressReview": {
+        "dimension": "resolved Module Record export-list width",
+        "parameter": "width",
+        "representativeHighDepth": 128,
+        "rationale": "One generated native case independently stresses the canonical resolved-export collection and singleton namespace factory without turning successive export counts into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_module_namespace_new",
+      "targets": [
+        "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",
+        "sec-module-namespace-objects#observable-module-namespace-contract"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_get_prototype_of",
+      "targets": ["sec-module-namespace-exotic-objects-getprototypeof#null-prototype"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_set_prototype_of",
+      "targets": ["sec-module-namespace-exotic-objects-setprototypeof-v#same-null-vs-other-prototype"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_is_extensible",
+      "targets": ["sec-module-namespace-exotic-objects-isextensible#always-nonextensible"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_prevent_extensions",
+      "targets": ["sec-module-namespace-exotic-objects-preventextensions#idempotent-prevention"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_get_own_property_descriptor",
+      "targets": ["sec-module-namespace-exotic-objects-getownproperty-p#export-absent-symbol-and-tdz"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_define_desc",
+      "targets": ["sec-module-namespace-exotic-objects-defineownproperty-p-desc#compatible-vs-incompatible-descriptors"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_has",
+      "targets": ["sec-module-namespace-exotic-objects-hasproperty-p#export-absent-and-symbol-keys"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_get_receiver",
+      "targets": ["sec-module-namespace-exotic-objects-get-p-receiver#live-export-symbol-and-absent-reads"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_set_receiver",
+      "targets": ["sec-module-namespace-exotic-objects-set-p-v-receiver#all-writes-rejected"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_object_delete",
+      "targets": ["sec-module-namespace-exotic-objects-delete-p#export-vs-absent-delete"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_reflect_own_keys",
+      "targets": ["sec-module-namespace-exotic-objects-ownpropertykeys#sorted-exports-then-tostringtag"]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitModuleNamespacePlan",
+      "targets": ["sec-modulenamespacecreate#canonical-export-plan-and-singleton"]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#resolveModuleNamespaceExport",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#ensureModuleNamespacePlan",
+      "targets": ["sec-getmodulenamespace#module-record-namespace-singleton"]
     }
   ]
 }

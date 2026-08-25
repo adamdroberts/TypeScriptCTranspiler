@@ -13,10 +13,16 @@ export interface StrictEqualityExpressionDepthSpec {
     depth: number;
 }
 
+export interface ModuleNamespaceExportWidthSpec {
+    generator: "module-namespace-export-width";
+    width: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
-    | StrictEqualityExpressionDepthSpec;
+    | StrictEqualityExpressionDepthSpec
+    | ModuleNamespaceExportWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -57,6 +63,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             depth,
+        };
+    }
+    if (spec.generator === "module-namespace-export-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
         };
     }
     throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
@@ -197,6 +213,33 @@ function strictEqualityExpressionDepthSource(depth: number): string {
     ].join("\n");
 }
 
+function moduleNamespaceExportWidthSource(width: number): string {
+    const exportedValues = Array.from(
+        { length: width },
+        (_, index) => `export const value${index.toString().padStart(3, "0")} = ${index};`,
+    );
+    const lastName = `value${(width - 1).toString().padStart(3, "0")}`;
+    return [
+        'import * as namespace from "./module_namespace_export_width";',
+        "",
+        ...exportedValues,
+        "export let live = 0;",
+        "export function update(value: number): void { live = value; }",
+        "",
+        "const names = Object.getOwnPropertyNames(namespace);",
+        "const sorted = names.slice().sort();",
+        "namespace.update(211);",
+        "const valid =",
+        `    names.length === ${width + 2} &&`,
+        '    names.join("|") === sorted.join("|") &&',
+        `    namespace.${lastName} === ${width - 1} &&`,
+        "    namespace.live === 211 &&",
+        "    namespace === namespace;",
+        'console.log("module namespace width:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -206,5 +249,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return asyncBindingDefaultDepthSource(spec.depth);
         case "strict-equality-expression-depth":
             return strictEqualityExpressionDepthSource(spec.depth);
+        case "module-namespace-export-width":
+            return moduleNamespaceExportWidthSource(spec.width);
     }
 }

@@ -120,7 +120,12 @@ typedef struct tsc_function_identity {
     double length;
     tsc_str_t* name;
     tsc_value_t prototype;
+    /* Function [[Prototype]] and the own `prototype` value are NaN-boxed.
+     * Mirror their decoded pointers so a collection cannot reclaim either
+     * object while the function identity still owns it. */
+    void* prototype_gc_root;
     tsc_value_t func_prototype;
+    void* func_prototype_gc_root;
     tsc_object_t* props;
     union {
         tsc_accessor_getter_t getter;
@@ -180,6 +185,7 @@ struct tsc_object {
     bool is_set;
     bool is_error;
     bool is_arguments;
+    bool is_module_namespace;
     bool is_typed_array;
     bool is_url;
     bool is_url_search_params;
@@ -292,6 +298,8 @@ typedef struct tsc_event_once_promise_env {
 
 extern tsc_function_identity_t* g_function_identities;
 void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, tsc_str_t* name);
+void tsc_function_identity_set_prototype(tsc_function_identity_t* entry, tsc_value_t prototype);
+void tsc_function_identity_set_own_prototype(tsc_function_identity_t* entry, tsc_value_t prototype);
 extern double g_event_emitter_default_max_listeners;
 extern bool g_shape_diagnostics_enabled;
 

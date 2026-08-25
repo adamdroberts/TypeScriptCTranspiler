@@ -918,12 +918,15 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache);
 bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value);
+bool tsc_value_set_computed_prop_receiver(tsc_value_t v, tsc_value_t key, tsc_value_t value, tsc_value_t receiver);
 tsc_value_t tsc_reflect_get_prop(tsc_value_t v, const tsc_str_t* key);
 tsc_value_t tsc_reflect_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
 tsc_value_t tsc_reflect_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver, tsc_prop_cache_t* cache);
 bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
 bool tsc_reflect_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value);
+bool tsc_reflect_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value);
+bool tsc_reflect_set_computed_prop_receiver(tsc_value_t v, tsc_value_t key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_reflect_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache);
 bool tsc_reflect_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_reflect_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache);
@@ -945,6 +948,7 @@ bool tsc_reflect_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key);
 bool tsc_reflect_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
+bool tsc_reflect_delete_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_value_is_extensible(tsc_value_t v);
 bool tsc_value_prevent_extensions(tsc_value_t v);
 bool tsc_reflect_is_extensible(tsc_value_t v);
@@ -1194,6 +1198,9 @@ tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_v
 
 tsc_object_t* tsc_object_new(void);
 tsc_object_t* tsc_object_new_class(void* ptr);
+tsc_object_t* tsc_module_namespace_new(void);
+bool tsc_module_namespace_define(tsc_object_t* object, tsc_str_t* key, tsc_accessor_getter_t getter);
+void tsc_module_namespace_finalize(tsc_object_t* object);
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);

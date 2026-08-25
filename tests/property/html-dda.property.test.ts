@@ -28,6 +28,7 @@ const probes: readonly SemanticProbe[] = [
     { label: "abstract-source-tag-brand", expression: "abstractTagDescriptor.get.call(1) === undefined && abstractTagDescriptor.get.call(abstractModuleSource.prototype) === undefined", expected: "true" },
     { label: "abstract-source-call-throws", expression: "abstractCallThrows", expected: "true" },
     { label: "abstract-source-construct-throws", expression: "abstractConstructThrows", expected: "true" },
+    { label: "function-prototype-retention", expression: "retainedPrototypeDescriptor.value === retainedPrototypeFunction.prototype && retainedConstructorDescriptor.value === retainedPrototypeFunction && retainedPrototypeFunction.prototype.marker === 'retained'", expected: "true" },
     { label: "typeof", expression: "typeof htmlDDA", expected: "undefined" },
     { label: "boolean", expression: "Boolean(htmlDDA)", expected: "false" },
     { label: "logical-not", expression: "!htmlDDA", expected: "true" },
@@ -54,16 +55,21 @@ const probes: readonly SemanticProbe[] = [
     { label: "call-empty-string", expression: "htmlDDA('') === null", expected: "true" },
 ];
 
-function source(): string {
+function source(forceCollection: boolean): string {
     return [
         "var emit = print;",
         "var hostDescriptor = Object.getOwnPropertyDescriptor(globalThis, '$262');",
         "var printDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'print');",
         "var abstractModuleSource = $262.AbstractModuleSource;",
         "var abstractHookDescriptor = Object.getOwnPropertyDescriptor($262, 'AbstractModuleSource');",
+        "function retainedPrototypeFunction() {}",
+        "Object.defineProperty(retainedPrototypeFunction.prototype, 'marker', { value: 'retained', configurable: true });",
+        ...(forceCollection ? ["$262.gc();"] : []),
         "var abstractPrototypeDescriptor = Object.getOwnPropertyDescriptor(abstractModuleSource, 'prototype');",
         "var abstractConstructorDescriptor = Object.getOwnPropertyDescriptor(abstractModuleSource.prototype, 'constructor');",
         "var abstractTagDescriptor = Object.getOwnPropertyDescriptor(abstractModuleSource.prototype, Symbol.toStringTag);",
+        "var retainedPrototypeDescriptor = Object.getOwnPropertyDescriptor(retainedPrototypeFunction, 'prototype');",
+        "var retainedConstructorDescriptor = Object.getOwnPropertyDescriptor(retainedPrototypeFunction.prototype, 'constructor');",
         "var abstractCallThrows = false;",
         "try { abstractModuleSource(); } catch (error) { abstractCallThrows = error instanceof TypeError; }",
         "var abstractConstructThrows = false;",
@@ -84,9 +90,9 @@ test("Test262 host globals and [[IsHTMLDDA]] follow canonical semantic paths", a
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/html-dda.js#sloppy";
     try {
-        await fs.writeFile(entry, source(), "utf8");
         const expected = probes.map((probe) => `${probe.label}:${probe.expected}`).join("\n") + "\n";
         for (const noGc of [false, true]) {
+            await fs.writeFile(entry, source(!noGc), "utf8");
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);
             const diagnostics: string[] = [];

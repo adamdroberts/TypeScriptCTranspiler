@@ -5,4 +5,4 @@ second unchanged: true
 set null: true null
 locked same: true
 locked change: false
-object locked change: Object.setPrototypeOf failed
+object locked change: TypeError: Object.setPrototypeOf failed

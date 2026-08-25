@@ -466,8 +466,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-canbeheldweakly` — CanBeHeldWeakly ( _v_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
 - [ ] **Ordinary and Exotic Objects Behaviours** (`sec-ordinary-and-exotic-objects-behaviours`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary internal methods; function objects; arguments; arrays; proxies; module namespace objects.
-  - Linked local regression evidence: E2E: object_descriptors, array_property_descriptors, proxy.
-  - Known blockers: Exotic-object invariants and proxy/module-namespace interactions are not clause-verified.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: object_descriptors, array_property_descriptors, proxy.
+  - Known blockers: Pinned namespace scenarios that depend on general super lowering or captured for-of closure bindings remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified.
   - [ ] `sec-ordinary-and-exotic-objects-behaviours` — Ordinary and Exotic Objects Behaviours: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots` — Ordinary Object Internal Methods and Internal Slots: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing either an Object or null: exact disposition and partitions missing.
@@ -567,19 +567,32 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-typedarraygetelement` — TypedArrayGetElement ( _O_: a TypedArray, _index_: a Number, ): a Number, a BigInt, or undefined: exact disposition and partitions missing.
   - [ ] `sec-typedarraysetelement` — TypedArraySetElement ( _O_: a TypedArray, _index_: a Number, _value_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-isarraybufferviewoutofbounds` — IsArrayBufferViewOutOfBounds ( _O_: a TypedArray or a DataView, ): a Boolean: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects` — Module Namespace Exotic Objects: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing null: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): a normal completion containing a Boolean: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-isextensible` — [[IsExtensible]] ( ): a normal completion containing false: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-preventextensions` — [[PreventExtensions]] ( ): a normal completion containing true: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): either a normal completion containing either a Property Descriptor or undefined, or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-hasproperty-p` — [[HasProperty]] ( _P_: a property key, ): a normal completion containing a Boolean: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): a normal completion containing false: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-delete-p` — [[Delete]] ( _P_: a property key, ): a normal completion containing a Boolean: exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-exotic-objects-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
-  - [ ] `sec-modulenamespacecreate` — ModuleNamespaceCreate ( _module_: a Module Record, _exports_: a List of Strings, ): a module namespace exotic object: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-exotic-objects` — Module Namespace Exotic Objects
+    - [ ] `namespace-exotic-slot-invariants` (algorithm, unbounded): Module namespace slot identity, null prototype, non-extensibility, and @@toStringTag dispatch.
+  - [ ] `sec-module-namespace-exotic-objects-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing null
+    - [ ] `null-prototype` (algorithm, finite): The namespace prototype is always null.
+  - [ ] `sec-module-namespace-exotic-objects-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): a normal completion containing a Boolean
+    - [ ] `same-null-vs-other-prototype` (algorithm, finite): Setting null succeeds without change; every different prototype is rejected.
+  - [ ] `sec-module-namespace-exotic-objects-isextensible` — [[IsExtensible]] ( ): a normal completion containing false
+    - [ ] `always-nonextensible` (algorithm, finite): Every completed namespace is non-extensible.
+  - [ ] `sec-module-namespace-exotic-objects-preventextensions` — [[PreventExtensions]] ( ): a normal completion containing true
+    - [ ] `idempotent-prevention` (algorithm, finite): PreventExtensions succeeds on the already non-extensible namespace.
+  - [ ] `sec-module-namespace-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): either a normal completion containing either a Property Descriptor or undefined, or a throw completion
+    - [ ] `export-absent-symbol-and-tdz` (algorithm, unbounded): Export descriptors are live writable data descriptors; absent and symbol keys retain their specified behavior and TDZ.
+  - [ ] `sec-module-namespace-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion
+    - [ ] `compatible-vs-incompatible-descriptors` (algorithm, unbounded): Compatible export redefinitions succeed without mutation; incompatible or absent definitions fail.
+  - [ ] `sec-module-namespace-exotic-objects-hasproperty-p` — [[HasProperty]] ( _P_: a property key, ): a normal completion containing a Boolean
+    - [ ] `export-absent-and-symbol-keys` (algorithm, unbounded): Presence follows the namespace export set without reading an absent or symbol binding.
+  - [ ] `sec-module-namespace-exotic-objects-get-p-receiver` — [[Get]] ( _P_: a property key, _Receiver_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or a throw completion
+    - [ ] `live-export-symbol-and-absent-reads` (algorithm, unbounded): Export reads resolve the current binding value; absent and unsupported symbol reads yield undefined.
+  - [ ] `sec-module-namespace-exotic-objects-set-p-v-receiver` — [[Set]] ( _P_: a property key, _V_: an ECMAScript language value, _Receiver_: an ECMAScript language value, ): a normal completion containing false
+    - [ ] `all-writes-rejected` (algorithm, unbounded): Every namespace write returns false regardless of key or receiver.
+  - [ ] `sec-module-namespace-exotic-objects-delete-p` — [[Delete]] ( _P_: a property key, ): a normal completion containing a Boolean
+    - [ ] `export-vs-absent-delete` (algorithm, unbounded): Deleting an export fails and deleting an absent property key succeeds.
+  - [ ] `sec-module-namespace-exotic-objects-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys
+    - [ ] `sorted-exports-then-tostringtag` (algorithm, unbounded): OwnPropertyKeys returns sorted export strings followed by @@toStringTag.
+  - [ ] `sec-modulenamespacecreate` — ModuleNamespaceCreate ( _module_: a Module Record, _exports_: a List of Strings, ): a module namespace exotic object
+    - [ ] `canonical-export-plan-and-singleton` (module, unbounded): One sorted resolved export plan creates one finalized namespace object per Module Record.
   - [ ] `sec-immutable-prototype-exotic-objects` — Immutable Prototype Exotic Objects: exact disposition and partitions missing.
   - [ ] `sec-immutable-prototype-exotic-objects-setprototypeof-v` — [[SetPrototypeOf]] ( _V_: an Object or null, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-set-immutable-prototype` — SetImmutablePrototype ( _O_: an Object, _V_: an Object or null, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
@@ -961,8 +974,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-preparefortailcall` — PrepareForTailCall ( ): ~unused~: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Scripts and Modules** (`sec-ecmascript-language-scripts-and-modules`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: script parsing/evaluation; module linking; live bindings; cycles; async module evaluation.
-  - Linked local regression evidence: property: tests/property/module-class-binding.property.test.ts, tests/property/module-declaration-instantiation.property.test.ts, tests/property/module-default-binding.property.test.ts, tests/property/module-default-class-binding.property.test.ts, tests/property/module-import-binding.property.test.ts, tests/property/module-lexical-binding.property.test.ts, tests/property/module-linking.property.test.ts; E2E: modules, module_re_exports.
-  - Known blockers: Exact clause partitions remain incomplete for module namespace exotics, cyclic evaluation beyond binding instantiation, dynamic import, and top-level await.
+  - Linked local regression evidence: property: tests/property/module-class-binding.property.test.ts, tests/property/module-declaration-instantiation.property.test.ts, tests/property/module-default-binding.property.test.ts, tests/property/module-default-class-binding.property.test.ts, tests/property/module-import-binding.property.test.ts, tests/property/module-lexical-binding.property.test.ts, tests/property/module-linking.property.test.ts, tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: modules, module_re_exports.
+  - Known blockers: Cyclic evaluation beyond binding instantiation, dynamic import, top-level await, and namespace scenarios blocked by general super/captured-loop lowering remain incomplete.
   - [ ] `sec-ecmascript-language-scripts-and-modules` — ECMAScript Language: Scripts and Modules: exact disposition and partitions missing.
   - [ ] `sec-scripts` — Scripts: exact disposition and partitions missing.
   - [ ] `sec-scripts-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
@@ -999,7 +1012,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-parsemodule` — ParseModule ( _sourceText_: ECMAScript source text, _realm_: a Realm Record, _hostDefined_: anything, ): a Source Text Module Record or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
   - [ ] `sec-source-text-module-record-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
   - [ ] `sec-getexportednames` — GetExportedNames ( optional _exportStarSet_: a List of Source Text Module Records, ): a List of Strings: exact disposition and partitions missing.
-  - [ ] `sec-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~: exact disposition and partitions missing.
+  - [ ] `sec-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~
+    - [ ] `local-indirect-star-default-ambiguity-and-cycles` (module, unbounded): ResolveExport follows explicit and star edges, excludes default from stars, detects ambiguity, and terminates cycles.
   - [ ] `sec-source-text-module-record-cyclic-module-record-methods` — Implementation of Cyclic Module Record Abstract Methods: exact disposition and partitions missing.
   - [ ] `sec-source-text-module-record-initialize-environment` — InitializeEnvironment ( ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-source-text-module-record-execute-module` — ExecuteModule ( optional _capability_: a PromiseCapability Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
@@ -1010,7 +1024,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-smr-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
   - [ ] `sec-smr-LoadRequestedModules` — LoadRequestedModules ( optional _hostDefined_: anything, ): a Promise: exact disposition and partitions missing.
   - [ ] `sec-smr-getexportednames` — GetExportedNames ( optional _exportStarSet_: a List of Source Text Module Records, ): a List of Strings: exact disposition and partitions missing.
-  - [ ] `sec-smr-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~: exact disposition and partitions missing.
+  - [ ] `sec-smr-resolveexport` — ResolveExport ( _exportName_: a String, optional _resolveSet_: a List of Records with fields [[Module]] (a Module Record) and [[ExportName]] (a String), ): a ResolvedBinding Record, null, or ~ambiguous~
+    - [ ] `source-text-module-export-graph` (module, unbounded): Source Text Module ResolveExport traverses the canonical Module Record graph by binding identity.
   - [ ] `sec-smr-Link` — Link ( ): a normal completion containing ~unused~: exact disposition and partitions missing.
   - [ ] `sec-smr-Evaluate` — Evaluate ( ): a Promise: exact disposition and partitions missing.
   - [ ] `sec-GetImportedModule` — GetImportedModule ( _referrer_: a Cyclic Module Record, _request_: a ModuleRequest Record, ): a Module Record: exact disposition and partitions missing.
@@ -1018,7 +1033,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-FinishLoadingImportedModule` — FinishLoadingImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _payload_: a GraphLoadingState Record or a PromiseCapability Record, _result_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-AllImportAttributesSupported` — AllImportAttributesSupported ( _attributes_: a List of ImportAttribute Records, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-hostgetsupportedimportattributes` — HostGetSupportedImportAttributes ( ): a List of Strings: exact disposition and partitions missing.
-  - [ ] `sec-getmodulenamespace` — GetModuleNamespace ( _module_: an instance of a concrete subclass of Module Record, ): a Module Namespace Object: exact disposition and partitions missing.
+  - [ ] `sec-getmodulenamespace` — GetModuleNamespace ( _module_: an instance of a concrete subclass of Module Record, ): a Module Namespace Object
+    - [ ] `module-record-namespace-singleton` (module, unbounded): GetModuleNamespace returns the lazily created singleton for the resolved Module Record.
   - [ ] `sec-module-semantics-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-imports` — Imports: exact disposition and partitions missing.
   - [ ] `sec-imports-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
@@ -2256,7 +2272,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `await` — Await ( _value_: an ECMAScript language value, ): either a normal completion containing either an ECMAScript language value or ~empty~, or a throw completion: exact disposition and partitions missing.
 - [ ] **Reflection** (`sec-reflection`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Reflect internal-method forwarding; Proxy traps; invariants and revocation.
-  - Linked local regression evidence: E2E: reflect_dynamic, proxy.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: reflect_dynamic, proxy.
   - Known blockers: Proxy invariant and abrupt-completion partitions remain unverified.
   - [ ] `sec-reflection` — Reflection: exact disposition and partitions missing.
   - [ ] `sec-reflect-object` — The Reflect Object: exact disposition and partitions missing.
@@ -2279,7 +2295,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-proxy-target-handler` — Proxy ( _target_, _handler_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-proxy-constructor` — Properties of the Proxy Constructor: exact disposition and partitions missing.
   - [ ] `sec-proxy.revocable` — Proxy.revocable ( _target_, _handler_ ): exact disposition and partitions missing.
-  - [ ] `sec-module-namespace-objects` — Module Namespace Objects: exact disposition and partitions missing.
+  - [ ] `sec-module-namespace-objects` — Module Namespace Objects
+    - [ ] `observable-module-namespace-contract` (module, unbounded): Reflection exposes the Module Namespace Exotic Object contract without substituting an ordinary object.
   - [ ] `sec-%symbol.tostringtag%` — %Symbol.toStringTag%: exact disposition and partitions missing.
 - [ ] **Memory Model** (`sec-memory-model`) — tracking: `todo`, scope: `required`
   - Semantic partitions: happens-before; tear-free reads; data races; Atomics synchronization.

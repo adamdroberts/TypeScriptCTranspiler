@@ -67,6 +67,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_set = false;
     o->is_error = false;
     o->is_arguments = false;
+    o->is_module_namespace = false;
     o->is_typed_array = false;
     o->is_url = false;
     o->is_url_search_params = false;
@@ -217,6 +218,53 @@ static void print_shape_keys(const tsc_object_t* o, const tsc_str_t* skip_key, c
 
 tsc_object_t* tsc_object_new(void) {
     return tsc_object_alloc(tsc_value_object_prototype());
+}
+
+tsc_object_t* tsc_module_namespace_new(void) {
+    tsc_object_t* object = tsc_object_alloc(tsc_value_null());
+    object->is_module_namespace = true;
+    return object;
+}
+
+bool tsc_module_namespace_define(
+    tsc_object_t* object,
+    tsc_str_t* key,
+    tsc_accessor_getter_t getter
+) {
+    if (!object || !object->is_module_namespace || !object->extensible || !getter) return false;
+    return tsc_object_define_accessor(
+        object,
+        key,
+        getter,
+        NULL,
+        true,
+        NULL,
+        NULL,
+        false,
+        true,
+        true,
+        false,
+        true
+    );
+}
+
+void tsc_module_namespace_finalize(tsc_object_t* object) {
+    if (!object || !object->is_module_namespace || !object->extensible) return;
+    if (!tsc_value_define_symbol_property_desc(
+        tsc_value_object(object),
+        tsc_symbol_to_string_tag(),
+        tsc_value_string(tsc_str_from_lit("Module", 6)),
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true
+    )) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module namespace @@toStringTag definition failed"));
+    }
+    (void)tsc_object_prevent_extensions(object);
 }
 
 static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_str_t* key) {
@@ -1158,6 +1206,9 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
         validate_proxy_set_result(o, key, value, success);
         return success;
     }
+    /* Module Namespace Exotic Objects have a [[Set]] method that always
+     * returns false, including for absent keys and alternate receivers. */
+    if (o->is_module_namespace) return false;
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
         const tsc_object_prop_t* prop = &o->props[idx];
@@ -1214,6 +1265,30 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         bool success = tsc_value_is_truthy(res);
         validate_proxy_define_property_result(o, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable, false, tsc_value_undefined(), false, tsc_value_undefined(), false, success);
         return success;
+    }
+    if (o->is_module_namespace && !o->extensible) {
+        ssize_t namespace_index = object_find(o, key);
+        if (namespace_index < 0) return false;
+        const tsc_object_prop_t* namespace_prop = &o->props[(size_t)namespace_index];
+        if (!namespace_prop->accessor) {
+            if (has_configurable && configurable) return false;
+            if (has_enumerable && enumerable != namespace_prop->enumerable) return false;
+            if (has_writable && writable && !namespace_prop->writable) return false;
+            if (!namespace_prop->writable && has_value && !tsc_value_object_is(value, namespace_prop->value)) {
+                return false;
+            }
+            return true;
+        }
+        if (has_configurable && configurable) return false;
+        if (has_enumerable && !enumerable) return false;
+        if (has_writable && !writable) return false;
+        if (has_value) {
+            tsc_value_t current = namespace_prop->getter
+                ? namespace_prop->getter(namespace_prop->getter_env, tsc_value_object(o))
+                : tsc_value_undefined();
+            if (!tsc_value_object_is(value, current)) return false;
+        }
+        return true;
     }
     ssize_t found = object_find(o, key);
     if (found >= 0) {
@@ -1305,6 +1380,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         validate_proxy_define_property_result(o, key, tsc_value_undefined(), false, false, false, enumerable, has_enumerable, configurable, has_configurable, true, getter_value, has_getter, setter_value, has_setter, success);
         return success;
     }
+    if (o->is_module_namespace && !o->extensible) return false;
     ssize_t found = object_find(o, key);
     if (found >= 0) {
         tsc_object_prop_t* prop = &o->props[(size_t)found];
@@ -1494,7 +1570,7 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
     ) {
         return tsc_value_get_prop_receiver(o->prototype, key, receiver);
     }
-    if (str_lit_eq(key, "__proto__")) {
+    if (!o->is_module_namespace && str_lit_eq(key, "__proto__")) {
         return tsc_value_get_prototype_of(receiver);
     }
     return tsc_value_undefined();
@@ -1522,7 +1598,16 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_proxy_validate_get_own_property_descriptor_result(o, key, res);
         return !tsc_value_is_undefined(res);
     }
-    return object_find(o, key) >= 0;
+    ssize_t found = object_find(o, key);
+    if (found < 0) return false;
+    /* HasOwnProperty is specified through [[GetOwnProperty]].  For namespace
+     * string exports that operation observes the live binding and therefore
+     * preserves its TDZ, even though [[HasProperty]] itself does not. */
+    const tsc_object_prop_t* prop = &o->props[(size_t)found];
+    if (o->is_module_namespace && !o->extensible && prop->accessor && prop->getter) {
+        (void)prop->getter(prop->getter_env, tsc_value_object((tsc_object_t*)o));
+    }
+    return true;
 }
 
 
@@ -1544,7 +1629,12 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
         return tsc_value_is_truthy(enum_val);
     }
     ssize_t found = object_find(o, key);
-    return found >= 0 && o->props[(size_t)found].enumerable;
+    if (found < 0) return false;
+    const tsc_object_prop_t* prop = &o->props[(size_t)found];
+    if (o->is_module_namespace && !o->extensible && prop->accessor && prop->getter) {
+        (void)prop->getter(prop->getter_env, tsc_value_object((tsc_object_t*)o));
+    }
+    return prop->enumerable;
 }
 
 
@@ -1827,6 +1917,11 @@ bool tsc_object_freeze(tsc_object_t* o) {
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_freeze(o->proxy_target);
         return tsc_object_set_proxy_integrity(o, true);
     }
+    if (o && o->is_module_namespace) {
+        for (size_t i = 0; i < o->len; i++) {
+            if (o->props[i].accessor) return false;
+        }
+    }
     if (!tsc_object_seal(o)) return false;
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].writable = false;
@@ -1853,6 +1948,11 @@ bool tsc_object_is_frozen(const tsc_object_t* o) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'isFrozen' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_frozen(o->proxy_target);
         return tsc_object_test_proxy_integrity((tsc_object_t*)o, true);
+    }
+    if (o && o->is_module_namespace) {
+        for (size_t i = 0; i < o->len; i++) {
+            if (o->props[i].accessor) return false;
+        }
     }
     if (!tsc_object_is_sealed(o)) return false;
     for (size_t i = 0; i < o->len; i++) {
@@ -2029,8 +2129,8 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
-        if (!o->props[i].enumerable) continue;
         tsc_str_t* key = o->props[i].key;
+        if (!tsc_object_property_is_enumerable(o, key)) continue;
         tsc_array_push_raw(a, &key);
     }
     return a;
