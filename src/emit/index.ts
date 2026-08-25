@@ -74652,13 +74652,70 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret) {
             unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
         }
-        const params = prepared.params ?? [];
-        if (kind === "get" && params.length !== 0) {
-            unsupported(expr, "Object.defineProperty getter must take no arguments");
+    }
+
+    private descriptorAccessorFunctionLike(
+        expression: ts.Expression,
+    ): ts.SignatureDeclaration | null {
+        const target = this.unwrapTransparentExpression(expression);
+        if (ts.isFunctionExpression(target) || ts.isArrowFunction(target)) return target;
+        if (!ts.isIdentifier(target)) return null;
+        const symbol = this.symbolForIdentifier(target);
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (!declaration) return null;
+        if (ts.isFunctionLike(declaration)) return declaration;
+        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+            const initializer = this.unwrapTransparentExpression(declaration.initializer);
+            if (ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer)) {
+                return initializer;
+            }
         }
-        if (kind === "set" && params.length !== 1) {
-            unsupported(expr, "Object.defineProperty setter must take one argument");
+        return null;
+    }
+
+    /** Build descriptor-callback argument binding. Getters
+     * receive no actual arguments and setters receive one; fixed formals get
+     * undefined when absent and a rest formal receives the remaining actuals. */
+    private descriptorAccessorCallArguments(
+        expression: ts.Expression,
+        kind: "get" | "set",
+        type: CType,
+        valueName: string,
+    ): { prelude: string[]; args: string[] } {
+        const params = type.params ?? [];
+        const declaration = this.descriptorAccessorFunctionLike(expression);
+        const restIndex = declaration?.parameters.findIndex((parameter) => !!parameter.dotDotDotToken) ?? -1;
+        const actuals: EmitResult[] = kind === "set"
+            ? [{ c: valueName, ty: T_VALUE }]
+            : [];
+        const prelude: string[] = [];
+        const args: string[] = [];
+        for (let index = 0; index < params.length; index++) {
+            const param = this.prepareType(params[index]!);
+            if (index === restIndex) {
+                const rest = this.freshTemp("_access_rest");
+                const remaining = actuals.slice(index);
+                prelude.push(
+                    `tsc_array_t* ${rest} = ` +
+                    `tsc_array_new(sizeof(tsc_value_t), ${Math.max(remaining.length, 1)})`,
+                );
+                for (const actual of remaining) {
+                    prelude.push(
+                        `tsc_array_push_value(${rest}, ${this.coerce(actual, T_VALUE, expression)})`,
+                    );
+                }
+                args.push(param.kind === "array"
+                    ? rest
+                    : this.coerce({ c: `tsc_value_array(${rest})`, ty: T_VALUE }, param, expression));
+                break;
+            }
+            args.push(this.coerce(
+                actuals[index] ?? { c: "tsc_value_undefined()", ty: T_VALUE },
+                param,
+                expression,
+            ));
         }
+        return { prelude, args };
     }
 
     private ensureDirectAccessorAdapter(expr: ts.Identifier, kind: "get" | "set", type: CType): string {
@@ -74672,26 +74729,33 @@ class Emitter {
         const name = `${callee}__access_${kind}_${this.accessorAdapters.size}`;
         this.accessorAdapters.set(key, name);
         const buf = new CBuf();
-        const params = type.params ?? [];
         const thisType = this.directCallableThisType(expr);
         if (kind === "get") {
             const ret = this.prepareType(type.ret);
-            if (ret.kind === "void") unsupported(expr, "Object.defineProperty getter must return a value");
             this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
             buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
             buf.line("(void)env;");
             if (!thisType) buf.line("(void)receiver;");
-            const args = thisType ? "receiver" : "";
-            const boxed = this.coerce({ c: `${callee}(${args})`, ty: ret }, T_VALUE, expr);
-            buf.line(`return ${boxed};`);
+            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
+            for (const step of call.prelude) buf.line(`${step};`);
+            const args = [...(thisType ? ["receiver"] : []), ...call.args].join(", ");
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${callee}(${args});`);
+                buf.line("return tsc_value_undefined();");
+            } else {
+                const boxed = this.coerce({ c: `${callee}(${args})`, ty: ret }, T_VALUE, expr);
+                buf.line(`return ${boxed};`);
+            }
         } else {
-            const param = this.prepareType(params[0]!);
             this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
             buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
             buf.line("(void)env;");
             if (!thisType) buf.line("(void)receiver;");
-            const arg = this.coerce({ c: "value", ty: T_VALUE }, param, expr);
-            const args = [...(thisType ? ["receiver"] : []), arg].join(", ");
+            buf.line("void* volatile value_gc_root = tsc_value_gc_root(value);");
+            buf.line("(void)value_gc_root;");
+            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
+            for (const step of call.prelude) buf.line(`${step};`);
+            const args = [...(thisType ? ["receiver"] : []), ...call.args].join(", ");
             buf.line(`${callee}(${args});`);
             buf.line("return true;");
         }
@@ -74714,23 +74778,30 @@ class Emitter {
         const buf = new CBuf();
         if (kind === "get") {
             const ret = this.prepareType(type.ret);
-            if (ret.kind === "void") unsupported(expr, "Object.defineProperty getter must return a value");
             this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
             buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
             if (!type.thisParam) buf.line("(void)receiver;");
             buf.line(`${type.c} fn = (${type.c})env;`);
-            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : [])].join(", ");
-            const boxed = this.coerce({ c: `fn->fn(${callArgs})`, ty: ret }, T_VALUE, expr);
-            buf.line(`return ${boxed};`);
+            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
+            for (const step of call.prelude) buf.line(`${step};`);
+            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), ...call.args].join(", ");
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`fn->fn(${callArgs});`);
+                buf.line("return tsc_value_undefined();");
+            } else {
+                const boxed = this.coerce({ c: `fn->fn(${callArgs})`, ty: ret }, T_VALUE, expr);
+                buf.line(`return ${boxed};`);
+            }
         } else {
-            const params = type.params ?? [];
-            const param = this.prepareType(params[0]!);
             this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
             buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
             if (!type.thisParam) buf.line("(void)receiver;");
             buf.line(`${type.c} fn = (${type.c})env;`);
-            const arg = this.coerce({ c: "value", ty: T_VALUE }, param, expr);
-            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), arg].join(", ");
+            buf.line("void* volatile value_gc_root = tsc_value_gc_root(value);");
+            buf.line("(void)value_gc_root;");
+            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
+            for (const step of call.prelude) buf.line(`${step};`);
+            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), ...call.args].join(", ");
             buf.line(`fn->fn(${callArgs});`);
             buf.line("return true;");
         }

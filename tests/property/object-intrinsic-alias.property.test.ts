@@ -32,6 +32,8 @@ function descriptorPlans(seed: number, count: number): DescriptorPlan[] {
 }
 
 function nativeSource(plans: readonly DescriptorPlan[]): string {
+    const stressFormals = Array.from({ length: 41 }, (_, index) => `formal_${index}`);
+    const lastStressFormal = stressFormals.at(-1)!;
     const definitions = plans.map((plan) => `
         definePropertyAlias(target, ${JSON.stringify(plan.key)}, {
             value: ${JSON.stringify(plan.value)},
@@ -79,6 +81,75 @@ function nativeSource(plans: readonly DescriptorPlan[]): string {
             Object("boxed").valueOf(),
             new Object(12).valueOf(),
         ].join(":"));
+
+        var accessorTrace = [];
+        var directAccessorTarget = {};
+        function directGetter(missing, ...remaining) {
+            accessorTrace.push([
+                "direct-get",
+                this === directAccessorTarget,
+                missing === undefined,
+                remaining.length,
+            ].join(":"));
+        }
+        function directSetter(first, missing, ...remaining) {
+            accessorTrace.push([
+                "direct-set",
+                this === directAccessorTarget,
+                first,
+                missing === undefined,
+                remaining.length,
+            ].join(":"));
+        }
+        definePropertyAlias(directAccessorTarget, "value", {
+            get: directGetter,
+            set: directSetter,
+            configurable: true,
+        });
+        void directAccessorTarget.value;
+        directAccessorTarget.value = "written";
+
+        var closureAccessorTarget = {};
+        definePropertyAlias(closureAccessorTarget, "value", {
+            get: function (first = "getter-default", ...remaining) {
+                accessorTrace.push([
+                    "closure-get",
+                    this === closureAccessorTarget,
+                    first,
+                    remaining.length,
+                ].join(":"));
+                return first;
+            },
+            set: function (...actuals) {
+                accessorTrace.push([
+                    "closure-set",
+                    this === closureAccessorTarget,
+                    actuals.length,
+                    actuals[0],
+                ].join(":"));
+            },
+            configurable: true,
+        });
+        accessorTrace.push("closure-read:" + closureAccessorTarget.value);
+        closureAccessorTarget.value = "assigned";
+
+        var zeroSetterTarget = {};
+        definePropertyAlias(zeroSetterTarget, "value", {
+            set: function () { accessorTrace.push("zero-set"); },
+        });
+        zeroSetterTarget.value = "ignored";
+
+        var stressAccessorTarget = {};
+        function stressSetter(${stressFormals.join(", ")}) {
+            accessorTrace.push([
+                "stress-set",
+                formal_0,
+                ${lastStressFormal} === undefined,
+            ].join(":"));
+        }
+        definePropertyAlias(stressAccessorTarget, "value", { set: stressSetter });
+        stressAccessorTarget.value = "stress-value";
+        console.log(accessorTrace.join("|"));
     `;
 }
 
@@ -95,6 +166,15 @@ function expectedOutput(plans: readonly DescriptorPlan[]): string[] {
         plans.map((plan) => plan.key).join("|"),
         `${plans.map((plan) => plan.key).join("|")}:true`,
         "true:false:boxed:12",
+        [
+            "direct-get:true:true:0",
+            "direct-set:true:written:true:0",
+            "closure-get:true:getter-default:0",
+            "closure-read:getter-default",
+            "closure-set:true:1:assigned",
+            "zero-set",
+            "stress-set:stress-value:true",
+        ].join("|"),
     ];
 }
 
