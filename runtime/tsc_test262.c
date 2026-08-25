@@ -52,6 +52,94 @@ static tsc_value_t test262_host_html_dda(void* env, tsc_value_t this_arg, tsc_ar
     return tsc_value_null();
 }
 
+static tsc_value_t test262_abstract_module_source_body(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("AbstractModuleSource is an abstract constructor"));
+    return tsc_value_undefined();
+}
+
+static tsc_value_t test262_abstract_module_source_tag(void* env, tsc_value_t receiver) {
+    (void)env;
+    (void)receiver;
+    return tsc_value_undefined();
+}
+
+static tsc_value_t test262_abstract_module_source_constructor(void) {
+    tsc_value_t constructor = tsc_value_function_generic_named(
+        test262_abstract_module_source_body,
+        NULL,
+        0.0,
+        tsc_str_from_lit("AbstractModuleSource", 20)
+    );
+    tsc_value_t prototype = tsc_value_get_prop(
+        constructor,
+        tsc_str_from_lit("prototype", 9)
+    );
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit("prototype", 9),
+        prototype,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true
+    );
+    (void)tsc_value_define_property_desc(
+        prototype,
+        tsc_str_from_lit("constructor", 11),
+        constructor,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+    tsc_str_t* tag_key = tsc_str_from_cstr("__tsc_symbol_toStringTag");
+    (void)tsc_object_define_accessor(
+        (tsc_object_t*)value_ptr(prototype),
+        tag_key,
+        test262_abstract_module_source_tag,
+        NULL,
+        true,
+        NULL,
+        NULL,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+    tsc_value_t tag_descriptor = tsc_value_get_own_property_descriptor(prototype, tag_key);
+    tsc_value_t tag_getter = tsc_value_get_prop(
+        tag_descriptor,
+        tsc_str_from_lit("get", 3)
+    );
+    (void)tsc_value_define_property_desc(
+        tag_getter,
+        tsc_str_from_lit("name", 4),
+        tsc_value_string(tsc_str_from_lit("get [Symbol.toStringTag]", 24)),
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+    return constructor;
+}
+
 tsc_value_t tsc_test262_host_object(void) {
     static tsc_object_t* host = NULL;
     if (!host) {
@@ -116,6 +204,18 @@ tsc_value_t tsc_test262_host_object(void) {
                 object,
                 tsc_str_from_lit("IsHTMLDDA", 9),
                 html_dda,
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("AbstractModuleSource", 20),
+                test262_abstract_module_source_constructor(),
                 true,
                 true,
                 true,

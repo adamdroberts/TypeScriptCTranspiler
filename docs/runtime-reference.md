@@ -407,7 +407,7 @@ Linked only for conformance observations. `tsc_test262_begin()` installs `$262` 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_test262_begin()` | `void` | Starts observation capture and installs the reviewed host-global binding collection |
-| `tsc_test262_host_object()` | `tsc_value_t` | Returns the stable `$262` object for the current native process/Realm |
+| `tsc_test262_host_object()` | `tsc_value_t` | Returns the stable `$262` object for the current native process/Realm, including the hidden `%AbstractModuleSource%` intrinsic reference and implemented host hooks |
 | `tsc_test262_write_normal(...)` / `tsc_test262_write_throw(...)` | `void` | Emits the single structured observation owned by the native execution boundary |
 
 ## Process

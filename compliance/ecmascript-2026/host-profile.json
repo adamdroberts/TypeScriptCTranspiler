@@ -81,7 +81,7 @@
     "failure-origin": true,
     "host-print": true,
     "host-$262-global": true,
-    "host-$262-AbstractModuleSource": false,
+    "host-$262-AbstractModuleSource": true,
     "host-$262-createRealm": false,
     "host-$262-evalScript": false,
     "host-$262-detachArrayBuffer": true,
