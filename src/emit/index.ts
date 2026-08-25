@@ -720,6 +720,7 @@ class Emitter {
     }
 
     private readonly test262ScriptEntryPaths: ReadonlySet<string>;
+    private test262ScriptDeclaredGlobalBindingNamesCache: ReadonlySet<string> | null = null;
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
@@ -24018,6 +24019,21 @@ class Emitter {
             this.isTest262ScriptSourceFile(expr.getSourceFile());
     }
 
+    private isTest262ScriptEvaluationNode(node: ts.Node): boolean {
+        const source = node.getSourceFile();
+        if (!this.isTest262ScriptSourceFile(source)) return false;
+        for (let current: ts.Node | undefined = node.parent; current && current !== source; current = current.parent) {
+            if (
+                ts.isFunctionLike(current) ||
+                ts.isClassLike(current) ||
+                ts.isClassStaticBlockDeclaration(current)
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private isTest262ScriptGlobalVarScopedDeclaration(
         decl: ts.Node,
     ): decl is ts.VariableDeclaration {
@@ -24055,6 +24071,58 @@ class Emitter {
         return this.isTest262ScriptGlobalVarScopedDeclaration(decl) && ts.isIdentifier(decl.name);
     }
 
+    private test262BindingVariableDeclaration(node: ts.Node): ts.VariableDeclaration | null {
+        for (let current: ts.Node | undefined = node; current; current = current.parent) {
+            if (ts.isVariableDeclaration(current)) return current;
+            if (
+                ts.isSourceFile(current) ||
+                ts.isFunctionLike(current) ||
+                ts.isClassLike(current)
+            ) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private isTest262ScriptGlobalLexicalVariableDeclaration(
+        declaration: ts.Node,
+    ): declaration is ts.VariableDeclaration {
+        if (!ts.isVariableDeclaration(declaration) ||
+            !this.isTest262ScriptSourceFile(declaration.getSourceFile()) ||
+            !ts.isVariableDeclarationList(declaration.parent) ||
+            (declaration.parent.flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) === 0) {
+            return false;
+        }
+        return ts.isVariableStatement(declaration.parent.parent) &&
+            ts.isSourceFile(declaration.parent.parent.parent);
+    }
+
+    /** BoundNames is one source-ordered tree worklist shared by declaration
+     * instantiation, identifier resolution, and binding initialization. */
+    private test262BindingNames(name: ts.BindingName): ts.Identifier[] {
+        const names: ts.Identifier[] = [];
+        const worklist: ts.BindingName[] = [name];
+        while (worklist.length > 0) {
+            const current = worklist.pop()!;
+            if (ts.isIdentifier(current)) {
+                names.push(current);
+                continue;
+            }
+            for (let index = current.elements.length - 1; index >= 0; index--) {
+                const element = current.elements[index];
+                if (!element || !ts.isBindingElement(element)) continue;
+                worklist.push(element.name);
+            }
+        }
+        return names;
+    }
+
     private isTest262ScriptGlobalLexicalDeclaration(
         decl: ts.Node,
     ): decl is (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier } {
@@ -24062,16 +24130,8 @@ class Emitter {
         if (ts.isClassDeclaration(decl)) {
             return !!decl.name && ts.isSourceFile(decl.parent);
         }
-        return ts.isVariableDeclaration(decl) && ts.isIdentifier(decl.name) &&
-            ts.isVariableDeclarationList(decl.parent) &&
-            (decl.parent.flags & (
-                ts.NodeFlags.Const |
-                ts.NodeFlags.Let |
-                ts.NodeFlags.Using |
-                ts.NodeFlags.AwaitUsing
-            )) !== 0 &&
-            ts.isVariableStatement(decl.parent.parent) &&
-            ts.isSourceFile(decl.parent.parent.parent);
+        return this.isTest262ScriptGlobalLexicalVariableDeclaration(decl) &&
+            ts.isIdentifier(decl.name);
     }
 
     private isTest262ScriptGlobalFunctionDeclaration(
@@ -24376,18 +24436,52 @@ class Emitter {
      * later setup/test source records. */
     private test262ScriptGlobalBindingName(id: ts.Identifier): string | null {
         const symbol = this.symbolForIdentifier(id);
-        if (!symbol) return null;
+        if (!symbol) {
+            return this.test262ScriptDeclaredGlobalBindingNames().has(id.text)
+                ? id.text
+                : null;
+        }
         const declarations = new Set<ts.Declaration>();
         if (symbol.valueDeclaration) declarations.add(symbol.valueDeclaration);
         for (const declaration of symbol.declarations ?? []) declarations.add(declaration);
         for (const declaration of declarations) {
-            if (this.isTest262ScriptGlobalVarDeclaration(declaration) ||
+            const variable = this.test262BindingVariableDeclaration(declaration);
+            if ((variable && (
+                this.isTest262ScriptGlobalVarScopedDeclaration(variable) ||
+                this.isTest262ScriptGlobalLexicalVariableDeclaration(variable)
+            )) ||
+                this.isTest262ScriptGlobalVarDeclaration(declaration) ||
                 this.isTest262ScriptGlobalFunctionDeclaration(declaration) ||
                 this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
         }
         return null;
+    }
+
+    /** Checker symbols do not always connect a var-scoped declaration nested
+     * in a Script statement (for example a for-of binding pattern) to a use in
+     * another separately parsed Script.  Resolve that cross-record case from
+     * the canonical declaration plans themselves, never from fixture shape. */
+    private test262ScriptDeclaredGlobalBindingNames(): ReadonlySet<string> {
+        if (this.test262ScriptDeclaredGlobalBindingNamesCache) {
+            return this.test262ScriptDeclaredGlobalBindingNamesCache;
+        }
+        const names = new Set<string>();
+        this.test262ScriptDeclaredGlobalBindingNamesCache = names;
+        for (const module of this.graph.modules.values()) {
+            if (!this.test262ScriptEntryPaths.has(path.resolve(module.sf.fileName)) ||
+                !this.isTest262ScriptSourceFile(module.sf)) {
+                continue;
+            }
+            const declarations = this.test262ScriptGlobalDeclarations(module.sf);
+            for (const lexical of declarations.lexicals) names.add(lexical.name.text);
+            for (const declaration of declarations.functions) {
+                if (declaration.name) names.add(declaration.name.text);
+            }
+            for (const name of declarations.vars) names.add(name.text);
+        }
+        return names;
     }
 
     private test262GlobalBindingKey(name: string): string {
@@ -24400,7 +24494,8 @@ class Emitter {
      * source-tree worklist independently of statement nesting depth. */
     private test262ScriptGlobalDeclarations(sf: ts.SourceFile): {
         lexicals: Array<{
-            declaration: (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier };
+            declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
+            name: ts.Identifier;
             immutable: boolean;
         }>;
         functions: ts.FunctionDeclaration[];
@@ -24410,13 +24505,18 @@ class Emitter {
             return { lexicals: [], functions: [], vars: [] };
         }
         const lexicals: Array<{
-            declaration: (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier };
+            declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
+            name: ts.Identifier;
             immutable: boolean;
         }> = [];
         for (const statement of sf.statements) {
             if (ts.isClassDeclaration(statement)) {
                 if (statement.name) {
-                    lexicals.push({ declaration: statement as typeof statement & { name: ts.Identifier }, immutable: false });
+                    lexicals.push({
+                        declaration: statement as typeof statement & { name: ts.Identifier },
+                        name: statement.name,
+                        immutable: false,
+                    });
                 }
                 continue;
             }
@@ -24429,20 +24529,17 @@ class Emitter {
                 ts.NodeFlags.AwaitUsing
             )) === 0) continue;
             for (const declaration of statement.declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name)) {
-                    unsupported(
+                for (const name of this.test262BindingNames(declaration.name)) {
+                    lexicals.push({
                         declaration,
-                        "global lexical binding patterns require canonical Global Environment destructuring",
-                    );
+                        name,
+                        immutable: (flags & (
+                            ts.NodeFlags.Const |
+                            ts.NodeFlags.Using |
+                            ts.NodeFlags.AwaitUsing
+                        )) !== 0,
+                    });
                 }
-                lexicals.push({
-                    declaration: declaration as typeof declaration & { name: ts.Identifier },
-                    immutable: (flags & (
-                        ts.NodeFlags.Const |
-                        ts.NodeFlags.Using |
-                        ts.NodeFlags.AwaitUsing
-                    )) !== 0,
-                });
             }
         }
 
@@ -24456,12 +24553,6 @@ class Emitter {
             }
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             if (this.isTest262ScriptGlobalVarScopedDeclaration(node)) {
-                if (!ts.isIdentifier(node.name)) {
-                    unsupported(
-                        node,
-                        "global var binding patterns require canonical Global Environment destructuring",
-                    );
-                }
                 varDeclarations.push(node);
             }
             ts.forEachChild(node, visit);
@@ -24480,10 +24571,12 @@ class Emitter {
         const varNames = new Set<string>();
         const vars: ts.Identifier[] = [];
         for (const declaration of varDeclarations) {
-            if (!ts.isVariableDeclaration(declaration) || !ts.isIdentifier(declaration.name) ||
-                functionNames.has(declaration.name.text) || varNames.has(declaration.name.text)) continue;
-            varNames.add(declaration.name.text);
-            vars.push(declaration.name);
+            if (!ts.isVariableDeclaration(declaration)) continue;
+            for (const name of this.test262BindingNames(declaration.name)) {
+                if (functionNames.has(name.text) || varNames.has(name.text)) continue;
+                varNames.add(name.text);
+                vars.push(name);
+            }
         }
         return { lexicals, functions, vars };
     }
@@ -24504,7 +24597,7 @@ class Emitter {
                 : "TSC_GLOBAL_DECL_LEXICAL_MUTABLE";
             buf.line(
                 `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                `${this.test262GlobalBindingKey(lexical.declaration.name.text)}, ${kind}, ` +
+                `${this.test262GlobalBindingKey(lexical.name.text)}, ${kind}, ` +
                 `tsc_value_undefined(), NULL };`,
             );
         }
@@ -24528,11 +24621,224 @@ class Emitter {
         buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
     }
 
+    private emitTest262ScriptGlobalBindingLeaf(
+        buf: CBuf,
+        identifier: ts.Identifier,
+        value: string,
+        mode: "lexical" | "var",
+    ): void {
+        const key = this.test262GlobalBindingKey(identifier.text);
+        buf.line(mode === "lexical"
+            ? `tsc_global_lexical_initialize(${key}, ${value});`
+            : `tsc_global_binding_set(${key}, ${value});`);
+    }
+
+    private emitTest262ScriptBindingElement(
+        buf: CBuf,
+        element: ts.BindingElement,
+        sourceValue: string,
+        mode: "lexical" | "var",
+    ): void {
+        const value = this.freshTemp("_global_binding_value");
+        const root = this.freshTemp("_global_binding_value_gc_root");
+        buf.line(`tsc_value_t ${value} = ${sourceValue};`);
+        buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
+        if (element.initializer) {
+            buf.open(`if (tsc_value_is_undefined(${value}))`);
+            const fallback = this.emitExpr(element.initializer);
+            buf.line(`${value} = ${this.coerce(fallback, T_VALUE, element.initializer)};`);
+            buf.line(`${root} = tsc_value_gc_root(${value});`);
+            buf.close();
+        }
+        this.emitTest262ScriptBindingName(buf, element.name, value, mode);
+    }
+
+    /** BindingInitialization consumes the BindingName AST as one canonical
+     * recursive tree. Every object member and iterator step enters this same
+     * algorithm independently of pattern width or nesting depth. */
+    private emitTest262ScriptBindingName(
+        buf: CBuf,
+        binding: ts.BindingName,
+        sourceValue: string,
+        mode: "lexical" | "var",
+    ): void {
+        if (ts.isIdentifier(binding)) {
+            this.emitTest262ScriptGlobalBindingLeaf(buf, binding, sourceValue, mode);
+            return;
+        }
+
+        const source = this.freshTemp("_global_binding_source");
+        const sourceRoot = this.freshTemp("_global_binding_source_gc_root");
+        buf.open("");
+        buf.line(`tsc_value_t const ${source} = ${sourceValue};`);
+        buf.line(`void* volatile ${sourceRoot} = tsc_value_gc_root(${source});`);
+
+        if (ts.isObjectBindingPattern(binding)) {
+            buf.open(`if (tsc_value_is_nullish(${source}))`);
+            buf.line(
+                `tsc_throw_error(TSC_ERROR_TYPE, ` +
+                `tsc_str_from_cstr("Cannot destructure null or undefined"));`,
+            );
+            buf.close();
+            const hasRest = binding.elements.some((element) => !!element.dotDotDotToken);
+            const excluded = hasRest ? this.freshTemp("_global_binding_excluded") : null;
+            if (excluded) {
+                buf.line(
+                    `tsc_array_t* ${excluded} = ` +
+                    `tsc_array_new(sizeof(tsc_value_t), ${Math.max(binding.elements.length, 1)});`,
+                );
+            }
+            for (let index = 0; index < binding.elements.length; index++) {
+                const element = binding.elements[index]!;
+                if (element.dotDotDotToken) {
+                    if (
+                        index !== binding.elements.length - 1 ||
+                        element.propertyName ||
+                        element.initializer ||
+                        !ts.isIdentifier(element.name) ||
+                        !excluded
+                    ) {
+                        unsupported(element, "invalid object binding rest element");
+                    }
+                    const rest = this.freshTemp("_global_binding_object_rest");
+                    const restRoot = this.freshTemp("_global_binding_object_rest_gc_root");
+                    buf.line(
+                        `tsc_value_t ${rest} = ` +
+                        `tsc_value_copy_data_properties(${source}, ${excluded});`,
+                    );
+                    buf.line(`void* volatile ${restRoot} = tsc_value_gc_root(${rest});`);
+                    this.emitTest262ScriptGlobalBindingLeaf(buf, element.name, rest, mode);
+                    continue;
+                }
+                const propertyName = element.propertyName ??
+                    (ts.isIdentifier(element.name) ? element.name : null);
+                if (!propertyName) {
+                    unsupported(element, "object binding element requires a property name");
+                }
+                const key = this.freshTemp("_global_binding_key");
+                if (ts.isComputedPropertyName(propertyName)) {
+                    const keyExpression = this.emitExpr(propertyName.expression);
+                    buf.line(
+                        `tsc_value_t const ${key} = tsc_value_to_property_key(` +
+                        `${this.coerce(keyExpression, T_VALUE, propertyName.expression)});`,
+                    );
+                } else {
+                    const name = this.staticPropertyName(propertyName);
+                    if (name === null) unsupported(propertyName, "unsupported object binding property name");
+                    buf.line(
+                        `tsc_value_t const ${key} = ` +
+                        `tsc_value_string(${this.test262GlobalBindingKey(name)});`,
+                    );
+                }
+                const keyRoot = this.freshTemp("_global_binding_key_gc_root");
+                buf.line(`void* volatile ${keyRoot} = tsc_value_gc_root(${key});`);
+                if (excluded) buf.line(`tsc_array_push_value(${excluded}, ${key});`);
+                this.emitTest262ScriptBindingElement(
+                    buf,
+                    element,
+                    `tsc_value_get_computed_prop(${source}, ${key})`,
+                    mode,
+                );
+            }
+            buf.close();
+            return;
+        }
+
+        const iterator = this.freshTemp("_global_binding_iterator");
+        const frame = this.freshTemp("_global_binding_iterator_frame");
+        const error = this.freshTemp("_global_binding_iterator_error");
+        const errorRoot = this.freshTemp("_global_binding_iterator_error_gc_root");
+        const closeFrame = this.freshTemp("_global_binding_iterator_close_frame");
+        buf.line(
+            `tsc_sync_iterator_t* const ${iterator} = ` +
+            `(tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`,
+        );
+        buf.line(`*${iterator} = tsc_sync_iterator_open(${source});`);
+        buf.line(`TSC_TRY_FRAME(${frame});`);
+        buf.line(`tsc_try_push(&${frame});`);
+        buf.open(`if (setjmp(${frame}.jb) == 0)`);
+        for (let index = 0; index < binding.elements.length; index++) {
+            const element = binding.elements[index];
+            if (!element || !ts.isBindingElement(element)) {
+                buf.line(`(void)tsc_sync_iterator_step(${iterator}, NULL);`);
+                continue;
+            }
+            if (element.dotDotDotToken) {
+                if (
+                    index !== binding.elements.length - 1 ||
+                    element.propertyName ||
+                    element.initializer
+                ) {
+                    unsupported(element, "invalid array binding rest element");
+                }
+                const rest = this.freshTemp("_global_binding_array_rest");
+                const next = this.freshTemp("_global_binding_array_rest_value");
+                const boxedRest = this.freshTemp("_global_binding_array_rest_boxed");
+                const boxedRestRoot = this.freshTemp("_global_binding_array_rest_gc_root");
+                buf.line(`tsc_array_t* ${rest} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+                buf.line(`tsc_value_t ${next};`);
+                buf.open(`while (tsc_sync_iterator_step(${iterator}, &${next}))`);
+                buf.line(`tsc_array_push_value(${rest}, ${next});`);
+                buf.close();
+                buf.line(`tsc_value_t ${boxedRest} = tsc_value_array(${rest});`);
+                buf.line(`void* volatile ${boxedRestRoot} = tsc_value_gc_root(${boxedRest});`);
+                this.emitTest262ScriptBindingName(buf, element.name, boxedRest, mode);
+                continue;
+            }
+            const next = this.freshTemp("_global_binding_iterator_value");
+            buf.line(`tsc_value_t ${next} = tsc_value_undefined();`);
+            buf.line(`(void)tsc_sync_iterator_step(${iterator}, &${next});`);
+            this.emitTest262ScriptBindingElement(buf, element, next, mode);
+        }
+        buf.line(`tsc_sync_iterator_close(${iterator});`);
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.open("else");
+        buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
+        buf.line(`void* volatile ${errorRoot} = tsc_value_gc_root(${error});`);
+        buf.line("tsc_try_pop();");
+        buf.line(`TSC_TRY_FRAME(${closeFrame});`);
+        buf.line(`tsc_try_push(&${closeFrame});`);
+        buf.open(`if (setjmp(${closeFrame}.jb) == 0)`);
+        buf.line(`tsc_sync_iterator_close(${iterator});`);
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.open("else");
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.line(`tsc_throw_value(${error});`);
+        buf.close();
+        buf.close();
+    }
+
+    private emitTest262ScriptGlobalPatternInitializer(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+        mode: "lexical" | "var",
+    ): void {
+        if (!declaration.initializer) {
+            unsupported(declaration, "global binding pattern requires an initializer");
+        }
+        const initializer = this.emitExpr(declaration.initializer);
+        const value = this.freshTemp("_global_binding_initializer");
+        const root = this.freshTemp("_global_binding_initializer_gc_root");
+        buf.line(
+            `tsc_value_t ${value} = ` +
+            `${this.coerce(initializer, T_VALUE, declaration.initializer)};`,
+        );
+        buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
+        this.emitTest262ScriptBindingName(buf, declaration.name, value, mode);
+    }
+
     private emitTest262ScriptGlobalLexicalInitializer(
         buf: CBuf,
         declaration: ts.VariableDeclaration,
     ): boolean {
-        if (!this.isTest262ScriptGlobalLexicalDeclaration(declaration)) return false;
+        if (!this.isTest262ScriptGlobalLexicalVariableDeclaration(declaration)) return false;
+        if (!ts.isIdentifier(declaration.name)) {
+            this.emitTest262ScriptGlobalPatternInitializer(buf, declaration, "lexical");
+            return true;
+        }
         const value = declaration.initializer
             ? this.emitExpr(declaration.initializer)
             : { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -24562,7 +24868,11 @@ class Emitter {
         buf: CBuf,
         declaration: ts.VariableDeclaration,
     ): boolean {
-        if (!this.isTest262ScriptGlobalVarDeclaration(declaration)) return false;
+        if (!this.isTest262ScriptGlobalVarScopedDeclaration(declaration)) return false;
+        if (!ts.isIdentifier(declaration.name)) {
+            this.emitTest262ScriptGlobalPatternInitializer(buf, declaration, "var");
+            return true;
+        }
         if (declaration.initializer) {
             const value = this.emitExpr(declaration.initializer);
             buf.line(
@@ -40693,7 +41003,9 @@ class Emitter {
             this.emitYieldStmt(buf, es.expression);
             return;
         }
-        const completion = this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1];
+        const completion = this.isTest262ScriptEvaluationNode(es)
+            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
+            : undefined;
         if (!completion && this.isPrunableExpressionStatementExpression(es.expression)) return;
         const r = this.emitExpr(es.expression);
         if (!completion) {
@@ -42050,6 +42362,22 @@ class Emitter {
         if (!varInitializer) buf.close();
     }
 
+    /** Recognize the one global-var pattern route shared by iteration forms. */
+    private test262ScriptGlobalVarBindingPattern(
+        initializer: ts.VariableDeclarationList | ts.Expression,
+    ): ts.VariableDeclaration | null {
+        if (!ts.isVariableDeclarationList(initializer) ||
+            initializer.declarations.length !== 1) {
+            return null;
+        }
+        const declaration = initializer.declarations[0];
+        return declaration &&
+            !ts.isIdentifier(declaration.name) &&
+            this.isTest262ScriptGlobalVarScopedDeclaration(declaration)
+            ? declaration
+            : null;
+    }
+
     /** Bind one simple iteration value through the declaration's canonical
      * storage.  Lexical bindings captured by a nested closure allocate a fresh
      * heap cell on every iteration; all reads and writes then follow that cell.
@@ -42123,9 +42451,11 @@ class Emitter {
 
     private emitForIn(buf: CBuf, fis: ts.ForInStatement): void {
         const iter = this.emitExpr(fis.expression);
+        const test262GlobalPattern = this.test262ScriptGlobalVarBindingPattern(fis.initializer);
         if (ts.isVariableDeclarationList(fis.initializer)) {
             const d = fis.initializer.declarations[0];
-            if (fis.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name))
+            if (fis.initializer.declarations.length !== 1 || !d ||
+                !ts.isIdentifier(d.name) && d !== test262GlobalPattern)
                 unsupported(fis.initializer, "for-in binding must be simple identifier");
         } else if (!ts.isIdentifier(fis.initializer)) {
             unsupported(fis.initializer, "for-in binding form");
@@ -42193,10 +42523,21 @@ class Emitter {
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${keysVar}->len; ${idxVar}++)`,
         );
-        this.emitIterationIdentifierBinding(buf, fis.initializer, {
+        const value: EmitResult = {
             c: `TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})`,
             ty: T_STRING,
-        });
+        };
+        const test262GlobalPattern = this.test262ScriptGlobalVarBindingPattern(fis.initializer);
+        if (test262GlobalPattern) {
+            this.emitTest262ScriptBindingName(
+                buf,
+                test262GlobalPattern.name,
+                this.coerce(value, T_VALUE, test262GlobalPattern.name),
+                "var",
+            );
+        } else {
+            this.emitIterationIdentifierBinding(buf, fis.initializer, value);
+        }
         const labeledContinueTarget = this.directLabeledLoopName(fis)
             ? this.freshTemp("_for_in_labeled_continue")
             : null;
@@ -42278,8 +42619,9 @@ class Emitter {
         if (!elemType) unsupported(fos.expression, "for-of element type unavailable");
         const idxVar = this.freshTemp("_i");
         const arrVar = this.freshTemp("_a");
+        const test262GlobalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
 
-        if (elemType.kind === "entry" && ts.isVariableDeclarationList(fos.initializer)) {
+        if (!test262GlobalPattern && elemType.kind === "entry" && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isArrayBindingPattern(d.name)) {
                 this.emitEntryArrayForOf(
@@ -42293,7 +42635,7 @@ class Emitter {
                 return;
             }
         }
-        if (elemType.kind === "value" && ts.isVariableDeclarationList(fos.initializer)) {
+        if (!test262GlobalPattern && elemType.kind === "value" && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isObjectBindingPattern(d.name)) {
                 this.emitDynamicObjectArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
@@ -42304,7 +42646,7 @@ class Emitter {
                 return;
             }
         }
-        if (elemType.kind === "array" && elemType.elem && ts.isVariableDeclarationList(fos.initializer)) {
+        if (!test262GlobalPattern && elemType.kind === "array" && elemType.elem && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isArrayBindingPattern(d.name)) {
                 this.emitArrayBackedArrayBindingForOf(
@@ -42318,7 +42660,7 @@ class Emitter {
                 return;
             }
         }
-        if ((elemType.kind === "class" || elemType.kind === "array") && ts.isVariableDeclarationList(fos.initializer)) {
+        if (!test262GlobalPattern && (elemType.kind === "class" || elemType.kind === "array") && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isObjectBindingPattern(d.name)) {
                 const objectTsType = this.forOfElementTsType(fos.expression);
@@ -42343,7 +42685,8 @@ class Emitter {
 
         if (ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
-            if (fos.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name))
+            if (fos.initializer.declarations.length !== 1 || !d ||
+                !ts.isIdentifier(d.name) && d !== test262GlobalPattern)
                 unsupported(fos.initializer, "for-of binding must be simple identifier");
         } else if (!ts.isIdentifier(fos.initializer)) {
             unsupported(fos.initializer, "for-of binding form");
@@ -42358,11 +42701,20 @@ class Emitter {
         const element = elemType.kind === "value"
             ? `(tsc_array_index_present(${arrVar}, ${idxVar}) ? TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar}) : tsc_value_undefined())`
             : `TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar})`;
-        this.emitIterationIdentifierBinding(
-            buf,
-            fos.initializer,
-            { c: element, ty: elemType },
-        );
+        if (test262GlobalPattern) {
+            this.emitTest262ScriptBindingName(
+                buf,
+                test262GlobalPattern.name,
+                this.coerce({ c: element, ty: elemType }, T_VALUE, test262GlobalPattern.name),
+                "var",
+            );
+        } else {
+            this.emitIterationIdentifierBinding(
+                buf,
+                fos.initializer,
+                { c: element, ty: elemType },
+            );
+        }
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_for_of_labeled_continue")
             : null;
@@ -46619,7 +46971,9 @@ class Emitter {
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
-        const completion = this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1];
+        const completion = this.isTest262ScriptEvaluationNode(ts0)
+            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
+            : undefined;
         const outerCompletion = completion
             ? {
                 value: this.freshTemp("_try_outer_completion"),

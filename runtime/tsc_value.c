@@ -4319,6 +4319,58 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
     return target;
 }
 
+static bool copy_data_property_is_excluded(
+    const tsc_str_t* raw_key,
+    const tsc_array_t* excluded_keys
+) {
+    if (!excluded_keys) return false;
+    tsc_symbol_t* raw_symbol = value_known_symbol_from_internal_key(raw_key);
+    for (size_t i = 0; i < excluded_keys->len; i++) {
+        tsc_value_t excluded = TSC_ARR(tsc_value_t, excluded_keys, i);
+        if (raw_symbol) {
+            if (
+                value_is_box(excluded) &&
+                value_tag(excluded) == TSC_VALUE_TAG_SYMBOL &&
+                (tsc_symbol_t*)value_ptr(excluded) == raw_symbol
+            ) {
+                return true;
+            }
+            continue;
+        }
+        if (
+            value_is_box(excluded) &&
+            value_tag(excluded) == TSC_VALUE_TAG_STRING &&
+            tsc_str_eq(raw_key, (tsc_str_t*)value_ptr(excluded))
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* CopyDataProperties consumes the runtime's one canonical [[OwnPropertyKeys]]
+ * collection, preserving String/Symbol identity and Proxy/accessor effects. */
+tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excluded_keys) {
+    if (tsc_value_is_nullish(source)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Cannot destructure null or undefined")
+        );
+    }
+    tsc_object_t* target = tsc_object_new();
+    tsc_array_t* keys = tsc_value_raw_own_keys(source);
+    for (size_t i = 0; i < keys->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+        if (copy_data_property_is_excluded(key, excluded_keys)) continue;
+        if (!tsc_value_property_is_enumerable(source, key)) continue;
+        tsc_value_t value = tsc_value_get_prop(source, key);
+        void* volatile value_gc_root = tsc_value_gc_root(value);
+        (void)value_gc_root;
+        tsc_object_set(target, key, value);
+    }
+    return tsc_value_object(target);
+}
+
 double tsc_value_length(tsc_value_t v) {
     if (!value_is_box(v)) return 0.0;
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
@@ -4355,6 +4407,136 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     }
     tsc_throw_str(tsc_str_from_cstr("for-of value is not iterable"));
     return tsc_array_new(sizeof(tsc_value_t), 1);
+}
+
+enum {
+    TSC_SYNC_ITERATOR_DYNAMIC = 0,
+    TSC_SYNC_ITERATOR_ARRAY = 1,
+    TSC_SYNC_ITERATOR_STRING = 2,
+};
+
+tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
+    if (tsc_value_is_nullish(source)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
+    }
+    tsc_sync_iterator_t record = {
+        .source = source,
+        .iterator = tsc_value_undefined(),
+        .next_method = tsc_value_undefined(),
+        .source_gc_root = tsc_value_gc_root(source),
+        .iterator_gc_root = NULL,
+        .next_method_gc_root = NULL,
+        .index = 0,
+        .kind = TSC_SYNC_ITERATOR_DYNAMIC,
+        .done = false,
+    };
+    tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
+    void* volatile method_gc_root = tsc_value_gc_root(method);
+    (void)method_gc_root;
+    if (
+        value_is_box(source) &&
+        value_tag(source) == TSC_VALUE_TAG_ARRAY &&
+        tsc_value_eq(method, tsc_value_symbol_iterator_method_value())
+    ) {
+        record.kind = TSC_SYNC_ITERATOR_ARRAY;
+        return record;
+    }
+    if (
+        value_is_box(source) &&
+        value_tag(source) == TSC_VALUE_TAG_STRING &&
+        tsc_value_is_undefined(method)
+    ) {
+        record.kind = TSC_SYNC_ITERATOR_STRING;
+        record.iterator = tsc_value_array(value_string_values((tsc_str_t*)value_ptr(source)));
+        record.iterator_gc_root = tsc_value_gc_root(record.iterator);
+        return record;
+    }
+    if (!tsc_value_is_callable(method)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
+    }
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    record.iterator = tsc_value_apply_function(method, source, tsc_value_array(args));
+    if (!tsc_value_is_object(record.iterator)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator method returned a non-object"));
+    }
+    record.iterator_gc_root = tsc_value_gc_root(record.iterator);
+    record.next_method = tsc_value_get_prop(
+        record.iterator,
+        tsc_str_from_lit("next", 4)
+    );
+    record.next_method_gc_root = tsc_value_gc_root(record.next_method);
+    if (!tsc_value_is_callable(record.next_method)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator next method is not callable"));
+    }
+    return record;
+}
+
+bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
+    if (!record || record->done) return false;
+    if (record->kind == TSC_SYNC_ITERATOR_ARRAY) {
+        size_t length = (size_t)tsc_value_length(record->source);
+        if (record->index >= length) {
+            record->done = true;
+            return false;
+        }
+        if (value) *value = tsc_value_get_index(record->source, (double)record->index);
+        record->index++;
+        return true;
+    }
+    if (record->kind == TSC_SYNC_ITERATOR_STRING) {
+        tsc_array_t* values = tsc_value_as_array(record->iterator);
+        if (record->index >= values->len) {
+            record->done = true;
+            return false;
+        }
+        if (value) *value = TSC_ARR(tsc_value_t, values, record->index);
+        record->index++;
+        return true;
+    }
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_value_t result = tsc_value_apply_function(
+        record->next_method,
+        record->iterator,
+        tsc_value_array(args)
+    );
+    if (!tsc_value_is_object(result)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator result is not an object"));
+    }
+    void* volatile result_gc_root = tsc_value_gc_root(result);
+    (void)result_gc_root;
+    if (tsc_value_is_truthy(tsc_value_get_prop(result, tsc_str_from_lit("done", 4)))) {
+        record->done = true;
+        return false;
+    }
+    if (value) {
+        *value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
+    }
+    return true;
+}
+
+void tsc_sync_iterator_close(tsc_sync_iterator_t* record) {
+    if (!record || record->done) return;
+    record->done = true;
+    if (record->kind != TSC_SYNC_ITERATOR_DYNAMIC) return;
+    tsc_value_t return_method = tsc_value_get_prop(
+        record->iterator,
+        tsc_str_from_lit("return", 6)
+    );
+    void* volatile return_method_gc_root = tsc_value_gc_root(return_method);
+    (void)return_method_gc_root;
+    if (tsc_value_is_nullish(return_method)) return;
+    if (!tsc_value_is_callable(return_method)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return method is not callable"));
+    }
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_value_t result = tsc_value_apply_function(
+        return_method,
+        record->iterator,
+        tsc_value_array(args)
+    );
+    if (!tsc_value_is_object(result)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return method returned a non-object"));
+    }
 }
 
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {

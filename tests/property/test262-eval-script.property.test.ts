@@ -76,6 +76,33 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         try { 40; } finally { 41; }
     `;
     const completionStressSource = `${"{".repeat(128)}sentinel;${"}".repeat(128)}`;
+    const bindingPatternSource = `
+        let {
+            first: lexicalPatternFirst,
+            nested: { value: lexicalPatternNested },
+            [patternSymbol]: lexicalPatternSymbol,
+            missing: lexicalPatternDefault = lexicalPatternFirst + 4,
+            ...lexicalPatternRest
+        } = patternObject;
+        const [arrayPatternFirst = lexicalPatternDefault, , arrayPatternThird, ...arrayPatternRest] = patternArray;
+        var { extra: varPatternExtra } = patternObject;
+        var [varPatternFirst] = [7];
+        if (true) { var { extra: blockVarPattern } = patternObject; }
+        for (var [forPatternFirst, ...forPatternRest] of [[13, 14, 15]]) {}
+        for (var [forInPatternFirst, ...forInPatternRest] in { xy: true }) {}
+        function readPatternBindings() {
+            return lexicalPatternFirst + arrayPatternThird + forPatternFirst;
+        }
+    `;
+    const iteratorPatternSource = `
+        let [iteratorPatternFirst] = patternIterable;
+    `;
+    const abruptIteratorPatternSource = `
+        let [abruptPatternValue = throwPatternDefault()] = abruptPatternIterable;
+    `;
+    const bindingStressName = `${"[".repeat(64)}bindingStressValue${"]".repeat(64)}`;
+    const bindingStressValue = `${"[".repeat(64)}99${"]".repeat(64)}`;
+    const bindingStressSource = `let ${bindingStressName} = ${bindingStressValue};`;
     const compiledSources = [
         ["mutation.js", mutationSource],
         ["throw.js", throwSource],
@@ -94,6 +121,10 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["completion-catch-value.js", completionCatchValueSource],
         ["completion-finally.js", completionFinallySource],
         ["completion-stress.js", completionStressSource],
+        ["binding-pattern.js", bindingPatternSource],
+        ["binding-iterator.js", iteratorPatternSource],
+        ["binding-iterator-abrupt.js", abruptIteratorPatternSource],
+        ["binding-stress.js", bindingStressSource],
     ] as const;
     const compiledEntries = compiledSources.map(([filename, source]) => ({
         source,
@@ -108,6 +139,38 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             var completionOnlyDeclaration;
             var completionIndex;
             var sentinel = {};
+            var patternSymbol = Symbol("pattern-symbol");
+            var patternObject = { first: 1, nested: { value: 2 }, extra: 3 };
+            patternObject[patternSymbol] = 4;
+            var patternArray = [undefined, "skip", 9, 10];
+            var patternIteratorStep = 0;
+            var patternIteratorClosed = 0;
+            var patternIterable = {};
+            patternIterable[Symbol.iterator] = function () {
+                patternIteratorStep = 0;
+                return {
+                    next: function () {
+                        if (patternIteratorStep++ === 0) return { done: false, value: 8 };
+                        return { done: true, value: undefined };
+                    },
+                    return: function () {
+                        patternIteratorClosed += 1;
+                        return {};
+                    }
+                };
+            };
+            var abruptPatternIteratorClosed = 0;
+            var abruptPatternIterable = {};
+            abruptPatternIterable[Symbol.iterator] = function () {
+                return {
+                    next: function () { return { done: false, value: undefined }; },
+                    return: function () {
+                        abruptPatternIteratorClosed += 1;
+                        return {};
+                    }
+                };
+            };
+            function throwPatternDefault() { throw sentinel; }
             let sharedLexical = 10;
             const sharedConstant = {};
             class SharedClass {}
@@ -186,6 +249,47 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             catch (error) { functionCollision = error instanceof TypeError; }
             if (!functionCollision || globalThis.blockedFunction !== 1) {
                 throw new Error("function definability preflight differed");
+            }
+
+            $262.evalScript(${JSON.stringify(bindingPatternSource)});
+            if (lexicalPatternFirst !== 1 || lexicalPatternNested !== 2 ||
+                lexicalPatternSymbol !== 4 || lexicalPatternDefault !== 5 ||
+                lexicalPatternRest.extra !== 3 || "first" in lexicalPatternRest ||
+                patternSymbol in lexicalPatternRest) {
+                throw new Error("global object BindingInitialization differed");
+            }
+            if (arrayPatternFirst !== 5 || arrayPatternThird !== 9 ||
+                arrayPatternRest.length !== 1 || arrayPatternRest[0] !== 10) {
+                throw new Error("global array BindingInitialization differed");
+            }
+            if (varPatternExtra !== 3 || varPatternFirst !== 7 || blockVarPattern !== 3 ||
+                forPatternFirst !== 13 || forPatternRest.length !== 2 ||
+                forPatternRest[0] !== 14 || forPatternRest[1] !== 15 ||
+                readPatternBindings() !== 23) {
+                throw new Error("global var BindingInitialization differed");
+            }
+            if (forInPatternFirst !== "x" || forInPatternRest.length !== 1 ||
+                forInPatternRest[0] !== "y" || globalThis.forInPatternFirst !== "x") {
+                throw new Error("global for-in BindingInitialization differed");
+            }
+            if ("lexicalPatternFirst" in globalThis || "arrayPatternFirst" in globalThis ||
+                globalThis.varPatternExtra !== 3 || globalThis.varPatternFirst !== 7 ||
+                globalThis.blockVarPattern !== 3 || globalThis.forPatternFirst !== 13) {
+                throw new Error("global binding reflection differed");
+            }
+            $262.evalScript(${JSON.stringify(iteratorPatternSource)});
+            if (iteratorPatternFirst !== 8 || patternIteratorClosed !== 1) {
+                throw new Error("normal IteratorClose differed");
+            }
+            var abruptPatternExact = false;
+            try { $262.evalScript(${JSON.stringify(abruptIteratorPatternSource)}); }
+            catch (error) { abruptPatternExact = error === sentinel; }
+            if (!abruptPatternExact || abruptPatternIteratorClosed !== 1) {
+                throw new Error("abrupt IteratorClose differed");
+            }
+            $262.evalScript(${JSON.stringify(bindingStressSource)});
+            if (bindingStressValue !== 99) {
+                throw new Error("deep BindingInitialization differed");
             }
 
             Object.preventExtensions(globalThis);

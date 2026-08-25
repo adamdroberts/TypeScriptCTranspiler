@@ -177,6 +177,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_async_iterator_get(value)` | `tsc_value_t` | Resolves a dynamic async iterator through `[Symbol.asyncIterator]()` when present |
 | `tsc_async_iterator_next(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.next()` and assimilates its result into a Promise |
 | `tsc_async_iterator_return(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.return()` and assimilates its result for bounded iterator close |
+| `tsc_sync_iterator_open/step/close(...)` | `tsc_sync_iterator_t` / `bool` / `void` | Owns one rooted synchronous iterator record for array, string, and dynamic `@@iterator` binding initialization; validates iterator results and invokes `return` on early normal or abrupt completion |
 | `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
 | `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
 | `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |
@@ -186,6 +187,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_get_prop_receiver(v, key, receiver)` | `tsc_value_t` | Dynamic `Reflect.get` read with an explicit receiver argument for accessor dispatch |
 | `tsc_value_get_prop_receiver_cached(v, key, receiver, cache)` | `tsc_value_t` | Shape-validated dynamic own-property read cache helper for generated receiver-aware `Reflect.get(...)` sites; falls back to receiver-aware lookup for proxies, prototypes, arrays, strings, functions, and absent keys |
 | `tsc_value_get_index(v, index)` | `tsc_value_t` | Dynamic array or string index read, returning `undefined` when absent |
+| `tsc_value_copy_data_properties(source, excluded_keys)` | `tsc_value_t` | Implements object-rest CopyDataProperties over the canonical own-key collection, retaining String/Symbol keys, enumerability, accessors, and Proxy observations while excluding an evaluated PropertyKey collection |
 | `tsc_value_set_index(v, index, value)` | `bool` | Dynamic array index write, extending with `undefined` for skipped slots |
 | `tsc_value_set_prop(v, key, value)` | `bool` | Dynamic object data/accessor-property write used by direct dynamic property assignment and three-argument `Reflect.set(...)` |
 | `tsc_value_set_prop_cached(v, key, value, cache)` | `bool` | Shape-validated dynamic own-property write cache helper used by generated direct dynamic property/string-key assignments; falls back to descriptor-aware `tsc_value_set_prop` semantics for proxies, arrays, inherited writes, and absent keys |
@@ -406,7 +408,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 
 ## Test262 native host
 
-Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. Binder-isolated Script records submit a `tsc_global_declaration_t` collection to `tsc_global_declaration_instantiation`, which preflights the complete collection before creating object-backed or declarative bindings in the shared Global Environment Record. Declarative values retain TDZ, mutability, and an explicit decoded GC root. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls and stringifies only its first argument as required by Test262, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
+Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. Binder-isolated Script records submit a `tsc_global_declaration_t` collection to `tsc_global_declaration_instantiation`, which preflights the complete collection before creating object-backed or declarative bindings in the shared Global Environment Record. Declarative values retain TDZ, mutability, and an explicit decoded GC root. Global binding patterns consume one source-ordered BoundNames collection for declaration planning and one recursive BindingInitialization tree for object/array reads, defaults, rest, iterator closing, and final environment writes. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls and stringifies only its first argument as required by Test262, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|

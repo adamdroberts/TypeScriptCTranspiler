@@ -1006,9 +1006,24 @@ tsc_value_t tsc_reflect_get_own_property_symbol_descriptor(tsc_value_t v, tsc_sy
 tsc_value_t tsc_reflect_get_own_property_computed_descriptor(tsc_value_t v, tsc_value_t key);
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v);
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
+tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excluded_keys);
 double tsc_value_length(tsc_value_t v);
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
+typedef struct {
+    tsc_value_t source;
+    tsc_value_t iterator;
+    tsc_value_t next_method;
+    void* source_gc_root;
+    void* iterator_gc_root;
+    void* next_method_gc_root;
+    size_t index;
+    unsigned char kind;
+    bool done;
+} tsc_sync_iterator_t;
+tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
+bool tsc_sync_iterator_step(tsc_sync_iterator_t* iterator, tsc_value_t* value);
+void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method_value(void);

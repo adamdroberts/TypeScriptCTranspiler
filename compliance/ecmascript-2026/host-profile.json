@@ -86,7 +86,7 @@
     "host-$262-global": true,
     "host-$262-AbstractModuleSource": true,
     "host-$262-createRealm": false,
-    "host-$262-evalScript": false,
+    "host-$262-evalScript": true,
     "host-$262-detachArrayBuffer": true,
     "host-$262-agent": false,
     "can-block-agent-selection": false,
