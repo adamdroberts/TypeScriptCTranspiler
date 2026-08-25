@@ -482,6 +482,12 @@ interface ModuleDefaultExportBindingPlan {
     readonly gcRoot: string;
 }
 
+interface JsonModuleBindingPlan {
+    readonly source: ts.SourceFile;
+    readonly cName: string;
+    readonly gcRoot: string;
+}
+
 interface ModuleNamespaceExportPlan {
     readonly name: string;
     readonly declaration: ts.Node;
@@ -597,6 +603,10 @@ class Emitter {
      * binding until evaluation reaches the ExportAssignment. */
     private moduleDefaultExportBindings = new WeakMap<ts.ExportAssignment | ts.ClassDeclaration, ModuleDefaultExportBindingPlan>();
     private moduleDefaultExportBindingBySource = new WeakMap<ts.SourceFile, ModuleDefaultExportBindingPlan | null>();
+    /** ParseJSONModule owns exactly one default-export value per JSON Module
+     * Record. Direct, aliased-default, and namespace imports all read this
+     * exporter-owned slot. */
+    private jsonModuleBindings = new WeakMap<ts.SourceFile, JsonModuleBindingPlan>();
     /** Anonymous `export default class {}` declarations receive one private C
      * identity before the ordinary class passes run. The synthetic spelling
      * never becomes the observable function name. */
@@ -15078,6 +15088,7 @@ class Emitter {
                 this.collectModuleVarBindings(info.sf, modId);
                 this.collectModuleLexicalBindings(info.sf, modId);
                 this.collectModuleDefaultExportBinding(info.sf, modId);
+                this.collectJsonModuleBinding(info.sf, modId);
             }
         }
         this.analyzeReferencedTopLevelFunctions(emitOrder);
@@ -15235,6 +15246,19 @@ class Emitter {
         const initBuf = new CBuf();
         initBuf.indent = 1;
         this.modInits.set(modId, initBuf);
+        if (this.isJsonSourceFile(sf)) {
+            const syntax = validateJsonSyntax(sf.text);
+            if (syntax) unsupported(sf, `invalid JSON module: ${syntax.message}`);
+            const binding = this.collectJsonModuleBinding(sf, modId);
+            if (!binding) unsupported(sf, "JSON module binding plan is unavailable");
+            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
+            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            initBuf.line(`${binding.cName} = tsc_value_undefined();`);
+            initBuf.line(`${binding.gcRoot} = NULL;`);
+            initBuf.line(`${binding.cName} = tsc_json_parse(${this.stringLit(sf.text)});`);
+            initBuf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+            return;
+        }
         const capturedCells = this.capturedCellsFor(sf);
         this.cellScopes.push(capturedCells);
         this.localDynamicRootScopes.push(new Map());
@@ -15759,6 +15783,77 @@ class Emitter {
         } catch {
             return null;
         }
+    }
+
+    private jsonModuleBindingForImportIdentifier(id: ts.Identifier): JsonModuleBindingPlan | null {
+        const importDeclarations: ts.ImportDeclaration[] = [];
+        const raw = this.checker.getSymbolAtLocation(id);
+        for (const declaration of raw?.declarations ?? []) {
+            if (
+                ts.isImportClause(declaration) &&
+                declaration.name?.text === id.text &&
+                !declaration.isTypeOnly &&
+                ts.isImportDeclaration(declaration.parent)
+            ) {
+                importDeclarations.push(declaration.parent);
+                continue;
+            }
+            if (
+                ts.isImportSpecifier(declaration) &&
+                declaration.name.text === id.text &&
+                !declaration.isTypeOnly &&
+                (declaration.propertyName?.text ?? declaration.name.text) === "default"
+            ) {
+                const importDeclaration = declaration.parent.parent.parent;
+                if (ts.isImportDeclaration(importDeclaration) && !importDeclaration.importClause?.isTypeOnly) {
+                    importDeclarations.push(importDeclaration);
+                }
+            }
+        }
+        if (importDeclarations.length === 0) {
+            for (const statement of id.getSourceFile().statements) {
+                if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) continue;
+                const clause = statement.importClause;
+                if (clause?.name?.text === id.text) {
+                    importDeclarations.push(statement);
+                    continue;
+                }
+                const bindings = clause?.namedBindings;
+                if (!bindings || !ts.isNamedImports(bindings)) continue;
+                if (bindings.elements.some((element) =>
+                    !element.isTypeOnly &&
+                    element.name.text === id.text &&
+                    (element.propertyName?.text ?? element.name.text) === "default"
+                )) {
+                    importDeclarations.push(statement);
+                }
+            }
+        }
+        for (const declaration of importDeclarations) {
+            const specifier = declaration.moduleSpecifier;
+            if (!ts.isStringLiteralLike(specifier)) continue;
+            const info = this.resolvedModuleInfoForSpecifier(
+                specifier.text,
+                id.getSourceFile().fileName,
+            );
+            if (!info || !this.isJsonSourceFile(info.sf)) continue;
+            if (raw) this.symbolStorageTypes.set(raw, T_VALUE);
+            return this.jsonModuleBindings.get(info.sf) ??
+                this.collectJsonModuleBinding(info.sf, info.moduleId);
+        }
+        return null;
+    }
+
+    private hasDynamicJsonModuleRepresentation(expression: ts.Expression): boolean {
+        const current = this.unwrapTransparentExpression(expression);
+        if (ts.isIdentifier(current)) {
+            return !!this.jsonModuleBindingForImportIdentifier(current) ||
+                !!this.moduleNamespacePlanForIdentifier(current);
+        }
+        if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+            return this.hasDynamicJsonModuleRepresentation(current.expression);
+        }
+        return false;
     }
 
     private jsDefaultExportDeclarationForImport(
@@ -22533,6 +22628,7 @@ class Emitter {
     }
 
     private moduleExplicitRuntimeExportNames(source: ts.SourceFile): Set<string> {
+        if (this.isJsonSourceFile(source)) return new Set(["default"]);
         const names = new Set<string>();
         const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
             !!(ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)
@@ -22593,6 +22689,9 @@ class Emitter {
         exportName: string,
         resolveSet = new Set<string>(),
     ): ts.Node | null | "ambiguous" {
+        if (this.isJsonSourceFile(info.sf)) {
+            return exportName === "default" ? info.sf : null;
+        }
         const resolutionKey = `${info.moduleId}\0${exportName}`;
         if (resolveSet.has(resolutionKey)) return null;
         const nextResolveSet = new Set(resolveSet);
@@ -22639,6 +22738,8 @@ class Emitter {
 
     private moduleNamespaceExportRead(declaration: ts.Node): EmitResult {
         if (ts.isSourceFile(declaration)) {
+            const jsonBinding = this.jsonModuleBindings.get(declaration);
+            if (jsonBinding) return { c: jsonBinding.cName, ty: T_VALUE };
             const moduleId = this.graph.fileToModuleId.get(declaration.fileName);
             const info = moduleId ? this.graph.modules.get(moduleId) : undefined;
             if (!info) unsupported(declaration, "namespace re-export target is outside the AOT module graph");
@@ -22678,13 +22779,17 @@ class Emitter {
     private emitModuleNamespacePlan(plan: ModuleNamespacePlan): void {
         if (plan.emitted) return;
         plan.emitted = true;
-        const moduleSymbol = this.moduleSymbol(plan.source);
-        if (!moduleSymbol) unsupported(plan.source, "could not resolve Module Record exports for namespace creation");
         const moduleInfo = this.graph.modules.get(plan.moduleId);
         if (!moduleInfo) unsupported(plan.source, "module namespace source is outside the AOT module graph");
-        const exported = this.checker.getExportsOfModule(moduleSymbol)
-            .map((symbol) => {
-                const name = symbol.getName();
+        const exportNames = this.isJsonSourceFile(plan.source)
+            ? ["default"]
+            : (() => {
+                const moduleSymbol = this.moduleSymbol(plan.source);
+                if (!moduleSymbol) unsupported(plan.source, "could not resolve Module Record exports for namespace creation");
+                return this.checker.getExportsOfModule(moduleSymbol).map((symbol) => symbol.getName());
+            })();
+        const exported = exportNames
+            .map((name) => {
                 const declaration = this.resolveModuleNamespaceExport(moduleInfo, name);
                 return { name, declaration };
             })
@@ -23716,6 +23821,11 @@ class Emitter {
         return /\.[cm]?jsx?$/i.test(sf.fileName);
     }
 
+    private isJsonSourceFile(sf: ts.SourceFile): boolean {
+        return /\.json$/i.test(sf.fileName) ||
+            (sf as ts.SourceFile & { scriptKind?: ts.ScriptKind }).scriptKind === ts.ScriptKind.JSON;
+    }
+
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
         return !!this.options.test262Observation &&
             this.isJavaScriptSourceFile(sf) &&
@@ -23763,6 +23873,20 @@ class Emitter {
      * shared by direct declarations, nested blocks, and loop declarations;
      * function, class, and namespace bodies are independent declaration
      * scopes and therefore terminate the walk. */
+    private collectJsonModuleBinding(sf: ts.SourceFile, modId: string): JsonModuleBindingPlan | null {
+        if (!this.isJsonSourceFile(sf)) return null;
+        const existing = this.jsonModuleBindings.get(sf);
+        if (existing) return existing;
+        const cName = `${modId}_default`;
+        const plan: JsonModuleBindingPlan = {
+            source: sf,
+            cName,
+            gcRoot: this.freshTemp(`_${cName}_json_module_gc_root`),
+        };
+        this.jsonModuleBindings.set(sf, plan);
+        return plan;
+    }
+
     private collectModuleVarBindings(sf: ts.SourceFile, modId: string): ModuleVarBindingPlan[] {
         const prepared = this.moduleVarBindingsBySource.get(sf);
         if (prepared) return prepared;
@@ -46518,6 +46642,10 @@ class Emitter {
                     };
                 }
             }
+            const jsonModuleBinding = this.jsonModuleBindingForImportIdentifier(expr);
+            if (jsonModuleBinding) {
+                return { c: jsonModuleBinding.cName, ty: T_VALUE };
+            }
             const moduleNamespace = this.moduleNamespacePlanForIdentifier(expr);
             if (moduleNamespace) {
                 return { c: `${moduleNamespace.factory}()`, ty: T_VALUE };
@@ -47668,8 +47796,9 @@ class Emitter {
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : (rawRecv.ty.kind === "array" && rawRecv.ty.elem?.kind === "value") ||
-                (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value")
+            : rawRecv.ty.kind === "array" &&
+                (rawRecv.ty.elem?.kind === "value" ||
+                    (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value"))
                 ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
                 : rawRecv;
         if (recv.ty.kind !== "value") return null;
@@ -49124,8 +49253,9 @@ class Emitter {
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : (rawRecv.ty.kind === "array" && rawRecv.ty.elem?.kind === "value") ||
-                (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value")
+            : rawRecv.ty.kind === "array" &&
+                (rawRecv.ty.elem?.kind === "value" ||
+                    (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value"))
                 ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
                 : rawRecv;
         if (recv.ty.kind !== "value") return null;
@@ -69784,7 +69914,8 @@ class Emitter {
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
         const tsType = this.expressionDeclaredOrCurrentType(arg);
-        const mapped = this.isUntypedJsObjectCallTarget(arg) ||
+        const mapped = this.hasDynamicJsonModuleRepresentation(arg) ||
+            this.isUntypedJsObjectCallTarget(arg) ||
             (ts.isIdentifier(arg) && this.untypedJsLiteralVariableDeclaration(arg))
             ? T_VALUE
             : this.prepareType(mapTsType(arg, tsType, this.checker));

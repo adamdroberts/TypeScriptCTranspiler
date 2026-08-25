@@ -67,6 +67,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         types: [],
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
+        resolveJsonModule: true,
         customConditions,
         allowJs: true,
         checkJs: false,
@@ -206,6 +207,7 @@ function resolveTypeScriptModuleName(
 }
 
 function scriptKindForFile(fileName: string): ts.ScriptKind {
+    if (/\.json$/i.test(fileName)) return ts.ScriptKind.JSON;
     if (/\.[cm]?js$/i.test(fileName)) return ts.ScriptKind.JS;
     if (/\.jsx$/i.test(fileName)) return ts.ScriptKind.JSX;
     if (/\.tsx$/i.test(fileName)) return ts.ScriptKind.TSX;

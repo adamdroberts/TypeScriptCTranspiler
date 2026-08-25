@@ -41,7 +41,7 @@ export function moduleIdOf(fileName: string, rootDir: string): string {
     if (rel === "" || rel === path.basename(fileName)) {
         rel = path.basename(fileName, path.extname(fileName));
     } else {
-        rel = rel.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/i, "");
+        rel = rel.replace(/\.(ts|tsx|js|jsx|mjs|cjs|json)$/i, "");
     }
     rel = rel.replace(/\.\./g, "_up_");
     rel = rel.replace(/[^a-zA-Z0-9_]/g, "_");
