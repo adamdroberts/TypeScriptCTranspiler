@@ -6358,6 +6358,11 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
         if (tsc_value_is_undefined(radix)) return tsc_str_from_num(value_as_num(recv));
         return tsc_str_from_num_radix(value_as_num(recv), tsc_value_as_num(radix));
     }
+    /* Symbol.prototype.toString is an explicit conversion and therefore does
+     * not use the throwing abstract ToString(Symbol) operation. */
+    if (value_tag(recv) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_to_explicit_string(recv);
+    }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(recv);
         if (o->is_typed_array && o->class_ptr) {

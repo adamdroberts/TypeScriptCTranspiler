@@ -467,7 +467,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 - [ ] **Ordinary and Exotic Objects Behaviours** (`sec-ordinary-and-exotic-objects-behaviours`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary internal methods; function objects; arguments; arrays; proxies; module namespace objects.
   - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: object_descriptors, array_property_descriptors, proxy.
-  - Known blockers: Pinned namespace scenarios that depend on general super lowering or captured for-of closure bindings remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified.
+  - Known blockers: Pinned namespace scenarios that depend on general super lowering remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified.
   - [ ] `sec-ordinary-and-exotic-objects-behaviours` — Ordinary and Exotic Objects Behaviours: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots` — Ordinary Object Internal Methods and Internal Slots: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing either an Object or null: exact disposition and partitions missing.
@@ -975,7 +975,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 - [ ] **ECMAScript Language: Scripts and Modules** (`sec-ecmascript-language-scripts-and-modules`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: script parsing/evaluation; module linking; live bindings; cycles; async module evaluation.
   - Linked local regression evidence: property: tests/property/module-class-binding.property.test.ts, tests/property/module-declaration-instantiation.property.test.ts, tests/property/module-default-binding.property.test.ts, tests/property/module-default-class-binding.property.test.ts, tests/property/module-import-binding.property.test.ts, tests/property/module-lexical-binding.property.test.ts, tests/property/module-linking.property.test.ts, tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: modules, module_re_exports.
-  - Known blockers: Cyclic evaluation beyond binding instantiation, dynamic import, top-level await, and namespace scenarios blocked by general super/captured-loop lowering remain incomplete.
+  - Known blockers: Cyclic evaluation beyond binding instantiation, dynamic import, top-level await, and namespace scenarios blocked by general super lowering remain incomplete.
   - [ ] `sec-ecmascript-language-scripts-and-modules` — ECMAScript Language: Scripts and Modules: exact disposition and partitions missing.
   - [ ] `sec-scripts` — Scripts: exact disposition and partitions missing.
   - [ ] `sec-scripts-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.

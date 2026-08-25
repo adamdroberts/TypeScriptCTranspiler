@@ -141,6 +141,34 @@ function entrySource(): string {
         try { Object.defineProperty(direct, "mutable", { value: 101 }); }
         catch (error) { defineThrew = error instanceof TypeError; }
         check(defineThrew, "Object.defineProperty did not throw for an incompatible definition");
+        const compatibleDynamicKeys = ["mutable", Symbol.toStringTag];
+        for (const compatibleDynamicKey of compatibleDynamicKeys) {
+            check(
+                Reflect.defineProperty(direct, compatibleDynamicKey, {}) === true,
+                "dynamic compatible key was rejected: " + compatibleDynamicKey.toString()
+            );
+            check(
+                Object.defineProperty(direct, compatibleDynamicKey, {}) === direct,
+                "Object.defineProperty changed dynamic compatible key: " + compatibleDynamicKey.toString()
+            );
+        }
+        const rejectedDynamicKeys = ["missing", 0, Symbol("missing"), Symbol.iterator];
+        for (const rejectedDynamicKey of rejectedDynamicKeys) {
+            check(
+                Reflect.defineProperty(direct, rejectedDynamicKey, {}) === false,
+                "dynamic absent key was accepted: " + rejectedDynamicKey.toString()
+            );
+            let rejectedDynamicThrew = false;
+            try {
+                (function () { Object.defineProperty(direct, rejectedDynamicKey, {}); })();
+            } catch (error) {
+                rejectedDynamicThrew = error instanceof TypeError;
+            }
+            check(
+                rejectedDynamicThrew,
+                "Object.defineProperty accepted dynamic absent key: " + rejectedDynamicKey.toString()
+            );
+        }
         let freezeThrew = false;
         try { Object.freeze(direct); }
         catch (error) { freezeThrew = error instanceof TypeError; }

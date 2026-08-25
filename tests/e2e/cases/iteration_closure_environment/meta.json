@@ -1,0 +1,3 @@
+{
+  "description": "for-of and for-in lexical declarations allocate fresh closure environments while assignment heads retain one shared binding"
+}

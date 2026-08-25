@@ -627,7 +627,7 @@ class Emitter {
     private eventListenerAdapters = new Map<string, string>();
     private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
-    private capturedCellsCache = new WeakMap<ts.FunctionLikeDeclaration, Map<ts.Symbol, CaptureCell>>();
+    private capturedCellsCache = new WeakMap<ts.Node, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
@@ -15235,6 +15235,9 @@ class Emitter {
         const initBuf = new CBuf();
         initBuf.indent = 1;
         this.modInits.set(modId, initBuf);
+        const capturedCells = this.capturedCellsFor(sf);
+        this.cellScopes.push(capturedCells);
+        this.localDynamicRootScopes.push(new Map());
 
         try {
             const statements = this.flattenModuleStatements(sf.statements);
@@ -15559,6 +15562,9 @@ class Emitter {
                 return;
             }
             throw e;
+        } finally {
+            this.localDynamicRootScopes.pop();
+            this.cellScopes.pop();
         }
     }
 
@@ -15614,18 +15620,32 @@ class Emitter {
         return parts;
     }
 
-    private isNamespaceTopLevelDeclaration(node: ts.Node): boolean {
-        for (let cur = node.parent; cur; cur = cur.parent) {
-            if (ts.isModuleBlock(cur) && ts.isModuleDeclaration(cur.parent)) return true;
-            if (
-                ts.isFunctionLike(cur) ||
-                ts.isClassDeclaration(cur) ||
-                ts.isInterfaceDeclaration(cur)
-            ) {
-                return false;
+    private topLevelDeclarationContainer(node: ts.Node): ts.SourceFile | ts.ModuleBlock | null {
+        let declaration = node;
+        if (ts.isBindingElement(declaration)) {
+            for (let cur: ts.Node | undefined = declaration.parent; cur; cur = cur.parent) {
+                if (ts.isVariableDeclaration(cur)) {
+                    declaration = cur;
+                    break;
+                }
+                if (ts.isParameter(cur)) return null;
             }
         }
-        return false;
+        if (ts.isVariableDeclaration(declaration)) {
+            const list = declaration.parent;
+            if (!list || !ts.isVariableDeclarationList(list) || !list.parent || !ts.isVariableStatement(list.parent)) {
+                return null;
+            }
+            const container = list.parent.parent;
+            return !!container && (ts.isSourceFile(container) || ts.isModuleBlock(container)) ? container : null;
+        }
+        const container = declaration.parent;
+        return !!container && (ts.isSourceFile(container) || ts.isModuleBlock(container)) ? container : null;
+    }
+
+    private isNamespaceTopLevelDeclaration(node: ts.Node): boolean {
+        const container = this.topLevelDeclarationContainer(node);
+        return !!container && ts.isModuleBlock(container);
     }
 
     private declaredName(name: ts.Identifier): string {
@@ -24259,19 +24279,19 @@ class Emitter {
         }
     }
 
-    private capturedCellsFor(fn: ts.FunctionLikeDeclaration): Map<ts.Symbol, CaptureCell> {
-        const cached = this.capturedCellsCache.get(fn);
+    private capturedCellsFor(owner: ts.FunctionLikeDeclaration | ts.SourceFile): Map<ts.Symbol, CaptureCell> {
+        const cached = this.capturedCellsCache.get(owner);
         if (cached) return cached;
         const captures = new Map<ts.Symbol, CaptureCell>();
-        const body = fn.body;
+        const body = ts.isSourceFile(owner) ? owner : owner.body;
         if (!body) {
-            this.capturedCellsCache.set(fn, captures);
+            this.capturedCellsCache.set(owner, captures);
             return captures;
         }
 
         const visit = (node: ts.Node): void => {
             if (
-                node !== fn &&
+                node !== owner &&
                 (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
             ) {
                 for (const cap of this.collectClosureCaptures(node)) {
@@ -24284,12 +24304,12 @@ class Emitter {
                 }
                 return;
             }
-            if (node !== fn && ts.isFunctionDeclaration(node)) return;
+            if (node !== owner && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
             ts.forEachChild(node, visit);
         };
         visit(body);
-        if (this.functionHasMappedArgumentsObject(fn)) {
-            for (const parameter of fn.parameters) {
+        if (!ts.isSourceFile(owner) && this.functionHasMappedArgumentsObject(owner)) {
+            for (const parameter of owner.parameters) {
                 if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
                 const symbol = this.symbolForIdentifier(parameter.name);
                 if (!symbol) continue;
@@ -24301,7 +24321,7 @@ class Emitter {
                 });
             }
         }
-        this.capturedCellsCache.set(fn, captures);
+        this.capturedCellsCache.set(owner, captures);
         return captures;
     }
 
@@ -24446,13 +24466,7 @@ class Emitter {
     }
 
     private isTopLevelValueDeclaration(decl: ts.Declaration): boolean {
-        if (this.isNamespaceTopLevelDeclaration(decl)) return true;
-        for (let cur: ts.Node | undefined = decl.parent; cur; cur = cur.parent) {
-            if (ts.isSourceFile(cur)) return true;
-            if (ts.isFunctionLike(cur)) return false;
-            if (ts.isClassDeclaration(cur)) return false;
-        }
-        return false;
+        return this.topLevelDeclarationContainer(decl) !== null;
     }
 
     private isNodeWithin(node: ts.Node, ancestor: ts.Node): boolean {
@@ -41550,19 +41564,84 @@ class Emitter {
         if (!varInitializer) buf.close();
     }
 
+    /** Bind one simple iteration value through the declaration's canonical
+     * storage.  Lexical bindings captured by a nested closure allocate a fresh
+     * heap cell on every iteration; all reads and writes then follow that cell.
+     * Non-declaration heads assign the existing reference instead of creating
+     * a shadow C local. */
+    private emitIterationIdentifierBinding(
+        buf: CBuf,
+        initializer: ts.VariableDeclarationList | ts.Expression,
+        value: EmitResult,
+    ): void {
+        if (ts.isVariableDeclarationList(initializer)) {
+            const declaration = initializer.declarations[0];
+            if (initializer.declarations.length !== 1 || !declaration || !ts.isIdentifier(declaration.name)) {
+                unsupported(initializer, "iteration binding must be one simple identifier");
+            }
+            const symbol = this.symbolForIdentifier(declaration.name);
+            if (this.isTest262ScriptGlobalVarDeclaration(declaration)) {
+                buf.line(
+                    `tsc_global_binding_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+                    `${this.coerce(value, T_VALUE, declaration.name)});`,
+                );
+                return;
+            }
+            if (this.emitModuleVarWrite(buf, declaration, value, declaration.name)) return;
+
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            const inferred = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+            const storage = cell?.type ?? this.variableDeclarationStorageType(
+                declaration,
+                inferred.kind === "value" ? inferred : value.ty,
+            );
+            if (symbol) this.symbolStorageTypes.set(symbol, storage);
+            const coerced = this.coerce(value, storage, declaration.name);
+            if (cell) {
+                this.emitCaptureCellInitialization(buf, cell, coerced);
+                return;
+            }
+            const qualifier = (initializer.flags & ts.NodeFlags.Const) !== 0 ? " const" : "";
+            const name = mangleIdent(declaration.name.text);
+            buf.line(`${storage.c}${qualifier} ${name} = ${coerced};`);
+            if (symbol && storage.kind === "value") {
+                this.emitLocalDynamicRoot(buf, symbol, name, name);
+            }
+            return;
+        }
+
+        if (!ts.isIdentifier(initializer)) {
+            unsupported(initializer, "iteration assignment target must be a simple identifier");
+        }
+        const global = this.test262GlobalReferencePlan(initializer);
+        if (global) {
+            buf.line(`(void)${global.set(this.coerce(value, T_VALUE, initializer))};`);
+            return;
+        }
+        const moduleLexical = this.localModuleLexicalBindingIdentifier(initializer);
+        if (moduleLexical) {
+            buf.line(`(void)${this.moduleLexicalPut(
+                moduleLexical.binding,
+                this.coerce(value, T_VALUE, initializer),
+            )};`);
+            return;
+        }
+        const storage = this.storageType(initializer);
+        const target = this.emitLvalue(initializer);
+        buf.line(`${target} = ${this.coerce(value, storage, initializer)};`);
+        if (storage.kind === "value") {
+            const refresh = this.dynamicIdentifierRootRefresh(initializer, target);
+            if (refresh) buf.line(`${refresh};`);
+        }
+    }
+
     private emitForIn(buf: CBuf, fis: ts.ForInStatement): void {
         const iter = this.emitExpr(fis.expression);
-        let bindingName: string;
-        let bindingIsConst = false;
         if (ts.isVariableDeclarationList(fis.initializer)) {
-            bindingIsConst = (fis.initializer.flags & ts.NodeFlags.Const) !== 0;
             const d = fis.initializer.declarations[0];
-            if (!d || !ts.isIdentifier(d.name))
+            if (fis.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name))
                 unsupported(fis.initializer, "for-in binding must be simple identifier");
-            bindingName = mangleIdent(d.name.text);
-        } else if (ts.isIdentifier(fis.initializer)) {
-            bindingName = mangleIdent(fis.initializer.text);
-        } else {
+        } else if (!ts.isIdentifier(fis.initializer)) {
             unsupported(fis.initializer, "for-in binding form");
         }
 
@@ -41584,7 +41663,7 @@ class Emitter {
             buf.line(`tsc_str_t* _fk_v = tsc_str_from_int((int64_t)${idxVar});`);
             buf.line(`tsc_array_push_raw(${keysVar}, &_fk_v);`);
             buf.close();
-            this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+            this.emitForInBody(buf, fis, keysVar);
             buf.close();
             return;
         } else if (iter.ty.kind === "buffer") {
@@ -41606,7 +41685,7 @@ class Emitter {
                 const fc = `tsc_str_from_lit(${JSON.stringify(f)}, ${utf8ByteLen(f)})`;
                 buf.line(`{ tsc_str_t* _fk_v = ${fc}; tsc_array_push_raw(${keysVar}, &_fk_v); }`);
             }
-            this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+            this.emitForInBody(buf, fis, keysVar);
             buf.close();
             return;
         } else {
@@ -41615,7 +41694,7 @@ class Emitter {
 
         buf.open("");
         buf.line(`tsc_array_t* const ${keysVar} = ${keysExpr};`);
-        this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
+        this.emitForInBody(buf, fis, keysVar);
         buf.close();
     }
 
@@ -41623,41 +41702,15 @@ class Emitter {
         buf: CBuf,
         fis: ts.ForInStatement,
         keysVar: string,
-        bindingName: string,
-        bindingIsConst: boolean,
     ): void {
         const idxVar = this.freshTemp("_fii");
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${keysVar}->len; ${idxVar}++)`,
         );
-        const declaration = ts.isVariableDeclarationList(fis.initializer)
-            ? fis.initializer.declarations[0]
-            : undefined;
-        const globalName = declaration && this.isTest262ScriptGlobalVarDeclaration(declaration)
-            ? declaration.name.text
-            : null;
-        if (globalName) {
-            buf.line(
-                `tsc_global_binding_set(${this.test262GlobalBindingKey(globalName)}, ` +
-                `tsc_value_string(TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})));`,
-            );
-        } else if (
-            declaration &&
-            this.emitModuleVarWrite(
-                buf,
-                declaration,
-                { c: `TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})`, ty: T_STRING },
-                declaration.name,
-            )
-        ) {
-            // The shared module binding was assigned rather than redeclared
-            // in the loop's C block.
-        } else {
-            const qual = bindingIsConst ? " const" : "";
-            buf.line(
-                `tsc_str_t*${qual} ${bindingName} = TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar});`,
-            );
-        }
+        this.emitIterationIdentifierBinding(buf, fis.initializer, {
+            c: `TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar})`,
+            ty: T_STRING,
+        });
         const labeledContinueTarget = this.directLabeledLoopName(fis)
             ? this.freshTemp("_for_in_labeled_continue")
             : null;
@@ -41802,18 +41855,11 @@ class Emitter {
             }
         }
 
-        let bindingName: string;
-        let bindingIsConst = false;
         if (ts.isVariableDeclarationList(fos.initializer)) {
-            bindingIsConst =
-                (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
             const d = fos.initializer.declarations[0];
-            if (!d || !ts.isIdentifier(d.name))
+            if (fos.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name))
                 unsupported(fos.initializer, "for-of binding must be simple identifier");
-            bindingName = mangleIdent(d.name.text);
-        } else if (ts.isIdentifier(fos.initializer)) {
-            bindingName = mangleIdent(fos.initializer.text);
-        } else {
+        } else if (!ts.isIdentifier(fos.initializer)) {
             unsupported(fos.initializer, "for-of binding form");
         }
 
@@ -41823,37 +41869,14 @@ class Emitter {
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
-        const qual = bindingIsConst ? " const" : "";
         const element = elemType.kind === "value"
             ? `(tsc_array_index_present(${arrVar}, ${idxVar}) ? TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar}) : tsc_value_undefined())`
             : `TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar})`;
-        const declaration = ts.isVariableDeclarationList(fos.initializer)
-            ? fos.initializer.declarations[0]
-            : undefined;
-        const globalName = declaration && this.isTest262ScriptGlobalVarDeclaration(declaration)
-            ? declaration.name.text
-            : null;
-        if (globalName) {
-            buf.line(
-                `tsc_global_binding_set(${this.test262GlobalBindingKey(globalName)}, ` +
-                `${this.coerce({ c: element, ty: elemType }, T_VALUE, declaration!.name)});`,
-            );
-        } else if (
-            declaration &&
-            this.emitModuleVarWrite(
-                buf,
-                declaration,
-                { c: element, ty: elemType },
-                declaration.name,
-            )
-        ) {
-            // The shared module binding was assigned rather than redeclared
-            // for each iteration.
-        } else {
-            buf.line(
-                `${elemType.c}${qual} ${bindingName} = ${element};`,
-            );
-        }
+        this.emitIterationIdentifierBinding(
+            buf,
+            fos.initializer,
+            { c: element, ty: elemType },
+        );
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_for_of_labeled_continue")
             : null;
@@ -42382,24 +42405,17 @@ class Emitter {
             return true;
         }
 
-        let bindingName: string;
-        let bindingIsConst = false;
         if (ts.isVariableDeclarationList(fos.initializer)) {
-            bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
             const d = fos.initializer.declarations[0];
-            if (!d || !ts.isIdentifier(d.name)) {
+            if (fos.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name)) {
                 unsupported(fos.initializer, "custom iterator for-of binding must be simple identifier");
             }
-            bindingName = mangleIdent(d.name.text);
-        } else if (ts.isIdentifier(fos.initializer)) {
-            bindingName = mangleIdent(fos.initializer.text);
-        } else {
+        } else if (!ts.isIdentifier(fos.initializer)) {
             unsupported(fos.initializer, "custom iterator for-of binding form");
         }
 
         const iterVar = this.freshTemp("_it");
         const stepVar = this.freshTemp("_step");
-        const qual = bindingIsConst ? " const" : "";
         buf.open("");
         const recv = this.freshTemp("_recv");
         buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
@@ -42412,7 +42428,11 @@ class Emitter {
         buf.open("while (true)");
         buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
         buf.line(`if (${stepVar}->done) break;`);
-        buf.line(`${valueType.c}${qual} ${bindingName} = ${stepVar}->value;`);
+        this.emitIterationIdentifierBinding(
+            buf,
+            fos.initializer,
+            { c: `${stepVar}->value`, ty: valueType },
+        );
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_custom_for_of_labeled_continue")
             : null;
@@ -70866,6 +70886,21 @@ class Emitter {
             if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
             const ignored = this.ignoredArgumentSpecs(args, 3);
             const key = this.emitExpr(args[1]!);
+            if (key.ty.kind !== "string" && key.ty.kind !== "symbol") {
+                const obj = this.emitExpr(arg);
+                const descriptor = this.emitExpr(args[2]!);
+                const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
+                const resultType = mapped.kind === "function" || mapped.kind === "array" ? mapped : T_VALUE;
+                return this.emitSequencedExpr(resultType, [
+                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
+                    { value: key, target: T_VALUE, node: args[1]! },
+                    { value: descriptor, target: T_VALUE, node: args[2]! },
+                    ...ignored,
+                ], ([o, k, d]) => {
+                    const target = requiresValueTarget ? o! : dynamicObjectArg(o!, obj.ty);
+                    return `({ if (!tsc_value_define_computed_property_descriptor(${target}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                });
+            }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
                 if (ts.isObjectLiteralExpression(args[2]!) && key.ty.kind !== "symbol") {
@@ -72729,13 +72764,22 @@ class Emitter {
                 if (args.length < 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
                 const ignored = this.ignoredArgumentSpecs(args, 3);
                 const target = this.emitExpr(args[0]!);
+                const key = this.emitExpr(args[1]!);
+                if (key.ty.kind !== "string" && key.ty.kind !== "symbol") {
+                    const descriptor = this.emitExpr(args[2]!);
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_VALUE, node: args[1]! },
+                        { value: descriptor, target: T_VALUE, node: args[2]! },
+                        ...ignored,
+                    ], ([t, k, d]) => `tsc_reflect_define_computed_property_descriptor(${t}, ${k}, ${d})`);
+                }
                 if (target.ty.kind === "array" && ts.isObjectLiteralExpression(args[2]!)) {
                     const desc = this.descriptorData(args[2]!);
                     if (desc.kind !== "accessor") {
                         return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false, ignored);
                     }
                 }
-                const key = this.emitExpr(args[1]!);
                 if (!ts.isObjectLiteralExpression(args[2]!)) {
                     if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.defineProperty symbol keys require an object-literal data descriptor");
                     const descValue = this.emitExpr(args[2]!);
