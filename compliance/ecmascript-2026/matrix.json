@@ -638,7 +638,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ArrayBuffer", "SharedArrayBuffer", "DataView", "Atomics", "JSON"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["array_buffer_dataview", "json"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c", "runtime/tsc_builtin.c"] },
+      "localEvidence": { "property": ["tests/property/json-parse-materialization.property.test.ts"], "generatedRegression": [], "stress": ["json_parse_deep_worklist"], "e2e": ["array_buffer_dataview", "json", "json_parse_errors", "json_parse_deep_worklist"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_object.c"] },
       "knownGaps": ["Shared memory, Atomics, detachment, and complete JSON semantics are not verified."]
     },
     {

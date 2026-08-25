@@ -14,6 +14,7 @@
 #include <libgen.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <locale.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <openssl/evp.h>
@@ -552,10 +553,7 @@ bool value_json_omits_object_property(tsc_value_t v);
 void jp_ws(json_parser_t* p);
 bool jp_lit(json_parser_t* p, const char* lit);
 tsc_str_t* jp_string(json_parser_t* p);
-tsc_value_t jp_array(json_parser_t* p);
-tsc_value_t jp_object(json_parser_t* p);
 tsc_value_t jp_number(json_parser_t* p);
-tsc_value_t jp_value(json_parser_t* p);
 uint64_t key_hash(tsc_key_kind_t kk, const void* k);
 void map_rebuild_buckets(tsc_map_t* m, size_t new_bucket_cap);
 void map_grow_ordered(tsc_map_t* m, size_t want);

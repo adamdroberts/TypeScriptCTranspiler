@@ -1,4 +1,9 @@
-object: JSON.parse expected string
-unicode: JSON.parse invalid unicode escape
-trailing: JSON.parse trailing input
+object: true:SyntaxError: JSON.parse expected string
+unicode: ok
+unicode-code: 55296
+trailing: true:SyntaxError: JSON.parse trailing input
+whitespace: true:SyntaxError: JSON.parse expected value
+number: true:SyntaxError: JSON.parse leading zero true:SyntaxError: JSON.parse incomplete fraction true:SyntaxError: JSON.parse incomplete exponent
+control: true:SyntaxError: JSON.parse unescaped control character
+own-data: true true true 2
 after: {"ok":true}

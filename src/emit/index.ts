@@ -80,6 +80,7 @@ import {
     type RuntimeCodeManifest,
 } from "../runtime-code-aot";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
+import { validateJsonSyntax } from "../json-syntax";
 
 const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
 
@@ -13239,9 +13240,8 @@ class Emitter {
             unwrapped.arguments.length >= 1 &&
             unwrapped.arguments.length <= 2
         ) {
-            if (!this.isSideEffectFreeStringOperand(unwrapped.arguments[0]!, seenConsts)) {
-                return false;
-            }
+            const source = this.sideEffectFreeStringLiteralText(unwrapped.arguments[0]!, seenConsts);
+            if (source === null || validateJsonSyntax(source) !== null) return false;
             if (unwrapped.arguments.length === 2) {
                 const reviver = unwrapped.arguments[1]!;
                 const unwrappedReviver = this.unwrapSideEffectFreeStaticExpression(reviver);

@@ -1904,7 +1904,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-canonicalizekeyedcollectionkey` — CanonicalizeKeyedCollectionKey ( _key_: an ECMAScript language value, ): an ECMAScript language value: exact disposition and partitions missing.
 - [ ] **Structured Data** (`sec-structured-data`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ArrayBuffer; SharedArrayBuffer; DataView; Atomics; JSON.
-  - Linked local regression evidence: E2E: array_buffer_dataview, json.
+  - Linked local regression evidence: property: tests/property/json-parse-materialization.property.test.ts; stress: json_parse_deep_worklist; E2E: array_buffer_dataview, json, json_parse_errors, json_parse_deep_worklist.
   - Known blockers: Shared memory, Atomics, detachment, and complete JSON semantics are not verified.
   - [ ] `sec-structured-data` — Structured Data: exact disposition and partitions missing.
   - [ ] `sec-arraybuffer-objects` — ArrayBuffer Objects: exact disposition and partitions missing.
