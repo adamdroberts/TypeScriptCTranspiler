@@ -1,4 +1,4 @@
-forward default: object
+forward default: function
 forward set: true next
 forward ext: true true false
 get closed: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target

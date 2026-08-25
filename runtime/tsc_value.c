@@ -92,6 +92,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
                 if (o->primitive_kind == TSC_PRIMITIVE_STRING) return tsc_str_from_lit("[object String]", 15);
             }
             if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
+            if (o && o->is_arguments) return tsc_str_from_lit("[object Arguments]", 18);
             return tsc_str_from_lit("[object Object]", 15);
         }
     }
@@ -770,6 +771,27 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
     return list;
 }
 
+typedef struct tsc_callee_frame {
+    struct tsc_callee_frame* prev;
+    tsc_value_t value;
+} tsc_callee_frame_t;
+
+static TSC_TLS tsc_callee_frame_t* value_current_callee = NULL;
+
+tsc_value_t tsc_value_current_callee(void) {
+    return value_current_callee
+        ? value_current_callee->value
+        : tsc_value_undefined();
+}
+
+void* tsc_value_callee_checkpoint(void) {
+    return value_current_callee;
+}
+
+void tsc_value_callee_restore(void* checkpoint) {
+    value_current_callee = (tsc_callee_frame_t*)checkpoint;
+}
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
@@ -807,7 +829,14 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN ||
         ident->kind == TSC_FUNCTION_IDENTITY_BOUND
     ) {
-        return ident->code.generic(ident->env, this_arg, list);
+        tsc_callee_frame_t frame = {
+            .prev = value_current_callee,
+            .value = fn,
+        };
+        value_current_callee = &frame;
+        tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
+        value_current_callee = frame.prev;
+        return result;
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
         ident->code.event_listener.fn(ident->env, NULL, list);
@@ -3095,6 +3124,12 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     }
     for (size_t i = 0; i < o->len; i++) {
         if (!tsc_str_eq(o->props[i].key, key)) continue;
+        volatile tsc_value_t* mapped = tsc_object_arguments_mapped_cell(o, key);
+        if (mapped && !o->props[i].accessor) {
+            tsc_object_prop_t effective = o->props[i];
+            effective.value = *mapped;
+            return value_descriptor_from_prop(&effective);
+        }
         return value_descriptor_from_prop(&o->props[i]);
     }
     return tsc_value_undefined();

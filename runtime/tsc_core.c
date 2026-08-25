@@ -438,6 +438,7 @@ void tsc_dispatch_task_scheduled(void) {}
  * get independent try/throw stacks; without TSC_THREADS this is a plain
  * static exactly as before. */
 static TSC_TLS tsc_try_frame_t* g_try_top = NULL;
+static TSC_TLS tsc_call_activation_t* g_call_activation_top = NULL;
 static TSC_TLS tsc_str_t* g_current_error = NULL;
 static TSC_TLS tsc_value_t g_current_error_value;
 static TSC_TLS bool g_current_error_value_set = false;
@@ -1759,8 +1760,136 @@ void tsc_run_event_loop(void) {
 
 /* ---------------- exceptions ---------------- */
 
+void tsc_call_activation_push(
+    tsc_call_activation_t* activation,
+    tsc_array_t* arguments,
+    tsc_value_t this_arg,
+    tsc_value_t callee
+) {
+    if (!activation) return;
+    activation->prev = g_call_activation_top;
+    activation->arguments = arguments
+        ? arguments
+        : tsc_array_new(sizeof(tsc_value_t), 1);
+    activation->this_arg = this_arg;
+    activation->callee = callee;
+    activation->arguments_object = tsc_value_undefined();
+    activation->parameter_cells = NULL;
+    activation->strict = false;
+    activation->arguments_object_initialized = false;
+    g_call_activation_top = activation;
+}
+
+void tsc_call_activation_pop(tsc_call_activation_t* activation) {
+    if (!activation || g_call_activation_top != activation) {
+        tsc_panic("ordinary call activation stack mismatch");
+    }
+    g_call_activation_top = activation->prev;
+}
+
+void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells) {
+    if (!g_call_activation_top) {
+        tsc_panic("ordinary function entered without a call activation");
+    }
+    g_call_activation_top->strict = strict;
+    g_call_activation_top->parameter_cells = parameter_cells;
+}
+
+static tsc_value_t call_arguments_thrower(void* env, tsc_value_t receiver) {
+    (void)env;
+    (void)receiver;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted arguments property"));
+}
+
+static bool call_arguments_set_thrower(void* env, tsc_value_t receiver, tsc_value_t value) {
+    (void)env;
+    (void)receiver;
+    (void)value;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted arguments property"));
+}
+
+tsc_value_t tsc_call_arguments(void) {
+    tsc_call_activation_t* activation = g_call_activation_top;
+    if (!activation) {
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("arguments is not defined"));
+    }
+    if (activation->arguments_object_initialized) return activation->arguments_object;
+
+    tsc_object_t* object = tsc_object_new();
+    object->is_arguments = true;
+    object->arguments_parameter_cells = activation->strict
+        ? NULL
+        : activation->parameter_cells;
+    tsc_array_t* arguments = activation->arguments;
+    if (object->arguments_parameter_cells) {
+        for (size_t index = arguments->len; index < object->arguments_parameter_cells->len; index++) {
+            TSC_ARR(volatile tsc_value_t*, object->arguments_parameter_cells, index) = NULL;
+        }
+    }
+    for (size_t index = 0; index < arguments->len; index++) {
+        tsc_object_define(
+            object,
+            tsc_str_from_int((int64_t)index),
+            TSC_ARR(tsc_value_t, arguments, index),
+            true,
+            true,
+            true
+        );
+    }
+    tsc_object_define(
+        object,
+        tsc_str_from_lit("length", 6),
+        tsc_value_num((double)arguments->len),
+        true,
+        false,
+        true
+    );
+    if (activation->strict) {
+        tsc_object_define_accessor(
+            object,
+            tsc_str_from_lit("callee", 6),
+            call_arguments_thrower,
+            NULL,
+            true,
+            call_arguments_set_thrower,
+            NULL,
+            true,
+            false,
+            true,
+            false,
+            true
+        );
+    } else {
+        tsc_object_define(
+            object,
+            tsc_str_from_lit("callee", 6),
+            activation->callee,
+            true,
+            false,
+            true
+        );
+    }
+    activation->arguments_object = tsc_value_object(object);
+    tsc_value_define_symbol_property_desc(
+        activation->arguments_object,
+        tsc_symbol_iterator(),
+        tsc_array_prototype_symbol_value(tsc_symbol_iterator()),
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+    activation->arguments_object_initialized = true;
+    return activation->arguments_object;
+}
+
 void tsc_try_push(tsc_try_frame_t* f) {
     f->prev = g_try_top;
+    f->activation_top = g_call_activation_top;
+    f->callee_top = tsc_value_callee_checkpoint();
     g_try_top = f;
 }
 
@@ -1778,6 +1907,8 @@ _Noreturn void tsc_throw_str(tsc_str_t* message) {
          * the frame installed until control lands keeps push/pop balanced;
          * popping here as well makes the handler discard its caller's frame
          * and can leave g_try_top pointing at an expired async stack frame. */
+        g_call_activation_top = f->activation_top;
+        tsc_value_callee_restore(f->callee_top);
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);
@@ -1794,6 +1925,8 @@ _Noreturn void tsc_throw_value(tsc_value_t value) {
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
         /* The setjmp landing path owns the matching tsc_try_pop(). */
+        g_call_activation_top = f->activation_top;
+        tsc_value_callee_restore(f->callee_top);
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);

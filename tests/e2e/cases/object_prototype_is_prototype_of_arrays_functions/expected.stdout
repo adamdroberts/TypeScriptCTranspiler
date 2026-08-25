@@ -1,5 +1,5 @@
 arrayProto: object 0
-functionProto: object [object Object]
+functionProto: function [function]
 objectProto: object [object Object]
 objectProto parent: object null
 arrayProto isPrototypeOf arr: true

@@ -1,4 +1,4 @@
-default: object true
+default: function true
 set object: true fn
 reflect get: fn
 reflect set null: true null

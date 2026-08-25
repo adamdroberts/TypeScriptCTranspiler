@@ -66,6 +66,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_map = false;
     o->is_set = false;
     o->is_error = false;
+    o->is_arguments = false;
     o->is_typed_array = false;
     o->is_url = false;
     o->is_url_search_params = false;
@@ -84,6 +85,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->primitive_kind = 0;
     o->primitive_value = tsc_value_undefined();
     o->primitive_value_root = NULL;
+    o->arguments_parameter_cells = NULL;
     o->prototype = prototype;
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     if (g_shape_diagnostics_enabled) {
@@ -294,6 +296,20 @@ ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key) {
         if (o->props[i].key == key || tsc_str_eq(o->props[i].key, key)) return (ssize_t)i;
     }
     return -1;
+}
+
+volatile tsc_value_t* tsc_object_arguments_mapped_cell(const tsc_object_t* object, const tsc_str_t* key) {
+    if (!object || !object->is_arguments || !object->arguments_parameter_cells) return NULL;
+    size_t index = 0;
+    if (!tsc_str_array_index(key, &index) || index >= object->arguments_parameter_cells->len) return NULL;
+    return TSC_ARR(volatile tsc_value_t*, object->arguments_parameter_cells, index);
+}
+
+void tsc_object_arguments_disconnect(tsc_object_t* object, const tsc_str_t* key) {
+    if (!object || !object->is_arguments || !object->arguments_parameter_cells) return;
+    size_t index = 0;
+    if (!tsc_str_array_index(key, &index) || index >= object->arguments_parameter_cells->len) return;
+    TSC_ARR(volatile tsc_value_t*, object->arguments_parameter_cells, index) = NULL;
 }
 
 bool tsc_proxy_trap_is_callable(tsc_value_t trap) {
@@ -1052,6 +1068,8 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
         tsc_object_prop_t* prop = &o->props[(size_t)found];
         if (prop->accessor || !prop->writable) return false;
         object_prop_store_value(prop, value);
+        volatile tsc_value_t* mapped = tsc_object_arguments_mapped_cell(o, key);
+        if (mapped) *mapped = value;
         return true;
     }
     if (!o->extensible) return false;
@@ -1200,6 +1218,8 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
     if (found >= 0) {
         size_t idx = (size_t)found;
         tsc_object_prop_t* p = &o->props[idx];
+        volatile tsc_value_t* mapped = tsc_object_arguments_mapped_cell(o, key);
+        if (mapped && !p->accessor) object_prop_store_value(p, *mapped);
         if (!p->configurable) {
             if (p->accessor) {
                 if (has_value || has_writable) return false;
@@ -1221,10 +1241,14 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
             p->setter_env = NULL;
             object_prop_store_setter_value(p, tsc_value_undefined());
         }
-        if (has_value) object_prop_store_value(p, value);
+        if (has_value) {
+            object_prop_store_value(p, value);
+            if (mapped) *mapped = value;
+        }
         if (has_writable) p->writable = writable;
         if (has_enumerable) p->enumerable = enumerable;
         if (has_configurable) p->configurable = configurable;
+        if (has_writable && !writable) tsc_object_arguments_disconnect(o, key);
         object_shape_changed(o, "modify", key);
         return true;
     }
@@ -1314,6 +1338,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         prop->writable = false;
         prop->enumerable = next_enumerable;
         prop->configurable = next_configurable;
+        tsc_object_arguments_disconnect(o, key);
         object_shape_changed(o, "modify", key);
         return true;
     }
@@ -1428,6 +1453,8 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
     if (idx >= 0) {
         const tsc_object_prop_t* prop = &o->props[idx];
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
+        volatile tsc_value_t* mapped = tsc_object_arguments_mapped_cell(o, key);
+        if (mapped) return *mapped;
         return prop->value;
     }
     if (o->is_error && o->class_ptr) {
@@ -1647,6 +1674,7 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
     if (found < 0) return true;
     size_t idx = (size_t)found;
     if (!o->props[idx].configurable) return false;
+    tsc_object_arguments_disconnect(o, key);
     for (size_t i = idx + 1; i < o->len; i++) {
         o->props[i - 1] = o->props[i];
     }

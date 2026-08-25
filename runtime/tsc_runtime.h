@@ -597,6 +597,34 @@ typedef struct tsc_array {
     void* data;
 } tsc_array_t;
 
+/* One ordinary-call activation owns one canonical, dynamically sized
+ * argument collection.  Generated adapters push this record before entering
+ * source code, so parameter projection, rest binding, and the `arguments`
+ * object never depend on a C arity family. */
+typedef struct tsc_call_activation {
+    struct tsc_call_activation* prev;
+    tsc_array_t* arguments;
+    tsc_value_t this_arg;
+    tsc_value_t callee;
+    tsc_value_t arguments_object;
+    tsc_array_t* parameter_cells;
+    bool strict;
+    bool arguments_object_initialized;
+} tsc_call_activation_t;
+
+void tsc_call_activation_push(
+    tsc_call_activation_t* activation,
+    tsc_array_t* arguments,
+    tsc_value_t this_arg,
+    tsc_value_t callee
+);
+void tsc_call_activation_pop(tsc_call_activation_t* activation);
+void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
+tsc_value_t tsc_call_arguments(void);
+tsc_value_t tsc_value_current_callee(void);
+void* tsc_value_callee_checkpoint(void);
+void tsc_value_callee_restore(void* checkpoint);
+
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_prototype(void);
@@ -1474,6 +1502,8 @@ bool tsc_path_win32_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern
 typedef struct tsc_try_frame {
     jmp_buf jb;
     struct tsc_try_frame* prev;
+    tsc_call_activation_t* activation_top;
+    void* callee_top;
 } tsc_try_frame_t;
 
 void tsc_try_push(tsc_try_frame_t* f);

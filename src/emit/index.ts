@@ -15603,6 +15603,9 @@ class Emitter {
 
     private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.Node | null {
         const target = this.importAliasTargetDeclaration(id);
+        if (target && this.isDefaultExportDeclaration(target)) {
+            return target;
+        }
         if (
             target &&
             ts.isBinaryExpression(target) &&
@@ -19724,6 +19727,9 @@ class Emitter {
     }
 
     private closureDeclarationCType(fn: ClosureLikeDeclaration): CType {
+        if (this.isJavaScriptSourceFile(fn.getSourceFile())) {
+            return this.javaScriptFunctionValueType(fn);
+        }
         const sig = this.checker.getSignatureFromDeclaration(fn);
         if (!sig) unsupported(fn, "could not resolve closure signature");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
@@ -20303,6 +20309,10 @@ class Emitter {
     private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {
         let expr: ts.Expression = stmt.expression;
         while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if ((ts.isFunctionExpression(expr) || ts.isArrowFunction(expr)) &&
+            this.isJavaScriptSourceFile(expr.getSourceFile())) {
+            return this.javaScriptFunctionValueType(expr);
+        }
         if (
             (ts.isObjectLiteralExpression(expr) && this.isUntypedJsObjectLiteral(expr)) ||
             (ts.isArrayLiteralExpression(expr) && this.isUntypedJsArrayLiteral(expr))
@@ -22929,6 +22939,10 @@ class Emitter {
     private identifierScopedType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
         if (!sym) return null;
+        const cell = this.captureCellForSymbol(sym);
+        if (cell) return cell.type;
+        const closureBinding = this.closureEnvBindingForSymbol(sym);
+        if (closureBinding) return closureBinding.type;
         for (let i = this.argumentValueTypeScopes.length - 1; i >= 0; i--) {
             const type = this.argumentValueTypeScopes[i]!.get(sym);
             if (type) return type;
@@ -22938,6 +22952,10 @@ class Emitter {
 
     private identifierDeclaredType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
+        const activationCell = this.captureCellForSymbol(sym);
+        if (activationCell) return activationCell.type;
+        const closureBinding = this.closureEnvBindingForSymbol(sym);
+        if (closureBinding) return closureBinding.type;
         const emittedStorage = sym ? this.symbolStorageTypes.get(sym) : undefined;
         if (emittedStorage) return emittedStorage;
         const requireDestructureType = this.requireDestructureBindingType(id);
@@ -23032,6 +23050,97 @@ class Emitter {
 
     private isJavaScriptSourceFile(sf: ts.SourceFile): boolean {
         return /\.[cm]?jsx?$/i.test(sf.fileName);
+    }
+
+    /** JavaScript source syntax, rather than TypeScript's contextual/inferred
+     * signature, defines the runtime call ABI.  In particular the checker may
+     * synthesize a rest parameter for `arguments` use; admitting that symbol
+     * here would make a finite inferred tuple alter ECMAScript arity. */
+    private javaScriptFunctionValueType(fn: ts.FunctionLikeDeclaration): CType {
+        const sig = this.checker.getSignatureFromDeclaration(fn);
+        if (!sig) unsupported(fn, "could not resolve JavaScript function signature");
+        const params = fn.parameters
+            .filter((parameter) => !this.isThisParameter(parameter))
+            .map((parameter) => this.prepareType(
+                parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE,
+            ));
+        const ret = !this.isAsyncDeclaration(fn) && !this.isGeneratorDeclaration(fn)
+            ? T_VALUE
+            : this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
+        const thisType = this.signatureThisType(sig, fn);
+        return this.prepareType(functionType(params, ret, thisType ?? undefined));
+    }
+
+    private javaScriptFunctionLength(fn: ts.FunctionLikeDeclaration): number {
+        let length = 0;
+        for (const parameter of fn.parameters) {
+            if (this.isThisParameter(parameter)) continue;
+            if (parameter.initializer || parameter.dotDotDotToken) break;
+            length++;
+        }
+        return length;
+    }
+
+    /** Resolve the source function behind a direct callable expression.  This
+     * is identity-based (checker symbols), so a same-spelled global or local
+     * does not accidentally enter the JavaScript activation path. */
+    private javaScriptFunctionLikeForExpression(
+        expression: ts.Expression,
+        seen = new Set<ts.Symbol>(),
+    ): ts.FunctionLikeDeclaration | null {
+        const current = this.unwrapTransparentExpression(expression);
+        if (ts.isFunctionExpression(current) || ts.isArrowFunction(current)) {
+            return this.isJavaScriptSourceFile(current.getSourceFile()) ? current : null;
+        }
+        if (!ts.isIdentifier(current)) return null;
+        const symbol = this.symbolForIdentifier(current);
+        if (!symbol || seen.has(symbol)) return null;
+        seen.add(symbol);
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (declaration && ts.isFunctionDeclaration(declaration)) {
+            return this.isJavaScriptSourceFile(declaration.getSourceFile()) ? declaration : null;
+        }
+        if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) {
+            return this.javaScriptFunctionLikeForExpression(declaration.initializer, seen);
+        }
+        return null;
+    }
+
+    private directivePrologueHasUseStrict(statements: readonly ts.Statement[]): boolean {
+        for (const statement of statements) {
+            if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
+            if (statement.expression.text === "use strict") return true;
+        }
+        return false;
+    }
+
+    private functionHasStrictThisBinding(fn: ts.FunctionLikeDeclaration): boolean {
+        for (let current: ts.Node | undefined = fn; current; current = current.parent) {
+            const body = ts.isFunctionLike(current) && "body" in current
+                ? current.body
+                : undefined;
+            if (body && ts.isBlock(body) &&
+                this.directivePrologueHasUseStrict(body.statements)) {
+                return true;
+            }
+            if (ts.isSourceFile(current)) {
+                return ts.isExternalModule(current) ||
+                    this.directivePrologueHasUseStrict(current.statements);
+            }
+        }
+        return false;
+    }
+
+    private isImplicitArgumentsIdentifier(identifier: ts.Identifier): boolean {
+        if (identifier.text !== "arguments") return false;
+        const symbol = this.symbolForIdentifier(identifier);
+        if (symbol?.declarations?.length || symbol?.valueDeclaration) return false;
+        for (let current: ts.Node | undefined = identifier.parent; current; current = current.parent) {
+            if (ts.isArrowFunction(current)) continue;
+            if (ts.isFunctionLike(current)) return true;
+            if (ts.isSourceFile(current)) return false;
+        }
+        return false;
     }
 
     private isUntypedJsObjectLiteral(expr: ts.ObjectLiteralExpression): boolean {
@@ -23148,8 +23257,86 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         visit(body);
+        if (this.functionHasMappedArgumentsObject(fn)) {
+            for (const parameter of fn.parameters) {
+                if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
+                const symbol = this.symbolForIdentifier(parameter.name);
+                if (!symbol) continue;
+                const cellName = this.cellNameForCapture(symbol, mangleIdent(parameter.name.text));
+                captures.set(symbol, {
+                    type: T_VALUE,
+                    cellName,
+                    rootCellName: `${cellName}__gc_root`,
+                });
+            }
+        }
         this.capturedCellsCache.set(fn, captures);
         return captures;
+    }
+
+    private functionUsesOwnArgumentsObject(fn: ts.FunctionLikeDeclaration): boolean {
+        if (ts.isArrowFunction(fn)) return false;
+        let found = false;
+        const visit = (node: ts.Node): void => {
+            if (found) return;
+            if (node !== fn && ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return;
+            if (ts.isIdentifier(node) && this.isImplicitArgumentsIdentifier(node)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        for (const parameter of fn.parameters) {
+            if (parameter.initializer) visit(parameter.initializer);
+        }
+        if (fn.body) visit(fn.body);
+        return found;
+    }
+
+    private functionHasMappedArgumentsObject(fn: ts.FunctionLikeDeclaration): boolean {
+        if (!this.isJavaScriptSourceFile(fn.getSourceFile()) ||
+            this.functionHasStrictThisBinding(fn) ||
+            !this.functionUsesOwnArgumentsObject(fn)) {
+            return false;
+        }
+        return fn.parameters.every((parameter) =>
+            this.isThisParameter(parameter) ||
+            ts.isIdentifier(parameter.name) && !parameter.initializer && !parameter.dotDotDotToken,
+        );
+    }
+
+    private emitCallActivationConfiguration(
+        buffer: CBuf,
+        fn: ts.FunctionLikeDeclaration,
+        capturedCells: ReadonlyMap<ts.Symbol, CaptureCell>,
+    ): void {
+        if (!this.isJavaScriptSourceFile(fn.getSourceFile()) ||
+            ts.isArrowFunction(fn) ||
+            !this.functionUsesOwnArgumentsObject(fn)) return;
+        const strict = this.functionHasStrictThisBinding(fn);
+        if (!this.functionHasMappedArgumentsObject(fn)) {
+            buffer.line(`tsc_call_activation_configure(${strict ? "true" : "false"}, NULL);`);
+            return;
+        }
+        const parameters = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
+        const lastOccurrence = new Map<ts.Symbol, number>();
+        for (let index = 0; index < parameters.length; index++) {
+            const parameter = parameters[index]!;
+            if (!ts.isIdentifier(parameter.name)) continue;
+            const symbol = this.symbolForIdentifier(parameter.name);
+            if (symbol) lastOccurrence.set(symbol, index);
+        }
+        const mapping = this.freshTemp("_arguments_parameter_map");
+        buffer.line(`tsc_array_t* ${mapping} = tsc_array_new(sizeof(tsc_value_t*), ${Math.max(1, parameters.length)});`);
+        for (let index = 0; index < parameters.length; index++) {
+            const parameter = parameters[index]!;
+            const symbol = ts.isIdentifier(parameter.name) ? this.symbolForIdentifier(parameter.name) : undefined;
+            const cell = symbol ? capturedCells.get(symbol) : undefined;
+            const entry = this.freshTemp("_arguments_parameter_cell");
+            buffer.line(`volatile tsc_value_t* ${entry} = ${symbol && lastOccurrence.get(symbol) === index && cell ? cell.cellName : "NULL"};`);
+            buffer.line(`tsc_array_push_raw(${mapping}, &${entry});`);
+        }
+        buffer.line(`tsc_call_activation_configure(false, ${mapping});`);
     }
 
     private collectClosureCaptures(
@@ -26153,7 +26340,9 @@ class Emitter {
             if (!ts.isIdentifier(p.name)) {
                 unsupported(p, "parameter destructuring");
             }
-            const pt = this.prepareType(mapType(p, this.checker));
+            const pt = this.isJavaScriptSourceFile(p.getSourceFile())
+                ? this.prepareType(p.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
+                : this.prepareType(mapType(p, this.checker));
             infos.push({ name: mangleIdent(p.name.text), type: pt });
         }
         return infos;
@@ -26226,13 +26415,7 @@ class Emitter {
             }
         }
         const visit = (node: ts.Node): void => {
-            if (node.kind === ts.SyntaxKind.ThisKeyword) {
-                unsupported(node, "default parameter initializers cannot reference this yet");
-            }
             if (ts.isIdentifier(node)) {
-                if (node.text === "arguments") {
-                    unsupported(node, "default parameter initializers cannot reference arguments yet");
-                }
                 const sym = this.symbolForIdentifier(node);
                 if (sym && disallowedParamSyms.has(sym)) {
                     unsupported(node, "default parameter initializers can only reference earlier parameters");
@@ -26257,8 +26440,37 @@ class Emitter {
         }
     }
 
+    /** Evaluate JavaScript parameter initializers at function entry.  Dynamic
+     * calls always supply an explicit undefined slot for an omitted formal, so
+     * one source-ordered pass is independent of the number of parameters. */
+    private emitJavaScriptDefaultParameterInitializers(
+        buf: CBuf,
+        fn: ts.FunctionLikeDeclaration,
+        cells: ReadonlyMap<ts.Symbol, CaptureCell>,
+    ): void {
+        if (!this.isJavaScriptSourceFile(fn.getSourceFile())) return;
+        for (const parameter of fn.parameters) {
+            if (!parameter.initializer) continue;
+            if (!ts.isIdentifier(parameter.name)) {
+                unsupported(parameter, "default destructuring parameters require binding initialization lowering");
+            }
+            this.validateDefaultParameterInitializer(parameter);
+            const symbol = this.symbolForIdentifier(parameter.name);
+            const cell = symbol ? cells.get(symbol) : undefined;
+            const target = cell ? `*${cell.cellName}` : mangleIdent(parameter.name.text);
+            const initializer = this.emitExpr(parameter.initializer);
+            buf.open(`if (tsc_value_is_undefined(${target}))`);
+            buf.line(`${target} = ${this.coerce(initializer, T_VALUE, parameter.initializer)};`);
+            if (cell?.rootCellName) {
+                buf.line(`*${cell.rootCellName} = tsc_value_gc_root(${target});`);
+            }
+            buf.close();
+        }
+    }
+
     private emitCaptureCellInitialization(buf: CBuf, cell: CaptureCell, value: string): void {
-        buf.line(`${cell.type.c}* ${cell.cellName} = (${cell.type.c}*)TSC_GC_MALLOC(sizeof(${cell.type.c}));`);
+        const qualifier = cell.type.kind === "value" ? "volatile " : "";
+        buf.line(`${qualifier}${cell.type.c}* ${cell.cellName} = (${qualifier}${cell.type.c}*)TSC_GC_MALLOC(sizeof(${cell.type.c}));`);
         buf.line(`*${cell.cellName} = ${value};`);
         if (cell.rootCellName) {
             buf.line(`void** ${cell.rootCellName} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
@@ -26313,8 +26525,23 @@ class Emitter {
         }
         const { signature, returnType, thisType } = this.fnSignature(fd);
         const capturedCells = this.capturedCellsFor(fd);
+        const parameterValueScope = new Map<ts.Symbol, string>();
+        const parameterTypeScope = new Map<ts.Symbol, CType>();
+        for (const parameter of fd.parameters) {
+            if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
+            const symbol = this.symbolForIdentifier(parameter.name);
+            if (!symbol) continue;
+            if (!capturedCells.has(symbol)) {
+                parameterValueScope.set(symbol, mangleIdent(parameter.name.text));
+            }
+            parameterTypeScope.set(symbol, this.isJavaScriptSourceFile(fd.getSourceFile())
+                ? this.prepareType(parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
+                : this.prepareType(mapType(parameter, this.checker)));
+        }
         this.defs.open(signature);
         this.returnStack.push(returnType);
+        this.argumentValueScopes.push(parameterValueScope);
+        this.argumentValueTypeScopes.push(parameterTypeScope);
         this.cellScopes.push(capturedCells);
         if (thisType) {
             this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
@@ -26331,6 +26558,8 @@ class Emitter {
             this.defs.line(`${tailCtx.label}: __attribute__((unused));`);
         }
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+        this.emitCallActivationConfiguration(this.defs, fd, capturedCells);
+        this.emitJavaScriptDefaultParameterInitializers(this.defs, fd, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
             this.emitStmtList(this.defs, fd.body.statements);
@@ -26341,6 +26570,8 @@ class Emitter {
             if (tailCtx) this.tailFunctionStack.pop();
             if (thisType) this.functionThisStack.pop();
             this.cellScopes.pop();
+            this.argumentValueTypeScopes.pop();
+            this.argumentValueScopes.pop();
             this.returnStack.pop();
         }
         this.defs.close();
@@ -38613,7 +38844,10 @@ class Emitter {
         const sig = this.checker.getSignatureFromDeclaration(fd);
         if (!sig) unsupported(fd, "could not resolve function signature");
         const retTsType = sig.getReturnType();
-        const retCt = this.prepareType(mapTsType(fd, retTsType, this.checker));
+        const retCt = this.isJavaScriptSourceFile(fd.getSourceFile()) &&
+            !this.isAsyncDeclaration(fd) && !this.isGeneratorDeclaration(fd)
+            ? T_VALUE
+            : this.prepareType(mapTsType(fd, retTsType, this.checker));
         const thisType = this.signatureThisType(sig, fd);
         const params = this.collectParams(fd.parameters);
         const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
@@ -44840,6 +45074,9 @@ class Emitter {
         }
 
         if (ts.isIdentifier(expr)) {
+            if (this.isImplicitArgumentsIdentifier(expr)) {
+                return { c: "tsc_call_arguments()", ty: T_VALUE };
+            }
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };
@@ -44993,6 +45230,12 @@ class Emitter {
                     }
                     unsupported(expr, "unsupported CommonJS default import fallback");
                 }
+                if (ts.isFunctionDeclaration(commonJsDefaultImport)) {
+                    const type = this.isJavaScriptSourceFile(commonJsDefaultImport.getSourceFile())
+                        ? this.javaScriptFunctionValueType(commonJsDefaultImport)
+                        : this.prepareType(mapType(expr, this.checker));
+                    return this.emitFunctionReferenceClosure(expr, type);
+                }
                 const cName = this.declarationCName(commonJsDefaultImport);
                 if (!cName) unsupported(expr, "unsupported CommonJS default import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsDefaultImport) };
@@ -45035,7 +45278,10 @@ class Emitter {
                 : null;
             if (processProp) return processProp;
             const scopedTy = this.identifierScopedType(expr);
-            const ty = scopedTy ?? this.prepareType(mapType(expr, this.checker));
+            const sourceJavaScriptFunction = this.javaScriptFunctionLikeForExpression(expr);
+            const ty = scopedTy ?? (sourceJavaScriptFunction
+                ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
+                : this.prepareType(mapType(expr, this.checker)));
             const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
             if (declaredTy?.kind === "value" && ty.kind === "void") {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
@@ -47527,6 +47773,12 @@ class Emitter {
     private emitCall(call: ts.CallExpression): EmitResult {
         const inlineClosure = this.emitInlineClosureCall(call);
         if (inlineClosure) return inlineClosure;
+        /* JavaScript calls always cross one canonical argument-list boundary.
+         * TypeScript's inferred signature is optimization evidence only and
+         * must not discard excess ECMAScript arguments. */
+        if (this.javaScriptFunctionLikeForExpression(call.expression)) {
+            return this.emitDynamicValueCall(call, this.emitExpr(call.expression));
+        }
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
         if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
             if (!this.currentBaseClass) {
@@ -48073,7 +48325,9 @@ class Emitter {
     }
 
     private isSupportedInlineClosureParameter(parameter: ts.ParameterDeclaration): boolean {
-        if (this.isThisParameter(parameter) || parameter.initializer && !this.isSupportedInlineClosureDefault(parameter)) {
+        if (this.isThisParameter(parameter) ||
+            !this.isJavaScriptSourceFile(parameter.getSourceFile()) &&
+            parameter.initializer && !this.isSupportedInlineClosureDefault(parameter)) {
             return false;
         }
         if (ts.isIdentifier(parameter.name)) return true;
@@ -49195,14 +49449,22 @@ class Emitter {
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
             if (!this.isSupportedInlineClosureParameter(p)) unsupported(p, "unsupported closure parameter shape");
-            if (p.initializer && !this.isSupportedInlineClosureDefault(p)) {
+            if (!this.isJavaScriptSourceFile(fn.getSourceFile()) &&
+                p.initializer && !this.isSupportedInlineClosureDefault(p)) {
                 unsupported(p, "default closure parameters currently require a literal initializer");
             }
-            return this.prepareType(mapType(p, this.checker));
+            return this.isJavaScriptSourceFile(fn.getSourceFile())
+                ? this.prepareType(p.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
+                : this.prepareType(mapType(p, this.checker));
         });
-        const ret = this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
-        const thisType = this.signatureThisType(sig, fn);
-        const type = this.prepareType(functionType(params, ret, thisType ?? undefined));
+        const type = this.isJavaScriptSourceFile(fn.getSourceFile())
+            ? this.javaScriptFunctionValueType(fn)
+            : this.prepareType(functionType(
+                params,
+                this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker)),
+                this.signatureThisType(sig, fn) ?? undefined,
+            ));
+        const ret = this.prepareType(type.ret!);
         const captures = this.collectClosureCaptures(fn);
         const implName = `tsc_closure_${this.closureCounter++}`;
         let envType: string | null = null;
@@ -49210,7 +49472,7 @@ class Emitter {
             envType = `${implName}_env_t`;
             this.structDecls.open(`typedef struct ${envType}`);
             for (const cap of captures) {
-                this.structDecls.line(`${cap.type.c}* ${cap.field};`);
+                this.structDecls.line(`${cap.type.kind === "value" ? "volatile " : ""}${cap.type.c}* ${cap.field};`);
                 if (cap.type.kind === "value") this.structDecls.line(`void** ${cap.field}_gc_root;`);
             }
             this.structDecls.close(` ${envType};`);
@@ -49307,6 +49569,7 @@ class Emitter {
         }
         const argumentScope = new Map<ts.Symbol, string>();
         const argumentTypeScope = new Map<ts.Symbol, CType>();
+        const capturedCells = this.capturedCellsFor(fn);
         for (let i = 0; i < runtimeParams.length; i++) {
             const parameter = runtimeParams[i]!;
             const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
@@ -49454,10 +49717,17 @@ class Emitter {
                     unsupported(parameter, "object destructuring currently requires a dynamic object parameter type");
                 }
                 bindObjectPattern(parameter.name, paramNames[i]);
+            } else {
+                const symbol = this.symbolForIdentifier(parameter.name);
+                if (symbol) {
+                    if (!capturedCells.has(symbol)) {
+                        argumentScope.set(symbol, paramNames[i]!);
+                    }
+                    argumentTypeScope.set(symbol, parameterType);
+                }
             }
         }
 
-        const capturedCells = this.capturedCellsFor(fn);
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
         if (isAsync && isGenerator) {
@@ -49512,6 +49782,8 @@ class Emitter {
                     ? this.beginAsyncDynamicRootScope(body, runtimeParams)
                     : null;
                 this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
+                this.emitCallActivationConfiguration(body, fn, capturedCells);
+                this.emitJavaScriptDefaultParameterInitializers(body, fn, capturedCells);
                 try {
                     const fnBody = fn.body;
                     if (!fnBody) unsupported(fn, "closure implementation requires a body");
@@ -73620,8 +73892,15 @@ class Emitter {
                         `tsc_value_array(${tmpOut}); })`
                     );
                 }
-                case "function":
-                    return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
+                case "function": {
+                    const sourceFunction = ts.isExpression(node)
+                        ? this.javaScriptFunctionLikeForExpression(node)
+                        : null;
+                    const length = sourceFunction
+                        ? this.javaScriptFunctionLength(sourceFunction)
+                        : (r.ty.params ?? []).length;
+                    return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${length}.0, ${this.functionValueNameLiteral(node)})`;
+                }
                 case "class":
                     return this.classValueBoxExpression(r, node);
                 case "date":
@@ -73737,7 +74016,13 @@ class Emitter {
             unsupported(node, "dynamic function boxing requires a function value");
         }
         this.prepareType(type);
-        const key = this.typeKey(type);
+        const sourceFunction = ts.isExpression(node)
+            ? this.javaScriptFunctionLikeForExpression(node)
+            : null;
+        const createsActivation = !!sourceFunction && !ts.isArrowFunction(sourceFunction);
+        const runtimeParameters = sourceFunction?.parameters.filter((parameter) => !this.isThisParameter(parameter));
+        const restIndex = runtimeParameters?.findIndex((parameter) => !!parameter.dotDotDotToken) ?? -1;
+        const key = `${this.typeKey(type)}:rest=${restIndex}:activation=${createsActivation}`;
         const existing = this.dynamicFunctionAdapters.get(key);
         if (existing) return existing;
         const name = `tsc_dynamic_function_adapter_${this.dynamicFunctionAdapters.size}`;
@@ -73751,20 +74036,31 @@ class Emitter {
         buf.line(`${type.c} fn = (${type.c})env;`);
         if (!type.thisParam) buf.line("(void)this_arg;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        if (createsActivation) {
+            buf.line("tsc_call_activation_t activation;");
+            buf.line("tsc_call_activation_push(&activation, args, this_arg, tsc_value_current_callee());");
+        }
         const callArgs: string[] = ["fn->env"];
         if (type.thisParam) {
             callArgs.push(this.coerce({ c: "this_arg", ty: T_VALUE }, type.thisParam, node));
         }
         for (let i = 0; i < params.length; i++) {
+            if (i === restIndex) {
+                const rawRest = `tsc_value_array(tsc_array_slice(args, ${i}.0, (double)args->len))`;
+                callArgs.push(this.coerce({ c: rawRest, ty: T_VALUE }, params[i]!, node));
+                continue;
+            }
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
             callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, params[i]!, node));
         }
         const call = `fn->fn(${callArgs.join(", ")})`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
+            if (createsActivation) buf.line("tsc_call_activation_pop(&activation);");
             buf.line("return tsc_value_undefined();");
         } else {
             buf.line(`${ret.c} result = ${call};`);
+            if (createsActivation) buf.line("tsc_call_activation_pop(&activation);");
             buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, node)};`);
         }
         buf.close();

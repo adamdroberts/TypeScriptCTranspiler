@@ -167,6 +167,7 @@ struct tsc_object {
     bool is_map;
     bool is_set;
     bool is_error;
+    bool is_arguments;
     bool is_typed_array;
     bool is_url;
     bool is_url_search_params;
@@ -189,9 +190,15 @@ struct tsc_object {
     uint8_t primitive_kind;
     tsc_value_t primitive_value;
     void* primitive_value_root;
+    /* For mapped arguments objects, index i optionally aliases one heap
+     * parameter cell.  A NULL entry means the property is unmapped. */
+    tsc_array_t* arguments_parameter_cells;
     tsc_value_t prototype;
     tsc_object_prop_t* props;
 };
+
+volatile tsc_value_t* tsc_object_arguments_mapped_cell(const tsc_object_t* object, const tsc_str_t* key);
+void tsc_object_arguments_disconnect(tsc_object_t* object, const tsc_str_t* key);
 
 tsc_shape_t* tsc_shape_new_unique(void);
 tsc_shape_t* tsc_shape_new(tsc_shape_t* parent, const tsc_str_t* key);
