@@ -574,6 +574,44 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     return r;
 }
 
+tsc_regexp_t* tsc_regexp_from_constructor_args(
+    tsc_value_t pattern,
+    tsc_value_t flags,
+    bool as_function_call
+) {
+    tsc_regexp_t* source_regexp = NULL;
+    if (value_is_box(pattern) && value_tag(pattern) == TSC_VALUE_TAG_OBJECT) {
+        const tsc_object_t* object = (const tsc_object_t*)value_ptr(pattern);
+        if (object && object->is_regexp) {
+            source_regexp = (tsc_regexp_t*)object->class_ptr;
+        }
+    }
+
+    const bool flags_undefined = tsc_value_is_undefined(flags);
+    if (as_function_call && source_regexp && flags_undefined) {
+        return source_regexp;
+    }
+
+    const tsc_str_t* pattern_text;
+    if (source_regexp) {
+        pattern_text = source_regexp->source;
+    } else if (tsc_value_is_undefined(pattern)) {
+        pattern_text = tsc_str_from_lit("", 0);
+    } else {
+        pattern_text = tsc_value_to_string(pattern);
+    }
+
+    const tsc_str_t* flags_text;
+    if (!flags_undefined) {
+        flags_text = tsc_value_to_string(flags);
+    } else if (source_regexp) {
+        flags_text = source_regexp->flags;
+    } else {
+        flags_text = tsc_str_from_lit("", 0);
+    }
+    return tsc_regexp_new(pattern_text, flags_text);
+}
+
 tsc_str_t* tsc_regexp_escape(const tsc_str_t* input) {
     static const char* hex = "0123456789abcdef";
     tsc_str_t* out = str_alloc(input->len * 4);

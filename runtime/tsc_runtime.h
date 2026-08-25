@@ -292,6 +292,7 @@ typedef struct tsc_regexp {
 } tsc_regexp_t;
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags);
+tsc_regexp_t* tsc_regexp_from_constructor_args(tsc_value_t pattern, tsc_value_t flags, bool as_function_call);
 tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 /* Inline test: skips a function call + lazy-init function call per match.

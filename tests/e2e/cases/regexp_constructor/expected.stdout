@@ -1,3 +1,6 @@
 letters: true a+ gi true true
 word: ba|a
 spaced: true ms true true
+empty: true true true true
+regexp input: true false c+ gi c+ m true
+undefined/order: true pfx

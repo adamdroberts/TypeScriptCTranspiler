@@ -71255,20 +71255,21 @@ class Emitter {
 
     private emitRegExpConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
         const args = call.arguments ?? [];
-        if (args.length < 1) unsupported(call, "RegExp expects pattern and optional flags");
-        const patternNode = args[0]!;
-        const pattern = this.emitExpr(patternNode);
-        const specs: SequencedCallArg[] = [
-            { value: pattern, target: T_STRING, node: patternNode },
-        ];
+        const specs: SequencedCallArg[] = [];
+        const patternIndex = args[0] ? specs.length : -1;
+        if (args[0]) {
+            specs.push({ value: this.emitExpr(args[0]), target: T_VALUE, node: args[0] });
+        }
+        const flagsIndex = args[1] ? specs.length : -1;
         if (args[1]) {
-            const flags = this.emitExpr(args[1]);
-            specs.push({ value: flags, target: T_STRING, node: args[1] });
+            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
         }
         specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_REGEXP, specs, ([patternC, flagsC]) =>
-            `tsc_regexp_new(${patternC}, ${flagsC ?? 'tsc_str_from_lit("", 0)'})`,
-        );
+        return this.emitSequencedExpr(T_REGEXP, specs, (values) => {
+            const pattern = patternIndex >= 0 ? values[patternIndex]! : "tsc_value_undefined()";
+            const flags = flagsIndex >= 0 ? values[flagsIndex]! : "tsc_value_undefined()";
+            return `tsc_regexp_from_constructor_args(${pattern}, ${flags}, ${ts.isCallExpression(call) ? "true" : "false"})`;
+        });
     }
 
     private emitDecoratedClassNew(
@@ -73768,7 +73769,13 @@ class Emitter {
                 case "void":
                 case "never":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
-                    if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
+                    if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) {
+                        const unwrapped = this.unwrapTransparentExpression(node);
+                        if (ts.isVoidExpression(unwrapped)) {
+                            return `({ (void)(${r.c}); tsc_value_undefined(); })`;
+                        }
+                        return `tsc_value_undefined()`;
+                    }
                     if (r.c !== "NULL" && r.c !== "(void)0") {
                         return `({ (void)(${r.c}); tsc_value_undefined(); })`;
                     }
