@@ -544,6 +544,11 @@ class Emitter {
     /** Per-source-record evaluation and Module instantiation bodies. */
     private modInits = new Map<string, CBuf>();
     private modInstantiations = new Map<string, CBuf>();
+    /** ScriptEvaluation carries one UpdateEmpty completion slot through the
+     * complete statement tree. Module evaluators use the same return ABI but
+     * deliberately return undefined. */
+    private sourceRecordCompletionValues = new Map<string, string>();
+    private scriptCompletionTargets: Array<{ value: string; gcRoot: string }> = [];
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
     private generatorStack: GeneratorContext[] = [];
@@ -15212,8 +15217,11 @@ class Emitter {
         for (const modId of emitOrder) {
             const body = this.modInits.get(modId);
             if (!body) continue;
-            out.line(`static void mod_evaluate_${modId}(void) {`);
+            out.line(`static tsc_value_t mod_evaluate_${modId}(void) {`);
             out.write(body.toString());
+            out.line(
+                `    return ${this.sourceRecordCompletionValues.get(modId) ?? "tsc_value_undefined()"};`,
+            );
             out.line("}");
             out.line();
         }
@@ -15228,7 +15236,7 @@ class Emitter {
             out.line(`    TSC_TRY_FRAME(_mod_frame_${modId});`);
             out.line(`    tsc_try_push(&_mod_frame_${modId});`);
             out.line(`    if (setjmp(_mod_frame_${modId}.jb) == 0) {`);
-            out.line(`        mod_evaluate_${modId}();`);
+            out.line(`        (void)mod_evaluate_${modId}();`);
             out.line(`        tsc_try_pop();`);
             out.line(`        mod_state_${modId} = 2;`);
             out.line("        return;");
@@ -15256,8 +15264,7 @@ class Emitter {
                     if (!moduleId) {
                         throw new Error(`Test262 evalScript entry is absent from the module graph: ${entry.entry}`);
                     }
-                    out.line(`        mod_evaluate_${moduleId}();`);
-                    out.line("        return tsc_value_undefined();");
+                    out.line(`        return mod_evaluate_${moduleId}();`);
                 }
                 out.line("    }");
             }
@@ -15397,6 +15404,7 @@ class Emitter {
         const capturedCells = this.capturedCellsFor(sf);
         this.cellScopes.push(capturedCells);
         this.localDynamicRootScopes.push(new Map());
+        let scriptCompletionTarget: { value: string; gcRoot: string } | null = null;
 
         try {
             const statements = this.flattenModuleStatements(sf.statements);
@@ -15492,6 +15500,16 @@ class Emitter {
                 this.emitClassBodies(classExpr as unknown as ts.ClassDeclaration);
             }
             this.emitTest262ScriptGlobalDeclarationInstantiation(initBuf, sf);
+            if (this.isTest262ScriptSourceFile(sf)) {
+                scriptCompletionTarget = {
+                    value: this.freshTemp("_script_completion"),
+                    gcRoot: this.freshTemp("_script_completion_gc_root"),
+                };
+                initBuf.line(`tsc_value_t ${scriptCompletionTarget.value} = tsc_value_undefined();`);
+                initBuf.line(`void* volatile ${scriptCompletionTarget.gcRoot} = NULL;`);
+                this.sourceRecordCompletionValues.set(modId, scriptCompletionTarget.value);
+                this.scriptCompletionTargets.push(scriptCompletionTarget);
+            }
             // Pass E: top-level statements. VariableStatements are split into
             // file-scope declarations + in-mod_init assignments so that other
             // top-level functions (including lifted arrows) can reference them.
@@ -15723,6 +15741,12 @@ class Emitter {
             }
             throw e;
         } finally {
+            if (scriptCompletionTarget) {
+                const popped = this.scriptCompletionTargets.pop();
+                if (popped !== scriptCompletionTarget) {
+                    throw new Error("Script completion target stack became unbalanced");
+                }
+            }
             this.localDynamicRootScopes.pop();
             this.cellScopes.pop();
         }
@@ -40669,9 +40693,15 @@ class Emitter {
             this.emitYieldStmt(buf, es.expression);
             return;
         }
-        if (this.isPrunableExpressionStatementExpression(es.expression)) return;
+        const completion = this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1];
+        if (!completion && this.isPrunableExpressionStatementExpression(es.expression)) return;
         const r = this.emitExpr(es.expression);
-        buf.line(r.c + ";");
+        if (!completion) {
+            buf.line(r.c + ";");
+            return;
+        }
+        buf.line(`${completion.value} = ${this.coerce(r, T_VALUE, es.expression)};`);
+        buf.line(`${completion.gcRoot} = tsc_value_gc_root(${completion.value});`);
     }
 
     private emitYieldStmt(buf: CBuf, y: ts.YieldExpression): void {
@@ -46589,12 +46619,46 @@ class Emitter {
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
+        const completion = this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1];
+        const outerCompletion = completion
+            ? {
+                value: this.freshTemp("_try_outer_completion"),
+                gcRoot: this.freshTemp("_try_outer_completion_gc_root"),
+            }
+            : null;
+        const emitOuterCompletionSnapshot = (): void => {
+            if (!completion || !outerCompletion) return;
+            buf.line(`tsc_value_t const ${outerCompletion.value} = ${completion.value};`);
+            buf.line(
+                `void* volatile ${outerCompletion.gcRoot} = ` +
+                `tsc_value_gc_root(${outerCompletion.value});`,
+            );
+        };
+        const restoreOuterCompletion = (): void => {
+            if (!completion || !outerCompletion) return;
+            buf.line(`${completion.value} = ${outerCompletion.value};`);
+            buf.line(`${completion.gcRoot} = ${outerCompletion.gcRoot};`);
+        };
+        const emitFinallyPreservingNormalCompletion = (statements: readonly ts.Statement[]): void => {
+            if (!completion) {
+                for (const statement of statements) this.emitStmt(buf, statement);
+                return;
+            }
+            const normalValue = this.freshTemp("_try_normal_completion");
+            const normalRoot = this.freshTemp("_try_normal_completion_gc_root");
+            buf.line(`tsc_value_t const ${normalValue} = ${completion.value};`);
+            buf.line(`void* volatile ${normalRoot} = tsc_value_gc_root(${normalValue});`);
+            for (const statement of statements) this.emitStmt(buf, statement);
+            buf.line(`${completion.value} = ${normalValue};`);
+            buf.line(`${completion.gcRoot} = ${normalRoot};`);
+        };
         if (ts0.catchClause && ts0.finallyBlock) {
             const ehVar = this.freshTemp("_eh");
             const catchEhVar = this.freshTemp("_catch_eh");
             const finallyEhVar = this.freshTemp("_finally_eh");
             const catchErrorVar = this.freshTemp("_catch_error");
             buf.open("");
+            emitOuterCompletionSnapshot();
             buf.line(`TSC_TRY_FRAME(${ehVar});`);
             buf.line(`tsc_try_push(&${ehVar});`);
             buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
@@ -46608,6 +46672,7 @@ class Emitter {
             buf.close();
             buf.open("else");
             buf.line(`tsc_try_pop();`);
+            restoreOuterCompletion();
             buf.line(`TSC_TRY_FRAME(${catchEhVar});`);
             buf.line(`tsc_try_push(&${catchEhVar});`);
             buf.open(`if (setjmp(${catchEhVar}.jb) == 0)`);
@@ -46653,7 +46718,7 @@ class Emitter {
             buf.close();
             buf.close();
             buf.close();
-            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            emitFinallyPreservingNormalCompletion(ts0.finallyBlock.statements);
             buf.close();
             return;
         }
@@ -46662,6 +46727,7 @@ class Emitter {
             const finallyEhVar = this.freshTemp("_finally_eh");
             const errorVar = this.freshTemp("_try_error");
             buf.open("");
+            emitOuterCompletionSnapshot();
             buf.line(`TSC_TRY_FRAME(${ehVar});`);
             buf.line(`tsc_try_push(&${ehVar});`);
             buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
@@ -46688,12 +46754,13 @@ class Emitter {
             buf.line("tsc_rethrow();");
             buf.close();
             buf.close();
-            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            emitFinallyPreservingNormalCompletion(ts0.finallyBlock.statements);
             buf.close();
             return;
         }
         const ehVar = this.freshTemp("_eh");
         buf.open("");
+        emitOuterCompletionSnapshot();
         buf.line(`TSC_TRY_FRAME(${ehVar});`);
         buf.line(`tsc_try_push(&${ehVar});`);
         buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
@@ -46708,6 +46775,7 @@ class Emitter {
         if (ts0.catchClause) {
             buf.open("else");
             buf.line(`tsc_try_pop();`);
+            restoreOuterCompletion();
             let catchSym: ts.Symbol | undefined;
             const catchUsesValue = this.catchBindingUsesValue(ts0.catchClause);
             if (ts0.catchClause.variableDeclaration) {

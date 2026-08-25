@@ -59,6 +59,23 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const functionCollisionSource = "function blockedFunction() {}";
     const existingVarSource = "var existingConfigurable; var existingRestricted;";
     const nonExtensibleSource = "var impossibleGlobal; var impossibleSideEffect;";
+    const completionEmptySource = "var completionOnlyDeclaration;";
+    const completionIdentitySource = "sentinel; var completionTrailingDeclaration;";
+    const completionBranchSource = "if (true) { 11; } else { 12; } ;";
+    const completionLoopSource = `
+        for (var completionIndex = 0; completionIndex < 3; completionIndex++) completionIndex;
+    `;
+    const completionCaughtEmptySource = `
+        20;
+        try { 21; throw sentinel; } catch (error) {}
+    `;
+    const completionCatchValueSource = `
+        try { throw sentinel; } catch (error) { 30; }
+    `;
+    const completionFinallySource = `
+        try { 40; } finally { 41; }
+    `;
+    const completionStressSource = `${"{".repeat(128)}sentinel;${"}".repeat(128)}`;
     const compiledSources = [
         ["mutation.js", mutationSource],
         ["throw.js", throwSource],
@@ -69,6 +86,14 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["function-collision.js", functionCollisionSource],
         ["existing-var.js", existingVarSource],
         ["non-extensible.js", nonExtensibleSource],
+        ["completion-empty.js", completionEmptySource],
+        ["completion-identity.js", completionIdentitySource],
+        ["completion-branch.js", completionBranchSource],
+        ["completion-loop.js", completionLoopSource],
+        ["completion-caught-empty.js", completionCaughtEmptySource],
+        ["completion-catch-value.js", completionCatchValueSource],
+        ["completion-finally.js", completionFinallySource],
+        ["completion-stress.js", completionStressSource],
     ] as const;
     const compiledEntries = compiledSources.map(([filename, source]) => ({
         source,
@@ -79,6 +104,9 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ...compiledEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
         fs.writeFile(main, `
             var executions = 0;
+            var completionTrailingDeclaration;
+            var completionOnlyDeclaration;
+            var completionIndex;
             var sentinel = {};
             let sharedLexical = 10;
             const sharedConstant = {};
@@ -175,6 +203,16 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             catch (error) { nonExtensible = error instanceof TypeError; }
             if (!nonExtensible || "impossibleGlobal" in globalThis || "impossibleSideEffect" in globalThis) {
                 throw new Error("non-extensible global preflight was not atomic");
+            }
+            if ($262.evalScript(${JSON.stringify(completionEmptySource)}) !== undefined ||
+                $262.evalScript(${JSON.stringify(completionIdentitySource)}) !== sentinel ||
+                $262.evalScript(${JSON.stringify(completionBranchSource)}) !== 11 ||
+                $262.evalScript(${JSON.stringify(completionLoopSource)}) !== 2 ||
+                $262.evalScript(${JSON.stringify(completionCaughtEmptySource)}) !== 20 ||
+                $262.evalScript(${JSON.stringify(completionCatchValueSource)}) !== 30 ||
+                $262.evalScript(${JSON.stringify(completionFinallySource)}) !== 40 ||
+                $262.evalScript(${JSON.stringify(completionStressSource)}) !== sentinel) {
+                throw new Error("ScriptEvaluation completion propagation differed");
             }
             print("test262-eval-script-ok");
         `, "utf8"),
