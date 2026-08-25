@@ -447,6 +447,7 @@ typedef struct tsc_date {
 } tsc_date_t;
 tsc_date_t* tsc_date_new_now(void);
 tsc_date_t* tsc_date_from_ms(double ms);
+tsc_date_t* tsc_date_from_value(tsc_value_t value);
 double tsc_date_get_time(const tsc_date_t* d);
 double tsc_date_set_time(tsc_date_t* d, double ms);
 double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count);
@@ -812,6 +813,8 @@ bool tsc_value_number_is_finite(tsc_value_t v);
 bool tsc_value_number_is_nan(tsc_value_t v);
 bool tsc_value_number_is_safe_integer(tsc_value_t v);
 double tsc_value_as_num(tsc_value_t v);
+double tsc_value_to_number(tsc_value_t v);
+double tsc_value_number_constructor(tsc_value_t v);
 bool tsc_value_as_bool(tsc_value_t v);
 tsc_str_t* tsc_value_as_string(tsc_value_t v);
 tsc_bigint_t* tsc_value_as_bigint(tsc_value_t v);

@@ -572,7 +572,7 @@ static tsc_value_t primitive_convert(
         return tsc_value_bool(tsc_value_is_truthy(input));
     }
     if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
-        return tsc_value_num(tsc_value_as_num(input));
+        return tsc_value_num(tsc_value_number_constructor(input));
     }
     if (descriptor->kind == TSC_PRIMITIVE_STRING) {
         if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_SYMBOL) {
@@ -4599,6 +4599,43 @@ static tsc_value_t value_to_primitive(
         if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
     }
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
+}
+
+double tsc_value_to_number(tsc_value_t input) {
+    return tsc_value_as_num(value_to_primitive_if_object(
+        input,
+        TSC_TO_PRIMITIVE_NUMBER
+    ));
+}
+
+double tsc_value_number_constructor(tsc_value_t input) {
+    tsc_value_t primitive = value_to_primitive_if_object(
+        input,
+        TSC_TO_PRIMITIVE_NUMBER
+    );
+    if (value_is_bigint(primitive)) {
+        return mpz_get_d(((const tsc_bigint_t*)value_ptr(primitive))->value);
+    }
+    return tsc_value_as_num(primitive);
+}
+
+tsc_date_t* tsc_date_from_value(tsc_value_t input) {
+    if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_OBJECT) {
+        const tsc_object_t* object = (const tsc_object_t*)value_ptr(input);
+        if (object && object->is_date && object->class_ptr) {
+            return tsc_date_from_ms(
+                tsc_date_get_time((const tsc_date_t*)object->class_ptr)
+            );
+        }
+    }
+    tsc_value_t primitive = value_to_primitive_if_object(
+        input,
+        TSC_TO_PRIMITIVE_DEFAULT
+    );
+    if (value_is_box(primitive) && value_tag(primitive) == TSC_VALUE_TAG_STRING) {
+        return tsc_date_from_ms(tsc_date_parse((const tsc_str_t*)value_ptr(primitive)));
+    }
+    return tsc_date_from_ms(tsc_value_as_num(primitive));
 }
 
 tsc_str_t* tsc_value_to_string_coercion(tsc_value_t value) {

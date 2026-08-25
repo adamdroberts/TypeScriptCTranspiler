@@ -62827,7 +62827,7 @@ class Emitter {
         return this.emitSequencedExpr(T_NUMBER, [
             { value: r, target: T_VALUE, node: arg },
             ...ignored,
-        ], ([v]) => `tsc_value_as_num(${v})`);
+        ], ([v]) => `tsc_value_number_constructor(${v})`);
     }
 
     private emitGlobalNumberPredicate(call: ts.CallExpression, name: "isNaN" | "isFinite"): EmitResult {
@@ -62846,7 +62846,7 @@ class Emitter {
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value, target: T_VALUE, node: arg },
                 ...ignored,
-            ], ([v]) => `(${fn}(tsc_value_as_num(${v})))`);
+            ], ([v]) => `(${fn}(tsc_value_to_number(${v})))`);
         }
         return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], () => name === "isNaN" ? "true" : "false");
     }
@@ -73156,14 +73156,8 @@ class Emitter {
                 );
             }
             const value = this.emitExpr(args[0]!);
-            if (value.ty.kind === "date") {
-                return this.emitSequencedExpr(T_DATE, [{ value }], ([date]) => `tsc_date_from_ms(tsc_date_get_time(${date}))`);
-            }
-            if (value.ty.kind === "string") {
-                return this.emitSequencedExpr(T_DATE, [{ value }], ([text]) => `tsc_date_from_ms(tsc_date_parse(${text}))`);
-            }
-            return this.emitSequencedCall("tsc_date_from_ms", T_DATE, [
-                { value, target: T_NUMBER, node: args[0]! },
+            return this.emitSequencedCall("tsc_date_from_value", T_DATE, [
+                { value, target: T_VALUE, node: args[0]! },
             ]);
         }
         if (cls === "AggregateError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {

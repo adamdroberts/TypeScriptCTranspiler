@@ -16983,9 +16983,15 @@ tsc_date_t* tsc_date_new_now(void) {
     return tsc_date_from_ms(tsc_date_now());
 }
 
+static double date_time_clip(double ms) {
+    if (!isfinite(ms) || fabs(ms) > 8.64e15) return NAN;
+    double clipped = trunc(ms);
+    return clipped == 0.0 ? 0.0 : clipped;
+}
+
 tsc_date_t* tsc_date_from_ms(double ms) {
     tsc_date_t* d = (tsc_date_t*)TSC_GC_MALLOC(sizeof(tsc_date_t));
-    d->ms = ms;
+    d->ms = date_time_clip(ms);
     return d;
 }
 
@@ -16995,8 +17001,8 @@ double tsc_date_get_time(const tsc_date_t* d) {
 
 double tsc_date_set_time(tsc_date_t* d, double ms) {
     if (!d) return NAN;
-    d->ms = ms;
-    return ms;
+    d->ms = date_time_clip(ms);
+    return d->ms;
 }
 
 double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
