@@ -8,12 +8,11 @@ static void test262_capture_print_args(tsc_array_t* args) {
         tsc_jsonbuf_init(&g_test262_stdout);
         g_test262_started = true;
     }
-    size_t length = args ? args->len : 0;
-    for (size_t index = 0; index < length; index++) {
-        if (index > 0) tsc_jsonbuf_byte(&g_test262_stdout, ' ');
-        tsc_str_t* text = tsc_value_to_string(TSC_ARR(tsc_value_t, args, index));
-        if (text) tsc_jsonbuf_append(&g_test262_stdout, text->data, text->len);
-    }
+    tsc_value_t value = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_str_t* text = tsc_value_to_string(value);
+    if (text) tsc_jsonbuf_append(&g_test262_stdout, text->data, text->len);
     tsc_jsonbuf_byte(&g_test262_stdout, '\n');
 }
 

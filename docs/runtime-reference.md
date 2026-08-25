@@ -402,7 +402,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 
 ## Test262 native host
 
-Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
+Linked only for conformance observations. `tsc_test262_begin()` installs `$262` and `print` as writable, configurable, non-enumerable properties of the ordinary runtime global object. The `print` built-in consumes the same `tsc_array_t` argument collection used by ordinary dynamic calls and stringifies only its first argument as required by Test262, so direct, aliased, `.call`, `.apply`, and `globalThis.print` invocation share one implementation.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|

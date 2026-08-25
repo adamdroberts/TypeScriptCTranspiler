@@ -216,6 +216,8 @@ describe("host result contract", () => {
             "globalThis.print('member', 42);",
             "aliasPrint.call(null, 'call');",
             "aliasPrint.apply(null, ['apply', true, undefined]);",
+            "var ignoredPrintArgument = { toString: function () { throw new TypeError('print coerced an ignored argument'); } };",
+            "aliasPrint('first-only', ignoredPrintArgument);",
             "",
         ].join("\n");
         const scenarioId = "test/native-host-separate-scripts.js#sloppy";
@@ -276,7 +278,7 @@ describe("host result contract", () => {
                 scenarioId,
                 kind: "normal",
                 asyncCompletion: undefined,
-                stdout: "native-ok\nmember 42\ncall\napply true undefined\n",
+                stdout: "native-ok\nmember\ncall\napply\nfirst-only\n",
                 stderr: undefined,
                 nativeTranscript: undefined,
             });
