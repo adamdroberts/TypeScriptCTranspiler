@@ -1,4 +1,4 @@
 array: true array x function function
 function: function [function]
 object: object y function
-primitive: Proxy construct trap must return an object
+primitive: TypeError: Proxy construct trap must return an object

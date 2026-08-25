@@ -2,7 +2,7 @@ same boxed: true true
 function length: 2 2
 function name: Stable Stable
 constructability: false true length,name length,name,prototype
-arrow construct: Reflect.construct target is not a supported constructor
+arrow construct: TypeError: Reflect.construct target is not a supported constructor
 function own: true true true 0 3 length name prototype 3 length name prototype
 length desc: 2 false false true
 name desc: Stable false false true

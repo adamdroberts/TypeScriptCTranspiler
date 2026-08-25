@@ -1,4 +1,4 @@
 metadata:  1  1
 prototype: false false
-construct: Reflect.construct target is not a supported constructor
+construct: TypeError: Reflect.construct target is not a supported constructor
 value: settled

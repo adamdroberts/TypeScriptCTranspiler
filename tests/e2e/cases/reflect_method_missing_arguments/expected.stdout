@@ -1,7 +1,7 @@
 apply no args: Reflect.apply target is not a function
-apply missing list: Reflect.apply argumentsList must be an array or array-like object
-apply missing list with this: Reflect.apply argumentsList must be an array or array-like object
-construct no args: Reflect.construct target is not a supported constructor
-construct missing list: Reflect.construct argumentsList must be an array or array-like object
-construct undefined list: Reflect.construct argumentsList must be an array or array-like object
+apply missing list: TypeError: Reflect.apply argumentsList must be an array or array-like object
+apply missing list with this: TypeError: Reflect.apply argumentsList must be an array or array-like object
+construct no args: TypeError: Reflect.construct target is not a supported constructor
+construct missing list: TypeError: Reflect.construct argumentsList must be an array or array-like object
+construct undefined list: TypeError: Reflect.construct argumentsList must be an array or array-like object
 construct valid: ok

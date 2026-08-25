@@ -1,4 +1,4 @@
 bad target: Reflect.apply target is not a function
-bad args: Reflect.apply argumentsList must be an array or array-like object
-proxy bad args: Reflect.apply argumentsList must be an array or array-like object false
+bad args: TypeError: Reflect.apply argumentsList must be an array or array-like object
+proxy bad args: TypeError: Reflect.apply argumentsList must be an array or array-like object false
 valid: 5

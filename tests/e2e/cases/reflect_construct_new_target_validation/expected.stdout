@@ -1,7 +1,7 @@
-function bad: Reflect.construct newTarget is not a constructor
-proxy bad: Reflect.construct newTarget is not a constructor
+function bad: TypeError: Reflect.construct newTarget is not a constructor
+proxy bad: TypeError: Reflect.construct newTarget is not a constructor
 valid: object target
-getter target: Proxy construct target must be constructor
-setter target: Proxy construct target must be constructor
-getter newTarget: Reflect.construct newTarget is not a constructor
+getter target: TypeError: Proxy construct target must be constructor
+setter target: TypeError: Proxy construct target must be constructor
+getter newTarget: TypeError: Reflect.construct newTarget is not a constructor
 events:

@@ -2,5 +2,5 @@ construct: 15 function function
 forward: 6 target
 rev before: 7 target
 property before: 8 target
-rev after: Cannot perform 'construct' on a proxy that has been revoked
-object construct: Proxy construct target must be constructor
+rev after: TypeError: Cannot perform 'construct' on a proxy that has been revoked
+object construct: TypeError: Proxy construct target must be constructor

@@ -2,3 +2,7 @@ made: a this:object object
 override: b object
 primitive: c object
 null prototype fallback: d true false
+typed target: typed this:object
+new target: alternate true true
+nonconstructor newTarget: TypeError true true
+nonconstructor target: TypeError true true

@@ -1,6 +1,6 @@
 methods next 0 false return 0 false [Symbol.asyncIterator] 0 false
 self true
-construct Reflect.construct target is not a supported constructor
+construct TypeError: Reflect.construct target is not a supported constructor
 first false one 2
 second false two
 closed true closed

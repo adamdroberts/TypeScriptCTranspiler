@@ -1,4 +1,4 @@
-bad number: Reflect.apply argumentsList must be an array or array-like object
-bad string: Reflect.apply argumentsList must be an array or array-like object
-bad boolean: Reflect.apply argumentsList must be an array or array-like object
+bad number: TypeError: Reflect.apply argumentsList must be an array or array-like object
+bad string: TypeError: Reflect.apply argumentsList must be an array or array-like object
+bad boolean: TypeError: Reflect.apply argumentsList must be an array or array-like object
 valid: ok:x

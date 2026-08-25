@@ -70112,125 +70112,28 @@ class Emitter {
         const args = call.arguments;
         if (args.length < 2) unsupported(call, "Reflect.construct expects target and argumentsList");
         const ignored = this.ignoredArgumentSpecs(args, args[2] ? 3 : 2);
-        const targetDecl = ts.isIdentifier(args[0]!)
-            ? this.classDeclForConstructorIdentifier(args[0]!)
-            : null;
-        if (!targetDecl) {
-            const target = this.emitExpr(args[0]!);
-            if (target.ty.kind === "value") {
-                const list = this.emitReflectArgumentsListExpr(args[1]!);
-                if (list.ty.kind !== "array" && list.ty.kind !== "value") {
-                    unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
-                }
-                const specs: SequencedCallArg[] = [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: list, target: T_VALUE, node: args[1]! },
-                ];
-                if (args[2]) {
-                    specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
-                    specs.push(...ignored);
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        specs,
-                        ([targetC, listC, newTargetC]) => `tsc_value_construct_with_new_target(${targetC}, ${listC}, ${newTargetC})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    specs,
-                    ([targetC, listC]) => `tsc_value_construct(${targetC}, ${listC})`,
-                );
-            }
-            if (!ts.isIdentifier(args[0]!)) {
-                unsupported(args[0]!, "Reflect.construct target must be a class identifier");
-            }
-            unsupported(args[0]!, "Reflect.construct target must be a supported class");
-        }
-        if (args[2]) unsupported(args[2], "Reflect.construct newTarget is supported only for dynamic targets");
-        const decl = targetDecl;
-        const cls = decl.name?.text;
-        if (!cls) unsupported(args[0]!, "Reflect.construct target must be a supported class");
-        let argList: ts.Expression = args[1]!;
-        while (
-            ts.isParenthesizedExpression(argList) ||
-            ts.isAsExpression(argList) ||
-            ts.isTypeAssertionExpression(argList) ||
-            ts.isNonNullExpression(argList) ||
-            ts.isSatisfiesExpression(argList)
-        ) {
-            argList = argList.expression;
-        }
-        if (!ts.isArrayLiteralExpression(argList)) {
-            const ctor = decl.members.find(ts.isConstructorDeclaration);
-            const params = ctor?.parameters ?? [];
-            const list = this.emitReflectArgumentsListExpr(args[1]!);
-            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
-                unsupported(args[1]!, "Reflect.construct argumentsList must be an array literal, typed array, or dynamic array");
-            }
-            if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
-                const paramTypes = params.map((param) => mapType(param, this.checker));
-                return this.emitDecoratedClassReflectListNew(call, args[1]!, decl, cls, list, paramTypes);
-            }
-            return this.emitSequencedExpr(classType(cls), [
-                { value: list, node: args[1]! },
-            ], ([listC]) => {
-                const callArgs: string[] = [];
-                const expected = params.length;
-                for (let i = 0; i < expected; i++) {
-                    const paramType = mapType(params[i]!, this.checker);
-                    if (list.ty.kind === "array") {
-                        const elem = list.ty.elem ?? T_VALUE;
-                        callArgs.push(this.coerce({ c: `TSC_ARR(${elem.c}, ${listC}, ${i})`, ty: elem }, paramType, args[1]!));
-                    } else {
-                        callArgs.push(this.coerce({ c: `tsc_value_get_index(${listC}, ${i}.0)`, ty: T_VALUE }, paramType, args[1]!));
-                    }
-                }
-                const lengthCheck = list.ty.kind === "array"
-                    ? `${listC}->len != ${expected}`
-                    : `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
-                return `({ if (${lengthCheck}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch")); ${cls}_new(${callArgs.join(", ")}); })`;
-            });
-        }
-        const ctor = decl.members.find(ts.isConstructorDeclaration);
-        const params = ctor?.parameters ?? [];
-        if (argList.elements.some((element) => ts.isSpreadElement(element))) {
-            const list = this.emitReflectArgumentArrayLiteral(argList);
-            if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
-                const paramTypes = params.map((param) => mapType(param, this.checker));
-                return this.emitDecoratedClassReflectListNew(call, args[1]!, decl, cls, list, paramTypes);
-            }
-            return this.emitSequencedExpr(classType(cls), [
-                { value: list, node: args[1]! },
-            ], ([listC]) => {
-                const callArgs: string[] = [];
-                for (let i = 0; i < params.length; i++) {
-                    const paramType = mapType(params[i]!, this.checker);
-                    callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, paramType, args[1]!));
-                }
-                return `({ if (${listC}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch")); ${cls}_new(${callArgs.join(", ")}); })`;
-            });
-        }
-        if (argList.elements.length !== params.length) {
-            unsupported(
-                argList,
-                `Reflect.construct target expects ${params.length} args, got ${argList.elements.length}`,
+        const target = this.emitExpr(args[0]!);
+        const list = this.emitReflectArgumentsListExpr(args[1]!);
+        const specs: SequencedCallArg[] = [
+            { value: target, target: T_VALUE, node: args[0]! },
+            { value: list, target: T_VALUE, node: args[1]! },
+        ];
+        if (args[2]) {
+            specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
+            specs.push(...ignored);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                specs,
+                ([targetC, listC, newTargetC]) =>
+                    `tsc_value_construct_with_new_target(${targetC}, ${listC}, ${newTargetC})`,
             );
         }
-        const specs: SequencedCallArg[] = [];
-        for (let i = 0; i < argList.elements.length; i++) {
-            const element = argList.elements[i]!;
-            if (ts.isSpreadElement(element)) unsupported(element, "Reflect.construct argumentsList spread");
-            const param = params[i]!;
-            specs.push({
-                value: this.emitExpr(element),
-                target: mapType(param, this.checker),
-                node: element,
-            });
-        }
-        if (ts.canHaveDecorators(decl) && (ts.getDecorators(decl) ?? []).length > 0) {
-            return this.emitDecoratedClassNew(call, decl, cls, specs);
-        }
-        return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
+        specs.push(...ignored);
+        return this.emitSequencedExpr(
+            T_VALUE,
+            specs,
+            ([targetC, listC]) => `tsc_value_construct(${targetC}, ${listC})`,
+        );
     }
 
     private emitReflectArgumentsListExpr(expr: ts.Expression): EmitResult {
@@ -71361,55 +71264,6 @@ class Emitter {
                 `if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`,
                 out,
             ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitDecoratedClassReflectListNew(
-        node: ts.CallExpression,
-        argsNode: ts.Expression,
-        cd: ts.ClassDeclaration,
-        className: string,
-        listValue: EmitResult,
-        paramTypes: readonly CType[],
-    ): EmitResult {
-        const replacement = this.classDecoratorReplacementName(cd);
-        const ret = classType(className);
-        return this.emitSequencedExpr(ret, [{ value: listValue, node: argsNode }], ([list]) => {
-            const fn = this.freshTemp("_class_replacement");
-            const out = this.freshTemp("_class_result");
-            const pieces: string[] = [
-                `tsc_value_t ${fn} = ${replacement}`,
-                `${ret.c} ${out} = NULL`,
-            ];
-            const originalArgs: string[] = [];
-            let constructArgs: string;
-            if (listValue.ty.kind === "array") {
-                const elem = listValue.ty.elem ?? T_VALUE;
-                pieces.push(`if (${list}->len != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch"))`);
-                const av = this.freshTemp("_reflect_construct_args");
-                pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, paramTypes.length)})`);
-                for (let i = 0; i < paramTypes.length; i++) {
-                    const current = { c: `TSC_ARR(${elem.c}, ${list}, ${i})`, ty: elem };
-                    originalArgs.push(this.coerce(current, paramTypes[i]!, argsNode));
-                    const value = this.freshTemp("_reflect_construct_arg");
-                    pieces.push(`tsc_value_t ${value} = ${this.coerce(current, T_VALUE, argsNode)}`);
-                    pieces.push(`tsc_array_push_raw(${av}, &${value})`);
-                }
-                constructArgs = `tsc_value_array(${av})`;
-            } else {
-                pieces.push(`if (!tsc_value_is_array(${list}) || (size_t)tsc_value_length(${list}) != ${paramTypes.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.construct argumentsList length mismatch"))`);
-                for (let i = 0; i < paramTypes.length; i++) {
-                    originalArgs.push(this.coerce({ c: `tsc_value_get_index(${list}, ${i}.0)`, ty: T_VALUE }, paramTypes[i]!, argsNode));
-                }
-                constructArgs = list;
-            }
-            const constructed = {
-                c: `tsc_value_construct(${fn}, ${constructArgs})`,
-                ty: T_VALUE,
-            };
-            pieces.push(`if (tsc_value_is_undefined(${fn})) { ${out} = ${className}_new(${originalArgs.join(", ")}); } else { ${out} = ${this.coerce(constructed, ret, node)}; }`);
-            pieces.push(out);
             return `({ ${pieces.join("; ")}; })`;
         });
     }

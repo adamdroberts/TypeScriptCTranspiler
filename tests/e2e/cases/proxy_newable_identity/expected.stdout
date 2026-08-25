@@ -5,4 +5,4 @@ spread: spread function function true true
 revoked type before: function
 revoked before: before target
 revoked type after: function
-revoked after: Cannot perform 'construct' on a proxy that has been revoked
+revoked after: TypeError: Cannot perform 'construct' on a proxy that has been revoked

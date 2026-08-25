@@ -1,6 +1,6 @@
 set trap called for: x value: 1
 set trap success: done
-construct undefined: Reflect.construct newTarget is not a constructor
+construct undefined: TypeError: Reflect.construct newTarget is not a constructor
 getPrototypeOf string: Reflect.getPrototypeOf target must be an object
 isExtensible string: Reflect.isExtensible target must be an object
 preventExtensions string: Reflect.preventExtensions target must be an object

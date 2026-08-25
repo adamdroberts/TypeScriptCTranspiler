@@ -1,4 +1,4 @@
 omitted: omitted
 explicit: explicit true
-undefined: Reflect.construct newTarget is not a constructor
-method undefined: Reflect.construct newTarget is not a constructor
+undefined: TypeError: Reflect.construct newTarget is not a constructor
+method undefined: TypeError: Reflect.construct newTarget is not a constructor

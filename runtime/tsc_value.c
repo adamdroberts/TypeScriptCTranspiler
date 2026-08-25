@@ -655,7 +655,7 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
             value_tag(args) != TSC_VALUE_TAG_FUNCTION
         )
     ) {
-        tsc_throw_str(tsc_str_from_cstr(message));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
     }
     tsc_value_t length_value = tsc_value_get_prop(args, tsc_str_from_lit("length", 6));
     double length_num = tsc_value_as_num(length_value);
@@ -734,7 +734,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL) {
             if (!tsc_value_is_constructable(new_target)) {
-                tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t receiver = tsc_value_object(tsc_object_new());
@@ -760,12 +760,12 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(target);
         if (o->is_proxy) {
-            if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
+            if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
             if (!tsc_value_is_constructable(o->proxy_target)) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy construct target must be constructor"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy construct target must be constructor"));
             }
             if (!tsc_value_is_constructable(new_target)) {
-                tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
@@ -773,7 +773,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
                 return tsc_value_construct_with_new_target(o->proxy_target, tsc_value_array(list), new_target);
             }
             if (!value_is_callable_function(trap)) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must be callable"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy construct trap must be callable"));
             }
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
@@ -788,12 +788,12 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
                     value_tag(result) != TSC_VALUE_TAG_FUNCTION
                 )
             ) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy construct trap must return an object"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy construct trap must return an object"));
             }
             return result;
         }
     }
-    tsc_throw_str(tsc_str_from_cstr("Reflect.construct target is not a supported constructor"));
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct target is not a supported constructor"));
     return tsc_value_undefined();
 }
 

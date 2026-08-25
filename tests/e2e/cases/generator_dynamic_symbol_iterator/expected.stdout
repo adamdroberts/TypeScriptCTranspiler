@@ -1,5 +1,5 @@
 gen method: next 1 false
-gen construct: Reflect.construct target is not a supported constructor
+gen construct: TypeError: Reflect.construct target is not a supported constructor
 gen next 1: 10
 gen next 2: 11
 gen next 3: 12

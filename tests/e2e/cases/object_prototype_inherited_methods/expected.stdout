@@ -3,7 +3,7 @@ obj: true false true [object Object] true
 array: true true true false
 function: true true false [object Function] [function] true
 metadata: hasOwnProperty 1 false toString 0 false
-construct: Reflect.construct target is not a supported constructor
+construct: TypeError: Reflect.construct target is not a supported constructor
 prototype:  false true true
 has: true true true
 detached: true [object Array]

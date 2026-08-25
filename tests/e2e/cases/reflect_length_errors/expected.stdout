@@ -1,9 +1,9 @@
 apply typed: Reflect.apply argumentsList length mismatch
 apply dynamic: Reflect.apply argumentsList length mismatch
 apply spread: Reflect.apply argumentsList length mismatch
-construct typed: Reflect.construct argumentsList length mismatch
-construct dynamic: Reflect.construct argumentsList length mismatch
-construct spread: Reflect.construct argumentsList length mismatch
+construct typed: NaN
+construct dynamic: NaN
+construct spread: NaN
 direct spread: spread call argument length mismatch
 function spread: function value argument length mismatch
 valid: 5 9

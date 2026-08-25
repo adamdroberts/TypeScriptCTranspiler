@@ -1,3 +1,3 @@
 {
-  "description": "Reflect and spread-call length mismatches throw catchable runtime exceptions"
+  "description": "Reflect.apply and spread calls retain typed arity checks while Reflect.construct supplies ordinary missing arguments"
 }

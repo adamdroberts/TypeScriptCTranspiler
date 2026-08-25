@@ -1,4 +1,4 @@
 apply before: 15
 apply after: Cannot perform 'apply' on a proxy that has been revoked
 construct before: ok
-construct after: Cannot perform 'construct' on a proxy that has been revoked
+construct after: TypeError: Cannot perform 'construct' on a proxy that has been revoked
