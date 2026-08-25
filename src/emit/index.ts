@@ -23456,7 +23456,7 @@ class Emitter {
     private unboxDynamicValue(cExpr: string, target: CType, node: ts.Node = this.currentSf!): string {
         switch (target.kind) {
             case "number":
-                return `tsc_value_as_num(${cExpr})`;
+                return `tsc_value_to_number(${cExpr})`;
             case "boolean":
                 return `tsc_value_as_bool(${cExpr})`;
             case "string":
@@ -45497,6 +45497,9 @@ class Emitter {
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
                 return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Date")) {
+                return { c: "tsc_date_constructor_value()", ty: T_VALUE };
             }
             const errorConstructorKind = this.errorConstructorRuntimeKind(expr.text);
             if (
@@ -74878,7 +74881,7 @@ class Emitter {
         if (r.ty.kind === "value") {
             switch (target.kind) {
                 case "number":
-                    return `tsc_value_as_num(${r.c})`;
+                    return `tsc_value_to_number(${r.c})`;
                 case "boolean":
                     return `tsc_value_as_bool(${r.c})`;
                 case "string":

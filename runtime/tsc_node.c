@@ -16992,6 +16992,7 @@ static double date_time_clip(double ms) {
 tsc_date_t* tsc_date_from_ms(double ms) {
     tsc_date_t* d = (tsc_date_t*)TSC_GC_MALLOC(sizeof(tsc_date_t));
     d->ms = date_time_clip(ms);
+    d->object = NULL;
     return d;
 }
 
@@ -17009,7 +17010,7 @@ double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double
     if (!d) return NAN;
     double provided[] = { a, b, c, e };
     for (int i = 0; i < arg_count && i < 4; i++) {
-        if (isnan(provided[i])) {
+        if (!isfinite(provided[i])) {
             d->ms = NAN;
             return NAN;
         }
@@ -17063,7 +17064,7 @@ double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double
     }
 
     time_t t = timegm(&tm);
-    d->ms = ((double)t) * 1000.0 + (double)millis;
+    d->ms = date_time_clip(((double)t) * 1000.0 + (double)millis);
     return d->ms;
 }
 
@@ -17071,7 +17072,7 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
     if (!d) return NAN;
     double provided[] = { a, b, c, e };
     for (int i = 0; i < arg_count && i < 4; i++) {
-        if (isnan(provided[i])) {
+        if (!isfinite(provided[i])) {
             d->ms = NAN;
             return NAN;
         }
@@ -17130,13 +17131,13 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
         d->ms = NAN;
         return NAN;
     }
-    d->ms = ((double)t) * 1000.0 + (double)millis;
+    d->ms = date_time_clip(((double)t) * 1000.0 + (double)millis);
     return d->ms;
 }
 
 double tsc_date_set_legacy_year(tsc_date_t* d, double year) {
     if (!d) return NAN;
-    if (isnan(year)) {
+    if (!isfinite(year)) {
         d->ms = NAN;
         return NAN;
     }
@@ -17160,7 +17161,7 @@ double tsc_date_set_legacy_year(tsc_date_t* d, double year) {
         d->ms = NAN;
         return NAN;
     }
-    d->ms = ((double)t) * 1000.0 + floor(rem);
+    d->ms = date_time_clip(((double)t) * 1000.0 + floor(rem));
     return d->ms;
 }
 
@@ -17267,11 +17268,11 @@ double tsc_date_parse(const tsc_str_t* text) {
 
     double result = ((double)t) * 1000.0 + (double)ms;
     if (has_time) result -= (double)offset_minutes * 60000.0;
-    return result;
+    return date_time_clip(result);
 }
 
 double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
-    if (isnan(year) || isnan(month) || isnan(day) || isnan(hours) || isnan(minutes) || isnan(seconds) || isnan(ms)) {
+    if (!isfinite(year) || !isfinite(month) || !isfinite(day) || !isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) {
         return NAN;
     }
     int y = (int)year;
@@ -17286,11 +17287,11 @@ double tsc_date_utc(double year, double month, double day, double hours, double 
     tm.tm_sec = (int)seconds;
     time_t t = timegm(&tm);
     if (t == (time_t)-1) return NAN;
-    return ((double)t) * 1000.0 + ms;
+    return date_time_clip(((double)t) * 1000.0 + ms);
 }
 
 double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
-    if (isnan(year) || isnan(month) || isnan(day) || isnan(hours) || isnan(minutes) || isnan(seconds) || isnan(ms)) {
+    if (!isfinite(year) || !isfinite(month) || !isfinite(day) || !isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) {
         return NAN;
     }
     int y = (int)year;
@@ -17306,7 +17307,7 @@ double tsc_date_local(double year, double month, double day, double hours, doubl
     tm.tm_isdst = -1;
     time_t t = mktime(&tm);
     if (t == (time_t)-1) return NAN;
-    return ((double)t) * 1000.0 + ms;
+    return date_time_clip(((double)t) * 1000.0 + ms);
 }
 
 double tsc_date_get_utc_part(const tsc_date_t* d, int part) {
@@ -17370,11 +17371,11 @@ double tsc_date_get_timezone_offset(const tsc_date_t* d) {
 }
 
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
-    if (!d || isnan(d->ms)) tsc_throw_str(tsc_str_from_lit("RangeError: Invalid time value", 30));
+    if (!d || isnan(d->ms)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_lit("Invalid time value", 18));
     double seconds_double = floor(d->ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
-    if (!gmtime_r(&seconds, &tm)) tsc_throw_str(tsc_str_from_lit("RangeError: Invalid time value", 30));
+    if (!gmtime_r(&seconds, &tm)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_lit("Invalid time value", 18));
     double rem = fmod(d->ms, 1000.0);
     if (rem < 0) rem += 1000.0;
     char buf[32];

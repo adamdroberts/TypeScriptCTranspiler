@@ -444,6 +444,7 @@ tsc_str_t* tsc_querystring_unescape(const tsc_str_t* str);
 /* ------------- Date ------------- */
 typedef struct tsc_date {
     double ms;
+    struct tsc_object* object;
 } tsc_date_t;
 tsc_date_t* tsc_date_new_now(void);
 tsc_date_t* tsc_date_from_ms(double ms);
@@ -468,6 +469,7 @@ tsc_str_t* tsc_date_to_locale_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_locale_date_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_locale_time_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d);
+tsc_value_t tsc_date_constructor_value(void);
 
 /* ------------- Error ------------- */
 typedef enum {

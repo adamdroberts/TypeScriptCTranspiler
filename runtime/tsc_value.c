@@ -97,6 +97,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
                 if (o->primitive_kind == TSC_PRIMITIVE_BIGINT) return tsc_str_from_lit("[object BigInt]", 15);
                 if (o->primitive_kind == TSC_PRIMITIVE_SYMBOL) return tsc_str_from_lit("[object Symbol]", 15);
             }
+            if (o && o->is_date) return tsc_str_from_lit("[object Date]", 13);
             if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
             if (o && o->is_arguments) return tsc_str_from_lit("[object Arguments]", 18);
             return tsc_str_from_lit("[object Object]", 15);
@@ -1175,6 +1176,7 @@ tsc_value_t tsc_global_object(void) {
         { "Boolean", 7, tsc_boolean_constructor_value() },
         { "BigInt", 6, tsc_bigint_constructor_value() },
         { "Symbol", 6, tsc_symbol_constructor_value() },
+        { "Date", 4, tsc_date_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
         { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
@@ -4536,7 +4538,7 @@ static tsc_abstract_type_t abstract_equality_type(tsc_value_t value) {
     return TSC_ABSTRACT_UNDEFINED;
 }
 
-static tsc_value_t value_to_primitive(
+static tsc_value_t value_ordinary_to_primitive(
     tsc_value_t object,
     tsc_to_primitive_hint_t hint
 ) {
@@ -4548,6 +4550,28 @@ static tsc_value_t value_to_primitive(
         [TSC_TO_PRIMITIVE_NUMBER] = { { "valueOf", 7 }, { "toString", 8 } },
         [TSC_TO_PRIMITIVE_STRING] = { { "toString", 8 }, { "valueOf", 7 } },
     };
+    for (size_t index = 0; index < 2; index++) {
+        const char* method_name = ordinary_methods[(size_t)hint][index].name;
+        size_t method_name_len = ordinary_methods[(size_t)hint][index].name_len;
+        tsc_value_t method = tsc_value_get_prop(
+            object,
+            tsc_str_from_lit(method_name, method_name_len)
+        );
+        if (!tsc_value_is_callable(method)) continue;
+        tsc_value_t result = tsc_value_apply_function(
+            method,
+            object,
+            tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))
+        );
+        if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
+}
+
+static tsc_value_t value_to_primitive(
+    tsc_value_t object,
+    tsc_to_primitive_hint_t hint
+) {
     static const struct {
         const char* name;
         size_t name_len;
@@ -4583,22 +4607,7 @@ static tsc_value_t value_to_primitive(
         );
     }
 
-    for (size_t index = 0; index < 2; index++) {
-        const char* method_name = ordinary_methods[(size_t)hint][index].name;
-        size_t method_name_len = ordinary_methods[(size_t)hint][index].name_len;
-        tsc_value_t method = tsc_value_get_prop(
-            object,
-            tsc_str_from_lit(method_name, method_name_len)
-        );
-        if (!tsc_value_is_callable(method)) continue;
-        tsc_value_t result = tsc_value_apply_function(
-            method,
-            object,
-            tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))
-        );
-        if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
-    }
-    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
+    return value_ordinary_to_primitive(object, hint);
 }
 
 double tsc_value_to_number(tsc_value_t input) {
@@ -4636,6 +4645,454 @@ tsc_date_t* tsc_date_from_value(tsc_value_t input) {
         return tsc_date_from_ms(tsc_date_parse((const tsc_str_t*)value_ptr(primitive)));
     }
     return tsc_date_from_ms(tsc_value_as_num(primitive));
+}
+
+typedef enum {
+    TSC_DATE_METHOD_TIME,
+    TSC_DATE_METHOD_UTC_PART,
+    TSC_DATE_METHOD_LOCAL_PART,
+    TSC_DATE_METHOD_LEGACY_YEAR_PART,
+    TSC_DATE_METHOD_SET_TIME,
+    TSC_DATE_METHOD_SET_UTC_PART,
+    TSC_DATE_METHOD_SET_LOCAL_PART,
+    TSC_DATE_METHOD_SET_LEGACY_YEAR,
+    TSC_DATE_METHOD_STRING,
+    TSC_DATE_METHOD_TO_JSON,
+} tsc_date_method_operation_t;
+
+typedef tsc_str_t* (*tsc_date_string_operation_t)(const tsc_date_t* date);
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_date_method_operation_t operation;
+    int part;
+    int max_args;
+    tsc_date_string_operation_t string_operation;
+    unsigned int identity_group;
+} tsc_date_method_descriptor_t;
+
+#define TSC_DATE_METHOD(NAME, ARITY, OPERATION, PART, MAX_ARGS, STRING_OPERATION) \
+    { NAME, sizeof(NAME) - 1, ARITY, OPERATION, PART, MAX_ARGS, STRING_OPERATION, 0 }
+#define TSC_DATE_ALIAS_METHOD(NAME, ARITY, OPERATION, PART, MAX_ARGS, STRING_OPERATION, GROUP) \
+    { NAME, sizeof(NAME) - 1, ARITY, OPERATION, PART, MAX_ARGS, STRING_OPERATION, GROUP }
+
+static const tsc_date_method_descriptor_t date_prototype_methods[] = {
+    TSC_DATE_METHOD("getTime", 0.0, TSC_DATE_METHOD_TIME, 0, 0, NULL),
+    TSC_DATE_METHOD("valueOf", 0.0, TSC_DATE_METHOD_TIME, 0, 0, NULL),
+    TSC_DATE_METHOD("getUTCFullYear", 0.0, TSC_DATE_METHOD_UTC_PART, 0, 0, NULL),
+    TSC_DATE_METHOD("getUTCMonth", 0.0, TSC_DATE_METHOD_UTC_PART, 1, 0, NULL),
+    TSC_DATE_METHOD("getUTCDate", 0.0, TSC_DATE_METHOD_UTC_PART, 2, 0, NULL),
+    TSC_DATE_METHOD("getUTCDay", 0.0, TSC_DATE_METHOD_UTC_PART, 3, 0, NULL),
+    TSC_DATE_METHOD("getUTCHours", 0.0, TSC_DATE_METHOD_UTC_PART, 4, 0, NULL),
+    TSC_DATE_METHOD("getUTCMinutes", 0.0, TSC_DATE_METHOD_UTC_PART, 5, 0, NULL),
+    TSC_DATE_METHOD("getUTCSeconds", 0.0, TSC_DATE_METHOD_UTC_PART, 6, 0, NULL),
+    TSC_DATE_METHOD("getUTCMilliseconds", 0.0, TSC_DATE_METHOD_UTC_PART, 7, 0, NULL),
+    TSC_DATE_METHOD("getFullYear", 0.0, TSC_DATE_METHOD_LOCAL_PART, 0, 0, NULL),
+    TSC_DATE_METHOD("getYear", 0.0, TSC_DATE_METHOD_LEGACY_YEAR_PART, 0, 0, NULL),
+    TSC_DATE_METHOD("getMonth", 0.0, TSC_DATE_METHOD_LOCAL_PART, 1, 0, NULL),
+    TSC_DATE_METHOD("getDate", 0.0, TSC_DATE_METHOD_LOCAL_PART, 2, 0, NULL),
+    TSC_DATE_METHOD("getDay", 0.0, TSC_DATE_METHOD_LOCAL_PART, 3, 0, NULL),
+    TSC_DATE_METHOD("getHours", 0.0, TSC_DATE_METHOD_LOCAL_PART, 4, 0, NULL),
+    TSC_DATE_METHOD("getMinutes", 0.0, TSC_DATE_METHOD_LOCAL_PART, 5, 0, NULL),
+    TSC_DATE_METHOD("getSeconds", 0.0, TSC_DATE_METHOD_LOCAL_PART, 6, 0, NULL),
+    TSC_DATE_METHOD("getMilliseconds", 0.0, TSC_DATE_METHOD_LOCAL_PART, 7, 0, NULL),
+    TSC_DATE_METHOD("getTimezoneOffset", 0.0, TSC_DATE_METHOD_LOCAL_PART, 8, 0, NULL),
+    TSC_DATE_METHOD("setTime", 1.0, TSC_DATE_METHOD_SET_TIME, 0, 1, NULL),
+    TSC_DATE_METHOD("setUTCFullYear", 3.0, TSC_DATE_METHOD_SET_UTC_PART, 0, 3, NULL),
+    TSC_DATE_METHOD("setUTCMonth", 2.0, TSC_DATE_METHOD_SET_UTC_PART, 1, 2, NULL),
+    TSC_DATE_METHOD("setUTCDate", 1.0, TSC_DATE_METHOD_SET_UTC_PART, 2, 1, NULL),
+    TSC_DATE_METHOD("setUTCHours", 4.0, TSC_DATE_METHOD_SET_UTC_PART, 3, 4, NULL),
+    TSC_DATE_METHOD("setUTCMinutes", 3.0, TSC_DATE_METHOD_SET_UTC_PART, 4, 3, NULL),
+    TSC_DATE_METHOD("setUTCSeconds", 2.0, TSC_DATE_METHOD_SET_UTC_PART, 5, 2, NULL),
+    TSC_DATE_METHOD("setUTCMilliseconds", 1.0, TSC_DATE_METHOD_SET_UTC_PART, 6, 1, NULL),
+    TSC_DATE_METHOD("setFullYear", 3.0, TSC_DATE_METHOD_SET_LOCAL_PART, 0, 3, NULL),
+    TSC_DATE_METHOD("setMonth", 2.0, TSC_DATE_METHOD_SET_LOCAL_PART, 1, 2, NULL),
+    TSC_DATE_METHOD("setDate", 1.0, TSC_DATE_METHOD_SET_LOCAL_PART, 2, 1, NULL),
+    TSC_DATE_METHOD("setHours", 4.0, TSC_DATE_METHOD_SET_LOCAL_PART, 3, 4, NULL),
+    TSC_DATE_METHOD("setMinutes", 3.0, TSC_DATE_METHOD_SET_LOCAL_PART, 4, 3, NULL),
+    TSC_DATE_METHOD("setSeconds", 2.0, TSC_DATE_METHOD_SET_LOCAL_PART, 5, 2, NULL),
+    TSC_DATE_METHOD("setMilliseconds", 1.0, TSC_DATE_METHOD_SET_LOCAL_PART, 6, 1, NULL),
+    TSC_DATE_METHOD("setYear", 1.0, TSC_DATE_METHOD_SET_LEGACY_YEAR, 0, 1, NULL),
+    TSC_DATE_METHOD("toString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_string),
+    TSC_DATE_METHOD("toDateString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_date_string),
+    TSC_DATE_METHOD("toTimeString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_time_string),
+    TSC_DATE_ALIAS_METHOD("toUTCString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_utc_string, 1),
+    TSC_DATE_ALIAS_METHOD("toGMTString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_utc_string, 1),
+    TSC_DATE_METHOD("toISOString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_iso_string),
+    TSC_DATE_METHOD("toLocaleString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_locale_string),
+    TSC_DATE_METHOD("toLocaleDateString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_locale_date_string),
+    TSC_DATE_METHOD("toLocaleTimeString", 0.0, TSC_DATE_METHOD_STRING, 0, 0, tsc_date_to_locale_time_string),
+    TSC_DATE_METHOD("toJSON", 1.0, TSC_DATE_METHOD_TO_JSON, 0, 0, NULL),
+};
+
+#undef TSC_DATE_METHOD
+#undef TSC_DATE_ALIAS_METHOD
+
+static tsc_object_t* date_prototype_object = NULL;
+static tsc_value_t date_constructor;
+static bool date_intrinsic_initialized = false;
+
+static tsc_value_t date_argument(const tsc_array_t* args, size_t index) {
+    return args && index < args->len
+        ? TSC_ARR(tsc_value_t, args, index)
+        : tsc_value_undefined();
+}
+
+static tsc_date_t* date_this_value(tsc_value_t receiver, const char* method) {
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
+        if (object && object->is_date && object->class_ptr) {
+            return (tsc_date_t*)object->class_ptr;
+        }
+    }
+    char message[128];
+    snprintf(message, sizeof message, "Date.prototype.%s called on incompatible receiver", method);
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
+}
+
+static int date_numeric_arguments(
+    const tsc_array_t* args,
+    int maximum,
+    double values[4]
+) {
+    int count = args ? (int)args->len : 0;
+    if (count > maximum) count = maximum;
+    if (count == 0) count = 1;
+    for (int index = 0; index < count; index++) {
+        values[index] = tsc_value_to_number(date_argument(args, (size_t)index));
+    }
+    return count;
+}
+
+static tsc_value_t date_prototype_to_json(tsc_value_t receiver) {
+    tsc_value_t primitive = value_to_primitive_if_object(
+        receiver,
+        TSC_TO_PRIMITIVE_NUMBER
+    );
+    if (!value_is_box(primitive) && !isfinite(value_as_num(primitive))) {
+        return tsc_value_null();
+    }
+    tsc_value_t method = tsc_value_get_prop(
+        receiver,
+        tsc_str_from_lit("toISOString", 11)
+    );
+    if (!tsc_value_is_callable(method)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("Date toISOString property is not callable", 41)
+        );
+    }
+    return tsc_value_apply_function(
+        method,
+        receiver,
+        tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))
+    );
+}
+
+static tsc_value_t date_prototype_method_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    const tsc_date_method_descriptor_t* descriptor =
+        (const tsc_date_method_descriptor_t*)env;
+    if (descriptor->operation == TSC_DATE_METHOD_TO_JSON) {
+        return date_prototype_to_json(this_arg);
+    }
+    tsc_date_t* date = date_this_value(this_arg, descriptor->name);
+    switch (descriptor->operation) {
+        case TSC_DATE_METHOD_TIME:
+            return tsc_value_num(tsc_date_get_time(date));
+        case TSC_DATE_METHOD_UTC_PART:
+            return tsc_value_num(tsc_date_get_utc_part(date, descriptor->part));
+        case TSC_DATE_METHOD_LOCAL_PART:
+            return tsc_value_num(
+                descriptor->part == 8
+                    ? tsc_date_get_timezone_offset(date)
+                    : tsc_date_get_local_part(date, descriptor->part)
+            );
+        case TSC_DATE_METHOD_LEGACY_YEAR_PART:
+            return tsc_value_num(tsc_date_get_local_part(date, 0) - 1900.0);
+        case TSC_DATE_METHOD_SET_TIME:
+            return tsc_value_num(tsc_date_set_time(
+                date,
+                tsc_value_to_number(date_argument(args, 0))
+            ));
+        case TSC_DATE_METHOD_SET_UTC_PART:
+        case TSC_DATE_METHOD_SET_LOCAL_PART: {
+            double values[4] = { 0.0, 0.0, 0.0, 0.0 };
+            int count = date_numeric_arguments(args, descriptor->max_args, values);
+            return tsc_value_num(
+                descriptor->operation == TSC_DATE_METHOD_SET_UTC_PART
+                    ? tsc_date_set_utc_part(
+                        date,
+                        descriptor->part,
+                        values[0], values[1], values[2], values[3],
+                        count
+                    )
+                    : tsc_date_set_local_part(
+                        date,
+                        descriptor->part,
+                        values[0], values[1], values[2], values[3],
+                        count
+                    )
+            );
+        }
+        case TSC_DATE_METHOD_SET_LEGACY_YEAR:
+            return tsc_value_num(tsc_date_set_legacy_year(
+                date,
+                tsc_value_to_number(date_argument(args, 0))
+            ));
+        case TSC_DATE_METHOD_STRING:
+            return tsc_value_string(descriptor->string_operation(date));
+        case TSC_DATE_METHOD_TO_JSON:
+            break;
+    }
+    tsc_panic("unknown Date prototype method operation");
+}
+
+static tsc_value_t date_prototype_to_primitive_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    if (!tsc_value_is_object(this_arg)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("Date.prototype[Symbol.toPrimitive] receiver is not an object", 60)
+        );
+    }
+    tsc_value_t hint_value = date_argument(args, 0);
+    if (!value_is_box(hint_value) || value_tag(hint_value) != TSC_VALUE_TAG_STRING) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("invalid Date toPrimitive hint", 29));
+    }
+    const tsc_str_t* hint = (const tsc_str_t*)value_ptr(hint_value);
+    if (str_lit_eq(hint, "number")) {
+        return value_ordinary_to_primitive(this_arg, TSC_TO_PRIMITIVE_NUMBER);
+    }
+    if (str_lit_eq(hint, "string") || str_lit_eq(hint, "default")) {
+        return value_ordinary_to_primitive(this_arg, TSC_TO_PRIMITIVE_STRING);
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("invalid Date toPrimitive hint", 29));
+}
+
+typedef enum {
+    TSC_DATE_STATIC_NOW,
+    TSC_DATE_STATIC_PARSE,
+    TSC_DATE_STATIC_UTC,
+} tsc_date_static_operation_t;
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_date_static_operation_t operation;
+} tsc_date_static_descriptor_t;
+
+static const tsc_date_static_descriptor_t date_static_methods[] = {
+    { "now", 3, 0.0, TSC_DATE_STATIC_NOW },
+    { "parse", 5, 1.0, TSC_DATE_STATIC_PARSE },
+    { "UTC", 3, 7.0, TSC_DATE_STATIC_UTC },
+};
+
+static tsc_value_t date_static_method_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)this_arg;
+    const tsc_date_static_descriptor_t* descriptor =
+        (const tsc_date_static_descriptor_t*)env;
+    if (descriptor->operation == TSC_DATE_STATIC_NOW) {
+        return tsc_value_num(tsc_date_now());
+    }
+    if (descriptor->operation == TSC_DATE_STATIC_PARSE) {
+        return tsc_value_num(tsc_date_parse(tsc_value_to_string_coercion(
+            date_argument(args, 0)
+        )));
+    }
+    double values[7] = { NAN, NAN, 1.0, 0.0, 0.0, 0.0, 0.0 };
+    size_t count = args && args->len < 7 ? args->len : 7;
+    for (size_t index = 0; index < count; index++) {
+        values[index] = tsc_value_to_number(date_argument(args, index));
+    }
+    return tsc_value_num(tsc_date_utc(
+        values[0], values[1], values[2], values[3],
+        values[4], values[5], values[6]
+    ));
+}
+
+static tsc_value_t date_constructor_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    return tsc_value_string(tsc_date_to_string(tsc_date_new_now()));
+}
+
+static tsc_value_t date_constructor_construct(
+    void* env,
+    tsc_value_t receiver,
+    tsc_array_t* args
+) {
+    (void)env;
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("Date constructor receiver is not an object", 42));
+    }
+    tsc_date_t* date;
+    if (!args || args->len == 0) {
+        date = tsc_date_new_now();
+    } else if (args->len == 1) {
+        date = tsc_date_from_value(TSC_ARR(tsc_value_t, args, 0));
+    } else {
+        double values[7] = { NAN, NAN, 1.0, 0.0, 0.0, 0.0, 0.0 };
+        size_t count = args->len < 7 ? args->len : 7;
+        for (size_t index = 0; index < count; index++) {
+            values[index] = tsc_value_to_number(TSC_ARR(tsc_value_t, args, index));
+        }
+        date = tsc_date_from_ms(tsc_date_local(
+            values[0], values[1], values[2], values[3],
+            values[4], values[5], values[6]
+        ));
+    }
+    tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
+    object->class_ptr = date;
+    object->is_date = true;
+    date->object = object;
+    return receiver;
+}
+
+static void date_intrinsic_initialize(void) {
+    if (date_intrinsic_initialized) return;
+    tsc_runtime_lock();
+    if (!date_intrinsic_initialized) {
+        tsc_date_t* prototype_date = tsc_date_from_ms(NAN);
+        date_prototype_object = tsc_object_new_class(prototype_date);
+        date_prototype_object->is_date = true;
+        prototype_date->object = date_prototype_object;
+        tsc_value_t prototype = tsc_value_object(date_prototype_object);
+
+        date_constructor = tsc_value_function_named_kind(
+            date_constructor_apply,
+            date_constructor_construct,
+            NULL,
+            7.0,
+            tsc_str_from_lit("Date", 4),
+            TSC_FUNCTION_IDENTITY_BUILTIN
+        );
+        tsc_function_identity_t* constructor_identity =
+            (tsc_function_identity_t*)value_ptr(date_constructor);
+        constructor_identity->func_prototype = prototype;
+        constructor_identity->func_prototype_writable = false;
+        tsc_object_define(
+            date_prototype_object,
+            tsc_str_from_lit("constructor", 11),
+            date_constructor,
+            true,
+            false,
+            true
+        );
+
+        tsc_value_t shared_methods[2] = { 0, 0 };
+        bool shared_method_initialized[2] = { false, false };
+        for (
+            size_t index = 0;
+            index < sizeof(date_prototype_methods) / sizeof(date_prototype_methods[0]);
+            index++
+        ) {
+            const tsc_date_method_descriptor_t* descriptor =
+                &date_prototype_methods[index];
+            tsc_value_t method;
+            if (
+                descriptor->identity_group > 0 &&
+                shared_method_initialized[descriptor->identity_group]
+            ) {
+                method = shared_methods[descriptor->identity_group];
+            } else {
+                method = tsc_value_function_builtin_named(
+                    date_prototype_method_apply,
+                    (void*)descriptor,
+                    descriptor->arity,
+                    tsc_str_from_lit(descriptor->name, descriptor->name_len)
+                );
+                if (descriptor->identity_group > 0) {
+                    shared_methods[descriptor->identity_group] = method;
+                    shared_method_initialized[descriptor->identity_group] = true;
+                }
+            }
+            tsc_object_define(
+                date_prototype_object,
+                tsc_str_from_lit(descriptor->name, descriptor->name_len),
+                method,
+                true,
+                false,
+                true
+            );
+        }
+
+        tsc_value_t to_primitive = tsc_value_function_builtin_named(
+            date_prototype_to_primitive_apply,
+            NULL,
+            1.0,
+            tsc_str_from_lit("[Symbol.toPrimitive]", 20)
+        );
+        (void)tsc_value_define_symbol_property_desc(
+            prototype,
+            tsc_symbol_to_primitive(),
+            to_primitive,
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true
+        );
+
+        for (
+            size_t index = 0;
+            index < sizeof(date_static_methods) / sizeof(date_static_methods[0]);
+            index++
+        ) {
+            const tsc_date_static_descriptor_t* descriptor = &date_static_methods[index];
+            tsc_value_t method = tsc_value_function_builtin_named(
+                date_static_method_apply,
+                (void*)descriptor,
+                descriptor->arity,
+                tsc_str_from_lit(descriptor->name, descriptor->name_len)
+            );
+            (void)tsc_value_define_property_desc(
+                date_constructor,
+                tsc_str_from_lit(descriptor->name, descriptor->name_len),
+                method,
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+        }
+        date_intrinsic_initialized = true;
+    }
+    tsc_runtime_unlock();
+}
+
+tsc_value_t tsc_date_constructor_value(void) {
+    date_intrinsic_initialize();
+    return date_constructor;
+}
+
+static tsc_value_t date_prototype_value(void) {
+    date_intrinsic_initialize();
+    return tsc_value_object(date_prototype_object);
 }
 
 tsc_str_t* tsc_value_to_string_coercion(tsc_value_t value) {
@@ -6024,8 +6481,11 @@ tsc_value_t tsc_structured_clone(tsc_value_t value) {
 
 tsc_value_t tsc_value_date(tsc_date_t* d) {
     if (!d) return tsc_value_null();
+    if (d->object) return tsc_value_object(d->object);
     tsc_object_t* o = tsc_object_new_class(d);
     o->is_date = true;
+    o->prototype = date_prototype_value();
+    d->object = o;
     return tsc_value_object(o);
 }
 
