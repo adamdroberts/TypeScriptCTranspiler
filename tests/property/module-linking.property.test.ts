@@ -1,4 +1,9 @@
 import { expect, test } from "bun:test";
+import ts from "typescript";
+import {
+    createEcmaSourceFile,
+    ecmaImportAttributesParserShadow,
+} from "../../src/ecmascript-source";
 import { analyzeModuleGraph } from "../test262/native-host";
 
 type ResolutionPartition = "direct" | "same-binding" | "ambiguous" | "missing";
@@ -101,4 +106,90 @@ test("module linking uses the same worklists for one representative deep graph",
         );
     }
     expect(analyzeModuleGraph("test/root.js", sources)).toBeNull();
+});
+
+type ImportAttributesForm = "side-effect" | "namespace" | "named" | "star-export" | "named-export";
+
+function attributedDeclaration(form: ImportAttributesForm, specifier: string, trivia: string): string {
+    const head = form === "side-effect"
+        ? `import ${JSON.stringify(specifier)}`
+        : form === "namespace"
+            ? `import * as namespace from ${JSON.stringify(specifier)}`
+            : form === "named"
+                ? `import { token } from ${JSON.stringify(specifier)}`
+                : form === "star-export"
+                    ? `export * from ${JSON.stringify(specifier)}`
+                    : `export { token } from ${JSON.stringify(specifier)}`;
+    return `${head}${trivia}with { type: "javascript" };\n`;
+}
+
+test("import attributes accept line-terminator trivia through one equal-width token worklist", () => {
+    const forms: readonly ImportAttributesForm[] = [
+        "side-effect",
+        "namespace",
+        "named",
+        "star-export",
+        "named-export",
+    ];
+    const triviaPartitions = [
+        "\n",
+        "\r\n",
+        "\u2028",
+        "\u2029",
+        " /* block\ncomment */ ",
+        " // line comment\n",
+    ];
+    for (const form of forms) {
+        for (const trivia of triviaPartitions) {
+            const source = attributedDeclaration(form, "./fixture.js", trivia);
+            const shadow = ecmaImportAttributesParserShadow(source);
+            expect(shadow.length).toBe(source.length);
+            expect(shadow).not.toBe(source);
+            const parsed = createEcmaSourceFile(
+                `${form}.js`,
+                source,
+                ts.ScriptTarget.ESNext,
+                true,
+                ts.ScriptKind.JS,
+            );
+            expect(parsed.text).toBe(source);
+            expect((parsed as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [])
+                .toEqual([]);
+            expect(parsed.getLineAndCharacterOfPosition(source.indexOf("with")).line).toBe(1);
+        }
+    }
+
+    const dynamic = 'import("./fixture.js")\nwith ({});\n';
+    expect(ecmaImportAttributesParserShadow(dynamic)).toBe(dynamic);
+    const legacyAssert = 'import "./fixture.js"\nassert { type: "javascript" };\n';
+    expect(ecmaImportAttributesParserShadow(legacyAssert)).toBe(legacyAssert);
+});
+
+test("import attributes parser shadow handles one representative wide module without shape-specific paths", () => {
+    const source = Array.from({ length: 512 }, (_, index) =>
+        attributedDeclaration("side-effect", `./fixture-${index}.js`, index % 2 === 0 ? "\n" : " /* x\ny */ "),
+    ).join("");
+    const shadow = ecmaImportAttributesParserShadow(source);
+    expect(shadow.length).toBe(source.length);
+    const parsed = createEcmaSourceFile(
+        "wide.js",
+        source,
+        ts.ScriptTarget.ESNext,
+        true,
+        ts.ScriptKind.JS,
+    );
+    expect(parsed.text).toBe(source);
+    expect((parsed as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [])
+        .toEqual([]);
+});
+
+test("module linking reaches resolution after an attributed import line terminator", () => {
+    const sources = new Map<string, string>([
+        ["test/root.js", attributedDeclaration("named", "./fixture.js", "\n")],
+        ["test/fixture.js", "export const other = 1;\n"],
+    ]);
+    expect(analyzeModuleGraph("test/root.js", sources)).toMatchObject({
+        phase: "resolution",
+        origin: "module-graph",
+    });
 });

@@ -3,6 +3,12 @@
 
 type Extract<T, U> = T extends U ? T : never;
 
+// Required by TypeScript's parser/type checker for static import attributes.
+// This declaration does not imply support for the separate dynamic import API.
+interface ImportAttributes {
+    [key: string]: string;
+}
+
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
     readonly description: string | undefined;

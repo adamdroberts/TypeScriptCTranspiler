@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import ts from "typescript";
 import { compile } from "../../src/compile";
+import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import {
     complianceDir,
     hasArgument,
@@ -209,7 +210,13 @@ function parseFailure(
     origin: ParseFailure["origin"],
     goal: "script" | "module",
 ): ParseFailure | null {
-    const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+    const sourceFile = createEcmaSourceFile(
+        filename,
+        source,
+        ts.ScriptTarget.ESNext,
+        true,
+        ts.ScriptKind.JS,
+    );
     const diagnostics = (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] })
         .parseDiagnostics ?? [];
     const goalMismatch = goal === "script" && sourceFile.statements.find((statement) =>
@@ -261,7 +268,13 @@ function bindingNames(name: ts.BindingName): string[] {
 }
 
 function moduleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {
-    const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+    const sourceFile = createEcmaSourceFile(
+        filename,
+        source,
+        ts.ScriptTarget.ESNext,
+        true,
+        ts.ScriptKind.JS,
+    );
     const requestedModules: string[] = [];
     const imports: ModuleImportEntry[] = [];
     const importedLocals = new Map<string, ModuleImportEntry>();

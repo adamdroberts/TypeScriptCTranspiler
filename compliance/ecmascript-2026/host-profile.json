@@ -27,6 +27,7 @@
     "src/compile.ts",
     "src/diagnostics.ts",
     "src/dynamic-require.ts",
+    "src/ecmascript-source.ts",
     "src/emit/async-cfg.ts",
     "src/emit/async-ir.ts",
     "src/emit/cbuf.ts",

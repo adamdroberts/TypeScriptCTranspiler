@@ -14,6 +14,7 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
+import { createEcmaSourceFile, ecmaImportAttributesParserShadow } from "./ecmascript-source";
 
 export interface BuildProgramOpts {
     entry: string;
@@ -88,7 +89,24 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const compilerHost = ts.createCompilerHost(compilerOptions);
     const getSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-        const sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        let sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        if (
+            sourceFile &&
+            !sourceFile.isDeclarationFile &&
+            /\.[cm]?[jt]sx?$/i.test(sourceFile.fileName) &&
+            ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text
+        ) {
+            const original = sourceFile;
+            sourceFile = createEcmaSourceFile(
+                fileName,
+                original.text,
+                languageVersion,
+                true,
+                (original as ts.SourceFile & { scriptKind?: ts.ScriptKind }).scriptKind ?? scriptKindForFile(fileName),
+            );
+            (sourceFile as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat =
+                (original as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat;
+        }
         if (sourceFile && moduleRoots.has(path.resolve(sourceFile.fileName))) {
             // TypeScript otherwise infers the goal from import/export syntax. Test262
             // also contains empty or syntax-free Module records, so bind the requested
