@@ -193,3 +193,26 @@ test("module linking reaches resolution after an attributed import line terminat
         origin: "module-graph",
     });
 });
+
+test("module linking derives JSON synthetic-module resolution from strict source syntax", () => {
+    const valid = new Map<string, string>([
+        ["test/root.js", 'import value from "./value.json" with { type: "json" };\n'],
+        ["test/value.json", '{"nested":[1,true,null]}\n'],
+    ]);
+    expect(analyzeModuleGraph("test/root.js", valid)).toBeNull();
+
+    const named = new Map(valid);
+    named.set("test/root.js", 'import { nested } from "./value.json" with { type: "json" };\n');
+    expect(analyzeModuleGraph("test/root.js", named)).toMatchObject({
+        phase: "resolution",
+        origin: "module-graph",
+    });
+
+    const invalid = new Map(valid);
+    invalid.set("test/value.json", "{ unquoted: true }\n");
+    expect(analyzeModuleGraph("test/root.js", invalid)).toMatchObject({
+        phase: "resolution",
+        origin: "module-graph",
+        diagnostics: expect.stringContaining("invalid JSON module"),
+    });
+});

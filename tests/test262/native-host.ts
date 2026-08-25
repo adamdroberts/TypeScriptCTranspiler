@@ -4,6 +4,7 @@ import * as path from "node:path";
 import ts from "typescript";
 import { compile } from "../../src/compile";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
+import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
     complianceDir,
     hasArgument,
@@ -45,7 +46,6 @@ interface ModuleIndirectExportEntry {
 
 interface ModuleRecord {
     readonly path: string;
-    readonly sourceFile: ts.SourceFile;
     readonly requestedModules: string[];
     readonly imports: ModuleImportEntry[];
     readonly localExports: Map<string, string>;
@@ -381,7 +381,6 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
     return {
         record: error ? null : {
             path: filename,
-            sourceFile,
             requestedModules,
             imports,
             localExports,
@@ -389,6 +388,28 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
             starExports,
         },
         error,
+    };
+}
+
+function jsonModuleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {
+    const syntax = validateJsonSyntax(source);
+    if (syntax) {
+        const location = jsonSyntaxLineAndColumn(source, syntax);
+        return {
+            record: null,
+            error: `${filename}:${location.line + 1}:${location.column + 1}: invalid JSON module: ${syntax.message}`,
+        };
+    }
+    return {
+        record: {
+            path: filename,
+            requestedModules: [],
+            imports: [],
+            localExports: new Map([["default", "*default*"]]),
+            indirectExports: new Map(),
+            starExports: [],
+        },
+        error: null,
     };
 }
 
@@ -462,23 +483,32 @@ export function analyzeModuleGraph(
             filename,
             "requested module source is absent from the attested resource directory",
         );
-        const syntax = parseFailure(
-            source,
-            filename,
-            root ? "parse" : "resolution",
-            root ? "test-source" : "module-graph",
-            "module",
-        );
-        if (syntax) return syntax;
-        const parsed = moduleRecord(source, filename);
+        const json = /\.json$/i.test(filename);
+        if (!json) {
+            const syntax = parseFailure(
+                source,
+                filename,
+                root ? "parse" : "resolution",
+                root ? "test-source" : "module-graph",
+                "module",
+            );
+            if (syntax) return syntax;
+        }
+        const parsed = json ? jsonModuleRecord(source, filename) : moduleRecord(source, filename);
         if (parsed.error || !parsed.record) {
             return root
                 ? {
                     phase: "parse",
                     origin: "test-source",
-                    diagnostics: `${filename}:1:1: ${parsed.error ?? "invalid Module record"}\n`,
+                    diagnostics: `${parsed.error ?? `${filename}:1:1: invalid Module record`}\n`,
                 }
-                : moduleResolutionFailure(filename, parsed.error ?? "invalid Module record");
+                : parsed.error
+                    ? {
+                        phase: "resolution",
+                        origin: "module-graph",
+                        diagnostics: `${parsed.error}\n`,
+                    }
+                    : moduleResolutionFailure(filename, "invalid Module record");
         }
         records.set(filename, parsed.record);
         return null;
@@ -556,7 +586,7 @@ function moduleGraphFailure(request: HostRequest): ParseFailure | null {
     if (request.goal !== "module") return null;
     const sources = new Map<string, string>([[request.testPath, request.testSource]]);
     for (const file of request.moduleFiles) {
-        if (!/\.[cm]?js$/i.test(file.path)) continue;
+        if (!/\.(?:[cm]?js|json)$/i.test(file.path)) continue;
         sources.set(file.path, Buffer.from(file.data, "base64").toString("utf8"));
     }
     return analyzeModuleGraph(request.testPath, sources);

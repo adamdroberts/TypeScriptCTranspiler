@@ -34,6 +34,7 @@
     "src/emit/index.ts",
     "src/emit/mangle.ts",
     "src/emit/types.ts",
+    "src/json-syntax.ts",
     "src/link/cc.ts",
     "src/module-specifiers.ts",
     "src/native-addons.ts",
