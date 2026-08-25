@@ -3,7 +3,48 @@
   "baseline": "baseline.json",
   "choiceSelections": [],
   "normativeOptionalEvidence": [],
-  "clauseEvidence": [],
+  "clauseEvidence": [
+    {
+      "clause": "sec-isstrictlyequal",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ecmascript-type-partition",
+          "title": "Strict equality across the ECMAScript Type partition, including ordered evaluation of arbitrarily nested operand expressions",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "tree",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-isstrictlyequal" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/strict-equality.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["strict_equality_expression_depth"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#emitStrictEquality",
+              "src/emit/index.ts#emitSequencedExpr",
+              "runtime/tsc_value.c#tsc_value_eq"
+            ]
+          },
+          "rationale": "The property specification independently crosses the canonical ECMAScript Type partition for both strict-equality operators and observes left-to-right evaluation. The compiler lowers arbitrary source nesting from the expression tree through one sequenced operand worklist, while the runtime helper implements dynamic same-Type comparison. The separately generated native stress case exercises a representative deep right-nested tree and cannot be substituted by property-example cardinality."
+        }
+      ],
+      "rationale": "One direct terminal partition binds the pinned IsStrictlyEqual scenarios to independent semantic, cardinality, and implementation evidence."
+    }
+  ],
   "groups": [
     {
       "id": "scope",

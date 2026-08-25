@@ -261,7 +261,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-samevaluenonnumber` — SameValueNonNumber ( _x_: an ECMAScript language value, but not a Number, _y_: an ECMAScript language value, but not a Number, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-islessthan` — IsLessThan ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, _LeftFirst_: a Boolean, ): either a normal completion containing either a Boolean or undefined, or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-islooselyequal` — IsLooselyEqual ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-isstrictlyequal` — IsStrictlyEqual ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-isstrictlyequal` — IsStrictlyEqual ( _x_: an ECMAScript language value, _y_: an ECMAScript language value, ): a Boolean
+    - [ ] `ecmascript-type-partition` (algorithm, unbounded): Strict equality across the ECMAScript Type partition, including ordered evaluation of arbitrarily nested operand expressions.
   - [ ] `sec-operations-on-objects` — Operations on Objects: exact disposition and partitions missing.
   - [ ] `sec-makebasicobject` — MakeBasicObject ( _internalSlotsList_: a List of internal slot names, ): an Object: exact disposition and partitions missing.
   - [ ] `sec-get-o-p` — Get ( _O_: an Object, _P_: a property key, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.

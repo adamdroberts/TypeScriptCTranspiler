@@ -1,4 +1,37 @@
 {
   "schemaVersion": 1,
-  "artifacts": []
+  "artifacts": [
+    {
+      "kind": "property",
+      "id": "tests/property/strict-equality.property.test.ts",
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+    },
+    {
+      "kind": "stress",
+      "id": "strict_equality_expression_depth",
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"],
+      "stressReview": {
+        "dimension": "right-nested strict-equality expression-tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 64,
+        "rationale": "A single generated native case independently stresses the canonical expression-tree and ordered operand worklist without turning successive nesting depths into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitStrictEquality",
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitSequencedExpr",
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_eq",
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+    }
+  ]
 }

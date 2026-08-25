@@ -8,7 +8,15 @@ export interface AsyncBindingDefaultDepthSpec {
     depth: number;
 }
 
-export type GeneratedCaseSpec = AsyncLeadingAwaitChainSpec | AsyncBindingDefaultDepthSpec;
+export interface StrictEqualityExpressionDepthSpec {
+    generator: "strict-equality-expression-depth";
+    depth: number;
+}
+
+export type GeneratedCaseSpec =
+    | AsyncLeadingAwaitChainSpec
+    | AsyncBindingDefaultDepthSpec
+    | StrictEqualityExpressionDepthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -32,6 +40,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "async-binding-default-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+        };
+    }
+    if (spec.generator === "strict-equality-expression-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -153,6 +171,32 @@ function asyncBindingDefaultDepthSource(depth: number): string {
     ].join("\n");
 }
 
+function strictEqualityExpressionDepthSource(depth: number): string {
+    let expression = `mark(${depth})`;
+    for (let index = depth - 1; index >= 0; index--) {
+        expression = `mark(${index}) === (${expression})`;
+    }
+    const expected = depth % 2 === 1 ? "true" : "false";
+    return [
+        "let calls = 0;",
+        "let ordered = true;",
+        "",
+        "function mark(index: number): any {",
+        "    ordered = ordered && index === calls;",
+        "    calls++;",
+        "    return false;",
+        "}",
+        "",
+        "function strictEqualityExpressionDepth(): boolean {",
+        `    const result = ${expression};`,
+        `    return result === ${expected} && calls === ${depth + 1} && ordered;`,
+        "}",
+        "",
+        'console.log("strict equality depth:", strictEqualityExpressionDepth());',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -160,5 +204,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return asyncLeadingAwaitChainSource(spec.awaitCount);
         case "async-binding-default-depth":
             return asyncBindingDefaultDepthSource(spec.depth);
+        case "strict-equality-expression-depth":
+            return strictEqualityExpressionDepthSource(spec.depth);
     }
 }

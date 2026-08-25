@@ -1,0 +1,4 @@
+{
+  "generator": "strict-equality-expression-depth",
+  "depth": 64
+}
