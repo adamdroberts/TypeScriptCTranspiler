@@ -12,6 +12,8 @@ tsc_value_t tsc_value_num(double n) {
 }
 
 tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRING, (uintptr_t)s); }
+tsc_value_t tsc_value_bigint(tsc_bigint_t* value) { return value_box(TSC_VALUE_TAG_BIGINT, (uintptr_t)value); }
+tsc_value_t tsc_value_symbol(tsc_symbol_t* value) { return value_box(TSC_VALUE_TAG_SYMBOL, (uintptr_t)value); }
 tsc_object_t* tsc_object_new_class(void* ptr) {
     tsc_object_t* o = tsc_object_new();
     o->class_ptr = ptr;
@@ -78,6 +80,8 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
         case TSC_VALUE_TAG_FALSE:
         case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("[object Boolean]", 16);
         case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("[object String]", 15);
+        case TSC_VALUE_TAG_BIGINT: return tsc_str_from_lit("[object BigInt]", 15);
+        case TSC_VALUE_TAG_SYMBOL: return tsc_str_from_lit("[object Symbol]", 15);
         case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
         case TSC_VALUE_TAG_OBJECT: {
             tsc_object_t* o = (tsc_object_t*)value_ptr(v);
@@ -90,6 +94,8 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
                 if (o->primitive_kind == TSC_PRIMITIVE_BOOLEAN) return tsc_str_from_lit("[object Boolean]", 16);
                 if (o->primitive_kind == TSC_PRIMITIVE_NUMBER) return tsc_str_from_lit("[object Number]", 15);
                 if (o->primitive_kind == TSC_PRIMITIVE_STRING) return tsc_str_from_lit("[object String]", 15);
+                if (o->primitive_kind == TSC_PRIMITIVE_BIGINT) return tsc_str_from_lit("[object BigInt]", 15);
+                if (o->primitive_kind == TSC_PRIMITIVE_SYMBOL) return tsc_str_from_lit("[object Symbol]", 15);
             }
             if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
             if (o && o->is_arguments) return tsc_str_from_lit("[object Arguments]", 18);
@@ -512,6 +518,8 @@ typedef struct {
 static tsc_primitive_descriptor_t primitive_boolean = { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false };
 static tsc_primitive_descriptor_t primitive_number = { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false };
 static tsc_primitive_descriptor_t primitive_string = { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false };
+static tsc_primitive_descriptor_t primitive_bigint = { TSC_PRIMITIVE_BIGINT, "BigInt", 6, NULL, 0, false };
+static tsc_primitive_descriptor_t primitive_symbol = { TSC_PRIMITIVE_SYMBOL, "Symbol", 6, NULL, 0, false };
 
 static bool primitive_matches(tsc_primitive_kind_t kind, tsc_value_t value) {
     if (kind == TSC_PRIMITIVE_NUMBER) return !value_is_box(value);
@@ -519,7 +527,9 @@ static bool primitive_matches(tsc_primitive_kind_t kind, tsc_value_t value) {
     if (kind == TSC_PRIMITIVE_BOOLEAN) {
         return value_tag(value) == TSC_VALUE_TAG_FALSE || value_tag(value) == TSC_VALUE_TAG_TRUE;
     }
-    return kind == TSC_PRIMITIVE_STRING && value_tag(value) == TSC_VALUE_TAG_STRING;
+    if (kind == TSC_PRIMITIVE_STRING) return value_tag(value) == TSC_VALUE_TAG_STRING;
+    if (kind == TSC_PRIMITIVE_BIGINT) return value_tag(value) == TSC_VALUE_TAG_BIGINT;
+    return kind == TSC_PRIMITIVE_SYMBOL && value_tag(value) == TSC_VALUE_TAG_SYMBOL;
 }
 
 static bool primitive_receiver_value(
@@ -547,7 +557,9 @@ static bool primitive_receiver_value(
 static tsc_value_t primitive_default(const tsc_primitive_descriptor_t* descriptor) {
     if (descriptor->kind == TSC_PRIMITIVE_BOOLEAN) return tsc_value_bool(false);
     if (descriptor->kind == TSC_PRIMITIVE_NUMBER) return tsc_value_num(0.0);
-    return tsc_value_string(tsc_str_from_lit("", 0));
+    if (descriptor->kind == TSC_PRIMITIVE_STRING) return tsc_value_string(tsc_str_from_lit("", 0));
+    if (descriptor->kind == TSC_PRIMITIVE_BIGINT) return tsc_value_bigint(tsc_bigint_from_lit("0"));
+    return tsc_value_symbol(tsc_symbol_new(NULL));
 }
 
 static tsc_value_t primitive_convert(
@@ -562,7 +574,16 @@ static tsc_value_t primitive_convert(
     if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
         return tsc_value_num(tsc_value_as_num(input));
     }
-    return tsc_value_string(tsc_value_to_string(input));
+    if (descriptor->kind == TSC_PRIMITIVE_STRING) {
+        if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_SYMBOL) {
+            return tsc_value_string(tsc_symbol_to_string((const tsc_symbol_t*)value_ptr(input)));
+        }
+        return tsc_value_string(tsc_value_to_string(input));
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_BIGINT) {
+        return tsc_value_bigint(tsc_value_as_bigint(input));
+    }
+    return tsc_value_symbol(tsc_value_as_symbol(input));
 }
 
 static tsc_value_t primitive_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -621,6 +642,16 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
                 : tsc_str_from_num_radix(value_as_num(primitive), tsc_value_as_num(radix))
         );
     }
+    if (descriptor->kind == TSC_PRIMITIVE_BIGINT) {
+        tsc_value_t radix = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+        return tsc_value_string(tsc_bigint_to_string(
+            (const tsc_bigint_t*)value_ptr(primitive),
+            tsc_value_is_undefined(radix) ? 10.0 : tsc_value_as_num(radix)
+        ));
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_SYMBOL) {
+        return tsc_value_string(tsc_symbol_to_string((const tsc_symbol_t*)value_ptr(primitive)));
+    }
     return tsc_value_string(tsc_value_to_string(primitive));
 }
 
@@ -661,15 +692,6 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
     return tsc_value_object(descriptor->prototype);
 }
 
-static tsc_value_t ordinary_primitive_prototype(tsc_object_t** slot) {
-    if (!*slot) {
-        tsc_runtime_lock();
-        if (!*slot) *slot = tsc_object_new();
-        tsc_runtime_unlock();
-    }
-    return tsc_value_object(*slot);
-}
-
 static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descriptor) {
     if (descriptor->constructor_initialized) return descriptor->constructor;
     tsc_value_t constructor = tsc_value_function_named_kind(
@@ -701,6 +723,172 @@ tsc_value_t tsc_string_constructor_value(void) { return primitive_constructor_va
 tsc_value_t tsc_number_constructor_value(void) { return primitive_constructor_value(&primitive_number); }
 tsc_value_t tsc_boolean_constructor_value(void) { return primitive_constructor_value(&primitive_boolean); }
 
+static tsc_value_t bigint_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    if (!args || args->len == 0) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert undefined to a BigInt"));
+    }
+    tsc_value_t input = TSC_ARR(tsc_value_t, args, 0);
+    if (value_is_box(input)) {
+        switch (value_tag(input)) {
+            case TSC_VALUE_TAG_BIGINT:
+                return input;
+            case TSC_VALUE_TAG_FALSE:
+                return tsc_value_bigint(tsc_bigint_from_bool(false));
+            case TSC_VALUE_TAG_TRUE:
+                return tsc_value_bigint(tsc_bigint_from_bool(true));
+            case TSC_VALUE_TAG_STRING:
+                return tsc_value_bigint(tsc_bigint_from_str((const tsc_str_t*)value_ptr(input)));
+            default:
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert value to a BigInt"));
+        }
+    }
+    return tsc_value_bigint(tsc_bigint_from_num(value_as_num(input)));
+}
+
+static tsc_value_t symbol_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    if (!args || args->len == 0 || tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        return tsc_value_symbol(tsc_symbol_new(NULL));
+    }
+    return tsc_value_symbol(tsc_symbol_new(tsc_value_to_string(TSC_ARR(tsc_value_t, args, 0))));
+}
+
+static tsc_value_t symbol_for_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t key = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return tsc_value_symbol(tsc_symbol_for(tsc_value_to_string(key)));
+}
+
+static tsc_value_t symbol_key_for_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t value = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_symbol_t* symbol = tsc_value_as_symbol(value);
+    tsc_str_t* key = tsc_symbol_key_for(symbol);
+    return key ? tsc_value_string(key) : tsc_value_undefined();
+}
+
+static void primitive_link_nonconstructable_constructor(
+    tsc_primitive_descriptor_t* descriptor,
+    tsc_value_t constructor
+) {
+    tsc_value_t prototype = primitive_prototype(descriptor);
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit("prototype", 9),
+        prototype,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true
+    );
+    (void)tsc_value_define_property_desc(
+        prototype,
+        tsc_str_from_lit("constructor", 11),
+        constructor,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+}
+
+tsc_value_t tsc_bigint_constructor_value(void) {
+    if (primitive_bigint.constructor_initialized) return primitive_bigint.constructor;
+    tsc_value_t constructor = tsc_value_function_builtin_named(
+        bigint_constructor_apply,
+        NULL,
+        1.0,
+        tsc_str_from_lit("BigInt", 6)
+    );
+    primitive_link_nonconstructable_constructor(&primitive_bigint, constructor);
+    primitive_bigint.constructor = constructor;
+    primitive_bigint.constructor_initialized = true;
+    return constructor;
+}
+
+static void symbol_constructor_define_value(
+    tsc_value_t constructor,
+    const char* name,
+    size_t name_len,
+    tsc_value_t value
+) {
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit(name, name_len),
+        value,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true
+    );
+}
+
+tsc_value_t tsc_symbol_constructor_value(void) {
+    if (primitive_symbol.constructor_initialized) return primitive_symbol.constructor;
+    tsc_value_t constructor = tsc_value_function_builtin_named(
+        symbol_constructor_apply,
+        NULL,
+        0.0,
+        tsc_str_from_lit("Symbol", 6)
+    );
+    primitive_link_nonconstructable_constructor(&primitive_symbol, constructor);
+    symbol_constructor_define_value(
+        constructor,
+        "for",
+        3,
+        tsc_value_function_builtin_named(symbol_for_apply, NULL, 1.0, tsc_str_from_lit("for", 3))
+    );
+    symbol_constructor_define_value(
+        constructor,
+        "keyFor",
+        6,
+        tsc_value_function_builtin_named(symbol_key_for_apply, NULL, 1.0, tsc_str_from_lit("keyFor", 6))
+    );
+    const struct {
+        const char* name;
+        size_t name_len;
+        tsc_symbol_t* (*value)(void);
+    } well_known[] = {
+        { "iterator", 8, tsc_symbol_iterator },
+        { "asyncIterator", 13, tsc_symbol_async_iterator },
+        { "asyncDispose", 12, tsc_symbol_async_dispose },
+        { "dispose", 7, tsc_symbol_dispose },
+        { "unscopables", 11, tsc_symbol_unscopables },
+        { "isConcatSpreadable", 18, tsc_symbol_is_concat_spreadable },
+        { "toStringTag", 11, tsc_symbol_to_string_tag },
+        { "species", 7, tsc_symbol_species },
+    };
+    for (size_t index = 0; index < sizeof(well_known) / sizeof(well_known[0]); index++) {
+        symbol_constructor_define_value(
+            constructor,
+            well_known[index].name,
+            well_known[index].name_len,
+            tsc_value_symbol(well_known[index].value())
+        );
+    }
+    primitive_symbol.constructor = constructor;
+    primitive_symbol.constructor_initialized = true;
+    return constructor;
+}
+
 static tsc_value_t object_constructor_arg(tsc_array_t* args, size_t index) {
     return args && index < args->len
         ? TSC_ARR(tsc_value_t, args, index)
@@ -713,6 +901,8 @@ static const tsc_primitive_descriptor_t* object_constructor_primitive_descriptor
         return &primitive_boolean;
     }
     if (value_tag(value) == TSC_VALUE_TAG_STRING) return &primitive_string;
+    if (value_tag(value) == TSC_VALUE_TAG_BIGINT) return &primitive_bigint;
+    if (value_tag(value) == TSC_VALUE_TAG_SYMBOL) return &primitive_symbol;
     return NULL;
 }
 
@@ -896,6 +1086,8 @@ tsc_value_t tsc_global_object(void) {
         { "String", 6, tsc_string_constructor_value() },
         { "Number", 6, tsc_number_constructor_value() },
         { "Boolean", 7, tsc_boolean_constructor_value() },
+        { "BigInt", 6, tsc_bigint_constructor_value() },
+        { "Symbol", 6, tsc_symbol_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
         { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
@@ -1432,6 +1624,12 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
             return tsc_value_string(tsc_str_char_at(s, (double)idx));
         }
     }
+    if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
+        return tsc_value_get_prop_receiver(tsc_value_bigint_prototype(), key, v);
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_get_prop_receiver(tsc_value_symbol_prototype(), key, v);
+    }
     return tsc_value_undefined();
 }
 
@@ -1531,6 +1729,12 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
         return tsc_value_get_prop(v, key);
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
+        return tsc_value_get_prop_receiver(tsc_value_bigint_prototype(), key, receiver);
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_get_prop_receiver(tsc_value_symbol_prototype(), key, receiver);
     }
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
@@ -2172,7 +2376,9 @@ static bool value_is_object_coercible_primitive(tsc_value_t v) {
     tsc_value_tag_t tag = value_tag(v);
     return tag == TSC_VALUE_TAG_FALSE ||
         tag == TSC_VALUE_TAG_TRUE ||
-        tag == TSC_VALUE_TAG_STRING;
+        tag == TSC_VALUE_TAG_STRING ||
+        tag == TSC_VALUE_TAG_BIGINT ||
+        tag == TSC_VALUE_TAG_SYMBOL;
 }
 
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
@@ -2412,13 +2618,11 @@ tsc_value_t tsc_value_string_prototype(void) {
 }
 
 tsc_value_t tsc_value_bigint_prototype(void) {
-    static tsc_object_t* proto = NULL;
-    return ordinary_primitive_prototype(&proto);
+    return primitive_prototype(&primitive_bigint);
 }
 
 tsc_value_t tsc_value_symbol_prototype(void) {
-    static tsc_object_t* proto = NULL;
-    return ordinary_primitive_prototype(&proto);
+    return primitive_prototype(&primitive_symbol);
 }
 
 tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v) {
@@ -2436,6 +2640,10 @@ tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v) {
                 return tsc_value_boolean_prototype();
             case TSC_VALUE_TAG_STRING:
                 return tsc_value_string_prototype();
+            case TSC_VALUE_TAG_BIGINT:
+                return tsc_value_bigint_prototype();
+            case TSC_VALUE_TAG_SYMBOL:
+                return tsc_value_symbol_prototype();
             case TSC_VALUE_TAG_UNDEFINED:
             case TSC_VALUE_TAG_NULL:
                 break;
@@ -4001,6 +4209,12 @@ bool tsc_value_eq(tsc_value_t a, tsc_value_t b) {
             return true;
         case TSC_VALUE_TAG_STRING:
             return tsc_str_eq((const tsc_str_t*)value_ptr(a), (const tsc_str_t*)value_ptr(b));
+        case TSC_VALUE_TAG_BIGINT:
+            return tsc_bigint_eq(
+                (const tsc_bigint_t*)value_ptr(a),
+                (const tsc_bigint_t*)value_ptr(b)
+            );
+        case TSC_VALUE_TAG_SYMBOL:
         case TSC_VALUE_TAG_FUNCTION:
         case TSC_VALUE_TAG_ARRAY:
         case TSC_VALUE_TAG_OBJECT:
@@ -4028,6 +4242,8 @@ typedef enum {
     TSC_ABSTRACT_BOOLEAN,
     TSC_ABSTRACT_NUMBER,
     TSC_ABSTRACT_STRING,
+    TSC_ABSTRACT_BIGINT,
+    TSC_ABSTRACT_SYMBOL,
     TSC_ABSTRACT_OBJECT,
 } tsc_abstract_type_t;
 
@@ -4039,6 +4255,8 @@ static tsc_abstract_type_t abstract_equality_type(tsc_value_t value) {
         case TSC_VALUE_TAG_FALSE:
         case TSC_VALUE_TAG_TRUE: return TSC_ABSTRACT_BOOLEAN;
         case TSC_VALUE_TAG_STRING: return TSC_ABSTRACT_STRING;
+        case TSC_VALUE_TAG_BIGINT: return TSC_ABSTRACT_BIGINT;
+        case TSC_VALUE_TAG_SYMBOL: return TSC_ABSTRACT_SYMBOL;
         case TSC_VALUE_TAG_FUNCTION:
         case TSC_VALUE_TAG_ARRAY:
         case TSC_VALUE_TAG_OBJECT: return TSC_ABSTRACT_OBJECT;
@@ -4065,6 +4283,17 @@ static tsc_value_t abstract_equality_to_primitive(tsc_value_t object) {
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
 }
 
+static bool abstract_bigint_number_equal(tsc_value_t bigint, tsc_value_t number) {
+    const double numeric = value_as_num(number);
+    return isfinite(numeric) && floor(numeric) == numeric &&
+        mpz_cmp_d(((const tsc_bigint_t*)value_ptr(bigint))->value, numeric) == 0;
+}
+
+static bool abstract_bigint_string_equal(tsc_value_t bigint, tsc_value_t string) {
+    const tsc_bigint_t* parsed = tsc_bigint_try_from_str((const tsc_str_t*)value_ptr(string));
+    return parsed && tsc_bigint_eq((const tsc_bigint_t*)value_ptr(bigint), parsed);
+}
+
 bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
     tsc_abstract_type_t at = abstract_equality_type(a);
     tsc_abstract_type_t bt = abstract_equality_type(b);
@@ -4086,6 +4315,18 @@ bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
     }
     if (at == TSC_ABSTRACT_STRING && bt == TSC_ABSTRACT_NUMBER) {
         return tsc_value_eq(tsc_value_num(tsc_value_as_num(a)), b);
+    }
+    if (at == TSC_ABSTRACT_BIGINT && bt == TSC_ABSTRACT_NUMBER) {
+        return abstract_bigint_number_equal(a, b);
+    }
+    if (at == TSC_ABSTRACT_NUMBER && bt == TSC_ABSTRACT_BIGINT) {
+        return abstract_bigint_number_equal(b, a);
+    }
+    if (at == TSC_ABSTRACT_BIGINT && bt == TSC_ABSTRACT_STRING) {
+        return abstract_bigint_string_equal(a, b);
+    }
+    if (at == TSC_ABSTRACT_STRING && bt == TSC_ABSTRACT_BIGINT) {
+        return abstract_bigint_string_equal(b, a);
     }
     if (at == TSC_ABSTRACT_BOOLEAN) {
         return tsc_value_abstract_eq(tsc_value_num(tsc_value_as_num(a)), b);
@@ -4711,10 +4952,10 @@ static void value_sort_array_values(tsc_array_t* a, tsc_value_t compare_fn) {
         while (j > 0) {
             tsc_value_t prev = TSC_ARR(tsc_value_t, a, j - 1);
             if (value_sort_compare(compare_fn, prev, key) <= 0) break;
-            TSC_ARR(tsc_value_t, a, j) = prev;
+            tsc_array_store_raw(a, j, &prev);
             j--;
         }
-        TSC_ARR(tsc_value_t, a, j) = key;
+        tsc_array_store_raw(a, j, &key);
     }
 }
 
@@ -4779,14 +5020,14 @@ tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         int64_t at = value_array_strict_index(tsc_value_as_num(index), a->len);
         tsc_array_t* copy = value_array_like_slice(recv, 0.0, (double)a->len);
-        TSC_ARR(tsc_value_t, copy, (size_t)at) = value;
+        tsc_array_store_raw(copy, (size_t)at, &value);
         return tsc_value_array(copy);
     }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         size_t len = (size_t)tsc_value_length(recv);
         int64_t at = value_array_strict_index(tsc_value_as_num(index), len);
         tsc_array_t* copy = value_array_like_slice(recv, 0.0, (double)len);
-        TSC_ARR(tsc_value_t, copy, (size_t)at) = value;
+        tsc_array_store_raw(copy, (size_t)at, &value);
         return tsc_value_array(copy);
     }
     return tsc_value_undefined();
@@ -5291,6 +5532,14 @@ static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen)
         return v;
     }
 
+    if (tag == TSC_VALUE_TAG_BIGINT) {
+        return v;
+    }
+
+    if (tag == TSC_VALUE_TAG_SYMBOL) {
+        tsc_throw_str(tsc_str_from_cstr("DataCloneError: structuredClone: Symbols cannot be cloned"));
+    }
+
     if (tag == TSC_VALUE_TAG_FUNCTION) {
         tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Functions cannot be cloned"));
         return tsc_value_undefined();
@@ -5311,7 +5560,8 @@ static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen)
         dst_arr->len = src_arr->len;
         for (size_t i = 0; i < src_arr->len; i++) {
             tsc_value_t elem = TSC_ARR(tsc_value_t, src_arr, i);
-            TSC_ARR(tsc_value_t, dst_arr, i) = tsc_structured_clone_internal(elem, seen);
+            tsc_value_t cloned = tsc_structured_clone_internal(elem, seen);
+            tsc_array_store_raw(dst_arr, i, &cloned);
         }
         return cloned_val;
     }

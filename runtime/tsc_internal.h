@@ -54,6 +54,8 @@
 // --- Dynamic Value Structs ---
 #define TSC_VALUE_BOX_MASK UINT64_C(0x7ffc000000000000)
 #define TSC_VALUE_PAYLOAD_MASK UINT64_C(0x0000ffffffffffff)
+#define TSC_VALUE_EXTENDED_TAG_BIT UINT64_C(0x8000000000000000)
+#define TSC_VALUE_TAG_MASK UINT64_C(0x7)
 
 typedef enum {
     TSC_VALUE_TAG_FUNCTION = 0,
@@ -64,7 +66,11 @@ typedef enum {
     TSC_VALUE_TAG_STRING = 5,
     TSC_VALUE_TAG_ARRAY = 6,
     TSC_VALUE_TAG_OBJECT = 7,
+    TSC_VALUE_TAG_BIGINT = 8,
+    TSC_VALUE_TAG_SYMBOL = 9,
 } tsc_value_tag_t;
+
+_Static_assert(TSC_VALUE_TAG_SYMBOL < 16, "dynamic value tags must fit the NaN-box tag field");
 
 typedef struct tsc_object_prop {
     tsc_str_t* key;
@@ -156,6 +162,8 @@ typedef enum {
     TSC_PRIMITIVE_BOOLEAN = 1,
     TSC_PRIMITIVE_NUMBER = 2,
     TSC_PRIMITIVE_STRING = 3,
+    TSC_PRIMITIVE_BIGINT = 4,
+    TSC_PRIMITIVE_SYMBOL = 5,
 } tsc_primitive_kind_t;
 
 struct tsc_object {
@@ -187,9 +195,9 @@ struct tsc_object {
     /* Keep tagged proxy slots conservatively rooted for Boehm GC. */
     void* proxy_target_root;
     void* proxy_handler_root;
-    /* Canonical [[PrimitiveData]] storage for Boolean, Number, and String
-     * wrapper objects.  The companion pointer keeps a boxed string alive
-     * under conservative GC. */
+    /* Canonical [[PrimitiveData]] storage for primitive wrapper objects.  The
+     * companion pointer keeps any NaN-boxed pointer payload visible to the
+     * conservative collector. */
     bool has_primitive_value;
     uint8_t primitive_kind;
     tsc_value_t primitive_value;
@@ -306,7 +314,12 @@ void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind);
 
 // --- Inline Boxing ---
 static inline tsc_value_t value_box(tsc_value_tag_t tag, uintptr_t payload) {
-    return TSC_VALUE_BOX_MASK | ((uint64_t)payload & TSC_VALUE_PAYLOAD_MASK) | (uint64_t)tag;
+    const uint64_t raw_tag = (uint64_t)tag;
+    const uint64_t extended = raw_tag >= 8 ? TSC_VALUE_EXTENDED_TAG_BIT : UINT64_C(0);
+    return TSC_VALUE_BOX_MASK |
+        extended |
+        ((uint64_t)payload & TSC_VALUE_PAYLOAD_MASK) |
+        (raw_tag & TSC_VALUE_TAG_MASK);
 }
 
 static inline bool value_is_box(tsc_value_t v) {
@@ -314,7 +327,10 @@ static inline bool value_is_box(tsc_value_t v) {
 }
 
 static inline tsc_value_tag_t value_tag(tsc_value_t v) {
-    return (tsc_value_tag_t)(v & 0x7);
+    return (tsc_value_tag_t)(
+        (v & TSC_VALUE_TAG_MASK) |
+        ((v & TSC_VALUE_EXTENDED_TAG_BIT) ? UINT64_C(8) : UINT64_C(0))
+    );
 }
 
 static inline void* value_ptr(tsc_value_t v) {

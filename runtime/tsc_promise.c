@@ -10,6 +10,8 @@ void* tsc_value_gc_root(tsc_value_t value) {
         case TSC_VALUE_TAG_ARRAY:
         case TSC_VALUE_TAG_OBJECT:
         case TSC_VALUE_TAG_FUNCTION:
+        case TSC_VALUE_TAG_BIGINT:
+        case TSC_VALUE_TAG_SYMBOL:
             return value_ptr(value);
         default:
             return NULL;
@@ -552,7 +554,8 @@ static void promise_all_dynamic_callback(void* env) {
         return;
     }
     if (tsc_promise_is_fulfilled(item->item)) {
-        TSC_ARR(tsc_value_t, state->values, item->index) = tsc_promise_value(item->item);
+        tsc_value_t value = tsc_promise_value(item->item);
+        tsc_array_store_raw(state->values, item->index, &value);
         if (state->remaining > 0) state->remaining--;
         if (state->remaining == 0) {
             state->settled = true;
@@ -586,7 +589,8 @@ tsc_promise_t* tsc_promise_all_dynamic(tsc_array_t* src) {
             tsc_promise_add_callback(item, promise_all_dynamic_callback, env);
             continue;
         }
-        TSC_ARR(tsc_value_t, state->values, i) = tsc_promise_value(item);
+        tsc_value_t value = tsc_promise_value(item);
+        tsc_array_store_raw(state->values, i, &value);
         if (state->remaining > 0) state->remaining--;
     }
     if (!state->settled && state->remaining == 0) {
@@ -675,7 +679,8 @@ static void promise_any_dynamic_callback(void* env) {
         return;
     }
     if (tsc_promise_is_rejected(item->item)) {
-        TSC_ARR(tsc_value_t, state->errors, item->index) = tsc_promise_reason(item->item);
+        tsc_value_t reason = tsc_promise_reason(item->item);
+        tsc_array_store_raw(state->errors, item->index, &reason);
         if (state->remaining > 0) state->remaining--;
         if (state->remaining == 0) {
             state->settled = true;
@@ -709,7 +714,8 @@ tsc_promise_t* tsc_promise_any_dynamic(tsc_array_t* src) {
             tsc_promise_add_callback(item, promise_any_dynamic_callback, env);
             continue;
         }
-        TSC_ARR(tsc_value_t, state->errors, i) = tsc_promise_reason(item);
+        tsc_value_t reason = tsc_promise_reason(item);
+        tsc_array_store_raw(state->errors, i, &reason);
         if (state->remaining > 0) state->remaining--;
     }
     if (!state->settled && state->remaining == 0) {
@@ -749,7 +755,8 @@ static void promise_all_settled_dynamic_callback(void* env) {
     tsc_promise_all_settled_dynamic_state_t* state = item ? item->state : NULL;
     if (!state || state->settled || !tsc_promise_is_pending(state->result)) return;
     if (!tsc_promise_is_fulfilled(item->item) && !tsc_promise_is_rejected(item->item)) return;
-    TSC_ARR(tsc_value_t, state->values, item->index) = promise_settled_result(item->item);
+    tsc_value_t value = promise_settled_result(item->item);
+    tsc_array_store_raw(state->values, item->index, &value);
     if (state->remaining > 0) state->remaining--;
     if (state->remaining == 0) {
         state->settled = true;
@@ -777,7 +784,8 @@ tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src) {
             tsc_promise_add_callback(item, promise_all_settled_dynamic_callback, env);
             continue;
         }
-        TSC_ARR(tsc_value_t, state->values, i) = promise_settled_result(item);
+        tsc_value_t value = promise_settled_result(item);
+        tsc_array_store_raw(state->values, i, &value);
         if (state->remaining > 0) state->remaining--;
     }
     if (!state->settled && state->remaining == 0) {

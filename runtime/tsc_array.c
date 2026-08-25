@@ -1130,6 +1130,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->box_element = NULL;
         proto->unbox_element = NULL;
         proto->data = NULL;
+        proto->value_roots = NULL;
         array_prototype_define_method(proto->props, "toString", 8, 0.0, array_prototype_to_string);
         array_prototype_define_method(proto->props, "toLocaleString", 14, 0.0, array_prototype_to_locale_string);
         array_prototype_define_method(proto->props, "valueOf", 7, 0.0, array_prototype_value_of);
@@ -1222,6 +1223,10 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->box_element = NULL;
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
+    a->value_roots = elem_size == sizeof(tsc_value_t) && initial_cap
+        ? (void**)TSC_GC_MALLOC(initial_cap * sizeof(void*))
+        : NULL;
+    if (a->value_roots) memset(a->value_roots, 0, initial_cap * sizeof(void*));
     return a;
 }
 
@@ -1251,7 +1256,29 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->box_element = NULL;
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
+    a->value_roots = elem_size == sizeof(tsc_value_t) && initial_cap
+        ? (void**)TSC_GC_MALLOC(initial_cap * sizeof(void*))
+        : NULL;
+    if (a->value_roots) memset(a->value_roots, 0, initial_cap * sizeof(void*));
     return a;
+}
+
+static void array_refresh_value_root(tsc_array_t* a, size_t index) {
+    if (!a || a->es != sizeof(tsc_value_t) || !a->value_roots || index >= a->cap) return;
+    if (index >= a->len || !tsc_array_index_present(a, index)) {
+        a->value_roots[index] = NULL;
+        return;
+    }
+    tsc_value_t value;
+    memcpy(&value, (const char*)a->data + index * a->es, sizeof(value));
+    a->value_roots[index] = tsc_value_gc_root(value);
+}
+
+static void array_refresh_value_roots(tsc_array_t* a, size_t start, size_t count) {
+    if (!a || a->es != sizeof(tsc_value_t) || !a->value_roots || start >= a->cap) return;
+    size_t end = start + count;
+    if (end < start || end > a->cap) end = a->cap;
+    for (size_t index = start; index < end; index++) array_refresh_value_root(a, index);
 }
 
 tsc_array_t* tsc_array_set_value_codec(
@@ -1277,6 +1304,7 @@ tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n) {
     tsc_array_t* a = tsc_array_new(elem_size, n > 0 ? n : 1);
     if (n > 0) memcpy(a->data, src, n * elem_size);
     a->len = n;
+    array_refresh_value_roots(a, 0, n);
     return a;
 }
 
@@ -1310,11 +1338,13 @@ void tsc_array_mark_hole(tsc_array_t* a, size_t index) {
     if (!a || index >= a->len) return;
     if (!a->holes) a->holes = tsc_object_new();
     (void)tsc_object_set(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true));
+    if (a->value_roots) a->value_roots[index] = NULL;
 }
 
 void tsc_array_clear_hole(tsc_array_t* a, size_t index) {
     if (!a || !a->holes) return;
     (void)tsc_object_delete(a->holes, tsc_str_from_int((int64_t)index));
+    array_refresh_value_root(a, index);
 }
 
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
@@ -1342,21 +1372,39 @@ void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
     /* Start growth at 8 so a fresh `[]` followed by N pushes amortizes well. */
     size_t cap = a->cap ? a->cap : 8;
     while (cap < new_cap) cap *= 2;
+    const size_t old_cap = a->cap;
     void* nd = a->data ? TSC_GC_REALLOC(a->data, cap * a->es) : TSC_GC_MALLOC(cap * a->es);
     a->data = nd;
+    if (a->es == sizeof(tsc_value_t)) {
+        a->value_roots = a->value_roots
+            ? (void**)TSC_GC_REALLOC(a->value_roots, cap * sizeof(void*))
+            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+        memset(a->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
+    }
     a->cap = cap;
+}
+
+void tsc_array_store_raw(tsc_array_t* a, size_t index, const void* elem) {
+    if (!a || !elem || index >= a->cap) tsc_panic("array store index exceeds capacity");
+    memcpy((char*)a->data + index * a->es, elem, a->es);
+    if (a->es == sizeof(tsc_value_t) && a->value_roots) {
+        tsc_value_t value;
+        memcpy(&value, elem, sizeof(value));
+        a->value_roots[index] = tsc_value_gc_root(value);
+    }
 }
 
 void tsc_array_push_raw(tsc_array_t* a, const void* elem) {
     if (a->len + 1 > a->cap) tsc_array_reserve(a, a->len + 1);
     tsc_array_clear_hole(a, a->len);
-    memcpy((char*)a->data + a->len * a->es, elem, a->es);
+    tsc_array_store_raw(a, a->len, elem);
     a->len++;
 }
 
 void tsc_array_pop_raw(tsc_array_t* a) {
     if (a->len > 0) {
         tsc_array_clear_hole(a, a->len - 1);
+        if (a->value_roots) a->value_roots[a->len - 1] = NULL;
         a->len--;
     }
 }
@@ -1382,6 +1430,7 @@ void tsc_array_shift_raw(tsc_array_t* a) {
     memmove(a->data, (char*)a->data + a->es, (a->len - 1) * a->es);
     a->len--;
     a->holes = shifted_holes;
+    array_refresh_value_roots(a, 0, a->len + 1);
 }
 
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
@@ -1403,9 +1452,10 @@ void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
     }
     if (a->len + 1 > a->cap) tsc_array_reserve(a, a->len + 1);
     memmove((char*)a->data + a->es, a->data, a->len * a->es);
-    memcpy(a->data, elem, a->es);
+    tsc_array_store_raw(a, 0, elem);
     a->len++;
     a->holes = shifted_holes;
+    array_refresh_value_roots(a, 0, a->len);
 }
 
 tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
@@ -1449,6 +1499,7 @@ tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
         hi -= a->es;
     }
     if (a->holes) a->holes = reversed_holes;
+    array_refresh_value_roots(a, 0, a->len);
     return a;
 }
 
@@ -1517,7 +1568,7 @@ static tsc_object_t* array_spliced_holes(
 tsc_array_t* tsc_array_with(const tsc_array_t* a, double index, const void* elem) {
     int64_t at = array_strict_index(index, (int64_t)a->len);
     tsc_array_t* copy = tsc_array_slice(a, 0.0, (double)a->len);
-    memcpy((char*)copy->data + (size_t)at * copy->es, elem, copy->es);
+    tsc_array_store_raw(copy, (size_t)at, elem);
     tsc_array_clear_hole(copy, (size_t)at);
     return copy;
 }
@@ -1579,6 +1630,7 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
         tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not update array-like length"));
     }
     a->len = new_len;
+    array_refresh_value_roots(a, 0, old_len > new_len ? old_len : new_len);
     return removed;
 }
 
@@ -1615,6 +1667,7 @@ tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double del
         out->len += tail_len;
     }
     out->holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
+    array_refresh_value_roots(out, 0, out->len);
     return out;
 }
 
@@ -1627,7 +1680,7 @@ tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, doub
         if (!tsc_array_index_present(a, (size_t)i) && !a->extensible) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill could not create array element"));
         }
-        memcpy((char*)a->data + (size_t)i * a->es, elem, a->es);
+        tsc_array_store_raw(a, (size_t)i, elem);
         tsc_array_clear_hole(a, (size_t)i);
     }
     return a;
@@ -1657,6 +1710,7 @@ tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, 
                 }
                 memmove((char*)a->data + target * a->es, (char*)a->data + source * a->es, a->es);
                 tsc_array_clear_hole(a, target);
+                array_refresh_value_root(a, target);
             } else {
                 if (tsc_array_index_present(a, target) && (a->sealed || a->frozen)) {
                     tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not delete array element"));
@@ -1688,6 +1742,7 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
             if (!tsc_array_index_present(a, (size_t)i0 + i)) tsc_array_mark_hole(r, i);
         }
     }
+    array_refresh_value_roots(r, 0, n);
     return r;
 }
 
@@ -1698,6 +1753,7 @@ tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src) {
     size_t source_offset = dst->len;
     dst->len += src->len;
     array_copy_holes_range(src, 0, dst, source_offset, src->len);
+    array_refresh_value_roots(dst, source_offset, src->len);
     return dst;
 }
 

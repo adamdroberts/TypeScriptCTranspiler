@@ -1,10 +1,17 @@
 #include "tsc_internal.h"
 
+static void* dynamic_storage_root(size_t width, const void* storage) {
+    if (width != sizeof(tsc_value_t) || !storage) return NULL;
+    tsc_value_t value;
+    memcpy(&value, storage, sizeof(value));
+    return tsc_value_gc_root(value);
+}
 
 tsc_map_t* tsc_map_new(size_t ks, size_t vs, int kk, size_t initial_cap) {
     tsc_map_t* m = (tsc_map_t*)TSC_GC_MALLOC(sizeof(tsc_map_t));
     m->ks = ks; m->vs = vs; m->kk = (tsc_key_kind_t)kk;
     m->len = 0; m->cap = 0; m->keys = NULL; m->values = NULL;
+    m->key_roots = NULL; m->value_roots = NULL;
     m->buckets = NULL; m->bucket_cap = 0;
     if (initial_cap > 0) map_grow_ordered(m, initial_cap);
     return m;
@@ -24,11 +31,14 @@ void tsc_map_set_raw(tsc_map_t* m, const void* k, const void* v) {
     size_t e = map_lookup(m, k, &slot);
     if (e != TSC_BKT_EMPTY) {
         memcpy((char*)m->values + e * m->vs, v, m->vs);
+        if (m->value_roots) m->value_roots[e] = dynamic_storage_root(m->vs, v);
         return;
     }
     map_grow_ordered(m, m->len + 1);
     memcpy((char*)m->keys + m->len * m->ks, k, m->ks);
     memcpy((char*)m->values + m->len * m->vs, v, m->vs);
+    if (m->key_roots) m->key_roots[m->len] = dynamic_storage_root(m->ks, k);
+    if (m->value_roots) m->value_roots[m->len] = dynamic_storage_root(m->vs, v);
     m->buckets[slot] = m->len;
     m->len++;
 }
@@ -81,13 +91,19 @@ bool tsc_map_delete_raw(tsc_map_t* m, const void* k) {
     if (tail > 0) {
         memmove((char*)m->keys + e * m->ks, (const char*)m->keys + (e + 1) * m->ks, tail * m->ks);
         memmove((char*)m->values + e * m->vs, (const char*)m->values + (e + 1) * m->vs, tail * m->vs);
+        if (m->key_roots) memmove(m->key_roots + e, m->key_roots + e + 1, tail * sizeof(void*));
+        if (m->value_roots) memmove(m->value_roots + e, m->value_roots + e + 1, tail * sizeof(void*));
     }
     m->len--;
+    if (m->key_roots) m->key_roots[m->len] = NULL;
+    if (m->value_roots) m->value_roots[m->len] = NULL;
     if (m->bucket_cap > 0) map_rebuild_buckets(m, m->bucket_cap);
     return true;
 }
 
 void tsc_map_clear(tsc_map_t* m) {
+    if (m->key_roots) memset(m->key_roots, 0, m->len * sizeof(void*));
+    if (m->value_roots) memset(m->value_roots, 0, m->len * sizeof(void*));
     m->len = 0;
     if (m->bucket_cap > 0) {
         for (size_t i = 0; i < m->bucket_cap; i++) m->buckets[i] = TSC_BKT_EMPTY;
@@ -96,17 +112,11 @@ void tsc_map_clear(tsc_map_t* m) {
 double tsc_map_size(const tsc_map_t* m) { return (double)m->len; }
 
 tsc_array_t* tsc_map_keys(const tsc_map_t* m) {
-    tsc_array_t* a = tsc_array_new(m->ks, m->len ? m->len : 1);
-    if (m->len) memcpy(a->data, m->keys, m->len * m->ks);
-    a->len = m->len;
-    return a;
+    return tsc_array_from_buf(m->ks, m->keys, m->len);
 }
 
 tsc_array_t* tsc_map_values(const tsc_map_t* m) {
-    tsc_array_t* a = tsc_array_new(m->vs, m->len ? m->len : 1);
-    if (m->len) memcpy(a->data, m->values, m->len * m->vs);
-    a->len = m->len;
-    return a;
+    return tsc_array_from_buf(m->vs, m->values, m->len);
 }
 
 /* Set ------------ — same architecture, single data array. */
@@ -129,16 +139,32 @@ void set_grow_ordered(tsc_set_t* s, size_t want) {
     if (want <= s->cap) return;
     size_t cap = s->cap ? s->cap : 512;
     while (cap < want) cap *= 2;
+    const size_t old_cap = s->cap;
     void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC(cap * s->es);
-    s->data = nd; s->cap = cap;
+    s->data = nd;
+    if (s->es == sizeof(tsc_value_t)) {
+        s->value_roots = s->value_roots
+            ? (void**)TSC_GC_REALLOC(s->value_roots, cap * sizeof(void*))
+            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+        memset(s->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
+    }
+    s->cap = cap;
 }
 
 void set_grow_ordered_atomic(tsc_set_t* s, size_t want) {
     if (want <= s->cap) return;
     size_t cap = s->cap ? s->cap : 512;
     while (cap < want) cap *= 2;
+    const size_t old_cap = s->cap;
     void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC_ATOMIC(cap * s->es);
-    s->data = nd; s->cap = cap;
+    s->data = nd;
+    if (s->es == sizeof(tsc_value_t)) {
+        s->value_roots = s->value_roots
+            ? (void**)TSC_GC_REALLOC(s->value_roots, cap * sizeof(void*))
+            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+        memset(s->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
+    }
+    s->cap = cap;
 }
 
 size_t set_lookup(const tsc_set_t* s, const void* v, size_t* slot_out) {
@@ -219,7 +245,7 @@ size_t set_lookup_int(const tsc_set_t* s, int64_t v, size_t* slot_out) {
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap) {
     tsc_set_t* s = (tsc_set_t*)TSC_GC_MALLOC(sizeof(tsc_set_t));
     s->es = es; s->kk = (tsc_key_kind_t)kk;
-    s->len = 0; s->cap = 0; s->data = NULL;
+    s->len = 0; s->cap = 0; s->data = NULL; s->value_roots = NULL;
     s->buckets = NULL; s->bucket_cap = 0;
     if (initial_cap > 0) set_grow_ordered(s, initial_cap);
     return s;
@@ -238,6 +264,7 @@ void tsc_set_add_raw(tsc_set_t* s, const void* v) {
      * Their backing storage must be scanned so entries remain alive. */
     set_grow_ordered(s, s->len + 1);
     memcpy((char*)s->data + s->len * s->es, v, s->es);
+    if (s->value_roots) s->value_roots[s->len] = dynamic_storage_root(s->es, v);
     s->buckets[slot] = s->len;
     s->len++;
 }
@@ -292,13 +319,16 @@ bool tsc_set_delete_raw(tsc_set_t* s, const void* v) {
     size_t tail = s->len - e - 1;
     if (tail > 0) {
         memmove((char*)s->data + e * s->es, (const char*)s->data + (e + 1) * s->es, tail * s->es);
+        if (s->value_roots) memmove(s->value_roots + e, s->value_roots + e + 1, tail * sizeof(void*));
     }
     s->len--;
+    if (s->value_roots) s->value_roots[s->len] = NULL;
     if (s->bucket_cap > 0) set_rebuild_buckets(s, s->bucket_cap);
     return true;
 }
 
 void tsc_set_clear(tsc_set_t* s) {
+    if (s->value_roots) memset(s->value_roots, 0, s->len * sizeof(void*));
     s->len = 0;
     if (s->bucket_cap > 0) {
         for (size_t i = 0; i < s->bucket_cap; i++) s->buckets[i] = TSC_BKT_EMPTY;
@@ -307,10 +337,7 @@ void tsc_set_clear(tsc_set_t* s) {
 double tsc_set_size(const tsc_set_t* s) { return (double)s->len; }
 
 tsc_array_t* tsc_set_values(const tsc_set_t* s) {
-    tsc_array_t* a = tsc_array_new(s->es, s->len ? s->len : 1);
-    if (s->len) memcpy(a->data, s->data, s->len * s->es);
-    a->len = s->len;
-    return a;
+    return tsc_array_from_buf(s->es, s->data, s->len);
 }
 
 void set_copy_into(tsc_set_t* dst, const tsc_set_t* src) {
@@ -382,4 +409,3 @@ bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b) {
     }
     return true;
 }
-

@@ -7473,6 +7473,8 @@ bool tsc_value_is_truthy(tsc_value_t v) {
             tsc_str_t* s = (tsc_str_t*)value_ptr(v);
             return s && s->len > 0;
         }
+        case TSC_VALUE_TAG_BIGINT:
+            return mpz_sgn(((const tsc_bigint_t*)value_ptr(v))->value) != 0;
         default:
             return true;
     }
@@ -7518,6 +7520,12 @@ double tsc_value_as_num(tsc_value_t v) {
         free(text);
         return n;
     }
+    if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert a BigInt value to a number"));
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert a Symbol value to a number"));
+    }
     if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         const tsc_object_t* object = (const tsc_object_t*)value_ptr(v);
         if (object && object->has_primitive_value) {
@@ -7540,6 +7548,20 @@ tsc_str_t* tsc_value_as_string(tsc_value_t v) {
         return (tsc_str_t*)value_ptr(v);
     }
     return tsc_value_to_string(v);
+}
+
+tsc_bigint_t* tsc_value_as_bigint(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_BIGINT) {
+        return (tsc_bigint_t*)value_ptr(v);
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not a BigInt"));
+}
+
+tsc_symbol_t* tsc_value_as_symbol(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        return (tsc_symbol_t*)value_ptr(v);
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not a Symbol"));
 }
 
 tsc_array_t* tsc_value_as_array(tsc_value_t v) {
@@ -7669,6 +7691,8 @@ tsc_str_t* tsc_value_typeof(tsc_value_t v) {
         case TSC_VALUE_TAG_FALSE:
         case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("boolean", 7);
         case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("string", 6);
+        case TSC_VALUE_TAG_BIGINT: return tsc_str_from_lit("bigint", 6);
+        case TSC_VALUE_TAG_SYMBOL: return tsc_str_from_lit("symbol", 6);
         case TSC_VALUE_TAG_ARRAY:
             return tsc_str_from_lit("object", 6);
         case TSC_VALUE_TAG_OBJECT: {
@@ -7690,6 +7714,10 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
         case TSC_VALUE_TAG_FALSE: return tsc_str_from_lit("false", 5);
         case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("true", 4);
         case TSC_VALUE_TAG_STRING: return (tsc_str_t*)value_ptr(v);
+        case TSC_VALUE_TAG_BIGINT:
+            return tsc_bigint_to_string((const tsc_bigint_t*)value_ptr(v), 10.0);
+        case TSC_VALUE_TAG_SYMBOL:
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert a Symbol value to a string"));
         case TSC_VALUE_TAG_ARRAY: {
             tsc_value_t joined = tsc_value_method_join(v, tsc_value_undefined());
             return tsc_value_as_string(joined);
@@ -7715,6 +7743,13 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
         }
     }
     return tsc_str_from_lit("undefined", 9);
+}
+
+tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_symbol_to_string((const tsc_symbol_t*)value_ptr(v));
+    }
+    return tsc_value_to_string(v);
 }
 
 /* ---------------- console ---------------- */

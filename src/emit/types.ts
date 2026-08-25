@@ -341,6 +341,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (concrete.length === 1) {
             const concreteType = mapTsType(node, concrete[0]!, checker);
             const hasNullish = concrete.length !== parts.length;
+            const hasNull = parts.some((p) => !!(p.flags & ts.TypeFlags.Null));
+            const hasUndefined = parts.some((p) =>
+                !!(p.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void))
+            );
+            // A single NULL pointer can represent one statically known
+            // nullish arm, but it cannot preserve the distinct ECMAScript
+            // Null and Undefined Types when both occur in the union.
+            if (hasNull && hasUndefined) return T_VALUE;
             if (
                 hasNullish &&
                 (concreteType.kind === "number" || concreteType.kind === "boolean")

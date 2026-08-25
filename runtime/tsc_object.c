@@ -106,7 +106,8 @@ static void proxy_fill_forwarded_array_growth_slots(tsc_value_t target, const ts
     tsc_array_t* array = (tsc_array_t*)value_ptr(target);
     for (size_t i = old_len; i < idx && i < array->len; i++) {
         tsc_array_clear_hole(array, i);
-        TSC_ARR(tsc_value_t, array, i) = tsc_value_string(tsc_str_from_lit("undefined", 9));
+        tsc_value_t replacement = tsc_value_string(tsc_str_from_lit("undefined", 9));
+        tsc_array_store_raw(array, i, &replacement);
     }
 }
 
@@ -2119,6 +2120,7 @@ bool value_json_omits_object_property(tsc_value_t v) {
     return value_is_box(v) && (
         value_tag(v) == TSC_VALUE_TAG_UNDEFINED ||
         value_tag(v) == TSC_VALUE_TAG_FUNCTION ||
+        value_tag(v) == TSC_VALUE_TAG_SYMBOL ||
         value_is_callable_proxy(v)
     );
 }
@@ -2136,6 +2138,10 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
             return tsc_str_from_lit("true", 4);
         case TSC_VALUE_TAG_STRING:
             return tsc_json_escape_string((tsc_str_t*)value_ptr(v));
+        case TSC_VALUE_TAG_BIGINT:
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Do not know how to serialize a BigInt"));
+        case TSC_VALUE_TAG_SYMBOL:
+            return tsc_str_from_lit("null", 4);
         case TSC_VALUE_TAG_ARRAY: {
             tsc_array_t* a = (tsc_array_t*)value_ptr(v);
             tsc_str_t* out = tsc_str_from_lit("[", 1);
@@ -2197,6 +2203,7 @@ tsc_value_t tsc_value_json_stringify_top(tsc_value_t v) {
         tsc_value_tag_t tag = value_tag(v);
         if (tag == TSC_VALUE_TAG_FUNCTION ||
             tag == TSC_VALUE_TAG_UNDEFINED ||
+            tag == TSC_VALUE_TAG_SYMBOL ||
             (tag == TSC_VALUE_TAG_OBJECT && value_is_callable_proxy(v))) {
             return tsc_value_undefined();
         }
@@ -2431,6 +2438,9 @@ uint64_t key_hash(tsc_key_kind_t kk, const void* k) {
                 case TSC_VALUE_TAG_FALSE: return splitmix64_mix(0x517cc1b727220a95ULL);
                 case TSC_VALUE_TAG_TRUE: return splitmix64_mix(0x9e3779b97f4a7c15ULL);
                 case TSC_VALUE_TAG_STRING: return tsc_str_cached_hash((const tsc_str_t*)value_ptr(v));
+                case TSC_VALUE_TAG_BIGINT:
+                    return tsc_str_cached_hash(tsc_bigint_to_string((const tsc_bigint_t*)value_ptr(v), 10.0));
+                case TSC_VALUE_TAG_SYMBOL:
                 case TSC_VALUE_TAG_FUNCTION:
                 case TSC_VALUE_TAG_ARRAY:
                 case TSC_VALUE_TAG_OBJECT:
@@ -2460,9 +2470,24 @@ void map_grow_ordered(tsc_map_t* m, size_t want) {
     if (want <= m->cap) return;
     size_t cap = m->cap ? m->cap : 256;
     while (cap < want) cap *= 2;
+    const size_t old_cap = m->cap;
     void* nk = m->keys ? TSC_GC_REALLOC(m->keys, cap * m->ks) : TSC_GC_MALLOC(cap * m->ks);
     void* nv = m->values ? TSC_GC_REALLOC(m->values, cap * m->vs) : TSC_GC_MALLOC(cap * m->vs);
-    m->keys = nk; m->values = nv; m->cap = cap;
+    m->keys = nk;
+    m->values = nv;
+    if (m->ks == sizeof(tsc_value_t)) {
+        m->key_roots = m->key_roots
+            ? (void**)TSC_GC_REALLOC(m->key_roots, cap * sizeof(void*))
+            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+        memset(m->key_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
+    }
+    if (m->vs == sizeof(tsc_value_t)) {
+        m->value_roots = m->value_roots
+            ? (void**)TSC_GC_REALLOC(m->value_roots, cap * sizeof(void*))
+            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+        memset(m->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
+    }
+    m->cap = cap;
 }
 
 /* Returns ordered-index if the key is in the map, else TSC_BKT_EMPTY.

@@ -262,6 +262,7 @@ typedef struct tsc_bigint {
 
 tsc_bigint_t* tsc_bigint_from_lit(const char* lit);
 tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s);
+tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* s);
 tsc_bigint_t* tsc_bigint_from_num(double n);
 tsc_bigint_t* tsc_bigint_from_bool(bool b);
 tsc_bigint_t* tsc_bigint_neg(const tsc_bigint_t* a);
@@ -604,6 +605,10 @@ typedef struct tsc_array {
     tsc_array_box_element_fn box_element;
     tsc_array_unbox_element_fn unbox_element;
     void* data;
+    /* NaN-boxed pointer payloads are invisible to conservative GC.  Arrays
+     * whose element width can hold tsc_value_t mirror decoded roots here; all
+     * canonical array mutations update this vector with the data. */
+    void** value_roots;
 } tsc_array_t;
 
 /* One ordinary-call activation owns one canonical, dynamically sized
@@ -659,6 +664,7 @@ void tsc_array_materialize_all(tsc_array_t* a);
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);
 void tsc_array_push_raw(tsc_array_t* a, const void* elem);
+void tsc_array_store_raw(tsc_array_t* a, size_t index, const void* elem);
 void tsc_array_pop_raw(tsc_array_t* a);
 void tsc_array_shift_raw(tsc_array_t* a);
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem);
@@ -719,6 +725,8 @@ tsc_value_t tsc_value_null(void);
 tsc_value_t tsc_value_bool(bool b);
 tsc_value_t tsc_value_num(double n);
 tsc_value_t tsc_value_string(tsc_str_t* s);
+tsc_value_t tsc_value_bigint(tsc_bigint_t* value);
+tsc_value_t tsc_value_symbol(tsc_symbol_t* value);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_class(void* ptr);
@@ -733,6 +741,8 @@ tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);
 tsc_value_t tsc_boolean_constructor_value(void);
+tsc_value_t tsc_bigint_constructor_value(void);
+tsc_value_t tsc_symbol_constructor_value(void);
 /* One canonical ECMAScript global object and its object-backed Script bindings. */
 tsc_value_t tsc_global_object(void);
 void tsc_global_declare_var(tsc_str_t* key);
@@ -763,6 +773,8 @@ bool tsc_value_number_is_safe_integer(tsc_value_t v);
 double tsc_value_as_num(tsc_value_t v);
 bool tsc_value_as_bool(tsc_value_t v);
 tsc_str_t* tsc_value_as_string(tsc_value_t v);
+tsc_bigint_t* tsc_value_as_bigint(tsc_value_t v);
+tsc_symbol_t* tsc_value_as_symbol(tsc_value_t v);
 tsc_array_t* tsc_value_as_array(tsc_value_t v);
 void* tsc_value_as_class(tsc_value_t v);
 bool tsc_value_is_promise(tsc_value_t v);
@@ -772,6 +784,7 @@ bool tsc_value_is_promise(tsc_value_t v);
 void* tsc_value_gc_root(tsc_value_t v);
 tsc_promise_t* tsc_value_as_promise(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
+tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
@@ -1173,6 +1186,8 @@ typedef struct tsc_map {
     size_t len, cap;          /* ordered (insertion-order) keys/values arrays */
     void* keys;
     void* values;
+    void** key_roots;
+    void** value_roots;
     size_t* buckets;          /* power-of-2-sized open-addressing index table */
     size_t bucket_cap;        /* always a power of 2 (or 0 before first insert) */
 } tsc_map_t;
@@ -1195,6 +1210,7 @@ typedef struct tsc_set {
     tsc_key_kind_t kk;
     size_t len, cap;          /* ordered (insertion-order) data array */
     void* data;
+    void** value_roots;
     size_t* buckets;          /* power-of-2-sized open-addressing index table */
     size_t bucket_cap;
 } tsc_set_t;

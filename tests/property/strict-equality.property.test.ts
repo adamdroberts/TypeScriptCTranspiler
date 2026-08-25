@@ -33,14 +33,27 @@ const values: readonly StrictValue[] = [
     { label: "emptyString", expression: '""', type: "String", value: "" },
     { label: "oneString", expression: '"1"', type: "String", value: "1" },
     { label: "oneBigInt", expression: "1n", type: "BigInt", value: 1n },
+    { label: "oneBigIntCopy", expression: "1n", type: "BigInt", value: 1n },
     { label: "twoBigInt", expression: "2n", type: "BigInt", value: 2n },
     { label: "symbolA", expression: "symbolA", type: "Symbol", value: "symbol-a" },
+    { label: "symbolAAlias", expression: "symbolA", type: "Symbol", value: "symbol-a" },
     { label: "symbolB", expression: "symbolB", type: "Symbol", value: "symbol-b" },
     { label: "objectA", expression: "objectA", type: "Object", value: "object-a" },
     { label: "objectB", expression: "objectB", type: "Object", value: "object-b" },
     { label: "functionA", expression: "functionA", type: "Object", value: "function-a" },
     { label: "functionB", expression: "functionB", type: "Object", value: "function-b" },
 ];
+
+const nullishStorageProbes = [
+    { label: "optional-undefined", expression: "maybeUndefined(false) === undefined", expected: true },
+    { label: "optional-undefined-vs-null", expression: "maybeUndefined(false) === null", expected: false },
+    { label: "present-vs-undefined", expression: "maybeUndefined(true) !== undefined", expected: true },
+    { label: "nullable-null", expression: "maybeNull(false) === null", expected: true },
+    { label: "nullable-null-vs-undefined", expression: "maybeNull(false) === undefined", expected: false },
+    { label: "present-vs-null", expression: "maybeNull(true) !== null", expected: true },
+    { label: "boxed-null", expression: "maybeEither(1) === null", expected: true },
+    { label: "boxed-undefined", expression: "maybeEither(2) === undefined", expected: true },
+] as const;
 
 function strictEqual(left: StrictValue, right: StrictValue): boolean {
     if (left.type !== right.type) return false;
@@ -63,21 +76,26 @@ function source(): string {
         "var objectB = /b/;",
         "var functionA = function () {};",
         "var functionB = function () {};",
+        `var dynamicValues = [${values.map((value) => value.expression).join(", ")}];`,
         "var abruptObject = { marker: 'right' };",
         "var abruptState = { trace: '' };",
         "function throwStrictValue(value) { throw value; }",
+        "function maybeUndefined(present) { return present ? 'value' : undefined; }",
+        "function maybeNull(present) { return present ? 'value' : null; }",
+        "function maybeEither(kind) { return kind === 0 ? 'value' : (kind === 1 ? null : undefined); }",
     ];
-    for (const left of values) {
-        for (const right of values) {
+    for (let leftIndex = 0; leftIndex < values.length; leftIndex++) {
+        for (let rightIndex = 0; rightIndex < values.length; rightIndex++) {
             lines.push(
                 "trace = '';",
-                `console.log(String((trace += "L", ${left.expression}) === (trace += "R", ${right.expression})) + ":" + trace);`,
+                `console.log(String((trace += "L", dynamicValues[${leftIndex}]) === (trace += "R", dynamicValues[${rightIndex}])) + ":" + trace);`,
                 "trace = '';",
-                `console.log(String((trace += "L", ${left.expression}) !== (trace += "R", ${right.expression})) + ":" + trace);`,
+                `console.log(String((trace += "L", dynamicValues[${leftIndex}]) !== (trace += "R", dynamicValues[${rightIndex}])) + ":" + trace);`,
             );
         }
     }
     lines.push(
+        ...nullishStorageProbes.map((probe) => `console.log('${probe.label}:' + String(${probe.expression}));`),
         "abruptState.trace = '';",
         "try { (abruptState.trace += 'L', throwStrictValue('left')) === (abruptState.trace += 'R', 0); } " +
             "catch (error) { console.log(String(error !== 'other' && error === 'left') + ':' + abruptState.trace); }",
@@ -97,6 +115,7 @@ function expectedOutput(): string[] {
             output.push(`${equal}:LR`, `${!equal}:LR`);
         }
     }
+    output.push(...nullishStorageProbes.map((probe) => `${probe.label}:${probe.expected}`));
     output.push("true:L", "true:LR");
     return output;
 }

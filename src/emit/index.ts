@@ -23445,6 +23445,10 @@ class Emitter {
                 return `tsc_value_as_bool(${cExpr})`;
             case "string":
                 return `tsc_value_as_string(${cExpr})`;
+            case "bigint":
+                return `tsc_value_as_bigint(${cExpr})`;
+            case "symbol":
+                return `tsc_value_as_symbol(${cExpr})`;
             case "array":
                 return `tsc_value_as_array(${cExpr})`;
             case "function":
@@ -36172,7 +36176,7 @@ class Emitter {
             if (element.kind === ts.SyntaxKind.OmittedExpression) {
                 const hole = this.freshTemp("_lazy_hole");
                 pieces.push(`${elemType.c} ${hole} = ${this.zeroValue(elemType)}`);
-                pieces.push(`TSC_ARR(${elemType.c}, ${array}, ${array}->len) = ${hole}; ${array}->len++; tsc_array_mark_hole(${array}, ${array}->len - 1)`);
+                pieces.push(`tsc_array_push_raw(${array}, &${hole}); tsc_array_mark_hole(${array}, ${array}->len - 1)`);
                 continue;
             }
             if (ts.isSpreadElement(element)) {
@@ -36208,7 +36212,7 @@ class Emitter {
             const coerced = this.coerce(value, elemType, element);
             const item = this.freshTemp("_lazy_el");
             pieces.push(`${elemType.c} ${item} = ${coerced}`);
-            pieces.push(`TSC_ARR(${elemType.c}, ${array}, ${array}->len) = ${item}; ${array}->len++`);
+            pieces.push(`tsc_array_push_raw(${array}, &${item})`);
         }
         pieces.push(array);
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
@@ -38561,7 +38565,7 @@ class Emitter {
             const coerced = this.coerce(r, et, e as ts.Expression);
             const tv = this.freshTemp("_el");
             pieces.push(`${et.c} ${tv} = ${coerced}`);
-            pieces.push(`TSC_ARR(${et.c}, ${av}, ${av}->len) = ${tv}; ${av}->len++`);
+            pieces.push(`tsc_array_push_raw(${av}, &${tv})`);
         }
         pieces.push(av);
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
@@ -38790,6 +38794,8 @@ class Emitter {
         whenFalse: EmitResult,
     ): EmitResult {
         const condC = this.truthyExprFromEmitResult(cond, expr.condition);
+        const distinctNullish = this.emitDistinctNullishConditional(expr, condC, whenTrue, whenFalse);
+        if (distinctNullish) return distinctNullish;
         if (whenTrue.ty.kind !== whenFalse.ty.kind) {
             const boxable: readonly CType["kind"][] = ["number", "boolean", "string", "array", "void", "value"];
             if (boxable.includes(whenTrue.ty.kind) && boxable.includes(whenFalse.ty.kind)) {
@@ -40134,11 +40140,18 @@ class Emitter {
                 buf.line(`${storage}.iter_return_consumed = false;`);
                 buf.line(`${storage}.iter_return = tsc_value_undefined();`);
                 buf.line(`${storage}.data = ${data};`);
+                if (elemType.kind === "value") {
+                    const roots = this.freshTemp(`_${name}_stack_roots`);
+                    buf.line(`void* ${roots}[${cap}] = {0};`);
+                    buf.line(`${storage}.value_roots = ${roots};`);
+                } else {
+                    buf.line(`${storage}.value_roots = NULL;`);
+                }
                 for (const element of stackArray.init.elements) {
                     const r = this.emitExpr(element as ts.Expression);
                     const tv = this.freshTemp("_el");
                     buf.line(`${elemType.c} ${tv} = ${this.coerce(r, elemType, element as ts.Expression)};`);
-                    buf.line(`TSC_ARR(${elemType.c}, &${storage}, ${storage}.len) = ${tv}; ${storage}.len++;`);
+                    buf.line(`tsc_array_push_raw(&${storage}, &${tv});`);
                 }
                 buf.line(`tsc_array_t*${qual} ${name} = &${storage};`);
                 continue;
@@ -48112,11 +48125,19 @@ class Emitter {
             (left.ty.kind === "void" && rightIsPointer)
         ) {
             const nullishExpression = left.ty.kind === "void" ? bin.left : bin.right;
+            const pointerExpression = leftIsPointer ? bin.left : bin.right;
             const nullishKind = this.equalityNullishKind(nullishExpression);
             if (!nullishKind) {
                 unsupported(bin, "strict equality cannot distinguish an unclassified static nullish value");
             }
-            if (nullishKind === "undefined") {
+            const pointerNullish = this.expressionNullishKinds(pointerExpression);
+            if (pointerNullish.hasNull && pointerNullish.hasUndefined) {
+                unsupported(bin, "strict equality requires boxed storage for a pointer union containing both null and undefined");
+            }
+            const canRepresentKind = nullishKind === "null"
+                ? pointerNullish.hasNull
+                : pointerNullish.hasUndefined;
+            if (!canRepresentKind) {
                 return this.emitEvaluatedEqualityConstant(left, right, false, negate);
             }
             return this.emitSequencedExpr(
@@ -48172,6 +48193,18 @@ class Emitter {
             result = kind;
         }
         return result;
+    }
+
+    private expressionNullishKinds(expr: ts.Expression): { hasNull: boolean; hasUndefined: boolean } {
+        const type = this.declaredOrCurrentType(expr);
+        const members = type.isUnion() ? type.types : [type];
+        let hasNull = false;
+        let hasUndefined = false;
+        for (const member of members) {
+            if (member.flags & ts.TypeFlags.Null) hasNull = true;
+            if (member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) hasUndefined = true;
+        }
+        return { hasNull, hasUndefined };
     }
 
     private emitRelational(
@@ -48256,6 +48289,8 @@ class Emitter {
         const cond = this.emitBoolExpr(expr.condition);
         const whenT = this.emitExpr(expr.whenTrue);
         const whenF = this.emitExpr(expr.whenFalse);
+        const distinctNullish = this.emitDistinctNullishConditional(expr, cond, whenT, whenF);
+        if (distinctNullish) return distinctNullish;
         if (
             whenT.ty.kind === "array" &&
             whenF.ty.kind === "array" &&
@@ -48295,6 +48330,22 @@ class Emitter {
             ty: whenT.ty,
             lazyGenerator: whenT.lazyGenerator && whenF.lazyGenerator,
             lazyGeneratorFactory: whenT.lazyGeneratorFactory && whenF.lazyGeneratorFactory,
+        };
+    }
+
+    private emitDistinctNullishConditional(
+        expr: ts.ConditionalExpression,
+        condition: string,
+        whenTrue: EmitResult,
+        whenFalse: EmitResult,
+    ): EmitResult | null {
+        if (whenTrue.ty.kind !== "void" || whenFalse.ty.kind !== "void") return null;
+        const trueKind = this.equalityNullishKind(expr.whenTrue);
+        const falseKind = this.equalityNullishKind(expr.whenFalse);
+        if (!trueKind || !falseKind || trueKind === falseKind) return null;
+        return {
+            c: `(${condition} ? ${this.coerce(whenTrue, T_VALUE, expr.whenTrue)} : ${this.coerce(whenFalse, T_VALUE, expr.whenFalse)})`,
+            ty: T_VALUE,
         };
     }
 
@@ -50485,7 +50536,7 @@ class Emitter {
                             if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
                                 unsupported(fnBody, "async suspension graph is not supported by the canonical CFG");
                             }
-                            for (const s of fnBody.statements) this.emitStmt(body, s);
+                            this.emitStmtList(body, fnBody.statements);
                             if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
                             else if (this.isJavaScriptSourceFile(fn.getSourceFile()) && ret.kind !== "void" && ret.kind !== "never") {
                                 body.line(`return ${this.zeroValue(ret)};`);
@@ -53427,9 +53478,9 @@ class Emitter {
                 `? (tsc_value_is_undefined(${bName}) ? 0.0 : 1.0) ` +
                 `: (tsc_value_is_undefined(${bName}) ? -1.0 : ${cmpExpr}); ` +
                 `if (${cmp} <= 0) break; ` +
-                `TSC_ARR(tsc_value_t, ${arrayName}, ${jv}) = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
+                `tsc_array_store_raw(${arrayName}, ${jv}, &TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1)); ` +
                 `${jv}--; } ` +
-                `TSC_ARR(tsc_value_t, ${arrayName}, ${jv}) = ${kv}; }`;
+                `tsc_array_store_raw(${arrayName}, ${jv}, &${kv}); }`;
             const compact = this.freshTemp("_dynsort_compact");
             const sourceIndex = this.freshTemp("_dynsort_src_i");
             const item = this.freshTemp("_dynsort_item");
@@ -53444,7 +53495,7 @@ class Emitter {
                 `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
                 `if (!tsc_array_index_present(${av}, ${sourceIndex}) && !${av}->extensible) ` +
                 `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element")); ` +
-                `TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}) = TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}); ` +
+                `tsc_array_store_raw(${av}, ${sourceIndex}, &TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex})); ` +
                 `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
                 `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
                 `if (tsc_array_index_present(${av}, ${sourceIndex}) && (${av}->sealed || ${av}->frozen)) ` +
@@ -60380,7 +60431,7 @@ class Emitter {
                     const vv = this.freshTemp("_pv");
                     pieces.push(`${et.c} ${vv} = ${coerced}`);
                     values.push(vv);
-                    pushes.push(`if (${av}->len + 1 > ${av}->cap) tsc_array_reserve(${av}, ${av}->len + 1); TSC_ARR(${et.c}, ${av}, ${av}->len) = ${vv}; ${av}->len++`);
+                    pushes.push(`tsc_array_push_raw(${av}, &${vv})`);
                 }
                 if (pushes.length > 0) {
                     pieces.push(et.kind === "value"
@@ -60432,7 +60483,7 @@ class Emitter {
                             `tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); ` +
                             `else if (!${av}->length_writable) { ` +
                             `for (size_t _shift_i = 1; _shift_i < ${av}->len; _shift_i++) { ` +
-                            `if (tsc_array_index_present(${av}, _shift_i)) { TSC_ARR(${et.c}, ${av}, _shift_i - 1) = TSC_ARR(${et.c}, ${av}, _shift_i); tsc_array_clear_hole(${av}, _shift_i - 1); } ` +
+                            `if (tsc_array_index_present(${av}, _shift_i)) { tsc_array_store_raw(${av}, _shift_i - 1, &TSC_ARR(${et.c}, ${av}, _shift_i)); tsc_array_clear_hole(${av}, _shift_i - 1); } ` +
                             `else tsc_array_mark_hole(${av}, _shift_i - 1); } ` +
                             `if (${av}->len > 0) tsc_array_mark_hole(${av}, ${av}->len - 1); ` +
                             `tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not update array-like length")); } ` +
@@ -61601,6 +61652,8 @@ class Emitter {
                 `: (tsc_value_is_undefined(${bName}) ? -1.0 : (${cmpExpr}))`;
         }
         specs.push(...this.ignoredArgumentSpecs(call.arguments, consumed));
+        const sortStore = (arrayName: string, index: string, value: string): string =>
+            `tsc_array_store_raw(${arrayName}, ${index}, &${value})`;
         const sortLoop = (arrayName: string): string =>
             `for (size_t ${iv} = 1; ${iv} < ${arrayName}->len; ${iv}++) { ` +
                 `${et.c} ${kv} = TSC_ARR(${et.c}, ${arrayName}, ${iv}); ` +
@@ -61610,9 +61663,9 @@ class Emitter {
                 `${et.c} ${bName} = ${kv}; ` +
                 `double _cmp = ${cmpExpr}; ` +
                 `if (_cmp <= 0) break; ` +
-                `TSC_ARR(${et.c}, ${arrayName}, ${jv}) = TSC_ARR(${et.c}, ${arrayName}, ${jv} - 1); ` +
+                `${sortStore(arrayName, jv, `TSC_ARR(${et.c}, ${arrayName}, ${jv} - 1)`)}; ` +
                 `${jv}--; } ` +
-                `TSC_ARR(${et.c}, ${arrayName}, ${jv}) = ${kv}; }`;
+                `${sortStore(arrayName, jv, kv)}; }`;
         let sortBody = sortLoop(av);
         if (et.c === T_VALUE.c) {
             const compact = this.freshTemp("_sort_compact");
@@ -61646,7 +61699,7 @@ class Emitter {
                 `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
                 `if (!tsc_array_index_present(${av}, ${sourceIndex}) && !${av}->extensible) ` +
                 `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element")); ` +
-                `TSC_ARR(${et.c}, ${av}, ${sourceIndex}) = TSC_ARR(${et.c}, ${compact}, ${sourceIndex}); ` +
+                `${sortStore(av, sourceIndex, `TSC_ARR(${et.c}, ${compact}, ${sourceIndex})`)}; ` +
                 `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
                 `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
                 `if (tsc_array_index_present(${av}, ${sourceIndex}) && (${av}->sealed || ${av}->frozen)) ` +
@@ -62567,7 +62620,9 @@ class Emitter {
             return this.emitSequencedExpr(T_STRING, [{ value: first }, ...ignored], () => this.stringLit(text));
         }
         return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], ([value]) =>
-            this.coerceToString({ c: value, ty: r.ty }, arg),
+            r.ty.kind === "value"
+                ? `tsc_value_to_explicit_string(${value})`
+                : this.coerceToString({ c: value, ty: r.ty }, arg),
         );
     }
 
@@ -69609,7 +69664,7 @@ class Emitter {
                             `${elem.c} ${elemTmp} = ${coerced}; ` +
                             `if (${targetC}->frozen) { ${assignFailure}; ` +
                             `} else if (${idx} < ${targetC}->len) { ` +
-                                `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                                `tsc_array_store_raw(${targetC}, ${idx}, &${elemTmp}); ` +
                             `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
                                 `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                             `} else { ${assignFailure}; } ` +
@@ -69636,7 +69691,7 @@ class Emitter {
                                 `tsc_str_t* _ta_assign_idx_key = tsc_str_from_int((int64_t)${targetIdx}); ` +
                                 `if (tsc_str_eq(${key}, _ta_assign_idx_key)) { ` +
                                     `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                    `if (${targetC}->frozen) { ${assignFailure}; } else { TSC_ARR(${elem.c}, ${targetC}, ${targetIdx}) = ${elemTmp}; } ` +
+                                    `if (${targetC}->frozen) { ${assignFailure}; } else { tsc_array_store_raw(${targetC}, ${targetIdx}, &${elemTmp}); } ` +
                                     `_ta_assign_done = true; ` +
                                     `break; ` +
                                 `} ` +
@@ -69675,7 +69730,7 @@ class Emitter {
                             `{ ${elem.c} ${elemTmp} = ${coerced}; ` +
                                 `if (${targetC}->frozen && ${numericKey} <= ${targetC}->len) { ${assignFailure}; ` +
                                 `} else if (${numericKey} < ${targetC}->len) { ` +
-                                    `TSC_ARR(${elem.c}, ${targetC}, ${numericKey}) = ${elemTmp}; ` +
+                                    `tsc_array_store_raw(${targetC}, ${numericKey}, &${elemTmp}); ` +
                                 `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${numericKey} == ${targetC}->len) { ` +
                                     `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                                 `} else if (${numericKey} == ${targetC}->len) { ` +
@@ -69710,7 +69765,7 @@ class Emitter {
                         `${elem.c} ${elemTmp} = ${coerced}; ` +
                         `if (${targetC}->frozen) { ${assignFailure}; ` +
                         `} else if (${idx} < ${targetC}->len) { ` +
-                            `TSC_ARR(${elem.c}, ${targetC}, ${idx}) = ${elemTmp}; ` +
+                            `tsc_array_store_raw(${targetC}, ${idx}, &${elemTmp}); ` +
                         `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
                             `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
                         `} else { ${assignFailure}; } ` +
@@ -70602,7 +70657,7 @@ class Emitter {
                             `if (${desc.hasValue}) { ` +
                                 `if (${arrC}->frozen) { ${out} = tsc_value_object_is(${boxedElemValue}, ${currentElemValue}); } else { ` +
                                     `${elem.c} ${elemTmp} = ${elemValue}; ` +
-                                    `TSC_ARR(${elem.c}, ${arrC}, ${idx}) = ${elemTmp}; ` +
+                                    `tsc_array_store_raw(${arrC}, ${idx}, &${elemTmp}); ` +
                                 `} ` +
                             `} ` +
                         `} ` +
@@ -70758,7 +70813,7 @@ class Emitter {
                         `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
                         `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
                             `${elem.c} ${elemTmp} = ${valueC}; ` +
-                            `TSC_ARR(${elem.c}, ${arrC}, ${idx}) = ${elemTmp}; ` +
+                            `tsc_array_store_raw(${arrC}, ${idx}, &${elemTmp}); ` +
                             `${out} = true; ` +
                             `break; ` +
                         `} ` +
@@ -74262,7 +74317,7 @@ class Emitter {
             const coerced = this.coerce(r, et, e as ts.Expression);
             const tv = this.freshTemp("_el");
             pieces.push(`${et.c} ${tv} = ${coerced}`);
-            pieces.push(`TSC_ARR(${et.c}, ${av}, ${av}->len) = ${tv}; ${av}->len++`);
+            pieces.push(`tsc_array_push_raw(${av}, &${tv})`);
         }
         pieces.push(av);
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
@@ -74433,8 +74488,8 @@ class Emitter {
         node: ts.Node,
     ): { box: string; unbox: string } | null {
         if (elementType.kind === "value") return null;
-        if (!(["number", "boolean", "string"] as const).includes(
-            elementType.kind as "number" | "boolean" | "string",
+        if (!(["number", "boolean", "string", "bigint", "symbol"] as const).includes(
+            elementType.kind as "number" | "boolean" | "string" | "bigint" | "symbol",
         )) {
             return null;
         }
@@ -74565,6 +74620,10 @@ class Emitter {
                     return `tsc_value_as_bool(${r.c})`;
                 case "string":
                     return `tsc_value_as_string(${r.c})`;
+                case "bigint":
+                    return `tsc_value_as_bigint(${r.c})`;
+                case "symbol":
+                    return `tsc_value_as_symbol(${r.c})`;
                 case "array": {
                     if (target.elem && target.elem.kind !== "value") {
                         const tmpIn = this.freshTemp("_arrIn");
@@ -74620,6 +74679,10 @@ class Emitter {
                     return `tsc_value_bool(${r.c})`;
                 case "string":
                     return `tsc_value_string(${r.c})`;
+                case "bigint":
+                    return `tsc_value_bigint(${r.c})`;
+                case "symbol":
+                    return `tsc_value_symbol(${r.c})`;
                 case "array": {
                     const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
                     if (aliased && r.ty.elem?.kind !== "value") {

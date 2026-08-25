@@ -432,6 +432,22 @@ tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s) {
     return b;
 }
 
+tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* s) {
+    char* raw = cstr_dup(s);
+    char* start = raw;
+    while (isspace((unsigned char)*start)) start++;
+    char* end = start + strlen(start);
+    while (end > start && isspace((unsigned char)end[-1])) end--;
+    *end = '\0';
+    if (*start == '\0') start = "0";
+    tsc_bigint_t* b = bigint_alloc();
+    int base = 10;
+    const char* digits = bigint_digits_for(start, &base);
+    const bool valid = mpz_set_str(b->value, digits, base) == 0;
+    free(raw);
+    return valid ? b : NULL;
+}
+
 tsc_bigint_t* tsc_bigint_from_num(double n) {
     if (isnan(n) || isinf(n) || floor(n) != n) {
         tsc_throw_str(tsc_str_from_cstr("BigInt: number must be a finite integer"));
