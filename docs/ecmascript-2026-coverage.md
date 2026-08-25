@@ -1040,8 +1040,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-forbidden-extensions` — Forbidden Extensions: exact disposition and partitions missing.
 - [ ] **ECMAScript Standard Built-in Objects** (`sec-ecmascript-standard-built-in-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: callability and construction; property descriptors; prototype identity; realm ownership.
-  - Linked local regression evidence: E2E: function_integrity, object_descriptors.
-  - Known blockers: Broad built-in path evidence must be refined to exact clauses before verification.
+  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, function_integrity, object_descriptors.
+  - Known blockers: Broad built-in path evidence must be refined to exact clauses before verification; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
   - [ ] `sec-ecmascript-standard-built-in-objects` — ECMAScript Standard Built-in Objects: exact disposition and partitions missing.
 - [ ] **The Global Object** (`sec-global-object`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: value properties; global functions; constructors; global object semantics.
@@ -1120,8 +1120,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-reflect` — Reflect: exact disposition and partitions missing.
 - [ ] **Fundamental Objects** (`sec-fundamental-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Object; Function; Boolean; Symbol; Error and native errors.
-  - Linked local regression evidence: E2E: object_prototypes, function_prototypes, symbols.
-  - Known blockers: Clause-level descriptor, prototype, and realm behavior remains unverified.
+  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, object_prototypes, function_prototypes, symbols.
+  - Known blockers: Clause-level descriptor, prototype, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
   - [ ] `sec-fundamental-objects` — Fundamental Objects: exact disposition and partitions missing.
   - [ ] `sec-object-objects` — Object Objects: exact disposition and partitions missing.
   - [ ] `sec-object-constructor` — The Object Constructor: exact disposition and partitions missing.

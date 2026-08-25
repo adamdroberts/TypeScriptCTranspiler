@@ -187,8 +187,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["callability and construction", "property descriptors", "prototype identity", "realm ownership"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["function_integrity", "object_descriptors"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
-      "knownGaps": ["Broad built-in path evidence must be refined to exact clauses before verification."]
+      "localEvidence": { "property": ["tests/property/function-bind.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "function_integrity", "object_descriptors"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_value.c#tsc_value_bind_function"] },
+      "knownGaps": ["Broad built-in path evidence must be refined to exact clauses before verification; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open."]
     },
     {
       "id": "global-object",
@@ -207,8 +207,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Object", "Function", "Boolean", "Symbol", "Error and native errors"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["object_prototypes", "function_prototypes", "symbols"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
-      "knownGaps": ["Clause-level descriptor, prototype, and realm behavior remains unverified."]
+      "localEvidence": { "property": ["tests/property/function-bind.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "object_prototypes", "function_prototypes", "symbols"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_object.c", "runtime/tsc_value.c#tsc_value_bind_function"] },
+      "knownGaps": ["Clause-level descriptor, prototype, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open."]
     },
     {
       "id": "numbers-dates",

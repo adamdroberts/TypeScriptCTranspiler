@@ -2,3 +2,15 @@ bad number: TypeError: Reflect.apply argumentsList must be an array or array-lik
 bad string: TypeError: Reflect.apply argumentsList must be an array or array-like object
 bad boolean: TypeError: Reflect.apply argumentsList must be an array or array-like object
 valid: ok:x
+uncurry: a|b|c 2 head|tail
+bound call: bound:first bound:first
+function prototype: function true true call 2 1
+function descriptors: true false true 0 false false true true false false false
+function intrinsic calls: true call:x apply:y false true true
+bound construct: left:right true true true left:alternate true
+bound metadata: bound BoundConstructor 1 false
+deep bind: deep:value
+bad call receiver: TypeError: Function.prototype.call called on non-callable value
+bad apply receiver: TypeError: Function.prototype.apply called on non-callable value
+bad bind receiver: TypeError: Function.prototype.bind called on non-callable value
+shadowed Function: local:shadow

@@ -212,7 +212,7 @@ function permanentLimitDiagnostics(
             } else if (ts.isCallExpression(node)) {
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
-                    if (expr.text === "eval") {
+                    if (expr.text === "eval" && isUnshadowedGlobalBindingIdentifier(expr, checker)) {
                         const source = node.arguments[0] ? runtimeCodeStringText(node.arguments[0]!) : "";
                         const canDispatchRuntimeManifest =
                             source === null &&
@@ -227,7 +227,7 @@ function permanentLimitDiagnostics(
                                 message: UNKNOWN_EVAL_AOT_MESSAGE,
                             });
                         }
-                    } else if (expr.text === "Function") {
+                    } else if (expr.text === "Function" && isUnshadowedGlobalBindingIdentifier(expr, checker)) {
                         const body = functionConstructorBodyText(node);
                         const canDispatchRuntimeManifest =
                             body === null &&
@@ -304,7 +304,8 @@ function permanentLimitDiagnostics(
             } else if (
                 ts.isNewExpression(node) &&
                 ts.isIdentifier(node.expression) &&
-                node.expression.text === "Function"
+                node.expression.text === "Function" &&
+                isUnshadowedGlobalBindingIdentifier(node.expression, checker)
             ) {
                 const body = functionConstructorBodyText(node);
                 const canDispatchRuntimeManifest =
@@ -358,6 +359,22 @@ function isGlobalEvalOrFunctionValueReference(node: ts.Identifier, checker: ts.T
     if (ts.isCallExpression(parent) && parent.expression === node) return false;
     if (ts.isNewExpression(parent) && parent.expression === node) return false;
 
+    // Reading the intrinsic prototype cannot itself compile or execute source
+    // text. The runtime exposes a fail-closed Function constructor through its
+    // `constructor` property, so this exemption cannot bypass the AOT gate.
+    if (
+        node.text === "Function" &&
+        ts.isPropertyAccessExpression(parent) &&
+        parent.expression === node &&
+        parent.name.text === "prototype"
+    ) {
+        return false;
+    }
+
+    return isUnshadowedGlobalBindingIdentifier(node, checker);
+}
+
+function isUnshadowedGlobalBindingIdentifier(node: ts.Identifier, checker: ts.TypeChecker): boolean {
     const sym = checker.getSymbolAtLocation(node);
     if (!sym) return true;
     const source = node.getSourceFile();

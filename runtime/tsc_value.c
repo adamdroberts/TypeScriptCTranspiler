@@ -190,6 +190,94 @@ tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* en
     return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
 }
 
+static tsc_array_t* bound_function_arguments(
+    const tsc_bound_function_env_t* bound,
+    const tsc_array_t* call_args
+) {
+    const size_t bound_length = bound && bound->bound_args ? bound->bound_args->len : 0;
+    const size_t call_length = call_args ? call_args->len : 0;
+    tsc_array_t* arguments = tsc_array_new(
+        sizeof(tsc_value_t),
+        bound_length + call_length ? bound_length + call_length : 1
+    );
+    for (size_t i = 0; i < bound_length; i++) {
+        tsc_array_push_value(arguments, TSC_ARR(tsc_value_t, bound->bound_args, i));
+    }
+    for (size_t i = 0; i < call_length; i++) {
+        tsc_array_push_value(arguments, TSC_ARR(tsc_value_t, call_args, i));
+    }
+    return arguments;
+}
+
+static tsc_value_t bound_function_apply(void* raw_env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)raw_env;
+    return tsc_value_apply_function(
+        bound->target,
+        bound->bound_this,
+        tsc_value_array(bound_function_arguments(bound, args))
+    );
+}
+
+tsc_value_t tsc_value_bind_function(
+    tsc_value_t target,
+    tsc_value_t bound_this,
+    tsc_array_t* bound_args
+) {
+    if (!tsc_value_is_callable(target)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Function.prototype.bind called on non-callable value")
+        );
+    }
+
+    tsc_bound_function_env_t* bound =
+        (tsc_bound_function_env_t*)TSC_GC_MALLOC(sizeof(tsc_bound_function_env_t));
+    bound->target = target;
+    bound->target_keepalive = value_is_box(target) ? value_ptr(target) : NULL;
+    bound->bound_this = bound_this;
+    bound->bound_this_keepalive = value_is_box(bound_this) ? value_ptr(bound_this) : NULL;
+    const size_t bound_length = bound_args ? bound_args->len : 0;
+    bound->bound_args = tsc_array_new(sizeof(tsc_value_t), bound_length ? bound_length : 1);
+    bound->bound_arg_keepalives = bound_length > 0
+        ? (void**)TSC_GC_MALLOC(sizeof(void*) * bound_length)
+        : NULL;
+    for (size_t i = 0; i < bound_length; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, bound_args, i);
+        tsc_array_push_value(bound->bound_args, value);
+        bound->bound_arg_keepalives[i] = value_is_box(value) ? value_ptr(value) : NULL;
+    }
+
+    double length = 0.0;
+    tsc_value_t target_length = tsc_value_get_prop(target, tsc_str_from_lit("length", 6));
+    if (!value_is_box(target_length)) {
+        double numeric_length = tsc_value_as_num(target_length);
+        if (isinf(numeric_length) && numeric_length > 0.0) {
+            length = INFINITY;
+        } else if (isfinite(numeric_length) && numeric_length > 0.0) {
+            length = fmax(trunc(numeric_length) - (double)bound_length, 0.0);
+        }
+    }
+
+    tsc_value_t target_name = tsc_value_get_prop(target, tsc_str_from_lit("name", 4));
+    tsc_str_t* name = value_is_box(target_name) && value_tag(target_name) == TSC_VALUE_TAG_STRING
+        ? (tsc_str_t*)value_ptr(target_name)
+        : tsc_str_from_lit("", 0);
+    name = tsc_str_concat(tsc_str_from_lit("bound ", 6), name);
+
+    tsc_value_t result = tsc_value_function_named_kind(
+        bound_function_apply,
+        NULL,
+        bound,
+        length,
+        name,
+        TSC_FUNCTION_IDENTITY_BOUND
+    );
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
+    identity->prototype = tsc_value_get_prototype_of(target);
+    return result;
+}
+
 typedef struct {
     tsc_error_kind_t kind;
     const char* name;
@@ -623,6 +711,10 @@ bool tsc_value_is_constructable(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
+        if (ident && ident->kind == TSC_FUNCTION_IDENTITY_BOUND) {
+            tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)ident->env;
+            return bound && tsc_value_is_constructable(bound->target);
+        }
         return ident && (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL);
     }
     if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
@@ -632,14 +724,21 @@ bool tsc_value_is_constructable(tsc_value_t v) {
 
 bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor) {
     if (!tsc_value_is_callable(constructor)) {
-        tsc_throw_str(tsc_str_from_cstr("instanceof right operand is not callable"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("instanceof right operand is not callable"));
+    }
+    if (value_is_box(constructor) && value_tag(constructor) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+        if (identity && identity->kind == TSC_FUNCTION_IDENTITY_BOUND) {
+            tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)identity->env;
+            return bound && tsc_value_instanceof(object, bound->target);
+        }
     }
     tsc_value_t prototype = tsc_value_get_prop(
         constructor,
         tsc_str_from_lit("prototype", 9)
     );
     if (!value_is_valid_prototype(prototype) || value_is_null_value(prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("instanceof constructor has non-object prototype"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("instanceof constructor has non-object prototype"));
     }
     return tsc_value_is_prototype_of(prototype, object);
 }
@@ -705,7 +804,8 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (
         ident->kind == TSC_FUNCTION_IDENTITY_GENERIC ||
         ident->kind == TSC_FUNCTION_IDENTITY_CLOSURE ||
-        ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN
+        ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN ||
+        ident->kind == TSC_FUNCTION_IDENTITY_BOUND
     ) {
         return ident->code.generic(ident->env, this_arg, list);
     }
@@ -732,6 +832,27 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
+        if (ident->kind == TSC_FUNCTION_IDENTITY_BOUND) {
+            tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)ident->env;
+            if (!bound || !tsc_value_is_constructable(bound->target)) {
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("bound function target is not a constructor"));
+            }
+            if (!tsc_value_is_constructable(new_target)) {
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
+            }
+            tsc_array_t* list = value_to_argument_list(
+                args,
+                "Reflect.construct argumentsList must be an array or array-like object"
+            );
+            const tsc_value_t effective_new_target = new_target == target
+                ? bound->target
+                : new_target;
+            return tsc_value_construct_with_new_target(
+                bound->target,
+                tsc_value_array(bound_function_arguments(bound, list)),
+                effective_new_target
+            );
+        }
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL) {
             if (!tsc_value_is_constructable(new_target)) {
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));

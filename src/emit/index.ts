@@ -44848,7 +44848,7 @@ class Emitter {
                 return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
-                return { c: "tsc_value_function_generic(tsc_builtin_function, NULL)", ty: T_VALUE };
+                return { c: "tsc_function_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "String")) {
                 return { c: "tsc_string_constructor_value()", ty: T_VALUE };
@@ -47684,10 +47684,10 @@ class Emitter {
                 `tsc_test262_print_n(${values.length}${values.length > 0 ? `, ${values.join(", ")}` : ""})`
             );
         }
-        if (name === "eval") {
+        if (name === "eval" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitUnsafeEvalCall(call);
         }
-        if (name === "Function") {
+        if (name === "Function" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitUnsafeFunctionConstructor(call);
         }
         if (name === "structuredClone") {
@@ -68074,9 +68074,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: T_VALUE, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_object_get_prototype_of(${mapped.kind === "array" ? o! : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_object_get_prototype_of(${o})`);
         }
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
@@ -71382,6 +71382,9 @@ class Emitter {
         if (primitiveConstructor) {
             return this.emitDynamicValueConstruct(n, { c: primitiveConstructor, ty: T_VALUE });
         }
+        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
+            return this.emitUnsafeFunctionConstructor(n);
+        }
         if (this.functionValueIsConstructable(ctorExpr)) {
             const functionValue = this.emitExpr(n.expression);
             if (functionValue.ty.kind === "function" || functionValue.ty.kind === "value") {
@@ -71394,9 +71397,6 @@ class Emitter {
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
         const cls = targetClassDecl?.name?.text ?? targetClassExpression?.name?.text ?? this.identifierName(ctorExpr);
-        if (cls === "Function") {
-            return this.emitUnsafeFunctionConstructor(n);
-        }
         if (cls === "TextEncoder") {
             const args = n.arguments ?? [];
             return this.emitSequencedExpr(

@@ -15,18 +15,200 @@ void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, t
     tsc_object_define(entry->props, tsc_str_from_lit("name", 4), tsc_value_string(name), false, false, true);
 }
 
-tsc_value_t tsc_function_default_prototype(void) {
-    static bool initialized = false;
-    static tsc_value_t prototype;
-    if (!initialized) {
-        tsc_runtime_lock();
-        if (!initialized) {
-            prototype = tsc_value_object(tsc_object_new());
-            initialized = true;
-        }
-        tsc_runtime_unlock();
+static tsc_function_identity_t* function_prototype_identity = NULL;
+static tsc_function_identity_t* function_constructor_identity = NULL;
+static int function_intrinsics_state = 0;
+
+static tsc_value_t function_prototype_call_body(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    return tsc_value_undefined();
+}
+
+static tsc_value_t function_constructor_body(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+#ifdef TSC_UNSAFE_EVAL
+    return tsc_builtin_function(NULL, tsc_value_undefined(), args);
+#else
+    (void)args;
+    tsc_throw_error(
+        TSC_ERROR_EVAL,
+        tsc_str_from_cstr("Function constructor source is unavailable in ahead-of-time execution")
+    );
+    return tsc_value_undefined();
+#endif
+}
+
+static tsc_array_t* function_argument_tail(tsc_array_t* args, size_t start) {
+    const size_t length = args && args->len > start ? args->len - start : 0;
+    tsc_array_t* tail = tsc_array_new(sizeof(tsc_value_t), length ? length : 1);
+    for (size_t i = 0; i < length; i++) {
+        tsc_array_push_value(tail, TSC_ARR(tsc_value_t, args, start + i));
     }
-    return prototype;
+    return tail;
+}
+
+static void function_prototype_require_callable(tsc_value_t value, const char* method) {
+    if (tsc_value_is_callable(value)) return;
+    tsc_str_t* prefix = tsc_str_from_lit("Function.prototype.", 19);
+    tsc_str_t* name = tsc_str_from_cstr(method);
+    tsc_throw_error(
+        TSC_ERROR_TYPE,
+        tsc_str_concat(tsc_str_concat(prefix, name), tsc_str_from_lit(" called on non-callable value", 29))
+    );
+}
+
+static tsc_value_t function_prototype_call(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    function_prototype_require_callable(this_arg, "call");
+    tsc_value_t receiver = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return tsc_value_apply_function(
+        this_arg,
+        receiver,
+        tsc_value_array(function_argument_tail(args, 1))
+    );
+}
+
+static tsc_value_t function_prototype_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    function_prototype_require_callable(this_arg, "apply");
+    tsc_value_t receiver = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_value_t argument_list = args && args->len > 1
+        ? TSC_ARR(tsc_value_t, args, 1)
+        : tsc_value_undefined();
+    if (tsc_value_is_nullish(argument_list)) {
+        argument_list = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+    }
+    return tsc_value_apply_function(this_arg, receiver, argument_list);
+}
+
+static tsc_value_t function_prototype_bind(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    function_prototype_require_callable(this_arg, "bind");
+    tsc_value_t receiver = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return tsc_value_bind_function(this_arg, receiver, function_argument_tail(args, 1));
+}
+
+static tsc_value_t function_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    function_prototype_require_callable(this_arg, "toString");
+    tsc_value_t name_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("name", 4));
+    tsc_str_t* name = value_is_box(name_value) && value_tag(name_value) == TSC_VALUE_TAG_STRING
+        ? tsc_value_as_string(name_value)
+        : tsc_str_from_lit("", 0);
+    tsc_str_t* source = tsc_str_concat(tsc_str_from_lit("function ", 9), name);
+    source = tsc_str_concat(source, tsc_str_from_lit("() { [native code] }", 20));
+    return tsc_value_string(source);
+}
+
+static void function_prototype_define_method(
+    tsc_function_identity_t* prototype,
+    const char* name,
+    size_t name_len,
+    double length,
+    tsc_generic_function_t body
+) {
+    tsc_object_define(
+        prototype->props,
+        tsc_str_from_lit(name, name_len),
+        tsc_value_function_builtin_named(body, NULL, length, tsc_str_from_lit(name, name_len)),
+        true,
+        false,
+        true
+    );
+}
+
+static void ensure_function_intrinsics(void) {
+    if (function_intrinsics_state == 2) return;
+    tsc_runtime_lock();
+    if (function_intrinsics_state == 0) {
+        function_intrinsics_state = 1;
+
+        function_prototype_identity = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+        function_constructor_identity = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+        memset(function_prototype_identity, 0, sizeof(*function_prototype_identity));
+        memset(function_constructor_identity, 0, sizeof(*function_constructor_identity));
+
+        function_prototype_identity->kind = TSC_FUNCTION_IDENTITY_BUILTIN;
+        function_prototype_identity->extensible = true;
+        function_prototype_identity->func_prototype_writable = true;
+        function_prototype_identity->prototype = tsc_value_null();
+        function_prototype_identity->func_prototype = tsc_value_undefined();
+        function_prototype_identity->code.generic = function_prototype_call_body;
+
+        function_constructor_identity->kind = TSC_FUNCTION_IDENTITY_BUILTIN;
+        function_constructor_identity->extensible = true;
+        function_constructor_identity->func_prototype_writable = false;
+        function_constructor_identity->prototype = value_box(
+            TSC_VALUE_TAG_FUNCTION,
+            (uintptr_t)function_prototype_identity
+        );
+        function_constructor_identity->func_prototype = function_constructor_identity->prototype;
+        function_constructor_identity->code.generic = function_constructor_body;
+        function_constructor_identity->construct = function_constructor_body;
+
+        function_prototype_identity->next = g_function_identities;
+        g_function_identities = function_prototype_identity;
+        function_constructor_identity->next = g_function_identities;
+        g_function_identities = function_constructor_identity;
+
+        tsc_function_init_metadata(
+            function_prototype_identity,
+            0.0,
+            tsc_str_from_lit("", 0)
+        );
+        tsc_function_init_metadata(
+            function_constructor_identity,
+            1.0,
+            tsc_str_from_lit("Function", 8)
+        );
+
+        function_prototype_identity->prototype = tsc_value_object_prototype();
+        const tsc_value_t prototype = value_box(
+            TSC_VALUE_TAG_FUNCTION,
+            (uintptr_t)function_prototype_identity
+        );
+        const tsc_value_t constructor = value_box(
+            TSC_VALUE_TAG_FUNCTION,
+            (uintptr_t)function_constructor_identity
+        );
+        tsc_object_define(
+            function_prototype_identity->props,
+            tsc_str_from_lit("constructor", 11),
+            constructor,
+            true,
+            false,
+            true
+        );
+        function_prototype_define_method(function_prototype_identity, "apply", 5, 2.0, function_prototype_apply);
+        function_prototype_define_method(function_prototype_identity, "bind", 4, 1.0, function_prototype_bind);
+        function_prototype_define_method(function_prototype_identity, "call", 4, 1.0, function_prototype_call);
+        function_prototype_define_method(function_prototype_identity, "toString", 8, 0.0, function_prototype_to_string);
+
+        function_constructor_identity->prototype = prototype;
+        function_constructor_identity->func_prototype = prototype;
+        function_intrinsics_state = 2;
+    }
+    tsc_runtime_unlock();
+}
+
+tsc_value_t tsc_function_default_prototype(void) {
+    ensure_function_intrinsics();
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)function_prototype_identity);
+}
+
+tsc_value_t tsc_function_constructor_value(void) {
+    ensure_function_intrinsics();
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)function_constructor_identity);
 }
 
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity) {

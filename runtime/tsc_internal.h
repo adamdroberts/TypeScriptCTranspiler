@@ -92,7 +92,17 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_GENERIC,
     TSC_FUNCTION_IDENTITY_CLOSURE,
     TSC_FUNCTION_IDENTITY_BUILTIN,
+    TSC_FUNCTION_IDENTITY_BOUND,
 } tsc_function_identity_kind_t;
+
+typedef struct {
+    tsc_value_t target;
+    void* target_keepalive;
+    tsc_value_t bound_this;
+    void* bound_this_keepalive;
+    tsc_array_t* bound_args;
+    void** bound_arg_keepalives;
+} tsc_bound_function_env_t;
 
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
@@ -434,6 +444,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 
 // --- Function Declarations ---
 tsc_value_t tsc_function_default_prototype(void);
+tsc_value_t tsc_value_bind_function(tsc_value_t target, tsc_value_t bound_this, tsc_array_t* bound_args);
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);

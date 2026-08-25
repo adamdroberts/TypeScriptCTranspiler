@@ -199,7 +199,24 @@ interface BigIntConstructor {
     (value: string | number | boolean, ...ignored: any[]): bigint;
 }
 declare var BigInt: BigIntConstructor;
-interface IArguments {}
+interface IArguments {
+    readonly length: number;
+    readonly callee: Function;
+    [index: number]: any;
+}
+
+interface PropertyDescriptor {
+    configurable?: boolean;
+    enumerable?: boolean;
+    value?: any;
+    writable?: boolean;
+    get?(): any;
+    set?(value: any): void;
+}
+
+interface PropertyDescriptorMap {
+    [key: PropertyKey]: PropertyDescriptor;
+}
 
 interface Array<T> extends Iterable<T> {
     readonly length: number;
@@ -578,12 +595,19 @@ interface DataViewConstructor {
 declare var DataView: DataViewConstructor;
 interface Function {
     (...args: any[]): any;
+    readonly length: number;
+    readonly name: string;
+    readonly prototype: any;
+    readonly constructor: Function;
     call(thisArg: any, ...args: any[]): any;
     apply(thisArg: any, args?: any[] | ArrayLike<any> | null, ...ignored: any[]): any;
+    bind(thisArg: any, ...args: any[]): any;
+    toString(): string;
 }
 interface FunctionConstructor {
     new (...args: string[]): Function;
     (...args: string[]): Function;
+    readonly prototype: Function;
 }
 declare var Function: FunctionConstructor;
 interface CallableFunction extends Function {}
