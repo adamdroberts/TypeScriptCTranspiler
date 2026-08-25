@@ -475,7 +475,7 @@ interface ModuleLexicalBindingPlan {
 }
 
 interface ModuleDefaultExportBindingPlan {
-    readonly declaration: ts.ExportAssignment;
+    readonly declaration: ts.ExportAssignment | ts.ClassDeclaration;
     readonly cName: string;
     readonly initialized: string;
     readonly gcRoot: string;
@@ -580,8 +580,12 @@ class Emitter {
     private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
     /** `export default <expression>` owns an uninitialized `*default*`
      * binding until evaluation reaches the ExportAssignment. */
-    private moduleDefaultExportBindings = new WeakMap<ts.ExportAssignment, ModuleDefaultExportBindingPlan>();
+    private moduleDefaultExportBindings = new WeakMap<ts.ExportAssignment | ts.ClassDeclaration, ModuleDefaultExportBindingPlan>();
     private moduleDefaultExportBindingBySource = new WeakMap<ts.SourceFile, ModuleDefaultExportBindingPlan | null>();
+    /** Anonymous `export default class {}` declarations receive one private C
+     * identity before the ordinary class passes run. The synthetic spelling
+     * never becomes the observable function name. */
+    private anonymousDefaultClassDeclarations = new WeakSet<ts.ClassDeclaration>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -15010,8 +15014,44 @@ class Emitter {
         return !this.isPrunableLocalVariable(decl) || this.referencedVariables.has(decl);
     }
 
+    private prepareAnonymousDefaultClasses(emitOrder: readonly string[]): void {
+        const reserved = new Set<string>();
+        for (const modId of emitOrder) {
+            const sf = this.graph.modules.get(modId)?.sf;
+            if (!sf) continue;
+            for (const statement of sf.statements) {
+                if (ts.isClassDeclaration(statement) && statement.name) {
+                    reserved.add(statement.name.text);
+                }
+            }
+        }
+        for (const modId of emitOrder) {
+            const sf = this.graph.modules.get(modId)?.sf;
+            if (!sf || !this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) continue;
+            for (const declaration of sf.statements) {
+                if (
+                    !ts.isClassDeclaration(declaration) ||
+                    declaration.name ||
+                    !this.isDefaultExportDeclaration(declaration)
+                ) {
+                    continue;
+                }
+                let cName: string;
+                do {
+                    cName = this.freshTemp(`_${modId}_default_class`);
+                } while (reserved.has(cName));
+                reserved.add(cName);
+                const name = ts.factory.createIdentifier(cName);
+                (name as ts.Identifier & { parent: ts.Node }).parent = declaration;
+                (declaration as ts.ClassDeclaration & { name: ts.Identifier }).name = name;
+                this.anonymousDefaultClassDeclarations.add(declaration);
+            }
+        }
+    }
+
     run(): EmittedProgram {
         const emitOrder = this.graph.emitOrder ?? this.graph.topoOrder;
+        this.prepareAnonymousDefaultClasses(emitOrder);
         // Binding identities must exist before any importer is emitted. Source
         // file order is not dependency order, so derive every module plan in
         // one program-wide preparation pass.
@@ -15684,7 +15724,20 @@ class Emitter {
         }
     }
 
-    private jsDefaultExportAssignmentForImport(id: ts.Identifier): ts.ExportAssignment | null {
+    private jsDefaultExportDeclarationForImport(
+        id: ts.Identifier,
+    ): ts.ExportAssignment | ts.ClassDeclaration | null {
+        const target = this.importAliasTargetDeclaration(id);
+        if (
+            target &&
+            this.isJavaScriptSourceFile(target.getSourceFile()) &&
+            (
+                (ts.isExportAssignment(target) && !target.isExportEquals) ||
+                (ts.isClassDeclaration(target) && this.isDefaultExportDeclaration(target))
+            )
+        ) {
+            return target;
+        }
         const raw = this.checker.getSymbolAtLocation(id);
         const importClause = (raw?.declarations ?? []).find((decl): decl is ts.ImportClause =>
             ts.isImportClause(decl) && decl.name?.text === id.text,
@@ -15695,7 +15748,10 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
-        return sf.statements.find(ts.isExportAssignment) ?? null;
+        return sf.statements.find((statement): statement is ts.ExportAssignment | ts.ClassDeclaration =>
+            ts.isExportAssignment(statement) ||
+            (ts.isClassDeclaration(statement) && this.isDefaultExportDeclaration(statement)),
+        ) ?? null;
     }
 
     private commonJsDefaultReExportInfoForImport(id: ts.Identifier): { specifier: string; containingFile: string } | null {
@@ -15736,6 +15792,9 @@ class Emitter {
     private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.Node | null {
         const target = this.importAliasTargetDeclaration(id);
         if (target && this.isDefaultExportDeclaration(target)) {
+            if (ts.isClassDeclaration(target) && this.isJavaScriptSourceFile(target.getSourceFile())) {
+                return null;
+            }
             return target;
         }
         if (
@@ -23477,7 +23536,9 @@ class Emitter {
                 // Class declarations create mutable lexical bindings. Their
                 // values remain uninitialized until ClassDefinitionEvaluation
                 // completes, including static elements and decorators.
-                if (statement.name) addPlan(statement, statement.name, false);
+                if (statement.name && !this.anonymousDefaultClassDeclarations.has(statement)) {
+                    addPlan(statement, statement.name, false);
+                }
                 continue;
             }
             if (!ts.isVariableStatement(statement)) continue;
@@ -23541,7 +23602,8 @@ class Emitter {
         buf: CBuf,
         declaration: ts.ClassDeclaration,
     ): boolean {
-        const binding = this.moduleLexicalBindingForDeclaration(declaration);
+        const binding = this.moduleLexicalBindingForDeclaration(declaration) ??
+            this.moduleDefaultExportBindings.get(declaration);
         if (!binding) return false;
         const value = this.classHasDecorators(declaration)
             ? this.classDecoratorValue(declaration)
@@ -23562,8 +23624,9 @@ class Emitter {
             this.moduleDefaultExportBindingBySource.set(sf, null);
             return null;
         }
-        const declaration = sf.statements.find((statement): statement is ts.ExportAssignment =>
-            ts.isExportAssignment(statement) && !statement.isExportEquals,
+        const declaration = sf.statements.find((statement): statement is ts.ExportAssignment | ts.ClassDeclaration =>
+            (ts.isExportAssignment(statement) && !statement.isExportEquals) ||
+            (ts.isClassDeclaration(statement) && this.anonymousDefaultClassDeclarations.has(statement)),
         );
         if (!declaration) {
             this.moduleDefaultExportBindingBySource.set(sf, null);
@@ -26103,8 +26166,14 @@ class Emitter {
     private classDecoratorValue(cd: ts.ClassDeclaration): EmitResult {
         const replacement = this.classDecoratorReplacementName(cd);
         const adapter = this.ensureClassDecoratorAdapter(cd);
+        const length = cd.members.find(ts.isConstructorDeclaration)?.parameters.length ?? 0;
+        const runtimeName = this.classRuntimeName(cd);
         return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            c: `({ tsc_value_t _decorator_current = ${replacement}; ` +
+                `tsc_value_is_undefined(_decorator_current) ? ` +
+                `tsc_value_function_class_named(${adapter}, NULL, ${length}.0, ` +
+                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})) : ` +
+                `_decorator_current; })`,
             ty: T_VALUE,
         };
     }
@@ -26442,6 +26511,7 @@ class Emitter {
     private classConstructorValue(cd: ts.ClassDeclaration): EmitResult {
         if (!cd.name) unsupported(cd, "class constructor value requires a named class");
         const className = cd.name.text;
+        const runtimeName = this.classRuntimeName(cd);
         const ctor = cd.members.find(ts.isConstructorDeclaration);
         const params = ctor?.parameters ?? [];
         const paramTypes = params.map((param) => this.prepareType(mapTsType(
@@ -26471,10 +26541,53 @@ class Emitter {
             buf.line();
             this.closureDefs.write(buf.toString());
         }
+        const constructor =
+            `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, ` +
+            `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`;
+        const staticDefinitions: string[] = [];
+        for (const member of cd.members) {
+            if (!isStatic(member)) continue;
+            const propertyName = member.name ? this.staticPropertyName(member.name) : null;
+            if (propertyName == null) continue;
+            const key = `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)})`;
+            if (ts.isMethodDeclaration(member)) {
+                const methodAdapter = this.ensureClassStaticMethodDecoratorAdapter(cd, member);
+                const methodLength = member.parameters.length;
+                const methodValue = this.classMemberHasDecorators(member)
+                    ? this.classStaticMethodDecoratorValue(cd, member).c
+                    : `tsc_value_function_closure_named(${methodAdapter}, NULL, ${methodLength}.0, ` +
+                        `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}))`;
+                staticDefinitions.push(
+                    `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${methodValue}, ` +
+                    `true, true, true, false, true, true, true)) ` +
+                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static method definition failed"))`,
+                );
+                continue;
+            }
+            if (ts.isPropertyDeclaration(member)) {
+                const fieldType = this.prepareType(mapType(member, this.checker));
+                const fieldName = `${className}_${mangleIdent(propertyName)}`;
+                const fieldValue = this.coerce({ c: fieldName, ty: fieldType }, T_VALUE, member);
+                staticDefinitions.push(
+                    `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${fieldValue}, ` +
+                    `true, true, true, true, true, true, true)) ` +
+                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"))`,
+                );
+            }
+        }
         return {
-            c: `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, tsc_str_from_lit("${escapeCString(className)}", ${utf8ByteLen(className)}))`,
+            c: staticDefinitions.length === 0
+                ? constructor
+                : `({ tsc_value_t _class_constructor = ${constructor}; ` +
+                    `${staticDefinitions.join("; ")}; _class_constructor; })`,
             ty: T_VALUE,
         };
+    }
+
+    private classRuntimeName(cd: ts.ClassDeclaration): string {
+        if (this.anonymousDefaultClassDeclarations.has(cd)) return "default";
+        if (!cd.name) unsupported(cd, "class runtime name requires a named class");
+        return cd.name.text;
     }
 
     private classStaticGetterDecoratorValue(
@@ -46114,8 +46227,21 @@ class Emitter {
                 if (!cName) unsupported(expr, "unsupported CommonJS named import");
                 return { c: cName, ty: this.commonJsExportedCType(commonJsNamedImport.decl) };
             }
-            const jsDefaultExport = this.jsDefaultExportAssignmentForImport(expr);
+            const jsDefaultExport = this.jsDefaultExportDeclarationForImport(expr);
             if (jsDefaultExport) {
+                if (ts.isClassDeclaration(jsDefaultExport)) {
+                    const lexicalBinding = this.moduleLexicalBindingForDeclaration(jsDefaultExport);
+                    const defaultBinding = this.moduleDefaultExportBindings.get(jsDefaultExport);
+                    if (!lexicalBinding && !defaultBinding) {
+                        unsupported(expr, "JavaScript default class binding plan is unavailable");
+                    }
+                    return {
+                        c: lexicalBinding
+                            ? this.moduleLexicalRead(lexicalBinding)
+                            : this.moduleDefaultExportRead(defaultBinding!),
+                        ty: T_VALUE,
+                    };
+                }
                 const moduleBinding = this.moduleDefaultExportBindings.get(jsDefaultExport);
                 return {
                     c: moduleBinding
