@@ -63,6 +63,9 @@ function source(): string {
         "var objectB = /b/;",
         "var functionA = function () {};",
         "var functionB = function () {};",
+        "var abruptObject = { marker: 'right' };",
+        "var abruptState = { trace: '' };",
+        "function throwStrictValue(value) { throw value; }",
     ];
     for (const left of values) {
         for (const right of values) {
@@ -74,6 +77,14 @@ function source(): string {
             );
         }
     }
+    lines.push(
+        "abruptState.trace = '';",
+        "try { (abruptState.trace += 'L', throwStrictValue('left')) === (abruptState.trace += 'R', 0); } " +
+            "catch (error) { console.log(String(error !== 'other' && error === 'left') + ':' + abruptState.trace); }",
+        "abruptState.trace = '';",
+        "try { (abruptState.trace += 'L', 0) !== (abruptState.trace += 'R', throwStrictValue(abruptObject)); } " +
+            "catch (error) { console.log(String(error === abruptObject) + ':' + abruptState.trace); }",
+    );
     lines.push("})();");
     return lines.join("\n");
 }
@@ -86,6 +97,7 @@ function expectedOutput(): string[] {
             output.push(`${equal}:LR`, `${!equal}:LR`);
         }
     }
+    output.push("true:L", "true:LR");
     return output;
 }
 

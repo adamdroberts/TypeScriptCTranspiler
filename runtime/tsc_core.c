@@ -1891,6 +1891,7 @@ void tsc_try_push(tsc_try_frame_t* f) {
     f->prev = g_try_top;
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
+    f->roots = (tsc_try_roots_t*)TSC_GC_MALLOC(sizeof(tsc_try_roots_t));
     g_try_top = f;
 }
 
@@ -1904,6 +1905,8 @@ _Noreturn void tsc_throw_str(tsc_str_t* message) {
     g_current_error_value_set = true;
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
+        f->roots->value = tsc_value_gc_root(g_current_error_value);
+        f->roots->message = g_current_error;
         /* The setjmp landing path owns the matching tsc_try_pop().  Leaving
          * the frame installed until control lands keeps push/pop balanced;
          * popping here as well makes the handler discard its caller's frame
@@ -1925,6 +1928,8 @@ _Noreturn void tsc_throw_value(tsc_value_t value) {
     if (!g_current_error) g_current_error = tsc_str_from_lit("(unknown error)", 15);
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
+        f->roots->value = tsc_value_gc_root(g_current_error_value);
+        f->roots->message = g_current_error;
         /* The setjmp landing path owns the matching tsc_try_pop(). */
         g_call_activation_top = f->activation_top;
         tsc_value_callee_restore(f->callee_top);

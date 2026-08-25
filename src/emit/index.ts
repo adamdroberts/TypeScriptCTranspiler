@@ -988,6 +988,7 @@ class Emitter {
         info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
     ): boolean {
         const decl = ts.isVariableDeclaration(info.name.parent) ? info.name.parent : null;
+        if (decl && this.isTest262ScriptGlobalVarDeclaration(decl)) return true;
         return !decl ||
             !this.isPrunableTopLevelLiftedArrow(decl) ||
             this.referencedTopLevelLiftedArrows.has(decl);
@@ -15431,7 +15432,10 @@ class Emitter {
                     this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
                     continue;
                 }
-                if (this.getLiftableArrow(inner)) continue; // lifted to static fn
+                // Module-scope lifted functions can be referenced directly by
+                // their C identity.  Script `var` initializers are observable
+                // object-environment writes and must still install that value.
+                if (this.getLiftableArrow(inner) && !this.isTest262ScriptSourceFile(sf)) continue;
                 if (ts.isVariableStatement(inner)) {
                     this.emitTopLevelVarStmt(initBuf, inner);
                     continue;

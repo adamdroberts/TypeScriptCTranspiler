@@ -1531,11 +1531,20 @@ tsc_str_t* tsc_path_win32_relative(const tsc_str_t* from, const tsc_str_t* to);
 bool tsc_path_win32_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern);
 
 /* ------------- exceptions ------------- */
+typedef struct tsc_try_roots {
+    void* value;
+    tsc_str_t* message;
+} tsc_try_roots_t;
+
 typedef struct tsc_try_frame {
     jmp_buf jb;
     struct tsc_try_frame* prev;
     tsc_call_activation_t* activation_top;
     void* callee_top;
+    /* NaN-boxed pointer payloads and TLS slots are invisible to conservative
+     * GC.  This cell is allocated before setjmp, so longjmp cannot make its
+     * subsequently updated contents indeterminate with the frame's locals. */
+    tsc_try_roots_t* roots;
 } tsc_try_frame_t;
 
 void tsc_try_push(tsc_try_frame_t* f);
