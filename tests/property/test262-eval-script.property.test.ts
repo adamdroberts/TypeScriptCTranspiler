@@ -59,6 +59,11 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const functionCollisionSource = "function blockedFunction() {}";
     const existingVarSource = "var existingConfigurable; var existingRestricted;";
     const nonExtensibleSource = "var impossibleGlobal; var impossibleSideEffect;";
+    const nonExtensibleLexicalSource = `
+        let afterPreventLet = 21;
+        const afterPreventConst = 22;
+        class AfterPreventClass {}
+    `;
     const completionEmptySource = "var completionOnlyDeclaration;";
     const completionIdentitySource = "sentinel; var completionTrailingDeclaration;";
     const completionBranchSource = "if (true) { 11; } else { 12; } ;";
@@ -113,6 +118,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["function-collision.js", functionCollisionSource],
         ["existing-var.js", existingVarSource],
         ["non-extensible.js", nonExtensibleSource],
+        ["non-extensible-lexical.js", nonExtensibleLexicalSource],
         ["completion-empty.js", completionEmptySource],
         ["completion-identity.js", completionIdentitySource],
         ["completion-branch.js", completionBranchSource],
@@ -226,6 +232,9 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             if (!immutableThrow || evalConstant !== sharedConstant) {
                 throw new Error("immutable global lexical assignment differed");
             }
+            if (delete evalLexical || evalLexical !== 11) {
+                throw new Error("global lexical deletion differed");
+            }
 
             $262.evalScript(${JSON.stringify(shadowSource)});
             if (shadowable !== "lexical" || globalThis.shadowable !== "property") {
@@ -237,6 +246,13 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             catch (error) { varCollision = error instanceof SyntaxError; }
             if (!varCollision || "collisionSideEffect" in globalThis) {
                 throw new Error("var/lexical collision was not atomic");
+            }
+            var collisionReferenceError = false;
+            try { collisionSideEffect; }
+            catch (error) { collisionReferenceError = error instanceof ReferenceError; }
+            if (!collisionReferenceError || typeof collisionSideEffect !== "undefined" ||
+                !delete collisionSideEffect) {
+                throw new Error("failed declaration left a resolvable binding");
             }
             var lexicalCollision = false;
             try { $262.evalScript(${JSON.stringify(lexicalCollisionSource)}); }
@@ -293,6 +309,18 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             }
 
             Object.preventExtensions(globalThis);
+            $262.evalScript(${JSON.stringify(nonExtensibleLexicalSource)});
+            afterPreventLet = 23;
+            AfterPreventClass = 24;
+            var afterPreventConstThrow = false;
+            try { afterPreventConst = 25; }
+            catch (error) { afterPreventConstThrow = error instanceof TypeError; }
+            if (afterPreventLet !== 23 || afterPreventConst !== 22 ||
+                AfterPreventClass !== 24 || !afterPreventConstThrow ||
+                "afterPreventLet" in globalThis || "afterPreventConst" in globalThis ||
+                "AfterPreventClass" in globalThis) {
+                throw new Error("non-extensible global lexical declaration differed");
+            }
             $262.evalScript(${JSON.stringify(existingVarSource)});
             var configurableDescriptor = Object.getOwnPropertyDescriptor(globalThis, "existingConfigurable");
             var restrictedDescriptor = Object.getOwnPropertyDescriptor(globalThis, "existingRestricted");

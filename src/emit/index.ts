@@ -1174,6 +1174,7 @@ class Emitter {
     }
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
+        if (this.isTest262ScriptGlobalLexicalDeclaration(cd)) return true;
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
     }
 
@@ -23774,7 +23775,7 @@ class Emitter {
         }
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         if (scriptGlobal) {
-            return `tsc_global_binding_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
+            return `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
         }
         const moduleLexical = this.moduleLexicalBindingForIdentifier(id);
         if (moduleLexical) return this.moduleLexicalRead(moduleLexical);
@@ -47244,7 +47245,7 @@ class Emitter {
             const scriptGlobal = this.test262ScriptGlobalBindingName(expr);
             if (scriptGlobal) {
                 return {
-                    c: `tsc_global_binding_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                     ty: T_VALUE,
                 };
             }
@@ -47623,7 +47624,10 @@ class Emitter {
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
-        if (ts.isIdentifier(to.expression) && this.isTest262DynamicGlobalReference(to.expression)) {
+        if (ts.isIdentifier(to.expression) && (
+            this.test262ScriptGlobalBindingName(to.expression) ||
+            this.isTest262DynamicGlobalReference(to.expression)
+        )) {
             return {
                 c: `tsc_global_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
                 ty: T_STRING,
@@ -47804,7 +47808,10 @@ class Emitter {
     }
 
     private emitTypeofEquals(expr: ts.Expression, expected: string): string {
-        if (ts.isIdentifier(expr) && this.isTest262DynamicGlobalReference(expr)) {
+        if (ts.isIdentifier(expr) && (
+            this.test262ScriptGlobalBindingName(expr) ||
+            this.isTest262DynamicGlobalReference(expr)
+        )) {
             return `tsc_str_eq(` +
                 `tsc_global_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
                 `${this.stringLit(expected)})`;
@@ -48026,14 +48033,14 @@ class Emitter {
         const name = scriptGlobal ?? referenceName;
         if (!name) return null;
         const key = this.test262GlobalBindingKey(name);
+        const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
         if (scriptGlobal) {
             return {
-                get: `tsc_global_binding_get(${key})`,
-                set: (value) => `tsc_global_binding_set(${key}, ${value})`,
-                remove: "false",
+                get: `tsc_global_reference_get(${key})`,
+                set: (value) => `tsc_global_reference_set(${key}, ${value}, ${strict})`,
+                remove: `tsc_global_reference_delete(${key})`,
             };
         }
-        const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
         return {
             get: `tsc_global_reference_get(${key})`,
             set: (value) => `tsc_global_reference_set(${key}, ${value}, ${strict})`,
@@ -50969,7 +50976,7 @@ class Emitter {
         const scriptGlobal = this.test262ScriptGlobalBindingName(calleeId);
         if (scriptGlobal) {
             return this.emitDynamicValueCall(call, {
-                c: `tsc_global_binding_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                 ty: T_VALUE,
             });
         }
@@ -75031,7 +75038,7 @@ class Emitter {
         const scriptGlobal = this.test262ScriptGlobalBindingName(ctorExpr);
         if (scriptGlobal) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_binding_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                 ty: T_VALUE,
             });
         }
