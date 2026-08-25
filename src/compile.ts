@@ -198,6 +198,7 @@ function permanentLimitDiagnostics(
         dynamicRequires?: DynamicRequireManifest;
         runtimeCode?: RuntimeCodeManifest;
         allowFunctionValueReference?: boolean;
+        test262Observation?: Test262NativeObservationPlan;
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
@@ -245,10 +246,18 @@ function permanentLimitDiagnostics(
                         const canDispatchRuntimeManifest =
                             source === null &&
                             !!(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode));
+                        const canDispatchFiniteDirectEval = source !== null &&
+                            !!opts.test262Observation?.directEvalEntries?.some((entry) =>
+                                entry.source === source,
+                            );
+                        const canCompileWithoutDelegation = opts.test262Observation
+                            ? node.arguments.length === 0 || canDispatchFiniteDirectEval
+                            : canAotCompileEvalCall(node);
                         if (
                             !opts.unsafeEval &&
-                            !canAotCompileEvalCall(node) &&
-                            !canDispatchRuntimeManifest
+                            !canCompileWithoutDelegation &&
+                            !canDispatchRuntimeManifest &&
+                            !canDispatchFiniteDirectEval
                         ) {
                             diagnostics.push({
                                 node,
@@ -355,7 +364,7 @@ function permanentLimitDiagnostics(
                 }
             } else if (
                 ts.isIdentifier(node) &&
-                (node.text === "eval" ||
+                ((node.text === "eval" && !opts.test262Observation) ||
                     (node.text === "Function" && !opts.allowFunctionValueReference)) &&
                 !opts.unsafeEval &&
                 isGlobalEvalOrFunctionValueReference(node, checker)
@@ -802,6 +811,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         runtimeCode,
         allowFunctionValueReference: !!opts.test262Observation,
+        test262Observation: opts.test262Observation,
     });
     if (permanent.length > 0) {
         for (const d of permanent) {

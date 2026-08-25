@@ -803,6 +803,8 @@ typedef enum {
     TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE,
     TSC_GLOBAL_DECL_FUNCTION,
     TSC_GLOBAL_DECL_VAR,
+    TSC_GLOBAL_DECL_EVAL_FUNCTION,
+    TSC_GLOBAL_DECL_EVAL_VAR,
 } tsc_global_declaration_kind_t;
 
 typedef struct {
@@ -1377,6 +1379,10 @@ void tsc_test262_begin(void);
 tsc_value_t tsc_test262_host_object(void);
 typedef tsc_value_t (*tsc_test262_eval_script_callback_t)(tsc_str_t* source);
 void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback);
+typedef tsc_value_t (*tsc_test262_direct_eval_callback_t)(tsc_str_t* source, bool strict_caller);
+void tsc_test262_set_direct_eval_callback(tsc_test262_direct_eval_callback_t callback);
+tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller);
+tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t args, bool strict_caller);
 void tsc_test262_write_normal(const char* scenario_id, bool async_test);
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error);
 tsc_str_t* tsc_util_format_n(size_t n, ...);

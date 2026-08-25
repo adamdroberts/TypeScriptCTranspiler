@@ -3,9 +3,56 @@
 static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
 static tsc_test262_eval_script_callback_t g_test262_eval_script_callback = NULL;
+static tsc_test262_direct_eval_callback_t g_test262_direct_eval_callback = NULL;
+
+static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t source = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    if (!value_is_box(source) || value_tag(source) != TSC_VALUE_TAG_STRING) return source;
+    tsc_throw_error(
+        TSC_ERROR_TYPE,
+        tsc_str_from_cstr("indirect eval is outside the finite AOT direct-eval graph")
+    );
+    return tsc_value_undefined();
+}
 
 void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback) {
     g_test262_eval_script_callback = callback;
+}
+
+void tsc_test262_set_direct_eval_callback(tsc_test262_direct_eval_callback_t callback) {
+    g_test262_direct_eval_callback = callback;
+}
+
+tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
+    if (!value_is_box(source) || value_tag(source) != TSC_VALUE_TAG_STRING) return source;
+    if (!g_test262_direct_eval_callback) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("direct eval has no finite AOT source graph"));
+    }
+    return g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller);
+}
+
+tsc_value_t tsc_test262_direct_eval_call(
+    tsc_value_t callee,
+    tsc_value_t args,
+    bool strict_caller
+) {
+    if (value_is_box(callee) && value_tag(callee) == TSC_VALUE_TAG_FUNCTION) {
+        const tsc_function_identity_t* identity =
+            (const tsc_function_identity_t*)value_ptr(callee);
+        if (identity->kind == TSC_FUNCTION_IDENTITY_BUILTIN &&
+            identity->code.generic == test262_eval_intrinsic && identity->env == NULL) {
+            tsc_array_t* list = tsc_value_as_array(args);
+            tsc_value_t source = list && list->len > 0
+                ? TSC_ARR(tsc_value_t, list, 0)
+                : tsc_value_undefined();
+            return tsc_test262_direct_eval(source, strict_caller);
+        }
+    }
+    return tsc_value_apply_function(callee, tsc_value_undefined(), args);
 }
 
 static void test262_capture_print_args(tsc_array_t* args) {
@@ -387,6 +434,16 @@ void tsc_test262_begin(void) {
     } test262_global_binding_t;
     const test262_global_binding_t bindings[] = {
         { "$262", 4, tsc_test262_host_object() },
+        {
+            "eval",
+            4,
+            tsc_value_function_builtin_named(
+                test262_eval_intrinsic,
+                NULL,
+                1.0,
+                tsc_str_from_lit("eval", 4)
+            )
+        },
         {
             "print",
             5,

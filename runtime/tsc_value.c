@@ -1327,7 +1327,7 @@ static void global_create_lexical(const tsc_global_declaration_t* declaration) {
     g_global_lexical_bindings = binding;
 }
 
-static void global_create_var(tsc_str_t* key) {
+static void global_create_var(tsc_str_t* key, bool deletable) {
     tsc_value_t global = tsc_global_object();
     if (tsc_value_has_own_prop(global, key) || !tsc_value_is_extensible(global)) return;
     if (!tsc_value_define_property_desc(
@@ -1339,14 +1339,14 @@ static void global_create_var(tsc_str_t* key) {
         true,
         true,
         true,
-        false,
+        deletable,
         true
     )) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot create global var binding"));
     }
 }
 
-static void global_create_function(tsc_str_t* key, tsc_value_t value) {
+static void global_create_function(tsc_str_t* key, tsc_value_t value, bool deletable) {
     tsc_value_t global = tsc_global_object();
     const tsc_object_prop_t* existing = global_own_property(key);
     bool replace_descriptor = !existing || existing->configurable;
@@ -1359,7 +1359,7 @@ static void global_create_function(tsc_str_t* key, tsc_value_t value) {
         replace_descriptor,
         true,
         replace_descriptor,
-        false,
+        deletable,
         replace_descriptor
     )) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot create global function binding"));
@@ -1370,6 +1370,14 @@ static void global_create_function(tsc_str_t* key, tsc_value_t value) {
 static bool global_declaration_is_lexical(tsc_global_declaration_kind_t kind) {
     return kind == TSC_GLOBAL_DECL_LEXICAL_MUTABLE ||
         kind == TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE;
+}
+
+static bool global_declaration_is_function(tsc_global_declaration_kind_t kind) {
+    return kind == TSC_GLOBAL_DECL_FUNCTION || kind == TSC_GLOBAL_DECL_EVAL_FUNCTION;
+}
+
+static bool global_declaration_is_var(tsc_global_declaration_kind_t kind) {
+    return kind == TSC_GLOBAL_DECL_VAR || kind == TSC_GLOBAL_DECL_EVAL_VAR;
 }
 
 static void global_throw_declaration_error(tsc_error_kind_t kind, const char* message) {
@@ -1419,7 +1427,7 @@ void tsc_global_declaration_instantiation(
     }
     for (size_t index = 0; index < length; index++) {
         const tsc_global_declaration_t* declaration = &declarations[index];
-        if (declaration->kind == TSC_GLOBAL_DECL_FUNCTION &&
+        if (global_declaration_is_function(declaration->kind) &&
             !global_can_declare_function(declaration->name)) {
             global_throw_declaration_error(
                 TSC_ERROR_TYPE,
@@ -1429,7 +1437,7 @@ void tsc_global_declaration_instantiation(
     }
     for (size_t index = 0; index < length; index++) {
         const tsc_global_declaration_t* declaration = &declarations[index];
-        if (declaration->kind == TSC_GLOBAL_DECL_VAR &&
+        if (global_declaration_is_var(declaration->kind) &&
             !global_can_declare_var(declaration->name)) {
             global_throw_declaration_error(TSC_ERROR_TYPE, "global var declaration is not definable");
         }
@@ -1441,13 +1449,20 @@ void tsc_global_declaration_instantiation(
         }
     }
     for (size_t index = 0; index < length; index++) {
-        if (declarations[index].kind == TSC_GLOBAL_DECL_FUNCTION) {
-            global_create_function(declarations[index].name, declarations[index].value);
+        if (global_declaration_is_function(declarations[index].kind)) {
+            global_create_function(
+                declarations[index].name,
+                declarations[index].value,
+                declarations[index].kind == TSC_GLOBAL_DECL_EVAL_FUNCTION
+            );
         }
     }
     for (size_t index = 0; index < length; index++) {
-        if (declarations[index].kind == TSC_GLOBAL_DECL_VAR) {
-            global_create_var(declarations[index].name);
+        if (global_declaration_is_var(declarations[index].kind)) {
+            global_create_var(
+                declarations[index].name,
+                declarations[index].kind == TSC_GLOBAL_DECL_EVAL_VAR
+            );
         }
     }
 }
@@ -1457,7 +1472,7 @@ bool tsc_global_annex_b_function_instantiation(tsc_str_t* key) {
      * when an existing declarative binding wins or the ordinary global object
      * cannot accept the candidate var binding. */
     if (global_lexical_find(key) || !global_can_declare_var(key)) return false;
-    global_create_var(key);
+    global_create_var(key, false);
     return true;
 }
 

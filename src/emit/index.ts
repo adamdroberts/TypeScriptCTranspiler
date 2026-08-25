@@ -467,12 +467,19 @@ export interface Test262NativeObservationPlan {
     readonly scriptEntries?: readonly string[];
     /** Finite AOT ParseScript records dispatched by exact runtime source text. */
     readonly evalScriptEntries?: readonly Test262EvalScriptEntry[];
+    /** Finite direct-PerformEval records keyed by source and effective strictness. */
+    readonly directEvalEntries?: readonly Test262DirectEvalEntry[];
 }
 
 export interface Test262EvalScriptEntry {
     readonly source: string;
     /** Null means ParseScript produced a SyntaxError and no source root was compiled. */
     readonly entry: string | null;
+}
+
+export interface Test262DirectEvalEntry extends Test262EvalScriptEntry {
+    readonly strictCaller: boolean;
+    readonly strict: boolean;
 }
 
 interface Test262GlobalReferencePlan {
@@ -726,11 +733,20 @@ class Emitter {
                 ...(options.test262Observation?.scriptEntries ?? []),
                 ...(options.test262Observation?.evalScriptEntries ?? [])
                     .flatMap((entry) => entry.entry ? [entry.entry] : []),
+                ...(options.test262Observation?.directEvalEntries ?? [])
+                    .flatMap((entry) => entry.entry && !entry.strict ? [entry.entry] : []),
             ].map((entry) => path.resolve(entry)),
+        );
+        this.test262DirectEvalEntryModes = new Map(
+            (options.test262Observation?.directEvalEntries ?? [])
+                .flatMap((entry) => entry.entry
+                    ? [[path.resolve(entry.entry), entry.strict] as const]
+                    : []),
         );
     }
 
     private readonly test262ScriptEntryPaths: ReadonlySet<string>;
+    private readonly test262DirectEvalEntryModes: ReadonlyMap<string, boolean>;
     private test262ScriptDeclaredGlobalBindingNamesCache: ReadonlySet<string> | null = null;
     private test262SelectedGlobalFunctionsCache =
         new WeakMap<ts.SourceFile, ReadonlySet<ts.FunctionDeclaration>>();
@@ -14958,7 +14974,9 @@ class Emitter {
         if (
             !this.options.test262Observation ||
             !this.isJavaScriptSourceFile(source) ||
-            (!this.isTest262ScriptSourceFile(source) && !ts.isExternalModule(source))
+            (!this.isTest262ScriptSourceFile(source) &&
+                !this.isTest262DirectEvalSourceFile(source) &&
+                !ts.isExternalModule(source))
         ) {
             return false;
         }
@@ -15297,6 +15315,31 @@ class Emitter {
             out.line("}");
             out.line();
         }
+        const directEvalEntries = this.options.test262Observation?.directEvalEntries ?? [];
+        if (directEvalEntries.length > 0) {
+            out.line("static tsc_value_t test262_direct_eval_dispatch(tsc_str_t* source, bool strict_caller) {");
+            for (const [index, entry] of directEvalEntries.entries()) {
+                out.line(
+                    `    ${index === 0 ? "if" : "else if"} (` +
+                    `strict_caller == ${entry.strictCaller ? "true" : "false"} && ` +
+                    `tsc_str_eq(source, ${this.cStringLiteral(entry.source)})) {`,
+                );
+                if (entry.entry === null) {
+                    out.line("        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr(\"invalid direct eval source\"));");
+                } else {
+                    const moduleId = this.graph.fileToModuleId.get(path.resolve(entry.entry));
+                    if (!moduleId) {
+                        throw new Error(`Test262 direct eval entry is absent from the module graph: ${entry.entry}`);
+                    }
+                    out.line(`        return mod_evaluate_${moduleId}();`);
+                }
+                out.line("    }");
+            }
+            out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"direct eval source is outside the finite AOT graph\"));");
+            out.line("    return tsc_value_undefined();");
+            out.line("}");
+            out.line();
+        }
         // main(): bootstrap, then evaluate one canonical ordered root graph.
         out.line("int main(int argc, char** argv) {");
         out.line("    tsc_bootstrap(argc, argv);");
@@ -15314,6 +15357,9 @@ class Emitter {
             const scenario = escapeCString(observation.scenarioId);
             if (evalScriptEntries.length > 0) {
                 out.line("    tsc_test262_set_eval_script_callback(test262_eval_script_dispatch);");
+            }
+            if (directEvalEntries.length > 0) {
+                out.line("    tsc_test262_set_direct_eval_callback(test262_direct_eval_dispatch);");
             }
             out.line("    tsc_test262_begin();");
             for (const [index, modId] of this.graph.topoOrder.entries()) {
@@ -15524,7 +15570,7 @@ class Emitter {
                 this.emitClassBodies(classExpr as unknown as ts.ClassDeclaration);
             }
             this.emitTest262ScriptGlobalDeclarationInstantiation(initBuf, sf);
-            if (this.isTest262ScriptSourceFile(sf)) {
+            if (this.isTest262ScriptSourceFile(sf) || this.isTest262DirectEvalSourceFile(sf)) {
                 scriptCompletionTarget = {
                     value: this.freshTemp("_script_completion"),
                     gcRoot: this.freshTemp("_script_completion_gc_root"),
@@ -15859,7 +15905,8 @@ class Emitter {
     private declaredName(name: ts.Identifier): string {
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
-        if (this.test262ScriptEntryPaths.has(path.resolve(source.fileName))) {
+        if (this.test262ScriptEntryPaths.has(path.resolve(source.fileName)) ||
+            this.isTest262DirectEvalSourceFile(source)) {
             const moduleId = this.graph.fileToModuleId.get(source.fileName) ?? "eval_script";
             parts.unshift(moduleId);
         }
@@ -24032,9 +24079,19 @@ class Emitter {
     }
 
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
+        const directEvalStrict = this.test262DirectEvalEntryModes.get(path.resolve(sf.fileName));
+        if (directEvalStrict === true) return false;
         return !!this.options.test262Observation &&
             this.isJavaScriptSourceFile(sf) &&
             (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
+    }
+
+    private isTest262DirectEvalSourceFile(sf: ts.SourceFile): boolean {
+        return this.test262DirectEvalEntryModes.has(path.resolve(sf.fileName));
+    }
+
+    private isTest262SloppyDirectEvalSourceFile(sf: ts.SourceFile): boolean {
+        return this.test262DirectEvalEntryModes.get(path.resolve(sf.fileName)) === false;
     }
 
     private isTest262ScriptGlobalThisExpression(expr: ts.Expression): boolean {
@@ -24042,7 +24099,8 @@ class Emitter {
             !this.currentClass &&
             !this.functionThisStack[this.functionThisStack.length - 1] &&
             !!this.options.test262Observation &&
-            this.isTest262ScriptSourceFile(expr.getSourceFile());
+            (this.isTest262ScriptSourceFile(expr.getSourceFile()) ||
+                this.isTest262DirectEvalSourceFile(expr.getSourceFile()));
     }
 
     private isTest262ScriptEvaluationNode(node: ts.Node): boolean {
@@ -24764,6 +24822,19 @@ class Emitter {
 
     private emitTest262ScriptGlobalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         const declarations = this.test262ScriptGlobalDeclarations(sf);
+        const sloppyDirectEval = this.isTest262SloppyDirectEvalSourceFile(sf);
+        if (sloppyDirectEval && declarations.lexicals.length > 0) {
+            unsupported(
+                declarations.lexicals[0]!.declaration,
+                "finite direct eval lexical declarations require the eval-local declarative environment lowering",
+            );
+        }
+        if (sloppyDirectEval && declarations.annexBFunctions.length > 0) {
+            unsupported(
+                declarations.annexBFunctions[0]!,
+                "finite direct eval Annex B functions require the deletable eval-binding insertion",
+            );
+        }
         const length = declarations.lexicals.length + declarations.functions.length + declarations.vars.length;
         if (length > 0) {
             const plan = this.freshTemp("_global_declarations");
@@ -24789,13 +24860,16 @@ class Emitter {
                 const value = this.coerce(closure, T_VALUE, name);
                 buf.line(
                     `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                    `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_FUNCTION, ${value}, NULL };`,
+                    `${this.test262GlobalBindingKey(name.text)}, ` +
+                    `${sloppyDirectEval ? "TSC_GLOBAL_DECL_EVAL_FUNCTION" : "TSC_GLOBAL_DECL_FUNCTION"}, ` +
+                    `${value}, NULL };`,
                 );
             }
             for (const name of declarations.vars) {
                 buf.line(
                     `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                    `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_VAR, ` +
+                    `${this.test262GlobalBindingKey(name.text)}, ` +
+                    `${sloppyDirectEval ? "TSC_GLOBAL_DECL_EVAL_VAR" : "TSC_GLOBAL_DECL_VAR"}, ` +
                     `tsc_value_undefined(), NULL };`,
                 );
             }
@@ -47476,6 +47550,12 @@ class Emitter {
                 return { c: "tsc_object_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
+                if (this.options.test262Observation) {
+                    return {
+                        c: `tsc_global_reference_get(${this.test262GlobalBindingKey("eval")})`,
+                        ty: T_VALUE,
+                    };
+                }
                 return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
@@ -51180,6 +51260,10 @@ class Emitter {
         }
         const calleeId = call.expression;
         const name = calleeId.text;
+        if (name === "eval" && this.options.test262Observation &&
+            this.isTest262OutOfBandIdentifier(calleeId)) {
+            return this.emitTest262DirectEvalCall(call);
+        }
         const hostGlobal = this.test262HostGlobalBindingName(calleeId);
         if (hostGlobal) {
             return this.emitDynamicValueCall(call, {
@@ -52358,6 +52442,43 @@ class Emitter {
             { value: source, target: T_STRING, node: sourceNode },
             ...this.ignoredArgumentSpecs(call.arguments, 1),
         ]);
+    }
+
+    private emitTest262DirectEvalCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) {
+            unsupported(call, "finite direct eval does not yet support a spread argument list");
+        }
+        const args = Array.from(call.arguments, (argument) => this.emitExpr(argument));
+        return this.emitSequencedExpr(
+            T_VALUE,
+            [
+                {
+                    value: {
+                        c: `tsc_global_reference_get(${this.test262GlobalBindingKey("eval")})`,
+                        ty: T_VALUE,
+                    },
+                    target: T_VALUE,
+                    node: call.expression,
+                },
+                ...args.map((value, index) => ({
+                    value,
+                    target: T_VALUE,
+                    node: call.arguments[index]!,
+                })),
+            ],
+            ([callee, ...values]) => {
+                const list = this.freshTemp("_direct_eval_args");
+                const pieces = [
+                    `tsc_array_t* ${list} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length)})`,
+                ];
+                for (const value of values) pieces.push(`tsc_array_push_value(${list}, ${value})`);
+                pieces.push(
+                    `tsc_test262_direct_eval_call(${callee}, tsc_value_array(${list}), ` +
+                    `${this.nodeIsInStrictMode(call) ? "true" : "false"})`,
+                );
+                return `({ ${pieces.join("; ")}; })`;
+            },
+        );
     }
 
     private emitUnsafeFunctionConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {

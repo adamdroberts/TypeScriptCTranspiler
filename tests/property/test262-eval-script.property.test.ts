@@ -10,12 +10,17 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     const nested = '$262.evalScript("var nested = 1;");';
     const sibling = "var sibling = 3;";
     const branch = "var branch = 4;";
+    const directSloppy = 'var directSloppy = 5; eval("var directNested = 6;");';
+    const directSourceStrict = '"use strict"; var directSourceStrict = 7;';
+    const strictRecord = '"use strict"; eval("var directCallerStrict = 8;");';
     const root = finiteEvalScriptSourceGraph([{
         path: "root.js",
         source: `
             $262.evalScript(flag ? ${JSON.stringify(nested)} : "var alternate = 2;");
             $262.evalScript(${JSON.stringify(sibling)});
             flag && $262.evalScript(${JSON.stringify(branch)});
+            eval(flag ? ${JSON.stringify(directSloppy)} : ${JSON.stringify(directSourceStrict)});
+            $262.evalScript(${JSON.stringify(strictRecord)});
         `,
     }]);
     expect(root.error).toBeNull();
@@ -25,6 +30,13 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
         "var alternate = 2;",
         sibling,
         branch,
+        strictRecord,
+    ]));
+    expect(new Set(root.directEvalSources.map((entry) => JSON.stringify(entry)))).toEqual(new Set([
+        JSON.stringify({ source: directSloppy, strictCaller: false, strict: false }),
+        JSON.stringify({ source: "var directNested = 6;", strictCaller: false, strict: false }),
+        JSON.stringify({ source: directSourceStrict, strictCaller: false, strict: true }),
+        JSON.stringify({ source: "var directCallerStrict = 8;", strictCaller: true, strict: true }),
     ]));
 
     const nonFinite = finiteEvalScriptSourceGraph([{
@@ -33,14 +45,50 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     }]);
     expect(nonFinite.sources).toEqual([]);
     expect(nonFinite.error).toContain("not a finite static string expression");
+
+    const nonFiniteDirect = finiteEvalScriptSourceGraph([{
+        path: "root.js",
+        source: "eval(runtimeSource);",
+    }]);
+    expect(nonFiniteDirect.directEvalSources).toEqual([]);
+    expect(nonFiniteDirect.error).toContain("direct eval source is not a finite static string expression");
 });
 
 test("finite AOT evalScript records parse and evaluate on every call", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-test262-eval-script-property-"));
     const main = path.join(temporary, "main.js");
+    const nestedEvalMain = path.join(temporary, "nested-eval.js");
     const mutationSource = "executions += 1; var created = executions; function readCreated() { return created; }";
     const throwSource = "throw sentinel;";
     const invalidSource = "let = ;";
+    const directDeclarationSource = `
+        var directEvalVar = 31;
+        function directEvalFunction() { return 32; }
+    `;
+    const directShadowSource = `
+        let directEvalVar = "lexical-var";
+        let directEvalFunction = "lexical-function";
+    `;
+    const directSourceStrict = `
+        "use strict";
+        var directSourceStrictVar = 33;
+        function directSourceStrictFunction() { return 34; }
+    `;
+    const directCallerStrictBody = `
+        var directCallerStrictVar = 35;
+        function directCallerStrictFunction() { return 36; }
+    `;
+    const directCallerStrictRecord = `
+        "use strict";
+        eval(${JSON.stringify(directCallerStrictBody)});
+        if (typeof directCallerStrictVar !== "undefined" ||
+            typeof directCallerStrictFunction !== "undefined") {
+            throw new Error("strict-caller eval declarations escaped");
+        }
+    `;
+    const directCompletionSource = "sentinel;";
+    const directThrowSource = "throw sentinel;";
+    const invalidDirectSource = "let = ;";
     const lexicalSource = `
         var sawTdz = false;
         try { evalTdz; } catch (error) { sawTdz = error instanceof ReferenceError; }
@@ -136,6 +184,8 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const compiledSources = [
         ["mutation.js", mutationSource],
         ["throw.js", throwSource],
+        ["direct-shadow.js", directShadowSource],
+        ["direct-caller-strict.js", directCallerStrictRecord],
         ["lexical.js", lexicalSource],
         ["shadow.js", shadowSource],
         ["var-collision.js", varCollisionSource],
@@ -168,9 +218,43 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         source,
         entry: path.join(temporary, filename),
     }));
+    const directEntries = [
+        {
+            source: directDeclarationSource,
+            entry: path.join(temporary, "direct-declarations.js"),
+            strictCaller: false,
+            strict: false,
+        },
+        {
+            source: directSourceStrict,
+            entry: path.join(temporary, "direct-source-strict.js"),
+            strictCaller: false,
+            strict: true,
+        },
+        {
+            source: directCallerStrictBody,
+            entry: path.join(temporary, "direct-caller-strict-body.js"),
+            strictCaller: true,
+            strict: true,
+        },
+        {
+            source: directCompletionSource,
+            entry: path.join(temporary, "direct-completion.js"),
+            strictCaller: false,
+            strict: false,
+        },
+        {
+            source: directThrowSource,
+            entry: path.join(temporary, "direct-throw.js"),
+            strictCaller: false,
+            strict: false,
+        },
+    ] as const;
     const scenarioId = "property/test262-eval-script.js#sloppy";
     await Promise.all([
         ...compiledEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
+        ...directEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
+        fs.writeFile(nestedEvalMain, 'function nested() { return eval("1"); } nested();', "utf8"),
         fs.writeFile(main, `
             var executions = 0;
             var completionTrailingDeclaration;
@@ -238,6 +322,52 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 !primordialEnumerable({ visible: true }, "visible")) {
                 throw new Error("primordial bound array method differed");
             }
+            var directExtraArgument = 0;
+            if (eval() !== undefined || eval(17, directExtraArgument = 1) !== 17 ||
+                directExtraArgument !== 1) {
+                throw new Error("direct eval non-string/argument evaluation differed");
+            }
+            var savedEval = eval;
+            eval = function (value) { return value + 1; };
+            if (eval(17) !== 18) throw new Error("reassigned eval was still treated as direct eval");
+            eval = function (value) { "use strict"; return this === undefined ? value : -1; };
+            if (eval(17) !== 17) throw new Error("reassigned strict eval receiver differed");
+            eval = savedEval;
+
+            eval(${JSON.stringify(directDeclarationSource)});
+            var directVarDescriptor = Object.getOwnPropertyDescriptor(globalThis, "directEvalVar");
+            var directFunctionDescriptor = Object.getOwnPropertyDescriptor(globalThis, "directEvalFunction");
+            if (directEvalVar !== 31 || directEvalFunction() !== 32 ||
+                !directVarDescriptor || !directVarDescriptor.writable ||
+                !directVarDescriptor.enumerable || !directVarDescriptor.configurable ||
+                !directFunctionDescriptor || !directFunctionDescriptor.writable ||
+                !directFunctionDescriptor.enumerable || !directFunctionDescriptor.configurable) {
+                throw new Error("sloppy direct eval declaration instantiation differed");
+            }
+            $262.evalScript(${JSON.stringify(directShadowSource)});
+            if (directEvalVar !== "lexical-var" || directEvalFunction !== "lexical-function" ||
+                globalThis.directEvalVar !== 31 || typeof globalThis.directEvalFunction !== "function") {
+                throw new Error("deletable direct eval bindings did not admit Script lexical shadowing");
+            }
+            eval(${JSON.stringify(directSourceStrict)});
+            if (typeof directSourceStrictVar !== "undefined" ||
+                typeof directSourceStrictFunction !== "undefined" ||
+                "directSourceStrictVar" in globalThis || "directSourceStrictFunction" in globalThis) {
+                throw new Error("source-strict eval declarations escaped");
+            }
+            $262.evalScript(${JSON.stringify(directCallerStrictRecord)});
+            if (eval(${JSON.stringify(directCompletionSource)}) !== sentinel) {
+                throw new Error("direct eval completion identity differed");
+            }
+            var directThrowExact = false;
+            try { eval(${JSON.stringify(directThrowSource)}); }
+            catch (error) { directThrowExact = error === sentinel; }
+            if (!directThrowExact) throw new Error("direct eval abrupt identity differed");
+            var directSyntax = false;
+            try { eval(${JSON.stringify(invalidDirectSource)}); }
+            catch (error) { directSyntax = error instanceof SyntaxError; }
+            if (!directSyntax) throw new Error("direct eval ParseScript failure differed");
+
             $262.evalScript(${JSON.stringify(mutationSource)});
             if (executions !== 1 || created !== 1 || readCreated() !== 1) {
                 throw new Error("first ScriptEvaluation differed");
@@ -425,14 +555,18 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `program-${mode}`);
             const diagnostics: string[] = [];
+            const allCompiledRoots = [
+                ...compiledEntries.map(({ entry }) => entry),
+                ...directEntries.map(({ entry }) => entry),
+            ];
             const result = await compile({
                 entry: main,
                 output: executable,
                 buildDir: path.join(temporary, `build-${mode}`),
-                additionalRoots: compiledEntries.map(({ entry }) => entry),
+                additionalRoots: allCompiledRoots,
                 initializationEntries: [main],
-                isolatedScriptRoots: [main, ...compiledEntries.map(({ entry }) => entry)],
-                ignoreCheckJsDirectiveRoots: [main, ...compiledEntries.map(({ entry }) => entry)],
+                isolatedScriptRoots: [main, ...allCompiledRoots],
+                ignoreCheckJsDirectiveRoots: [main, ...allCompiledRoots],
                 noGc,
                 test262Observation: {
                     kind: "test262-native-observation",
@@ -444,6 +578,11 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                     evalScriptEntries: [
                         { source: invalidSource, entry: null },
                         ...compiledEntries,
+                    ],
+                    directEvalEntries: [
+                        { source: "17", entry: null, strictCaller: false, strict: false },
+                        { source: invalidDirectSource, entry: null, strictCaller: false, strict: false },
+                        ...directEntries,
                     ],
                 },
                 diagnosticWriter: (message) => diagnostics.push(message),
@@ -461,6 +600,31 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             }
             expect(observation.stdout).toBe("test262-eval-script-ok\n");
         }
+
+        const nestedDiagnostics: string[] = [];
+        const nestedResult = await compile({
+            entry: nestedEvalMain,
+            output: path.join(temporary, "nested-eval-program"),
+            buildDir: path.join(temporary, "nested-eval-build"),
+            initializationEntries: [nestedEvalMain],
+            isolatedScriptRoots: [nestedEvalMain],
+            ignoreCheckJsDirectiveRoots: [nestedEvalMain],
+            test262Observation: {
+                kind: "test262-native-observation",
+                scenarioId: "property/test262-nested-eval.js#sloppy",
+                setupEntries: [],
+                testEntry: nestedEvalMain,
+                async: false,
+                scriptEntries: [nestedEvalMain],
+                evalScriptEntries: [],
+                directEvalEntries: [],
+            },
+            diagnosticWriter: (message) => nestedDiagnostics.push(message),
+        });
+        expect(nestedResult.exitCode).not.toBe(0);
+        expect(nestedDiagnostics.join("")).toContain(
+            "unknown eval() source requires --runtime-code-manifest allow-list",
+        );
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });
     }
