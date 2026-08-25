@@ -6,12 +6,12 @@ console.log("object proto:", Object.getPrototypeOf(proto) === Object.prototype);
 console.log("own keys:", Object.keys(proto).length, Object.values(proto).length, Object.entries(proto).length);
 console.log("reflect:", Reflect.ownKeys(proto).includes("length"), Reflect.getOwnPropertyDescriptor(proto, "length") !== undefined);
 const ownNames: string[] = Object.getOwnPropertyNames(Array.prototype);
-const reflectOwnKeys: string[] = Reflect.ownKeys(Array.prototype);
+const reflectOwnKeys: (string | symbol)[] = Reflect.ownKeys(Array.prototype);
 const allDescriptors: any = Object.getOwnPropertyDescriptors(Array.prototype);
 console.log("own names:", ownNames.length, ownNames[0], ownNames.includes("constructor"), ownNames.includes("map"), ownNames.includes("valueOf"));
 console.log("reflect own names:", reflectOwnKeys.length, reflectOwnKeys[0], reflectOwnKeys.includes("constructor"), reflectOwnKeys.includes("map"), reflectOwnKeys.includes("valueOf"));
 const aliasOwnNames: string[] = Object.getOwnPropertyNames(proto);
-const aliasReflectOwnKeys: string[] = Reflect.ownKeys(proto);
+const aliasReflectOwnKeys: (string | symbol)[] = Reflect.ownKeys(proto);
 console.log("alias own names:", aliasOwnNames.length, aliasOwnNames.includes("constructor"), aliasOwnNames.includes("map"), aliasOwnNames.includes("valueOf"), aliasReflectOwnKeys.length, aliasReflectOwnKeys.includes("valueOf"));
 const aliasAllDescriptors: any = Object.getOwnPropertyDescriptors(proto);
 const aliasValueOfDescriptor: any = Object.getOwnPropertyDescriptor(proto, "valueOf");
@@ -91,6 +91,19 @@ console.log("symbol enumerability after define:", proto.propertyIsEnumerable(Sym
 const detachedIteratorEnumerable: boolean = Object.prototype.propertyIsEnumerable.call(proto, Symbol.iterator);
 const detachedArrayUnscopablesEnumerable: boolean = Object.prototype.propertyIsEnumerable.call([], Symbol.unscopables);
 console.log("detached symbol enumerability:", detachedIteratorEnumerable, detachedArrayUnscopablesEnumerable);
+const typedPropertyArray: any[] = [];
+const typedPropertySymbol: symbol = Symbol("typed-array-property");
+(typedPropertyArray as any)[typedPropertySymbol] = 1;
+function typedPropertyKeyResult(target: any[], key: string | symbol): string {
+    return target.hasOwnProperty(key) + ":" + target.propertyIsEnumerable(key);
+}
+console.log(
+    "typed computed property keys:",
+    typedPropertyArray.hasOwnProperty(typedPropertySymbol),
+    typedPropertyArray.propertyIsEnumerable(typedPropertySymbol),
+    typedPropertyKeyResult(typedPropertyArray, typedPropertySymbol),
+    typedPropertyKeyResult(["indexed"], "0"),
+);
 const deletedMapMethod: boolean = delete proto.map;
 const namesAfterMapDelete: string[] = Object.getOwnPropertyNames(Array.prototype);
 const aliasNamesAfterMapDelete: string[] = Object.getOwnPropertyNames(proto);

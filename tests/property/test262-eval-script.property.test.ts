@@ -573,6 +573,66 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 realmA.global.Symbol.iterator !== Symbol.iterator) {
                 throw new Error("Realm method or well-known Symbol identity differed");
             }
+            var foreignArrayPrototype = realmB.global.Array.prototype;
+            var foreignArray = realmB.global.Array();
+            var foreignIteratorDescriptor = Object.getOwnPropertyDescriptor(
+                foreignArrayPrototype,
+                Symbol.iterator
+            );
+            var foreignPrototypeSymbols = Object.getOwnPropertySymbols(foreignArrayPrototype);
+            var foreignPrototypeKeys = Reflect.ownKeys(foreignArrayPrototype);
+            if (!foreignIteratorDescriptor ||
+                foreignIteratorDescriptor.value !== foreignArrayPrototype.values ||
+                foreignIteratorDescriptor.value === Array.prototype.values ||
+                foreignIteratorDescriptor.writable !== true ||
+                foreignIteratorDescriptor.enumerable !== false ||
+                foreignIteratorDescriptor.configurable !== true ||
+                !foreignPrototypeSymbols.includes(Symbol.iterator) ||
+                !foreignPrototypeSymbols.includes(Symbol.unscopables) ||
+                !foreignPrototypeKeys.includes(Symbol.iterator) ||
+                !foreignPrototypeKeys.includes(Symbol.unscopables) ||
+                foreignArray[Symbol.iterator] !== foreignIteratorDescriptor.value) {
+                throw new Error("Array prototype symbol ownership crossed Realm boundaries");
+            }
+            var defaultIteratorMethod = Object.getOwnPropertyDescriptor(
+                defaultRealmGlobal.Array.prototype,
+                Symbol.iterator
+            ).value;
+            if (!Reflect.deleteProperty(foreignArrayPrototype, Symbol.iterator) ||
+                Reflect.has(foreignArray, Symbol.iterator) ||
+                !Reflect.has([], Symbol.iterator) ||
+                Reflect.get(defaultRealmGlobal.Array.prototype, Symbol.iterator) !== defaultIteratorMethod) {
+                throw new Error("foreign Array prototype symbol deletion crossed Realm boundaries");
+            }
+            function replacementForeignIterator() { return ["foreign"].values(); }
+            var foreignIteratorDefined = Reflect.defineProperty(foreignArrayPrototype, Symbol.iterator, {
+                    value: replacementForeignIterator,
+                    writable: true,
+                    enumerable: true,
+                    configurable: true
+                });
+            var inheritedForeignIterator = foreignArray[Symbol.iterator];
+            var currentDefaultIterator = Reflect.get(
+                defaultRealmGlobal.Array.prototype,
+                Symbol.iterator
+            );
+            var foreignIteratorEnumerable = foreignArrayPrototype.propertyIsEnumerable(Symbol.iterator);
+            if (!foreignIteratorDefined ||
+                inheritedForeignIterator !== replacementForeignIterator ||
+                currentDefaultIterator !== defaultIteratorMethod ||
+                !foreignIteratorEnumerable) {
+                throw new Error("foreign Array prototype symbol definition crossed Realm boundaries");
+            }
+            Object.defineProperty(
+                foreignArrayPrototype,
+                Symbol.iterator,
+                foreignIteratorDescriptor
+            );
+            var restoredIteratorEnumerable = foreignArrayPrototype.propertyIsEnumerable(Symbol.iterator);
+            if (foreignArray[Symbol.iterator] !== foreignArrayPrototype.values ||
+                restoredIteratorEnumerable) {
+                throw new Error("foreign Array prototype symbol restoration differed");
+            }
             realmA.evalScript(${JSON.stringify(realmCallableSource)});
             if (realmA.global.realmGlobalReader() !== realmA.global ||
                 realmA.global.realmGlobalReader.bind(null)() !== realmA.global) {

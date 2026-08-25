@@ -3,8 +3,8 @@ object proto: true
 own keys: 0 0 0
 reflect: true true
 own names: 40 length true true false
-reflect own names: 40 length true true false
-alias own names: 40 true true false 40 false
+reflect own names: 42 length true true false
+alias own names: 40 true true false 42 false
 alias descriptors: 40 false true
 all descriptors: 40 0 true true false
 static string descriptors: true true false true true true false true true
@@ -35,6 +35,7 @@ define unscopables symbol: true true true true true true true true 2
 set symbol slots: true true true true false true
 symbol enumerability after define: true true false
 detached symbol enumerability: true false
+typed computed property keys: true true true:true true:true
 string key mutation: true true true true true true 42 false
 fresh reflect integrity: true true false
 fresh object integrity: true true false false true false true true true true true null

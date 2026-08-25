@@ -3,16 +3,6 @@
 /* ---------------- arrays ---------------- */
 
 typedef struct {
-    bool initialized;
-    bool present;
-    bool has_custom_value;
-    tsc_value_t custom_value;
-    bool writable;
-    bool enumerable;
-    bool configurable;
-} tsc_array_prototype_symbol_slot_t;
-
-typedef struct {
     bool prototype_initializing;
     bool prototype_initialized;
     bool default_prototype_initialized;
@@ -24,8 +14,6 @@ typedef struct {
     tsc_value_t constructor;
     bool unscopables_initialized;
     tsc_value_t unscopables;
-    tsc_array_prototype_symbol_slot_t symbol_iterator_slot;
-    tsc_array_prototype_symbol_slot_t symbol_unscopables_slot;
 } tsc_array_intrinsics_t;
 
 static const char array_intrinsics_realm_state_key = 0;
@@ -56,8 +44,6 @@ static tsc_array_intrinsics_t* array_intrinsics_for_current_realm(void) {
 #define array_constructor_value (array_intrinsics_for_current_realm()->constructor)
 #define array_unscopables_initialized (array_intrinsics_for_current_realm()->unscopables_initialized)
 #define array_unscopables_value (array_intrinsics_for_current_realm()->unscopables)
-#define array_prototype_symbol_iterator_slot (array_intrinsics_for_current_realm()->symbol_iterator_slot)
-#define array_prototype_symbol_unscopables_slot (array_intrinsics_for_current_realm()->symbol_unscopables_slot)
 
 static tsc_value_t array_constructor_result(tsc_array_t* result, tsc_value_t receiver) {
     if (!tsc_value_is_undefined(tsc_value_current_new_target())) {
@@ -469,13 +455,6 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
         }
     }
     return tsc_value_string(out);
-}
-
-static tsc_value_t array_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    array_prototype_require_receiver(this_arg, "valueOf");
-    return this_arg;
 }
 
 static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -1002,85 +981,46 @@ tsc_value_t tsc_array_unscopables_value(void) {
 
 tsc_array_t* tsc_array_prototype_symbols(void) {
     tsc_array_t* out = tsc_array_new(sizeof(tsc_symbol_t*), 2);
-    tsc_symbol_t* iterator = tsc_symbol_iterator();
-    tsc_symbol_t* unscopables = tsc_symbol_unscopables();
-    if (tsc_array_prototype_has_symbol(iterator)) tsc_array_push_raw(out, &iterator);
-    if (tsc_array_prototype_has_symbol(unscopables)) tsc_array_push_raw(out, &unscopables);
+    tsc_array_t* keys = tsc_object_own_keys_dyn(tsc_array_prototype()->props);
+    for (size_t index = 0; index < keys->len; index++) {
+        tsc_symbol_t* symbol = tsc_property_key_symbol(TSC_ARR(tsc_str_t*, keys, index));
+        if (symbol) tsc_array_push_raw(out, &symbol);
+    }
     return out;
 }
 
-static tsc_array_prototype_symbol_slot_t* array_prototype_symbol_slot(tsc_symbol_t* key) {
-    if (key == tsc_symbol_iterator()) return &array_prototype_symbol_iterator_slot;
-    if (key == tsc_symbol_unscopables()) return &array_prototype_symbol_unscopables_slot;
-    return NULL;
-}
-
-static void array_prototype_symbol_slot_init(tsc_array_prototype_symbol_slot_t* slot, bool writable) {
-    if (slot->initialized) return;
-    slot->initialized = true;
-    slot->present = true;
-    slot->has_custom_value = false;
-    slot->custom_value = tsc_value_undefined();
-    slot->writable = writable;
-    slot->enumerable = false;
-    slot->configurable = true;
-}
-
-static tsc_array_prototype_symbol_slot_t* array_prototype_symbol_slot_ready(tsc_symbol_t* key) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot(key);
-    if (!slot) return NULL;
-    array_prototype_symbol_slot_init(slot, key == tsc_symbol_iterator());
-    return slot;
-}
-
 bool tsc_array_prototype_has_symbol(tsc_symbol_t* key) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    return slot && slot->present;
+    return tsc_object_has_own(tsc_array_prototype()->props, tsc_symbol_property_key(key));
 }
 
 bool tsc_array_prototype_delete_symbol(tsc_symbol_t* key) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    if (!slot) return true;
-    if (!slot->present) return true;
-    if (!slot->configurable) return false;
-    slot->present = false;
-    return true;
+    return tsc_object_delete(tsc_array_prototype()->props, tsc_symbol_property_key(key));
 }
 
 bool tsc_array_prototype_symbol_is_enumerable(tsc_symbol_t* key) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    return slot && slot->present && slot->enumerable;
+    return tsc_object_property_is_enumerable(
+        tsc_array_prototype()->props,
+        tsc_symbol_property_key(key)
+    );
 }
 
 tsc_value_t tsc_array_prototype_symbol_value(tsc_symbol_t* key) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    if (!slot || !slot->present) return tsc_value_undefined();
-    if (slot->has_custom_value) return slot->custom_value;
-    if (key == tsc_symbol_iterator()) return tsc_value_symbol_iterator_method_value();
-    if (key == tsc_symbol_unscopables()) return tsc_array_unscopables_value();
-    return tsc_value_undefined();
+    return tsc_object_get(tsc_array_prototype()->props, tsc_symbol_property_key(key));
 }
 
 bool tsc_array_prototype_define_symbol_desc(tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    if (!slot) return false;
-    if (slot->present && !slot->configurable) {
-        if (has_configurable && configurable) return false;
-        if (has_enumerable && enumerable != slot->enumerable) return false;
-        if (has_writable && writable && !slot->writable) return false;
-        if (has_value && !slot->writable && !tsc_value_eq(value, tsc_array_prototype_symbol_value(key))) return false;
-    }
-    const bool was_present = slot->present;
-    tsc_value_t next_value = has_value
-        ? value
-        : (was_present ? tsc_array_prototype_symbol_value(key) : tsc_value_undefined());
-    slot->present = true;
-    slot->has_custom_value = true;
-    slot->custom_value = next_value;
-    slot->writable = has_writable ? writable : (was_present ? slot->writable : false);
-    slot->enumerable = has_enumerable ? enumerable : (was_present ? slot->enumerable : false);
-    slot->configurable = has_configurable ? configurable : (was_present ? slot->configurable : false);
-    return true;
+    return tsc_object_define_desc(
+        tsc_array_prototype()->props,
+        tsc_symbol_property_key(key),
+        value,
+        has_value,
+        writable,
+        has_writable,
+        enumerable,
+        has_enumerable,
+        configurable,
+        has_configurable
+    );
 }
 
 tsc_array_t* tsc_array_prototype_own_property_names(void) {
@@ -1117,31 +1057,25 @@ tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
     return tsc_value_object(out);
 }
 
-static tsc_value_t array_symbol_descriptor(tsc_value_t value, bool writable, bool enumerable, bool configurable) {
-    tsc_object_t* desc = tsc_object_new();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(writable));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(enumerable));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(configurable));
-    return tsc_value_object(desc);
-}
-
 tsc_value_t tsc_array_symbol_iterator_descriptor(void) {
-    tsc_symbol_t* key = tsc_symbol_iterator();
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    if (!slot || !slot->present) return tsc_value_undefined();
-    return array_symbol_descriptor(tsc_array_prototype_symbol_value(key), slot->writable, slot->enumerable, slot->configurable);
+    return tsc_value_get_own_property_descriptor(
+        tsc_value_array(tsc_array_prototype()),
+        tsc_symbol_property_key(tsc_symbol_iterator())
+    );
 }
 
 tsc_value_t tsc_array_symbol_unscopables_descriptor(void) {
-    tsc_symbol_t* key = tsc_symbol_unscopables();
-    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
-    if (!slot || !slot->present) return tsc_value_undefined();
-    return array_symbol_descriptor(tsc_array_prototype_symbol_value(key), slot->writable, slot->enumerable, slot->configurable);
+    return tsc_value_get_own_property_descriptor(
+        tsc_value_array(tsc_array_prototype()),
+        tsc_symbol_property_key(tsc_symbol_unscopables())
+    );
 }
 
 static tsc_value_t tsc_array_default_prototype(void) {
     tsc_array_intrinsics_t* intrinsics = array_intrinsics_for_current_realm();
+    tsc_value_t unscopables = intrinsics->default_prototype_initialized
+        ? tsc_value_undefined()
+        : tsc_array_unscopables_value();
     tsc_runtime_lock();
     if (!intrinsics->default_prototype_initialized) {
         array_prototype_initializing = true;
@@ -1174,7 +1108,6 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->value_roots = NULL;
         array_prototype_define_method(proto->props, "toString", 8, 0.0, array_prototype_to_string);
         array_prototype_define_method(proto->props, "toLocaleString", 14, 0.0, array_prototype_to_locale_string);
-        array_prototype_define_method(proto->props, "valueOf", 7, 0.0, array_prototype_value_of);
         array_prototype_define_method(proto->props, "at", 2, 1.0, array_prototype_at);
         array_prototype_define_method(proto->props, "includes", 8, 1.0, array_prototype_includes);
         array_prototype_define_method(proto->props, "indexOf", 7, 1.0, array_prototype_index_of);
@@ -1211,6 +1144,22 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto->props, "findLastIndex", 13, 1.0, array_prototype_find_last_index);
         array_prototype_define_method(proto->props, "reduce", 6, 1.0, array_prototype_reduce);
         array_prototype_define_method(proto->props, "reduceRight", 11, 1.0, array_prototype_reduce_right);
+        tsc_object_define(
+            proto->props,
+            tsc_symbol_property_key(tsc_symbol_iterator()),
+            tsc_object_get(proto->props, tsc_str_from_lit("values", 6)),
+            true,
+            false,
+            true
+        );
+        tsc_object_define(
+            proto->props,
+            tsc_symbol_property_key(tsc_symbol_unscopables()),
+            unscopables,
+            false,
+            false,
+            true
+        );
         array_prototype_gc_root = proto;
         intrinsics->default_prototype = tsc_value_array(proto);
         array_prototype_initialized = true;
@@ -1391,7 +1340,6 @@ void tsc_array_clear_hole(tsc_array_t* a, size_t index) {
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a) return false;
     if (tsc_str_is_length_key(key)) return true;
-    if (array_prototype_initialized && a == tsc_array_prototype() && str_lit_eq(key, "valueOf")) return false;
     size_t idx = 0;
     if (tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) return true;
     return a->props && tsc_object_has_own(a->props, key);
@@ -1399,7 +1347,6 @@ bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
 
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a || tsc_str_is_length_key(key)) return false;
-    if (array_prototype_initialized && a == tsc_array_prototype() && str_lit_eq(key, "valueOf")) return false;
     if (a->props && tsc_object_has_own(a->props, key)) {
         return tsc_object_property_is_enumerable(a->props, key);
     }

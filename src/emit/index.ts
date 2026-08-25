@@ -55555,22 +55555,34 @@ class Emitter {
             }
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
-                if (this.isSupportedWellKnownSymbolExpression(args[0]!)) {
+                const hasOwnKey = this.emitExpr(args[0]!);
+                if (hasOwnKey.ty.kind === "symbol") {
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         [
                             { value: recv, target: T_VALUE, node: call.expression },
-                            { value: this.emitExpr(args[0]!), target: T_SYMBOL, node: args[0]! },
+                            { value: hasOwnKey, target: T_SYMBOL, node: args[0]! },
                             ...this.ignoredArgumentSpecs(args, 1),
                         ],
                         ([value, key]) => `tsc_value_has_own_symbol_prop(${value}, ${key})`,
+                    );
+                }
+                if (hasOwnKey.ty.kind === "value") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: hasOwnKey, target: T_VALUE, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([value, key]) => `tsc_value_has_own_computed_prop(${value}, ${key})`,
                     );
                 }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
                         { value: recv, target: T_VALUE, node: call.expression },
-                        { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                        { value: hasOwnKey, target: T_STRING, node: args[0]! },
                         ...this.ignoredArgumentSpecs(args, 1),
                     ],
                     ([value, key]) => `tsc_value_has_own_prop(${value}, ${key})`,
@@ -55588,22 +55600,34 @@ class Emitter {
                 );
             case "propertyIsEnumerable":
                 if (args.length < 1) unsupported(call, "propertyIsEnumerable expects at least 1 arg");
-                if (this.isSupportedWellKnownSymbolExpression(args[0]!)) {
+                const enumerableKey = this.emitExpr(args[0]!);
+                if (enumerableKey.ty.kind === "symbol") {
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         [
                             { value: recv, target: T_VALUE, node: call.expression },
-                            { value: this.emitExpr(args[0]!), target: T_SYMBOL, node: args[0]! },
+                            { value: enumerableKey, target: T_SYMBOL, node: args[0]! },
                             ...this.ignoredArgumentSpecs(args, 1),
                         ],
                         ([value, key]) => `tsc_value_symbol_property_is_enumerable(${value}, ${key})`,
+                    );
+                }
+                if (enumerableKey.ty.kind === "value") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: enumerableKey, target: T_VALUE, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([value, key]) => `tsc_value_computed_property_is_enumerable(${value}, ${key})`,
                     );
                 }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
                         { value: recv, target: T_VALUE, node: call.expression },
-                        { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
+                        { value: enumerableKey, target: T_STRING, node: args[0]! },
                         ...this.ignoredArgumentSpecs(args, 1),
                     ],
                     ([value, key]) => `tsc_value_property_is_enumerable(${value}, ${key})`,
@@ -63865,6 +63889,34 @@ class Emitter {
             case "propertyIsEnumerable": {
                 if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
                 const key = this.emitExpr(args[0]!);
+                if (key.ty.kind === "symbol") {
+                    const fn = method === "hasOwnProperty"
+                        ? "tsc_value_has_own_symbol_prop"
+                        : "tsc_value_symbol_property_is_enumerable";
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: key, target: T_SYMBOL, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([array, prop]) => `${fn}(${array}, ${prop})`,
+                    );
+                }
+                if (key.ty.kind === "value") {
+                    const fn = method === "hasOwnProperty"
+                        ? "tsc_value_has_own_computed_prop"
+                        : "tsc_value_computed_property_is_enumerable";
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: key, target: T_VALUE, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([array, prop]) => `${fn}(${array}, ${prop})`,
+                    );
+                }
                 const fn = method === "hasOwnProperty"
                     ? "tsc_array_has_own_key"
                     : "tsc_array_property_is_enumerable_key";
@@ -74598,12 +74650,6 @@ class Emitter {
                 const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                if (this.isStaticArrayPrototypeExpression(args[0]!)) {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
-                        `({ (void)${t}; tsc_array_prototype_own_property_names(); })`,
-                    );
-                }
                 if (
                     mapped.kind === "map" ||
                     mapped.kind === "set" ||
