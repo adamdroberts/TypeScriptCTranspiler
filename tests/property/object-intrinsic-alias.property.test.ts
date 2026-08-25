@@ -60,6 +60,19 @@ function nativeSource(plans: readonly DescriptorPlan[]): string {
         var target = {};
         ${definitions.join("\n")}
         console.log(joinAlias(getOwnPropertyNamesAlias(target), "|"));
+        function dynamicIdentity(value) {
+            return value;
+        }
+        function inspectNarrowedNames(value) {
+            /** @type {string[]} */
+            var names = dynamicIdentity(getOwnPropertyNamesAlias(value));
+            var allStrings = true;
+            for (var index = 0; index < names.length; index++) {
+                allStrings = allStrings && typeof names[index] === "string";
+            }
+            console.log(joinAlias(names, "|") + ":" + String(allStrings));
+        }
+        inspectNarrowedNames(target);
         console.log([
             Object(target) === target,
             Object(false).valueOf(),
@@ -80,6 +93,7 @@ function expectedOutput(plans: readonly DescriptorPlan[]): string[] {
             plan.enumerable,
         ].join(":")),
         plans.map((plan) => plan.key).join("|"),
+        `${plans.map((plan) => plan.key).join("|")}:true`,
         "true:false:boxed:12",
     ];
 }
@@ -109,8 +123,8 @@ test("Object intrinsic aliases share one descriptor and key worklist", async () 
             expect(result.exitCode).toBe(0);
 
             const process = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
-            expect(process.exitCode).toBe(0);
             expect(process.stderr.toString()).toBe("");
+            expect(process.exitCode).toBe(0);
             expect(process.stdout.toString().trimEnd().split("\n")).toEqual(expectedOutput(plans));
         }
     } finally {

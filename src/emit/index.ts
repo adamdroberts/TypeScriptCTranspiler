@@ -547,6 +547,14 @@ class Emitter {
     private conditionValueScopes: Map<ts.Expression, EmitResult>[] = [];
     private asyncAwaitEscapingSymbols = new Set<ts.Symbol>();
     private asyncAwaitPreludeDynamicRoots = new Map<ts.Symbol, string>();
+    /**
+     * Stack of lexical bindings whose NaN-boxed values need a decoded pointer
+     * visible to the conservative collector. A source symbol selects exactly
+     * one companion root in its declaring scope; every mutation refreshes that
+     * root through captureRootPtrForSymbol().
+     */
+    private localDynamicRootScopes: Map<ts.Symbol, string>[] = [];
+    private globalDynamicRoots = new Map<ts.Symbol, string>();
     private asyncAwaitHoistedPreludeSymbols = new Set<ts.Symbol>();
     private asyncAwaitHoistedPreludeDeclaredSymbols = new Set<ts.Symbol>();
     private asyncAwaitLexicalStorageNames = new Map<ts.Symbol, string>();
@@ -22864,7 +22872,43 @@ class Emitter {
         const env = this.closureEnvBindingForSymbol(sym);
         if (env?.rootPtr) return env.rootPtr;
         const cell = this.captureCellForSymbol(sym);
-        return cell?.rootCellName ?? null;
+        if (cell?.rootCellName) return cell.rootCellName;
+        for (let i = this.localDynamicRootScopes.length - 1; i >= 0; i--) {
+            const root = this.localDynamicRootScopes[i]!.get(sym);
+            if (root) return `&${root}`;
+        }
+        const globalRoot = this.globalDynamicRoots.get(sym);
+        if (globalRoot) return `&${globalRoot}`;
+        return null;
+    }
+
+    private emitLocalDynamicRoot(
+        buf: CBuf,
+        symbol: ts.Symbol,
+        value: string,
+        hint: string,
+    ): string | null {
+        const scope = this.localDynamicRootScopes[this.localDynamicRootScopes.length - 1];
+        if (!scope) return null;
+        const existing = scope.get(symbol);
+        if (existing) return existing;
+        const root = this.freshTemp(`_${hint}_gc_root`);
+        buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
+        scope.set(symbol, root);
+        return root;
+    }
+
+    private dynamicIdentifierRootRefresh(
+        expression: ts.Expression,
+        value: string,
+    ): string | null {
+        if (!ts.isIdentifier(expression)) return null;
+        const symbol = this.symbolForIdentifier(expression);
+        if (!symbol) return null;
+        const rootPtr = this.captureRootPtrForSymbol(symbol);
+        if (rootPtr) return `*${rootPtr} = tsc_value_gc_root(${value})`;
+        const asyncRoot = this.asyncAwaitPreludeDynamicRoots.get(symbol);
+        return asyncRoot ? `${asyncRoot} = tsc_value_gc_root(${value})` : null;
     }
 
     private asyncContinuationCellForSymbol(sym: ts.Symbol): string | null {
@@ -39367,14 +39411,25 @@ class Emitter {
             }
 
             this.globalDecls.line(`static ${ct.c} ${name};`);
+            let dynamicRoot: string | null = null;
+            if (sym && ct.kind === "value") {
+                dynamicRoot = this.freshTemp(`_${name}_global_gc_root`);
+                // The collector discovers this slot by scanning static data;
+                // the generated C never reads it directly, so make the store
+                // observable to prevent dead-store elimination.
+                this.globalDecls.line(`static void* volatile ${dynamicRoot};`);
+                this.globalDynamicRoots.set(sym, dynamicRoot);
+            }
             if (d.initializer) {
                 const r = this.emitExpr(d.initializer);
                 const coerced = useInt && r.ty.kind === "number"
                     ? `((int64_t)(${r.c}))`
                     : this.coerce(r, ct, d.initializer);
                 initBuf.line(`${name} = ${coerced};`);
+                if (dynamicRoot) initBuf.line(`${dynamicRoot} = tsc_value_gc_root(${name});`);
             } else if (ct.kind === "value") {
                 initBuf.line(`${name} = tsc_value_undefined();`);
+                if (dynamicRoot) initBuf.line(`${dynamicRoot} = NULL;`);
             }
         }
     }
@@ -40121,6 +40176,9 @@ class Emitter {
                 const root = this.freshTemp(`_${name}_async_gc_root`);
                 buf.line(`void* volatile ${root} = tsc_value_gc_root(${name});`);
                 this.asyncAwaitPreludeDynamicRoots.set(sym, root);
+                this.localDynamicRootScopes[this.localDynamicRootScopes.length - 1]?.set(sym, root);
+            } else if (sym && ct.kind === "value") {
+                this.emitLocalDynamicRoot(buf, sym, name, name);
             }
         }
     }
@@ -43839,6 +43897,7 @@ class Emitter {
     ): void {
         const disposables = this.syncUsingNames(statements);
         let exited = false;
+        this.localDynamicRootScopes.push(new Map());
         if (disposables.length > 0) this.syncUsingScopes.push(disposables);
         try {
             for (const stmt of statements) {
@@ -43865,6 +43924,7 @@ class Emitter {
             if (!exited) this.emitSyncDisposals(buf, disposables);
         } finally {
             if (disposables.length > 0) this.syncUsingScopes.pop();
+            this.localDynamicRootScopes.pop();
         }
     }
 
@@ -45492,17 +45552,11 @@ class Emitter {
                 ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
                 : this.prepareType(mapType(expr, this.checker)));
             const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
-            if (declaredTy?.kind === "value" && ty.kind === "void") {
-                return { c: this.identifierRead(expr), ty: T_VALUE };
-            }
-            if (declaredTy?.kind === "value" && ty.kind === "function") {
-                return { c: this.identifierRead(expr), ty: T_VALUE };
-            }
             if (declaredTy?.kind === "value" && ty.kind !== "value") {
-                return {
-                    c: this.unboxDynamicValue(this.identifierRead(expr), ty, expr),
-                    ty,
-                };
+                // Flow analysis can narrow a JavaScript/dynamic binding, but
+                // it does not change the binding's physical NaN-boxed storage.
+                // Consumers perform the conversion at their own typed boundary.
+                return { c: this.identifierRead(expr), ty: T_VALUE };
             }
             if (ty.kind === "function" && this.isDirectFunctionReferenceValue(expr)) {
                 return this.emitFunctionReferenceClosure(expr, ty);
@@ -46053,8 +46107,12 @@ class Emitter {
                 return { c: `(+${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusPlusToken:
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    const update = `${inner.c} = tsc_value_add(tsc_value_pos(${inner.c}), tsc_value_num(1.0))`;
+                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `(${inner.c} = tsc_value_add(tsc_value_pos(${inner.c}), tsc_value_num(1.0)))`,
+                        c: refresh
+                            ? `({ ${update}; ${refresh}; ${inner.c}; })`
+                            : `(${update})`,
                         ty: T_VALUE,
                     };
                 }
@@ -46062,8 +46120,12 @@ class Emitter {
                 return { c: `(++${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.MinusMinusToken:
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
+                    const update = `${inner.c} = tsc_value_sub(tsc_value_pos(${inner.c}), tsc_value_num(1.0))`;
+                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `(${inner.c} = tsc_value_sub(tsc_value_pos(${inner.c}), tsc_value_num(1.0)))`,
+                        c: refresh
+                            ? `({ ${update}; ${refresh}; ${inner.c}; })`
+                            : `(${update})`,
                         ty: T_VALUE,
                     };
                 }
@@ -46163,8 +46225,9 @@ class Emitter {
             case ts.SyntaxKind.PlusPlusToken: {
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
                     const tmp = this.freshTemp("_post");
+                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_add(${tmp}, tsc_value_num(1.0)); ${tmp}; })`,
+                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_add(${tmp}, tsc_value_num(1.0)); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
                         ty: T_VALUE,
                     };
                 }
@@ -46174,8 +46237,9 @@ class Emitter {
             case ts.SyntaxKind.MinusMinusToken: {
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
                     const tmp = this.freshTemp("_post");
+                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_sub(${tmp}, tsc_value_num(1.0)); ${tmp}; })`,
+                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_sub(${tmp}, tsc_value_num(1.0)); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
                         ty: T_VALUE,
                     };
                 }
@@ -47284,24 +47348,14 @@ class Emitter {
 
         if (op === ts.SyntaxKind.EqualsToken) {
             const coerced = this.coerce(rhs, lhsType, bin.right);
-            if (ts.isIdentifier(bin.left)) {
-                const symbol = this.symbolForIdentifier(bin.left);
-                if (symbol && lhsType.kind === "value") {
-                    const rootPtr = this.captureRootPtrForSymbol(symbol);
-                    if (rootPtr) {
-                        return {
-                            c: `({ ${lhsC} = ${coerced}; *${rootPtr} = tsc_value_gc_root(${lhsC}); ${lhsC}; })`,
-                            ty: lhsType,
-                        };
-                    }
-                    const root = this.asyncAwaitPreludeDynamicRoots.get(symbol);
-                    if (root) {
-                        return {
-                            c: `({ ${lhsC} = ${coerced}; ${root} = tsc_value_gc_root(${lhsC}); ${lhsC}; })`,
-                            ty: lhsType,
-                        };
-                    }
-                }
+            const refresh = lhsType.kind === "value"
+                ? this.dynamicIdentifierRootRefresh(bin.left, lhsC)
+                : null;
+            if (refresh) {
+                return {
+                    c: `({ ${lhsC} = ${coerced}; ${refresh}; ${lhsC}; })`,
+                    ty: lhsType,
+                };
             }
             return { c: `(${lhsC} = ${coerced})`, ty: lhsType };
         }
@@ -47363,8 +47417,12 @@ class Emitter {
                                                                 ? "tsc_value_ushr"
                                                                 : null;
             if (fn) {
+                const assignment = `${lhsC} = ${fn}(${lhsC}, ${this.coerce(rhs, T_VALUE, bin.right)})`;
+                const refresh = this.dynamicIdentifierRootRefresh(bin.left, lhsC);
                 return {
-                    c: `(${lhsC} = ${fn}(${lhsC}, ${this.coerce(rhs, T_VALUE, bin.right)}))`,
+                    c: refresh
+                        ? `({ ${assignment}; ${refresh}; ${lhsC}; })`
+                        : `(${assignment})`,
                     ty: T_VALUE,
                 };
             }
@@ -47570,33 +47628,43 @@ class Emitter {
     ): EmitResult {
         const cur = this.freshTemp("_la");
         const assign = `(${lhsC} = ${this.coerce(rhs, lhsType, bin.right)})`;
+        let result: EmitResult;
         if (op === ts.SyntaxKind.QuestionQuestionEqualsToken) {
             if (lhsType.kind === "value") {
-                return {
+                result = {
                     c: `({ ${lhsType.c} ${cur} = ${lhsC}; tsc_value_is_nullish(${cur}) ? ${assign} : ${cur}; })`,
                     ty: lhsType,
                 };
-            }
-            if (isPointerKind(lhsType)) {
-                return {
+            } else if (isPointerKind(lhsType)) {
+                result = {
                     c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cur} == NULL ? ${assign} : ${cur}; })`,
                     ty: lhsType,
                 };
+            } else {
+                result = { c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cur}; })`, ty: lhsType };
             }
-            return { c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cur}; })`, ty: lhsType };
+        } else {
+            const cond = this.truthyC({ c: cur, ty: lhsType }, bin.left);
+            result = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                ? {
+                    c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${assign} : ${cur}; })`,
+                    ty: lhsType,
+                }
+                : {
+                    c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${cur} : ${assign}; })`,
+                    ty: lhsType,
+                };
         }
-
-        const cond = this.truthyC({ c: cur, ty: lhsType }, bin.left);
-        if (op === ts.SyntaxKind.AmpersandAmpersandEqualsToken) {
+        const refresh = lhsType.kind === "value"
+            ? this.dynamicIdentifierRootRefresh(bin.left, lhsC)
+            : null;
+        if (refresh) {
             return {
-                c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${assign} : ${cur}; })`,
+                c: `({ (void)(${result.c}); ${refresh}; ${lhsC}; })`,
                 ty: lhsType,
             };
         }
-        return {
-            c: `({ ${lhsType.c} ${cur} = ${lhsC}; ${cond} ? ${cur} : ${assign}; })`,
-            ty: lhsType,
-        };
+        return result;
     }
 
     private emitDynamicPropertyAssignment(
@@ -48084,6 +48152,27 @@ class Emitter {
         const cond = this.emitBoolExpr(expr.condition);
         const whenT = this.emitExpr(expr.whenTrue);
         const whenF = this.emitExpr(expr.whenFalse);
+        if (
+            whenT.ty.kind === "array" &&
+            whenF.ty.kind === "array" &&
+            !sameCType(whenT.ty, whenF.ty)
+        ) {
+            const mapped = this.prepareType(mapType(expr, this.checker));
+            const target = mapped.kind === "array" && mapped.elem &&
+                mapped.elem.kind !== "void" && mapped.elem.kind !== "never"
+                ? mapped
+                : this.prepareType(arrayType(T_VALUE));
+            return {
+                // Each arm is converted lazily, after the condition chooses it.
+                // A C pointer alone cannot describe an array's element layout;
+                // selecting unlike layouts first would make the later consumer
+                // reinterpret one arm using the other arm's representation.
+                c: `(${cond} ? ${this.coerce(whenT, target, expr.whenTrue)} : ${this.coerce(whenF, target, expr.whenFalse)})`,
+                ty: target,
+                lazyGenerator: whenT.lazyGenerator && whenF.lazyGenerator,
+                lazyGeneratorFactory: whenT.lazyGeneratorFactory && whenF.lazyGeneratorFactory,
+            };
+        }
         if (whenT.ty.kind !== whenF.ty.kind) {
             const boxable: readonly CType["kind"][] = ["number", "boolean", "string", "array", "void", "value"];
             if (boxable.includes(whenT.ty.kind) && boxable.includes(whenF.ty.kind)) {
@@ -68992,9 +69081,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_extensible(${mapped.kind === "array" ? o! : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
         }
         if (name === "isSealed") {
             if (args.length < 1) unsupported(call, "Object.isSealed expects object");
@@ -69016,9 +69105,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_sealed(${mapped.kind === "array" ? o! : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_sealed(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
         }
         if (name === "isFrozen") {
             if (args.length < 1) unsupported(call, "Object.isFrozen expects object");
@@ -69040,9 +69129,9 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
-            ], ([o]) => `tsc_value_is_frozen(${mapped.kind === "array" ? o! : dynamicObjectArg(o!)})`);
+            ], ([o]) => `tsc_value_is_frozen(${mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!)})`);
         }
         if (name === "preventExtensions") {
             if (args.length < 1) unsupported(call, "Object.preventExtensions expects object");
@@ -69063,11 +69152,11 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? o! : dynamicObjectArg(o!);
-                const result = mapped.kind === "array" ? `tsc_value_as_array(${o})` : o;
+                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
+                const result = o;
                 return `({ if (!tsc_value_prevent_extensions(${target})) tsc_throw_str(tsc_str_from_cstr("Object.preventExtensions failed")); ${result}; })`;
             });
         }
@@ -69090,11 +69179,11 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? o! : dynamicObjectArg(o!);
-                const result = mapped.kind === "array" ? `tsc_value_as_array(${o})` : o;
+                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
+                const result = o;
                 return `({ if (!tsc_value_seal(${target})) tsc_throw_str(tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
             });
         }
@@ -69125,12 +69214,12 @@ class Emitter {
             const obj = this.emitExpr(arg);
             const proto = this.emitExpr(args[1]!);
             return this.emitSequencedExpr(mapped.kind === "value" ? T_VALUE : mapped, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 { value: proto, target: T_VALUE, node: args[1]! },
                 ...ignored,
             ], ([o, p]) => {
-                const target = mapped.kind === "array" ? o! : dynamicObjectArg(o!);
-                const result = mapped.kind === "array" ? `tsc_value_as_array(${o})` : o;
+                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
+                const result = o;
                 return `({ tsc_value_object_set_prototype_of(${target}, ${p}); ${result}; })`;
             });
         }
@@ -69153,11 +69242,11 @@ class Emitter {
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(mapped, [
-                { value: obj, target: (mapped.kind === "value" || mapped.kind === "array") ? T_VALUE : undefined, node: arg },
+                { value: obj, target: mapped.kind === "value" ? T_VALUE : undefined, node: arg },
                 ...ignored,
             ], ([o]) => {
-                const target = mapped.kind === "array" ? o! : dynamicObjectArg(o!);
-                const result = mapped.kind === "array" ? `tsc_value_as_array(${o})` : o;
+                const target = mapped.kind === "array" ? `tsc_value_array(${o})` : dynamicObjectArg(o!);
+                const result = o;
                 return `({ if (!tsc_value_freeze(${target})) tsc_throw_str(tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
             });
         }
@@ -71344,9 +71433,9 @@ class Emitter {
                     ], ([t]) => `((void)${t}, true)`);
                 }
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class" || mapped.kind === "array") ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class") ? T_VALUE : undefined, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_is_extensible(${t})`);
+                ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "ownKeys": {
                 if (args.length < 1) unsupported(call, "Reflect.ownKeys expects target");
@@ -71439,9 +71528,9 @@ class Emitter {
                 }
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
+                    { value: target, target: mapped.kind === "array" ? undefined : T_VALUE, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_prevent_extensions(${t})`);
+                ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
             case "set": {
                 if (args.length < 3) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
@@ -74256,9 +74345,8 @@ class Emitter {
                 const tmpOut = this.freshTemp("_arrOut");
                 const idx = this.freshTemp("_idx");
                 if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
-                    if (target.elem.kind === "value") return r.c;
                     const converted = this.freshTemp("_converted");
-                    const convertedExpr = this.coerce({ c: "NULL", ty: T_VOID }, target.elem, node);
+                    const convertedExpr = this.zeroValue(target.elem);
                     return (
                         `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); ` +
                         `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ` +
@@ -74612,13 +74700,14 @@ class Emitter {
         const key = this.typeKey(type);
         const existing = this.valueFunctionAdapters.get(key);
         if (existing) {
-            return `({ ${type.closureName}_value_env_t* _env = (${type.closureName}_value_env_t*)TSC_GC_MALLOC(sizeof(${type.closureName}_value_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _fn->fn = ${existing}; _fn->env = _env; _fn; })`;
+            return `({ ${type.closureName}_value_env_t* _env = (${type.closureName}_value_env_t*)TSC_GC_MALLOC(sizeof(${type.closureName}_value_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${existing}; _fn->env = _env; _fn; })`;
         }
         const adapter = `tsc_value_function_adapter_${this.valueFunctionAdapters.size}`;
         this.valueFunctionAdapters.set(key, adapter);
         const envType = `${type.closureName}_value_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_value_t value;");
+        this.structDecls.line("void* value_gc_root;");
         this.structDecls.close(` ${envType};`);
         const params = type.params ?? [];
         const paramNames = params.map((_, index) => `_arg${index}`);
@@ -74649,12 +74738,13 @@ class Emitter {
             buf.line("return;");
         } else {
             buf.line(`tsc_value_t _result = ${result};`);
+            buf.line("void* volatile _result_gc_root = tsc_value_gc_root(_result);");
             buf.line(`return ${this.coerce({ c: "_result", ty: T_VALUE }, ret, node)};`);
         }
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
-        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _fn->fn = ${adapter}; _fn->env = _env; _fn; })`;
+        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${adapter}; _fn->env = _env; _fn; })`;
     }
 }
 

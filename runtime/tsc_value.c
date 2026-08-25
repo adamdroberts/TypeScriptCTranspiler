@@ -4373,10 +4373,8 @@ tsc_value_t tsc_value_method_unshift(tsc_value_t recv, tsc_value_t value) {
 }
 
 static bool value_is_concat_spreadable(tsc_value_t value) {
-    tsc_str_t* key = value_known_symbol_internal_key(tsc_symbol_is_concat_spreadable());
-    if (tsc_value_has_own_prop(value, key)) {
-        return tsc_value_is_truthy(tsc_value_get_prop(value, key));
-    }
+    tsc_value_t spreadable = tsc_value_get_symbol_prop(value, tsc_symbol_is_concat_spreadable());
+    if (!tsc_value_is_undefined(spreadable)) return tsc_value_is_truthy(spreadable);
     return tsc_value_is_array(value);
 }
 
