@@ -1221,18 +1221,16 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
         }
         await requireTrackedRegularProjectFile(filename, trackedFiles, "host profile implementation");
     }
-    if (hostProfile.claimEligible) {
-        const canonicalImplementation = [
-            ...[...trackedFiles]
-                .filter((filename) => ["tests/test262/", "src/", "runtime/", "stdlib/"].some((prefix) => filename.startsWith(prefix))),
-            "package.json",
-            "bun.lock",
-            "compliance/ecmascript-2026/evidence-registry.json",
-            "compliance/ecmascript-2026/evidence-registry.schema.json",
-        ].sort();
-        if (JSON.stringify([...hostProfile.implementationFiles].sort()) !== JSON.stringify(canonicalImplementation)) {
-            throw new Error("claim-eligible host implementationFiles must equal the complete tracked compiler/runtime/runner source worklist");
-        }
+    const canonicalImplementation = [
+        ...[...trackedFiles]
+            .filter((filename) => ["tests/test262/", "src/", "runtime/", "stdlib/"].some((prefix) => filename.startsWith(prefix))),
+        "package.json",
+        "bun.lock",
+        "compliance/ecmascript-2026/evidence-registry.json",
+        "compliance/ecmascript-2026/evidence-registry.schema.json",
+    ].sort();
+    if (JSON.stringify([...hostProfile.implementationFiles].sort()) !== JSON.stringify(canonicalImplementation)) {
+        throw new Error("host implementationFiles must equal the complete tracked compiler/runtime/runner source worklist");
     }
     const capabilityKeys = Object.keys(hostProfile.capabilities).sort();
     const requiredKeys = [...baseline.runnerContract.requiredCapabilities].sort();

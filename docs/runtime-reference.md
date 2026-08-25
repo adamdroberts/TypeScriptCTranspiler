@@ -161,7 +161,8 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_add/sub/mul/div/mod/pow(a, b)` | `tsc_value_t` | Dynamic arithmetic and `+` string concatenation |
 | `tsc_value_pos/neg/bit_not(v)` | `tsc_value_t` | Dynamic unary `+`, `-`, and `~` using JS-style numeric coercion |
 | `tsc_value_bit_and/bit_or/bit_xor/shl/shr/ushr(a, b)` | `tsc_value_t` | Dynamic bitwise operators with JS-style numeric coercion, int32/uint32 conversion, and masked shift counts |
-| `tsc_value_eq(a, b)` | `bool` | Dynamic equality for numbers, booleans, strings, nullish sentinels, object identity, and boxed function identity |
+| `tsc_value_eq(a, b)` | `bool` | Strict dynamic equality for numbers, booleans, strings, nullish sentinels, object identity, and boxed function identity |
+| `tsc_value_abstract_eq(a, b)` | `bool` | Abstract dynamic equality over the runtime value representation, including primitive coercion and the Test262 HTMLDDA host object's nullish-equality exception |
 | `tsc_value_object_is(a, b)` | `bool` | SameValue comparison used by `Object.is`, including `NaN` and signed-zero handling |
 | `tsc_value_cmp(a, b)` | `int` | Dynamic relational comparison; returns `2` for unordered/NaN comparisons |
 | `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |

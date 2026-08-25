@@ -106,6 +106,7 @@ typedef struct {
 
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
+    bool is_html_dda;
     bool extensible;
     bool sealed;
     bool frozen;
@@ -136,6 +137,9 @@ typedef struct tsc_function_identity {
     void* env;
     struct tsc_function_identity* next;
 } tsc_function_identity_t;
+
+bool tsc_value_is_html_dda(tsc_value_t value);
+void tsc_value_mark_html_dda(tsc_value_t value);
 
 
 

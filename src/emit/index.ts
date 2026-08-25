@@ -14792,6 +14792,20 @@ class Emitter {
         );
     }
 
+    private isTest262DynamicGlobalReference(id: ts.Identifier): boolean {
+        if (!this.options.test262Observation || !this.isTest262ScriptSourceFile(id.getSourceFile())) {
+            return false;
+        }
+        const symbol = this.symbolForIdentifier(id);
+        if (!symbol) return true;
+        const declarations = symbol.declarations ?? [];
+        return declarations.length === 0 || declarations.every((declaration) =>
+            declaration.getSourceFile().isDeclarationFile ||
+            !this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) ||
+            ts.isIdentifier(declaration)
+        );
+    }
+
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
         name: ts.PropertyName,
         seenConsts: Set<ts.Symbol>,
@@ -45421,6 +45435,12 @@ class Emitter {
             if (this.isNamedImportFrom(expr, ["os", "node:os"], "devNull")) {
                 return { c: this.stringLit("/dev/null"), ty: T_STRING };
             }
+            if (this.isTest262DynamicGlobalReference(expr)) {
+                return {
+                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey(expr.text)})`,
+                    ty: T_VALUE,
+                };
+            }
             const dnsExport = this.namedImportExportName(expr, ["dns", "node:dns"]);
             const dnsHint = dnsExport === null ? null : this.dnsLookupHintConstant(dnsExport);
             if (dnsHint !== null) {
@@ -45661,6 +45681,12 @@ class Emitter {
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
+        if (ts.isIdentifier(to.expression) && this.isTest262DynamicGlobalReference(to.expression)) {
+            return {
+                c: `tsc_global_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
+                ty: T_STRING,
+            };
+        }
         const staticResult = this.sideEffectFreeTypeofString(to.expression, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
         const inner = this.emitExpr(to.expression);
@@ -47906,17 +47932,17 @@ class Emitter {
         if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || this.isNullExpression(bin.right))) {
             const literal = this.isUndefinedExpression(bin.right) ? "tsc_value_undefined()" : "tsc_value_null()";
             const value = this.coerce(left, T_VALUE, bin.left);
-            const c = `tsc_value_eq(${value}, ${literal})`;
+            const c = `tsc_value_abstract_eq(${value}, ${literal})`;
             return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
         }
         if (right.ty.kind === "value" && (this.isUndefinedExpression(bin.left) || this.isNullExpression(bin.left))) {
             const literal = this.isUndefinedExpression(bin.left) ? "tsc_value_undefined()" : "tsc_value_null()";
             const value = this.coerce(right, T_VALUE, bin.right);
-            const c = `tsc_value_eq(${literal}, ${value})`;
+            const c = `tsc_value_abstract_eq(${literal}, ${value})`;
             return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
         }
         if (left.ty.kind === "value" || right.ty.kind === "value") {
-            const r = this.emitDynamicBinary("tsc_value_eq", T_BOOLEAN, bin, left, right);
+            const r = this.emitDynamicBinary("tsc_value_abstract_eq", T_BOOLEAN, bin, left, right);
             return { c: negate ? `(!${r.c})` : r.c, ty: T_BOOLEAN };
         }
         if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {

@@ -7459,6 +7459,7 @@ double value_as_num(tsc_value_t v) {
 }
 
 bool tsc_value_is_truthy(tsc_value_t v) {
+    if (tsc_value_is_html_dda(v)) return false;
     if (!value_is_box(v)) {
         double n = value_as_num(v);
         return n != 0.0 && !isnan(n);
@@ -7659,6 +7660,7 @@ tsc_text_decoder_t* tsc_value_as_text_decoder(tsc_value_t v) {
 }
 
 tsc_str_t* tsc_value_typeof(tsc_value_t v) {
+    if (tsc_value_is_html_dda(v)) return tsc_str_from_lit("undefined", 9);
     if (!value_is_box(v)) return tsc_str_from_lit("number", 6);
     switch (value_tag(v)) {
         case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("function", 8);

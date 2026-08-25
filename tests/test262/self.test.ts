@@ -194,6 +194,13 @@ describe("host result contract", () => {
             "var detachedConstructorThrows = false;",
             "try { new DataView(storage); } catch (error) { detachedConstructorThrows = error instanceof TypeError; }",
             "if (!detachedConstructorThrows) throw new TypeError('detached DataView construction did not throw TypeError');",
+            "var htmlDDA = $262.IsHTMLDDA;",
+            "var htmlDDADescriptor = Object.getOwnPropertyDescriptor($262, 'IsHTMLDDA');",
+            "if (!htmlDDADescriptor || htmlDDADescriptor.value !== htmlDDA || !htmlDDADescriptor.writable || htmlDDADescriptor.enumerable || !htmlDDADescriptor.configurable) throw new TypeError('bad IsHTMLDDA descriptor');",
+            "if (typeof htmlDDA !== 'undefined' || Boolean(htmlDDA) || !htmlDDA !== true) throw new TypeError('bad IsHTMLDDA type or truthiness');",
+            "if (!(htmlDDA == null) || !(null == htmlDDA) || !(htmlDDA == undefined) || !(undefined == htmlDDA)) throw new TypeError('bad IsHTMLDDA abstract equality');",
+            "if (htmlDDA === null || htmlDDA === undefined || !Object.is(htmlDDA, htmlDDA)) throw new TypeError('bad IsHTMLDDA object identity');",
+            "if ((htmlDDA ?? 42) !== htmlDDA || htmlDDA() !== null || htmlDDA('') !== null) throw new TypeError('bad IsHTMLDDA ordinary object or call behavior');",
             "print('native-ok');",
             "",
         ].join("\n");

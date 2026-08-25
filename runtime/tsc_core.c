@@ -8,6 +8,7 @@ tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_O
 void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, tsc_str_t* name) {
     if (!entry) return;
     if (!name) name = tsc_str_from_lit("", 0);
+    entry->is_html_dda = false;
     entry->length = length;
     entry->name = name;
     entry->props = tsc_object_new();

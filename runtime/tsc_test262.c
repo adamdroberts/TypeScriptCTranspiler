@@ -25,6 +25,13 @@ static tsc_value_t test262_host_detach_array_buffer(void* env, tsc_value_t this_
     return tsc_value_undefined();
 }
 
+static tsc_value_t test262_host_html_dda(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    return tsc_value_null();
+}
+
 tsc_value_t tsc_test262_host_object(void) {
     static tsc_object_t* host = NULL;
     if (!host) {
@@ -70,6 +77,25 @@ tsc_value_t tsc_test262_host_object(void) {
                     1.0,
                     tsc_str_from_lit("detachArrayBuffer", 17)
                 ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            tsc_value_t html_dda = tsc_value_function_builtin_named(
+                test262_host_html_dda,
+                NULL,
+                0.0,
+                tsc_str_from_lit("IsHTMLDDA", 9)
+            );
+            tsc_value_mark_html_dda(html_dda);
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("IsHTMLDDA", 9),
+                html_dda,
                 true,
                 true,
                 true,

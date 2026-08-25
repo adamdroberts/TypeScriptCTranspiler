@@ -1001,6 +1001,24 @@ tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value) {
     return value;
 }
 
+tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
+    tsc_value_t global = tsc_global_object();
+    if (!tsc_value_has_prop(global, key)) {
+        tsc_throw_error(
+            TSC_ERROR_REFERENCE,
+            tsc_str_concat(key, tsc_str_from_lit(" is not defined", 15))
+        );
+    }
+    return tsc_value_get_prop(global, key);
+}
+
+tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key) {
+    tsc_value_t global = tsc_global_object();
+    return tsc_value_has_prop(global, key)
+        ? tsc_value_typeof(tsc_value_get_prop(global, key))
+        : tsc_str_from_lit("undefined", 9);
+}
+
 tsc_value_t tsc_value_sloppy_this(tsc_value_t value) {
     if (tsc_value_is_nullish(value)) return tsc_global_object();
     if (tsc_value_is_object(value)) return value;
@@ -3968,6 +3986,99 @@ bool tsc_value_eq(tsc_value_t a, tsc_value_t b) {
         case TSC_VALUE_TAG_ARRAY:
         case TSC_VALUE_TAG_OBJECT:
             return value_ptr(a) == value_ptr(b);
+    }
+    return false;
+}
+
+bool tsc_value_is_html_dda(tsc_value_t value) {
+    return value_is_box(value) &&
+        value_tag(value) == TSC_VALUE_TAG_FUNCTION &&
+        ((const tsc_function_identity_t*)value_ptr(value))->is_html_dda;
+}
+
+void tsc_value_mark_html_dda(tsc_value_t value) {
+    if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_FUNCTION) {
+        tsc_panic("[[IsHTMLDDA]] requires a callable object");
+    }
+    ((tsc_function_identity_t*)value_ptr(value))->is_html_dda = true;
+}
+
+typedef enum {
+    TSC_ABSTRACT_UNDEFINED,
+    TSC_ABSTRACT_NULL,
+    TSC_ABSTRACT_BOOLEAN,
+    TSC_ABSTRACT_NUMBER,
+    TSC_ABSTRACT_STRING,
+    TSC_ABSTRACT_OBJECT,
+} tsc_abstract_type_t;
+
+static tsc_abstract_type_t abstract_equality_type(tsc_value_t value) {
+    if (!value_is_box(value)) return TSC_ABSTRACT_NUMBER;
+    switch (value_tag(value)) {
+        case TSC_VALUE_TAG_UNDEFINED: return TSC_ABSTRACT_UNDEFINED;
+        case TSC_VALUE_TAG_NULL: return TSC_ABSTRACT_NULL;
+        case TSC_VALUE_TAG_FALSE:
+        case TSC_VALUE_TAG_TRUE: return TSC_ABSTRACT_BOOLEAN;
+        case TSC_VALUE_TAG_STRING: return TSC_ABSTRACT_STRING;
+        case TSC_VALUE_TAG_FUNCTION:
+        case TSC_VALUE_TAG_ARRAY:
+        case TSC_VALUE_TAG_OBJECT: return TSC_ABSTRACT_OBJECT;
+    }
+    return TSC_ABSTRACT_UNDEFINED;
+}
+
+static tsc_value_t abstract_equality_to_primitive(tsc_value_t object) {
+    static const char* const methods[] = { "valueOf", "toString" };
+    static const size_t method_lengths[] = { 7, 8 };
+    for (size_t index = 0; index < sizeof(methods) / sizeof(methods[0]); index++) {
+        tsc_value_t method = tsc_value_get_prop(
+            object,
+            tsc_str_from_lit(methods[index], method_lengths[index])
+        );
+        if (!tsc_value_is_callable(method)) continue;
+        tsc_value_t result = tsc_value_apply_function(
+            method,
+            object,
+            tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))
+        );
+        if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
+}
+
+bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
+    tsc_abstract_type_t at = abstract_equality_type(a);
+    tsc_abstract_type_t bt = abstract_equality_type(b);
+    if (at == bt) return tsc_value_eq(a, b);
+    if (
+        (at == TSC_ABSTRACT_NULL && bt == TSC_ABSTRACT_UNDEFINED) ||
+        (at == TSC_ABSTRACT_UNDEFINED && bt == TSC_ABSTRACT_NULL)
+    ) {
+        return true;
+    }
+    if (
+        (tsc_value_is_html_dda(a) && (bt == TSC_ABSTRACT_NULL || bt == TSC_ABSTRACT_UNDEFINED)) ||
+        (tsc_value_is_html_dda(b) && (at == TSC_ABSTRACT_NULL || at == TSC_ABSTRACT_UNDEFINED))
+    ) {
+        return true;
+    }
+    if (at == TSC_ABSTRACT_NUMBER && bt == TSC_ABSTRACT_STRING) {
+        return tsc_value_eq(a, tsc_value_num(tsc_value_as_num(b)));
+    }
+    if (at == TSC_ABSTRACT_STRING && bt == TSC_ABSTRACT_NUMBER) {
+        return tsc_value_eq(tsc_value_num(tsc_value_as_num(a)), b);
+    }
+    if (at == TSC_ABSTRACT_BOOLEAN) {
+        return tsc_value_abstract_eq(tsc_value_num(tsc_value_as_num(a)), b);
+    }
+    if (bt == TSC_ABSTRACT_BOOLEAN) {
+        return tsc_value_abstract_eq(a, tsc_value_num(tsc_value_as_num(b)));
+    }
+    if (at == TSC_ABSTRACT_OBJECT && bt != TSC_ABSTRACT_OBJECT) {
+        return tsc_value_abstract_eq(abstract_equality_to_primitive(a), b);
+    }
+    if (at != TSC_ABSTRACT_OBJECT && bt == TSC_ABSTRACT_OBJECT) {
+        return tsc_value_abstract_eq(a, abstract_equality_to_primitive(b));
     }
     return false;
 }
