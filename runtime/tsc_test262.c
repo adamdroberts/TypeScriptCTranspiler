@@ -4,6 +4,7 @@ static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
 static tsc_test262_eval_script_callback_t g_test262_eval_script_callback = NULL;
 static tsc_test262_direct_eval_callback_t g_test262_direct_eval_callback = NULL;
+static tsc_test262_indirect_eval_callback_t g_test262_indirect_eval_callback = NULL;
 static const char test262_host_realm_state_key;
 
 static void test262_install_current_realm_globals(void);
@@ -15,11 +16,10 @@ static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_a
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
     if (!value_is_box(source) || value_tag(source) != TSC_VALUE_TAG_STRING) return source;
-    tsc_throw_error(
-        TSC_ERROR_TYPE,
-        tsc_str_from_cstr("indirect eval is outside the finite AOT direct-eval graph")
-    );
-    return tsc_value_undefined();
+    if (!g_test262_indirect_eval_callback) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("indirect eval has no finite AOT source graph"));
+    }
+    return g_test262_indirect_eval_callback(tsc_value_as_string(source));
 }
 
 void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback) {
@@ -28,6 +28,10 @@ void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t cal
 
 void tsc_test262_set_direct_eval_callback(tsc_test262_direct_eval_callback_t callback) {
     g_test262_direct_eval_callback = callback;
+}
+
+void tsc_test262_set_indirect_eval_callback(tsc_test262_indirect_eval_callback_t callback) {
+    g_test262_indirect_eval_callback = callback;
 }
 
 tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {

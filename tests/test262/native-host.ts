@@ -74,6 +74,10 @@ interface ControlContext {
 
 export interface FiniteEvalScriptSourceGraph {
     readonly sources: readonly string[];
+    readonly indirectEvalSources: readonly {
+        readonly source: string;
+        readonly strict: boolean;
+    }[];
     readonly directEvalSources: readonly {
         readonly source: string;
         readonly strictCaller: boolean;
@@ -140,6 +144,195 @@ function callIsInSourceEvaluation(call: ts.CallExpression, sourceFile: ts.Source
     return true;
 }
 
+function transparentExpression(expression: ts.Expression): ts.Expression {
+    while (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAsExpression(expression) ||
+        ts.isTypeAssertionExpression(expression) ||
+        ts.isSatisfiesExpression(expression) ||
+        ts.isNonNullExpression(expression)
+    ) {
+        expression = expression.expression;
+    }
+    return expression;
+}
+
+function staticMemberNames(expression: ts.PropertyAccessExpression | ts.ElementAccessExpression): string[] {
+    if (ts.isPropertyAccessExpression(expression)) return [expression.name.text];
+    return expression.argumentExpression
+        ? staticStringExpressionTexts(expression.argumentExpression)
+        : [];
+}
+
+/** Build one conservative value-flow graph for expressions which can carry a
+ * Realm's %eval% identity. Runtime identity checking makes over-approximation
+ * safe; the graph is only used to prove the finite source records that must be
+ * compiled ahead of time. */
+function evalIdentityAliases(sourceFile: ts.SourceFile): ReadonlyMap<string, readonly ts.Expression[]> {
+    const aliases = new Map<string, ts.Expression[]>();
+    const add = (name: string, expression: ts.Expression): void => {
+        const values = aliases.get(name) ?? [];
+        values.push(expression);
+        aliases.set(name, values);
+    };
+    const worklist: ts.Node[] = [sourceFile];
+    while (worklist.length > 0) {
+        const node = worklist.pop()!;
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            add(node.name.text, node.initializer);
+        } else if (
+            ts.isBinaryExpression(node) &&
+            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(transparentExpression(node.left))
+        ) {
+            add((transparentExpression(node.left) as ts.Identifier).text, node.right);
+        }
+        ts.forEachChild(node, (child) => { worklist.push(child); });
+    }
+    return aliases;
+}
+
+function expressionMayCarryEvalIdentity(
+    expression: ts.Expression,
+    evalMayBeShadowed: boolean,
+    aliases: ReadonlyMap<string, readonly ts.Expression[]>,
+    seenAliases: Set<string> = new Set(),
+): boolean {
+    expression = transparentExpression(expression);
+    if (ts.isIdentifier(expression)) {
+        if (expression.text === "eval" && !evalMayBeShadowed) return true;
+        if (seenAliases.has(expression.text)) return false;
+        const values = aliases.get(expression.text);
+        if (!values) return false;
+        seenAliases.add(expression.text);
+        const result = values.some((value) =>
+            expressionMayCarryEvalIdentity(value, evalMayBeShadowed, aliases, seenAliases));
+        seenAliases.delete(expression.text);
+        return result;
+    }
+    if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+        const names = staticMemberNames(expression);
+        if (names.includes("eval")) return true;
+        if (names.some((name) => name === "bind" || name === "valueOf")) {
+            return expressionMayCarryEvalIdentity(
+                expression.expression,
+                evalMayBeShadowed,
+                aliases,
+                seenAliases,
+            );
+        }
+        return false;
+    }
+    if (ts.isConditionalExpression(expression)) {
+        return expressionMayCarryEvalIdentity(
+            expression.whenTrue,
+            evalMayBeShadowed,
+            aliases,
+            seenAliases,
+        ) || expressionMayCarryEvalIdentity(
+            expression.whenFalse,
+            evalMayBeShadowed,
+            aliases,
+            seenAliases,
+        );
+    }
+    if (ts.isBinaryExpression(expression)) {
+        if (
+            expression.operatorToken.kind === ts.SyntaxKind.CommaToken ||
+            expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+            return expressionMayCarryEvalIdentity(
+                expression.right,
+                evalMayBeShadowed,
+                aliases,
+                seenAliases,
+            );
+        }
+        if (
+            expression.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+            expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+            expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+        ) {
+            return expressionMayCarryEvalIdentity(
+                expression.left,
+                evalMayBeShadowed,
+                aliases,
+                seenAliases,
+            ) || expressionMayCarryEvalIdentity(
+                expression.right,
+                evalMayBeShadowed,
+                aliases,
+                seenAliases,
+            );
+        }
+    }
+    if (ts.isCallExpression(expression)) {
+        const callee = transparentExpression(expression.expression);
+        if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
+            if (staticMemberNames(callee).includes("bind")) {
+                return expressionMayCarryEvalIdentity(
+                    callee.expression,
+                    evalMayBeShadowed,
+                    aliases,
+                    seenAliases,
+                );
+            }
+        }
+    }
+    return false;
+}
+
+function finiteApplyArgumentExpressions(expression: ts.Expression | undefined): readonly ts.Expression[] {
+    if (!expression) return [];
+    expression = transparentExpression(expression);
+    if (!ts.isArrayLiteralExpression(expression) || expression.elements.length === 0) return [];
+    const first = expression.elements[0];
+    return first && ts.isExpression(first) && !ts.isSpreadElement(first) ? [first] : [];
+}
+
+/** Return the possible String argument expressions for an indirect call of a
+ * %eval% identity. All ordinary calls still use the runtime identity guard. */
+function indirectEvalSourceExpressions(
+    call: ts.CallExpression,
+    evalMayBeShadowed: boolean,
+    aliases: ReadonlyMap<string, readonly ts.Expression[]>,
+): readonly ts.Expression[] {
+    const callee = transparentExpression(call.expression);
+    if (
+        ts.isIdentifier(callee) &&
+        callee.text === "eval" &&
+        !evalMayBeShadowed &&
+        !aliases.has("eval")
+    ) {
+        return [];
+    }
+    if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
+        const names = staticMemberNames(callee);
+        if (names.includes("call") && expressionMayCarryEvalIdentity(
+            callee.expression,
+            evalMayBeShadowed,
+            aliases,
+        )) {
+            return call.arguments[1] && ts.isExpression(call.arguments[1])
+                ? [call.arguments[1]]
+                : [];
+        }
+        if (names.includes("apply") && expressionMayCarryEvalIdentity(
+            callee.expression,
+            evalMayBeShadowed,
+            aliases,
+        )) {
+            return finiteApplyArgumentExpressions(call.arguments[1]);
+        }
+    }
+    if (expressionMayCarryEvalIdentity(callee, evalMayBeShadowed, aliases)) {
+        return call.arguments[0] && ts.isExpression(call.arguments[0])
+            ? [call.arguments[0]]
+            : [];
+    }
+    return [];
+}
+
 /** Derive the transitive ParseScript source graph from one canonical AST
  * worklist. Runtime strings outside this finite graph fail closed. */
 export function finiteEvalScriptSourceGraph(
@@ -149,6 +342,10 @@ export function finiteEvalScriptSourceGraph(
     const directSources = new Map<string, {
         source: string;
         strictCaller: boolean;
+        strict: boolean;
+    }>();
+    const indirectSources = new Map<string, {
+        source: string;
         strict: boolean;
     }>();
     const records: Array<{
@@ -167,6 +364,7 @@ export function finiteEvalScriptSourceGraph(
         );
         const recordStrict = record.strictContext ?? sourceFileIsStrict(sourceFile);
         const evalMayBeShadowed = sourceRecordMayShadowEval(sourceFile);
+        const evalAliases = evalIdentityAliases(sourceFile);
         const worklist: ts.Node[] = [sourceFile];
         while (worklist.length > 0) {
             const node = worklist.pop()!;
@@ -179,6 +377,7 @@ export function finiteEvalScriptSourceGraph(
                     const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
                     return {
                         sources: [],
+                        indirectEvalSources: [],
                         directEvalSources: [],
                         error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript must be called directly so its finite source graph can be proven`,
                     };
@@ -190,6 +389,7 @@ export function finiteEvalScriptSourceGraph(
                     const location = sourceFile.getLineAndCharacterOfPosition(parent.getStart(sourceFile));
                     return {
                         sources: [],
+                        indirectEvalSources: [],
                         directEvalSources: [],
                         error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript source is not a finite static string expression`,
                     };
@@ -213,6 +413,7 @@ export function finiteEvalScriptSourceGraph(
                     const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
                     return {
                         sources: [],
+                        indirectEvalSources: [],
                         directEvalSources: [],
                         error: `${record.path}:${location.line + 1}:${location.character + 1}: direct eval source is not a finite static string expression`,
                     };
@@ -236,6 +437,31 @@ export function finiteEvalScriptSourceGraph(
                     });
                 }
             }
+            if (ts.isCallExpression(node)) {
+                for (const expression of indirectEvalSourceExpressions(
+                    node,
+                    evalMayBeShadowed,
+                    evalAliases,
+                )) {
+                    for (const source of staticStringExpressionTexts(expression)) {
+                        if (indirectSources.has(source)) continue;
+                        const evalSourceFile = createEcmaSourceFile(
+                            "__tsc2c_indirect_eval_probe__.js",
+                            source,
+                            ts.ScriptTarget.ESNext,
+                            true,
+                            ts.ScriptKind.JS,
+                        );
+                        const strict = sourceFileIsStrict(evalSourceFile);
+                        indirectSources.set(source, { source, strict });
+                        records.push({
+                            path: `__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,
+                            source,
+                            strictContext: strict,
+                        });
+                    }
+                }
+            }
             const children: ts.Node[] = [];
             node.forEachChild((child) => {
                 children.push(child);
@@ -247,6 +473,9 @@ export function finiteEvalScriptSourceGraph(
     }
     return {
         sources: [...sources].sort(),
+        indirectEvalSources: [...indirectSources.values()].sort((left, right) =>
+            Number(left.strict) - Number(right.strict) || left.source.localeCompare(right.source),
+        ),
         directEvalSources: [...directSources.values()].sort((left, right) =>
             Number(left.strictCaller) - Number(right.strictCaller) ||
             left.source.localeCompare(right.source),
@@ -996,6 +1225,25 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             directEvalRoots.push(entry);
             directEvalEntries.push({ ...direct, entry });
         }
+        const indirectEvalEntries: Array<{
+            source: string;
+            entry: string | null;
+            strict: boolean;
+        }> = [];
+        const indirectEvalRoots: string[] = [];
+        for (const indirect of evalScriptGraph.indirectEvalSources) {
+            const relative =
+                `__tsc2c_indirect_eval__/${indirect.strict ? "strict" : "sloppy"}/` +
+                `${sha256Text(indirect.source)}.js`;
+            const failure = parseFailure(indirect.source, relative, "parse", "test-source", "script");
+            if (failure) {
+                indirectEvalEntries.push({ ...indirect, entry: null });
+                continue;
+            }
+            const entry = await writeExclusive(sourceRoot, relative, indirect.source);
+            indirectEvalRoots.push(entry);
+            indirectEvalEntries.push({ ...indirect, entry });
+        }
 
         const buildDirectory = path.join(request.artifactDirectory, "build");
         const executable = path.join(request.artifactDirectory, "program");
@@ -1009,16 +1257,22 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             entry: testEntry,
             output: executable,
             buildDir: buildDirectory,
-            additionalRoots: [...setupEntries, ...evalScriptRoots, ...directEvalRoots],
+            additionalRoots: [
+                ...setupEntries,
+                ...evalScriptRoots,
+                ...directEvalRoots,
+                ...indirectEvalRoots,
+            ],
             initializationEntries: [...setupEntries, testEntry],
             moduleRoots,
-            isolatedScriptRoots: [...scriptEntries, ...directEvalRoots],
+            isolatedScriptRoots: [...scriptEntries, ...directEvalRoots, ...indirectEvalRoots],
             ignoreCheckJsDirectiveRoots: [...new Set([
                 ...setupEntries,
                 testEntry,
                 ...moduleRoots,
                 ...evalScriptRoots,
                 ...directEvalRoots,
+                ...indirectEvalRoots,
             ])],
             test262Observation: {
                 kind: "test262-native-observation",
@@ -1029,6 +1283,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 scriptEntries,
                 evalScriptEntries,
                 directEvalEntries,
+                indirectEvalEntries,
             },
             diagnosticWriter: (message) => {
                 diagnostics += message;

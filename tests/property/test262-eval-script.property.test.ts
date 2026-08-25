@@ -14,6 +14,11 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     const directSourceStrict = '"use strict"; var directSourceStrict = 7;';
     const strictRecord = '"use strict"; eval("var directCallerStrict = 8;");';
     const createdRealmRecord = "var createdRealmValue = 9;";
+    const indirectSequence = 'var indirectSequence = 10; (0, eval)("var indirectNested = 11;");';
+    const indirectAlias = "var indirectAliasValue = 12;";
+    const indirectCall = "var indirectCallValue = 13;";
+    const indirectApply = "var indirectApplyValue = 14;";
+    const indirectConditional = '"use strict"; var indirectStrictValue = 15;';
     const root = finiteEvalScriptSourceGraph([{
         path: "root.js",
         source: `
@@ -23,6 +28,12 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
             eval(flag ? ${JSON.stringify(directSloppy)} : ${JSON.stringify(directSourceStrict)});
             $262.evalScript(${JSON.stringify(strictRecord)});
             $262.createRealm().evalScript(${JSON.stringify(createdRealmRecord)});
+            var foreignEval = $262.createRealm().global.eval;
+            (0, eval)(${JSON.stringify(indirectSequence)});
+            foreignEval(${JSON.stringify(indirectAlias)});
+            globalThis.eval.call(undefined, ${JSON.stringify(indirectCall)});
+            eval.apply(undefined, [${JSON.stringify(indirectApply)}]);
+            (flag ? eval : foreignEval)(${JSON.stringify(indirectConditional)});
         `,
     }]);
     expect(root.error).toBeNull();
@@ -41,6 +52,14 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
         JSON.stringify({ source: directSourceStrict, strictCaller: false, strict: true }),
         JSON.stringify({ source: "var directCallerStrict = 8;", strictCaller: true, strict: true }),
     ]));
+    expect(new Set(root.indirectEvalSources.map((entry) => JSON.stringify(entry)))).toEqual(new Set([
+        JSON.stringify({ source: indirectSequence, strict: false }),
+        JSON.stringify({ source: "var indirectNested = 11;", strict: false }),
+        JSON.stringify({ source: indirectAlias, strict: false }),
+        JSON.stringify({ source: indirectCall, strict: false }),
+        JSON.stringify({ source: indirectApply, strict: false }),
+        JSON.stringify({ source: indirectConditional, strict: true }),
+    ]));
 
     const nonFinite = finiteEvalScriptSourceGraph([{
         path: "root.js",
@@ -55,6 +74,13 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     }]);
     expect(nonFiniteDirect.directEvalSources).toEqual([]);
     expect(nonFiniteDirect.error).toContain("direct eval source is not a finite static string expression");
+
+    const nonFiniteIndirect = finiteEvalScriptSourceGraph([{
+        path: "root.js",
+        source: "(0, eval)(runtimeSource);",
+    }]);
+    expect(nonFiniteIndirect.indirectEvalSources).toEqual([]);
+    expect(nonFiniteIndirect.error).toBeNull();
 });
 
 test("finite AOT evalScript records parse and evaluate on every call", async () => {
@@ -92,6 +118,24 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const directCompletionSource = "sentinel;";
     const directThrowSource = "throw sentinel;";
     const invalidDirectSource = "let = ;";
+    const indirectDeclarationSource = `
+        indirectInitial = indirectEvalFunction;
+        var indirectEvalVar = 51;
+        function indirectEvalFunction() { return 52; }
+    `;
+    const indirectStrictSource = `
+        "use strict";
+        var indirectStrictVar = 53;
+        function indirectStrictFunction() { return 54; }
+    `;
+    const indirectCompletionSource = "sentinel;";
+    const indirectThrowSource = "throw sentinel;";
+    const indirectRealmSource = `
+        globalThis.indirectRealmMark = 55;
+        globalThis.indirectRealmReader = function () { return globalThis; };
+        indirectRealmMark;
+    `;
+    const invalidIndirectSource = "let = ;";
     const realmDeclarationSource = `
         let realmLexical = 41;
         var realmVar = 42;
@@ -273,10 +317,38 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             strict: false,
         },
     ] as const;
+    const indirectEntries = [
+        {
+            source: indirectDeclarationSource,
+            entry: path.join(temporary, "indirect-declarations.js"),
+            strict: false,
+        },
+        {
+            source: indirectStrictSource,
+            entry: path.join(temporary, "indirect-strict.js"),
+            strict: true,
+        },
+        {
+            source: indirectCompletionSource,
+            entry: path.join(temporary, "indirect-completion.js"),
+            strict: false,
+        },
+        {
+            source: indirectThrowSource,
+            entry: path.join(temporary, "indirect-throw.js"),
+            strict: false,
+        },
+        {
+            source: indirectRealmSource,
+            entry: path.join(temporary, "indirect-realm.js"),
+            strict: false,
+        },
+    ] as const;
     const scenarioId = "property/test262-eval-script.js#sloppy";
     await Promise.all([
         ...compiledEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
         ...directEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
+        ...indirectEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
         fs.writeFile(nestedEvalMain, 'function nested() { return eval("1"); } nested();', "utf8"),
         fs.writeFile(main, `
             var executions = 0;
@@ -357,6 +429,42 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             if (eval(17) !== 17) throw new Error("reassigned strict eval receiver differed");
             eval = savedEval;
 
+            if ((0, eval)(17) !== 17 || savedEval.call(undefined, true) !== true ||
+                savedEval.apply(undefined, [null]) !== null) {
+                throw new Error("indirect eval non-string identity differed");
+            }
+            var indirectInitial;
+            (0, eval)(${JSON.stringify(indirectDeclarationSource)});
+            var indirectDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indirectEvalVar");
+            if (indirectInitial !== indirectEvalFunction || indirectEvalVar !== 51 ||
+                indirectEvalFunction() !== 52 || !indirectDescriptor ||
+                !indirectDescriptor.writable || !indirectDescriptor.enumerable ||
+                !indirectDescriptor.configurable) {
+                throw new Error("sloppy indirect eval declaration instantiation differed");
+            }
+            savedEval.call(undefined, ${JSON.stringify(indirectStrictSource)});
+            if (typeof indirectStrictVar !== "undefined" ||
+                typeof indirectStrictFunction !== "undefined" ||
+                "indirectStrictVar" in globalThis || "indirectStrictFunction" in globalThis) {
+                throw new Error("strict indirect eval declarations escaped");
+            }
+            if (savedEval.apply(undefined, [${JSON.stringify(indirectCompletionSource)}]) !== sentinel ||
+                savedEval.bind(null)(${JSON.stringify(indirectCompletionSource)}) !== sentinel) {
+                throw new Error("indirect eval completion identity differed");
+            }
+            var indirectThrowExact = false;
+            try { (0, eval)(${JSON.stringify(indirectThrowSource)}); }
+            catch (error) { indirectThrowExact = error === sentinel; }
+            if (!indirectThrowExact) throw new Error("indirect eval abrupt identity differed");
+            var indirectSyntax = false;
+            try { globalThis.eval(${JSON.stringify(invalidIndirectSource)}); }
+            catch (error) { indirectSyntax = error instanceof SyntaxError; }
+            if (!indirectSyntax) throw new Error("indirect eval ParseScript failure differed");
+            var indirectUnknown = false;
+            try { (0, eval)("runtime source outside graph"); }
+            catch (error) { indirectUnknown = error instanceof TypeError; }
+            if (!indirectUnknown) throw new Error("unproved indirect eval source did not fail closed");
+
             eval(${JSON.stringify(directDeclarationSource)});
             var directVarDescriptor = Object.getOwnPropertyDescriptor(globalThis, "directEvalVar");
             var directFunctionDescriptor = Object.getOwnPropertyDescriptor(globalThis, "directEvalFunction");
@@ -398,6 +506,12 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 realmA.global === defaultRealmGlobal || realmB.global === defaultRealmGlobal ||
                 realmA.global.globalThis !== realmA.global || realmB.global.globalThis !== realmB.global) {
                 throw new Error("createRealm did not create independent global identities");
+            }
+            if (realmA.global.eval(${JSON.stringify(indirectRealmSource)}) !== 55 ||
+                realmA.global.indirectRealmMark !== 55 ||
+                realmA.global.indirectRealmReader() !== realmA.global ||
+                "indirectRealmMark" in globalThis) {
+                throw new Error("indirect eval did not use the callee Realm");
             }
             realmA.evalScript(${JSON.stringify(realmDeclarationSource)});
             realmB.evalScript(${JSON.stringify(realmDeclarationSource)});
@@ -702,6 +816,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             const allCompiledRoots = [
                 ...compiledEntries.map(({ entry }) => entry),
                 ...directEntries.map(({ entry }) => entry),
+                ...indirectEntries.map(({ entry }) => entry),
             ];
             const result = await compile({
                 entry: main,
@@ -727,6 +842,10 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                         { source: "17", entry: null, strictCaller: false, strict: false },
                         { source: invalidDirectSource, entry: null, strictCaller: false, strict: false },
                         ...directEntries,
+                    ],
+                    indirectEvalEntries: [
+                        { source: invalidIndirectSource, entry: null, strict: false },
+                        ...indirectEntries,
                     ],
                 },
                 diagnosticWriter: (message) => diagnostics.push(message),
@@ -762,6 +881,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 scriptEntries: [nestedEvalMain],
                 evalScriptEntries: [],
                 directEvalEntries: [],
+                indirectEvalEntries: [],
             },
             diagnosticWriter: (message) => nestedDiagnostics.push(message),
         });
