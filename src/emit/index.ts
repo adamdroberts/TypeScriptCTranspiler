@@ -57348,6 +57348,12 @@ class Emitter {
         if (!arg) unsupported(call, `${label} expects an array or Set`);
         const source = this.emitExpr(arg);
         const unsupportedMessage = `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, string, or a typed custom iterable`;
+        if (source.ty.kind === "value") {
+            return {
+                c: `tsc_value_iter_values(${source.c})`,
+                ty: arrayType(T_VALUE),
+            };
+        }
         if (source.ty.kind === "map") {
             if (!source.ty.key || !source.ty.elem || source.ty.key.kind !== "value" || source.ty.elem.kind !== "value") {
                 unsupported(arg, unsupportedMessage);
