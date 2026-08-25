@@ -567,6 +567,62 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                     throw new Error("Realm namespace identity was shared: " + realmNamespaceName);
                 }
             }
+            var realmGlobalFunctionPlan = [
+                ["parseFloat", 1], ["parseInt", 2], ["isFinite", 1], ["isNaN", 1],
+                ["encodeURI", 1], ["encodeURIComponent", 1],
+                ["decodeURI", 1], ["decodeURIComponent", 1]
+            ];
+            for (var realmFunctionIndex = 0;
+                realmFunctionIndex < realmGlobalFunctionPlan.length;
+                realmFunctionIndex += 1) {
+                var realmFunctionName = realmGlobalFunctionPlan[realmFunctionIndex][0];
+                var realmFunctionLength = realmGlobalFunctionPlan[realmFunctionIndex][1];
+                var defaultGlobalFunction = defaultRealmGlobal[realmFunctionName];
+                var realmAFunction = realmA.global[realmFunctionName];
+                var realmBFunction = realmB.global[realmFunctionName];
+                var realmAFunctionDescriptor = Object.getOwnPropertyDescriptor(
+                    realmA.global,
+                    realmFunctionName
+                );
+                if (realmAFunction === defaultGlobalFunction ||
+                    realmBFunction === defaultGlobalFunction ||
+                    realmAFunction === realmBFunction ||
+                    Object.getPrototypeOf(realmAFunction) !== realmA.global.Function.prototype ||
+                    Object.getPrototypeOf(realmBFunction) !== realmB.global.Function.prototype ||
+                    realmAFunction.name !== realmFunctionName ||
+                    realmAFunction.length !== realmFunctionLength ||
+                    !realmAFunctionDescriptor ||
+                    realmAFunctionDescriptor.value !== realmAFunction ||
+                    !realmAFunctionDescriptor.writable || realmAFunctionDescriptor.enumerable ||
+                    !realmAFunctionDescriptor.configurable) {
+                    throw new Error("Realm global function ownership differed: " + realmFunctionName);
+                }
+            }
+            var realmAParseIntDescriptor = Object.getOwnPropertyDescriptor(
+                realmA.global,
+                "parseInt"
+            );
+            realmA.global.parseInt = function () { return 99; };
+            if (realmA.global.parseInt("10", 10) !== 99 ||
+                realmB.global.parseInt("10", 10) !== 10 || parseInt("10", 10) !== 10) {
+                throw new Error("Realm global function mutation crossed Realm boundaries");
+            }
+            Object.defineProperty(realmA.global, "parseInt", realmAParseIntDescriptor);
+            if (realmA.global.parseInt("0x20") !== 32 ||
+                realmA.global.parseFloat("1.25tail") !== 1.25 ||
+                realmA.global.isFinite("8") !== true ||
+                realmA.global.isNaN("not-a-number") !== true ||
+                realmA.global.encodeURIComponent("a/b") !== "a%2Fb" ||
+                realmA.global.decodeURIComponent("a%2Fb") !== "a/b") {
+                throw new Error("Realm global function behavior differed");
+            }
+            var realmGlobalFunctionTypeError;
+            try { realmA.global.parseInt(Symbol(), 10); }
+            catch (error) { realmGlobalFunctionTypeError = error; }
+            if (!(realmGlobalFunctionTypeError instanceof realmA.global.TypeError) ||
+                realmGlobalFunctionTypeError instanceof TypeError) {
+                throw new Error("Realm global function abrupt completion used the caller intrinsic");
+            }
             var realmObjectMethodName = "defineProperty";
             if (realmA.global.Object[realmObjectMethodName] === Object[realmObjectMethodName] ||
                 realmA.global.Array.prototype.map === Array.prototype.map ||

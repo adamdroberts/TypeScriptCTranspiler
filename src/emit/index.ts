@@ -51370,7 +51370,16 @@ class Emitter {
             return this.emitErrorConstructor(call, name);
         }
         if (name === "encodeURI" || name === "encodeURIComponent" || name === "decodeURI" || name === "decodeURIComponent") {
-            if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
+            if (call.arguments.length < 1) {
+                const fn = name === "encodeURI" ? "tsc_str_encode_uri" :
+                    name === "encodeURIComponent" ? "tsc_str_encode_uri_component" :
+                    name === "decodeURI" ? "tsc_str_decode_uri" :
+                    "tsc_str_decode_uri_component";
+                return {
+                    c: `${fn}(tsc_str_from_lit("undefined", 9))`,
+                    ty: T_STRING,
+                };
+            }
             const arg = call.arguments[0]!;
             const value = this.emitExpr(arg);
             const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
@@ -51385,11 +51394,11 @@ class Emitter {
             ]);
         }
         if (name === "isNaN") {
-            if (call.arguments.length < 1) unsupported(call, "isNaN expects at least 1 arg");
+            if (call.arguments.length < 1) return { c: "true", ty: T_BOOLEAN };
             return this.emitGlobalNumberPredicate(call, "isNaN");
         }
         if (name === "isFinite") {
-            if (call.arguments.length < 1) unsupported(call, "isFinite expects at least 1 arg");
+            if (call.arguments.length < 1) return { c: "false", ty: T_BOOLEAN };
             return this.emitGlobalNumberPredicate(call, "isFinite");
         }
         if (name === "btoa" || name === "atob") {
@@ -75305,8 +75314,7 @@ class Emitter {
         call: ts.CallExpression,
         which: "parseInt" | "parseFloat",
     ): EmitResult {
-        if (call.arguments.length < 1)
-            unsupported(call, `${which} expects at least 1 arg`);
+        if (call.arguments.length < 1) return { c: "NAN", ty: T_NUMBER };
         const r = this.emitExpr(call.arguments[0]!);
         const fn = which === "parseInt" ? "tsc_parse_int" : "tsc_parse_float";
         const specs: SequencedCallArg[] = [

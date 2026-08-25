@@ -18,11 +18,17 @@ export interface ModuleNamespaceExportWidthSpec {
     width: number;
 }
 
+export interface GlobalNumberParseLengthSpec {
+    generator: "global-number-parse-length";
+    length: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | StrictEqualityExpressionDepthSpec
-    | ModuleNamespaceExportWidthSpec;
+    | ModuleNamespaceExportWidthSpec
+    | GlobalNumberParseLengthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -73,6 +79,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             width,
+        };
+    }
+    if (spec.generator === "global-number-parse-length") {
+        const length = spec.length;
+        if (typeof length !== "number" || !Number.isInteger(length) || length < 2) {
+            throw new Error(`invalid generated case spec ${filename}: length must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            length,
         };
     }
     throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
@@ -240,6 +256,20 @@ function moduleNamespaceExportWidthSource(width: number): string {
     ].join("\n");
 }
 
+function globalNumberParseLengthSource(length: number): string {
+    const whitespace = " ".repeat(length);
+    const zeros = "0".repeat(length);
+    return [
+        `const integerSource = ${JSON.stringify(`${whitespace}${zeros}42tail`)};`,
+        `const decimalSource = ${JSON.stringify(`${whitespace}${zeros}1.25tail`)};`,
+        "const valid =",
+        "    parseInt(integerSource, 10) === 42 &&",
+        "    parseFloat(decimalSource) === 1.25;",
+        'console.log("global number parse length:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -251,5 +281,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":
             return moduleNamespaceExportWidthSource(spec.width);
+        case "global-number-parse-length":
+            return globalNumberParseLengthSource(spec.length);
     }
 }

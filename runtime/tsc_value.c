@@ -1370,6 +1370,74 @@ typedef struct {
     tsc_value_t value;
 } tsc_global_intrinsic_t;
 
+typedef enum {
+    TSC_GLOBAL_FUNCTION_PARSE_FLOAT,
+    TSC_GLOBAL_FUNCTION_PARSE_INT,
+    TSC_GLOBAL_FUNCTION_IS_FINITE,
+    TSC_GLOBAL_FUNCTION_IS_NAN,
+    TSC_GLOBAL_FUNCTION_ENCODE_URI,
+    TSC_GLOBAL_FUNCTION_ENCODE_URI_COMPONENT,
+    TSC_GLOBAL_FUNCTION_DECODE_URI,
+    TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT,
+} tsc_global_function_kind_t;
+
+typedef struct {
+    const char* name;
+    size_t name_length;
+    double function_length;
+    tsc_global_function_kind_t kind;
+} tsc_global_function_descriptor_t;
+
+static const tsc_global_function_descriptor_t global_function_descriptors[] = {
+    { "parseFloat", 10, 1.0, TSC_GLOBAL_FUNCTION_PARSE_FLOAT },
+    { "parseInt", 8, 2.0, TSC_GLOBAL_FUNCTION_PARSE_INT },
+    { "isFinite", 8, 1.0, TSC_GLOBAL_FUNCTION_IS_FINITE },
+    { "isNaN", 5, 1.0, TSC_GLOBAL_FUNCTION_IS_NAN },
+    { "encodeURI", 9, 1.0, TSC_GLOBAL_FUNCTION_ENCODE_URI },
+    { "encodeURIComponent", 18, 1.0, TSC_GLOBAL_FUNCTION_ENCODE_URI_COMPONENT },
+    { "decodeURI", 9, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI },
+    { "decodeURIComponent", 18, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT },
+};
+
+static tsc_value_t global_function_argument(const tsc_array_t* args, size_t index) {
+    return args && index < args->len
+        ? TSC_ARR(tsc_value_t, args, index)
+        : tsc_value_undefined();
+}
+
+static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    const tsc_global_function_descriptor_t* descriptor =
+        (const tsc_global_function_descriptor_t*)raw_descriptor;
+    tsc_value_t input = global_function_argument(args, 0);
+    switch (descriptor->kind) {
+        case TSC_GLOBAL_FUNCTION_PARSE_FLOAT:
+            return tsc_value_num(tsc_parse_float(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_PARSE_INT: {
+            tsc_str_t* parsed_input = tsc_value_to_string(input);
+            tsc_value_t radix = global_function_argument(args, 1);
+            double parsed_radix = tsc_value_is_undefined(radix)
+                ? 0.0
+                : tsc_value_to_number(radix);
+            return tsc_value_num(tsc_parse_int(parsed_input, parsed_radix));
+        }
+        case TSC_GLOBAL_FUNCTION_IS_FINITE:
+            return tsc_value_bool(isfinite(tsc_value_to_number(input)));
+        case TSC_GLOBAL_FUNCTION_IS_NAN:
+            return tsc_value_bool(isnan(tsc_value_to_number(input)));
+        case TSC_GLOBAL_FUNCTION_ENCODE_URI:
+            return tsc_value_string(tsc_str_encode_uri(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_ENCODE_URI_COMPONENT:
+            return tsc_value_string(tsc_str_encode_uri_component(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_DECODE_URI:
+            return tsc_value_string(tsc_str_decode_uri(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT:
+            return tsc_value_string(tsc_str_decode_uri_component(tsc_value_to_string(input)));
+    }
+    tsc_panic("unknown global function descriptor");
+    return tsc_value_undefined();
+}
+
 static void global_define_intrinsic(tsc_object_t* global, const tsc_global_intrinsic_t* intrinsic) {
     (void)tsc_object_define(
         global,
@@ -1423,6 +1491,27 @@ tsc_value_t tsc_global_object(void) {
     );
     for (size_t index = 0; index < sizeof(intrinsics) / sizeof(intrinsics[0]); index++) {
         global_define_intrinsic(built, &intrinsics[index]);
+    }
+    for (
+        size_t index = 0;
+        index < sizeof(global_function_descriptors) / sizeof(global_function_descriptors[0]);
+        index++
+    ) {
+        const tsc_global_function_descriptor_t* descriptor =
+            &global_function_descriptors[index];
+        (void)tsc_object_define(
+            built,
+            tsc_str_from_lit(descriptor->name, descriptor->name_length),
+            tsc_value_function_builtin_named(
+                global_function_apply,
+                (void*)descriptor,
+                descriptor->function_length,
+                tsc_str_from_lit(descriptor->name, descriptor->name_length)
+            ),
+            true,
+            false,
+            true
+        );
     }
     (void)tsc_object_define(
         built,

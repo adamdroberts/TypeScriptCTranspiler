@@ -185,35 +185,104 @@ bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token) {
 /* tsc_num_mod is defined as `static inline` in tsc_runtime.h. */
 
 double tsc_parse_float(const tsc_str_t* s) {
-    if (!s || s->len == 0) return NAN;
-    char buf[64];
-    size_t n = s->len < 63 ? s->len : 63;
-    memcpy(buf, s->data, n);
-    buf[n] = '\0';
-    char* end;
-    double v = strtod(buf, &end);
-    if (end == buf) return NAN;
-    return v;
+    if (!s) return NAN;
+    const tsc_str_t* input = tsc_str_trim_start(s);
+    size_t cursor = 0;
+    if (cursor < input->len &&
+        (input->data[cursor] == '+' || input->data[cursor] == '-')) {
+        cursor++;
+    }
+    if (cursor + 8 <= input->len &&
+        memcmp(input->data + cursor, "Infinity", 8) == 0) {
+        return input->len > 0 && input->data[0] == '-' ? -INFINITY : INFINITY;
+    }
+
+    size_t digits = 0;
+    while (cursor < input->len &&
+        input->data[cursor] >= '0' && input->data[cursor] <= '9') {
+        cursor++;
+        digits++;
+    }
+    if (cursor < input->len && input->data[cursor] == '.') {
+        cursor++;
+        while (cursor < input->len &&
+            input->data[cursor] >= '0' && input->data[cursor] <= '9') {
+            cursor++;
+            digits++;
+        }
+    }
+    if (digits == 0) return NAN;
+
+    size_t prefix_end = cursor;
+    if (cursor < input->len &&
+        (input->data[cursor] == 'e' || input->data[cursor] == 'E')) {
+        size_t exponent = cursor + 1;
+        if (exponent < input->len &&
+            (input->data[exponent] == '+' || input->data[exponent] == '-')) {
+            exponent++;
+        }
+        size_t exponent_digits = exponent;
+        while (exponent < input->len &&
+            input->data[exponent] >= '0' && input->data[exponent] <= '9') {
+            exponent++;
+        }
+        if (exponent > exponent_digits) prefix_end = exponent;
+    }
+
+    char* prefix = (char*)TSC_GC_MALLOC_ATOMIC(prefix_end + 1);
+    memcpy(prefix, input->data, prefix_end);
+    prefix[prefix_end] = '\0';
+    return strtod(prefix, NULL);
+}
+
+static int parse_digit_value(unsigned char value) {
+    if (value >= '0' && value <= '9') return (int)(value - '0');
+    if (value >= 'a' && value <= 'z') return (int)(value - 'a') + 10;
+    if (value >= 'A' && value <= 'Z') return (int)(value - 'A') + 10;
+    return -1;
 }
 
 double tsc_parse_int(const tsc_str_t* s, double radix) {
-    if (!s || s->len == 0) return NAN;
-    char buf[64];
-    size_t n = s->len < 63 ? s->len : 63;
-    memcpy(buf, s->data, n);
-    buf[n] = '\0';
-    int base = (isfinite(radix) ? (int)radix : 0);
-    if (base != 0 && (base < 2 || base > 36)) return NAN;
-    if (base == 0) {
-        const char* p = buf;
-        while (isspace((unsigned char)*p)) p++;
-        if (*p == '+' || *p == '-') p++;
-        base = (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) ? 16 : 10;
+    if (!s) return NAN;
+    const tsc_str_t* input = tsc_str_trim_start(s);
+    size_t cursor = 0;
+    bool negative = false;
+    if (cursor < input->len &&
+        (input->data[cursor] == '+' || input->data[cursor] == '-')) {
+        negative = input->data[cursor] == '-';
+        cursor++;
     }
-    char* end;
-    long v = strtol(buf, &end, base);
-    if (end == buf) return NAN;
-    return (double)v;
+
+    int32_t base = tsc_to_int32(radix);
+    bool strip_prefix = base == 0 || base == 16;
+    if (base == 0) base = 10;
+    if (base < 2 || base > 36) return NAN;
+    if (strip_prefix && cursor + 2 <= input->len &&
+        input->data[cursor] == '0' &&
+        (input->data[cursor + 1] == 'x' || input->data[cursor + 1] == 'X')) {
+        cursor += 2;
+        base = 16;
+    }
+
+    tsc_bigint_t integer;
+    mpz_init_set_ui(integer.value, 0u);
+    size_t digits = 0;
+    while (cursor < input->len) {
+        int digit = parse_digit_value((unsigned char)input->data[cursor]);
+        if (digit < 0 || digit >= base) break;
+        mpz_mul_ui(integer.value, integer.value, (unsigned long)base);
+        mpz_add_ui(integer.value, integer.value, (unsigned long)digit);
+        cursor++;
+        digits++;
+    }
+    if (digits == 0) {
+        mpz_clear(integer.value);
+        return NAN;
+    }
+    if (negative) mpz_neg(integer.value, integer.value);
+    double result = tsc_bigint_to_number(&integer);
+    mpz_clear(integer.value);
+    return negative && result == 0.0 ? -0.0 : result;
 }
 
 double tsc_math_random(void) {

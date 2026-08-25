@@ -88,8 +88,8 @@ typedef struct tsc_str {
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_num_mod` | `(double, double) -> double` | `fmod` — JS-style modulo for the `%` operator. |
-| `tsc_parse_float` | `(const tsc_str_t*) -> double` | Equivalent of `parseFloat`. Returns NaN on failure. |
-| `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Equivalent of `parseInt`, including omitted/zero radix inference and invalid-radix `NaN`. |
+| `tsc_parse_float` | `(const tsc_str_t*) -> double` | Length-driven `parseFloat` decimal/Infinity-prefix scan with ECMAScript leading whitespace, partial parsing, signed zero, and `NaN` on failure. |
+| `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Length-driven `parseInt` digit scan with ECMAScript leading whitespace, ToInt32 radix inference/validation, exact GMP accumulation, and binary64 rounding. |
 | `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
 | `tsc_math_round` | `(double) -> double` | `Math.round()`, preserving JavaScript negative zero. |
 | `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
