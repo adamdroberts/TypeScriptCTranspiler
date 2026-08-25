@@ -47819,6 +47819,11 @@ class Emitter {
         right: EmitResult,
         negate: boolean,
     ): EmitResult {
+        const strict =
+            bin.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+            bin.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+        if (strict) return this.emitStrictEquality(bin, left, right, negate);
+
         if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || this.isNullExpression(bin.right))) {
             const literal = this.isUndefinedExpression(bin.right) ? "tsc_value_undefined()" : "tsc_value_null()";
             const value = this.coerce(left, T_VALUE, bin.left);
@@ -47861,6 +47866,138 @@ class Emitter {
             return { c: `(${ptrSide} ${op} NULL)`, ty: T_BOOLEAN };
         }
         unsupported(bin, `cross-type equality ${left.ty.c} vs ${right.ty.c}`);
+    }
+
+    private emitStrictEquality(
+        bin: ts.BinaryExpression,
+        left: EmitResult,
+        right: EmitResult,
+        negate: boolean,
+    ): EmitResult {
+        if (left.ty.kind === "unsupported" || right.ty.kind === "unsupported") {
+            unsupported(bin, `strict equality on ${left.ty.c} vs ${right.ty.c}`);
+        }
+        if (left.ty.kind === "value" || right.ty.kind === "value") {
+            const result = this.emitDynamicBinary("tsc_value_eq", T_BOOLEAN, bin, left, right);
+            return { c: negate ? `(!${result.c})` : result.c, ty: T_BOOLEAN };
+        }
+
+        if (left.ty.kind === "void" && right.ty.kind === "void") {
+            const leftKind = this.equalityNullishKind(bin.left);
+            const rightKind = this.equalityNullishKind(bin.right);
+            if (!leftKind || !rightKind) {
+                unsupported(bin, "strict equality cannot distinguish an unclassified static nullish value");
+            }
+            return this.emitEvaluatedEqualityConstant(left, right, leftKind === rightKind, negate);
+        }
+
+        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: left, node: bin.left },
+                    { value: right, node: bin.right },
+                ],
+                ([leftValue, rightValue]) => {
+                    const equal = `tsc_bigint_eq(${leftValue}, ${rightValue})`;
+                    return negate ? `(!${equal})` : equal;
+                },
+            );
+        }
+        if (left.ty.kind === "string" && right.ty.kind === "string") {
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: left, node: bin.left },
+                    { value: right, node: bin.right },
+                ],
+                ([leftValue, rightValue]) => {
+                    const equal = `tsc_str_eq(${leftValue}, ${rightValue})`;
+                    return negate ? `(!${equal})` : equal;
+                },
+            );
+        }
+        if (left.ty.kind === right.ty.kind) {
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: left, node: bin.left },
+                    { value: right, node: bin.right },
+                ],
+                ([leftValue, rightValue]) => `(${leftValue} ${negate ? "!=" : "=="} ${rightValue})`,
+            );
+        }
+
+        const pointerKinds: readonly CType["kind"][] = [
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+        ];
+        const leftIsPointer = pointerKinds.includes(left.ty.kind);
+        const rightIsPointer = pointerKinds.includes(right.ty.kind);
+        if (
+            (leftIsPointer && right.ty.kind === "void") ||
+            (left.ty.kind === "void" && rightIsPointer)
+        ) {
+            const nullishExpression = left.ty.kind === "void" ? bin.left : bin.right;
+            const nullishKind = this.equalityNullishKind(nullishExpression);
+            if (!nullishKind) {
+                unsupported(bin, "strict equality cannot distinguish an unclassified static nullish value");
+            }
+            if (nullishKind === "undefined") {
+                return this.emitEvaluatedEqualityConstant(left, right, false, negate);
+            }
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: left, node: bin.left },
+                    { value: right, node: bin.right },
+                ],
+                ([leftValue, rightValue]) => {
+                    const pointer = leftIsPointer ? leftValue : rightValue;
+                    return `(${pointer} ${negate ? "!=" : "=="} NULL)`;
+                },
+            );
+        }
+
+        // ECMAScript Strict Equality returns false when the operand Types differ.
+        // Evaluate both operands through one ordered worklist before materialising
+        // that constant; C's operand evaluation order is not JavaScript's order.
+        return this.emitEvaluatedEqualityConstant(left, right, false, negate);
+    }
+
+    private emitEvaluatedEqualityConstant(
+        left: EmitResult,
+        right: EmitResult,
+        equal: boolean,
+        negate: boolean,
+    ): EmitResult {
+        const result = negate ? !equal : equal;
+        return this.emitSequencedExpr(
+            T_BOOLEAN,
+            [{ value: left }, { value: right }],
+            () => result ? "true" : "false",
+        );
+    }
+
+    private equalityNullishKind(expr: ts.Expression): "null" | "undefined" | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (this.isUnshadowedUndefinedExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
+            return "undefined";
+        }
+
+        const type = this.checker.getTypeAtLocation(expr);
+        const members = type.isUnion() ? type.types : [type];
+        let result: "null" | "undefined" | null = null;
+        for (const member of members) {
+            const kind = member.flags & ts.TypeFlags.Null
+                ? "null"
+                : member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)
+                    ? "undefined"
+                    : null;
+            if (!kind || (result !== null && result !== kind)) return null;
+            result = kind;
+        }
+        return result;
     }
 
     private emitRelational(
