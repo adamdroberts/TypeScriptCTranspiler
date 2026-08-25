@@ -31,7 +31,10 @@
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#tsc_value_eq",
-      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+      "targets": [
+        "sec-isstrictlyequal#ecmascript-type-partition",
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
     },
     {
       "kind": "property",
@@ -166,6 +169,62 @@
       "kind": "implementation",
       "id": "src/emit/index.ts#ensureModuleNamespacePlan",
       "targets": ["sec-getmodulenamespace#module-record-namespace-singleton"]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/switch-selection.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "switch_clause_worklist_width",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ],
+      "stressReview": {
+        "dimension": "CaseBlock clause-list width",
+        "parameter": "width",
+        "representativeHighDepth": 257,
+        "rationale": "One generated native case independently stresses the source-ordered canonical clause worklist without turning successive clause counts into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "async_cfg_awaited_switch_cases",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "async_cfg_captured_switch_scope_cells",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitSwitch",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitAsyncControlFlowGraphContinuation",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#switchStrictEqualityCondition",
+      "targets": [
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+      ]
     }
   ]
 }

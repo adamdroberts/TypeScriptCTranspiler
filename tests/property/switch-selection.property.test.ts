@@ -23,6 +23,7 @@ const valuePlan: readonly ValuePlan[] = [
     { label: "false", source: "false", model: { kind: "boolean", value: false } },
     { label: "true", source: "true", model: { kind: "boolean", value: true } },
     { label: "zero", source: "0", model: { kind: "number", value: 0 } },
+    { label: "negative-zero", source: "-0", model: { kind: "number", value: -0 } },
     { label: "nan", source: "NaN", model: { kind: "number", value: Number.NaN } },
     { label: "number-one", source: "1", model: { kind: "number", value: 1 } },
     { label: "string-one", source: "'1'", model: { kind: "string", value: "1" } },
@@ -32,6 +33,8 @@ const valuePlan: readonly ValuePlan[] = [
     { label: "symbol-a", source: "symbolA", model: { kind: "symbol", identity: "symbol-a" } },
     { label: "symbol-b", source: "symbolB", model: { kind: "symbol", identity: "symbol-b" } },
     { label: "bigint-one", source: "1n", model: { kind: "bigint", value: "1" } },
+    { label: "function-a", source: "functionA", model: { kind: "object", identity: "function-a" } },
+    { label: "function-b", source: "functionB", model: { kind: "object", identity: "function-b" } },
 ];
 
 function strictEqual(left: ModelValue, right: ModelValue): boolean {
@@ -75,12 +78,17 @@ function modeledSelection(discriminantIndex: number, caseIndices: readonly numbe
 }
 
 function sourceAndExpected(): { source: string; expected: string } {
+    const numberOneIndex = valuePlan.findIndex((value) => value.label === "number-one");
+    const stringOneIndex = valuePlan.findIndex((value) => value.label === "string-one");
+    if (numberOneIndex < 0 || stringOneIndex < 0) throw new Error("mixed-Type switch plan is incomplete");
     const source: string[] = [
         "var objectA = {};",
         "var objectB = {};",
         "var unmatchedObject = {};",
         "var symbolA = Symbol('same');",
         "var symbolB = Symbol('same');",
+        "function functionA() {}",
+        "function functionB() {}",
         `var switchValues = [${valuePlan.map((value) => value.source).join(",")}];`,
     ];
     const expected: string[] = [];
@@ -109,8 +117,8 @@ function sourceAndExpected(): { source: string; expected: string } {
     source.push(
         "var staticMixed = '';",
         "switch ('1') {",
-        "case switchValues[6]: staticMixed = 'coerced'; break;",
-        "case switchValues[7]: staticMixed = 'strict'; break;",
+        `case switchValues[${numberOneIndex}]: staticMixed = 'coerced'; break;`,
+        `case switchValues[${stringOneIndex}]: staticMixed = 'strict'; break;`,
         "default: staticMixed = 'default';",
         "}",
         "console.log('static-mixed:' + staticMixed);",
@@ -156,6 +164,51 @@ function sourceAndExpected(): { source: string; expected: string } {
         "abrupt-disc:true:D",
         "abrupt-case:true:C",
     );
+
+    const fixedCases = valuePlan.map((_, index) => index);
+    source.push(
+        "async function asyncSelect(index) {",
+        "var trace = 'D';",
+        "var selected = 'unselected';",
+        "switch ((trace += ':disc', await Promise.resolve(switchValues[index]))) {",
+        ...fixedCases.map((caseIndex) =>
+            `case (trace += ':${valuePlan[caseIndex]!.label}', switchValues[${caseIndex}]): ` +
+            `selected = '${valuePlan[caseIndex]!.label}'; break;`,
+        ),
+        "default: selected = 'default';",
+        "}",
+        "return selected + ':' + trace;",
+        "}",
+        "async function asyncAwaitedSelect() {",
+        "var trace = 'D';",
+        "var selected = 'unselected';",
+        "switch ((trace += ':disc', await Promise.resolve(functionA))) {",
+        "case await (trace += ':function-b', Promise.resolve(functionB)): selected = 'function-b'; break;",
+        "default: selected = 'default'; break;",
+        "case await (trace += ':function-a', Promise.resolve(functionA)): selected = 'function-a'; break;",
+        "}",
+        "return selected + ':' + trace;",
+        "}",
+        "async function runAsyncSelections() {",
+        ...valuePlan.flatMap((value, index) => [
+            `var asyncResult_${index} = await asyncSelect(${index});`,
+            `console.log('async:${value.label}:' + asyncResult_${index});`,
+        ]),
+        "var asyncAwaitedResult = await asyncAwaitedSelect();",
+        "console.log('async-awaited:' + asyncAwaitedResult);",
+        "}",
+        "runAsyncSelections();",
+    );
+    for (let index = 0; index < valuePlan.length; index++) {
+        const value = valuePlan[index]!;
+        const modeled = modeledSelection(index, fixedCases);
+        expected.push(
+            `async:${value.label}:${modeled.selected}:D:disc:${modeled.evaluated.join(":")}`,
+        );
+    }
+    expected.push(
+        "async-awaited:function-a:D:disc:function-b:function-a",
+    );
     return { source: source.join("\n"), expected: expected.join("\n") + "\n" };
 }
 
@@ -176,6 +229,14 @@ test("switch selection follows one Strict Equality clause worklist", async () =>
                 noGc,
                 diagnosticWriter: (message) => diagnostics.push(message),
             });
+            if (diagnostics.length > 0) {
+                const line = Number(/:(\d+):\d+:/.exec(diagnostics[0] ?? "")?.[1] ?? 1);
+                const excerpt = generated.source.split("\n")
+                    .slice(Math.max(0, line - 3), line + 2)
+                    .map((sourceLine, offset) => `${Math.max(0, line - 3) + offset + 1}: ${sourceLine}`)
+                    .join("\n");
+                throw new Error(`${diagnostics.join("")}\n${excerpt}`);
+            }
             expect(diagnostics.join("")).toBe("");
             expect(result.exitCode).toBe(0);
 

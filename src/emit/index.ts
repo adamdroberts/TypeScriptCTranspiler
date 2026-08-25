@@ -29086,7 +29086,37 @@ class Emitter {
                 assignmentTargets: stateNode.assignmentTargets,
             });
         }
+        /* Every staged value owned by a switch comparison tree remains boxed.
+         * This prevents a suspension boundary from changing Object identity
+         * through a value -> typed adapter -> value round trip.  One AST-root
+         * set covers nested comma, logical, conditional, and awaited forms. */
+        const switchValueExpressionNodes = new Set<ts.Node>();
+        const switchValueResultSlots = new Set<number>();
+        const switchStatements = new Set<ts.SwitchStatement>();
+        for (const state of graph.states) {
+            if (state.kind !== "switch-dispatch" && state.kind !== "switch-compare") continue;
+            switchStatements.add(state.statement);
+            switchValueResultSlots.add(state.discriminatorResultSlot);
+            if (state.kind === "switch-compare" && state.caseResultSlot !== null) {
+                switchValueResultSlots.add(state.caseResultSlot);
+            }
+        }
+        const collectSwitchValueTree = (root: ts.Expression): void => {
+            const visit = (node: ts.Node): void => {
+                switchValueExpressionNodes.add(node);
+                if (node !== root && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, visit);
+            };
+            visit(root);
+        };
+        for (const statement of switchStatements) {
+            collectSwitchValueTree(statement.expression);
+            for (const clause of statement.caseBlock.clauses) {
+                if (ts.isCaseClause(clause)) collectSwitchValueTree(clause.expression);
+            }
+        }
         const expressionAwaitTypes = graph.expressionAwaits.map((awaitExpr) => {
+            if (switchValueExpressionNodes.has(awaitExpr)) return T_VALUE;
             const awaitedType = this.prepareType(mapTsType(
                 awaitExpr,
                 this.checker.getTypeAtLocation(awaitExpr),
@@ -29098,26 +29128,35 @@ class Emitter {
             graph.expressionAwaits.map((awaitExpr, slot) => [awaitExpr, slot] as const),
         );
         const expressionSyncTypes = graph.expressionSyncs.map((expression) =>
-            this.asyncAwaitContinuationStorageType(
-                expression,
-                this.prepareType(mapTsType(
+            switchValueExpressionNodes.has(expression)
+                ? T_VALUE
+                : this.asyncAwaitContinuationStorageType(
                     expression,
-                    this.checker.getTypeAtLocation(expression),
-                    this.checker,
-                )),
-            ));
+                    this.prepareType(mapTsType(
+                        expression,
+                        this.checker.getTypeAtLocation(expression),
+                        this.checker,
+                    )),
+                ));
         const expressionSyncSlot = new Map(
             graph.expressionSyncs.map((expression, slot) => [expression, slot] as const),
         );
-        const expressionResultTypes = graph.expressionResults.map((expression) =>
-            this.asyncAwaitContinuationStorageType(
-                expression,
-                this.prepareType(mapTsType(
+        /* Switch selection stores both the discriminator and any suspending
+         * case expression in the canonical ECMAScript value representation.
+         * The CFG owns one collection of result slots, so this identity-based
+         * projection covers every switch shape without specializing on Type,
+         * clause count, or suspension count. */
+        const expressionResultTypes = graph.expressionResults.map((expression, slot) =>
+            switchValueResultSlots.has(slot)
+                ? T_VALUE
+                : this.asyncAwaitContinuationStorageType(
                     expression,
-                    this.checker.getTypeAtLocation(expression),
-                    this.checker,
-                )),
-            ));
+                    this.prepareType(mapTsType(
+                        expression,
+                        this.checker.getTypeAtLocation(expression),
+                        this.checker,
+                    )),
+                ));
         const cfgReturnContextType = this.asyncAwaitReturnContextTypeForBody(body);
         const cfgReturnType = cfgReturnContextType
             ? this.prepareType(mapTsType(body, cfgReturnContextType, this.checker))
@@ -29248,18 +29287,14 @@ class Emitter {
             } else if (stateNode.kind === "switch-dispatch") {
                 this.assertExhaustiveSwitch(stateNode.statement);
                 const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
-                if (!discriminatorType) return false;
-                if (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                    discriminatorType.kind !== "boolean") return false;
+                if (!discriminatorType || discriminatorType.kind !== "value") return false;
             } else if (stateNode.kind === "switch-compare") {
                 this.assertExhaustiveSwitch(stateNode.statement);
                 const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
-                if (!discriminatorType ||
-                    (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                        discriminatorType.kind !== "boolean")) return false;
+                if (!discriminatorType || discriminatorType.kind !== "value") return false;
                 if (stateNode.caseResultSlot !== null) {
                     const caseType = expressionResultTypes[stateNode.caseResultSlot];
-                    if (!caseType || caseType.kind === "void" || caseType.kind === "never") return false;
+                    if (!caseType || caseType.kind !== "value") return false;
                 }
             } else if (stateNode.kind === "await-dispose") {
                 for (const declaration of stateNode.declarations) {
@@ -29585,25 +29620,35 @@ class Emitter {
                 );
             const emitSwitchDispatch = (
                 discriminator: EmitResult,
+                discriminatorNode: ts.Expression,
                 clauses: readonly { readonly expression: ts.Expression | null; readonly target: AsyncControlFlowTarget }[],
                 defaultTarget: AsyncControlFlowTarget,
+                releaseDiscriminator: () => void,
             ): void => {
-                const discriminatorType = this.prepareType(discriminator.ty);
-                if (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                    discriminatorType.kind !== "boolean") return;
                 const discriminatorVar = this.freshTemp("_async_cfg_switch");
-                callback.line(`${discriminatorType.c} ${discriminatorVar} = ${discriminator.c};`);
+                const discriminatorRoot = this.freshTemp("_async_cfg_switch_gc_root");
+                callback.line(
+                    `tsc_value_t const ${discriminatorVar} = ` +
+                    `${this.coerce(discriminator, T_VALUE, discriminatorNode)};`,
+                );
+                callback.line(
+                    `void* volatile ${discriminatorRoot} = tsc_value_gc_root(${discriminatorVar});`,
+                );
+                callback.line(`(void)${discriminatorRoot};`);
                 for (const clause of clauses) {
                     if (!clause.expression) continue;
                     const caseValue = this.emitExpr(clause.expression);
-                    const coercedCase = this.coerce(caseValue, discriminatorType, clause.expression);
-                    const matches = discriminatorType.kind === "string"
-                        ? `tsc_str_eq(${discriminatorVar}, ${coercedCase})`
-                        : `(${discriminatorVar} == ${coercedCase})`;
+                    const matches = this.switchStrictEqualityCondition(
+                        discriminatorVar,
+                        caseValue,
+                        clause.expression,
+                    );
                     callback.open(`if (${matches})`);
+                    releaseDiscriminator();
                     emitTransition(clause.target.id);
                     callback.close();
                 }
+                releaseDiscriminator();
                 emitTransition(defaultTarget.id);
             };
             const emitCfgBinding = (
@@ -30087,22 +30132,24 @@ class Emitter {
                     callback.line("continue;");
                 } else if (stateNode.kind === "switch-dispatch") {
                     const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
-                    if (!discriminatorType ||
-                        (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                            discriminatorType.kind !== "boolean")) return false;
-                    const discriminator = this.freshTemp("_async_cfg_switch_discriminator");
-                    callback.line(`${discriminatorType.c} const ${discriminator} = state->expression_result_${stateNode.discriminatorResultSlot};`);
-                    callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                    if (!discriminatorType || discriminatorType.kind !== "value") return false;
                     emitSwitchDispatch(
-                        { c: discriminator, ty: discriminatorType },
+                        {
+                            c: `state->expression_result_${stateNode.discriminatorResultSlot}`,
+                            ty: discriminatorType,
+                        },
+                        stateNode.statement.expression,
                         stateNode.clauses,
                         stateNode.defaultTarget,
+                        () => {
+                            if (!releaseExpressionResult(stateNode.discriminatorResultSlot)) {
+                                unsupported(stateNode.statement, "async switch discriminator storage is unavailable");
+                            }
+                        },
                     );
                 } else if (stateNode.kind === "switch-compare") {
                     const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
-                    if (!discriminatorType ||
-                        (discriminatorType.kind !== "number" && discriminatorType.kind !== "string" &&
-                            discriminatorType.kind !== "boolean")) return false;
+                    if (!discriminatorType || discriminatorType.kind !== "value") return false;
                     const discriminator = `state->expression_result_${stateNode.discriminatorResultSlot}`;
                     const caseValue = stateNode.caseResultSlot === null
                         ? this.emitExpr(stateNode.expression)
@@ -30110,24 +30157,26 @@ class Emitter {
                             c: `state->expression_result_${stateNode.caseResultSlot}`,
                             ty: expressionResultTypes[stateNode.caseResultSlot]!,
                         };
-                    const coercedCase = this.coerce(caseValue, discriminatorType, stateNode.expression);
                     const matches = this.freshTemp("_async_cfg_switch_matches");
-                    callback.line(`bool ${matches} = ${discriminatorType.kind === "string"
-                        ? `tsc_str_eq(${discriminator}, ${coercedCase})`
-                        : `(${discriminator} == ${coercedCase})`};`);
+                    callback.line(
+                        `bool ${matches} = ` +
+                        `${this.switchStrictEqualityCondition(discriminator, caseValue, stateNode.expression)};`,
+                    );
                     if (stateNode.caseResultSlot !== null) {
-                        const caseType = expressionResultTypes[stateNode.caseResultSlot]!;
-                        callback.line(`state->expression_result_${stateNode.caseResultSlot} = ${this.zeroValue(caseType)};`);
-                        if (caseType.kind === "value") {
-                            callback.line(`state->expression_result_${stateNode.caseResultSlot}_gc_root = NULL;`);
+                        if (!releaseExpressionResult(stateNode.caseResultSlot)) {
+                            unsupported(stateNode.expression, "async switch case storage is unavailable");
                         }
                     }
                     callback.open(`if (${matches})`);
-                    callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                    if (!releaseExpressionResult(stateNode.discriminatorResultSlot)) {
+                        unsupported(stateNode.statement, "async switch discriminator storage is unavailable");
+                    }
                     emitTransition(stateNode.match.id);
                     callback.close();
                     if (stateNode.releaseDiscriminatorOnMiss) {
-                        callback.line(`state->expression_result_${stateNode.discriminatorResultSlot} = ${this.zeroValue(discriminatorType)};`);
+                        if (!releaseExpressionResult(stateNode.discriminatorResultSlot)) {
+                            unsupported(stateNode.statement, "async switch discriminator storage is unavailable");
+                        }
                     }
                     emitTransition(stateNode.miss.id);
                 } else if (stateNode.kind === "await-condition") {

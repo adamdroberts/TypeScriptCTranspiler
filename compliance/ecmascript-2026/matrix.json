@@ -45,6 +45,50 @@
       "rationale": "One direct terminal partition binds the pinned IsStrictlyEqual scenarios to independent semantic, cardinality, and implementation evidence."
     },
     {
+      "clause": "sec-runtime-semantics-caseclauseisselected",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "strict-equality-selection-and-abrupt-completion",
+          "title": "Case-expression evaluation and Strict Equality selection across ECMAScript Types, identities, suspension, and abrupt completion",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-runtime-semantics-caseclauseisselected" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/switch-selection.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["switch_clause_worklist_width"],
+            "e2e": [
+              "async_cfg_awaited_switch_cases",
+              "async_cfg_captured_switch_scope_cells"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#emitSwitch",
+              "src/emit/index.ts#emitAsyncControlFlowGraphContinuation",
+              "src/emit/index.ts#switchStrictEqualityCondition",
+              "runtime/tsc_value.c#tsc_value_eq"
+            ]
+          },
+          "rationale": "The independent property derives discriminants and case values from one ECMAScript Type/identity collection, models the evaluated case prefix with Strict Equality, and crosses mixed Types, NaN, signed zero, BigInt, Symbol/Object/Function identity, default placement, fallthrough, abrupt completion, nested awaited discriminators, and awaited cases in both memory modes. One source-ordered clause worklist feeds the ordinary, lazy-generator, and async CFG comparison paths. The separate generated width stress exercises that same worklist without treating clause counts as completion evidence."
+        }
+      ],
+      "rationale": "The exact CaseClauseIsSelected Test262 scenarios are paired with an independent Type-partition property, representative clause-width stress, retained async E2E regressions, and the one runtime Strict Equality implementation."
+    },
+    {
       "clause": "sec-module-namespace-exotic-objects",
       "disposition": "evidence",
       "partitions": [{
@@ -528,7 +572,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["normal control flow", "labels and loops", "declarations and TDZ", "abrupt completion", "iterator close", "try/catch/finally"],
-      "localEvidence": { "property": [], "generatedRegression": ["async-binding-default-depth"], "stress": ["async-binding-default-depth"], "e2e": ["switch_exhaustive", "custom_iterator_object"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "localEvidence": { "property": ["tests/property/switch-selection.property.test.ts"], "generatedRegression": ["async-binding-default-depth"], "stress": ["async-binding-default-depth", "switch_clause_worklist_width"], "e2e": ["switch_exhaustive", "async_cfg_awaited_switch_cases", "async_cfg_captured_switch_scope_cells", "custom_iterator_object"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
       "knownGaps": ["Generator/async abrupt-completion and iterator-close graphs remain incomplete."]
     },
     {

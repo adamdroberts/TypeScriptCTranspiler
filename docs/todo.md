@@ -73,6 +73,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
 
 - **Phase 6 — `async`/`await` + libuv event loop**
   - Extend the sole ordinary async control-flow/state-machine lowering across every remaining unsupported suspension graph in expressions and nested `if`, `switch`, loop, label, and `try` / `catch` / `finally` constructs; keep unsupported graphs fail-closed rather than restoring source-shape fallbacks.
+  - Complete the surrounding Switch Statement evidence after the registered `CaseClauseIsSelected` partition: model CaseBlock search/default/fallthrough completion values, the shared lexical environment/TDZ lifecycle, and abrupt `break` normalization with compact semantic properties and one representative worklist stress, then register the exact `CaseBlockEvaluation` and Evaluation partitions rather than expanding switch fixture families.
   - Compute live locals and captured environments across every suspension and completion edge, including mutation, aliasing, closures, iterator cleanup, and abrupt completion.
   - Complete Promise/thenable adoption, combinator iterable handling, rejection propagation, and microtask ordering for all async function forms without synchronous fallbacks for direct-await shapes.
   - Make libuv-backed APIs consume the same general async IR instead of dedicated continuation templates.

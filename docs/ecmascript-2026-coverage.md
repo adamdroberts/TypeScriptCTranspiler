@@ -812,7 +812,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-comma-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Statements and Declarations** (`sec-ecmascript-language-statements-and-declarations`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: normal control flow; labels and loops; declarations and TDZ; abrupt completion; iterator close; try/catch/finally.
-  - Linked local regression evidence: generated regression: async-binding-default-depth; stress: async-binding-default-depth; E2E: switch_exhaustive, custom_iterator_object.
+  - Linked local regression evidence: property: tests/property/switch-selection.property.test.ts; generated regression: async-binding-default-depth; stress: async-binding-default-depth, switch_clause_worklist_width; E2E: switch_exhaustive, async_cfg_awaited_switch_cases, async_cfg_captured_switch_scope_cells, custom_iterator_object.
   - Known blockers: Generator/async abrupt-completion and iterator-close graphs remain incomplete.
   - [ ] `sec-ecmascript-language-statements-and-declarations` — ECMAScript Language: Statements and Declarations: exact disposition and partitions missing.
   - [ ] `sec-statement-semantics` — Statement Semantics: exact disposition and partitions missing.
@@ -882,7 +882,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-switch-statement` — The switch Statement: exact disposition and partitions missing.
   - [ ] `sec-switch-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
   - [ ] `sec-runtime-semantics-caseblockevaluation` — Runtime Semantics: CaseBlockEvaluation ( _input_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
-  - [ ] `sec-runtime-semantics-caseclauseisselected` — CaseClauseIsSelected ( _C_: a |CaseClause| Parse Node, _input_: an ECMAScript language value, ): either a normal completion containing a Boolean or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-runtime-semantics-caseclauseisselected` — CaseClauseIsSelected ( _C_: a |CaseClause| Parse Node, _input_: an ECMAScript language value, ): either a normal completion containing a Boolean or an abrupt completion
+    - [ ] `strict-equality-selection-and-abrupt-completion` (algorithm, unbounded): Case-expression evaluation and Strict Equality selection across ECMAScript Types, identities, suspension, and abrupt completion.
   - [ ] `sec-switch-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-labelled-statements` — Labelled Statements: exact disposition and partitions missing.
   - [ ] `sec-labelled-statements-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
