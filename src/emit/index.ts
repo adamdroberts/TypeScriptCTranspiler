@@ -61080,8 +61080,11 @@ class Emitter {
     ): void {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
-        const ret = mapTsType(info.fn, sig.getReturnType(), this.checker);
-        const thisType = this.signatureThisType(sig, info.fn);
+        const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
+            ? this.javaScriptFunctionValueType(info.fn)
+            : null;
+        const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
+        const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);
         const params = this.collectParams(info.fn.parameters);
         const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const name = this.declaredName(info.name);
@@ -61095,8 +61098,11 @@ class Emitter {
     ): void {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
-        const ret = mapTsType(info.fn, sig.getReturnType(), this.checker);
-        const thisType = this.signatureThisType(sig, info.fn);
+        const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
+            ? this.javaScriptFunctionValueType(info.fn)
+            : null;
+        const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
+        const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);
         const params = this.collectParams(info.fn.parameters);
         const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const name = this.declaredName(info.name);
