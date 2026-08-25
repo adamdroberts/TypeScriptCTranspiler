@@ -740,6 +740,8 @@ void tsc_global_declare_function(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_binding_get(tsc_str_t* key);
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_reference_get(tsc_str_t* key);
+tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
+bool tsc_global_reference_delete(tsc_str_t* key);
 tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key);
 tsc_value_t tsc_value_sloppy_this(tsc_value_t value);
 tsc_value_t tsc_abort_controller_new(void);

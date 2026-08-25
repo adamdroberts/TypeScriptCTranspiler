@@ -430,6 +430,12 @@ export interface Test262NativeObservationPlan {
     readonly async: boolean;
 }
 
+interface Test262GlobalReferencePlan {
+    readonly get: string;
+    readonly set: (value: string) => string;
+    readonly remove: string;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -14775,6 +14781,27 @@ class Emitter {
         return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
     }
 
+    private isTest262SyntheticGlobalPropertyDeclaration(
+        declaration: ts.Declaration,
+        name: string,
+    ): boolean {
+        if (!ts.isCallExpression(declaration) || declaration.arguments.length < 2) return false;
+        const callee = declaration.expression;
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "defineProperty") {
+            return false;
+        }
+        if (!ts.isIdentifier(callee.expression) ||
+            !this.isTest262OutOfBandGlobalBinding(callee.expression, "Object")) {
+            return false;
+        }
+        const receiver = declaration.arguments[0];
+        const key = declaration.arguments[1];
+        return !!receiver && ts.isIdentifier(receiver) &&
+            this.isTest262OutOfBandGlobalBinding(receiver, "globalThis") &&
+            !!key && (ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) &&
+            key.text === name;
+    }
+
     private isTest262OutOfBandIdentifier(id: ts.Identifier): boolean {
         const symbol = this.symbolForIdentifier(id);
         return !symbol || (symbol.declarations ?? []).every((declaration) =>
@@ -14782,7 +14809,8 @@ class Emitter {
             !this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) ||
             ts.isIdentifier(declaration) ||
             ts.isPropertyAccessExpression(declaration) ||
-            ts.isElementAccessExpression(declaration)
+            ts.isElementAccessExpression(declaration) ||
+            this.isTest262SyntheticGlobalPropertyDeclaration(declaration, id.text)
         );
     }
 
@@ -23305,8 +23333,9 @@ class Emitter {
         return false;
     }
 
-    private functionHasStrictThisBinding(fn: ts.FunctionLikeDeclaration): boolean {
-        for (let current: ts.Node | undefined = fn; current; current = current.parent) {
+    private nodeIsInStrictMode(node: ts.Node): boolean {
+        for (let current: ts.Node | undefined = node; current; current = current.parent) {
+            if (ts.isClassLike(current)) return true;
             const body = ts.isFunctionLike(current) && "body" in current
                 ? current.body
                 : undefined;
@@ -23320,6 +23349,10 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private functionHasStrictThisBinding(fn: ts.FunctionLikeDeclaration): boolean {
+        return this.nodeIsInStrictMode(fn);
     }
 
     private isImplicitArgumentsIdentifier(identifier: ts.Identifier): boolean {
@@ -45856,6 +45889,11 @@ class Emitter {
     }
 
     private emitTypeofEquals(expr: ts.Expression, expected: string): string {
+        if (ts.isIdentifier(expr) && this.isTest262DynamicGlobalReference(expr)) {
+            return `tsc_str_eq(` +
+                `tsc_global_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
+                `${this.stringLit(expected)})`;
+        }
         const inner = this.emitExpr(expr);
         if (inner.ty.kind === "value") {
             const tv = this.freshTemp("_typeofv");
@@ -46066,6 +46104,28 @@ class Emitter {
         return rawText ?? node.text;
     }
 
+    private test262GlobalReferencePlan(id: ts.Identifier): Test262GlobalReferencePlan | null {
+        const scriptGlobal = this.test262ScriptGlobalBindingName(id);
+        const referenceName = this.test262HostGlobalBindingName(id) ??
+            (this.isTest262DynamicGlobalReference(id) ? id.text : null);
+        const name = scriptGlobal ?? referenceName;
+        if (!name) return null;
+        const key = this.test262GlobalBindingKey(name);
+        if (scriptGlobal) {
+            return {
+                get: `tsc_global_binding_get(${key})`,
+                set: (value) => `tsc_global_binding_set(${key}, ${value})`,
+                remove: "false",
+            };
+        }
+        const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
+        return {
+            get: `tsc_global_reference_get(${key})`,
+            set: (value) => `tsc_global_reference_set(${key}, ${value}, ${strict})`,
+            remove: `tsc_global_reference_delete(${key})`,
+        };
+    }
+
     private stringArrayLiteral(parts: readonly string[]): string {
         const av = this.freshTemp("_tpl");
         const steps = [
@@ -46088,13 +46148,8 @@ class Emitter {
         prefix: boolean,
     ): EmitResult | null {
         if (!ts.isIdentifier(operand)) return null;
-        const scriptGlobal = this.test262ScriptGlobalBindingName(operand);
-        const name = scriptGlobal ?? this.test262HostGlobalBindingName(operand);
-        if (!name) return null;
-        const key = this.test262GlobalBindingKey(name);
-        const get = scriptGlobal
-            ? `tsc_global_binding_get(${key})`
-            : `tsc_global_reference_get(${key})`;
+        const reference = this.test262GlobalReferencePlan(operand);
+        if (!reference) return null;
         const current = this.freshTemp("_global_update_current");
         const next = this.freshTemp("_global_update_next");
         const operation = op === ts.SyntaxKind.PlusPlusToken
@@ -46102,9 +46157,9 @@ class Emitter {
             : "tsc_value_sub";
         return {
             c:
-                `({ tsc_value_t ${current} = tsc_value_pos(${get}); ` +
+                `({ tsc_value_t ${current} = tsc_value_pos(${reference.get}); ` +
                 `tsc_value_t ${next} = ${operation}(${current}, tsc_value_num(1.0)); ` +
-                `tsc_global_binding_set(${key}, ${next}); ${prefix ? next : current}; })`,
+                `${reference.set(next)}; ${prefix ? next : current}; })`,
             ty: T_VALUE,
         };
     }
@@ -46181,8 +46236,9 @@ class Emitter {
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
         const expr = del.expression;
-        if (ts.isIdentifier(expr) && this.test262ScriptGlobalBindingName(expr)) {
-            return { c: "false", ty: T_BOOLEAN };
+        if (ts.isIdentifier(expr)) {
+            const reference = this.test262GlobalReferencePlan(expr);
+            if (reference) return { c: reference.remove, ty: T_BOOLEAN };
         }
         if (ts.isPropertyAccessExpression(expr) && this.isProcessEnvObject(expr.expression)) {
             const keyText = expr.name.text;
@@ -47288,17 +47344,12 @@ class Emitter {
         op: ts.SyntaxKind,
     ): EmitResult | null {
         if (!ts.isIdentifier(bin.left)) return null;
-        const scriptGlobal = this.test262ScriptGlobalBindingName(bin.left);
-        const name = scriptGlobal ?? this.test262HostGlobalBindingName(bin.left);
-        if (!name) return null;
-        const key = this.test262GlobalBindingKey(name);
-        const get = scriptGlobal
-            ? `tsc_global_binding_get(${key})`
-            : `tsc_global_reference_get(${key})`;
+        const reference = this.test262GlobalReferencePlan(bin.left);
+        if (!reference) return null;
         const rhs = this.emitExpr(bin.right);
         const value = this.coerce(rhs, T_VALUE, bin.right);
         if (op === ts.SyntaxKind.EqualsToken) {
-            return { c: `tsc_global_binding_set(${key}, ${value})`, ty: T_VALUE };
+            return { c: reference.set(value), ty: T_VALUE };
         }
 
         const current = this.freshTemp("_global_current");
@@ -47315,9 +47366,9 @@ class Emitter {
                     : `tsc_value_is_nullish(${current})`;
             return {
                 c:
-                    `({ tsc_value_t ${current} = ${get}; ` +
+                    `({ tsc_value_t ${current} = ${reference.get}; ` +
                     `tsc_value_t ${next} = ${current}; ` +
-                    `if (${assign}) ${next} = tsc_global_binding_set(${key}, ${value}); ` +
+                    `if (${assign}) ${next} = ${reference.set(value)}; ` +
                     `${next}; })`,
                 ty: T_VALUE,
             };
@@ -47340,9 +47391,9 @@ class Emitter {
         if (!operation) unsupported(bin, `unsupported global assignment ${ts.SyntaxKind[op]}`);
         return {
             c:
-                `({ tsc_value_t ${current} = ${get}; ` +
+                `({ tsc_value_t ${current} = ${reference.get}; ` +
                 `tsc_value_t ${next} = ${operation}(${current}, ${value}); ` +
-                `tsc_global_binding_set(${key}, ${next}); })`,
+                `${reference.set(next)}; })`,
             ty: T_VALUE,
         };
     }

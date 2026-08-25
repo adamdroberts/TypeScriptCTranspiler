@@ -1012,6 +1012,25 @@ tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
     return tsc_value_get_prop(global, key);
 }
 
+tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
+    tsc_value_t global = tsc_global_object();
+    if (!tsc_value_has_prop(global, key) && strict) {
+        tsc_throw_error(
+            TSC_ERROR_REFERENCE,
+            tsc_str_concat(key, tsc_str_from_lit(" is not defined", 15))
+        );
+    }
+    if (!tsc_value_set_prop(global, key, value) && strict) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot assign global reference"));
+    }
+    return value;
+}
+
+bool tsc_global_reference_delete(tsc_str_t* key) {
+    tsc_value_t global = tsc_global_object();
+    return !tsc_value_has_prop(global, key) || tsc_value_delete_prop(global, key);
+}
+
 tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key) {
     tsc_value_t global = tsc_global_object();
     return tsc_value_has_prop(global, key)
