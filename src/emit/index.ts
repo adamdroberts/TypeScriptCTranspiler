@@ -47759,6 +47759,8 @@ class Emitter {
             const symbol = this.symbolForIdentifier(expr);
             if (symbol && this.catchValueSymbols.has(symbol)) return T_VALUE;
             if (symbol && this.catchStringSymbols.has(symbol)) return T_STRING;
+            const scopedType = this.identifierScopedType(expr);
+            if (scopedType) return scopedType;
             return this.identifierDeclaredType(expr) ?? this.prepareType(mapType(expr, this.checker));
         }
         return this.prepareType(mapType(expr, this.checker));

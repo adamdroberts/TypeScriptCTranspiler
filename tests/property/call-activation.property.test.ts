@@ -176,6 +176,21 @@ function nativeSource(plans: readonly ActivationPlan[]): string {
             }
             console.log(String(invokeDynamicAlias(null)));
             console.log(String(invokeDynamicAlias({ callable: alternateIndirectTarget })));
+            /**
+             * @param {string|symbol} name
+             * @param {string} [functionName]
+             */
+            function normalizeCallableName(name, functionName) {
+                if (functionName === undefined) {
+                    if (typeof name === "symbol") {
+                        functionName = "[" + name.description + "]";
+                    } else {
+                        functionName = name;
+                    }
+                }
+                return functionName;
+            }
+            console.log(String(normalizeCallableName("plain")));
             var emptyFunctionExpression = function (first = "default", later) {};
             function callableIdentity(value) { return value; }
             var returnedEmptyFunction = callableIdentity(emptyFunctionExpression);
@@ -229,6 +244,7 @@ test("ordinary calls preserve one source-derived activation and parameter-map mo
                 "true",
                 "2:first:undefined:undefined",
                 "alternate:2:first:second",
+                "plain",
                 "0:undefined",
             ]);
         }
