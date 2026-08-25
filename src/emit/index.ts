@@ -474,6 +474,13 @@ interface ModuleLexicalBindingPlan {
     readonly immutable: boolean;
 }
 
+interface ModuleDefaultExportBindingPlan {
+    readonly declaration: ts.ExportAssignment;
+    readonly cName: string;
+    readonly initialized: string;
+    readonly gcRoot: string;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -571,6 +578,10 @@ class Emitter {
     private moduleLexicalBindings = new Map<ts.Symbol, ModuleLexicalBindingPlan>();
     private moduleLexicalDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
     private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
+    /** `export default <expression>` owns an uninitialized `*default*`
+     * binding until evaluation reaches the ExportAssignment. */
+    private moduleDefaultExportBindings = new WeakMap<ts.ExportAssignment, ModuleDefaultExportBindingPlan>();
+    private moduleDefaultExportBindingBySource = new WeakMap<ts.SourceFile, ModuleDefaultExportBindingPlan | null>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -15009,6 +15020,7 @@ class Emitter {
             if (info) {
                 this.collectModuleVarBindings(info.sf, modId);
                 this.collectModuleLexicalBindings(info.sf, modId);
+                this.collectModuleDefaultExportBinding(info.sf, modId);
             }
         }
         this.analyzeReferencedTopLevelFunctions(emitOrder);
@@ -15176,6 +15188,7 @@ class Emitter {
             this.analyzeStrbufSymbols(sf);
             this.emitModuleVarDeclarationInstantiation(initBuf, sf);
             this.emitModuleLexicalDeclarationInstantiation(initBuf, sf);
+            this.emitModuleDefaultExportDeclarationInstantiation(initBuf, sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
@@ -15759,8 +15772,13 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
         if (!sf) return null;
-        if (this.isJavaScriptSourceFile(sf) && sf.statements.some(ts.isExportAssignment)) {
-            return null;
+        const esmDefault = sf.statements.find((statement): statement is ts.ExportAssignment =>
+            ts.isExportAssignment(statement) && !statement.isExportEquals,
+        );
+        if (esmDefault) {
+            // JavaScript expression defaults use the TDZ-aware binding path
+            // below; typed ESM defaults can retain their direct representation.
+            return this.isJavaScriptSourceFile(sf) ? null : esmDefault;
         }
         if (!this.hasCommonJsEsModuleMarker(sf)) {
             const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
@@ -19886,6 +19904,9 @@ class Emitter {
     }
 
     private commonJsExportedCType(node: ts.Node): CType {
+        if (ts.isExportAssignment(node) && !node.isExportEquals) {
+            return this.defaultExportAssignmentCType(node);
+        }
         if (ts.isSourceFile(node) || this.isManifestBackedCommonJsExport(node)) {
             return T_VALUE;
         }
@@ -20432,6 +20453,7 @@ class Emitter {
     }
 
     private defaultExportAssignmentCType(stmt: ts.ExportAssignment): CType {
+        if (this.moduleDefaultExportBindings.has(stmt)) return T_VALUE;
         let expr: ts.Expression = stmt.expression;
         while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
         if ((ts.isFunctionExpression(expr) || ts.isArrowFunction(expr)) &&
@@ -20450,12 +20472,17 @@ class Emitter {
     private emitDefaultExportAssignment(buf: CBuf, stmt: ts.ExportAssignment): void {
         const cName = this.defaultExportCName(stmt);
         const ty = this.defaultExportAssignmentCType(stmt);
+        const moduleBinding = this.moduleDefaultExportBindings.get(stmt);
         if (!this.commonJsExportGlobals.has(cName)) {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
         const value = this.emitExpr(stmt.expression);
         buf.line(`${cName} = ${this.coerce(value, ty, stmt.expression)};`);
+        if (moduleBinding) {
+            buf.line(`${moduleBinding.gcRoot} = tsc_value_gc_root(${moduleBinding.cName});`);
+            buf.line(`${moduleBinding.initialized} = true;`);
+        }
     }
 
     private isCommonJsExportAccess(expr: ts.Expression): expr is CommonJsExportAccess {
@@ -23489,6 +23516,53 @@ class Emitter {
         buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
         buf.line(`${binding.initialized} = true;`);
         return true;
+    }
+
+    private collectModuleDefaultExportBinding(
+        sf: ts.SourceFile,
+        modId: string,
+    ): ModuleDefaultExportBindingPlan | null {
+        const prepared = this.moduleDefaultExportBindingBySource.get(sf);
+        if (prepared !== undefined) return prepared;
+        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) {
+            this.moduleDefaultExportBindingBySource.set(sf, null);
+            return null;
+        }
+        const declaration = sf.statements.find((statement): statement is ts.ExportAssignment =>
+            ts.isExportAssignment(statement) && !statement.isExportEquals,
+        );
+        if (!declaration) {
+            this.moduleDefaultExportBindingBySource.set(sf, null);
+            return null;
+        }
+        const cName = `${modId}_default`;
+        const plan: ModuleDefaultExportBindingPlan = {
+            declaration,
+            cName,
+            initialized: this.freshTemp(`_${cName}_module_default_initialized`),
+            gcRoot: this.freshTemp(`_${cName}_module_default_gc_root`),
+        };
+        this.moduleDefaultExportBindings.set(declaration, plan);
+        this.moduleDefaultExportBindingBySource.set(sf, plan);
+        return plan;
+    }
+
+    private emitModuleDefaultExportDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
+        const binding = this.collectModuleDefaultExportBinding(sf, this.currentModuleId);
+        if (!binding) return;
+        this.commonJsExportGlobals.add(binding.cName);
+        this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
+        this.globalDecls.line(`static bool ${binding.initialized};`);
+        this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+        buf.line(`${binding.cName} = tsc_value_undefined();`);
+        buf.line(`${binding.initialized} = false;`);
+        buf.line(`${binding.gcRoot} = NULL;`);
+    }
+
+    private moduleDefaultExportRead(binding: ModuleDefaultExportBindingPlan): string {
+        return `({ if (!${binding.initialized}) ` +
+            `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot access default export before initialization")); ` +
+            `${binding.cName}; })`;
     }
 
     /** Resolve through the checker so every occurrence of one Script binding
@@ -46004,8 +46078,11 @@ class Emitter {
             }
             const jsDefaultExport = this.jsDefaultExportAssignmentForImport(expr);
             if (jsDefaultExport) {
+                const moduleBinding = this.moduleDefaultExportBindings.get(jsDefaultExport);
                 return {
-                    c: this.defaultExportCName(jsDefaultExport),
+                    c: moduleBinding
+                        ? this.moduleDefaultExportRead(moduleBinding)
+                        : this.defaultExportCName(jsDefaultExport),
                     ty: this.defaultExportAssignmentCType(jsDefaultExport),
                 };
             }
@@ -75620,11 +75697,52 @@ class Emitter {
             }
             break;
         }
-        const name = ts.isIdentifier(current)
-            ? current.text
-            : (ts.isFunctionExpression(current) && current.name)
-                ? current.name.text
-                : "";
+        let name = "";
+        if (ts.isIdentifier(current)) {
+            const symbol = this.symbolForIdentifier(current);
+            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+            if (declaration && ts.isFunctionDeclaration(declaration)) {
+                name = declaration.name?.text ?? (this.isDefaultExportDeclaration(declaration) ? "default" : current.text);
+            } else if (
+                declaration &&
+                ts.isVariableDeclaration(declaration) &&
+                ts.isIdentifier(declaration.name)
+            ) {
+                const initializer = declaration.initializer
+                    ? this.unwrapTransparentExpression(declaration.initializer)
+                    : null;
+                name = initializer && ts.isFunctionExpression(initializer) && initializer.name
+                    ? initializer.name.text
+                    : declaration.name.text;
+            } else if (declaration && ts.isExportAssignment(declaration)) {
+                name = "default";
+            } else {
+                name = current.text;
+            }
+        } else if (ts.isFunctionExpression(current) && current.name) {
+            name = current.name.text;
+        } else if (
+            ts.isFunctionExpression(current) ||
+            ts.isArrowFunction(current)
+        ) {
+            let parent: ts.Node = current.parent;
+            while (
+                ts.isParenthesizedExpression(parent) ||
+                ts.isAsExpression(parent) ||
+                ts.isTypeAssertionExpression(parent) ||
+                ts.isSatisfiesExpression(parent) ||
+                ts.isNonNullExpression(parent)
+            ) {
+                parent = parent.parent;
+            }
+            if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+                name = parent.name.text;
+            } else if (ts.isPropertyAssignment(parent)) {
+                name = this.staticPropertyName(parent.name) ?? "";
+            } else if (ts.isExportAssignment(parent) && !parent.isExportEquals) {
+                name = "default";
+            }
+        }
         return `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
     }
 
