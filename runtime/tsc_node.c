@@ -17532,6 +17532,7 @@ tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
     e->error = tsc_value_undefined();
     e->suppressed = tsc_value_undefined();
     e->is_suppressed = false;
+    e->object = NULL;
     return e;
 }
 

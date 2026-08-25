@@ -44859,6 +44859,16 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
             }
+            const errorConstructorKind = this.errorConstructorRuntimeKind(expr.text);
+            if (
+                errorConstructorKind &&
+                this.isUnshadowedGlobalIdentifier(expr, expr.text)
+            ) {
+                return {
+                    c: `tsc_error_constructor_value(${errorConstructorKind})`,
+                    ty: T_VALUE,
+                };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Math")) {
                 return { c: "tsc_builtin_math()", ty: T_VALUE };
             }
@@ -47718,13 +47728,13 @@ class Emitter {
             const specs = Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg }));
             return this.emitSequencedExpr(T_STRING, specs, () => "tsc_date_to_string(tsc_date_new_now())");
         }
-        if (name === "AggregateError") {
+        if (name === "AggregateError" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitAggregateErrorConstructor(call);
         }
-        if (name === "SuppressedError") {
+        if (name === "SuppressedError" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitSuppressedErrorConstructor(call);
         }
-        if (this.isErrorConstructorName(name)) {
+        if (this.isErrorConstructorName(name) && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitErrorConstructor(call, name);
         }
         if (name === "encodeURI" || name === "encodeURIComponent" || name === "decodeURI" || name === "decodeURIComponent") {
@@ -59206,6 +59216,21 @@ class Emitter {
             name === "EvalError" ||
             name === "URIError"
         );
+    }
+
+    private errorConstructorRuntimeKind(name: string): string | null {
+        switch (name) {
+            case "Error": return "TSC_ERROR_ERROR";
+            case "TypeError": return "TSC_ERROR_TYPE";
+            case "RangeError": return "TSC_ERROR_RANGE";
+            case "SyntaxError": return "TSC_ERROR_SYNTAX";
+            case "ReferenceError": return "TSC_ERROR_REFERENCE";
+            case "EvalError": return "TSC_ERROR_EVAL";
+            case "URIError": return "TSC_ERROR_URI";
+            case "AggregateError": return "TSC_ERROR_AGGREGATE";
+            case "SuppressedError": return "TSC_ERROR_SUPPRESSED";
+            default: return null;
+        }
     }
 
     private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
@@ -72002,13 +72027,13 @@ class Emitter {
                 { value, target: T_NUMBER, node: args[0]! },
             ]);
         }
-        if (cls === "AggregateError") {
+        if (cls === "AggregateError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
             return this.emitAggregateErrorConstructor(n);
         }
-        if (cls === "SuppressedError") {
+        if (cls === "SuppressedError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
             return this.emitSuppressedErrorConstructor(n);
         }
-        if (this.isErrorConstructorName(cls)) {
+        if (this.isErrorConstructorName(cls) && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
             return this.emitErrorConstructor(n, cls);
         }
         if (cls === "RegExp") {

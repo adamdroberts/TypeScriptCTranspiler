@@ -64,6 +64,18 @@ export type TypeBindings = Map<string, CType>;
 
 const typeBindingStack: TypeBindings[] = [];
 
+const RUNTIME_ERROR_CONSTRUCTOR_TYPE_NAMES = new Set([
+    "ErrorConstructor",
+    "TypeErrorConstructor",
+    "RangeErrorConstructor",
+    "SyntaxErrorConstructor",
+    "ReferenceErrorConstructor",
+    "EvalErrorConstructor",
+    "URIErrorConstructor",
+    "AggregateErrorConstructor",
+    "SuppressedErrorConstructor",
+]);
+
 export function withTypeBindings<T>(
     bindings: TypeBindings,
     fn: () => T,
@@ -287,6 +299,20 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     if (t.flags & ts.TypeFlags.Never) return T_NEVER;
     if (t.flags & ts.TypeFlags.Unknown) return T_VALUE;
     if (t.flags & ts.TypeFlags.Any) return T_VALUE;
+
+    // Standard Error constructor interfaces are callable and constructable
+    // runtime identities.  Preserve that combined capability instead of
+    // narrowing an alias to the typed callback-only function ABI.
+    {
+        const sym = t.getSymbol();
+        if (
+            sym &&
+            RUNTIME_ERROR_CONSTRUCTOR_TYPE_NAMES.has(sym.getName()) &&
+            (sym.getDeclarations() ?? []).some((decl) => decl.getSourceFile().isDeclarationFile)
+        ) {
+            return T_VALUE;
+        }
+    }
 
     if (t.isUnion()) {
         const parts = t.types;

@@ -1,4 +1,5 @@
 arrays: true true false
 tags: [object Array] [object Array] [object Object]
+array revoked: object true true TypeError
 revocable before: [object Array]
 revocable after: Cannot perform 'get' on a proxy that has been revoked

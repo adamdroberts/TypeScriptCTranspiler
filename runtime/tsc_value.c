@@ -105,7 +105,10 @@ bool tsc_value_is_array(tsc_value_t v) {
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     if (!o || !o->is_proxy) return false;
     if (o->proxy_revoked) {
-        tsc_throw_str(tsc_str_from_cstr("Array.isArray cannot be called on a Proxy that has been revoked"));
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Array.isArray cannot be called on a Proxy that has been revoked")
+        );
     }
     return tsc_value_is_array(o->proxy_target);
 }
@@ -185,6 +188,227 @@ tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* en
 
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
     return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
+}
+
+typedef struct {
+    tsc_error_kind_t kind;
+    const char* name;
+    size_t name_len;
+    double length;
+    tsc_object_t* prototype;
+    tsc_value_t constructor;
+} tsc_error_intrinsic_t;
+
+static tsc_error_intrinsic_t error_intrinsics[TSC_ERROR_KIND_COUNT] = {
+    { TSC_ERROR_ERROR, "Error", 5, 1.0, NULL, 0 },
+    { TSC_ERROR_TYPE, "TypeError", 9, 1.0, NULL, 0 },
+    { TSC_ERROR_RANGE, "RangeError", 10, 1.0, NULL, 0 },
+    { TSC_ERROR_SYNTAX, "SyntaxError", 11, 1.0, NULL, 0 },
+    { TSC_ERROR_REFERENCE, "ReferenceError", 14, 1.0, NULL, 0 },
+    { TSC_ERROR_EVAL, "EvalError", 9, 1.0, NULL, 0 },
+    { TSC_ERROR_URI, "URIError", 8, 1.0, NULL, 0 },
+    { TSC_ERROR_AGGREGATE, "AggregateError", 14, 2.0, NULL, 0 },
+    { TSC_ERROR_SUPPRESSED, "SuppressedError", 15, 3.0, NULL, 0 },
+};
+
+static bool error_intrinsics_initialized = false;
+
+static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args);
+static tsc_value_t error_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args);
+
+static tsc_error_intrinsic_t* error_intrinsic(tsc_error_kind_t kind) {
+    if (kind < TSC_ERROR_ERROR || kind >= TSC_ERROR_KIND_COUNT) {
+        kind = TSC_ERROR_ERROR;
+    }
+    return &error_intrinsics[(size_t)kind];
+}
+
+static bool error_name_matches(const tsc_str_t* name, const tsc_error_intrinsic_t* intrinsic) {
+    return name && name->len == intrinsic->name_len &&
+        memcmp(name->data, intrinsic->name, intrinsic->name_len) == 0;
+}
+
+static tsc_error_kind_t error_kind_from_name(const tsc_str_t* name) {
+    for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
+        if (error_name_matches(name, &error_intrinsics[i])) {
+            return error_intrinsics[i].kind;
+        }
+    }
+    return TSC_ERROR_ERROR;
+}
+
+static tsc_value_t error_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    if (!tsc_value_is_object(this_arg)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("Error.prototype.toString called on non-object", 45)
+        );
+    }
+    tsc_value_t name_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("name", 4));
+    tsc_value_t message_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("message", 7));
+    tsc_str_t* name = tsc_value_is_undefined(name_value)
+        ? tsc_str_from_lit("Error", 5)
+        : tsc_value_to_string(name_value);
+    tsc_str_t* message = tsc_value_is_undefined(message_value)
+        ? tsc_str_from_lit("", 0)
+        : tsc_value_to_string(message_value);
+    if (name->len == 0) return tsc_value_string(message);
+    if (message->len == 0) return tsc_value_string(name);
+    return tsc_value_string(tsc_str_concat_n(
+        3,
+        name,
+        tsc_str_from_lit(": ", 2),
+        message
+    ));
+}
+
+static void error_intrinsics_initialize(void) {
+    if (error_intrinsics_initialized) return;
+    tsc_runtime_lock();
+    if (!error_intrinsics_initialized) {
+        for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
+            error_intrinsics[i].prototype = tsc_object_new();
+        }
+        for (size_t i = 1; i < TSC_ERROR_KIND_COUNT; i++) {
+            error_intrinsics[i].prototype->prototype =
+                tsc_value_object(error_intrinsics[TSC_ERROR_ERROR].prototype);
+        }
+        for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
+            tsc_error_intrinsic_t* intrinsic = &error_intrinsics[i];
+            tsc_object_define(
+                intrinsic->prototype,
+                tsc_str_from_lit("name", 4),
+                tsc_value_string(tsc_str_from_lit(intrinsic->name, intrinsic->name_len)),
+                true,
+                false,
+                true
+            );
+        }
+        tsc_object_define(
+            error_intrinsics[TSC_ERROR_ERROR].prototype,
+            tsc_str_from_lit("message", 7),
+            tsc_value_string(tsc_str_from_lit("", 0)),
+            true,
+            false,
+            true
+        );
+        tsc_object_define(
+            error_intrinsics[TSC_ERROR_ERROR].prototype,
+            tsc_str_from_lit("toString", 8),
+            tsc_value_function_builtin_named(
+                error_prototype_to_string,
+                NULL,
+                0.0,
+                tsc_str_from_lit("toString", 8)
+            ),
+            true,
+            false,
+            true
+        );
+        for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
+            tsc_error_intrinsic_t* intrinsic = &error_intrinsics[i];
+            intrinsic->constructor = tsc_value_function_named_kind(
+                error_constructor_apply,
+                error_constructor_construct,
+                intrinsic,
+                intrinsic->length,
+                tsc_str_from_lit(intrinsic->name, intrinsic->name_len),
+                TSC_FUNCTION_IDENTITY_BUILTIN
+            );
+            tsc_function_identity_t* identity =
+                (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
+            identity->func_prototype = tsc_value_object(intrinsic->prototype);
+            tsc_object_define(
+                intrinsic->prototype,
+                tsc_str_from_lit("constructor", 11),
+                intrinsic->constructor,
+                true,
+                false,
+                true
+            );
+        }
+        error_intrinsics_initialized = true;
+    }
+    tsc_runtime_unlock();
+}
+
+static bool error_cause_from_options(tsc_array_t* args, size_t index, tsc_value_t* cause) {
+    if (!args || index >= args->len) return false;
+    tsc_value_t options = TSC_ARR(tsc_value_t, args, index);
+    if (!tsc_value_is_object(options)) return false;
+    tsc_str_t* key = tsc_str_from_lit("cause", 5);
+    if (!tsc_value_has_prop(options, key)) return false;
+    *cause = tsc_value_get_prop(options, key);
+    return true;
+}
+
+static tsc_str_t* error_message_argument(tsc_array_t* args, size_t index) {
+    if (!args || index >= args->len) return tsc_str_from_lit("", 0);
+    tsc_value_t value = TSC_ARR(tsc_value_t, args, index);
+    return tsc_value_is_undefined(value)
+        ? tsc_str_from_lit("", 0)
+        : tsc_value_to_string(value);
+}
+
+static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_error_intrinsic_t* intrinsic = (tsc_error_intrinsic_t*)env;
+    tsc_error_t* error;
+    if (intrinsic->kind == TSC_ERROR_AGGREGATE) {
+        if (!args || args->len == 0) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("AggregateError errors is not iterable", 37));
+        }
+        tsc_array_t* errors = tsc_value_collection_constructor_values(
+            TSC_ARR(tsc_value_t, args, 0)
+        );
+        error = tsc_aggregate_error_new(errors, error_message_argument(args, 1));
+        tsc_value_t cause;
+        if (error_cause_from_options(args, 2, &cause)) error->cause = cause;
+    } else if (intrinsic->kind == TSC_ERROR_SUPPRESSED) {
+        tsc_value_t primary = args && args->len > 0
+            ? TSC_ARR(tsc_value_t, args, 0)
+            : tsc_value_undefined();
+        tsc_value_t suppressed = args && args->len > 1
+            ? TSC_ARR(tsc_value_t, args, 1)
+            : tsc_value_undefined();
+        error = tsc_suppressed_error_new(
+            primary,
+            suppressed,
+            error_message_argument(args, 2)
+        );
+    } else {
+        error = tsc_error_new_named(
+            tsc_str_from_lit(intrinsic->name, intrinsic->name_len),
+            error_message_argument(args, 0)
+        );
+        tsc_value_t cause;
+        if (error_cause_from_options(args, 1, &cause)) error->cause = cause;
+    }
+    return tsc_value_error(error);
+}
+
+static tsc_value_t error_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    tsc_value_t result = error_constructor_apply(env, tsc_value_undefined(), args);
+    tsc_value_t prototype = tsc_value_get_prototype_of(receiver);
+    if (!tsc_value_set_prototype_of(result, prototype)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("Error constructor could not set prototype", 41));
+    }
+    return result;
+}
+
+tsc_value_t tsc_error_constructor_value(tsc_error_kind_t kind) {
+    error_intrinsics_initialize();
+    return error_intrinsic(kind)->constructor;
+}
+
+_Noreturn void tsc_throw_error(tsc_error_kind_t kind, tsc_str_t* message) {
+    tsc_error_intrinsic_t* intrinsic = error_intrinsic(kind);
+    tsc_throw_value(tsc_value_error(tsc_error_new_named(
+        tsc_str_from_lit(intrinsic->name, intrinsic->name_len),
+        message
+    )));
 }
 
 typedef struct {
@@ -4525,8 +4749,14 @@ tsc_value_t tsc_value_set(tsc_set_t* s) {
 
 tsc_value_t tsc_value_error(tsc_error_t* e) {
     if (!e) return tsc_value_null();
+    if (e->object) return tsc_value_object(e->object);
+    error_intrinsics_initialize();
     tsc_object_t* o = tsc_object_new_class(e);
     o->is_error = true;
+    o->prototype = tsc_value_object(
+        error_intrinsic(error_kind_from_name(e->name))->prototype
+    );
+    e->object = o;
     return tsc_value_object(o);
 }
 

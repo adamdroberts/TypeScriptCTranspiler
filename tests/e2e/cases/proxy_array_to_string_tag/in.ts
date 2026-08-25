@@ -16,6 +16,20 @@ console.log(
     Object.prototype.toString.call(objectProxy),
 );
 
+const arrayRevocable: any = Proxy.revocable([], {});
+arrayRevocable.revoke();
+try {
+    Array.isArray(arrayRevocable.proxy);
+} catch (err: any) {
+    console.log(
+        "array revoked:",
+        typeof err,
+        err instanceof TypeError,
+        err.constructor === TypeError,
+        err.name,
+    );
+}
+
 const revocable: any = Proxy.revocable(["x"], {});
 console.log("revocable before:", Object.prototype.toString.call(revocable.proxy));
 revocable.revoke();

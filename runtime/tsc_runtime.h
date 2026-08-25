@@ -427,6 +427,19 @@ tsc_str_t* tsc_date_to_locale_time_string(const tsc_date_t* d);
 tsc_str_t* tsc_date_to_string(const tsc_date_t* d);
 
 /* ------------- Error ------------- */
+typedef enum {
+    TSC_ERROR_ERROR,
+    TSC_ERROR_TYPE,
+    TSC_ERROR_RANGE,
+    TSC_ERROR_SYNTAX,
+    TSC_ERROR_REFERENCE,
+    TSC_ERROR_EVAL,
+    TSC_ERROR_URI,
+    TSC_ERROR_AGGREGATE,
+    TSC_ERROR_SUPPRESSED,
+    TSC_ERROR_KIND_COUNT
+} tsc_error_kind_t;
+
 typedef struct tsc_error {
     tsc_str_t* name;
     tsc_str_t* message;
@@ -436,6 +449,7 @@ typedef struct tsc_error {
     tsc_value_t error;
     tsc_value_t suppressed;
     bool is_suppressed;
+    struct tsc_object* object;
 } tsc_error_t;
 tsc_error_t* tsc_error_new(tsc_str_t* message);
 tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message);
@@ -444,6 +458,8 @@ tsc_error_t* tsc_aggregate_error_new(struct tsc_array* errors, tsc_str_t* messag
 tsc_error_t* tsc_aggregate_error_new_cause(struct tsc_array* errors, tsc_str_t* message, tsc_value_t cause);
 tsc_error_t* tsc_suppressed_error_new(tsc_value_t error, tsc_value_t suppressed, tsc_str_t* message);
 tsc_str_t* tsc_error_to_string(const tsc_error_t* e);
+tsc_value_t tsc_error_constructor_value(tsc_error_kind_t kind);
+_Noreturn void tsc_throw_error(tsc_error_kind_t kind, tsc_str_t* message);
 
 /* ------------- Buffer ------------- */
 typedef struct tsc_buffer {

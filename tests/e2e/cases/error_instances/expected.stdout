@@ -4,4 +4,9 @@ called: Error called Error: called true
 extra: Error extra called-extra ncud
 undefined:   true true ncud
 methods: Error: boom Error: called true ncudslv
+constructors: function Error 1 function TypeError 1
+constructor identity: true true true true
+alias instances: TypeError alias-constructed true true true true
+prototype chain: true true false
+stable boxing: true true true
 caught: Error: boom

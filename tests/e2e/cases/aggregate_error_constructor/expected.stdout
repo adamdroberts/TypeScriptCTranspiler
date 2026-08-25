@@ -2,4 +2,5 @@ aggregate: AggregateError many AggregateError: many 2 one two
 called: AggregateError  AggregateError 1 solo
 extra: AggregateError extra x called extra y abuc
 undefined:  z true  root abuc
+alias: AggregateError 2 alias alias message alias cause true true true
 caught: AggregateError: many
