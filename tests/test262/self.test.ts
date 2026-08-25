@@ -256,6 +256,65 @@ describe("host result contract", () => {
         }
     });
 
+    test("classifies only reachable module-graph early errors as resolution failures", async () => {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-resolution-self-test-"));
+        const artifactDirectory = path.join(root, "artifacts");
+        await fs.mkdir(artifactDirectory);
+        const depth = 48;
+        const dependencyPath = (index: number): string =>
+            `test/dependency-${String(index).padStart(3, "0")}.js`;
+        const moduleSources = Array.from({ length: depth }, (_, index) => ({
+            path: dependencyPath(index),
+            source: index + 1 < depth
+                ? `import "./${path.posix.basename(dependencyPath(index + 1))}";\n`
+                : "break;\n",
+        }));
+        moduleSources.push({ path: "test/unreachable-invalid.js", source: "continue;\n" });
+        const moduleFiles = moduleSources.map(({ path: modulePath, source }) => ({
+            path: modulePath,
+            sha256: sha256Text(source),
+            encoding: "base64" as const,
+            data: Buffer.from(source).toString("base64"),
+        })).sort((left, right) => left.path.localeCompare(right.path));
+        const testSource = 'import "./dependency-000.js";\n';
+        const request: HostRequest = {
+            protocolVersion: hostProtocolVersion,
+            scenarioId: "test/native-host-resolution.js#module",
+            testPath: "test/native-host-resolution.js",
+            moduleBasePath: "test",
+            moduleFiles,
+            mode: "module",
+            goal: "module",
+            raw: false,
+            setupScripts: [],
+            testSource,
+            testSourceSha256: sha256Text(testSource),
+            async: false,
+            canBlock: null,
+            timeoutMs: 30_000,
+            artifactDirectory,
+        };
+        try {
+            const preparation = await prepareNativeRequest(request);
+            expect(preparation.kind).toBe("compiler-error");
+            if (preparation.kind !== "compiler-error") return;
+            expect(preparation.observation).toMatchObject({
+                kind: "throw",
+                phase: "resolution",
+                origin: "module-graph",
+                errorConstructor: "SyntaxError",
+            });
+            const diagnostics = await fs.readFile(
+                path.join(artifactDirectory, preparation.diagnosticsPath),
+                "utf8",
+            );
+            expect(diagnostics).toContain(dependencyPath(depth - 1));
+            expect(diagnostics).not.toContain("unreachable-invalid.js");
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    });
+
     test("requires one canonical exact-byte identity for every merged shard", () => {
         const canonical = [
             { index: 0, total: 2, sha256: "a".repeat(64) },

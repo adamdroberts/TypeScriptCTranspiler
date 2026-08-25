@@ -27,8 +27,16 @@ interface HostProfile {
 }
 
 interface ParseFailure {
+    phase: "parse" | "resolution";
     origin: "test-source" | "module-graph" | "setup-script";
     diagnostics: string;
+}
+
+interface ControlContext {
+    readonly allowReturn: boolean;
+    readonly breakableDepth: number;
+    readonly iterationDepth: number;
+    readonly labels: ReadonlyMap<string, boolean>;
 }
 
 function canonicalRelativePath(value: string, label: string): string {
@@ -68,7 +76,94 @@ async function writeExclusive(root: string, relative: string, content: string | 
     return destination;
 }
 
-function parseFailure(source: string, filename: string, origin: ParseFailure["origin"], goal: "script" | "module"): ParseFailure | null {
+function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
+    const location = (node: ts.Node, message: string): string => {
+        const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        return `${sourceFile.fileName}:${start.line + 1}:${start.character + 1}: ${message}\n`;
+    };
+    const labelsIteration = (statement: ts.Statement): boolean => {
+        let target = statement;
+        while (ts.isLabeledStatement(target)) target = target.statement;
+        return ts.isForStatement(target) ||
+            ts.isForInStatement(target) ||
+            ts.isForOfStatement(target) ||
+            ts.isWhileStatement(target) ||
+            ts.isDoStatement(target);
+    };
+    const visitFunction = (node: ts.SignatureDeclaration): string | null => {
+        const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
+        if (!body) return null;
+        const nested: ControlContext = {
+            allowReturn: true,
+            breakableDepth: 0,
+            iterationDepth: 0,
+            labels: new Map(),
+        };
+        return visit(body, nested);
+    };
+    const visit = (node: ts.Node, context: ControlContext): string | null => {
+        if (ts.isFunctionLike(node)) return visitFunction(node);
+        if (ts.isReturnStatement(node) && !context.allowReturn) {
+            return location(node, "return statement is not contained in a function body");
+        }
+        if (ts.isBreakStatement(node)) {
+            if (!node.label && context.breakableDepth === 0) {
+                return location(node, "break statement is not contained in an iteration or switch statement");
+            }
+            if (node.label && !context.labels.has(node.label.text)) {
+                return location(node, `break target '${node.label.text}' is not an active label`);
+            }
+        }
+        if (ts.isContinueStatement(node)) {
+            if (!node.label && context.iterationDepth === 0) {
+                return location(node, "continue statement is not contained in an iteration statement");
+            }
+            if (node.label && context.labels.get(node.label.text) !== true) {
+                return location(node, `continue target '${node.label.text}' is not an active iteration label`);
+            }
+        }
+        if (ts.isLabeledStatement(node)) {
+            if (context.labels.has(node.label.text)) {
+                return location(node.label, `duplicate active label '${node.label.text}'`);
+            }
+            const labels = new Map(context.labels);
+            labels.set(node.label.text, labelsIteration(node.statement));
+            return visit(node.statement, { ...context, labels });
+        }
+        const iteration = ts.isForStatement(node) ||
+            ts.isForInStatement(node) ||
+            ts.isForOfStatement(node) ||
+            ts.isWhileStatement(node) ||
+            ts.isDoStatement(node);
+        const breakable = iteration || ts.isSwitchStatement(node);
+        const childContext = iteration || breakable
+            ? {
+                ...context,
+                breakableDepth: context.breakableDepth + (breakable ? 1 : 0),
+                iterationDepth: context.iterationDepth + (iteration ? 1 : 0),
+            }
+            : context;
+        let failure: string | null = null;
+        ts.forEachChild(node, (child) => {
+            if (!failure) failure = visit(child, childContext);
+        });
+        return failure;
+    };
+    return visit(sourceFile, {
+        allowReturn: false,
+        breakableDepth: 0,
+        iterationDepth: 0,
+        labels: new Map(),
+    });
+}
+
+function parseFailure(
+    source: string,
+    filename: string,
+    phase: ParseFailure["phase"],
+    origin: ParseFailure["origin"],
+    goal: "script" | "module",
+): ParseFailure | null {
     const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
     const diagnostics = (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] })
         .parseDiagnostics ?? [];
@@ -78,15 +173,83 @@ function parseFailure(source: string, filename: string, origin: ParseFailure["or
         ts.isExportAssignment(statement) ||
         ts.isNamespaceExportDeclaration(statement)
     );
-    if (diagnostics.length === 0 && !goalMismatch) return null;
-    const formatted = diagnostics.length > 0
+    const controlFailure = diagnostics.length === 0 && !goalMismatch
+        ? earlyControlFlowFailure(sourceFile)
+        : null;
+    if (diagnostics.length === 0 && !goalMismatch && !controlFailure) return null;
+    const formatted = controlFailure ?? (diagnostics.length > 0
         ? diagnostics.map((diagnostic) => {
             const start = diagnostic.start ?? 0;
             const location = sourceFile.getLineAndCharacterOfPosition(start);
             return `${filename}:${location.line + 1}:${location.character + 1}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`;
         }).join("\n")
-        : `${filename}:1:1: import/export syntax is not valid under the Script parse goal`;
-    return { origin, diagnostics: `${formatted}\n` };
+        : `${filename}:1:1: import/export syntax is not valid under the Script parse goal`);
+    return { phase, origin, diagnostics: formatted.endsWith("\n") ? formatted : `${formatted}\n` };
+}
+
+function staticModuleSpecifiers(source: string, filename: string): string[] {
+    const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+    const result: string[] = [];
+    for (const statement of sourceFile.statements) {
+        if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
+        const specifier = statement.moduleSpecifier;
+        if (specifier && ts.isStringLiteral(specifier)) result.push(specifier.text);
+    }
+    return result;
+}
+
+function resolveRequestModulePath(importer: string, specifier: string): string | null {
+    if (!(specifier.startsWith("./") || specifier.startsWith("../"))) return null;
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
+    try {
+        return canonicalRelativePath(resolved, "resolved module path");
+    } catch {
+        return null;
+    }
+}
+
+function moduleGraphFailure(request: HostRequest): ParseFailure | null {
+    if (request.goal !== "module") return null;
+    const sources = new Map<string, string>([[request.testPath, request.testSource]]);
+    for (const file of request.moduleFiles) {
+        if (!/\.[cm]?js$/i.test(file.path)) continue;
+        sources.set(file.path, Buffer.from(file.data, "base64").toString("utf8"));
+    }
+    const visited = new Set<string>();
+    const worklist = [request.testPath];
+    while (worklist.length > 0) {
+        const current = worklist.pop()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        const source = sources.get(current);
+        if (source === undefined) {
+            return {
+                phase: "resolution",
+                origin: "module-graph",
+                diagnostics: `${current}:1:1: requested module source is absent from the attested resource directory\n`,
+            };
+        }
+        const failure = parseFailure(
+            source,
+            current,
+            current === request.testPath ? "parse" : "resolution",
+            current === request.testPath ? "test-source" : "module-graph",
+            "module",
+        );
+        if (failure) return failure;
+        for (const specifier of staticModuleSpecifiers(source, current)) {
+            const dependency = resolveRequestModulePath(current, specifier);
+            if (!dependency || !sources.has(dependency)) {
+                return {
+                    phase: "resolution",
+                    origin: "module-graph",
+                    diagnostics: `${current}:1:1: cannot resolve attested module specifier ${JSON.stringify(specifier)}\n`,
+                };
+            }
+            if (!visited.has(dependency)) worklist.push(dependency);
+        }
+    }
+    return null;
 }
 
 function validateRequest(request: HostRequest): void {
@@ -183,7 +346,7 @@ async function compilerErrorPreparation(
         protocolVersion: hostProtocolVersion,
         scenarioId: request.scenarioId,
         kind: "throw",
-        phase: "parse",
+        phase: failure.phase,
         origin: failure.origin,
         errorConstructor: "SyntaxError",
     };
@@ -203,11 +366,13 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
     await requireEmptyArtifactDirectory(request.artifactDirectory);
 
     for (const script of request.setupScripts) {
-        const failure = parseFailure(script.source, script.path, "setup-script", "script");
+        const failure = parseFailure(script.source, script.path, "parse", "setup-script", "script");
         if (failure) return compilerErrorPreparation(request, failure);
     }
-    const rootFailure = parseFailure(request.testSource, request.testPath, "test-source", request.goal);
+    const rootFailure = parseFailure(request.testSource, request.testPath, "parse", "test-source", request.goal);
     if (rootFailure) return compilerErrorPreparation(request, rootFailure);
+    const dependencyFailure = moduleGraphFailure(request);
+    if (dependencyFailure) return compilerErrorPreparation(request, dependencyFailure);
 
     const sourceRoot = await fs.mkdtemp(path.join(path.dirname(request.artifactDirectory), "sources-"));
     try {
