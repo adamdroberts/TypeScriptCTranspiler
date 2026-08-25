@@ -26,11 +26,36 @@ interface HostProfile {
     executionContract: HostExecutionContract;
 }
 
-interface ParseFailure {
+export interface ParseFailure {
     phase: "parse" | "resolution";
     origin: "test-source" | "module-graph" | "setup-script";
     diagnostics: string;
 }
+
+interface ModuleImportEntry {
+    readonly moduleRequest: string;
+    readonly importName: string | "namespace";
+}
+
+interface ModuleIndirectExportEntry {
+    readonly moduleRequest: string;
+    readonly importName: string | "namespace";
+}
+
+interface ModuleRecord {
+    readonly path: string;
+    readonly sourceFile: ts.SourceFile;
+    readonly requestedModules: string[];
+    readonly imports: ModuleImportEntry[];
+    readonly localExports: Map<string, string>;
+    readonly indirectExports: Map<string, ModuleIndirectExportEntry>;
+    readonly starExports: string[];
+}
+
+type ExportResolution =
+    | { readonly modulePath: string; readonly bindingName: string }
+    | "ambiguous"
+    | null;
 
 interface ControlContext {
     readonly allowReturn: boolean;
@@ -90,6 +115,19 @@ function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
             ts.isWhileStatement(target) ||
             ts.isDoStatement(target);
     };
+    const simpleAssignmentTarget = (expression: ts.Expression): boolean => {
+        while (
+            ts.isParenthesizedExpression(expression) ||
+            ts.isAsExpression(expression) ||
+            ts.isTypeAssertionExpression(expression) ||
+            ts.isSatisfiesExpression(expression)
+        ) {
+            expression = expression.expression;
+        }
+        return ts.isIdentifier(expression) ||
+            ts.isPropertyAccessExpression(expression) ||
+            ts.isElementAccessExpression(expression);
+    };
     const visitFunction = (node: ts.SignatureDeclaration): string | null => {
         const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
         if (!body) return null;
@@ -121,6 +159,13 @@ function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
             if (node.label && context.labels.get(node.label.text) !== true) {
                 return location(node, `continue target '${node.label.text}' is not an active iteration label`);
             }
+        }
+        if (
+            (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) &&
+            (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) &&
+            !simpleAssignmentTarget(node.operand)
+        ) {
+            return location(node.operand, "update expression operand is not a valid assignment target");
         }
         if (ts.isLabeledStatement(node)) {
             if (context.labels.has(node.label.text)) {
@@ -187,17 +232,6 @@ function parseFailure(
     return { phase, origin, diagnostics: formatted.endsWith("\n") ? formatted : `${formatted}\n` };
 }
 
-function staticModuleSpecifiers(source: string, filename: string): string[] {
-    const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
-    const result: string[] = [];
-    for (const statement of sourceFile.statements) {
-        if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
-        const specifier = statement.moduleSpecifier;
-        if (specifier && ts.isStringLiteral(specifier)) result.push(specifier.text);
-    }
-    return result;
-}
-
 function resolveRequestModulePath(importer: string, specifier: string): string | null {
     if (!(specifier.startsWith("./") || specifier.startsWith("../"))) return null;
     const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
@@ -208,6 +242,303 @@ function resolveRequestModulePath(importer: string, specifier: string): string |
     }
 }
 
+function moduleName(name: ts.ModuleExportName): string {
+    return name.text;
+}
+
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
+    return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false);
+}
+
+function bindingNames(name: ts.BindingName): string[] {
+    if (ts.isIdentifier(name)) return [name.text];
+    const result: string[] = [];
+    for (const element of name.elements) {
+        if (ts.isOmittedExpression(element)) continue;
+        result.push(...bindingNames(element.name));
+    }
+    return result;
+}
+
+function moduleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {
+    const sourceFile = ts.createSourceFile(filename, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+    const requestedModules: string[] = [];
+    const imports: ModuleImportEntry[] = [];
+    const importedLocals = new Map<string, ModuleImportEntry>();
+    const localExports = new Map<string, string>();
+    const indirectExports = new Map<string, ModuleIndirectExportEntry>();
+    const starExports: string[] = [];
+    let error: string | null = null;
+
+    const addRequested = (specifier: ts.Expression | undefined): string | null => {
+        if (!specifier || !ts.isStringLiteralLike(specifier)) return null;
+        requestedModules.push(specifier.text);
+        return specifier.text;
+    };
+    const addImport = (localName: string, entry: ModuleImportEntry): void => {
+        imports.push(entry);
+        importedLocals.set(localName, entry);
+    };
+    const addExplicitExport = (
+        exportName: string,
+        localName: string | null,
+        indirect: ModuleIndirectExportEntry | null,
+    ): void => {
+        if (localExports.has(exportName) || indirectExports.has(exportName)) {
+            error ??= `duplicate explicit export ${JSON.stringify(exportName)}`;
+            return;
+        }
+        if (indirect) indirectExports.set(exportName, indirect);
+        else localExports.set(exportName, localName!);
+    };
+
+    // Imported local bindings are collected first because a later `export { x }`
+    // is normalized to the same indirect binding as `export { x } from ...`.
+    for (const statement of sourceFile.statements) {
+        if (ts.isImportDeclaration(statement)) {
+            const moduleRequest = addRequested(statement.moduleSpecifier);
+            if (!moduleRequest || !statement.importClause) continue;
+            if (statement.importClause.name) {
+                addImport(statement.importClause.name.text, { moduleRequest, importName: "default" });
+            }
+            const bindings = statement.importClause.namedBindings;
+            if (bindings && ts.isNamespaceImport(bindings)) {
+                addImport(bindings.name.text, { moduleRequest, importName: "namespace" });
+            } else if (bindings) {
+                for (const element of bindings.elements) {
+                    addImport(element.name.text, {
+                        moduleRequest,
+                        importName: moduleName(element.propertyName ?? element.name),
+                    });
+                }
+            }
+        } else if (ts.isExportDeclaration(statement)) {
+            addRequested(statement.moduleSpecifier);
+        }
+    }
+
+    for (const statement of sourceFile.statements) {
+        if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+            addExplicitExport("default", "*default*", null);
+            continue;
+        }
+        if (ts.isExportDeclaration(statement)) {
+            const moduleRequest = statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier)
+                ? statement.moduleSpecifier.text
+                : null;
+            if (!statement.exportClause) {
+                if (moduleRequest) starExports.push(moduleRequest);
+                continue;
+            }
+            if (ts.isNamespaceExport(statement.exportClause)) {
+                if (moduleRequest) {
+                    addExplicitExport(moduleName(statement.exportClause.name), null, {
+                        moduleRequest,
+                        importName: "namespace",
+                    });
+                }
+                continue;
+            }
+            for (const element of statement.exportClause.elements) {
+                const exportName = moduleName(element.name);
+                const importOrLocalName = moduleName(element.propertyName ?? element.name);
+                if (moduleRequest) {
+                    addExplicitExport(exportName, null, { moduleRequest, importName: importOrLocalName });
+                } else {
+                    const imported = importedLocals.get(importOrLocalName);
+                    addExplicitExport(exportName, imported ? null : importOrLocalName, imported ?? null);
+                }
+            }
+            continue;
+        }
+        if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+        const isDefault = hasModifier(statement, ts.SyntaxKind.DefaultKeyword);
+        if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+            const localName = statement.name?.text ?? "*default*";
+            addExplicitExport(isDefault ? "default" : localName, localName, null);
+        } else if (ts.isVariableStatement(statement)) {
+            for (const declaration of statement.declarationList.declarations) {
+                for (const localName of bindingNames(declaration.name)) {
+                    addExplicitExport(localName, localName, null);
+                }
+            }
+        }
+    }
+
+    return {
+        record: error ? null : {
+            path: filename,
+            sourceFile,
+            requestedModules,
+            imports,
+            localExports,
+            indirectExports,
+            starExports,
+        },
+        error,
+    };
+}
+
+function moduleResolutionFailure(filename: string, detail: string): ParseFailure {
+    return {
+        phase: "resolution",
+        origin: "module-graph",
+        diagnostics: `${filename}:1:1: ${detail}\n`,
+    };
+}
+
+function resolvedModule(
+    records: ReadonlyMap<string, ModuleRecord>,
+    importer: ModuleRecord,
+    specifier: string,
+): ModuleRecord | null {
+    const resolved = resolveRequestModulePath(importer.path, specifier);
+    return resolved ? records.get(resolved) ?? null : null;
+}
+
+function sameResolution(left: Exclude<ExportResolution, "ambiguous" | null>, right: typeof left): boolean {
+    return left.modulePath === right.modulePath && left.bindingName === right.bindingName;
+}
+
+function resolveExport(
+    records: ReadonlyMap<string, ModuleRecord>,
+    record: ModuleRecord,
+    exportName: string,
+    resolveSet: Set<string> = new Set(),
+): ExportResolution {
+    const key = `${record.path}\0${exportName}`;
+    if (resolveSet.has(key)) return null;
+    resolveSet.add(key);
+
+    const localName = record.localExports.get(exportName);
+    if (localName !== undefined) return { modulePath: record.path, bindingName: localName };
+
+    const indirect = record.indirectExports.get(exportName);
+    if (indirect) {
+        const imported = resolvedModule(records, record, indirect.moduleRequest);
+        if (!imported) return null;
+        return indirect.importName === "namespace"
+            ? { modulePath: imported.path, bindingName: "*namespace*" }
+            : resolveExport(records, imported, indirect.importName, resolveSet);
+    }
+
+    if (exportName === "default") return null;
+    let starResolution: Exclude<ExportResolution, "ambiguous" | null> | null = null;
+    for (const moduleRequest of record.starExports) {
+        const imported = resolvedModule(records, record, moduleRequest);
+        if (!imported) return null;
+        const resolution = resolveExport(records, imported, exportName, resolveSet);
+        if (resolution === "ambiguous") return resolution;
+        if (resolution === null) continue;
+        if (starResolution === null) starResolution = resolution;
+        else if (!sameResolution(starResolution, resolution)) return "ambiguous";
+    }
+    return starResolution;
+}
+
+/** Analyze one complete, attested Module resource graph. The source-derived
+ * graph and the two graph algorithms are independent of fixture count/depth. */
+export function analyzeModuleGraph(
+    rootPath: string,
+    sources: ReadonlyMap<string, string>,
+): ParseFailure | null {
+    const records = new Map<string, ModuleRecord>();
+    const createRecord = (filename: string, root: boolean): ParseFailure | null => {
+        const source = sources.get(filename);
+        if (source === undefined) return moduleResolutionFailure(
+            filename,
+            "requested module source is absent from the attested resource directory",
+        );
+        const syntax = parseFailure(
+            source,
+            filename,
+            root ? "parse" : "resolution",
+            root ? "test-source" : "module-graph",
+            "module",
+        );
+        if (syntax) return syntax;
+        const parsed = moduleRecord(source, filename);
+        if (parsed.error || !parsed.record) {
+            return root
+                ? {
+                    phase: "parse",
+                    origin: "test-source",
+                    diagnostics: `${filename}:1:1: ${parsed.error ?? "invalid Module record"}\n`,
+                }
+                : moduleResolutionFailure(filename, parsed.error ?? "invalid Module record");
+        }
+        records.set(filename, parsed.record);
+        return null;
+    };
+
+    const rootFailure = createRecord(rootPath, true);
+    if (rootFailure) return rootFailure;
+
+    // Parse and resolve the reachable graph in source/depth-first order using
+    // explicit frames, so cycles and representative deep graphs share one path.
+    const discovery = [{ record: records.get(rootPath)!, next: 0 }];
+    while (discovery.length > 0) {
+        const frame = discovery[discovery.length - 1]!;
+        if (frame.next >= frame.record.requestedModules.length) {
+            discovery.pop();
+            continue;
+        }
+        const specifier = frame.record.requestedModules[frame.next++]!;
+        const dependencyPath = resolveRequestModulePath(frame.record.path, specifier);
+        if (!dependencyPath || !sources.has(dependencyPath)) {
+            return moduleResolutionFailure(
+                frame.record.path,
+                `cannot resolve attested module specifier ${JSON.stringify(specifier)}`,
+            );
+        }
+        if (records.has(dependencyPath)) continue;
+        const failure = createRecord(dependencyPath, false);
+        if (failure) return failure;
+        discovery.push({ record: records.get(dependencyPath)!, next: 0 });
+    }
+
+    // ModuleDeclarationInstantiation is another explicit DFS worklist. Each
+    // reachable record is validated after all of its requested modules.
+    const states = new Map<string, "visiting" | "done">();
+    const instantiation = [{ record: records.get(rootPath)!, next: 0 }];
+    states.set(rootPath, "visiting");
+    while (instantiation.length > 0) {
+        const frame = instantiation[instantiation.length - 1]!;
+        if (frame.next < frame.record.requestedModules.length) {
+            const specifier = frame.record.requestedModules[frame.next++]!;
+            const dependency = resolvedModule(records, frame.record, specifier)!;
+            if (!states.has(dependency.path)) {
+                states.set(dependency.path, "visiting");
+                instantiation.push({ record: dependency, next: 0 });
+            }
+            continue;
+        }
+        for (const [exportName] of frame.record.indirectExports) {
+            const resolution = resolveExport(records, frame.record, exportName);
+            if (resolution === null || resolution === "ambiguous") {
+                return moduleResolutionFailure(
+                    frame.record.path,
+                    `cannot resolve indirect export ${JSON.stringify(exportName)}`,
+                );
+            }
+        }
+        for (const entry of frame.record.imports) {
+            if (entry.importName === "namespace") continue;
+            const imported = resolvedModule(records, frame.record, entry.moduleRequest)!;
+            const resolution = resolveExport(records, imported, entry.importName);
+            if (resolution === null || resolution === "ambiguous") {
+                return moduleResolutionFailure(
+                    frame.record.path,
+                    `cannot resolve imported binding ${JSON.stringify(entry.importName)}`,
+                );
+            }
+        }
+        states.set(frame.record.path, "done");
+        instantiation.pop();
+    }
+    return null;
+}
+
 function moduleGraphFailure(request: HostRequest): ParseFailure | null {
     if (request.goal !== "module") return null;
     const sources = new Map<string, string>([[request.testPath, request.testSource]]);
@@ -215,41 +546,7 @@ function moduleGraphFailure(request: HostRequest): ParseFailure | null {
         if (!/\.[cm]?js$/i.test(file.path)) continue;
         sources.set(file.path, Buffer.from(file.data, "base64").toString("utf8"));
     }
-    const visited = new Set<string>();
-    const worklist = [request.testPath];
-    while (worklist.length > 0) {
-        const current = worklist.pop()!;
-        if (visited.has(current)) continue;
-        visited.add(current);
-        const source = sources.get(current);
-        if (source === undefined) {
-            return {
-                phase: "resolution",
-                origin: "module-graph",
-                diagnostics: `${current}:1:1: requested module source is absent from the attested resource directory\n`,
-            };
-        }
-        const failure = parseFailure(
-            source,
-            current,
-            current === request.testPath ? "parse" : "resolution",
-            current === request.testPath ? "test-source" : "module-graph",
-            "module",
-        );
-        if (failure) return failure;
-        for (const specifier of staticModuleSpecifiers(source, current)) {
-            const dependency = resolveRequestModulePath(current, specifier);
-            if (!dependency || !sources.has(dependency)) {
-                return {
-                    phase: "resolution",
-                    origin: "module-graph",
-                    diagnostics: `${current}:1:1: cannot resolve attested module specifier ${JSON.stringify(specifier)}\n`,
-                };
-            }
-            if (!visited.has(dependency)) worklist.push(dependency);
-        }
-    }
-    return null;
+    return analyzeModuleGraph(request.testPath, sources);
 }
 
 function validateRequest(request: HostRequest): void {
