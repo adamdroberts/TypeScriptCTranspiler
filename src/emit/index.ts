@@ -52802,6 +52802,11 @@ class Emitter {
             // function identity.
             if (symbol && this.moduleLexicalBindings.has(symbol)) return false;
         }
+        // Script-level lexical bindings likewise live in the Global
+        // Environment Record. Even an immutable function initializer must
+        // initialize that binding instead of being replaced by a lifted C
+        // identity that the runtime environment cannot resolve.
+        if (this.isTest262ScriptGlobalLexicalVariableDeclaration(decl)) return false;
         return this.isTopLevelValueDeclaration(decl);
     }
 
