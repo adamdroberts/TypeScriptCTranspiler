@@ -46,7 +46,7 @@ static void tsc_dispatch_serial_trampoline(void* ctx) {
     tsc_dispatch_serial_task_t* task = (tsc_dispatch_serial_task_t*)ctx;
     tsc_value_t result = tsc_value_undefined();
     bool is_error = false;
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         result = task->fn(task->env);
@@ -106,7 +106,7 @@ tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn
     if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.sync: invalid queue or task"));
     tsc_value_t result = tsc_value_undefined();
     tsc_str_t* error = NULL;
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         result = fn(env);
@@ -220,7 +220,7 @@ static void tsc_dispatch_async_trampoline(void* ctx) {
     bool registered_here = tsc_dispatch_register_gc_thread();
     tsc_value_t result = tsc_value_undefined();
     bool is_error = false;
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         result = task->fn(task->env);
@@ -297,7 +297,7 @@ typedef struct {
 static void tsc_dispatch_sync_trampoline(void* ctx) {
     tsc_dispatch_sync_task_t* task = (tsc_dispatch_sync_task_t*)ctx;
     bool registered_here = tsc_dispatch_register_gc_thread();
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         task->result = task->fn(task->env);

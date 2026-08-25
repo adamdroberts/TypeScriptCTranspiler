@@ -1892,11 +1892,34 @@ void tsc_try_push(tsc_try_frame_t* f) {
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
     f->roots = (tsc_try_roots_t*)TSC_GC_MALLOC(sizeof(tsc_try_roots_t));
+    f->active = true;
     g_try_top = f;
 }
 
 void tsc_try_pop(void) {
-    if (g_try_top) g_try_top = g_try_top->prev;
+    if (!g_try_top) return;
+    tsc_try_frame_t* frame = g_try_top;
+    g_try_top = frame->prev;
+    frame->active = false;
+}
+
+void tsc_try_cleanup(tsc_try_frame_t* frame) {
+    if (!frame || !frame->active) return;
+    if (g_try_top == frame) {
+        g_try_top = frame->prev;
+        frame->active = false;
+        return;
+    }
+    /* Cleanup normally runs in reverse lexical order. Retain a fail-safe
+     * unlink for a non-local C edge so no expired stack frame can remain in
+     * the exception chain even if a future emitter violates that ordering. */
+    for (tsc_try_frame_t* current = g_try_top; current; current = current->prev) {
+        if (current->prev != frame) continue;
+        current->prev = frame->prev;
+        frame->active = false;
+        return;
+    }
+    frame->active = false;
 }
 
 _Noreturn void tsc_throw_str(tsc_str_t* message) {

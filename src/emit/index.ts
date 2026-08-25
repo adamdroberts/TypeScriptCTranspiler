@@ -15060,7 +15060,7 @@ class Emitter {
                         : "module-graph";
                 const frame = `_test262_frame_${index}`;
                 out.line("    {");
-                out.line(`        tsc_try_frame_t ${frame};`);
+                out.line(`        TSC_TRY_FRAME(${frame});`);
                 out.line(`        tsc_try_push(&${frame});`);
                 out.line(`        if (setjmp(${frame}.jb) == 0) {`);
                 out.line(`            mod_init_${modId}();`);
@@ -15073,7 +15073,7 @@ class Emitter {
                 out.line("    }");
             }
             out.line("    {");
-            out.line("        tsc_try_frame_t _test262_event_frame;");
+            out.line("        TSC_TRY_FRAME(_test262_event_frame);");
             out.line("        tsc_try_push(&_test262_event_frame);");
             out.line("        if (setjmp(_test262_event_frame.jb) == 0) {");
             out.line("            tsc_run_event_loop();");
@@ -27403,7 +27403,7 @@ class Emitter {
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _ret = state->result_promise;");
-        callback.line(`tsc_try_frame_t ${eh};`);
+        callback.line(`TSC_TRY_FRAME(${eh});`);
         callback.line(`tsc_try_push(&${eh});`);
         callback.open(`if (setjmp(${eh}.jb) == 0)`);
 
@@ -45234,7 +45234,7 @@ class Emitter {
             const finallyEhVar = this.freshTemp("_finally_eh");
             const catchErrorVar = this.freshTemp("_catch_error");
             buf.open("");
-            buf.line(`tsc_try_frame_t ${ehVar};`);
+            buf.line(`TSC_TRY_FRAME(${ehVar});`);
             buf.line(`tsc_try_push(&${ehVar});`);
             buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
             this.tryDepth++;
@@ -45247,7 +45247,7 @@ class Emitter {
             buf.close();
             buf.open("else");
             buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_try_frame_t ${catchEhVar};`);
+            buf.line(`TSC_TRY_FRAME(${catchEhVar});`);
             buf.line(`tsc_try_push(&${catchEhVar});`);
             buf.open(`if (setjmp(${catchEhVar}.jb) == 0)`);
             let catchSym: ts.Symbol | undefined;
@@ -45279,7 +45279,7 @@ class Emitter {
             buf.open("else");
             buf.line(`tsc_try_pop();`);
             buf.line(`tsc_value_t const ${catchErrorVar} = tsc_current_error_value();`);
-            buf.line(`tsc_try_frame_t ${finallyEhVar};`);
+            buf.line(`TSC_TRY_FRAME(${finallyEhVar});`);
             buf.line(`tsc_try_push(&${finallyEhVar});`);
             buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
             for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
@@ -45301,7 +45301,7 @@ class Emitter {
             const finallyEhVar = this.freshTemp("_finally_eh");
             const errorVar = this.freshTemp("_try_error");
             buf.open("");
-            buf.line(`tsc_try_frame_t ${ehVar};`);
+            buf.line(`TSC_TRY_FRAME(${ehVar});`);
             buf.line(`tsc_try_push(&${ehVar});`);
             buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
             this.tryDepth++;
@@ -45315,7 +45315,7 @@ class Emitter {
             buf.open("else");
             buf.line(`tsc_try_pop();`);
             buf.line(`tsc_value_t const ${errorVar} = tsc_current_error_value();`);
-            buf.line(`tsc_try_frame_t ${finallyEhVar};`);
+            buf.line(`TSC_TRY_FRAME(${finallyEhVar});`);
             buf.line(`tsc_try_push(&${finallyEhVar});`);
             buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
             for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
@@ -45333,7 +45333,7 @@ class Emitter {
         }
         const ehVar = this.freshTemp("_eh");
         buf.open("");
-        buf.line(`tsc_try_frame_t ${ehVar};`);
+        buf.line(`TSC_TRY_FRAME(${ehVar});`);
         buf.line(`tsc_try_push(&${ehVar});`);
         buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
         this.tryDepth++;
@@ -54614,7 +54614,7 @@ class Emitter {
                     `({ tsc_array_t* ${src} = NULL; ` +
                     `tsc_array_t* ${out} = NULL; ` +
                     `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
-                    `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
+                    `TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); ` +
                     `if (setjmp(${eh}.jb) == 0) { ${src} = ${sourceArray}; ` +
                     `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
                     `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
@@ -54656,7 +54656,7 @@ class Emitter {
                 const eh = this.freshTemp("_from_async_eh");
                 return (
                     `({ tsc_promise_t* ${result} = NULL; tsc_array_t* ${src} = NULL; ` +
-                    `tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); ` +
+                    `TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); ` +
                     `if (setjmp(${eh}.jb) == 0) { ${src} = tsc_value_array_from_values(${items}); tsc_try_pop(); ${result} = tsc_promise_resolve_array(${src}); ` +
                     `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${result}; })`
                 );
@@ -55974,7 +55974,7 @@ class Emitter {
             const resPromise = this.freshTemp("_res_p");
             const eh = this.freshTemp("_eh");
             buf.line(`tsc_promise_t* ${resPromise};`);
-            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`TSC_TRY_FRAME(${eh});`);
             buf.line(`tsc_try_push(&${eh});`);
             buf.open(`if (setjmp(${eh}.jb) == 0)`);
             if (ret.kind === "void" || ret.kind === "never") {
@@ -56005,7 +56005,7 @@ class Emitter {
             const resPromise = this.freshTemp("_res_p");
             const eh = this.freshTemp("_eh");
             buf.line(`tsc_promise_t* ${resPromise};`);
-            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`TSC_TRY_FRAME(${eh});`);
             buf.line(`tsc_try_push(&${eh});`);
             buf.open(`if (setjmp(${eh}.jb) == 0)`);
             if (ret.kind === "void" || ret.kind === "never") {
@@ -56122,7 +56122,7 @@ class Emitter {
             const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
             const cbRet = preparedCb.kind === "function" && preparedCb.ret ? this.prepareType(preparedCb.ret) : null;
             const eh = this.freshTemp("_eh");
-            buf.line(`tsc_try_frame_t ${eh};`);
+            buf.line(`TSC_TRY_FRAME(${eh});`);
             buf.line(`tsc_try_push(&${eh});`);
             buf.open(`if (setjmp(${eh}.jb) == 0)`);
             if (cbRet?.kind === "void" || cbRet?.kind === "never" || !cbRet) {
@@ -56353,10 +56353,10 @@ class Emitter {
         const out = this.freshTemp("_promise_cb");
         const eh = this.freshTemp("_promise_cb_eh");
         if (ret.kind === "void" || ret.kind === "never") {
-            return `({ tsc_promise_t* ${out}; tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callResult}; tsc_try_pop(); ${out} = tsc_promise_resolve(tsc_value_undefined()); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+            return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callResult}; tsc_try_pop(); ${out} = tsc_promise_resolve(tsc_value_undefined()); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
         }
         const valueTmp = this.freshTemp("_promise_cb_value");
-        return `({ tsc_promise_t* ${out}; tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${ret.c} ${valueTmp} = ${callResult}; tsc_try_pop(); ${out} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)}; } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${ret.c} ${valueTmp} = ${callResult}; tsc_try_pop(); ${out} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)}; } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
     }
 
     private promiseCallbackCall(
@@ -65829,7 +65829,7 @@ class Emitter {
     private emitImmediatePromiseTry(successExpr: string): string {
         const out = this.freshTemp("_promise_try");
         const eh = this.freshTemp("_promise_try_eh");
-        return `({ tsc_promise_t* ${out}; tsc_try_frame_t ${eh}; tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${out} = ${successExpr}; tsc_try_pop(); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${out} = ${successExpr}; tsc_try_pop(); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
     }
 
     private emitPathCall(call: ts.CallExpression, name: string, isWin32 = false): EmitResult {
@@ -73090,7 +73090,7 @@ class Emitter {
                     callArgs.push(fn);
                 }
                 const eh = this.freshTemp("_promise_executor_eh");
-                pieces.push(`tsc_try_frame_t ${eh}`);
+                pieces.push(`TSC_TRY_FRAME(${eh})`);
                 pieces.push(`tsc_try_push(&${eh})`);
                 pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else { tsc_promise_reject_in_place(${result}, tsc_value_string(tsc_current_error())); }`);
                 pieces.push(result);

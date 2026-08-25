@@ -257,7 +257,7 @@ static bool is_ecma_object(tsc_value_t v) {
 static void promise_thenable_job(void* env) {
     tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
     if (!state || !state->promise) return;
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
@@ -279,7 +279,7 @@ static void promise_thenable_job(void* env) {
 static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen) {
     tsc_promise_t* volatile out = NULL;
     tsc_promise_thenable_state_t* volatile state = NULL;
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         if (tsc_value_is_promise(value)) {
@@ -497,7 +497,7 @@ tsc_value_t tsc_async_iterator_get(tsc_value_t value) {
 }
 
 tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_value_t next = tsc_value_get_prop(iterator, tsc_str_from_lit("next", 4));
@@ -514,7 +514,7 @@ tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
 }
 
 tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_value_t close = tsc_value_get_prop(iterator, tsc_str_from_lit("return", 6));
@@ -816,7 +816,7 @@ static tsc_array_t* promise_single_arg(tsc_value_t value) {
 }
 
 static tsc_promise_t* promise_call_dynamic_callback(tsc_value_t fn, tsc_value_t arg, bool has_arg) {
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_array_t* args = has_arg

@@ -1613,10 +1613,18 @@ typedef struct tsc_try_frame {
      * GC.  This cell is allocated before setjmp, so longjmp cannot make its
      * subsequently updated contents indeterminate with the frame's locals. */
     tsc_try_roots_t* roots;
+    bool active;
 } tsc_try_frame_t;
 
 void tsc_try_push(tsc_try_frame_t* f);
 void tsc_try_pop(void);
+void tsc_try_cleanup(tsc_try_frame_t* f);
+#if defined(__GNUC__) || defined(__clang__)
+#define TSC_TRY_FRAME(name) \
+    tsc_try_frame_t name __attribute__((cleanup(tsc_try_cleanup))) = {0}
+#else
+#define TSC_TRY_FRAME(name) tsc_try_frame_t name = {0}
+#endif
 _Noreturn void tsc_throw_str(tsc_str_t* message);
 _Noreturn void tsc_throw_value(tsc_value_t value);
 _Noreturn void tsc_rethrow(void);

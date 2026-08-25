@@ -13896,7 +13896,7 @@ static tsc_promise_t* tsc_fs_promises_stats_async(const tsc_str_t* path, bool th
     task->stats = NULL;
     task->error = NULL;
 
-    tsc_try_frame_t frame;
+    TSC_TRY_FRAME(frame);
     tsc_try_push(&frame);
     if (setjmp(frame.jb) == 0) {
         task->stats = lstat
@@ -14998,7 +14998,7 @@ static tsc_value_t tsc_fs_dir_read_builtin(void* env, tsc_value_t this_arg, tsc_
 #ifdef TSC_HAS_LIBUV
     if (state && state->uv_backend) return tsc_fs_dir_uv_wait(state, false);
 #endif
-    tsc_try_frame_t frame;
+    TSC_TRY_FRAME(frame);
     tsc_try_push(&frame);
     if (setjmp(frame.jb) == 0) {
         tsc_value_t value = tsc_fs_dir_read_entry(state);
@@ -15049,7 +15049,7 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
             tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
         ));
     }
-    tsc_try_frame_t frame;
+    TSC_TRY_FRAME(frame);
     tsc_try_push(&frame);
     if (setjmp(frame.jb) == 0) {
         tsc_value_t value = tsc_fs_dir_read_entry(state);

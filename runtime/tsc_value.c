@@ -2270,7 +2270,7 @@ tsc_promise_t* tsc_value_dispose_async(tsc_value_t value) {
     if (!tsc_value_is_callable(method)) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("Symbol.asyncDispose is not callable")));
     }
-    tsc_try_frame_t eh;
+    TSC_TRY_FRAME(eh);
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);

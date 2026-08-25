@@ -251,7 +251,7 @@ static tsc_str_t* error_constructor_name(tsc_value_t error) {
     }
     if (!tsc_value_is_object(error)) return NULL;
 
-    tsc_try_frame_t frame;
+    TSC_TRY_FRAME(frame);
     tsc_try_push(&frame);
     if (setjmp(frame.jb) != 0) {
         tsc_try_pop();
