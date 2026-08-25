@@ -8,15 +8,23 @@ import { hostProtocolVersion, parseHostObservation } from "../test262/protocol";
 
 test("evalScript source discovery follows one transitive finite AST worklist", () => {
     const nested = '$262.evalScript("var nested = 1;");';
+    const sibling = "var sibling = 3;";
+    const branch = "var branch = 4;";
     const root = finiteEvalScriptSourceGraph([{
         path: "root.js",
-        source: `$262.evalScript(flag ? ${JSON.stringify(nested)} : "var alternate = 2;");`,
+        source: `
+            $262.evalScript(flag ? ${JSON.stringify(nested)} : "var alternate = 2;");
+            $262.evalScript(${JSON.stringify(sibling)});
+            flag && $262.evalScript(${JSON.stringify(branch)});
+        `,
     }]);
     expect(root.error).toBeNull();
     expect(new Set(root.sources)).toEqual(new Set([
         nested,
         "var nested = 1;",
         "var alternate = 2;",
+        sibling,
+        branch,
     ]));
 
     const nonFinite = finiteEvalScriptSourceGraph([{
@@ -87,6 +95,19 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             Object.defineProperty(globalThis, "existingRestricted", {
                 value: 8, writable: false, enumerable: false, configurable: false
             });
+            var primordialJoin = Function.prototype.call.bind(Array.prototype.join);
+            var primordialPush = Function.prototype.call.bind(Array.prototype.push);
+            var primordialHasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+            var primordialEnumerable = Function.prototype.call.bind(Object.prototype.propertyIsEnumerable);
+            var primordialArray = [];
+            primordialPush(primordialArray, "pushed");
+            if (primordialJoin(["a", "b"], "-") !== "a-b" ||
+                Array.prototype.map.call([1, 2], String).join(", ") !== "1, 2" ||
+                primordialArray[0] !== "pushed" ||
+                !primordialHasOwn({ owned: true }, "owned") ||
+                !primordialEnumerable({ visible: true }, "visible")) {
+                throw new Error("primordial bound array method differed");
+            }
             $262.evalScript(${JSON.stringify(mutationSource)});
             if (executions !== 1 || created !== 1 || readCreated() !== 1) {
                 throw new Error("first ScriptEvaluation differed");

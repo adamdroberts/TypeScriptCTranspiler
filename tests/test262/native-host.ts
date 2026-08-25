@@ -130,7 +130,9 @@ export function finiteEvalScriptSourceGraph(
                 }
             }
             const children: ts.Node[] = [];
-            node.forEachChild((child) => children.push(child));
+            node.forEachChild((child) => {
+                children.push(child);
+            });
             for (let index = children.length - 1; index >= 0; index--) {
                 worklist.push(children[index]!);
             }

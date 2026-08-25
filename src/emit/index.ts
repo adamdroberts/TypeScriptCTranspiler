@@ -23986,6 +23986,14 @@ class Emitter {
             (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
     }
 
+    private isTest262ScriptGlobalThisExpression(expr: ts.Expression): boolean {
+        return expr.kind === ts.SyntaxKind.ThisKeyword &&
+            !this.currentClass &&
+            !this.functionThisStack[this.functionThisStack.length - 1] &&
+            !!this.options.test262Observation &&
+            this.isTest262ScriptSourceFile(expr.getSourceFile());
+    }
+
     private isTest262ScriptGlobalVarScopedDeclaration(
         decl: ts.Node,
     ): decl is ts.VariableDeclaration {
@@ -46789,11 +46797,11 @@ class Emitter {
         if (ts.isTaggedTemplateExpression(expr)) return this.emitTaggedTemplate(expr);
         if (expr.kind === ts.SyntaxKind.ThisKeyword) {
             const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
-            if (!this.currentClass && !fnThis && this.options.test262Observation) {
-                return this.isTest262ScriptSourceFile(expr.getSourceFile())
-                    ? { c: "tsc_global_object()", ty: T_VALUE }
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (this.isTest262ScriptGlobalThisExpression(expr)) {
+                return { c: "tsc_global_object()", ty: T_VALUE };
             }
+            if (!this.currentClass && !fnThis && this.options.test262Observation)
+                return { c: "tsc_value_undefined()", ty: T_VALUE };
             if (!this.currentClass && !fnThis)
                 unsupported(expr, "`this` outside of a class method or function this parameter");
             if (fnThis) return fnThis;
@@ -70422,7 +70430,8 @@ class Emitter {
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
         const tsType = this.expressionDeclaredOrCurrentType(arg);
-        const mapped = this.hasDynamicJsonModuleRepresentation(arg) ||
+        const mapped = this.isTest262ScriptGlobalThisExpression(arg) ||
+            this.hasDynamicJsonModuleRepresentation(arg) ||
             this.isUntypedJsObjectCallTarget(arg) ||
             (ts.isIdentifier(arg) && this.untypedJsLiteralVariableDeclaration(arg))
             ? T_VALUE
