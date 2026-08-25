@@ -409,6 +409,17 @@ interface DescriptorAccessor {
     node: ts.Expression;
 }
 
+interface Test262ScriptGlobalDeclarationPlan {
+    lexicals: Array<{
+        declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
+        name: ts.Identifier;
+        immutable: boolean;
+    }>;
+    functions: ts.FunctionDeclaration[];
+    vars: ts.Identifier[];
+    annexBFunctions: ts.FunctionDeclaration[];
+}
+
 type DescriptorData =
     | {
         kind: "data";
@@ -723,6 +734,10 @@ class Emitter {
     private test262ScriptDeclaredGlobalBindingNamesCache: ReadonlySet<string> | null = null;
     private test262SelectedGlobalFunctionsCache =
         new WeakMap<ts.SourceFile, ReadonlySet<ts.FunctionDeclaration>>();
+    private test262ScriptGlobalDeclarationsCache =
+        new WeakMap<ts.SourceFile, Test262ScriptGlobalDeclarationPlan>();
+    private test262AnnexBFunctionEnabled =
+        new WeakMap<ts.FunctionDeclaration, string>();
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
@@ -15134,6 +15149,9 @@ class Emitter {
                 this.collectModuleLexicalBindings(info.sf, modId);
                 this.collectModuleDefaultExportBinding(info.sf, modId);
                 this.collectJsonModuleBinding(info.sf, modId);
+                for (const declaration of this.test262ScriptGlobalDeclarations(info.sf).annexBFunctions) {
+                    this.referencedLocalFunctions.add(declaration);
+                }
             }
         }
         this.analyzeReferencedTopLevelFunctions(emitOrder);
@@ -15875,6 +15893,9 @@ class Emitter {
         if (!fd.name || !fd.body || this.isTopLevelValueDeclaration(fd) ||
             !this.isPrunableLocalFunction(fd) || this.isGenericFunction(fd)) {
             return false;
+        }
+        if (this.isTest262AnnexBGlobalFunctionDeclaration(fd)) {
+            return this.collectClosureCaptures(fd).length === 0;
         }
         if (!ts.isBlock(fd.parent)) return false;
         const owner = fd.parent.parent;
@@ -24148,6 +24169,130 @@ class Emitter {
             this.isTest262ScriptSourceFile(decl.getSourceFile());
     }
 
+    private isTest262AnnexBGlobalFunctionDeclaration(
+        declaration: ts.Node,
+    ): declaration is ts.FunctionDeclaration & { name: ts.Identifier } {
+        return ts.isFunctionDeclaration(declaration) &&
+            !!declaration.name &&
+            this.test262ScriptGlobalDeclarations(declaration.getSourceFile())
+                .annexBFunctions.includes(declaration);
+    }
+
+    private test262AnnexBFunctionHasCandidateParent(declaration: ts.FunctionDeclaration): boolean {
+        const parent = declaration.parent;
+        return ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent) ||
+            (ts.isIfStatement(parent) &&
+                (parent.thenStatement === declaration || parent.elseStatement === declaration));
+    }
+
+    /** The web-compat insertion is induced by source containment. This one
+     * worklist visits every candidate regardless of block or branch depth and
+     * stops at independent function/class declaration scopes. */
+    private test262AnnexBGlobalFunctionCandidates(sf: ts.SourceFile): ts.FunctionDeclaration[] {
+        if (!this.isTest262ScriptSourceFile(sf) || this.nodeIsInStrictMode(sf)) return [];
+        const out: ts.FunctionDeclaration[] = [];
+        const worklist: ts.Node[] = [...sf.statements];
+        while (worklist.length > 0) {
+            const current = worklist.pop()!;
+            if (ts.isFunctionDeclaration(current)) {
+                if (current.name && this.test262AnnexBFunctionHasCandidateParent(current)) {
+                    out.push(current);
+                }
+                continue;
+            }
+            if (ts.isFunctionLike(current) || ts.isClassLike(current) ||
+                ts.isClassStaticBlockDeclaration(current)) {
+                continue;
+            }
+            ts.forEachChild(current, (child) => { worklist.push(child); });
+        }
+        return out.sort((left, right) => left.getStart(sf) - right.getStart(sf));
+    }
+
+    private test262DirectLexicalNames(
+        statements: readonly ts.Statement[],
+        replaced: ts.FunctionDeclaration,
+        functionDeclarationsAreLexical = true,
+    ): Set<string> {
+        const names = new Set<string>();
+        const addStatement = (source: ts.Statement): void => {
+            let statement = source;
+            while (ts.isLabeledStatement(statement)) statement = statement.statement;
+            if (statement === replaced) return;
+            if (ts.isFunctionDeclaration(statement)) {
+                if (functionDeclarationsAreLexical && statement.name) names.add(statement.name.text);
+                return;
+            }
+            if (ts.isClassDeclaration(statement)) {
+                if (statement.name) names.add(statement.name.text);
+                return;
+            }
+            if (!ts.isVariableStatement(statement)) return;
+            const flags = statement.declarationList.flags;
+            if ((flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) === 0) return;
+            for (const declaration of statement.declarationList.declarations) {
+                for (const name of this.test262BindingNames(declaration.name)) names.add(name.text);
+            }
+        };
+        for (const statement of statements) addStatement(statement);
+        return names;
+    }
+
+    private test262LexicalLoopHeadContainsName(node: ts.Node, name: string): boolean {
+        if (!(ts.isForStatement(node) || ts.isForInStatement(node) || ts.isForOfStatement(node))) {
+            return false;
+        }
+        const initializer = node.initializer;
+        if (!initializer || !ts.isVariableDeclarationList(initializer) ||
+            (initializer.flags & (
+                ts.NodeFlags.Const |
+                ts.NodeFlags.Let |
+                ts.NodeFlags.Using |
+                ts.NodeFlags.AwaitUsing
+            )) === 0) {
+            return false;
+        }
+        return initializer.declarations.some((declaration) =>
+            this.test262BindingNames(declaration.name).some((bound) => bound.text === name),
+        );
+    }
+
+    /** Decide the spec's hypothetical `var F` replacement by following the
+     * new VarDeclaredName through its enclosing static-semantic scopes. */
+    private test262AnnexBFunctionReplacementAllowed(
+        declaration: ts.FunctionDeclaration & { name: ts.Identifier },
+        sf: ts.SourceFile,
+    ): boolean {
+        const name = declaration.name.text;
+        for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent) {
+            if (ts.isBlock(current) &&
+                this.test262DirectLexicalNames(current.statements, declaration).has(name)) {
+                return false;
+            }
+            if (ts.isCaseBlock(current)) {
+                const statements = current.clauses.flatMap((clause) => [...clause.statements]);
+                if (this.test262DirectLexicalNames(statements, declaration).has(name)) return false;
+            }
+            if (this.test262LexicalLoopHeadContainsName(current, name)) return false;
+            if (ts.isCatchClause(current) && current.variableDeclaration &&
+                this.test262BindingNames(current.variableDeclaration.name)
+                    .some((bound) => bound.text === name) &&
+                !ts.isIdentifier(current.variableDeclaration.name)) {
+                return false;
+            }
+            if (current === sf) {
+                return !this.test262DirectLexicalNames(sf.statements, declaration, false).has(name);
+            }
+            if (ts.isFunctionLike(current) || ts.isClassLike(current)) return false;
+        }
+        return false;
+    }
+
     /** ECMAScript ModuleDeclarationInstantiation derives every `var` binding
      * from VarScopedDeclarations before evaluation begins.  One tree walk is
      * shared by direct declarations, nested blocks, and loop declarations;
@@ -24450,6 +24595,16 @@ class Emitter {
         if (symbol.valueDeclaration) declarations.add(symbol.valueDeclaration);
         for (const declaration of symbol.declarations ?? []) declarations.add(declaration);
         for (const declaration of declarations) {
+            if (!this.isTest262AnnexBGlobalFunctionDeclaration(declaration)) continue;
+            const parent = declaration.parent;
+            const lexicalScope = ts.isBlock(parent)
+                ? parent
+                : ts.isCaseClause(parent) || ts.isDefaultClause(parent)
+                ? parent.parent
+                : declaration;
+            if (this.isNodeWithin(id, lexicalScope)) return null;
+        }
+        for (const declaration of declarations) {
             const variable = this.test262BindingVariableDeclaration(declaration);
             if ((variable && (
                 this.isTest262ScriptGlobalVarScopedDeclaration(variable) ||
@@ -24460,6 +24615,7 @@ class Emitter {
                 this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
+            if (this.isTest262AnnexBGlobalFunctionDeclaration(declaration)) return id.text;
         }
         return null;
     }
@@ -24497,6 +24653,9 @@ class Emitter {
                 if (declaration.name) names.add(declaration.name.text);
             }
             for (const name of declarations.vars) names.add(name.text);
+            for (const declaration of declarations.annexBFunctions) {
+                if (declaration.name) names.add(declaration.name.text);
+            }
         }
         return names;
     }
@@ -24509,17 +24668,15 @@ class Emitter {
      * Script static semantics. Nested functions/classes are declaration-scope
      * boundaries; every remaining `var` declaration is discovered by the same
      * source-tree worklist independently of statement nesting depth. */
-    private test262ScriptGlobalDeclarations(sf: ts.SourceFile): {
-        lexicals: Array<{
-            declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
-            name: ts.Identifier;
-            immutable: boolean;
-        }>;
-        functions: ts.FunctionDeclaration[];
-        vars: ts.Identifier[];
-    } {
+    private test262ScriptGlobalDeclarations(sf: ts.SourceFile): Test262ScriptGlobalDeclarationPlan {
+        const cached = this.test262ScriptGlobalDeclarationsCache.get(sf);
+        if (cached) return cached;
         if (!this.isTest262ScriptSourceFile(sf)) {
-            return { lexicals: [], functions: [], vars: [] };
+            const empty: Test262ScriptGlobalDeclarationPlan = {
+                lexicals: [], functions: [], vars: [], annexBFunctions: [],
+            };
+            this.test262ScriptGlobalDeclarationsCache.set(sf, empty);
+            return empty;
         }
         const lexicals: Array<{
             declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
@@ -24595,47 +24752,87 @@ class Emitter {
                 vars.push(name);
             }
         }
-        return { lexicals, functions, vars };
+        const annexBFunctions = this.test262AnnexBGlobalFunctionCandidates(sf)
+            .filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
+                !!declaration.name,
+            )
+            .filter((declaration) => this.test262AnnexBFunctionReplacementAllowed(declaration, sf));
+        const plan = { lexicals, functions, vars, annexBFunctions };
+        this.test262ScriptGlobalDeclarationsCache.set(sf, plan);
+        return plan;
     }
 
     private emitTest262ScriptGlobalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         const declarations = this.test262ScriptGlobalDeclarations(sf);
         const length = declarations.lexicals.length + declarations.functions.length + declarations.vars.length;
-        if (length === 0) return;
-        const plan = this.freshTemp("_global_declarations");
+        if (length > 0) {
+            const plan = this.freshTemp("_global_declarations");
+            buf.line(
+                `tsc_global_declaration_t* ${plan} = ` +
+                `(tsc_global_declaration_t*)TSC_GC_MALLOC(sizeof(tsc_global_declaration_t) * ${length});`,
+            );
+            let index = 0;
+            for (const lexical of declarations.lexicals) {
+                const kind = lexical.immutable
+                    ? "TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE"
+                    : "TSC_GLOBAL_DECL_LEXICAL_MUTABLE";
+                buf.line(
+                    `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                    `${this.test262GlobalBindingKey(lexical.name.text)}, ${kind}, ` +
+                    `tsc_value_undefined(), NULL };`,
+                );
+            }
+            for (const declaration of declarations.functions) {
+                const name = declaration.name!;
+                const type = this.javaScriptFunctionValueType(declaration);
+                const closure = this.emitFunctionReferenceClosure(name, type);
+                const value = this.coerce(closure, T_VALUE, name);
+                buf.line(
+                    `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                    `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_FUNCTION, ${value}, NULL };`,
+                );
+            }
+            for (const name of declarations.vars) {
+                buf.line(
+                    `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
+                    `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_VAR, ` +
+                    `tsc_value_undefined(), NULL };`,
+                );
+            }
+            buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
+        }
+        for (const declaration of declarations.annexBFunctions) {
+            if (!this.isSupportedLocalFunctionDeclaration(declaration)) {
+                unsupported(
+                    declaration,
+                    "Annex B global block function requires the canonical closure-capable function lowering",
+                );
+            }
+            const enabled = this.freshTemp("_annex_b_function_enabled");
+            this.test262AnnexBFunctionEnabled.set(declaration, enabled);
+            buf.line(
+                `bool ${enabled} = tsc_global_annex_b_function_instantiation(` +
+                `${this.test262GlobalBindingKey(declaration.name!.text)});`,
+            );
+        }
+    }
+
+    private emitTest262AnnexBGlobalFunctionUpdate(
+        buf: CBuf,
+        declaration: ts.FunctionDeclaration,
+    ): boolean {
+        const enabled = this.test262AnnexBFunctionEnabled.get(declaration);
+        if (!enabled || !declaration.name) return false;
+        const type = this.javaScriptFunctionValueType(declaration);
+        const closure = this.emitFunctionDeclarationReferenceClosure(declaration, type);
+        const value = this.coerce(closure, T_VALUE, declaration.name);
+        buf.open(`if (${enabled})`);
         buf.line(
-            `tsc_global_declaration_t* ${plan} = ` +
-            `(tsc_global_declaration_t*)TSC_GC_MALLOC(sizeof(tsc_global_declaration_t) * ${length});`,
+            `tsc_global_reference_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `${value}, false);`,
         );
-        let index = 0;
-        for (const lexical of declarations.lexicals) {
-            const kind = lexical.immutable
-                ? "TSC_GLOBAL_DECL_LEXICAL_IMMUTABLE"
-                : "TSC_GLOBAL_DECL_LEXICAL_MUTABLE";
-            buf.line(
-                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                `${this.test262GlobalBindingKey(lexical.name.text)}, ${kind}, ` +
-                `tsc_value_undefined(), NULL };`,
-            );
-        }
-        for (const declaration of declarations.functions) {
-            const name = declaration.name!;
-            const type = this.javaScriptFunctionValueType(declaration);
-            const closure = this.emitFunctionReferenceClosure(name, type);
-            const value = this.coerce(closure, T_VALUE, name);
-            buf.line(
-                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_FUNCTION, ${value}, NULL };`,
-            );
-        }
-        for (const name of declarations.vars) {
-            buf.line(
-                `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
-                `${this.test262GlobalBindingKey(name.text)}, TSC_GLOBAL_DECL_VAR, ` +
-                `tsc_value_undefined(), NULL };`,
-            );
-        }
-        buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
+        buf.close();
+        return true;
     }
 
     private emitTest262ScriptGlobalBindingLeaf(
@@ -40941,6 +41138,7 @@ class Emitter {
         if (ts.isExpressionStatement(stmt)) return this.emitExprStmt(buf, stmt);
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
+            if (this.emitTest262AnnexBGlobalFunctionUpdate(buf, stmt)) return;
             if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
             if (!this.isSupportedLocalFunctionDeclaration(stmt)) {
                 unsupported(stmt, "referenced local function declaration is not supported by the canonical lowering");

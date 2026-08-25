@@ -57,6 +57,22 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const varCollisionSource = "var sharedLexical; var collisionSideEffect;";
     const lexicalCollisionSource = "let sharedLexical; var collisionSideEffect;";
     const functionCollisionSource = "function blockedFunction() {}";
+    const annexBUpdateSource = `
+        if (false) function annexBNever() { return "never"; }
+        if (true) function annexBBranch() { return "branch"; }
+        { function annexBSequence() { return "first"; } }
+        { function annexBSequence() { return "second"; } }
+        switch (1) { case 1: function annexBCase() { return "case"; } }
+        { function annexBExistingFunction() { return "inner"; } }
+        function annexBExistingFunction() { return "outer"; }
+        let annexBSuppressed = "lexical";
+        { function annexBSuppressed() { return "wrong"; } }
+        { function annexBExisting() { return "updated"; } }
+    `;
+    const annexBCollisionSource = "var annexBCollisionSideEffect; let annexBMain;";
+    const annexBStrictSource = '"use strict"; { function annexBStrictOnly() {} }';
+    const annexBNonExtensibleSource = "{ function annexBNonExtensible() {} }";
+    const annexBStressSource = `${"{".repeat(96)}function annexBStress() { return "stress"; }${"}".repeat(96)}`;
     const duplicateFunctionSource = `
         function duplicateFunction() { return 1; }
         function duplicateFunction() { return 2; }
@@ -125,6 +141,11 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["var-collision.js", varCollisionSource],
         ["lexical-collision.js", lexicalCollisionSource],
         ["function-collision.js", functionCollisionSource],
+        ["annex-b-update.js", annexBUpdateSource],
+        ["annex-b-collision.js", annexBCollisionSource],
+        ["annex-b-strict.js", annexBStrictSource],
+        ["annex-b-non-extensible.js", annexBNonExtensibleSource],
+        ["annex-b-stress.js", annexBStressSource],
         ["function-duplicates.js", duplicateFunctionSource],
         ["function-duplicates-stress.js", duplicateFunctionStressSource],
         ["existing-var.js", existingVarSource],
@@ -156,6 +177,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             var completionOnlyDeclaration;
             var completionIndex;
             var sentinel = {};
+            if (true) { function annexBMain() { return "main"; } }
             var patternSymbol = Symbol("pattern-symbol");
             var patternObject = { first: 1, nested: { value: 2 }, extra: 3 };
             patternObject[patternSymbol] = 4;
@@ -277,6 +299,33 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             if (!functionCollision || globalThis.blockedFunction !== 1) {
                 throw new Error("function definability preflight differed");
             }
+            Object.defineProperty(globalThis, "annexBExisting", {
+                value: "existing", writable: true, enumerable: false, configurable: true
+            });
+            $262.evalScript(${JSON.stringify(annexBUpdateSource)});
+            var annexBNeverDescriptor = Object.getOwnPropertyDescriptor(globalThis, "annexBNever");
+            var annexBExistingDescriptor = Object.getOwnPropertyDescriptor(globalThis, "annexBExisting");
+            if (annexBMain() !== "main" || annexBBranch() !== "branch" ||
+                annexBSequence() !== "second" || annexBCase() !== "case" ||
+                annexBExistingFunction() !== "inner" ||
+                annexBSuppressed !== "lexical" || globalThis.annexBSuppressed !== undefined ||
+                !annexBNeverDescriptor || annexBNeverDescriptor.value !== undefined ||
+                !annexBNeverDescriptor.writable || !annexBNeverDescriptor.enumerable ||
+                annexBNeverDescriptor.configurable || annexBExisting() !== "updated" ||
+                annexBExistingDescriptor.enumerable || !annexBExistingDescriptor.configurable) {
+                throw new Error("Annex B global block function instantiation/update differed");
+            }
+            var annexBCollision = false;
+            try { $262.evalScript(${JSON.stringify(annexBCollisionSource)}); }
+            catch (error) { annexBCollision = error instanceof SyntaxError; }
+            if (!annexBCollision || "annexBCollisionSideEffect" in globalThis) {
+                throw new Error("Annex B var/lexical collision was not atomic");
+            }
+            $262.evalScript(${JSON.stringify(annexBStrictSource)});
+            $262.evalScript(${JSON.stringify(annexBStressSource)});
+            if (typeof annexBStrictOnly !== "undefined" || annexBStress() !== "stress") {
+                throw new Error("Annex B strict/deep source-tree partition differed");
+            }
             $262.evalScript(${JSON.stringify(duplicateFunctionSource)});
             $262.evalScript(${JSON.stringify(duplicateFunctionStressSource)});
             if (duplicateFunction() !== 3 || duplicateFunctionStress() !== 63) {
@@ -325,6 +374,11 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             }
 
             Object.preventExtensions(globalThis);
+            $262.evalScript(${JSON.stringify(annexBNonExtensibleSource)});
+            if (typeof annexBNonExtensible !== "undefined" ||
+                "annexBNonExtensible" in globalThis) {
+                throw new Error("Annex B non-extensible suppression differed");
+            }
             $262.evalScript(${JSON.stringify(nonExtensibleLexicalSource)});
             afterPreventLet = 23;
             AfterPreventClass = 24;

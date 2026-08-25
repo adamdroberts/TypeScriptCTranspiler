@@ -814,6 +814,7 @@ typedef struct {
 
 tsc_value_t tsc_global_object(void);
 void tsc_global_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
+bool tsc_global_annex_b_function_instantiation(tsc_str_t* key);
 tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_binding_get(tsc_str_t* key);
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
