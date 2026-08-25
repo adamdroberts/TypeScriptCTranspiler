@@ -18,9 +18,22 @@ static tsc_value_t test262_host_gc(void* env, tsc_value_t this_arg, tsc_array_t*
 tsc_value_t tsc_test262_host_object(void) {
     static tsc_object_t* host = NULL;
     if (!host) {
+        tsc_value_t global = tsc_global_object();
         tsc_runtime_lock();
         if (!host) {
             tsc_object_t* object = tsc_object_new();
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("global", 6),
+                global,
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
             (void)tsc_object_define_desc(
                 object,
                 tsc_str_from_lit("gc", 2),

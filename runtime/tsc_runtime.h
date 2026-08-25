@@ -719,6 +719,13 @@ tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);
 tsc_value_t tsc_boolean_constructor_value(void);
+/* One canonical ECMAScript global object and its object-backed Script bindings. */
+tsc_value_t tsc_global_object(void);
+void tsc_global_declare_var(tsc_str_t* key);
+void tsc_global_declare_function(tsc_str_t* key, tsc_value_t value);
+tsc_value_t tsc_global_binding_get(tsc_str_t* key);
+tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
+tsc_value_t tsc_value_sloppy_this(tsc_value_t value);
 tsc_value_t tsc_abort_controller_new(void);
 tsc_value_t tsc_abort_error_value(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);

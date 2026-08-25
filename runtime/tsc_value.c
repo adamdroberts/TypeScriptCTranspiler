@@ -505,11 +505,13 @@ typedef struct {
     const char* name;
     size_t name_len;
     tsc_object_t* prototype;
+    tsc_value_t constructor;
+    bool constructor_initialized;
 } tsc_primitive_descriptor_t;
 
-static tsc_primitive_descriptor_t primitive_boolean = { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL };
-static tsc_primitive_descriptor_t primitive_number = { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL };
-static tsc_primitive_descriptor_t primitive_string = { TSC_PRIMITIVE_STRING, "String", 6, NULL };
+static tsc_primitive_descriptor_t primitive_boolean = { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false };
+static tsc_primitive_descriptor_t primitive_number = { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false };
+static tsc_primitive_descriptor_t primitive_string = { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false };
 
 static bool primitive_matches(tsc_primitive_kind_t kind, tsc_value_t value) {
     if (kind == TSC_PRIMITIVE_NUMBER) return !value_is_box(value);
@@ -669,6 +671,7 @@ static tsc_value_t ordinary_primitive_prototype(tsc_object_t** slot) {
 }
 
 static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descriptor) {
+    if (descriptor->constructor_initialized) return descriptor->constructor;
     tsc_value_t constructor = tsc_value_function_named_kind(
         primitive_constructor_apply,
         primitive_constructor_construct,
@@ -689,7 +692,9 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
             true
         );
     }
-    return constructor;
+    descriptor->constructor = constructor;
+    descriptor->constructor_initialized = true;
+    return descriptor->constructor;
 }
 
 tsc_value_t tsc_string_constructor_value(void) { return primitive_constructor_value(&primitive_string); }
@@ -858,6 +863,154 @@ tsc_value_t tsc_object_constructor_value(void) {
         tsc_runtime_unlock();
     }
     return constructor;
+}
+
+typedef struct {
+    const char* name;
+    size_t length;
+    tsc_value_t value;
+} tsc_global_intrinsic_t;
+
+static void global_define_intrinsic(tsc_object_t* global, const tsc_global_intrinsic_t* intrinsic) {
+    (void)tsc_object_define(
+        global,
+        tsc_str_from_lit(intrinsic->name, intrinsic->length),
+        intrinsic->value,
+        true,
+        false,
+        true
+    );
+}
+
+tsc_value_t tsc_global_object(void) {
+    static tsc_object_t* global = NULL;
+    if (global) return tsc_value_object(global);
+
+    /* Build every dependency before publishing the object.  Several intrinsic
+     * constructors have their own singleton locks, so this ordering also keeps
+     * the global initializer free of nested runtime-lock acquisition. */
+    tsc_global_intrinsic_t intrinsics[] = {
+        { "Object", 6, tsc_object_constructor_value() },
+        { "Function", 8, tsc_function_constructor_value() },
+        { "Array", 5, tsc_array_constructor_value() },
+        { "String", 6, tsc_string_constructor_value() },
+        { "Number", 6, tsc_number_constructor_value() },
+        { "Boolean", 7, tsc_boolean_constructor_value() },
+        { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
+        { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
+        { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
+        { "SyntaxError", 11, tsc_error_constructor_value(TSC_ERROR_SYNTAX) },
+        { "ReferenceError", 14, tsc_error_constructor_value(TSC_ERROR_REFERENCE) },
+        { "EvalError", 9, tsc_error_constructor_value(TSC_ERROR_EVAL) },
+        { "URIError", 8, tsc_error_constructor_value(TSC_ERROR_URI) },
+        { "AggregateError", 14, tsc_error_constructor_value(TSC_ERROR_AGGREGATE) },
+        { "SuppressedError", 15, tsc_error_constructor_value(TSC_ERROR_SUPPRESSED) },
+        { "Math", 4, tsc_builtin_math() },
+        { "JSON", 4, tsc_builtin_json() },
+        { "Reflect", 7, tsc_builtin_reflect() },
+    };
+    tsc_object_t* built = tsc_object_new();
+    tsc_value_t built_value = tsc_value_object(built);
+    (void)tsc_object_define(
+        built,
+        tsc_str_from_lit("globalThis", 10),
+        built_value,
+        true,
+        false,
+        true
+    );
+    for (size_t index = 0; index < sizeof(intrinsics) / sizeof(intrinsics[0]); index++) {
+        global_define_intrinsic(built, &intrinsics[index]);
+    }
+    (void)tsc_object_define(
+        built,
+        tsc_str_from_lit("undefined", 9),
+        tsc_value_undefined(),
+        false,
+        false,
+        false
+    );
+    (void)tsc_object_define(
+        built,
+        tsc_str_from_lit("NaN", 3),
+        tsc_value_num(NAN),
+        false,
+        false,
+        false
+    );
+    (void)tsc_object_define(
+        built,
+        tsc_str_from_lit("Infinity", 8),
+        tsc_value_num(INFINITY),
+        false,
+        false,
+        false
+    );
+
+    tsc_runtime_lock();
+    if (!global) global = built;
+    tsc_runtime_unlock();
+    return tsc_value_object(global);
+}
+
+void tsc_global_declare_var(tsc_str_t* key) {
+    tsc_value_t global = tsc_global_object();
+    if (tsc_value_has_own_prop(global, key)) return;
+    if (!tsc_value_define_property_desc(
+        global,
+        key,
+        tsc_value_undefined(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true
+    )) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot create global var binding"));
+    }
+}
+
+void tsc_global_declare_function(tsc_str_t* key, tsc_value_t value) {
+    tsc_value_t global = tsc_global_object();
+    if (!tsc_value_define_property_desc(
+        global,
+        key,
+        value,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true
+    )) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot create global function binding"));
+    }
+}
+
+tsc_value_t tsc_global_binding_get(tsc_str_t* key) {
+    return tsc_value_get_prop(tsc_global_object(), key);
+}
+
+tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value) {
+    if (!tsc_value_set_prop(tsc_global_object(), key, value)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot assign global binding"));
+    }
+    return value;
+}
+
+tsc_value_t tsc_value_sloppy_this(tsc_value_t value) {
+    if (tsc_value_is_nullish(value)) return tsc_global_object();
+    if (tsc_value_is_object(value)) return value;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, value);
+    return tsc_value_apply_function(
+        tsc_object_constructor_value(),
+        tsc_value_undefined(),
+        tsc_value_array(args)
+    );
 }
 
 static bool value_is_callable_function(tsc_value_t v) {

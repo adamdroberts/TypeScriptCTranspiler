@@ -190,6 +190,7 @@ function permanentLimitDiagnostics(
         nativeAddons?: NativeAddonManifest;
         dynamicRequires?: DynamicRequireManifest;
         runtimeCode?: RuntimeCodeManifest;
+        allowFunctionValueReference?: boolean;
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
@@ -325,7 +326,8 @@ function permanentLimitDiagnostics(
                 }
             } else if (
                 ts.isIdentifier(node) &&
-                (node.text === "eval" || node.text === "Function") &&
+                (node.text === "eval" ||
+                    (node.text === "Function" && !opts.allowFunctionValueReference)) &&
                 !opts.unsafeEval &&
                 isGlobalEvalOrFunctionValueReference(node, checker)
             ) {
@@ -769,6 +771,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         nativeAddons,
         dynamicRequires,
         runtimeCode,
+        allowFunctionValueReference: !!opts.test262Observation,
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
