@@ -667,6 +667,7 @@ tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
+tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_abort_controller_new(void);
 tsc_value_t tsc_abort_error_value(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
@@ -678,6 +679,7 @@ void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id);
 
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_is_constructable(tsc_value_t v);
+bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor);
 bool tsc_value_number_is_integer(tsc_value_t v);
 bool tsc_value_number_is_finite(tsc_value_t v);
 bool tsc_value_number_is_nan(tsc_value_t v);

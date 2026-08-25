@@ -6,6 +6,7 @@
   "implementationFiles": [
     "runtime/tsc_runtime.h",
     "runtime/tsc_test262.c",
+    "runtime/tsc_value.c",
     "src/compile.ts",
     "src/emit/index.ts",
     "src/emit/types.ts",

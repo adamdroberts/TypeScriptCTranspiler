@@ -9,6 +9,7 @@ import {
     entryType,
     functionType,
     getArrayElementType,
+    hasImplicitJavaScriptThis,
     keyKindOf,
     mapType,
     mapTsType,
@@ -511,6 +512,8 @@ class Emitter {
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
+    /** Exact emitted C storage chosen for a source binding. */
+    private symbolStorageTypes = new Map<ts.Symbol, CType>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -13858,6 +13861,19 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): string | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
+            if (new Set([
+                "Array", "BigInt", "Boolean", "Date", "Error", "EvalError", "Function",
+                "Number", "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
+                "RegExp", "String", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
+                "URIError",
+            ]).has(unwrapped.text)) {
+                return "function";
+            }
+            if (new Set(["Atomics", "Intl", "JSON", "Math", "Reflect"]).has(unwrapped.text)) {
+                return "object";
+            }
+        }
         if (this.isSideEffectFreeUndefinedValue(unwrapped, seenConsts)) return "undefined";
         if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "object";
         const bool = this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
@@ -22922,6 +22938,8 @@ class Emitter {
 
     private identifierDeclaredType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
+        const emittedStorage = sym ? this.symbolStorageTypes.get(sym) : undefined;
+        if (emittedStorage) return emittedStorage;
         const requireDestructureType = this.requireDestructureBindingType(id);
         if (requireDestructureType) return requireDestructureType;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -23082,7 +23100,7 @@ class Emitter {
         );
     }
 
-    private unboxDynamicValue(cExpr: string, target: CType): string {
+    private unboxDynamicValue(cExpr: string, target: CType, node: ts.Node = this.currentSf!): string {
         switch (target.kind) {
             case "number":
                 return `tsc_value_as_num(${cExpr})`;
@@ -23092,6 +23110,8 @@ class Emitter {
                 return `tsc_value_as_string(${cExpr})`;
             case "array":
                 return `tsc_value_as_array(${cExpr})`;
+            case "function":
+                return this.emitValueFunctionAdapter({ c: cExpr, ty: T_VALUE }, target, node);
             case "value":
                 return cExpr;
             default:
@@ -26087,6 +26107,8 @@ class Emitter {
             const explicit = this.explicitThisParameter(node);
             if (explicit) {
                 ty = this.prepareType(mapType(explicit, this.checker));
+            } else if (hasImplicitJavaScriptThis(node)) {
+                ty = T_VALUE;
             }
         }
         if (!ty) return null;
@@ -26312,6 +26334,9 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             this.emitStmtList(this.defs, fd.body.statements);
+            if (this.isJavaScriptSourceFile(fd.getSourceFile()) && returnType.kind !== "void" && returnType.kind !== "never") {
+                this.defs.line(`return ${this.zeroValue(returnType)};`);
+            }
         } finally {
             if (tailCtx) this.tailFunctionStack.pop();
             if (thisType) this.functionThisStack.pop();
@@ -38941,6 +38966,7 @@ class Emitter {
             const sym = this.checker.getSymbolAtLocation(d.name);
             const useInt = baseCt.c === "double" && sym !== undefined && this.intSymbols.has(sym);
             const ct = useInt ? T_NUMBER_INT : baseCt;
+            if (sym) this.symbolStorageTypes.set(sym, ct);
 
             const lit = isConst && d.initializer
                 ? this.tryFoldNumericLiteral(d.initializer)
@@ -39680,6 +39706,7 @@ class Emitter {
                 sym !== undefined &&
                 this.intSymbols.has(sym);
             if (useInt) ct = T_NUMBER_INT;
+            if (sym) this.symbolStorageTypes.set(sym, ct);
             if (r) {
                 const coerced = useInt && r.ty.kind === "number"
                     ? `((int64_t)(${r.c}))`
@@ -44283,7 +44310,9 @@ class Emitter {
         }
         if (!r.expression) {
             this.emitActiveSyncDisposals(buf);
-            buf.line("return;");
+            buf.line(ret.kind === "void" || ret.kind === "never"
+                ? "return;"
+                : `return ${this.zeroValue(ret)};`);
             return;
         }
         if (this.emitTailCallReturn(buf, r.expression)) return;
@@ -44431,6 +44460,9 @@ class Emitter {
     }
 
     private assertExhaustiveSwitch(sw: ts.SwitchStatement): void {
+        // Untyped JavaScript switch statements may intentionally leave the
+        // dynamic domain unmatched and then complete the function normally.
+        if (this.isJavaScriptSourceFile(sw.getSourceFile())) return;
         const domain = this.finiteSwitchDomain(sw.expression);
         if (!domain) return;
         if (sw.caseBlock.clauses.some(ts.isDefaultClause)) return;
@@ -44818,6 +44850,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
                 return { c: "tsc_value_function_generic(tsc_builtin_function, NULL)", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "String")) {
+                return { c: "tsc_string_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
                 return { c: "tsc_builtin_reflect()", ty: T_VALUE };
             }
@@ -44985,7 +45020,7 @@ class Emitter {
             }
             if (declaredTy?.kind === "value" && ty.kind !== "value") {
                 return {
-                    c: this.unboxDynamicValue(this.identifierRead(expr), ty),
+                    c: this.unboxDynamicValue(this.identifierRead(expr), ty, expr),
                     ty,
                 };
             }
@@ -45091,6 +45126,8 @@ class Emitter {
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
+        const staticResult = this.sideEffectFreeTypeofString(to.expression, new Set());
+        if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
         const inner = this.emitExpr(to.expression);
         const result = this.typeofName(to.expression, inner.ty);
         const nullishResult = this.nullishTypeofName(to.expression);
@@ -45665,7 +45702,10 @@ class Emitter {
             return null;
         }
 
-        const recv = this.emitExpr(recvExpr);
+        const rawRecv = this.emitExpr(recvExpr);
+        const recv: EmitResult = rawRecv.ty.kind === "function"
+            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
+            : rawRecv;
         if (recv.ty.kind !== "value") return null;
 
         const specs: SequencedCallArg[] = [
@@ -46133,6 +46173,19 @@ class Emitter {
     }
 
     private emitInstanceOfWithLeft(bin: ts.BinaryExpression, left: EmitResult): EmitResult {
+        const classDeclaration = ts.isIdentifier(bin.right)
+            ? this.findClassDecl(bin.right.text)
+            : null;
+        if (!classDeclaration) {
+            const right = this.emitExpr(bin.right);
+            if (right.ty.kind !== "function" && right.ty.kind !== "value") {
+                unsupported(bin.right, "instanceof right side must be a callable dynamic constructor");
+            }
+            return this.emitSequencedCall("tsc_value_instanceof", T_BOOLEAN, [
+                { value: left, target: T_VALUE, node: bin.left },
+                { value: right, target: T_VALUE, node: bin.right },
+            ]);
+        }
         if (left.ty.kind !== "class" || !left.ty.className) {
             if (left.ty.kind !== "value") {
                 unsupported(bin.left, "instanceof left side must be a class value");
@@ -46141,8 +46194,6 @@ class Emitter {
         if (!ts.isIdentifier(bin.right)) {
             unsupported(bin.right, "instanceof right side must be a class identifier");
         }
-        const rightDecl = this.findClassDecl(bin.right.text);
-        if (!rightDecl) unsupported(bin.right, "instanceof right side must be a class");
         if (left.ty.kind === "class") {
             const leftDecl = this.findClassDecl(left.ty.className!);
             if (!leftDecl) unsupported(bin.left, "instanceof on interface-shaped value");
@@ -46977,7 +47028,10 @@ class Emitter {
             return null;
         }
 
-        const recv = this.emitExpr(recvExpr);
+        const rawRecv = this.emitExpr(recvExpr);
+        const recv: EmitResult = rawRecv.ty.kind === "function"
+            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
+            : rawRecv;
         if (recv.ty.kind !== "value") return null;
 
         const rhs = this.emitExpr(bin.right);
@@ -49452,6 +49506,9 @@ class Emitter {
                             }
                             for (const s of fnBody.statements) this.emitStmt(body, s);
                             if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
+                            else if (this.isJavaScriptSourceFile(fn.getSourceFile()) && ret.kind !== "void" && ret.kind !== "never") {
+                                body.line(`return ${this.zeroValue(ret)};`);
+                            }
                         }
                     } else {
                         const asyncExpressionBlock = isAsync
@@ -51113,7 +51170,7 @@ class Emitter {
         }
         if (recv.ty.kind === "value")
             return this.emitDynamicMethod(call, recv, memberName);
-        if (recv.ty.kind === "function" && (memberName === "call" || memberName === "apply")) {
+        if (recv.ty.kind === "function") {
             return this.emitDynamicMethod(
                 call,
                 { c: this.coerce(recv, T_VALUE, recvExpr), ty: T_VALUE },
@@ -60711,6 +60768,9 @@ class Emitter {
                     }
                     for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
+                    else if (this.isJavaScriptSourceFile(info.fn.getSourceFile()) && mappedRet.kind !== "void" && mappedRet.kind !== "never") {
+                        this.defs.line(`return ${this.zeroValue(mappedRet)};`);
+                    }
                 }
             } else {
                 const asyncExpressionBlock = isAsync
@@ -71423,6 +71483,15 @@ class Emitter {
         if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
+        if (this.functionValueIsConstructable(ctorExpr)) {
+            const functionValue = this.emitExpr(n.expression);
+            if (functionValue.ty.kind === "function" || functionValue.ty.kind === "value") {
+                return this.emitDynamicValueConstruct(n, {
+                    c: this.coerce(functionValue, T_VALUE, n.expression),
+                    ty: T_VALUE,
+                });
+            }
+        }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
         const cls = targetClassDecl?.name?.text ?? targetClassExpression?.name?.text ?? this.identifierName(ctorExpr);
@@ -72429,7 +72498,10 @@ class Emitter {
                 ty: T_VALUE,
             };
         }
-        const recv = precomputedReceiver ?? this.emitExpr(pa.expression);
+        const rawRecv = precomputedReceiver ?? this.emitExpr(pa.expression);
+        const recv: EmitResult = rawRecv.ty.kind === "function"
+            ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
+            : rawRecv;
         const isOpt = !!pa.questionDotToken;
         if (recv.ty.kind === "string" && pa.name.text === "length") {
             return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };

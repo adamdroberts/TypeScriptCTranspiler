@@ -180,6 +180,24 @@ tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* en
     return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
 }
 
+static tsc_value_t string_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    if (!args || args->len == 0) {
+        return tsc_value_string(tsc_str_from_lit("", 0));
+    }
+    return tsc_value_string(tsc_value_to_string(TSC_ARR(tsc_value_t, args, 0)));
+}
+
+tsc_value_t tsc_string_constructor_value(void) {
+    return tsc_value_function_builtin_named(
+        string_constructor_apply,
+        NULL,
+        1.0,
+        tsc_str_from_lit("String", 6)
+    );
+}
+
 static bool value_is_callable_function(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;
@@ -201,6 +219,20 @@ bool tsc_value_is_constructable(tsc_value_t v) {
     if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     return o && o->is_proxy && tsc_value_is_constructable(o->proxy_target);
+}
+
+bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor) {
+    if (!tsc_value_is_callable(constructor)) {
+        tsc_throw_str(tsc_str_from_cstr("instanceof right operand is not callable"));
+    }
+    tsc_value_t prototype = tsc_value_get_prop(
+        constructor,
+        tsc_str_from_lit("prototype", 9)
+    );
+    if (!value_is_valid_prototype(prototype) || value_is_null_value(prototype)) {
+        tsc_throw_str(tsc_str_from_cstr("instanceof constructor has non-object prototype"));
+    }
+    return tsc_value_is_prototype_of(prototype, object);
 }
 
 static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {

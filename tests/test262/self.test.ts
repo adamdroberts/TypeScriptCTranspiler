@@ -114,8 +114,23 @@ describe("host result contract", () => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-host-self-test-"));
         const artifactDirectory = path.join(root, "artifacts");
         await fs.mkdir(artifactDirectory);
-        const setupSource = "function add(left, right) { return left + right; }\n";
-        const testSource = "if (add(20, 22) !== 42) throw new TypeError('bad setup realm'); print('native-ok');\n";
+        const setupSource = [
+            "function HarnessError(message) {",
+            "  if (!(this instanceof HarnessError)) return new HarnessError(message);",
+            "  this.message = message || '';",
+            "}",
+            "HarnessError.prototype.describe = function () { return 'HarnessError: ' + this.message; };",
+            "function add(left, right) { return left + right; }",
+            "",
+        ].join("\n");
+        const testSource = [
+            "var error = HarnessError('native');",
+            "if (!(error instanceof HarnessError)) throw new TypeError('bad function prototype');",
+            "if (error.describe() !== 'HarnessError: native') throw new TypeError('bad function this');",
+            "if (add(20, 22) !== 42) throw new TypeError('bad setup realm');",
+            "print('native-ok');",
+            "",
+        ].join("\n");
         const scenarioId = "test/native-host-separate-scripts.js#sloppy";
         const request: HostRequest = {
             protocolVersion: hostProtocolVersion,

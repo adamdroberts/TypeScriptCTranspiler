@@ -182,6 +182,20 @@ function explicitThisParameter(node: ts.Node): ts.ParameterDeclaration | null {
     return null;
 }
 
+/**
+ * JavaScript ordinary functions always have a runtime `this` binding even
+ * when TypeScript's structural call signature omits a synthetic this symbol.
+ * Arrow functions are deliberately excluded because their binding is lexical.
+ */
+export function hasImplicitJavaScriptThis(node: ts.Node): boolean {
+    if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
+    return ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node);
+}
+
 /** Convert CType.kind to the tsc_key_kind_t enum used in runtime. */
 export function keyKindOf(t: CType): number {
     switch (t.kind) {
@@ -348,7 +362,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
             }
         } else {
-            const decl = explicitThisParameter(callSig.getDeclaration() ?? node);
+            const signatureDeclaration = callSig.getDeclaration() ?? node;
+            const decl = explicitThisParameter(signatureDeclaration);
             if (decl) {
                 thisParamType = mapTsType(decl, checker.getTypeAtLocation(decl), checker);
                 if (thisParamType.kind === "void") {
@@ -357,6 +372,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 if (thisParamType && thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter" && thisParamType.kind !== "eventtarget") {
                     unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
                 }
+            } else if (hasImplicitJavaScriptThis(signatureDeclaration)) {
+                thisParamType = T_VALUE;
             }
         }
         const params = callSig.getParameters().map((param) => {
