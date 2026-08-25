@@ -27,6 +27,8 @@ export interface BuildProgramOpts {
     additionalRoots?: readonly string[];
     /** Source records that must be parsed/bound with the ECMAScript Module goal. */
     moduleRoots?: readonly string[];
+    /** Script records isolated for static binding while retaining Script runtime semantics. */
+    isolatedScriptRoots?: readonly string[];
     /** Exact JavaScript records whose source-level `@ts-check` directive is ignored out of band. */
     ignoreCheckJsDirectiveRoots?: readonly string[];
     dynamicRequires?: DynamicRequireManifest;
@@ -88,6 +90,9 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const rootNames = [libCoreDts, ...new Set([...sourceRoots, ...discoveredRoots])];
 
     const moduleRoots = new Set((opts.moduleRoots ?? []).map((filename) => path.resolve(filename)));
+    const isolatedScriptRoots = new Set(
+        (opts.isolatedScriptRoots ?? []).map((filename) => path.resolve(filename)),
+    );
     const ignoreCheckJsDirectiveRoots = new Set(
         (opts.ignoreCheckJsDirectiveRoots ?? []).map((filename) => path.resolve(filename)),
     );
@@ -112,10 +117,15 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             (sourceFile as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat =
                 (original as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat;
         }
-        if (sourceFile && moduleRoots.has(path.resolve(sourceFile.fileName))) {
+        if (sourceFile && (
+            moduleRoots.has(path.resolve(sourceFile.fileName)) ||
+            isolatedScriptRoots.has(path.resolve(sourceFile.fileName))
+        )) {
             // TypeScript otherwise infers the goal from import/export syntax. Test262
-            // also contains empty or syntax-free Module records, so bind the requested
-            // goal out of band without changing one source byte.
+            // also contains empty or syntax-free Module records. AOT evalScript
+            // records use the same binder-isolation mechanism so separately
+            // parsed Script declarations do not merge before runtime
+            // GlobalDeclarationInstantiation. Their emitter goal remains Script.
             (sourceFile as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= sourceFile;
         }
         if (sourceFile && ignoreCheckJsDirectiveRoots.has(path.resolve(sourceFile.fileName))) {

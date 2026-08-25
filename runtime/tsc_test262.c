@@ -2,6 +2,11 @@
 
 static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
+static tsc_test262_eval_script_callback_t g_test262_eval_script_callback = NULL;
+
+void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback) {
+    g_test262_eval_script_callback = callback;
+}
 
 static void test262_capture_print_args(tsc_array_t* args) {
     if (!g_test262_started) {
@@ -43,6 +48,18 @@ static tsc_value_t test262_host_detach_array_buffer(void* env, tsc_value_t this_
         : tsc_value_undefined();
     tsc_array_buffer_detach(tsc_value_as_array_buffer(value));
     return tsc_value_undefined();
+}
+
+static tsc_value_t test262_host_eval_script(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    if (!g_test262_eval_script_callback) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("evalScript has no finite AOT source graph"));
+    }
+    tsc_value_t source = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return g_test262_eval_script_callback(tsc_value_to_string(source));
 }
 
 static tsc_value_t test262_host_html_dda(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -167,6 +184,23 @@ tsc_value_t tsc_test262_host_object(void) {
                     NULL,
                     0.0,
                     tsc_str_from_lit("gc", 2)
+                ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("evalScript", 10),
+                tsc_value_function_builtin_named(
+                    test262_host_eval_script,
+                    NULL,
+                    1.0,
+                    tsc_str_from_lit("evalScript", 10)
                 ),
                 true,
                 true,

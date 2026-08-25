@@ -452,6 +452,14 @@ export interface Test262NativeObservationPlan {
     /** The root Script or Module record under test. */
     readonly testEntry: string;
     readonly async: boolean;
+    /** Finite AOT ParseScript records dispatched by exact runtime source text. */
+    readonly evalScriptEntries?: readonly Test262EvalScriptEntry[];
+}
+
+export interface Test262EvalScriptEntry {
+    readonly source: string;
+    /** Null means ParseScript produced a SyntaxError and no source root was compiled. */
+    readonly entry: string | null;
 }
 
 interface Test262GlobalReferencePlan {
@@ -694,7 +702,14 @@ class Emitter {
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
         private options: EmitProgramOptions = {},
-    ) {}
+    ) {
+        this.test262EvalScriptEntryPaths = new Set(
+            (options.test262Observation?.evalScriptEntries ?? [])
+                .flatMap((entry) => entry.entry ? [path.resolve(entry.entry)] : []),
+        );
+    }
+
+    private readonly test262EvalScriptEntryPaths: ReadonlySet<string>;
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
@@ -15176,10 +15191,20 @@ class Emitter {
             out.line("}");
             out.line();
         }
-        // Module evaluation function bodies.
+        // Reusable source-record evaluators. Ordinary startup/dynamic Module
+        // evaluation wraps these in the cached state machine below; AOT
+        // evalScript invokes a Script evaluator directly on every call.
         for (const modId of emitOrder) {
             const body = this.modInits.get(modId);
             if (!body) continue;
+            out.line(`static void mod_evaluate_${modId}(void) {`);
+            out.write(body.toString());
+            out.line("}");
+            out.line();
+        }
+        // Cached startup and Module evaluation function bodies.
+        for (const modId of emitOrder) {
+            if (!this.modInits.has(modId)) continue;
             out.line(`static void mod_init_${modId}(void) {`);
             out.line(`    if (mod_state_${modId} == 2) return;`);
             out.line(`    if (mod_state_${modId} == 3) tsc_throw_value(mod_error_${modId});`);
@@ -15188,7 +15213,7 @@ class Emitter {
             out.line(`    TSC_TRY_FRAME(_mod_frame_${modId});`);
             out.line(`    tsc_try_push(&_mod_frame_${modId});`);
             out.line(`    if (setjmp(_mod_frame_${modId}.jb) == 0) {`);
-            out.write(body.toString());
+            out.line(`        mod_evaluate_${modId}();`);
             out.line(`        tsc_try_pop();`);
             out.line(`        mod_state_${modId} = 2;`);
             out.line("        return;");
@@ -15198,6 +15223,31 @@ class Emitter {
             out.line(`    mod_error_root_${modId} = tsc_value_gc_root(mod_error_${modId});`);
             out.line(`    mod_state_${modId} = 3;`);
             out.line(`    tsc_throw_value(mod_error_${modId});`);
+            out.line("}");
+            out.line();
+        }
+        const evalScriptEntries = this.options.test262Observation?.evalScriptEntries ?? [];
+        if (evalScriptEntries.length > 0) {
+            out.line("static tsc_value_t test262_eval_script_dispatch(tsc_str_t* source) {");
+            for (const [index, entry] of evalScriptEntries.entries()) {
+                out.line(
+                    `    ${index === 0 ? "if" : "else if"} (tsc_str_eq(source, ` +
+                    `${this.cStringLiteral(entry.source)})) {`,
+                );
+                if (entry.entry === null) {
+                    out.line("        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr(\"invalid evalScript source\"));");
+                } else {
+                    const moduleId = this.graph.fileToModuleId.get(path.resolve(entry.entry));
+                    if (!moduleId) {
+                        throw new Error(`Test262 evalScript entry is absent from the module graph: ${entry.entry}`);
+                    }
+                    out.line(`        mod_evaluate_${moduleId}();`);
+                    out.line("        return tsc_value_undefined();");
+                }
+                out.line("    }");
+            }
+            out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"evalScript source is outside the finite AOT graph\"));");
+            out.line("    return tsc_value_undefined();");
             out.line("}");
             out.line();
         }
@@ -15216,6 +15266,9 @@ class Emitter {
                 throw new Error("Test262 observation test entry differs from the module-graph entry");
             }
             const scenario = escapeCString(observation.scenarioId);
+            if (evalScriptEntries.length > 0) {
+                out.line("    tsc_test262_set_eval_script_callback(test262_eval_script_dispatch);");
+            }
             out.line("    tsc_test262_begin();");
             for (const [index, modId] of this.graph.topoOrder.entries()) {
                 const origin = setupIds.has(modId)
@@ -15741,6 +15794,11 @@ class Emitter {
 
     private declaredName(name: ts.Identifier): string {
         const parts = [...this.declarationNamespaceParts(name), name.text];
+        const source = name.getSourceFile();
+        if (this.test262EvalScriptEntryPaths.has(path.resolve(source.fileName))) {
+            const moduleId = this.graph.fileToModuleId.get(source.fileName) ?? "eval_script";
+            parts.unshift(moduleId);
+        }
         return mangleIdent(parts.join("_"));
     }
 
@@ -15809,6 +15867,9 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl) && !this.isTopLevelValueDeclaration(decl)) {
             return this.localFunctionCName(decl);
+        }
+        if (decl && ts.isFunctionDeclaration(decl) && decl.name && this.isTopLevelValueDeclaration(decl)) {
+            return this.declaredName(decl.name);
         }
         const moduleVar = sym ? this.moduleVarBindings.get(sym) : undefined;
         if (moduleVar) return moduleVar.cName;
@@ -23906,7 +23967,7 @@ class Emitter {
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
         return !!this.options.test262Observation &&
             this.isJavaScriptSourceFile(sf) &&
-            !ts.isExternalModule(sf);
+            (!ts.isExternalModule(sf) || this.test262EvalScriptEntryPaths.has(path.resolve(sf.fileName)));
     }
 
     private isTest262ScriptGlobalVarDeclaration(
@@ -23967,7 +24028,8 @@ class Emitter {
     private collectModuleVarBindings(sf: ts.SourceFile, modId: string): ModuleVarBindingPlan[] {
         const prepared = this.moduleVarBindingsBySource.get(sf);
         if (prepared) return prepared;
-        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
+        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf) ||
+            this.isTest262ScriptSourceFile(sf)) return [];
         const plans: ModuleVarBindingPlan[] = [];
         const visit = (node: ts.Node): void => {
             if (
@@ -24075,7 +24137,8 @@ class Emitter {
     ): ModuleLexicalBindingPlan[] {
         const prepared = this.moduleLexicalBindingsBySource.get(sf);
         if (prepared) return prepared;
-        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
+        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf) ||
+            this.isTest262ScriptSourceFile(sf)) return [];
 
         const plans: ModuleLexicalBindingPlan[] = [];
         const addPlan = (
@@ -24384,7 +24447,7 @@ class Emitter {
                 return true;
             }
             if (ts.isSourceFile(current)) {
-                return ts.isExternalModule(current) ||
+                return (ts.isExternalModule(current) && !this.isTest262ScriptSourceFile(current)) ||
                     this.directivePrologueHasUseStrict(current.statements);
             }
         }

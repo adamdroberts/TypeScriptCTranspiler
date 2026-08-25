@@ -412,6 +412,7 @@ Linked only for conformance observations. `tsc_test262_begin()` installs `$262` 
 |--------|-----------|---------|
 | `tsc_test262_begin()` | `void` | Starts observation capture and installs the reviewed host-global binding collection |
 | `tsc_test262_host_object()` | `tsc_value_t` | Returns the stable `$262` object for the current native process/Realm, including the hidden `%AbstractModuleSource%` intrinsic reference and implemented host hooks |
+| `tsc_test262_set_eval_script_callback(callback)` | `void` | Installs the generated exact-source dispatcher for the finite AOT `$262.evalScript` source graph; runtime sources outside that graph fail closed |
 | `tsc_test262_write_normal(...)` / `tsc_test262_write_throw(...)` | `void` | Emits the single structured observation owned by the native execution boundary |
 
 ## Process

@@ -11,6 +11,7 @@ import {
     moduleRequestKey,
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
+import { staticStringExpressionTexts } from "../../src/module-specifiers";
 import {
     complianceDir,
     hasArgument,
@@ -69,6 +70,73 @@ interface ControlContext {
     readonly breakableDepth: number;
     readonly iterationDepth: number;
     readonly labels: ReadonlyMap<string, boolean>;
+}
+
+export interface FiniteEvalScriptSourceGraph {
+    readonly sources: readonly string[];
+    readonly error: string | null;
+}
+
+/** Derive the transitive ParseScript source graph from one canonical AST
+ * worklist. Runtime strings outside this finite graph fail closed. */
+export function finiteEvalScriptSourceGraph(
+    roots: readonly { readonly path: string; readonly source: string }[],
+): FiniteEvalScriptSourceGraph {
+    const sources = new Set<string>();
+    const records = [...roots];
+    for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
+        const record = records[recordIndex]!;
+        const sourceFile = createEcmaSourceFile(
+            record.path,
+            record.source,
+            ts.ScriptTarget.ESNext,
+            true,
+            ts.ScriptKind.JS,
+        );
+        const worklist: ts.Node[] = [sourceFile];
+        while (worklist.length > 0) {
+            const node = worklist.pop()!;
+            if (
+                ts.isPropertyAccessExpression(node) &&
+                ts.isIdentifier(node.expression) &&
+                node.expression.text === "$262" &&
+                node.name.text === "evalScript"
+            ) {
+                const parent = node.parent;
+                if (!ts.isCallExpression(parent) || parent.expression !== node) {
+                    const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+                    return {
+                        sources: [],
+                        error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript must be called directly so its finite source graph can be proven`,
+                    };
+                }
+                const alternatives = parent.arguments[0]
+                    ? staticStringExpressionTexts(parent.arguments[0]!)
+                    : ["undefined"];
+                if (alternatives.length === 0) {
+                    const location = sourceFile.getLineAndCharacterOfPosition(parent.getStart(sourceFile));
+                    return {
+                        sources: [],
+                        error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript source is not a finite static string expression`,
+                    };
+                }
+                for (const source of alternatives) {
+                    if (sources.has(source)) continue;
+                    sources.add(source);
+                    records.push({
+                        path: `__tsc2c_eval_script__/${sha256Text(source)}.js`,
+                        source,
+                    });
+                }
+            }
+            const children: ts.Node[] = [];
+            node.forEachChild((child) => children.push(child));
+            for (let index = children.length - 1; index >= 0; index--) {
+                worklist.push(children[index]!);
+            }
+        }
+    }
+    return { sources: [...sources].sort(), error: null };
 }
 
 function canonicalRelativePath(value: string, label: string): string {
@@ -745,6 +813,26 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
     if (rootFailure) return compilerErrorPreparation(request, rootFailure);
     const dependencyFailure = moduleGraphFailure(request);
     if (dependencyFailure) return compilerErrorPreparation(request, dependencyFailure);
+    const evalScriptGraph = finiteEvalScriptSourceGraph([
+        ...request.setupScripts.map((script) => ({ path: script.path, source: script.source })),
+        { path: request.testPath, source: request.testSource },
+        ...(request.goal === "module" ? request.moduleFiles : [])
+            .filter((file) => /\.[cm]?js$/i.test(file.path))
+            .map((file) => ({ path: file.path, source: Buffer.from(file.data, "base64").toString("utf8") })),
+    ]);
+    if (evalScriptGraph.error) {
+        return {
+            protocolVersion: hostProtocolVersion,
+            scenarioId: request.scenarioId,
+            kind: "diagnostic-observation",
+            observation: {
+                protocolVersion: hostProtocolVersion,
+                scenarioId: request.scenarioId,
+                kind: "unsupported",
+                detail: evalScriptGraph.error,
+            },
+        };
+    }
 
     const sourceRoot = await fs.mkdtemp(path.join(path.dirname(request.artifactDirectory), "sources-"));
     try {
@@ -759,6 +847,19 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             const filename = await writeExclusive(sourceRoot, moduleFile.path, bytes);
             if (/\.[cm]?js$/i.test(moduleFile.path)) moduleRoots.push(filename);
         }
+        const evalScriptEntries: Array<{ source: string; entry: string | null }> = [];
+        const evalScriptRoots: string[] = [];
+        for (const source of evalScriptGraph.sources) {
+            const relative = `__tsc2c_eval_script__/${sha256Text(source)}.js`;
+            const failure = parseFailure(source, relative, "parse", "test-source", "script");
+            if (failure) {
+                evalScriptEntries.push({ source, entry: null });
+                continue;
+            }
+            const entry = await writeExclusive(sourceRoot, relative, source);
+            evalScriptRoots.push(entry);
+            evalScriptEntries.push({ source, entry });
+        }
 
         const buildDirectory = path.join(request.artifactDirectory, "build");
         const executable = path.join(request.artifactDirectory, "program");
@@ -767,16 +868,23 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             entry: testEntry,
             output: executable,
             buildDir: buildDirectory,
-            additionalRoots: setupEntries,
+            additionalRoots: [...setupEntries, ...evalScriptRoots],
             initializationEntries: [...setupEntries, testEntry],
             moduleRoots,
-            ignoreCheckJsDirectiveRoots: [...new Set([...setupEntries, testEntry, ...moduleRoots])],
+            isolatedScriptRoots: evalScriptRoots,
+            ignoreCheckJsDirectiveRoots: [...new Set([
+                ...setupEntries,
+                testEntry,
+                ...moduleRoots,
+                ...evalScriptRoots,
+            ])],
             test262Observation: {
                 kind: "test262-native-observation",
                 scenarioId: request.scenarioId,
                 setupEntries,
                 testEntry,
                 async: request.async,
+                evalScriptEntries,
             },
             diagnosticWriter: (message) => {
                 diagnostics += message;
