@@ -496,6 +496,13 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "FSFileHandle") return T_VALUE;
         if (sym?.getName() === "DispatchQueue") return T_DISPATCH_QUEUE;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
+        // Proxy instances are ordinary tagged runtime values.  The declaration
+        // class exists only to give the checker a construct signature; it must
+        // never become a generated `Proxy_t` C class.
+        if (
+            sym?.getName() === "Proxy" &&
+            (sym.getDeclarations() ?? []).some((decl) => decl.getSourceFile().isDeclarationFile)
+        ) return T_VALUE;
         if (sym?.getName() === "ProxyHandler") return T_VALUE;
         if (sym?.getName() === "SocketAddress") return T_VALUE;
         if (sym?.getName() === "SocketAddressInitOptions") return T_VALUE;

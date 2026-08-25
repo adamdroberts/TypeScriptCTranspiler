@@ -71481,7 +71481,7 @@ class Emitter {
             }
             unsupported(n, "new expression must use a class identifier or dynamic constructor value");
         }
-        if (ctorExpr.text === "Proxy") {
+        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Proxy")) {
             const args = n.arguments ?? [];
             if (args.length < 2) unsupported(n, "new Proxy expects target and handler");
             const target = this.emitExpr(args[0]!);

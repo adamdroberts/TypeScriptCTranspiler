@@ -1,6 +1,13 @@
-const arrayProxy: any = new Proxy([1, 2], {});
-const nestedArrayProxy: any = new Proxy(arrayProxy, {});
-const objectProxy: any = new Proxy({ length: 2 }, {});
+const arrayProxy = new Proxy([1, 2], {});
+const nestedArrayProxy = new Proxy(arrayProxy, {});
+const objectProxy = new Proxy({ length: 2 }, {});
+
+console.log(
+    "arrays:",
+    Array.isArray(arrayProxy),
+    Array.isArray(nestedArrayProxy),
+    Array.isArray(objectProxy),
+);
 
 console.log(
     "tags:",
