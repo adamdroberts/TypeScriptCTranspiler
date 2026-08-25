@@ -190,6 +190,30 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_GENERIC);
 }
 
+static tsc_value_t tsc_value_class_call_failure(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Class constructor cannot be invoked without 'new'"));
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_value_function_class_named(
+    tsc_generic_function_t construct,
+    void* env,
+    double length,
+    tsc_str_t* name
+) {
+    return tsc_value_function_named_kind(
+        tsc_value_class_call_failure,
+        construct,
+        env,
+        length,
+        name,
+        TSC_FUNCTION_IDENTITY_BUILTIN
+    );
+}
+
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
     return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_CLOSURE);
 }

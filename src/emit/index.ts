@@ -467,7 +467,7 @@ interface ModuleVarBindingPlan {
 interface ModuleLexicalBindingPlan {
     readonly symbol: ts.Symbol;
     readonly name: ts.Identifier;
-    readonly declaration: ts.VariableDeclaration;
+    readonly declaration: ts.VariableDeclaration | ts.ClassDeclaration;
     readonly cName: string;
     readonly initialized: string;
     readonly gcRoot: string;
@@ -576,7 +576,7 @@ class Emitter {
      * The initialized bit is the canonical TDZ state read by local references,
      * imports, and indirect re-exports. */
     private moduleLexicalBindings = new Map<ts.Symbol, ModuleLexicalBindingPlan>();
-    private moduleLexicalDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
+    private moduleLexicalDeclarationSymbols = new WeakMap<ts.Declaration, ts.Symbol>();
     private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
     /** `export default <expression>` owns an uninitialized `*default*`
      * binding until evaluation reaches the ExportAssignment. */
@@ -15302,6 +15302,7 @@ class Emitter {
                     this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
                     this.emitClassDecorators(initBuf, inner, metadata, initializers);
                     this.emitDecoratorInitializers(initBuf, initializers);
+                    this.emitModuleClassLexicalInitializer(initBuf, inner);
                     continue;
                 }
                 if (ts.isInterfaceDeclaration(inner)) continue;
@@ -15940,7 +15941,11 @@ class Emitter {
         if (ts.isExportAssignment(decl)) {
             return this.defaultExportCName(decl);
         }
-        if (ts.isVariableDeclaration(decl) && ts.isIdentifier(decl.name)) {
+        if (
+            (ts.isVariableDeclaration(decl) || ts.isClassDeclaration(decl)) &&
+            decl.name &&
+            ts.isIdentifier(decl.name)
+        ) {
             const symbol = this.symbolForIdentifier(decl.name);
             const moduleVar = symbol ? this.moduleVarBindings.get(symbol) : undefined;
             if (moduleVar) return moduleVar.cName;
@@ -23445,7 +23450,36 @@ class Emitter {
         if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
 
         const plans: ModuleLexicalBindingPlan[] = [];
+        const addPlan = (
+            declaration: ts.VariableDeclaration | ts.ClassDeclaration,
+            name: ts.Identifier,
+            immutable: boolean,
+        ): void => {
+            const symbol = this.symbolForIdentifier(name);
+            if (!symbol || this.moduleLexicalBindings.has(symbol)) return;
+            const cName = `${modId}_${this.declaredName(name)}`;
+            const plan: ModuleLexicalBindingPlan = {
+                symbol,
+                name,
+                declaration,
+                cName,
+                initialized: this.freshTemp(`_${cName}_module_lexical_initialized`),
+                gcRoot: this.freshTemp(`_${cName}_module_lexical_gc_root`),
+                immutable,
+            };
+            this.moduleLexicalBindings.set(symbol, plan);
+            this.moduleLexicalDeclarationSymbols.set(declaration, symbol);
+            this.symbolStorageTypes.set(symbol, T_VALUE);
+            plans.push(plan);
+        };
         for (const statement of sf.statements) {
+            if (ts.isClassDeclaration(statement)) {
+                // Class declarations create mutable lexical bindings. Their
+                // values remain uninitialized until ClassDefinitionEvaluation
+                // completes, including static elements and decorators.
+                if (statement.name) addPlan(statement, statement.name, false);
+                continue;
+            }
             if (!ts.isVariableStatement(statement)) continue;
             const flags = statement.declarationList.flags;
             if ((flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) continue;
@@ -23460,22 +23494,7 @@ class Emitter {
                     // same plan.
                     continue;
                 }
-                const symbol = this.symbolForIdentifier(declaration.name);
-                if (!symbol) continue;
-                const cName = `${modId}_${this.declaredName(declaration.name)}`;
-                const plan: ModuleLexicalBindingPlan = {
-                    symbol,
-                    name: declaration.name,
-                    declaration,
-                    cName,
-                    initialized: this.freshTemp(`_${cName}_module_lexical_initialized`),
-                    gcRoot: this.freshTemp(`_${cName}_module_lexical_gc_root`),
-                    immutable: (flags & ts.NodeFlags.Const) !== 0,
-                };
-                this.moduleLexicalBindings.set(symbol, plan);
-                this.moduleLexicalDeclarationSymbols.set(declaration, symbol);
-                this.symbolStorageTypes.set(symbol, T_VALUE);
-                plans.push(plan);
+                addPlan(declaration, declaration.name, (flags & ts.NodeFlags.Const) !== 0);
             }
         }
         this.moduleLexicalBindingsBySource.set(sf, plans);
@@ -23496,7 +23515,7 @@ class Emitter {
     }
 
     private moduleLexicalBindingForDeclaration(
-        declaration: ts.VariableDeclaration,
+        declaration: ts.VariableDeclaration | ts.ClassDeclaration,
     ): ModuleLexicalBindingPlan | null {
         const symbol = this.moduleLexicalDeclarationSymbols.get(declaration);
         return symbol ? this.moduleLexicalBindings.get(symbol) ?? null : null;
@@ -23513,6 +23532,21 @@ class Emitter {
             : { c: "tsc_value_undefined()", ty: T_VALUE };
         const boxed = this.coerce(value, T_VALUE, declaration.initializer ?? declaration.name);
         buf.line(`${binding.cName} = ${boxed};`);
+        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+        buf.line(`${binding.initialized} = true;`);
+        return true;
+    }
+
+    private emitModuleClassLexicalInitializer(
+        buf: CBuf,
+        declaration: ts.ClassDeclaration,
+    ): boolean {
+        const binding = this.moduleLexicalBindingForDeclaration(declaration);
+        if (!binding) return false;
+        const value = this.classHasDecorators(declaration)
+            ? this.classDecoratorValue(declaration)
+            : this.classConstructorValue(declaration);
+        buf.line(`${binding.cName} = ${this.coerce(value, T_VALUE, declaration)};`);
         buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
         buf.line(`${binding.initialized} = true;`);
         return true;
@@ -26438,7 +26472,7 @@ class Emitter {
             this.closureDefs.write(buf.toString());
         }
         return {
-            c: `tsc_value_function_generic_named(${adapter}, NULL, ${paramTypes.length}.0, tsc_str_from_lit("${escapeCString(className)}", ${utf8ByteLen(className)}))`,
+            c: `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, tsc_str_from_lit("${escapeCString(className)}", ${utf8ByteLen(className)}))`,
             ty: T_VALUE,
         };
     }
@@ -46002,6 +46036,10 @@ class Emitter {
                         ty: T_VALUE,
                     };
                 }
+            }
+            const moduleLexical = this.moduleLexicalBindingForIdentifier(expr);
+            if (moduleLexical) {
+                return { c: this.moduleLexicalRead(moduleLexical), ty: T_VALUE };
             }
             if (this.decoratedClassConstructorAliasIdentifier(expr)) {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
@@ -73300,6 +73338,13 @@ class Emitter {
                     ty: T_VALUE,
                 });
             }
+        }
+        const moduleClassBinding = this.moduleLexicalBindingForIdentifier(ctorExpr);
+        if (moduleClassBinding && ts.isClassDeclaration(moduleClassBinding.declaration)) {
+            return this.emitDynamicValueConstruct(n, {
+                c: this.moduleLexicalRead(moduleClassBinding),
+                ty: T_VALUE,
+            });
         }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);

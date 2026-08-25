@@ -474,6 +474,7 @@ tsc_value_t tsc_function_default_prototype(void);
 tsc_value_t tsc_value_bind_function(tsc_value_t target, tsc_value_t bound_this, tsc_array_t* bound_args);
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
+tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity);
