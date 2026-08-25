@@ -50151,6 +50151,8 @@ class Emitter {
                 return { c: "tsc_value_null()", ty: T_VALUE };
             case "undefined":
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
+            case "global-this":
+                return { c: "tsc_global_object()", ty: T_VALUE };
         }
     }
 
@@ -50170,6 +50172,8 @@ class Emitter {
                 return "null";
             case "undefined":
                 return "undefined";
+            case "global-this":
+                return "global_this";
         }
     }
 

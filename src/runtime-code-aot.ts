@@ -6,7 +6,8 @@ export type AotRuntimeConstant =
     | { kind: "string"; value: string }
     | { kind: "boolean"; value: boolean }
     | { kind: "null" }
-    | { kind: "undefined" };
+    | { kind: "undefined" }
+    | { kind: "global-this" };
 
 export interface AotRuntimeCodeEntry {
     source: string;
@@ -54,7 +55,25 @@ export function parseAotFunctionBodyConstant(body: string): AotRuntimeConstant |
     if (!match) return null;
     const exprText = match[1]?.trim();
     if (!exprText) return { kind: "undefined" };
+    const expression = parseExpression(exprText);
+    if (expression && unwrapExpression(expression).kind === ts.SyntaxKind.ThisKeyword) {
+        // Function-constructor code is non-strict unless its own body contains
+        // a strict directive, which the single-return grammar above rejects.
+        return { kind: "global-this" };
+    }
     return parseAotEvalConstant(exprText);
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+    while (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAsExpression(expression) ||
+        ts.isTypeAssertionExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+    ) {
+        expression = expression.expression;
+    }
+    return expression;
 }
 
 function parseExpression(source: string): ts.Expression | null {
@@ -72,14 +91,7 @@ function parseExpression(source: string): ts.Expression | null {
 }
 
 function evaluateConstant(expr: ts.Expression): AotRuntimeConstant | null {
-    while (
-        ts.isParenthesizedExpression(expr) ||
-        ts.isAsExpression(expr) ||
-        ts.isTypeAssertionExpression(expr) ||
-        ts.isSatisfiesExpression(expr)
-    ) {
-        expr = expr.expression;
-    }
+    expr = unwrapExpression(expr);
 
     if (ts.isNumericLiteral(expr)) return { kind: "number", value: Number(expr.text) };
     if (ts.isStringLiteralLike(expr)) return { kind: "string", value: expr.text };
@@ -180,6 +192,8 @@ function constantToJsValue(value: AotRuntimeConstant): unknown {
         case "null":
             return null;
         case "undefined":
+            return undefined;
+        case "global-this":
             return undefined;
     }
 }
