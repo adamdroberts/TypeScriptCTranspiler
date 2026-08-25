@@ -39,14 +39,83 @@ const probes: readonly SemanticProbe[] = [
     { label: "symbol-map-distinct-key", expression: "symbolMap.has(values[5])", expected: "false" },
 ];
 
+const numericProbes: readonly SemanticProbe[] = [
+    { label: "bigint-add", expression: "values[1] + values[2]", expected: "84" },
+    { label: "bigint-subtract", expression: "values[1] - 5n", expected: "37" },
+    { label: "bigint-multiply", expression: "values[1] * 2n", expected: "84" },
+    { label: "bigint-divide", expression: "values[1] / 5n", expected: "8" },
+    { label: "bigint-remainder", expression: "values[1] % 5n", expected: "2" },
+    { label: "bigint-exponentiate", expression: "values[1] ** 2n", expected: "1764" },
+    { label: "bigint-negate", expression: "-values[1]", expected: "-42" },
+    { label: "bigint-bit-not", expression: "~values[1]", expected: "-43" },
+    { label: "bigint-bit-and", expression: "values[1] & 15n", expected: "10" },
+    { label: "bigint-bit-or", expression: "values[1] | 5n", expected: "47" },
+    { label: "bigint-bit-xor", expression: "values[1] ^ 15n", expected: "37" },
+    { label: "bigint-left-shift", expression: "values[1] << 2n", expected: "168" },
+    { label: "bigint-right-shift", expression: "values[1] >> 2n", expected: "10" },
+    { label: "bigint-negative-shift", expression: "values[1] << -1n", expected: "21" },
+    { label: "bigint-number-relational", expression: "values[1] > 41.5", expected: "true" },
+    { label: "bigint-string-relational", expression: "values[1] < '43'", expected: "true" },
+    { label: "bigint-wrapper-add", expression: "bigintWrapper + values[2]", expected: "84" },
+    { label: "bigint-prefix-update", expression: "prefixUpdateResult(values[1])", expected: "43:43" },
+    { label: "bigint-postfix-update", expression: "postfixUpdateResult(values[1])", expected: "42:43" },
+    { label: "bigint-property-update", expression: "propertyUpdateResult(values[1])", expected: "43:43" },
+    { label: "typed-bigint-unsigned-shift", expression: "1n >>> 1n", expected: "throws:TypeError" },
+    { label: "bigint-number-mix", expression: "values[1] + 1", expected: "throws:TypeError" },
+    { label: "bigint-unsigned-shift", expression: "values[1] >>> 1n", expected: "throws:TypeError" },
+    { label: "bigint-unary-plus", expression: "+values[1]", expected: "throws:TypeError" },
+    { label: "symbol-arithmetic", expression: "values[3] - 1", expected: "throws:TypeError" },
+];
+
+const bigintOperandRepresentations = [
+    { label: "primitive", expression: "1n" },
+    { label: "wrapper", expression: "Object(1n)" },
+] as const;
+
+const numberCoercionPartitions = [
+    { label: "number", expression: "1" },
+    { label: "number-wrapper", expression: "Object(1)" },
+    { label: "nan", expression: "NaN" },
+    { label: "infinity", expression: "Infinity" },
+    { label: "boolean", expression: "true" },
+    { label: "null", expression: "null" },
+    { label: "undefined", expression: "undefined" },
+] as const;
+
+const mixedNumericTypeProbes: readonly SemanticProbe[] = bigintOperandRepresentations.flatMap((bigint) =>
+    numberCoercionPartitions.flatMap((other) => [
+        {
+            label: `mixed-${bigint.label}-${other.label}-right`,
+            expression: `${bigint.expression} + ${other.expression}`,
+            expected: "throws:TypeError",
+        },
+        {
+            label: `mixed-${bigint.label}-${other.label}-left`,
+            expression: `${other.expression} + ${bigint.expression}`,
+            expected: "throws:TypeError",
+        },
+    ])
+);
+
+const callbackErrorProbes: readonly SemanticProbe[] = [
+    ...mixedNumericTypeProbes.map((probe) => ({ ...probe, label: `callback-${probe.label}` })),
+    { label: "callback-bigint-unsigned-shift", expression: "1n >>> 1n", expected: "throws:TypeError" },
+    { label: "callback-bigint-unary-plus", expression: "+1n", expected: "throws:TypeError" },
+    { label: "callback-symbol-arithmetic", expression: "Symbol('operator') - 1", expected: "throws:TypeError" },
+];
+
 function source(): string {
     return [
+        "function observeTypeError(thunk) { try { thunk(); return 'missing'; } catch (error) { return 'throws:' + String(error.constructor === TypeError ? 'TypeError' : error.constructor.name); } }",
         "(function () {",
         "function makeValues() {",
         "  var retained = Symbol('retained');",
         "  return [0n, 42n, 42n, retained, retained, Symbol('retained')];",
         "}",
         "function collectIfAvailable() { try { $262.gc(); } catch (error) {} }",
+        "function prefixUpdateResult(initial) { var value = initial; var result = ++value; return String(result) + ':' + String(value); }",
+        "function postfixUpdateResult(initial) { var value = initial; var result = value++; return String(result) + ':' + String(value); }",
+        "function propertyUpdateResult(initial) { var target = { value: initial }; var result = ++target.value; return String(result) + ':' + String(target.value); }",
         "var values = makeValues();",
         "collectIfAvailable();",
         "var bigintWrapper = Object(values[1]);",
@@ -61,7 +130,16 @@ function source(): string {
         ...probes.map((probe) =>
             `print(${JSON.stringify(`${probe.label}:`)} + String(${probe.expression}));`
         ),
+        ...numericProbes.map((probe) => probe.expected.startsWith("throws:")
+            ? `try { print(${JSON.stringify(`${probe.label}:`)} + String(${probe.expression})); } ` +
+                `catch (error) { print(${JSON.stringify(`${probe.label}:throws:`)} + ` +
+                `String(error.constructor === TypeError ? 'TypeError' : error.constructor.name)); }`
+            : `print(${JSON.stringify(`${probe.label}:`)} + String(${probe.expression}));`
+        ),
         "})();",
+        ...callbackErrorProbes.map((probe) =>
+            `print(${JSON.stringify(`${probe.label}:`)} + observeTypeError(function () { ${probe.expression}; }));`
+        ),
         "",
     ].join("\n");
 }
@@ -72,7 +150,9 @@ test("dynamic BigInt and Symbol values preserve their semantic type and identity
     const scenarioId = "property/dynamic-primitive.js#sloppy";
     try {
         await fs.writeFile(entry, source(), "utf8");
-        const expected = probes.map((probe) => `${probe.label}:${probe.expected}`).join("\n") + "\n";
+        const expected = [...probes, ...numericProbes, ...callbackErrorProbes]
+            .map((probe) => `${probe.label}:${probe.expected}`)
+            .join("\n") + "\n";
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);

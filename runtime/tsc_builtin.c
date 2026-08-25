@@ -509,6 +509,71 @@ tsc_bigint_t* tsc_bigint_pow(const tsc_bigint_t* a, const tsc_bigint_t* b) {
     return r;
 }
 
+tsc_bigint_t* tsc_bigint_bit_not(const tsc_bigint_t* a) {
+    tsc_bigint_t* r = bigint_alloc();
+    mpz_com(r->value, a->value);
+    return r;
+}
+
+tsc_bigint_t* tsc_bigint_bit_and(const tsc_bigint_t* a, const tsc_bigint_t* b) {
+    tsc_bigint_t* r = bigint_alloc();
+    mpz_and(r->value, a->value, b->value);
+    return r;
+}
+
+tsc_bigint_t* tsc_bigint_bit_or(const tsc_bigint_t* a, const tsc_bigint_t* b) {
+    tsc_bigint_t* r = bigint_alloc();
+    mpz_ior(r->value, a->value, b->value);
+    return r;
+}
+
+tsc_bigint_t* tsc_bigint_bit_xor(const tsc_bigint_t* a, const tsc_bigint_t* b) {
+    tsc_bigint_t* r = bigint_alloc();
+    mpz_xor(r->value, a->value, b->value);
+    return r;
+}
+
+static tsc_bigint_t* bigint_shift(
+    const tsc_bigint_t* value,
+    const tsc_bigint_t* count,
+    bool left
+) {
+    bool negative = mpz_sgn(count->value) < 0;
+    mpz_t magnitude;
+    mpz_init(magnitude);
+    mpz_abs(magnitude, count->value);
+    bool effective_left = left != negative;
+    if (!mpz_fits_ulong_p(magnitude)) {
+        mpz_clear(magnitude);
+        if (effective_left) {
+            tsc_throw_error(
+                TSC_ERROR_RANGE,
+                tsc_str_from_cstr("BigInt shift count exceeds runtime limit")
+            );
+        }
+        tsc_bigint_t* saturated = bigint_alloc();
+        mpz_set_si(saturated->value, mpz_sgn(value->value) < 0 ? -1 : 0);
+        return saturated;
+    }
+    unsigned long bits = mpz_get_ui(magnitude);
+    mpz_clear(magnitude);
+    tsc_bigint_t* result = bigint_alloc();
+    if (effective_left) {
+        mpz_mul_2exp(result->value, value->value, bits);
+    } else {
+        mpz_fdiv_q_2exp(result->value, value->value, bits);
+    }
+    return result;
+}
+
+tsc_bigint_t* tsc_bigint_shl(const tsc_bigint_t* a, const tsc_bigint_t* b) {
+    return bigint_shift(a, b, true);
+}
+
+tsc_bigint_t* tsc_bigint_shr(const tsc_bigint_t* a, const tsc_bigint_t* b) {
+    return bigint_shift(a, b, false);
+}
+
 int tsc_bigint_cmp(const tsc_bigint_t* a, const tsc_bigint_t* b) {
     return mpz_cmp(a->value, b->value);
 }

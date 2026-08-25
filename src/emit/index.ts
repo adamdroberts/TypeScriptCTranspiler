@@ -1175,12 +1175,7 @@ class Emitter {
         }
         if (
             ts.isPrefixUnaryExpression(expr) &&
-            (
-                expr.operator === ts.SyntaxKind.PlusToken ||
-                expr.operator === ts.SyntaxKind.MinusToken ||
-                expr.operator === ts.SyntaxKind.ExclamationToken ||
-                expr.operator === ts.SyntaxKind.TildeToken
-            ) &&
+            expr.operator === ts.SyntaxKind.ExclamationToken &&
             this.isSideEffectFreeTopLevelConstInitializer(expr.operand, seenConsts)
         ) {
             return true;
@@ -1236,26 +1231,8 @@ class Emitter {
                     return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                         this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
                 }
-                case ts.SyntaxKind.PlusToken:
-                case ts.SyntaxKind.MinusToken:
-                case ts.SyntaxKind.AsteriskToken:
-                case ts.SyntaxKind.SlashToken:
-                case ts.SyntaxKind.PercentToken:
-                case ts.SyntaxKind.AsteriskAsteriskToken:
-                case ts.SyntaxKind.LessThanToken:
-                case ts.SyntaxKind.LessThanEqualsToken:
-                case ts.SyntaxKind.GreaterThanToken:
-                case ts.SyntaxKind.GreaterThanEqualsToken:
-                case ts.SyntaxKind.EqualsEqualsToken:
                 case ts.SyntaxKind.EqualsEqualsEqualsToken:
-                case ts.SyntaxKind.ExclamationEqualsToken:
                 case ts.SyntaxKind.ExclamationEqualsEqualsToken:
-                case ts.SyntaxKind.AmpersandToken:
-                case ts.SyntaxKind.BarToken:
-                case ts.SyntaxKind.CaretToken:
-                case ts.SyntaxKind.LessThanLessThanToken:
-                case ts.SyntaxKind.GreaterThanGreaterThanToken:
-                case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
                 case ts.SyntaxKind.CommaToken:
                     return this.isSideEffectFreeTopLevelConstInitializer(expr.left, seenConsts) &&
                         this.isSideEffectFreeTopLevelConstInitializer(expr.right, seenConsts);
@@ -37409,14 +37386,20 @@ class Emitter {
             case ts.SyntaxKind.MinusToken:
                 if (inner.ty.kind === "value") return { c: `tsc_value_neg(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
                 if (inner.ty.kind === "bigint") return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
+                if (inner.ty.kind === "symbol") return { c: `tsc_value_neg(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
                 requireNumber(expr, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusToken:
                 if (inner.ty.kind === "value") return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
+                    return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                }
                 requireNumber(expr, inner.ty);
                 return { c: `(+${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.TildeToken:
                 if (inner.ty.kind === "value") return { c: `tsc_value_bit_not(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                if (inner.ty.kind === "bigint") return { c: `tsc_bigint_bit_not(${inner.c})`, ty: T_BIGINT };
+                if (inner.ty.kind === "symbol") return { c: `tsc_value_bit_not(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
                 requireNumber(expr, inner.ty);
                 return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
             default:
@@ -38244,6 +38227,9 @@ class Emitter {
                 if (inner.ty.kind === "bigint") {
                     return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
                 }
+                if (inner.ty.kind === "symbol") {
+                    return { c: `tsc_value_neg(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                }
                 requireNumber(expr, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             }
@@ -38251,12 +38237,21 @@ class Emitter {
                 if (inner.ty.kind === "value") {
                     return { c: `tsc_value_pos(${inner.c})`, ty: T_VALUE };
                 }
+                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
+                    return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                }
                 requireNumber(expr, inner.ty);
                 return { c: `(+${inner.c})`, ty: T_NUMBER };
             }
             if (op === ts.SyntaxKind.TildeToken) {
                 if (inner.ty.kind === "value") {
                     return { c: `tsc_value_bit_not(${inner.c})`, ty: T_VALUE };
+                }
+                if (inner.ty.kind === "bigint") {
+                    return { c: `tsc_bigint_bit_not(${inner.c})`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
+                    return { c: `tsc_value_bit_not(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
                 }
                 requireNumber(expr, inner.ty);
                 return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
@@ -38892,13 +38887,12 @@ class Emitter {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
             }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             if (left.ty.kind === "string" || right.ty.kind === "string") {
                 const ls = this.coerceToString(left, bin.left);
                 const rs = this.coerceToString(right, bin.right);
                 return { c: `tsc_str_concat(${ls}, ${rs})`, ty: T_STRING };
-            }
-            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                return { c: `tsc_bigint_add(${left.c}, ${right.c})`, ty: T_BIGINT };
             }
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
@@ -38918,6 +38912,8 @@ class Emitter {
                             : "tsc_value_div";
                 return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
             }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
             const cop =
@@ -38932,9 +38928,8 @@ class Emitter {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_mod", T_VALUE, bin, left, right);
             }
-            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                return { c: `tsc_bigint_mod(${left.c}, ${right.c})`, ty: T_BIGINT };
-            }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
             return { c: `tsc_num_mod(${left.c}, ${right.c})`, ty: T_NUMBER };
@@ -38943,9 +38938,8 @@ class Emitter {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_pow", T_VALUE, bin, left, right);
             }
-            if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                return { c: `tsc_bigint_pow(${left.c}, ${right.c})`, ty: T_BIGINT };
-            }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
             return { c: `pow(${left.c}, ${right.c})`, ty: T_NUMBER };
@@ -38970,6 +38964,8 @@ class Emitter {
                                     : "tsc_value_shr";
                 return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
             }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
             const cop = bitwiseOp(op);
@@ -38982,6 +38978,8 @@ class Emitter {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_ushr", T_VALUE, bin, left, right);
             }
+            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+            if (bigint) return bigint;
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
             return {
@@ -46170,12 +46168,12 @@ class Emitter {
         const current = this.freshTemp("_global_update_current");
         const next = this.freshTemp("_global_update_next");
         const operation = op === ts.SyntaxKind.PlusPlusToken
-            ? "tsc_value_add"
-            : "tsc_value_sub";
+            ? "tsc_value_inc"
+            : "tsc_value_dec";
         return {
             c:
-                `({ tsc_value_t ${current} = tsc_value_pos(${reference.get}); ` +
-                `tsc_value_t ${next} = ${operation}(${current}, tsc_value_num(1.0)); ` +
+                `({ tsc_value_t ${current} = tsc_value_to_numeric(${reference.get}); ` +
+                `tsc_value_t ${next} = ${operation}(${current}); ` +
                 `${reference.set(next)}; ${prefix ? next : current}; })`,
             ty: T_VALUE,
         };
@@ -46203,6 +46201,11 @@ class Emitter {
                 if (inner.ty.kind === "bigint") {
                     return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
                 }
+                if (inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_neg", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(-${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusToken:
@@ -46211,11 +46214,16 @@ class Emitter {
                         { value: inner, target: T_VALUE, node: pu.operand },
                     ]);
                 }
+                if (inner.ty.kind === "bigint" || inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_pos", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(+${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.PlusPlusToken:
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const update = `${inner.c} = tsc_value_add(tsc_value_pos(${inner.c}), tsc_value_num(1.0))`;
+                    const update = `${inner.c} = tsc_value_inc(${inner.c})`;
                     const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
                         c: refresh
@@ -46223,12 +46231,20 @@ class Emitter {
                             : `(${update})`,
                         ty: T_VALUE,
                     };
+                }
+                if (inner.ty.kind === "bigint") {
+                    return { c: `(${inner.c} = tsc_bigint_add(${inner.c}, tsc_bigint_from_lit("1")))`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_inc", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
                 }
                 requireNumber(pu, inner.ty);
                 return { c: `(++${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.MinusMinusToken:
                 if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const update = `${inner.c} = tsc_value_sub(tsc_value_pos(${inner.c}), tsc_value_num(1.0))`;
+                    const update = `${inner.c} = tsc_value_dec(${inner.c})`;
                     const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
                         c: refresh
@@ -46237,10 +46253,26 @@ class Emitter {
                         ty: T_VALUE,
                     };
                 }
+                if (inner.ty.kind === "bigint") {
+                    return { c: `(${inner.c} = tsc_bigint_sub(${inner.c}, tsc_bigint_from_lit("1")))`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_dec", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
                 requireNumber(pu, inner.ty);
                 return { c: `(--${inner.c})`, ty: T_NUMBER };
             case ts.SyntaxKind.TildeToken:
                 if (inner.ty.kind === "value") {
+                    return this.emitSequencedCall("tsc_value_bit_not", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
+                }
+                if (inner.ty.kind === "bigint") {
+                    return { c: `tsc_bigint_bit_not(${inner.c})`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
                     return this.emitSequencedCall("tsc_value_bit_not", T_VALUE, [
                         { value: inner, target: T_VALUE, node: pu.operand },
                     ]);
@@ -46336,9 +46368,18 @@ class Emitter {
                     const tmp = this.freshTemp("_post");
                     const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_add(${tmp}, tsc_value_num(1.0)); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
+                        c: `({ tsc_value_t ${tmp} = tsc_value_to_numeric(${inner.c}); ${inner.c} = tsc_value_inc(${tmp}); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
                         ty: T_VALUE,
                     };
+                }
+                if (inner.ty.kind === "bigint") {
+                    const tmp = this.freshTemp("_post_bigint");
+                    return { c: `({ tsc_bigint_t* ${tmp} = ${inner.c}; ${inner.c} = tsc_bigint_add(${tmp}, tsc_bigint_from_lit("1")); ${tmp}; })`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_inc", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
                 }
                 requireNumber(pu, inner.ty);
                 return { c: `(${inner.c}++)`, ty: T_NUMBER };
@@ -46348,9 +46389,18 @@ class Emitter {
                     const tmp = this.freshTemp("_post");
                     const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
                     return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_pos(${inner.c}); ${inner.c} = tsc_value_sub(${tmp}, tsc_value_num(1.0)); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
+                        c: `({ tsc_value_t ${tmp} = tsc_value_to_numeric(${inner.c}); ${inner.c} = tsc_value_dec(${tmp}); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
                         ty: T_VALUE,
                     };
+                }
+                if (inner.ty.kind === "bigint") {
+                    const tmp = this.freshTemp("_post_bigint");
+                    return { c: `({ tsc_bigint_t* ${tmp} = ${inner.c}; ${inner.c} = tsc_bigint_sub(${tmp}, tsc_bigint_from_lit("1")); ${tmp}; })`, ty: T_BIGINT };
+                }
+                if (inner.ty.kind === "symbol") {
+                    return this.emitSequencedCall("tsc_value_dec", T_VALUE, [
+                        { value: inner, target: T_VALUE, node: pu.operand },
+                    ]);
                 }
                 requireNumber(pu, inner.ty);
                 return { c: `(${inner.c}--)`, ty: T_NUMBER };
@@ -46431,7 +46481,7 @@ class Emitter {
             });
         }
 
-        const fn = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_add" : "tsc_value_sub";
+        const fn = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
         return this.emitSequencedExpr(T_VALUE, specs, (values) => {
             const obj = values[0]!;
             const keyC = keyExpr
@@ -46443,7 +46493,7 @@ class Emitter {
                 const cache = this.freshTemp("_prop_cache");
                 const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
                 const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
-                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); tsc_value_t ${next} = ${fn}(${cur}); ${set}; ${prefix ? next : cur}; })`;
             }
             const existing = indexUpdate
                 ? `tsc_value_get_index(${obj}, ${keyC})`
@@ -46455,7 +46505,7 @@ class Emitter {
                 : symbolUpdate
                     ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${next})`
                     : `tsc_value_set_computed_prop(${obj}, ${keyC}, ${next})`;
-            return `({ tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
+            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); tsc_value_t ${next} = ${fn}(${cur}); ${set}; ${prefix ? next : cur}; })`;
         });
     }
 
@@ -46685,13 +46735,12 @@ class Emitter {
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
                 }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 if (left.ty.kind === "string" || right.ty.kind === "string") {
                     const ls = this.coerceToString(left, bin.left);
                     const rs = this.coerceToString(right, bin.right);
                     return { c: `tsc_str_concat(${ls}, ${rs})`, ty: T_STRING };
-                }
-                if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                    return { c: `tsc_bigint_add(${left.c}, ${right.c})`, ty: T_BIGINT };
                 }
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
@@ -46709,15 +46758,8 @@ class Emitter {
                                 : "tsc_value_div";
                     return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
                 }
-                if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                    const fn =
-                        op === ts.SyntaxKind.MinusToken
-                            ? "tsc_bigint_sub"
-                            : op === ts.SyntaxKind.AsteriskToken
-                                ? "tsc_bigint_mul"
-                                : "tsc_bigint_div";
-                    return { c: `${fn}(${left.c}, ${right.c})`, ty: T_BIGINT };
-                }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 const cop =
@@ -46735,9 +46777,8 @@ class Emitter {
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     return this.emitDynamicBinary("tsc_value_mod", T_VALUE, bin, left, right);
                 }
-                if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                    return { c: `tsc_bigint_mod(${left.c}, ${right.c})`, ty: T_BIGINT };
-                }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 // Fast path: when both sides are provably integer-valued, lower
@@ -46756,9 +46797,8 @@ class Emitter {
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     return this.emitDynamicBinary("tsc_value_pow", T_VALUE, bin, left, right);
                 }
-                if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-                    return { c: `tsc_bigint_pow(${left.c}, ${right.c})`, ty: T_BIGINT };
-                }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 return { c: `pow(${left.c}, ${right.c})`, ty: T_NUMBER };
@@ -46866,6 +46906,8 @@ class Emitter {
                                         : "tsc_value_shr";
                     return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
                 }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 const cop = bitwiseOp(op);
@@ -46878,6 +46920,8 @@ class Emitter {
                 if (left.ty.kind === "value" || right.ty.kind === "value") {
                     return this.emitDynamicBinary("tsc_value_ushr", T_VALUE, bin, left, right);
                 }
+                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
+                if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
                 return {
@@ -47497,6 +47541,16 @@ class Emitter {
                                     ? "tsc_bigint_div"
                                     : op === ts.SyntaxKind.PercentEqualsToken
                                         ? "tsc_bigint_mod"
+                                        : op === ts.SyntaxKind.AmpersandEqualsToken
+                                            ? "tsc_bigint_bit_and"
+                                            : op === ts.SyntaxKind.BarEqualsToken
+                                                ? "tsc_bigint_bit_or"
+                                                : op === ts.SyntaxKind.CaretEqualsToken
+                                                    ? "tsc_bigint_bit_xor"
+                                                    : op === ts.SyntaxKind.LessThanLessThanEqualsToken
+                                                        ? "tsc_bigint_shl"
+                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
+                                                            ? "tsc_bigint_shr"
                                         : null;
             if (fn) return { c: `(${lhsC} = ${fn}(${lhsC}, ${rhs.c}))`, ty: T_BIGINT };
         }
@@ -48247,6 +48301,17 @@ class Emitter {
                 ty: T_BOOLEAN,
             };
         }
+        if (
+            left.ty.kind === "bigint" || right.ty.kind === "bigint" ||
+            left.ty.kind === "symbol" || right.ty.kind === "symbol"
+        ) {
+            const compared = this.emitDynamicBinary("tsc_value_cmp", T_NUMBER, bin, left, right);
+            const value = this.freshTemp("_bigint_cmp");
+            return {
+                c: `({ int ${value} = (int)(${compared.c}); ${value} != 2 && ${value} ${cop} 0; })`,
+                ty: T_BOOLEAN,
+            };
+        }
         unsupported(bin, `relational ${cop} on ${left.ty.c} vs ${right.ty.c}`);
     }
 
@@ -48261,6 +48326,76 @@ class Emitter {
             { value: left, target: T_VALUE, node: bin.left },
             { value: right, target: T_VALUE, node: bin.right },
         ]);
+    }
+
+    private emitBigIntBinaryOperation(
+        bin: ts.BinaryExpression,
+        left: EmitResult,
+        right: EmitResult,
+        op: ts.SyntaxKind,
+    ): EmitResult | null {
+        if (
+            left.ty.kind !== "bigint" && right.ty.kind !== "bigint" &&
+            left.ty.kind !== "symbol" && right.ty.kind !== "symbol"
+        ) return null;
+        let valueFunction: string;
+        let bigintFunction: string | null;
+        switch (op) {
+            case ts.SyntaxKind.PlusToken:
+                valueFunction = "tsc_value_add";
+                bigintFunction = "tsc_bigint_add";
+                break;
+            case ts.SyntaxKind.MinusToken:
+                valueFunction = "tsc_value_sub";
+                bigintFunction = "tsc_bigint_sub";
+                break;
+            case ts.SyntaxKind.AsteriskToken:
+                valueFunction = "tsc_value_mul";
+                bigintFunction = "tsc_bigint_mul";
+                break;
+            case ts.SyntaxKind.SlashToken:
+                valueFunction = "tsc_value_div";
+                bigintFunction = "tsc_bigint_div";
+                break;
+            case ts.SyntaxKind.PercentToken:
+                valueFunction = "tsc_value_mod";
+                bigintFunction = "tsc_bigint_mod";
+                break;
+            case ts.SyntaxKind.AsteriskAsteriskToken:
+                valueFunction = "tsc_value_pow";
+                bigintFunction = "tsc_bigint_pow";
+                break;
+            case ts.SyntaxKind.AmpersandToken:
+                valueFunction = "tsc_value_bit_and";
+                bigintFunction = "tsc_bigint_bit_and";
+                break;
+            case ts.SyntaxKind.BarToken:
+                valueFunction = "tsc_value_bit_or";
+                bigintFunction = "tsc_bigint_bit_or";
+                break;
+            case ts.SyntaxKind.CaretToken:
+                valueFunction = "tsc_value_bit_xor";
+                bigintFunction = "tsc_bigint_bit_xor";
+                break;
+            case ts.SyntaxKind.LessThanLessThanToken:
+                valueFunction = "tsc_value_shl";
+                bigintFunction = "tsc_bigint_shl";
+                break;
+            case ts.SyntaxKind.GreaterThanGreaterThanToken:
+                valueFunction = "tsc_value_shr";
+                bigintFunction = "tsc_bigint_shr";
+                break;
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+                valueFunction = "tsc_value_ushr";
+                bigintFunction = null;
+                break;
+            default:
+                return null;
+        }
+        if (left.ty.kind === "bigint" && right.ty.kind === "bigint" && bigintFunction) {
+            return { c: `${bigintFunction}(${left.c}, ${right.c})`, ty: T_BIGINT };
+        }
+        return this.emitDynamicBinary(valueFunction, T_VALUE, bin, left, right);
     }
 
     private emitTernary(expr: ts.ConditionalExpression): EmitResult {

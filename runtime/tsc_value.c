@@ -4123,77 +4123,170 @@ tsc_value_t tsc_value_object_from_entries(tsc_value_t entries) {
     return tsc_value_object(out);
 }
 
+static tsc_value_t value_to_primitive_default(tsc_value_t object);
+
+typedef enum {
+    TSC_NUMERIC_ADD,
+    TSC_NUMERIC_SUB,
+    TSC_NUMERIC_MUL,
+    TSC_NUMERIC_DIV,
+    TSC_NUMERIC_MOD,
+    TSC_NUMERIC_POW,
+    TSC_NUMERIC_BIT_AND,
+    TSC_NUMERIC_BIT_OR,
+    TSC_NUMERIC_BIT_XOR,
+    TSC_NUMERIC_SHL,
+    TSC_NUMERIC_SHR,
+    TSC_NUMERIC_USHR,
+} tsc_numeric_binary_op_t;
+
+static bool value_is_bigint(tsc_value_t value) {
+    return value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_BIGINT;
+}
+
+static tsc_value_t value_to_primitive_if_object(tsc_value_t value) {
+    return tsc_value_is_object(value) ? value_to_primitive_default(value) : value;
+}
+
+tsc_value_t tsc_value_to_numeric(tsc_value_t value) {
+    tsc_value_t primitive = value_to_primitive_if_object(value);
+    if (value_is_bigint(primitive)) return primitive;
+    return tsc_value_num(tsc_value_as_num(primitive));
+}
+
+static void value_throw_mixed_bigint(void) {
+    tsc_throw_error(
+        TSC_ERROR_TYPE,
+        tsc_str_from_cstr("Cannot mix BigInt and other types, use explicit conversions")
+    );
+}
+
+static tsc_value_t value_numeric_binary(
+    tsc_value_t left,
+    tsc_value_t right,
+    tsc_numeric_binary_op_t operation
+) {
+    left = tsc_value_to_numeric(left);
+    right = tsc_value_to_numeric(right);
+    bool left_bigint = value_is_bigint(left);
+    bool right_bigint = value_is_bigint(right);
+    if (left_bigint != right_bigint) value_throw_mixed_bigint();
+    if (left_bigint) {
+        const tsc_bigint_t* a = (const tsc_bigint_t*)value_ptr(left);
+        const tsc_bigint_t* b = (const tsc_bigint_t*)value_ptr(right);
+        tsc_bigint_t* result = NULL;
+        switch (operation) {
+            case TSC_NUMERIC_ADD: result = tsc_bigint_add(a, b); break;
+            case TSC_NUMERIC_SUB: result = tsc_bigint_sub(a, b); break;
+            case TSC_NUMERIC_MUL: result = tsc_bigint_mul(a, b); break;
+            case TSC_NUMERIC_DIV: result = tsc_bigint_div(a, b); break;
+            case TSC_NUMERIC_MOD: result = tsc_bigint_mod(a, b); break;
+            case TSC_NUMERIC_POW: result = tsc_bigint_pow(a, b); break;
+            case TSC_NUMERIC_BIT_AND: result = tsc_bigint_bit_and(a, b); break;
+            case TSC_NUMERIC_BIT_OR: result = tsc_bigint_bit_or(a, b); break;
+            case TSC_NUMERIC_BIT_XOR: result = tsc_bigint_bit_xor(a, b); break;
+            case TSC_NUMERIC_SHL: result = tsc_bigint_shl(a, b); break;
+            case TSC_NUMERIC_SHR: result = tsc_bigint_shr(a, b); break;
+            case TSC_NUMERIC_USHR:
+                tsc_throw_error(
+                    TSC_ERROR_TYPE,
+                    tsc_str_from_cstr("BigInts have no unsigned right shift, use >> instead")
+                );
+        }
+        return tsc_value_bigint(result);
+    }
+
+    double a = value_as_num(left);
+    double b = value_as_num(right);
+    switch (operation) {
+        case TSC_NUMERIC_ADD: return tsc_value_num(a + b);
+        case TSC_NUMERIC_SUB: return tsc_value_num(a - b);
+        case TSC_NUMERIC_MUL: return tsc_value_num(a * b);
+        case TSC_NUMERIC_DIV: return tsc_value_num(a / b);
+        case TSC_NUMERIC_MOD: return tsc_value_num(tsc_num_mod(a, b));
+        case TSC_NUMERIC_POW: return tsc_value_num(pow(a, b));
+        case TSC_NUMERIC_BIT_AND:
+            return tsc_value_num((double)(tsc_to_int32(a) & tsc_to_int32(b)));
+        case TSC_NUMERIC_BIT_OR:
+            return tsc_value_num((double)(tsc_to_int32(a) | tsc_to_int32(b)));
+        case TSC_NUMERIC_BIT_XOR:
+            return tsc_value_num((double)(tsc_to_int32(a) ^ tsc_to_int32(b)));
+        case TSC_NUMERIC_SHL: {
+            uint32_t bits = (uint32_t)tsc_to_int32(a);
+            uint32_t shift = tsc_to_uint32(b) & 31u;
+            return tsc_value_num((double)tsc_int32_from_uint32(bits << shift));
+        }
+        case TSC_NUMERIC_SHR: {
+            int32_t bits = tsc_to_int32(a);
+            uint32_t shift = tsc_to_uint32(b) & 31u;
+            return tsc_value_num((double)tsc_shift_right_int32(bits, shift));
+        }
+        case TSC_NUMERIC_USHR: {
+            uint32_t bits = tsc_to_uint32(a);
+            uint32_t shift = tsc_to_uint32(b) & 31u;
+            return tsc_value_num((double)(bits >> shift));
+        }
+    }
+    tsc_panic("unknown numeric binary operation");
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b) {
+    a = value_to_primitive_if_object(a);
+    b = value_to_primitive_if_object(b);
     bool stringy =
         (value_is_box(a) && value_tag(a) == TSC_VALUE_TAG_STRING) ||
         (value_is_box(b) && value_tag(b) == TSC_VALUE_TAG_STRING);
     if (stringy) {
         return tsc_value_string(tsc_str_concat(tsc_value_to_string(a), tsc_value_to_string(b)));
     }
-    return tsc_value_num(tsc_value_as_num(a) + tsc_value_as_num(b));
+    return value_numeric_binary(a, b, TSC_NUMERIC_ADD);
 }
 
-tsc_value_t tsc_value_sub(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num(tsc_value_as_num(a) - tsc_value_as_num(b));
+tsc_value_t tsc_value_sub(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_SUB); }
+tsc_value_t tsc_value_mul(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_MUL); }
+tsc_value_t tsc_value_div(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_DIV); }
+tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_MOD); }
+tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_POW); }
+
+tsc_value_t tsc_value_pos(tsc_value_t value) {
+    return tsc_value_num(tsc_value_as_num(value_to_primitive_if_object(value)));
 }
 
-tsc_value_t tsc_value_mul(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num(tsc_value_as_num(a) * tsc_value_as_num(b));
+tsc_value_t tsc_value_inc(tsc_value_t value) {
+    value = tsc_value_to_numeric(value);
+    return value_is_bigint(value)
+        ? tsc_value_bigint(tsc_bigint_add((const tsc_bigint_t*)value_ptr(value), tsc_bigint_from_lit("1")))
+        : tsc_value_num(value_as_num(value) + 1.0);
 }
 
-tsc_value_t tsc_value_div(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num(tsc_value_as_num(a) / tsc_value_as_num(b));
+tsc_value_t tsc_value_dec(tsc_value_t value) {
+    value = tsc_value_to_numeric(value);
+    return value_is_bigint(value)
+        ? tsc_value_bigint(tsc_bigint_sub((const tsc_bigint_t*)value_ptr(value), tsc_bigint_from_lit("1")))
+        : tsc_value_num(value_as_num(value) - 1.0);
 }
 
-tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num(tsc_num_mod(tsc_value_as_num(a), tsc_value_as_num(b)));
+tsc_value_t tsc_value_neg(tsc_value_t value) {
+    value = tsc_value_to_numeric(value);
+    return value_is_bigint(value)
+        ? tsc_value_bigint(tsc_bigint_neg((const tsc_bigint_t*)value_ptr(value)))
+        : tsc_value_num(-value_as_num(value));
 }
 
-tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num(pow(tsc_value_as_num(a), tsc_value_as_num(b)));
+tsc_value_t tsc_value_bit_not(tsc_value_t value) {
+    value = tsc_value_to_numeric(value);
+    return value_is_bigint(value)
+        ? tsc_value_bigint(tsc_bigint_bit_not((const tsc_bigint_t*)value_ptr(value)))
+        : tsc_value_num((double)(~tsc_to_int32(value_as_num(value))));
 }
 
-tsc_value_t tsc_value_pos(tsc_value_t v) {
-    return tsc_value_num(tsc_value_as_num(v));
-}
-
-tsc_value_t tsc_value_neg(tsc_value_t v) {
-    return tsc_value_num(-tsc_value_as_num(v));
-}
-
-tsc_value_t tsc_value_bit_not(tsc_value_t v) {
-    return tsc_value_num((double)(~tsc_to_int32(tsc_value_as_num(v))));
-}
-
-tsc_value_t tsc_value_bit_and(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num((double)(tsc_to_int32(tsc_value_as_num(a)) & tsc_to_int32(tsc_value_as_num(b))));
-}
-
-tsc_value_t tsc_value_bit_or(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num((double)(tsc_to_int32(tsc_value_as_num(a)) | tsc_to_int32(tsc_value_as_num(b))));
-}
-
-tsc_value_t tsc_value_bit_xor(tsc_value_t a, tsc_value_t b) {
-    return tsc_value_num((double)(tsc_to_int32(tsc_value_as_num(a)) ^ tsc_to_int32(tsc_value_as_num(b))));
-}
-
-tsc_value_t tsc_value_shl(tsc_value_t a, tsc_value_t b) {
-    uint32_t left = (uint32_t)tsc_to_int32(tsc_value_as_num(a));
-    uint32_t shift = tsc_to_uint32(tsc_value_as_num(b)) & 31u;
-    return tsc_value_num((double)tsc_int32_from_uint32(left << shift));
-}
-
-tsc_value_t tsc_value_shr(tsc_value_t a, tsc_value_t b) {
-    int32_t left = tsc_to_int32(tsc_value_as_num(a));
-    uint32_t shift = tsc_to_uint32(tsc_value_as_num(b)) & 31u;
-    return tsc_value_num((double)tsc_shift_right_int32(left, shift));
-}
-
-tsc_value_t tsc_value_ushr(tsc_value_t a, tsc_value_t b) {
-    uint32_t left = tsc_to_uint32(tsc_value_as_num(a));
-    uint32_t shift = tsc_to_uint32(tsc_value_as_num(b)) & 31u;
-    return tsc_value_num((double)(left >> shift));
-}
+tsc_value_t tsc_value_bit_and(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_BIT_AND); }
+tsc_value_t tsc_value_bit_or(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_BIT_OR); }
+tsc_value_t tsc_value_bit_xor(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_BIT_XOR); }
+tsc_value_t tsc_value_shl(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_SHL); }
+tsc_value_t tsc_value_shr(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_SHR); }
+tsc_value_t tsc_value_ushr(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_USHR); }
 
 bool tsc_value_eq(tsc_value_t a, tsc_value_t b) {
     if (!value_is_box(a) && !value_is_box(b)) return value_as_num(a) == value_as_num(b);
@@ -4264,7 +4357,7 @@ static tsc_abstract_type_t abstract_equality_type(tsc_value_t value) {
     return TSC_ABSTRACT_UNDEFINED;
 }
 
-static tsc_value_t abstract_equality_to_primitive(tsc_value_t object) {
+static tsc_value_t value_to_primitive_default(tsc_value_t object) {
     static const char* const methods[] = { "valueOf", "toString" };
     static const size_t method_lengths[] = { 7, 8 };
     for (size_t index = 0; index < sizeof(methods) / sizeof(methods[0]); index++) {
@@ -4335,10 +4428,10 @@ bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
         return tsc_value_abstract_eq(a, tsc_value_num(tsc_value_as_num(b)));
     }
     if (at == TSC_ABSTRACT_OBJECT && bt != TSC_ABSTRACT_OBJECT) {
-        return tsc_value_abstract_eq(abstract_equality_to_primitive(a), b);
+        return tsc_value_abstract_eq(value_to_primitive_default(a), b);
     }
     if (at != TSC_ABSTRACT_OBJECT && bt == TSC_ABSTRACT_OBJECT) {
-        return tsc_value_abstract_eq(a, abstract_equality_to_primitive(b));
+        return tsc_value_abstract_eq(a, value_to_primitive_default(b));
     }
     return false;
 }
@@ -4364,6 +4457,8 @@ bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b) {
 }
 
 int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
+    a = value_to_primitive_if_object(a);
+    b = value_to_primitive_if_object(b);
     if (
         value_is_box(a) && value_is_box(b) &&
         value_tag(a) == TSC_VALUE_TAG_STRING &&
@@ -4372,8 +4467,45 @@ int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
         int c = tsc_str_cmp((const tsc_str_t*)value_ptr(a), (const tsc_str_t*)value_ptr(b));
         return c < 0 ? -1 : c > 0 ? 1 : 0;
     }
-    double an = tsc_value_as_num(a);
-    double bn = tsc_value_as_num(b);
+    if (value_is_bigint(a) && value_is_box(b) && value_tag(b) == TSC_VALUE_TAG_STRING) {
+        const tsc_bigint_t* parsed = tsc_bigint_try_from_str((const tsc_str_t*)value_ptr(b));
+        return parsed
+            ? tsc_bigint_cmp((const tsc_bigint_t*)value_ptr(a), parsed)
+            : 2;
+    }
+    if (value_is_box(a) && value_tag(a) == TSC_VALUE_TAG_STRING && value_is_bigint(b)) {
+        const tsc_bigint_t* parsed = tsc_bigint_try_from_str((const tsc_str_t*)value_ptr(a));
+        if (!parsed) return 2;
+        int comparison = tsc_bigint_cmp(parsed, (const tsc_bigint_t*)value_ptr(b));
+        return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
+    }
+    a = tsc_value_to_numeric(a);
+    b = tsc_value_to_numeric(b);
+    if (value_is_bigint(a) && value_is_bigint(b)) {
+        int comparison = tsc_bigint_cmp(
+            (const tsc_bigint_t*)value_ptr(a),
+            (const tsc_bigint_t*)value_ptr(b)
+        );
+        return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
+    }
+    if (value_is_bigint(a)) {
+        double numeric = value_as_num(b);
+        if (isnan(numeric)) return 2;
+        if (numeric == INFINITY) return -1;
+        if (numeric == -INFINITY) return 1;
+        int comparison = mpz_cmp_d(((const tsc_bigint_t*)value_ptr(a))->value, numeric);
+        return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
+    }
+    if (value_is_bigint(b)) {
+        double numeric = value_as_num(a);
+        if (isnan(numeric)) return 2;
+        if (numeric == INFINITY) return 1;
+        if (numeric == -INFINITY) return -1;
+        int comparison = mpz_cmp_d(((const tsc_bigint_t*)value_ptr(b))->value, numeric);
+        return comparison < 0 ? 1 : comparison > 0 ? -1 : 0;
+    }
+    double an = value_as_num(a);
+    double bn = value_as_num(b);
     if (isnan(an) || isnan(bn)) return 2;
     if (an < bn) return -1;
     if (an > bn) return 1;
