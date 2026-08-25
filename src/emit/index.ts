@@ -721,6 +721,8 @@ class Emitter {
 
     private readonly test262ScriptEntryPaths: ReadonlySet<string>;
     private test262ScriptDeclaredGlobalBindingNamesCache: ReadonlySet<string> | null = null;
+    private test262SelectedGlobalFunctionsCache =
+        new WeakMap<ts.SourceFile, ReadonlySet<ts.FunctionDeclaration>>();
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
@@ -1062,7 +1064,9 @@ class Emitter {
     }
 
     private shouldEmitFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
-        if (this.isTest262ScriptGlobalFunctionDeclaration(fd)) return true;
+        if (this.isTest262ScriptGlobalFunctionDeclaration(fd)) {
+            return this.isTest262SelectedGlobalFunctionDeclaration(fd);
+        }
         return !this.isPrunableTopLevelFunction(fd) || this.referencedTopLevelFunctions.has(fd);
     }
 
@@ -24458,6 +24462,18 @@ class Emitter {
             }
         }
         return null;
+    }
+
+    private isTest262SelectedGlobalFunctionDeclaration(
+        declaration: ts.FunctionDeclaration,
+    ): boolean {
+        const source = declaration.getSourceFile();
+        let selected = this.test262SelectedGlobalFunctionsCache.get(source);
+        if (!selected) {
+            selected = new Set(this.test262ScriptGlobalDeclarations(source).functions);
+            this.test262SelectedGlobalFunctionsCache.set(source, selected);
+        }
+        return selected.has(declaration);
     }
 
     /** Checker symbols do not always connect a var-scoped declaration nested

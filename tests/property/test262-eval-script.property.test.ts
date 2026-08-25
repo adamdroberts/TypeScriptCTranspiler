@@ -57,6 +57,15 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const varCollisionSource = "var sharedLexical; var collisionSideEffect;";
     const lexicalCollisionSource = "let sharedLexical; var collisionSideEffect;";
     const functionCollisionSource = "function blockedFunction() {}";
+    const duplicateFunctionSource = `
+        function duplicateFunction() { return 1; }
+        function duplicateFunction() { return 2; }
+        function duplicateFunction() { return 3; }
+    `;
+    const duplicateFunctionStressSource = Array.from(
+        { length: 64 },
+        (_, index) => `function duplicateFunctionStress() { return ${index}; }`,
+    ).join("\n");
     const existingVarSource = "var existingConfigurable; var existingRestricted;";
     const nonExtensibleSource = "var impossibleGlobal; var impossibleSideEffect;";
     const nonExtensibleLexicalSource = `
@@ -116,6 +125,8 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["var-collision.js", varCollisionSource],
         ["lexical-collision.js", lexicalCollisionSource],
         ["function-collision.js", functionCollisionSource],
+        ["function-duplicates.js", duplicateFunctionSource],
+        ["function-duplicates-stress.js", duplicateFunctionStressSource],
         ["existing-var.js", existingVarSource],
         ["non-extensible.js", nonExtensibleSource],
         ["non-extensible-lexical.js", nonExtensibleLexicalSource],
@@ -265,6 +276,11 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             catch (error) { functionCollision = error instanceof TypeError; }
             if (!functionCollision || globalThis.blockedFunction !== 1) {
                 throw new Error("function definability preflight differed");
+            }
+            $262.evalScript(${JSON.stringify(duplicateFunctionSource)});
+            $262.evalScript(${JSON.stringify(duplicateFunctionStressSource)});
+            if (duplicateFunction() !== 3 || duplicateFunctionStress() !== 63) {
+                throw new Error("duplicate global function selection differed");
             }
 
             $262.evalScript(${JSON.stringify(bindingPatternSource)});
