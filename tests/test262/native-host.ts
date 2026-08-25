@@ -108,7 +108,7 @@ async function writeExclusive(root: string, relative: string, content: string | 
     return destination;
 }
 
-function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
+export function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
     const location = (node: ts.Node, message: string): string => {
         const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
         return `${sourceFile.fileName}:${start.line + 1}:${start.character + 1}: ${message}\n`;
@@ -135,19 +135,32 @@ function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
             ts.isPropertyAccessExpression(expression) ||
             ts.isElementAccessExpression(expression);
     };
-    const visitFunction = (node: ts.SignatureDeclaration): string | null => {
-        const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
-        if (!body) return null;
-        const nested: ControlContext = {
-            allowReturn: true,
-            breakableDepth: 0,
-            iterationDepth: 0,
-            labels: new Map(),
-        };
-        return visit(body, nested);
+    const rootContext: ControlContext = {
+        allowReturn: false,
+        breakableDepth: 0,
+        iterationDepth: 0,
+        labels: new Map(),
     };
-    const visit = (node: ts.Node, context: ControlContext): string | null => {
-        if (ts.isFunctionLike(node)) return visitFunction(node);
+    const worklist: Array<{ readonly node: ts.Node; readonly context: ControlContext }> = [
+        { node: sourceFile, context: rootContext },
+    ];
+    while (worklist.length > 0) {
+        const { node, context } = worklist.pop()!;
+        if (ts.isFunctionLike(node)) {
+            const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
+            if (body) {
+                worklist.push({
+                    node: body,
+                    context: {
+                        allowReturn: true,
+                        breakableDepth: 0,
+                        iterationDepth: 0,
+                        labels: new Map(),
+                    },
+                });
+            }
+            continue;
+        }
         if (ts.isReturnStatement(node) && !context.allowReturn) {
             return location(node, "return statement is not contained in a function body");
         }
@@ -180,7 +193,8 @@ function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
             }
             const labels = new Map(context.labels);
             labels.set(node.label.text, labelsIteration(node.statement));
-            return visit(node.statement, { ...context, labels });
+            worklist.push({ node: node.statement, context: { ...context, labels } });
+            continue;
         }
         const iteration = ts.isForStatement(node) ||
             ts.isForInStatement(node) ||
@@ -195,18 +209,15 @@ function earlyControlFlowFailure(sourceFile: ts.SourceFile): string | null {
                 iterationDepth: context.iterationDepth + (iteration ? 1 : 0),
             }
             : context;
-        let failure: string | null = null;
-        ts.forEachChild(node, (child) => {
-            if (!failure) failure = visit(child, childContext);
+        const children: ts.Node[] = [];
+        node.forEachChild((child) => {
+            children.push(child);
         });
-        return failure;
-    };
-    return visit(sourceFile, {
-        allowReturn: false,
-        breakableDepth: 0,
-        iterationDepth: 0,
-        labels: new Map(),
-    });
+        for (let index = children.length - 1; index >= 0; index--) {
+            worklist.push({ node: children[index]!, context: childContext });
+        }
+    }
+    return null;
 }
 
 function parseFailure(

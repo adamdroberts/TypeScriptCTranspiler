@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "tsc2c-native-test262-v1",
-  "description": "Non-delegating native Test262 execution profile. It prepares runner-owned generated-C/native artifacts and is deliberately ineligible until every remaining host hook and phase classifier is implemented.",
+  "description": "Non-delegating native Test262 execution profile. It prepares runner-owned generated-C/native artifacts and is deliberately ineligible until every remaining host hook and language-semantic gap is implemented.",
   "command": ["bun", "tests/test262/native-host.ts"],
   "implementationFiles": [
     "bun.lock",
@@ -79,7 +79,7 @@
     "raw-source-preservation": true,
     "strict-variant-transform": true,
     "async-done-protocol": true,
-    "structured-negative-phases": false,
+    "structured-negative-phases": true,
     "exact-error-constructor": true,
     "failure-origin": true,
     "host-print": true,
