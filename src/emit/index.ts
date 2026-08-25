@@ -60627,15 +60627,15 @@ class Emitter {
             case "values": {
                 const av = this.freshTemp("_arr");
                 return this.emitSequencedExpr(
-                    recv.ty,
+                    arrayType(T_VALUE),
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([arr]) => {
-                        if (et.kind !== "value") return `({ tsc_array_t* const ${av} = ${arr}; tsc_array_slice(${av}, 0, (double)${av}->len); })`;
                         const out = this.freshTemp("_values");
                         const iv = this.freshTemp("_i");
                         const value = this.freshTemp("_value");
                         const boxed = this.freshTemp("_values_boxed");
-                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_value_t ${boxed} = tsc_value_array(${av}); tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                        const sourceValue = this.boxObjectIdentity(arr!, recv.ty, call.expression);
+                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_value_t ${boxed} = ${sourceValue}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
                             `tsc_value_t ${value} = tsc_value_get_index(${boxed}, (double)${iv}); ` +
                             `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;

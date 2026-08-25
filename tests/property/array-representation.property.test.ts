@@ -82,6 +82,8 @@ function source(): string {
         console.log(${JSON.stringify(`${plan.label}:identity:`)} + String(alias_${plan.label} === values_${plan.label}));
         applyOperations(alias_${plan.label}, [${plan.operations.map(operationLiteral).join(",")}]);
         console.log(${JSON.stringify(`${plan.label}:state:`)} + values_${plan.label}.join("|") + ":" + Object.keys(alias_${plan.label}).join("|"));
+        const iterator_${plan.label}: any = values_${plan.label}.values();
+        console.log(${JSON.stringify(`${plan.label}:values:`)} + iterator_${plan.label}.join("|") + ":" + Object.keys(iterator_${plan.label}).join("|"));
     `);
     return `
         function applyOperations(values: any[], operations: any[][]): void {
@@ -114,6 +116,13 @@ function expectedState(plan: RepresentationPlan): string {
     return `${plan.label}:state:${joined}:${keys}`;
 }
 
+function expectedIterator(plan: RepresentationPlan): string {
+    const state = expectedState(plan);
+    const joined = state.slice(`${plan.label}:state:`.length, state.lastIndexOf(":"));
+    const keys = Array.from({ length: plan.initial.length }, (_, index) => index).join("|");
+    return `${plan.label}:values:${joined}:${keys}`;
+}
+
 test("array aliases share one representation codec", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-array-representation-property-"));
     const entry = path.join(temporary, "subject.ts");
@@ -122,6 +131,7 @@ test("array aliases share one representation codec", async () => {
         const expected = plans.flatMap((plan) => [
             `${plan.label}:identity:true`,
             expectedState(plan),
+            expectedIterator(plan),
         ]);
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";

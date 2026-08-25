@@ -4,6 +4,10 @@
 
 static bool array_prototype_initializing = false;
 static bool array_prototype_initialized = false;
+/* `tsc_value_t` stores pointers in a NaN-boxed payload that a conservative
+ * collector cannot recognize.  Keep the singleton's decoded pointer in a
+ * static slot for as long as any array can reach it through [[Prototype]]. */
+static tsc_array_t* volatile array_prototype_gc_root = NULL;
 static bool array_constructor_initialized = false;
 static tsc_value_t array_constructor_value;
 static bool array_unscopables_initialized = false;
@@ -1123,6 +1127,8 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->lazy_close_value = tsc_value_undefined();
         proto->props = tsc_object_new();
         proto->holes = NULL;
+        proto->box_element = NULL;
+        proto->unbox_element = NULL;
         proto->data = NULL;
         array_prototype_define_method(proto->props, "toString", 8, 0.0, array_prototype_to_string);
         array_prototype_define_method(proto->props, "toLocaleString", 14, 0.0, array_prototype_to_locale_string);
@@ -1163,6 +1169,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto->props, "findLastIndex", 13, 1.0, array_prototype_find_last_index);
         array_prototype_define_method(proto->props, "reduce", 6, 1.0, array_prototype_reduce);
         array_prototype_define_method(proto->props, "reduceRight", 11, 1.0, array_prototype_reduce_right);
+        array_prototype_gc_root = proto;
         prototype = tsc_value_array(proto);
         array_prototype_initialized = true;
         (void)tsc_value_set_prop(
