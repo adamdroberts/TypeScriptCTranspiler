@@ -961,8 +961,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-preparefortailcall` — PrepareForTailCall ( ): ~unused~: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Scripts and Modules** (`sec-ecmascript-language-scripts-and-modules`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: script parsing/evaluation; module linking; live bindings; cycles; async module evaluation.
-  - Linked local regression evidence: property: tests/property/module-declaration-instantiation.property.test.ts, tests/property/module-linking.property.test.ts; E2E: modules, module_re_exports.
-  - Known blockers: Exact clause partitions remain incomplete for imported live bindings, module namespace exotics, cyclic evaluation, dynamic import, and top-level await.
+  - Linked local regression evidence: property: tests/property/module-declaration-instantiation.property.test.ts, tests/property/module-import-binding.property.test.ts, tests/property/module-linking.property.test.ts; E2E: modules, module_re_exports.
+  - Known blockers: Exact clause partitions remain incomplete for module namespace exotics, cyclic evaluation beyond binding instantiation, dynamic import, top-level await, and remaining import/export binding forms.
   - [ ] `sec-ecmascript-language-scripts-and-modules` — ECMAScript Language: Scripts and Modules: exact disposition and partitions missing.
   - [ ] `sec-scripts` — Scripts: exact disposition and partitions missing.
   - [ ] `sec-scripts-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.

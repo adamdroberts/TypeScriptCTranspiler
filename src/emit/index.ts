@@ -554,6 +554,7 @@ class Emitter {
      * independently of the statement that first evaluates a declaration. */
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     private moduleVarDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
+    private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -14835,7 +14836,12 @@ class Emitter {
     }
 
     private isTest262DynamicGlobalReference(id: ts.Identifier): boolean {
-        if (!this.options.test262Observation || !this.isTest262ScriptSourceFile(id.getSourceFile())) {
+        const source = id.getSourceFile();
+        if (
+            !this.options.test262Observation ||
+            !this.isJavaScriptSourceFile(source) ||
+            (!this.isTest262ScriptSourceFile(source) && !ts.isExternalModule(source))
+        ) {
             return false;
         }
         return this.isTest262OutOfBandIdentifier(id);
@@ -14979,6 +14985,13 @@ class Emitter {
 
     run(): EmittedProgram {
         const emitOrder = this.graph.emitOrder ?? this.graph.topoOrder;
+        // Binding identities must exist before any importer is emitted. Source
+        // file order is not dependency order, so derive every module plan in
+        // one program-wide preparation pass.
+        for (const modId of emitOrder) {
+            const info = this.graph.modules.get(modId);
+            if (info) this.collectModuleVarBindings(info.sf, modId);
+        }
         this.analyzeReferencedTopLevelFunctions(emitOrder);
         // Emit each module in program order so type-only dependencies can still
         // contribute declarations; only runtime-reachable modules are called
@@ -15595,6 +15608,8 @@ class Emitter {
         if (decl && ts.isFunctionDeclaration(decl) && !this.isTopLevelValueDeclaration(decl)) {
             return this.localFunctionCName(decl);
         }
+        const moduleVar = sym ? this.moduleVarBindings.get(sym) : undefined;
+        if (moduleVar) return moduleVar.cName;
         if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
             const parts = [...this.declarationNamespaceParts(decl), id.text];
             return mangleIdent(parts.join("_"));
@@ -15884,6 +15899,11 @@ class Emitter {
         }
         if (ts.isExportAssignment(decl)) {
             return this.defaultExportCName(decl);
+        }
+        if (ts.isVariableDeclaration(decl) && ts.isIdentifier(decl.name)) {
+            const symbol = this.symbolForIdentifier(decl.name);
+            const moduleVar = symbol ? this.moduleVarBindings.get(symbol) : undefined;
+            if (moduleVar) return moduleVar.cName;
         }
         const name = this.declarationName(decl);
         if (name) return this.declaredName(name);
@@ -23082,6 +23102,12 @@ class Emitter {
         if (closureBinding) return closureBinding.type;
         const emittedStorage = sym ? this.symbolStorageTypes.get(sym) : undefined;
         if (emittedStorage) return emittedStorage;
+        const aliasTarget = this.importAliasTargetDeclaration(id);
+        if (aliasTarget && ts.isVariableDeclaration(aliasTarget) && ts.isIdentifier(aliasTarget.name)) {
+            const targetSymbol = this.symbolForIdentifier(aliasTarget.name);
+            const targetStorage = targetSymbol ? this.symbolStorageTypes.get(targetSymbol) : undefined;
+            if (targetStorage) return targetStorage;
+        }
         const requireDestructureType = this.requireDestructureBindingType(id);
         if (requireDestructureType) return requireDestructureType;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -23229,7 +23255,9 @@ class Emitter {
      * shared by direct declarations, nested blocks, and loop declarations;
      * function, class, and namespace bodies are independent declaration
      * scopes and therefore terminate the walk. */
-    private collectModuleVarBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
+    private collectModuleVarBindings(sf: ts.SourceFile, modId: string): ModuleVarBindingPlan[] {
+        const prepared = this.moduleVarBindingsBySource.get(sf);
+        if (prepared) return prepared;
         if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
         const plans: ModuleVarBindingPlan[] = [];
         const visit = (node: ts.Node): void => {
@@ -23250,18 +23278,15 @@ class Emitter {
                 )) === 0
             ) {
                 if (!ts.isIdentifier(node.name)) {
-                    unsupported(
-                        node.name,
-                        "module var declaration instantiation requires identifier bindings",
-                    );
+                    // The existing binding-pattern lowering owns its stable
+                    // fail-closed diagnostic until it joins this shared plan.
+                    return;
                 }
                 const symbol = this.symbolForIdentifier(node.name);
-                if (!symbol) {
-                    unsupported(node.name, "module var binding could not be resolved");
-                }
+                if (!symbol) return;
                 let plan = this.moduleVarBindings.get(symbol);
                 if (!plan) {
-                    const cName = this.declaredName(node.name);
+                    const cName = `${modId}_${this.declaredName(node.name)}`;
                     plan = {
                         symbol,
                         name: node.name,
@@ -23270,6 +23295,7 @@ class Emitter {
                         gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`),
                     };
                     this.moduleVarBindings.set(symbol, plan);
+                    this.symbolStorageTypes.set(symbol, T_VALUE);
                     plans.push(plan);
                 }
                 plan.declarations.push(node);
@@ -23278,11 +23304,12 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         visit(sf);
+        this.moduleVarBindingsBySource.set(sf, plans);
         return plans;
     }
 
     private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
-        for (const binding of this.collectModuleVarBindings(sf)) {
+        for (const binding of this.collectModuleVarBindings(sf, this.currentModuleId)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
             this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
             this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
@@ -46415,9 +46442,110 @@ class Emitter {
         };
     }
 
+    /** Import bindings are immutable References to an exporter-owned slot.
+     * Reads continue through the checker-resolved alias; every write form
+     * shares this rejection path after performing the evaluations required by
+     * its operator. */
+    private immutableImportBindingIdentifier(expression: ts.Expression): ts.Identifier | null {
+        const target = this.unwrapTransparentExpression(expression);
+        if (!ts.isIdentifier(target)) return null;
+        const symbol = this.checker.getSymbolAtLocation(target);
+        if (!symbol || (symbol.flags & ts.SymbolFlags.Alias) === 0) return null;
+        return (symbol.declarations ?? []).some((declaration) =>
+            ts.isImportSpecifier(declaration) ||
+            ts.isImportClause(declaration) ||
+            ts.isNamespaceImport(declaration)
+        ) ? target : null;
+    }
+
+    private immutableImportWriteFailure(value: string): string {
+        return `({ (void)(${value}); ` +
+            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable import binding")); ` +
+            `tsc_value_undefined(); })`;
+    }
+
+    private dynamicCompoundAssignmentOperation(op: ts.SyntaxKind): string | null {
+        return op === ts.SyntaxKind.PlusEqualsToken ? "tsc_value_add" :
+            op === ts.SyntaxKind.MinusEqualsToken ? "tsc_value_sub" :
+            op === ts.SyntaxKind.AsteriskEqualsToken ? "tsc_value_mul" :
+            op === ts.SyntaxKind.AsteriskAsteriskEqualsToken ? "tsc_value_pow" :
+            op === ts.SyntaxKind.SlashEqualsToken ? "tsc_value_div" :
+            op === ts.SyntaxKind.PercentEqualsToken ? "tsc_value_mod" :
+            op === ts.SyntaxKind.AmpersandEqualsToken ? "tsc_value_bit_and" :
+            op === ts.SyntaxKind.BarEqualsToken ? "tsc_value_bit_or" :
+            op === ts.SyntaxKind.CaretEqualsToken ? "tsc_value_bit_xor" :
+            op === ts.SyntaxKind.LessThanLessThanEqualsToken ? "tsc_value_shl" :
+            op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ? "tsc_value_shr" :
+            op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ? "tsc_value_ushr" :
+            null;
+    }
+
+    private emitImmutableImportUpdate(
+        operand: ts.Expression,
+        op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
+    ): EmitResult | null {
+        const binding = this.immutableImportBindingIdentifier(operand);
+        if (!binding) return null;
+        const current = this.emitExpr(binding);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: current, target: T_VALUE, node: binding },
+        ], ([value]) => {
+            const numeric = this.freshTemp("_import_update_numeric");
+            const next = this.freshTemp("_import_update_next");
+            const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+            return `({ tsc_value_t ${numeric} = tsc_value_to_numeric(${value}); ` +
+                `tsc_value_t ${next} = ${operation}(${numeric}); ` +
+                `${this.immutableImportWriteFailure(next)}; })`;
+        });
+    }
+
+    private emitImmutableImportAssignment(
+        bin: ts.BinaryExpression,
+        op: ts.SyntaxKind,
+    ): EmitResult | null {
+        const binding = this.immutableImportBindingIdentifier(bin.left);
+        if (!binding) return null;
+        const rhs = this.emitExpr(bin.right);
+        if (op === ts.SyntaxKind.EqualsToken) {
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: rhs, target: T_VALUE, node: bin.right },
+            ], ([value]) => this.immutableImportWriteFailure(value));
+        }
+
+        const current = this.emitExpr(binding);
+        if (this.isLogicalAssignmentOperator(op)) {
+            const currentValue = this.coerce(current, T_VALUE, binding);
+            const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
+            const slot = this.freshTemp("_import_logical_current");
+            const assign = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                ? `tsc_value_is_truthy(${slot})`
+                : op === ts.SyntaxKind.BarBarEqualsToken
+                    ? `!tsc_value_is_truthy(${slot})`
+                    : `tsc_value_is_nullish(${slot})`;
+            return {
+                c: `({ tsc_value_t ${slot} = ${currentValue}; ` +
+                    `if (${assign}) ${this.immutableImportWriteFailure(rhsValue)}; ${slot}; })`,
+                ty: T_VALUE,
+            };
+        }
+
+        const operation = this.dynamicCompoundAssignmentOperation(op);
+        if (!operation) unsupported(bin, `unsupported immutable import assignment ${ts.SyntaxKind[op]}`);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: current, target: T_VALUE, node: binding },
+            { value: rhs, target: T_VALUE, node: bin.right },
+        ], ([left, right]) => {
+            const next = this.freshTemp("_import_compound_next");
+            return `({ tsc_value_t ${next} = ${operation}(${left}, ${right}); ` +
+                `${this.immutableImportWriteFailure(next)}; })`;
+        });
+    }
+
     private emitPrefixUnary(pu: ts.PrefixUnaryExpression): EmitResult {
         const op = pu.operator;
         if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
+            const importUpdate = this.emitImmutableImportUpdate(pu.operand, op);
+            if (importUpdate) return importUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(pu.operand, op, true);
             if (globalUpdate) return globalUpdate;
             const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
@@ -46588,6 +46716,8 @@ class Emitter {
 
     private emitPostfixUnary(pu: ts.PostfixUnaryExpression): EmitResult {
         if (pu.operator === ts.SyntaxKind.PlusPlusToken || pu.operator === ts.SyntaxKind.MinusMinusToken) {
+            const importUpdate = this.emitImmutableImportUpdate(pu.operand, pu.operator);
+            if (importUpdate) return importUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(
                 pu.operand,
                 pu.operator,
@@ -47724,6 +47854,9 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult {
+        const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
+        if (immutableImportAssignment) return immutableImportAssignment;
+
         const globalAssignment = this.emitTest262GlobalAssignment(bin, op);
         if (globalAssignment) return globalAssignment;
 
