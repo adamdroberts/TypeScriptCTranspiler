@@ -10,6 +10,7 @@ export interface CcOptions {
     linkFlags?: string[];
     release?: boolean;
     verbose?: boolean;
+    stderrWriter?: (message: string) => void;
 }
 
 export interface CcResult {
@@ -74,7 +75,9 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
         let stderr = "";
         proc.stderr.on("data", (d) => (stderr += d.toString()));
         proc.on("close", (code) => {
-            if (stderr && (code !== 0 || opts.verbose)) process.stderr.write(stderr);
+            if (stderr && (code !== 0 || opts.verbose)) {
+                (opts.stderrWriter ?? ((message: string) => process.stderr.write(message)))(stderr);
+            }
             resolve({ exitCode: code ?? 1, stderr });
         });
     });
@@ -122,7 +125,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
             "-o",
             object,
         ];
-        const result = await spawnCompiler(compiler, args, opts.verbose);
+        const result = await spawnCompiler(compiler, args, opts.verbose, opts.stderrWriter);
         if (result.exitCode !== 0) return result;
     }
 
@@ -134,13 +137,14 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
     linkArgs.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) linkArgs.push("-l" + lib);
     linkArgs.push("-o", opts.output);
-    return spawnCompiler(cxxCommand(), linkArgs, opts.verbose);
+    return spawnCompiler(cxxCommand(), linkArgs, opts.verbose, opts.stderrWriter);
 }
 
 function spawnCompiler(
     command: string,
     args: readonly string[],
     verbose?: boolean,
+    stderrWriter?: (message: string) => void,
 ): Promise<CcResult> {
     if (verbose) {
         console.error(`[tsc2c] ${command} ${args.join(" ")}`);
@@ -150,7 +154,9 @@ function spawnCompiler(
         let stderr = "";
         proc.stderr.on("data", (d) => (stderr += d.toString()));
         proc.on("close", (code) => {
-            if (stderr && (code !== 0 || verbose)) process.stderr.write(stderr);
+            if (stderr && (code !== 0 || verbose)) {
+                (stderrWriter ?? ((message: string) => process.stderr.write(message)))(stderr);
+            }
             resolve({ exitCode: code ?? 1, stderr });
         });
     });

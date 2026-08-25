@@ -61,7 +61,11 @@ export function buildModuleGraph(
     program: ts.Program,
     libCoreDts: string,
     entry: string,
-    options_: { dynamicRequires?: DynamicRequireManifest } = {},
+    options_: {
+        dynamicRequires?: DynamicRequireManifest;
+        /** Ordered independent Script/Module roots evaluated in one program. */
+        initializationEntries?: readonly string[];
+    } = {},
 ): ModuleGraph {
     const modules = new Map<string, ModuleInfo>();
     const fileToModuleId = new Map<string, string>();
@@ -152,7 +156,18 @@ export function buildModuleGraph(
         visited.add(id);
         topo.push(id);
     }
-    visit(entryModuleId);
+    const initializationEntries = options_.initializationEntries ?? [entry];
+    const seenInitializationEntries = new Set<string>();
+    for (const initializationEntry of initializationEntries) {
+        const absolute = path.resolve(initializationEntry);
+        if (seenInitializationEntries.has(absolute)) {
+            throw new Error(`duplicate initialization entry: ${initializationEntry}`);
+        }
+        seenInitializationEntries.add(absolute);
+        const rootId = fileToModuleId.get(absolute);
+        if (!rootId) throw new Error(`initialization entry not found in module graph: ${initializationEntry}`);
+        visit(rootId);
+    }
 
     return { modules, emitOrder: [...modules.keys()], topoOrder: topo, entryModuleId, fileToModuleId };
 }

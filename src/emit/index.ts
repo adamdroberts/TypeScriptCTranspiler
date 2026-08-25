@@ -417,15 +417,28 @@ export interface EmittedProgram {
     usesLibuv: boolean;
 }
 
+export interface Test262NativeObservationPlan {
+    readonly kind: "test262-native-observation";
+    readonly scenarioId: string;
+    /** Independent global Script records, in evaluation order. */
+    readonly setupEntries: readonly string[];
+    /** The root Script or Module record under test. */
+    readonly testEntry: string;
+    readonly async: boolean;
+}
+
+export interface EmitProgramOptions {
+    nativeAddons?: NativeAddonManifest;
+    dynamicRequires?: DynamicRequireManifest;
+    runtimeCode?: RuntimeCodeManifest;
+    unsafeEval?: boolean;
+    test262Observation?: Test262NativeObservationPlan;
+}
+
 export function emitProgram(
     graph: ModuleGraph,
     checker: ts.TypeChecker,
-    options: {
-        nativeAddons?: NativeAddonManifest;
-        dynamicRequires?: DynamicRequireManifest;
-        runtimeCode?: RuntimeCodeManifest;
-        unsafeEval?: boolean;
-    } = {},
+    options: EmitProgramOptions = {},
 ): EmittedProgram {
     const em = new Emitter(checker, graph, options);
     return em.run();
@@ -564,12 +577,7 @@ class Emitter {
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
-        private options: {
-            nativeAddons?: NativeAddonManifest;
-            dynamicRequires?: DynamicRequireManifest;
-            runtimeCode?: RuntimeCodeManifest;
-            unsafeEval?: boolean;
-        } = {},
+        private options: EmitProgramOptions = {},
     ) {}
 
     private freshTemp(prefix = "_t"): string {
@@ -14739,6 +14747,12 @@ class Emitter {
         return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
     }
 
+    private isTest262HostBinding(id: ts.Identifier, name: string): boolean {
+        if (id.text !== name) return false;
+        const sym = this.symbolForIdentifier(id);
+        return !sym || (sym.declarations ?? []).every((decl) => decl.getSourceFile().isDeclarationFile);
+    }
+
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
         name: ts.PropertyName,
         seenConsts: Set<ts.Symbol>,
@@ -14946,13 +14960,61 @@ class Emitter {
             out.line("}");
             out.line();
         }
-        // main(): bootstrap, then call mod_inits in topo order.
+        // main(): bootstrap, then evaluate one canonical ordered root graph.
         out.line("int main(int argc, char** argv) {");
         out.line("    tsc_bootstrap(argc, argv);");
-        for (const modId of this.graph.topoOrder) {
-            out.line(`    mod_init_${modId}();`);
+        const observation = this.options.test262Observation;
+        if (observation) {
+            const setupIds = new Set(observation.setupEntries.map((filename) => {
+                const moduleId = this.graph.fileToModuleId.get(path.resolve(filename));
+                if (!moduleId) throw new Error(`Test262 setup entry is absent from the module graph: ${filename}`);
+                return moduleId;
+            }));
+            const testId = this.graph.fileToModuleId.get(path.resolve(observation.testEntry));
+            if (!testId || testId !== this.graph.entryModuleId) {
+                throw new Error("Test262 observation test entry differs from the module-graph entry");
+            }
+            const scenario = escapeCString(observation.scenarioId);
+            out.line("    tsc_test262_begin();");
+            for (const [index, modId] of this.graph.topoOrder.entries()) {
+                const origin = setupIds.has(modId)
+                    ? "setup-script"
+                    : modId === testId
+                        ? "test-source"
+                        : "module-graph";
+                const frame = `_test262_frame_${index}`;
+                out.line("    {");
+                out.line(`        tsc_try_frame_t ${frame};`);
+                out.line(`        tsc_try_push(&${frame});`);
+                out.line(`        if (setjmp(${frame}.jb) == 0) {`);
+                out.line(`            mod_init_${modId}();`);
+                out.line("            tsc_try_pop();");
+                out.line("        } else {");
+                out.line("            tsc_try_pop();");
+                out.line(`            tsc_test262_write_throw("${scenario}", "${origin}", tsc_current_error_value());`);
+                out.line("            return 0;");
+                out.line("        }");
+                out.line("    }");
+            }
+            out.line("    {");
+            out.line("        tsc_try_frame_t _test262_event_frame;");
+            out.line("        tsc_try_push(&_test262_event_frame);");
+            out.line("        if (setjmp(_test262_event_frame.jb) == 0) {");
+            out.line("            tsc_run_event_loop();");
+            out.line("            tsc_try_pop();");
+            out.line("        } else {");
+            out.line("            tsc_try_pop();");
+            out.line(`            tsc_test262_write_throw("${scenario}", "async-completion", tsc_current_error_value());`);
+            out.line("            return 0;");
+            out.line("        }");
+            out.line("    }");
+            out.line(`    tsc_test262_write_normal("${scenario}", ${observation.async ? "true" : "false"});`);
+        } else {
+            for (const modId of this.graph.topoOrder) {
+                out.line(`    mod_init_${modId}();`);
+            }
+            out.line("    tsc_run_event_loop();");
         }
-        out.line("    tsc_run_event_loop();");
         out.line("    return 0;");
         out.line("}");
         return {
@@ -47532,6 +47594,20 @@ class Emitter {
         }
         const calleeId = call.expression;
         const name = calleeId.text;
+        if (
+            name === "print" &&
+            this.options.test262Observation &&
+            this.isTest262HostBinding(calleeId, "print")
+        ) {
+            const specs = call.arguments.map((argument) => ({
+                value: this.emitExpr(argument),
+                target: T_VALUE,
+                node: argument,
+            }));
+            return this.emitSequencedExpr(T_VOID, specs, (values) =>
+                `tsc_test262_print_n(${values.length}${values.length > 0 ? `, ${values.join(", ")}` : ""})`
+            );
+        }
         if (name === "eval") {
             return this.emitUnsafeEvalCall(call);
         }

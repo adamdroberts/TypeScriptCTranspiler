@@ -33,6 +33,7 @@ import { requireCanonicalStressBinding } from "./matrix";
 import { validatePropertyJUnit } from "../property/run";
 import { buildEvidenceContainment, supervisedArguments } from "./process-supervision";
 import { requireCanonicalMergedShards } from "./check-claim";
+import { prepareNativeRequest } from "./native-host";
 
 describe("Test262 metadata and scenarios", () => {
     test("parses CRLF YAML and preserves exact negative phase/type", () => {
@@ -109,6 +110,113 @@ describe("Test262 metadata and scenarios", () => {
 });
 
 describe("host result contract", () => {
+    test("prepares separate global Scripts as one runner-owned native observation", async () => {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-host-self-test-"));
+        const artifactDirectory = path.join(root, "artifacts");
+        await fs.mkdir(artifactDirectory);
+        const setupSource = "function add(left, right) { return left + right; }\n";
+        const testSource = "if (add(20, 22) !== 42) throw new TypeError('bad setup realm'); print('native-ok');\n";
+        const scenarioId = "test/native-host-separate-scripts.js#sloppy";
+        const request: HostRequest = {
+            protocolVersion: hostProtocolVersion,
+            scenarioId,
+            testPath: "test/native-host-separate-scripts.js",
+            moduleBasePath: "test",
+            moduleFiles: [],
+            mode: "sloppy",
+            goal: "script",
+            raw: false,
+            setupScripts: [{
+                path: "harness/native-host-setup.js",
+                sha256: sha256Text(setupSource),
+                source: setupSource,
+            }],
+            testSource,
+            testSourceSha256: sha256Text(testSource),
+            async: false,
+            canBlock: null,
+            timeoutMs: 30_000,
+            artifactDirectory,
+        };
+        try {
+            const preparation = await prepareNativeRequest(request);
+            expect(preparation.kind).toBe("prepared-native");
+            if (preparation.kind !== "prepared-native") return;
+            const attestations = await attestScenarioArtifactSet(artifactDirectory, preparation.artifactPaths);
+            await auditNativeArtifactDelegation(
+                artifactDirectory,
+                attestations,
+                path.join(artifactDirectory, preparation.generatedCPath),
+                path.join(artifactDirectory, preparation.executablePath),
+            );
+            const generated = await fs.readFile(path.join(artifactDirectory, preparation.generatedCPath), "utf8");
+            expect(generated).toContain("native-host-setup.js");
+            expect(generated).toContain("native-host-separate-scripts.js");
+
+            const child = Bun.spawn([path.join(artifactDirectory, preparation.executablePath)], {
+                stdout: "pipe",
+                stderr: "pipe",
+            });
+            const [exitCode, stdout, stderr] = await Promise.all([
+                child.exited,
+                new Response(child.stdout).text(),
+                new Response(child.stderr).text(),
+            ]);
+            expect(exitCode).toBe(0);
+            expect(stderr).toBe("");
+            expect(parseHostObservation(JSON.parse(stdout))).toEqual({
+                protocolVersion: hostProtocolVersion,
+                scenarioId,
+                kind: "normal",
+                asyncCompletion: undefined,
+                stdout: "native-ok\n",
+                stderr: undefined,
+                nativeTranscript: undefined,
+            });
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    }, 60_000);
+
+    test("returns an attested compiler observation for an exact root parse failure", async () => {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-parse-self-test-"));
+        const artifactDirectory = path.join(root, "artifacts");
+        await fs.mkdir(artifactDirectory);
+        const testSource = "function broken( {\n";
+        const request: HostRequest = {
+            protocolVersion: hostProtocolVersion,
+            scenarioId: "test/native-host-parse.js#raw",
+            testPath: "test/native-host-parse.js",
+            moduleBasePath: "test",
+            moduleFiles: [],
+            mode: "raw",
+            goal: "script",
+            raw: true,
+            setupScripts: [],
+            testSource,
+            testSourceSha256: sha256Text(testSource),
+            async: false,
+            canBlock: null,
+            timeoutMs: 30_000,
+            artifactDirectory,
+        };
+        try {
+            const preparation = await prepareNativeRequest(request);
+            expect(preparation.kind).toBe("compiler-error");
+            if (preparation.kind !== "compiler-error") return;
+            expect(preparation.observation).toMatchObject({
+                kind: "throw",
+                phase: "parse",
+                origin: "test-source",
+                errorConstructor: "SyntaxError",
+            });
+            expect(await fs.readFile(path.join(artifactDirectory, preparation.diagnosticsPath), "utf8"))
+                .toContain("native-host-parse.js");
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    });
+
     test("requires one canonical exact-byte identity for every merged shard", () => {
         const canonical = [
             { index: 0, total: 2, sha256: "a".repeat(64) },

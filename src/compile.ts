@@ -7,7 +7,10 @@ import * as os from "node:os";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
 import { buildModuleGraph } from "./resolve";
-import { emitProgram } from "./emit/index";
+import {
+    emitProgram,
+    type Test262NativeObservationPlan,
+} from "./emit/index";
 import { invokeCc } from "./link/cc";
 import { staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import {
@@ -39,6 +42,16 @@ import {
 export interface CompileOptions {
     entry: string;
     output: string;
+    /** Independent source records that share this compilation/Realm boundary. */
+    additionalRoots?: readonly string[];
+    /** Ordered roots to initialize; dependencies are traversed by the module graph. */
+    initializationEntries?: readonly string[];
+    /** Exact files whose parse/binding goal is Module even without import/export syntax. */
+    moduleRoots?: readonly string[];
+    /** Native structured observation mode used only by the non-delegating Test262 host. */
+    test262Observation?: Test262NativeObservationPlan;
+    /** Override compiler diagnostic output without changing its contents. */
+    diagnosticWriter?: (message: string) => void;
     emitCOnly?: boolean;
     buildDir?: string;
     verbose?: boolean;
@@ -79,6 +92,7 @@ const RUNTIME_SOURCES = [
 ];
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const DISPATCH_RUNTIME_SOURCES = ["tsc_dispatch.c"];
+const TEST262_RUNTIME_SOURCES = ["tsc_test262.c"];
 const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
@@ -698,9 +712,10 @@ function containsNativeAddonPackageReference(value: unknown, packageRoot: string
 }
 
 export async function compile(opts: CompileOptions): Promise<CompileResult> {
+    const writeDiagnostic = opts.diagnosticWriter ?? ((message: string) => process.stderr.write(message));
     const dispatchMode = opts.dispatch ?? "threaded";
     if (dispatchMode !== "threaded" && dispatchMode !== "serial") {
-        process.stderr.write(`tsc2c: unsupported dispatch mode: ${dispatchMode}\n`);
+        writeDiagnostic(`tsc2c: unsupported dispatch mode: ${dispatchMode}\n`);
         return { exitCode: 3, buildDir: opts.buildDir ?? "", mainC: "" };
     }
     const pkg = resolvePackageRoot();
@@ -716,7 +731,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires = await loadDynamicRequireManifest(opts.dynamicRequireManifest);
         runtimeCode = await loadRuntimeCodeManifest(opts.runtimeCodeManifest);
     } catch (e) {
-        process.stderr.write(`tsc2c: ${(e as Error).message}\n`);
+        writeDiagnostic(`tsc2c: ${(e as Error).message}\n`);
         return { exitCode: 3, buildDir, mainC: "" };
     }
     const usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
@@ -724,6 +739,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const { program, checker, entrySourceFile, libCoreDts } = buildProgram({
         entry: opts.entry,
         packageRoot: pkg,
+        additionalRoots: opts.additionalRoots,
+        moduleRoots: opts.moduleRoots,
         dynamicRequires,
         customConditions: opts.customConditions,
     });
@@ -735,7 +752,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
-            process.stderr.write(
+            writeDiagnostic(
                 formatUnsupported(
                     new UnsupportedError(d.node, d.message),
                     d.node.getSourceFile(),
@@ -747,12 +764,13 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
 
     const pre = ts.getPreEmitDiagnostics(program);
     if (pre.length > 0) {
-        process.stderr.write(formatTsDiagnostics(pre));
+        writeDiagnostic(formatTsDiagnostics(pre));
         return { exitCode: 2, buildDir, mainC: "" };
     }
 
     const graph = buildModuleGraph(program, libCoreDts, entrySourceFile.fileName, {
         dynamicRequires,
+        initializationEntries: opts.initializationEntries,
     });
     if (opts.verbose) {
         console.error(
@@ -766,14 +784,15 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         runtimeCode,
         unsafeEval: opts.unsafeEval,
+        test262Observation: opts.test262Observation,
     });
     if (diagnostics.length > 0) {
-        for (const d of diagnostics) process.stderr.write(d + "\n");
+        for (const d of diagnostics) writeDiagnostic(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
     }
     const libuv = usesLibuv ? findLibuvLinkOptions() : null;
     if (usesLibuv && !libuv) {
-        process.stderr.write(
+        writeDiagnostic(
             "tsc2c: this program uses a libuv-backed fs.promises subset, but libuv was not found.\n" +
             "tsc2c: install libuv or set TSC2C_LIBUV to an installed libuv shared library.\n",
         );
@@ -789,6 +808,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         ...RUNTIME_SOURCES,
         ...(usesNodeEmbed ? NODE_EMBED_RUNTIME_SOURCES : []),
         ...(usesDispatch ? DISPATCH_RUNTIME_SOURCES : []),
+        ...(opts.test262Observation ? TEST262_RUNTIME_SOURCES : []),
     ];
     for (const f of runtimeSources) {
         await fs.copyFile(path.join(runtimeSrc, f), path.join(buildDir, f));
@@ -805,7 +825,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const pcFlags = await pcre2Flags();
     const dispatchLink = usesDispatch && dispatchMode === "threaded" ? findDispatchLinkOptions() : null;
     if (usesDispatch && dispatchMode === "threaded" && !dispatchLink) {
-        process.stderr.write(
+        writeDiagnostic(
             "tsc2c: this program uses the dispatch API, which requires libdispatch (swift-corelibs-libdispatch).\n" +
             "tsc2c: install it (build https://github.com/swiftlang/swift-corelibs-libdispatch with clang+cmake,\n" +
             "tsc2c: then `ninja install`), or point TSC2C_LIBDISPATCH_PREFIX at an install prefix containing\n" +
@@ -816,7 +836,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
     const nodeEmbed = usesNodeEmbed ? findNodeEmbedLinkOptions() : null;
     if (usesNodeEmbed && !nodeEmbed) {
-        process.stderr.write(
+        writeDiagnostic(
             "tsc2c: embedded Node bridge requires link inputs; set TSC2C_LIBNODE to libnode.so/libnode.a and optionally TSC2C_NODE_INCLUDE to Node headers\n",
         );
         if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
@@ -854,9 +874,10 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         ],
         release: !!opts.release,
         verbose: !!opts.verbose,
+        stderrWriter: writeDiagnostic,
     });
     if (cc.exitCode !== 0) {
-        process.stderr.write(`tsc2c: gcc exited ${cc.exitCode}\n`);
+        writeDiagnostic(`tsc2c: gcc exited ${cc.exitCode}\n`);
         if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
         return { exitCode: cc.exitCode, buildDir, mainC };
     }

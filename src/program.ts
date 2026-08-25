@@ -18,6 +18,10 @@ import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
 export interface BuildProgramOpts {
     entry: string;
     packageRoot: string;
+    /** Additional independent source records compiled in the same program. */
+    additionalRoots?: readonly string[];
+    /** Source records that must be parsed/bound with the ECMAScript Module goal. */
+    moduleRoots?: readonly string[];
     dynamicRequires?: DynamicRequireManifest;
     customConditions?: string[];
 }
@@ -66,15 +70,33 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         maxNodeModuleJsDepth: 5,
     };
 
-    const rootNames = [
-        libCoreDts,
+    const sourceRoots = [...new Set([
         opts.entry,
-        ...collectStaticRequireRoots(opts.entry, compilerOptions, opts.dynamicRequires),
-    ];
+        ...(opts.additionalRoots ?? []),
+    ].map((filename) => path.resolve(filename)))];
+    const discoveredRoots = sourceRoots.flatMap((root) =>
+        collectStaticRequireRoots(root, compilerOptions, opts.dynamicRequires)
+    );
+    const rootNames = [libCoreDts, ...new Set([...sourceRoots, ...discoveredRoots])];
+
+    const moduleRoots = new Set((opts.moduleRoots ?? []).map((filename) => path.resolve(filename)));
+    const compilerHost = ts.createCompilerHost(compilerOptions);
+    const getSourceFile = compilerHost.getSourceFile.bind(compilerHost);
+    compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+        const sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        if (sourceFile && moduleRoots.has(path.resolve(sourceFile.fileName))) {
+            // TypeScript otherwise infers the goal from import/export syntax. Test262
+            // also contains empty or syntax-free Module records, so bind the requested
+            // goal out of band without changing one source byte.
+            (sourceFile as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= sourceFile;
+        }
+        return sourceFile;
+    };
 
     const program = ts.createProgram({
         rootNames,
         options: compilerOptions,
+        host: compilerHost,
     });
 
     const checker = program.getTypeChecker();
