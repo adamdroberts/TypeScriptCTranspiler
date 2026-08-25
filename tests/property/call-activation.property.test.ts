@@ -162,6 +162,20 @@ function nativeSource(plans: readonly ActivationPlan[]): string {
             }
             var aliasFunction = aliasTarget;
             console.log(String(aliasFunction({}, "name", undefined)));
+            function indirectTarget(first, second, third, fourth) {
+                return String(arguments.length) + ":" + String(first) + ":" +
+                    String(third) + ":" + String(fourth);
+            }
+            function alternateIndirectTarget() {
+                return "alternate:" + String(arguments.length) + ":" +
+                    String(arguments[0]) + ":" + String(arguments[1]);
+            }
+            function invokeDynamicAlias(options) {
+                var callable = options && options.callable || indirectTarget;
+                return callable("first", "second");
+            }
+            console.log(String(invokeDynamicAlias(null)));
+            console.log(String(invokeDynamicAlias({ callable: alternateIndirectTarget })));
             var emptyFunctionExpression = function (first = "default", later) {};
             function callableIdentity(value) { return value; }
             var returnedEmptyFunction = callableIdentity(emptyFunctionExpression);
@@ -213,6 +227,8 @@ test("ordinary calls preserve one source-derived activation and parameter-map mo
                 "true",
                 "true",
                 "true",
+                "2:first:undefined:undefined",
+                "alternate:2:first:second",
                 "0:undefined",
             ]);
         }

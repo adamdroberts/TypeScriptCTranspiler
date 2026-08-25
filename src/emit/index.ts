@@ -45495,6 +45495,9 @@ class Emitter {
             if (declaredTy?.kind === "value" && ty.kind === "void") {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
+            if (declaredTy?.kind === "value" && ty.kind === "function") {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
+            }
             if (declaredTy?.kind === "value" && ty.kind !== "value") {
                 return {
                     c: this.unboxDynamicValue(this.identifierRead(expr), ty, expr),
