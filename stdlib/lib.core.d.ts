@@ -1026,7 +1026,7 @@ declare module "node:process" {
 declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
 declare function parseFloat(value: any, ...ignored: any[]): number;
 declare function structuredClone<T>(value: T, ...ignored: any[]): T;
-declare function encodeURI(uri: string, ...ignored: any[]): string;
+declare function encodeURI(uri: string | number | boolean, ...ignored: any[]): string;
 declare function encodeURIComponent(uriComponent: string | number | boolean, ...ignored: any[]): string;
 declare function decodeURI(encodedURI: string, ...ignored: any[]): string;
 declare function decodeURIComponent(encodedURIComponent: string, ...ignored: any[]): string;

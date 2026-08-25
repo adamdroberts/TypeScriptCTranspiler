@@ -73,6 +73,10 @@ typedef struct tsc_str {
 | `tsc_str_trim_start` | `tsc_str_t*` | `.trimStart()` |
 | `tsc_str_trim_end` | `tsc_str_t*` | `.trimEnd()` |
 | `tsc_str_repeat(s, n)` | `tsc_str_t*` | `.repeat(n)` |
+| `tsc_str_is_well_formed(s)` | `bool` | Tests the canonical UTF-8/WTF-8 representation for isolated UTF-16 surrogates. |
+| `tsc_str_to_well_formed(s)` | `tsc_str_t*` | Replaces every isolated surrogate with U+FFFD while preserving scalar sequences. |
+| `tsc_str_encode_uri(s)` / `tsc_str_encode_uri_component(s)` | `tsc_str_t*` | URI Encode over the shared strict scalar codec, with the URI/component unescaped-set partition. |
+| `tsc_str_decode_uri(s)` / `tsc_str_decode_uri_component(s)` | `tsc_str_t*` | URI Decode with canonical UTF-8 validation and URI reserved-escape preservation. |
 | `tsc_str_pad_start(s, len, pad)` | `tsc_str_t*` | `.padStart(len, pad)` |
 | `tsc_str_pad_end(s, len, pad)` | `tsc_str_t*` | `.padEnd(len, pad)` |
 | `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match), with JS replacement-string tokens |

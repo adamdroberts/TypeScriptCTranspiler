@@ -462,6 +462,88 @@ size_t write_utf8_code_point(char* out, uint32_t cp) {
     return 4;
 }
 
+static bool is_utf8_continuation(unsigned char byte) {
+    return byte >= 0x80 && byte <= 0xbf;
+}
+
+/*
+ * Validate one exact canonical UTF-8 sequence. The internal string encoding
+ * is WTF-8, so callers that operate on ECMAScript code units may admit the
+ * three-byte surrogate forms; scalar-only boundaries such as URI Decode do
+ * not. No caller infers validity merely from the number of fixture shapes.
+ */
+static bool decode_canonical_utf8(
+    const unsigned char* bytes,
+    size_t length,
+    bool allow_surrogate,
+    uint32_t* code_point
+) {
+    if (!bytes || length == 0 || length > 4) return false;
+    unsigned char first = bytes[0];
+    uint32_t value = 0;
+    if (length == 1) {
+        if (first > 0x7f) return false;
+        value = first;
+    } else if (length == 2) {
+        if (first < 0xc2 || first > 0xdf || !is_utf8_continuation(bytes[1])) {
+            return false;
+        }
+        value = ((uint32_t)(first & 0x1f) << 6) |
+            (uint32_t)(bytes[1] & 0x3f);
+    } else if (length == 3) {
+        if (first < 0xe0 || first > 0xef ||
+            !is_utf8_continuation(bytes[1]) ||
+            !is_utf8_continuation(bytes[2])) {
+            return false;
+        }
+        if (first == 0xe0 && bytes[1] < 0xa0) return false;
+        if (first == 0xed && !allow_surrogate && bytes[1] >= 0xa0) return false;
+        value = ((uint32_t)(first & 0x0f) << 12) |
+            ((uint32_t)(bytes[1] & 0x3f) << 6) |
+            (uint32_t)(bytes[2] & 0x3f);
+    } else {
+        if (first < 0xf0 || first > 0xf4 ||
+            !is_utf8_continuation(bytes[1]) ||
+            !is_utf8_continuation(bytes[2]) ||
+            !is_utf8_continuation(bytes[3])) {
+            return false;
+        }
+        if (first == 0xf0 && bytes[1] < 0x90) return false;
+        if (first == 0xf4 && bytes[1] > 0x8f) return false;
+        value = ((uint32_t)(first & 0x07) << 18) |
+            ((uint32_t)(bytes[1] & 0x3f) << 12) |
+            ((uint32_t)(bytes[2] & 0x3f) << 6) |
+            (uint32_t)(bytes[3] & 0x3f);
+    }
+    if (!allow_surrogate && value >= 0xd800 && value <= 0xdfff) return false;
+    if (value > 0x10ffff) return false;
+    if (code_point) *code_point = value;
+    return true;
+}
+
+static size_t canonical_utf8_width(unsigned char first) {
+    if (first <= 0x7f) return 1;
+    if (first >= 0xc2 && first <= 0xdf) return 2;
+    if (first >= 0xe0 && first <= 0xef) return 3;
+    if (first >= 0xf0 && first <= 0xf4) return 4;
+    return 0;
+}
+
+static bool decode_wtf8_at_strict(
+    const tsc_str_t* string,
+    size_t offset,
+    uint32_t* code_point,
+    size_t* width
+) {
+    if (!string || offset >= string->len) return false;
+    const unsigned char* bytes = (const unsigned char*)string->data + offset;
+    size_t actual_width = canonical_utf8_width(bytes[0]);
+    if (actual_width == 0 || actual_width > string->len - offset) return false;
+    if (!decode_canonical_utf8(bytes, actual_width, true, code_point)) return false;
+    if (width) *width = actual_width;
+    return true;
+}
+
 bool decode_utf8_at(const tsc_str_t* s, size_t pos, uint32_t* cp, size_t* adv) {
     if (pos >= s->len) return false;
     const unsigned char* p = (const unsigned char*)s->data + pos;
@@ -520,8 +602,6 @@ tsc_str_t* tsc_str_from_char_code_n(size_t n, ...) {
         if (is_high_surrogate(units[i]) && i + 1 < n && is_low_surrogate(units[i + 1])) {
             cp = surrogate_pair_to_code_point(units[i], units[i + 1]);
             i++;
-        } else if (is_high_surrogate(units[i]) || is_low_surrogate(units[i])) {
-            cp = 0xfffd;
         }
         len += utf8_len_for_code_point(cp);
     }
@@ -534,8 +614,6 @@ tsc_str_t* tsc_str_from_char_code_n(size_t n, ...) {
         if (is_high_surrogate(units[i]) && i + 1 < n && is_low_surrogate(units[i + 1])) {
             cp = surrogate_pair_to_code_point(units[i], units[i + 1]);
             i++;
-        } else if (is_high_surrogate(units[i]) || is_low_surrogate(units[i])) {
-            cp = 0xfffd;
         }
         pos += write_utf8_code_point(out + pos, cp);
     }
@@ -669,6 +747,57 @@ double tsc_str_code_point_at(const tsc_str_t* s, double idx) {
         pos += adv;
     }
     return NAN;
+}
+
+bool tsc_str_is_well_formed(const tsc_str_t* string) {
+    if (!string) return true;
+    size_t offset = 0;
+    while (offset < string->len) {
+        uint32_t code_point = 0;
+        size_t width = 0;
+        if (!decode_wtf8_at_strict(string, offset, &code_point, &width) ||
+            (code_point >= 0xd800 && code_point <= 0xdfff)) {
+            return false;
+        }
+        offset += width;
+    }
+    return true;
+}
+
+tsc_str_t* tsc_str_to_well_formed(const tsc_str_t* string) {
+    if (!string) return tsc_str_from_lit("", 0);
+    if (string->len == 0 || tsc_str_is_well_formed(string)) return (tsc_str_t*)string;
+    if (string->len > SIZE_MAX / 3) tsc_panic("well-formed string output is too large");
+
+    size_t output_length = 0;
+    size_t offset = 0;
+    while (offset < string->len) {
+        uint32_t code_point = 0;
+        size_t width = 0;
+        bool valid = decode_wtf8_at_strict(string, offset, &code_point, &width);
+        bool surrogate = valid && code_point >= 0xd800 && code_point <= 0xdfff;
+        output_length += !valid || surrogate ? 3 : width;
+        offset += valid ? width : 1;
+    }
+
+    tsc_str_t* result = str_alloc(output_length);
+    char* output = (char*)result->data;
+    size_t output_offset = 0;
+    offset = 0;
+    while (offset < string->len) {
+        uint32_t code_point = 0;
+        size_t width = 0;
+        bool valid = decode_wtf8_at_strict(string, offset, &code_point, &width);
+        bool surrogate = valid && code_point >= 0xd800 && code_point <= 0xdfff;
+        if (!valid || surrogate) {
+            output_offset += write_utf8_code_point(output + output_offset, 0xfffd);
+        } else {
+            memcpy(output + output_offset, string->data + offset, width);
+            output_offset += width;
+        }
+        offset += valid ? width : 1;
+    }
+    return result;
 }
 
 int64_t string_clamped_position(double value, int64_t len) {
@@ -1213,95 +1342,166 @@ tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b) {
     s->symbol_key = NULL;
     return s;
 }
-
-
-
-#include <ctype.h>
-#include <stdio.h>
-
-static bool is_uri_reserved(char c) {
-    switch (c) {
-        case ';': case '/': case '?': case ':': case '@': case '&': case '=': case '+': case '$': case ',': return true;
-        default: return false;
+static bool is_uri_always_unescaped(unsigned char code_unit) {
+    if ((code_unit >= 'A' && code_unit <= 'Z') ||
+        (code_unit >= 'a' && code_unit <= 'z') ||
+        (code_unit >= '0' && code_unit <= '9')) {
+        return true;
+    }
+    switch (code_unit) {
+        case '-': case '_': case '.': case '!': case '~':
+        case '*': case '\'': case '(': case ')':
+            return true;
+        default:
+            return false;
     }
 }
 
-static bool is_uri_unescaped(char c) {
-    if (isalnum((unsigned char)c)) return true;
-    switch (c) {
-        case '-': case '_': case '.': case '!': case '~': case '*': case '\'': case '(': case ')': return true;
-        default: return false;
+static bool is_uri_reserved(unsigned char code_unit) {
+    switch (code_unit) {
+        case ';': case '/': case '?': case ':': case '@': case '&':
+        case '=': case '+': case '$': case ',': case '#':
+            return true;
+        default:
+            return false;
     }
 }
 
-static bool is_uri_hash(char c) {
-    return c == '#';
+static _Noreturn void throw_uri_malformed(void) {
+    tsc_throw_error(TSC_ERROR_URI, tsc_str_from_lit("URI malformed", 13));
 }
 
-static tsc_str_t* tsc_encode_uri_impl(const tsc_str_t* s, bool component) {
-    size_t out_cap = s->len * 3 + 1;
-    char* out = (char*)TSC_GC_MALLOC_ATOMIC(out_cap);
-    size_t out_len = 0;
-    
-    for (size_t i = 0; i < s->len; i++) {
-        char c = s->data[i];
-        if (is_uri_unescaped(c) || (!component && (is_uri_reserved(c) || is_uri_hash(c)))) {
-            out[out_len++] = c;
-        } else {
-            snprintf(out + out_len, 4, "%%%02X", (unsigned char)c);
-            out_len += 3;
+static void append_percent_octet(char* output, size_t* output_length, unsigned char octet) {
+    static const char hexadecimal[] = "0123456789ABCDEF";
+    output[(*output_length)++] = '%';
+    output[(*output_length)++] = hexadecimal[octet >> 4];
+    output[(*output_length)++] = hexadecimal[octet & 0x0f];
+}
+
+static tsc_str_t* tsc_encode_uri_impl(const tsc_str_t* string, bool component) {
+    if (!string) string = tsc_str_from_lit("", 0);
+    if (string->len > (SIZE_MAX - 1) / 3) tsc_panic("URI encoding output is too large");
+    size_t output_capacity = string->len * 3 + 1;
+    char* output = (char*)TSC_GC_MALLOC_ATOMIC(output_capacity);
+    size_t output_length = 0;
+    size_t offset = 0;
+
+    while (offset < string->len) {
+        unsigned char first = (unsigned char)string->data[offset];
+        if (first <= 0x7f) {
+            if (is_uri_always_unescaped(first) || (!component && is_uri_reserved(first))) {
+                output[output_length++] = (char)first;
+            } else {
+                append_percent_octet(output, &output_length, first);
+            }
+            offset++;
+            continue;
         }
+
+        uint32_t code_point = 0;
+        size_t width = 0;
+        if (!decode_wtf8_at_strict(string, offset, &code_point, &width) ||
+            (code_point >= 0xd800 && code_point <= 0xdfff)) {
+            throw_uri_malformed();
+        }
+        for (size_t index = 0; index < width; index++) {
+            append_percent_octet(
+                output,
+                &output_length,
+                (unsigned char)string->data[offset + index]
+            );
+        }
+        offset += width;
     }
-    out[out_len] = '\0';
-    return tsc_str_from_lit(out, out_len);
+
+    output[output_length] = '\0';
+    return tsc_str_from_lit(output, output_length);
 }
 
-tsc_str_t* tsc_str_encode_uri(const tsc_str_t* s) {
-    return tsc_encode_uri_impl(s, false);
+tsc_str_t* tsc_str_encode_uri(const tsc_str_t* string) {
+    return tsc_encode_uri_impl(string, false);
 }
 
-tsc_str_t* tsc_str_encode_uri_component(const tsc_str_t* s) {
-    return tsc_encode_uri_impl(s, true);
+tsc_str_t* tsc_str_encode_uri_component(const tsc_str_t* string) {
+    return tsc_encode_uri_impl(string, true);
 }
 
-static int hex_val(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+static int uri_hex_value(unsigned char code_unit) {
+    if (code_unit >= '0' && code_unit <= '9') return (int)(code_unit - '0');
+    if (code_unit >= 'a' && code_unit <= 'f') return (int)(code_unit - 'a') + 10;
+    if (code_unit >= 'A' && code_unit <= 'F') return (int)(code_unit - 'A') + 10;
     return -1;
 }
 
-static tsc_str_t* tsc_decode_uri_impl(const tsc_str_t* s, bool component) {
-    char* out = (char*)TSC_GC_MALLOC_ATOMIC(s->len + 1);
-    size_t out_len = 0;
-    
-    for (size_t i = 0; i < s->len; i++) {
-        if (s->data[i] == '%' && i + 2 < s->len) {
-            int h1 = hex_val(s->data[i+1]);
-            int h2 = hex_val(s->data[i+2]);
-            if (h1 != -1 && h2 != -1) {
-                char decoded = (char)((h1 << 4) | h2);
-                if (!component && is_uri_reserved(decoded)) {
-                    out[out_len++] = '%';
-                    out[out_len++] = s->data[i+1];
-                    out[out_len++] = s->data[i+2];
-                } else {
-                    out[out_len++] = decoded;
-                }
-                i += 2;
-                continue;
-            }
-        }
-        out[out_len++] = s->data[i];
+static bool parse_uri_octet(const tsc_str_t* string, size_t offset, unsigned char* octet) {
+    if (offset + 3 > string->len || string->data[offset] != '%') return false;
+    int high = uri_hex_value((unsigned char)string->data[offset + 1]);
+    int low = uri_hex_value((unsigned char)string->data[offset + 2]);
+    if (high < 0 || low < 0) return false;
+    *octet = (unsigned char)((high << 4) | low);
+    return true;
+}
+
+static size_t leading_one_bits(unsigned char octet) {
+    size_t count = 0;
+    unsigned char mask = 0x80;
+    while ((octet & mask) != 0) {
+        count++;
+        mask >>= 1;
     }
-    out[out_len] = '\0';
-    return tsc_str_from_lit(out, out_len);
+    return count;
 }
 
-tsc_str_t* tsc_str_decode_uri(const tsc_str_t* s) {
-    return tsc_decode_uri_impl(s, false);
+static tsc_str_t* tsc_decode_uri_impl(const tsc_str_t* string, bool preserve_reserved) {
+    if (!string) string = tsc_str_from_lit("", 0);
+    char* output = (char*)TSC_GC_MALLOC_ATOMIC(string->len + 1);
+    size_t output_length = 0;
+    size_t offset = 0;
+
+    while (offset < string->len) {
+        if (string->data[offset] != '%') {
+            output[output_length++] = string->data[offset++];
+            continue;
+        }
+
+        size_t escape_start = offset;
+        unsigned char octets[4] = { 0, 0, 0, 0 };
+        if (!parse_uri_octet(string, offset, &octets[0])) throw_uri_malformed();
+        offset += 3;
+
+        size_t width = leading_one_bits(octets[0]);
+        if (width == 0) {
+            if (preserve_reserved && is_uri_reserved(octets[0])) {
+                memcpy(output + output_length, string->data + escape_start, 3);
+                output_length += 3;
+            } else {
+                output[output_length++] = (char)octets[0];
+            }
+            continue;
+        }
+        if (width == 1 || width > 4) throw_uri_malformed();
+
+        for (size_t index = 1; index < width; index++) {
+            if (!parse_uri_octet(string, offset, &octets[index])) throw_uri_malformed();
+            offset += 3;
+        }
+        uint32_t code_point = 0;
+        if (!decode_canonical_utf8(octets, width, false, &code_point)) {
+            throw_uri_malformed();
+        }
+        (void)code_point;
+        memcpy(output + output_length, octets, width);
+        output_length += width;
+    }
+
+    output[output_length] = '\0';
+    return tsc_str_from_lit(output, output_length);
 }
 
-tsc_str_t* tsc_str_decode_uri_component(const tsc_str_t* s) {
-    return tsc_decode_uri_impl(s, true);
+tsc_str_t* tsc_str_decode_uri(const tsc_str_t* string) {
+    return tsc_decode_uri_impl(string, true);
+}
+
+tsc_str_t* tsc_str_decode_uri_component(const tsc_str_t* string) {
+    return tsc_decode_uri_impl(string, false);
 }

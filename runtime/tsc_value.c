@@ -6238,6 +6238,16 @@ tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index) 
     return tsc_value_num(NAN);
 }
 
+tsc_value_t tsc_value_method_is_well_formed(tsc_value_t recv) {
+    const tsc_str_t* string = tsc_value_to_string(recv);
+    return tsc_value_bool(tsc_str_is_well_formed(string));
+}
+
+tsc_value_t tsc_value_method_to_well_formed(tsc_value_t recv) {
+    const tsc_str_t* string = tsc_value_to_string(recv);
+    return tsc_value_string(tsc_str_to_well_formed(string));
+}
+
 tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
         double start = value_slice_arg(position, 0.0);

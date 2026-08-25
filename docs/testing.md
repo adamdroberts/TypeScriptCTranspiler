@@ -47,14 +47,14 @@ bun run compliance:inventory -- --fail-on-issues
 # A targeted diagnostic run is useful while the native host is incomplete.
 bun run test:test262 -- --allow-ineligible-host --filter test/path-fragment
 
-# These are release-evidence commands. The checked-in diagnostic host and the
-# intentionally empty property suite currently keep them fail-closed.
+# These are release-evidence commands. The checked-in ineligible host and the
+# unresolved exact matrix currently keep them fail-closed.
 bun run test:test262
 bun run compliance:local
 bun run compliance:claim
 ```
 
-The targeted command above produces diagnostic, non-claimable evidence. The property gate is implemented and recursively discovers `tests/property/**/*.property.test.ts`, but deliberately exits non-zero until real registered property specifications exist.
+The targeted command above produces diagnostic, non-claimable evidence. The property gate recursively discovers every tracked `tests/property/**/*.property.test.ts`, requires every specification to execute at least one test, and fails on any failure, skip, or todo.
 
 The runner expands the official strict, non-strict, Module, raw, async, and `[[CanBlock]]` modes; evaluates harness files as separate same-Realm global Scripts; supplies one independently attested sibling-resource directory for every scenario so Module and computed/eval dynamic-import resolution do not depend on source-shape scanning; and requires exact negative phase, origin, and constructor observations. An unavailable hook is an infrastructure error, never a skip. The host does not receive expected negative metadata, and the claim checker independently derives each verdict from its recorded observation. Under protocol 4, a future eligible host may only prepare artifacts in an ephemeral runner-owned directory. Every host/local command runs under a rebuilt Linux child-subreaper supervisor, and runtime observations come from a sealed, dynamically loaded native executable only after the rebuilt seccomp guard proves activation through a private handshake and kernel-state check. The guard prevents new processes and executable mappings; the supervisor rejects detached survivors. The runner rehashes the artifacts and authors the transcript, and the claim checker rebuilds and compares the containment identities. Capability booleans or host-reported hashes cannot turn the diagnostic host into evidence.
 

@@ -51354,28 +51354,7 @@ class Emitter {
             return this.emitErrorConstructor(call, name);
         }
         if (name === "encodeURI" || name === "encodeURIComponent" || name === "decodeURI" || name === "decodeURIComponent") {
-            if (call.arguments.length < 1) {
-                const fn = name === "encodeURI" ? "tsc_str_encode_uri" :
-                    name === "encodeURIComponent" ? "tsc_str_encode_uri_component" :
-                    name === "decodeURI" ? "tsc_str_decode_uri" :
-                    "tsc_str_decode_uri_component";
-                return {
-                    c: `${fn}(tsc_str_from_lit("undefined", 9))`,
-                    ty: T_STRING,
-                };
-            }
-            const arg = call.arguments[0]!;
-            const value = this.emitExpr(arg);
-            const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-            let fn = "";
-            if (name === "encodeURI") fn = "tsc_str_encode_uri";
-            if (name === "encodeURIComponent") fn = "tsc_str_encode_uri_component";
-            if (name === "decodeURI") fn = "tsc_str_decode_uri";
-            if (name === "decodeURIComponent") fn = "tsc_str_decode_uri_component";
-            return this.emitSequencedCall(fn, T_STRING, [
-                { value, target: T_STRING, node: arg },
-                ...ignored,
-            ]);
+            return this.emitGlobalUriFunction(call, name);
         }
         if (name === "isNaN") {
             if (call.arguments.length < 1) return { c: "true", ty: T_BOOLEAN };
@@ -55501,6 +55480,20 @@ class Emitter {
                 return oneArg("tsc_value_method_char_code_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "codePointAt":
                 return oneArg("tsc_value_method_code_point_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
+            case "isWellFormed":
+            case "toWellFormed": {
+                const callee = method === "isWellFormed"
+                    ? "tsc_value_method_is_well_formed"
+                    : "tsc_value_method_to_well_formed";
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        ...this.ignoredArgumentSpecs(args, 0),
+                    ],
+                    ([target]) => `${callee}(${target})`,
+                );
+            }
             case "includes":
                 return oneRequiredOneOptional("tsc_value_method_includes", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "indexOf":
@@ -65149,13 +65142,13 @@ class Emitter {
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    () => "true",
+                    ([s]) => `tsc_str_is_well_formed(${s!})`,
                 );
             case "toWellFormed":
                 return this.emitSequencedExpr(
                     T_STRING,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => s!,
+                    ([s]) => `tsc_str_to_well_formed(${s!})`,
                 );
             case "repeat": {
                 if (args.length < 1) unsupported(call, "repeat expects at least 1 arg");
@@ -65573,6 +65566,35 @@ class Emitter {
             { value, target: T_VALUE, node: arg },
             ...ignored,
         ], ([v]) => `(${fn}(tsc_value_to_number(${v})))`);
+    }
+
+    private emitGlobalUriFunction(
+        call: ts.CallExpression,
+        name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent",
+    ): EmitResult {
+        const functions = {
+            encodeURI: "tsc_str_encode_uri",
+            encodeURIComponent: "tsc_str_encode_uri_component",
+            decodeURI: "tsc_str_decode_uri",
+            decodeURIComponent: "tsc_str_decode_uri_component",
+        } as const;
+        const fn = functions[name];
+        const arg = call.arguments[0];
+        if (!arg) {
+            return { c: `${fn}(tsc_str_from_lit("undefined", 9))`, ty: T_STRING };
+        }
+        const value = this.emitExpr(arg);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
+        if (value.ty.kind === "string") {
+            return this.emitSequencedExpr(T_STRING, [
+                { value },
+                ...ignored,
+            ], ([text]) => `${fn}(${text})`);
+        }
+        return this.emitSequencedExpr(T_STRING, [
+            { value, target: T_VALUE, node: arg },
+            ...ignored,
+        ], ([input]) => `${fn}(tsc_value_to_string(${input}))`);
     }
 
     private emitBooleanMethod(

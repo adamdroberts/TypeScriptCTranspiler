@@ -23,12 +23,18 @@ export interface GlobalNumberParseLengthSpec {
     length: number;
 }
 
+export interface UriPercentCodecLengthSpec {
+    generator: "uri-percent-codec-length";
+    length: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
-    | GlobalNumberParseLengthSpec;
+    | GlobalNumberParseLengthSpec
+    | UriPercentCodecLengthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -82,6 +88,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "global-number-parse-length") {
+        const length = spec.length;
+        if (typeof length !== "number" || !Number.isInteger(length) || length < 2) {
+            throw new Error(`invalid generated case spec ${filename}: length must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            length,
+        };
+    }
+    if (spec.generator === "uri-percent-codec-length") {
         const length = spec.length;
         if (typeof length !== "number" || !Number.isInteger(length) || length < 2) {
             throw new Error(`invalid generated case spec ${filename}: length must be an integer of at least 2`);
@@ -273,6 +289,29 @@ function globalNumberParseLengthSource(length: number): string {
     ].join("\n");
 }
 
+function uriPercentCodecLengthSource(length: number): string {
+    return [
+        `const length = ${length};`,
+        `const unit = "a b;/?:@&=+$,#\\u03a9\\u{1f600}";`,
+        "const source = unit.repeat(length);",
+        "const reserved = \"%23\".repeat(length);",
+        "let malformedTail = false;",
+        "let surrogateTail = false;",
+        "try { decodeURIComponent(\"%41\".repeat(length) + \"%C2\"); }",
+        "catch (error) { malformedTail = error instanceof URIError; }",
+        "try { encodeURI(\"a\".repeat(length) + String.fromCharCode(0xd800)); }",
+        "catch (error) { surrogateTail = error instanceof URIError; }",
+        "const valid =",
+        "    decodeURI(encodeURI(source)) === source &&",
+        "    decodeURIComponent(encodeURIComponent(source)) === source &&",
+        "    decodeURI(reserved) === reserved &&",
+        "    decodeURIComponent(reserved) === \"#\".repeat(length) &&",
+        "    malformedTail && surrogateTail;",
+        'console.log("URI percent codec length:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -286,5 +325,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return moduleNamespaceExportWidthSource(spec.width);
         case "global-number-parse-length":
             return globalNumberParseLengthSource(spec.length);
+        case "uri-percent-codec-length":
+            return uriPercentCodecLengthSource(spec.length);
     }
 }
