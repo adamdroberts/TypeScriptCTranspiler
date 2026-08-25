@@ -1,0 +1,3 @@
+{
+  "description": "Finite AOT dynamic import initializes lazily and returns one stable module namespace"
+}

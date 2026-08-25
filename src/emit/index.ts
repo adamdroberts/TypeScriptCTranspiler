@@ -81,6 +81,11 @@ import {
 } from "../runtime-code-aot";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 import { validateJsonSyntax } from "../json-syntax";
+import {
+    type ModuleRequest,
+    moduleRequestKey,
+    moduleRequestsFromDynamicImport,
+} from "../module-request";
 
 const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
 
@@ -15130,6 +15135,12 @@ class Emitter {
             out.write(this.globalDecls.toString());
             out.line();
         }
+        for (const modId of emitOrder) {
+            out.line(`static int mod_state_${modId} = 0;`);
+            out.line(`static tsc_value_t mod_error_${modId};`);
+            out.line(`static void* volatile mod_error_root_${modId} = NULL;`);
+        }
+        out.line();
         // Forward declarations for mod_inits and user functions.
         for (const modId of emitOrder) {
             out.line(`static void mod_init_${modId}(void);`);
@@ -15156,7 +15167,23 @@ class Emitter {
             const body = this.modInits.get(modId);
             if (!body) continue;
             out.line(`static void mod_init_${modId}(void) {`);
+            out.line(`    if (mod_state_${modId} == 2) return;`);
+            out.line(`    if (mod_state_${modId} == 3) tsc_throw_value(mod_error_${modId});`);
+            out.line(`    if (mod_state_${modId} == 1) return;`);
+            out.line(`    mod_state_${modId} = 1;`);
+            out.line(`    TSC_TRY_FRAME(_mod_frame_${modId});`);
+            out.line(`    tsc_try_push(&_mod_frame_${modId});`);
+            out.line(`    if (setjmp(_mod_frame_${modId}.jb) == 0) {`);
             out.write(body.toString());
+            out.line(`        tsc_try_pop();`);
+            out.line(`        mod_state_${modId} = 2;`);
+            out.line("        return;");
+            out.line("    }");
+            out.line(`    mod_error_${modId} = tsc_current_error_value();`);
+            out.line("    tsc_try_pop();");
+            out.line(`    mod_error_root_${modId} = tsc_value_gc_root(mod_error_${modId});`);
+            out.line(`    mod_state_${modId} = 3;`);
+            out.line(`    tsc_throw_value(mod_error_${modId});`);
             out.line("}");
             out.line();
         }
@@ -50027,6 +50054,9 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
+        if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
+            return this.emitDynamicImportCall(call);
+        }
         const inlineClosure = this.emitInlineClosureCall(call);
         if (inlineClosure) return inlineClosure;
         /* JavaScript calls always cross one canonical argument-list boundary.
@@ -50567,6 +50597,114 @@ class Emitter {
             result.lazyGenerator = true;
         }
         return result;
+    }
+
+    private resolvedDynamicModuleInfoForRequest(
+        request: ModuleRequest,
+        containingFile: string,
+    ): ModuleInfo | null {
+        const moduleId = this.graph.fileToModuleId.get(containingFile);
+        const importer = moduleId ? this.graph.modules.get(moduleId) : undefined;
+        const targetId = importer?.resolvedDynamicModuleRequests.get(moduleRequestKey(request));
+        return targetId ? this.graph.modules.get(targetId) ?? null : null;
+    }
+
+    /** Dependency-first order through one explicit graph worklist. */
+    private dynamicModuleInitializationOrder(target: ModuleInfo): string[] {
+        const order: string[] = [];
+        const finished = new Set<string>();
+        const active = new Set<string>([target.moduleId]);
+        const frames: Array<{ readonly id: string; next: number }> = [{ id: target.moduleId, next: 0 }];
+        while (frames.length > 0) {
+            const frame = frames[frames.length - 1]!;
+            const info = this.graph.modules.get(frame.id);
+            const dependencies = info?.imports ?? [];
+            if (frame.next < dependencies.length) {
+                const dependency = dependencies[frame.next++]!;
+                if (finished.has(dependency) || active.has(dependency)) continue;
+                active.add(dependency);
+                frames.push({ id: dependency, next: 0 });
+                continue;
+            }
+            frames.pop();
+            active.delete(frame.id);
+            if (!finished.has(frame.id)) {
+                finished.add(frame.id);
+                order.push(frame.id);
+            }
+        }
+        return order;
+    }
+
+    private emitDynamicImportCall(call: ts.CallExpression): EmitResult {
+        const parsed = moduleRequestsFromDynamicImport(call);
+        if (!parsed || parsed.requests === null) {
+            unsupported(call, parsed?.error ?? "invalid dynamic import request");
+        }
+        const specifierNode = call.arguments[0]!;
+        const specifier = this.emitExpr(specifierNode);
+        const adapter = this.ensureDynamicImportAdapter(call, parsed.requests);
+        const stateType = `${adapter}_state_t`;
+        return this.emitSequencedExpr(
+            promiseType(T_VALUE),
+            [{ value: specifier, target: T_STRING, node: specifierNode }],
+            ([specifierValue]) => {
+                const promise = this.freshTemp("_dynamic_import");
+                const state = this.freshTemp("_dynamic_import_state");
+                return `({ tsc_promise_t* ${promise} = tsc_promise_pending(); ` +
+                    `${stateType}* ${state} = (${stateType}*)TSC_GC_MALLOC(sizeof(${stateType})); ` +
+                    `${state}->promise = ${promise}; ${state}->specifier = ${specifierValue}; ` +
+                    `tsc_queue_microtask(${adapter}, ${state}); ${promise}; })`;
+            },
+        );
+    }
+
+    private ensureDynamicImportAdapter(
+        call: ts.CallExpression,
+        requests: readonly ModuleRequest[],
+    ): string {
+        const adapter = this.freshTemp("tsc_dynamic_import_job");
+        const stateType = `${adapter}_state_t`;
+        const body = new CBuf();
+        body.line(`typedef struct { tsc_promise_t* promise; tsc_str_t* specifier; } ${stateType};`);
+        body.open(`static void ${adapter}(void* opaque)`);
+        body.line(`${stateType}* state = (${stateType}*)opaque;`);
+        body.line(`TSC_TRY_FRAME(${adapter}_frame);`);
+        body.line(`tsc_try_push(&${adapter}_frame);`);
+        body.open(`if (setjmp(${adapter}_frame.jb) == 0)`);
+        for (const [index, request] of requests.entries()) {
+            const target = this.resolvedDynamicModuleInfoForRequest(
+                request,
+                call.getSourceFile().fileName,
+            );
+            if (!target) unsupported(call, `dynamic import ${JSON.stringify(request.specifier)} is outside the AOT module graph`);
+            const namespace = this.ensureModuleNamespacePlan(target);
+            const condition = `tsc_str_eq(state->specifier, tsc_str_from_lit("${escapeCString(request.specifier)}", ${utf8ByteLen(request.specifier)}))`;
+            body.open(`${index === 0 ? "if" : "else if"} (${condition})`);
+            for (const moduleId of this.dynamicModuleInitializationOrder(target)) {
+                body.line(`mod_init_${moduleId}();`);
+            }
+            body.line(`tsc_promise_fulfill_in_place(state->promise, ${namespace.factory}());`);
+            body.close();
+        }
+        body.open("else");
+        body.line(
+            `tsc_promise_reject_in_place(state->promise, tsc_value_error(` +
+            `tsc_error_new_named(tsc_str_from_lit("TypeError", 9), ` +
+            `tsc_str_from_cstr("dynamic import resolved outside finite AOT set"))));`,
+        );
+        body.close();
+        body.line("tsc_try_pop();");
+        body.close(" else {");
+        body.indent++;
+        body.line(`tsc_value_t reason = tsc_current_error_value();`);
+        body.line("tsc_try_pop();");
+        body.line("tsc_promise_reject_in_place(state->promise, reason);");
+        body.close();
+        body.close();
+        body.line();
+        this.closureDefs.write(body.toString());
+        return adapter;
     }
 
     private inlineClosureBody(call: ts.CallExpression): ts.Expression | null {
@@ -57337,8 +57475,10 @@ class Emitter {
 
         buf.open("if (tsc_promise_is_fulfilled(_p))");
         if (preparedFulfilled && fulfilledType) {
+            const dynamicCallback = preparedFulfilled.kind === "value";
+            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->onFulfilled))");
             const callResult = this.promiseCallbackCall(call, fulfilledType, "state->onFulfilled", [this.promiseFulfilledValue(recvType.elem, "_p")], node);
-            const ret = this.prepareType(fulfilledType.ret!);
+            const ret = this.promiseCallbackReturnType(fulfilledType, node);
             const resPromise = this.freshTemp("_res_p");
             const eh = this.freshTemp("_eh");
             buf.line(`tsc_promise_t* ${resPromise};`);
@@ -57358,9 +57498,15 @@ class Emitter {
             buf.close();
             buf.open("else");
             buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
             buf.close();
             buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+            if (dynamicCallback) {
+                buf.close();
+                buf.open("else");
+                buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
+                buf.close();
+            }
         } else {
             buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
         }
@@ -57368,8 +57514,10 @@ class Emitter {
 
         buf.open("else if (tsc_promise_is_rejected(_p))");
         if (preparedRejected && rejectedType) {
+            const dynamicCallback = preparedRejected.kind === "value";
+            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->onRejected))");
             const callResult = this.promiseCallbackCall(call, rejectedType, "state->onRejected", [{ c: "tsc_promise_reason(_p)", ty: T_VALUE }], node);
-            const ret = this.prepareType(rejectedType.ret!);
+            const ret = this.promiseCallbackReturnType(rejectedType, node);
             const resPromise = this.freshTemp("_res_p");
             const eh = this.freshTemp("_eh");
             buf.line(`tsc_promise_t* ${resPromise};`);
@@ -57389,9 +57537,15 @@ class Emitter {
             buf.close();
             buf.open("else");
             buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
             buf.close();
             buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
+            if (dynamicCallback) {
+                buf.close();
+                buf.open("else");
+                buf.line("tsc_promise_adopt_into(_ret, _p);");
+                buf.close();
+            }
         } else {
             buf.line("tsc_promise_adopt_into(_ret, _p);");
         }
@@ -57487,8 +57641,10 @@ class Emitter {
         };
 
         if (preparedCb && cbType) {
+            const dynamicCallback = preparedCb.kind === "value";
+            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->cb))");
             const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
-            const cbRet = preparedCb.kind === "function" && preparedCb.ret ? this.prepareType(preparedCb.ret) : null;
+            const cbRet = this.promiseCallbackReturnType(cbType, node);
             const eh = this.freshTemp("_eh");
             buf.line(`TSC_TRY_FRAME(${eh});`);
             buf.line(`tsc_try_push(&${eh});`);
@@ -57507,8 +57663,14 @@ class Emitter {
             buf.close();
             buf.open("else");
             buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
             buf.close();
+            if (dynamicCallback) {
+                buf.close();
+                buf.open("else");
+                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+                buf.close();
+            }
         } else {
             buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
         }
@@ -57702,10 +57864,17 @@ class Emitter {
         arity: number,
         label: string,
     ): void {
+        void arity;
         const type = this.prepareType(callback.ty);
+        if (type.kind === "value") return;
         if (type.kind !== "function" || !type.ret) unsupported(node, `${label} must be a function`);
-        const params = type.params ?? [];
-        if (params.length !== arity) unsupported(node, `${label} expects ${arity} parameter(s)`);
+    }
+
+    private promiseCallbackReturnType(callbackType: CType, node: ts.Node): CType {
+        const type = this.prepareType(callbackType);
+        if (type.kind === "value") return T_VALUE;
+        if (type.kind !== "function" || !type.ret) unsupported(node, "Promise callback must be a function");
+        return this.prepareType(type.ret);
     }
 
     private promiseCallbackResolve(
@@ -57715,16 +57884,15 @@ class Emitter {
         value: EmitResult,
         node: ts.Expression,
     ): string {
-        if (callbackType.kind !== "function" || !callbackType.ret) unsupported(node, "Promise callback must be a function");
-        const ret = this.prepareType(callbackType.ret);
+        const ret = this.promiseCallbackReturnType(callbackType, node);
         const callResult = this.promiseCallbackCall(call, callbackType, callbackValue, [value], node);
         const out = this.freshTemp("_promise_cb");
         const eh = this.freshTemp("_promise_cb_eh");
         if (ret.kind === "void" || ret.kind === "never") {
-            return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callResult}; tsc_try_pop(); ${out} = tsc_promise_resolve(tsc_value_undefined()); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+            return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callResult}; tsc_try_pop(); ${out} = tsc_promise_resolve(tsc_value_undefined()); } else { ${out} = tsc_promise_reject(tsc_current_error_value()); } ${out}; })`;
         }
         const valueTmp = this.freshTemp("_promise_cb_value");
-        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${ret.c} ${valueTmp} = ${callResult}; tsc_try_pop(); ${out} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)}; } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${ret.c} ${valueTmp} = ${callResult}; tsc_try_pop(); ${out} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)}; } else { ${out} = tsc_promise_reject(tsc_current_error_value()); } ${out}; })`;
     }
 
     private promiseCallbackCall(
@@ -57734,10 +57902,20 @@ class Emitter {
         values: readonly EmitResult[],
         node: ts.Expression,
     ): string {
-        if (callbackType.kind !== "function" || !callbackType.ret) unsupported(node, "Promise callback must be a function");
-        const params = callbackType.params ?? [];
+        const type = this.prepareType(callbackType);
+        if (type.kind === "value") {
+            const args = this.freshTemp("_promise_cb_args");
+            const pieces = [`tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length)})`];
+            for (const value of values) {
+                pieces.push(`tsc_array_push_value(${args}, ${this.coerce(value, T_VALUE, call)})`);
+            }
+            pieces.push(`tsc_value_apply_function(${callbackValue}, tsc_value_undefined(), tsc_value_array(${args}))`);
+            return `({ ${pieces.join("; ")}; })`;
+        }
+        if (type.kind !== "function" || !type.ret) unsupported(node, "Promise callback must be a function");
+        const params = type.params ?? [];
         const args = params.map((param, i) => this.coerce(values[i] ?? { c: "tsc_value_undefined()", ty: T_VALUE }, param, call));
-        return `${callbackValue}->fn(${[`${callbackValue}->env`, ...(callbackType.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
+        return `${callbackValue}->fn(${[`${callbackValue}->env`, ...(type.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
     }
 
     private promiseFulfilledValue(elem: CType | undefined, promise: string): EmitResult {

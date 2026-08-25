@@ -1,0 +1,3 @@
+{
+  "description": "Dynamic import fails closed when no finite AOT ModuleRequest worklist can be proved"
+}

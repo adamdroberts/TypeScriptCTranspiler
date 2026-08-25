@@ -3,10 +3,13 @@
 
 type Extract<T, U> = T extends U ? T : never;
 
-// Required by TypeScript's parser/type checker for static import attributes.
-// This declaration does not imply support for the separate dynamic import API.
+// Required by TypeScript's parser/type checker for static and dynamic import
+// attributes. Legacy `assert` is intentionally absent from the ES2026 surface.
 interface ImportAttributes {
     [key: string]: string;
+}
+interface ImportCallOptions {
+    with?: ImportAttributes;
 }
 
 // --- iterator protocol (minimal, for for-of on arrays) ---

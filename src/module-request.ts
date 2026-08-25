@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { staticStringExpressionTexts } from "./module-specifiers";
 
 /** ECMA-262 ImportAttribute Record, normalized in UTF-16 key order. */
 export interface ImportAttributeRecord {
@@ -17,6 +18,119 @@ export type ModuleRequestParseResult =
     | { readonly request: null; readonly error: string };
 
 type StaticModuleDeclaration = ts.ImportDeclaration | ts.ExportDeclaration;
+
+export type DynamicModuleRequestsParseResult =
+    | { readonly requests: readonly ModuleRequest[]; readonly error: null }
+    | { readonly requests: null; readonly error: string };
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+    while (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAsExpression(expression) ||
+        ts.isTypeAssertionExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+    ) {
+        expression = expression.expression;
+    }
+    return expression;
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+    if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
+    if (ts.isNumericLiteral(name)) return String(Number(name.text));
+    return null;
+}
+
+function dynamicImportAttributes(expression: ts.Expression | undefined):
+    { readonly attributes: readonly ImportAttributeRecord[]; readonly error: null } |
+    { readonly attributes: null; readonly error: string } {
+    if (!expression) return { attributes: [], error: null };
+    const options = unwrapExpression(expression);
+    if (
+        (ts.isIdentifier(options) && options.text === "undefined") ||
+        options.kind === ts.SyntaxKind.UndefinedKeyword ||
+        ts.isVoidExpression(options)
+    ) {
+        return { attributes: [], error: null };
+    }
+    if (!ts.isObjectLiteralExpression(options)) {
+        return { attributes: null, error: "dynamic import options need a finite AOT object proof" };
+    }
+
+    let withValue: ts.Expression | undefined;
+    for (const property of options.properties) {
+        if (!ts.isPropertyAssignment(property) || staticPropertyName(property.name) !== "with" || withValue) {
+            return { attributes: null, error: "dynamic import options need one static `with` data property" };
+        }
+        withValue = property.initializer;
+    }
+    if (!withValue) return { attributes: [], error: null };
+    const attributeObject = unwrapExpression(withValue);
+    if (!ts.isObjectLiteralExpression(attributeObject)) {
+        return { attributes: null, error: "dynamic import `with` needs a finite AOT attribute-object proof" };
+    }
+
+    // Object-literal duplicate data properties use the final value before
+    // EnumerableOwnProperties observes them. One map models that collection
+    // independently of attribute width or source order.
+    const attributes = new Map<string, string>();
+    for (const property of attributeObject.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+            return { attributes: null, error: "dynamic import attributes need static enumerable data properties" };
+        }
+        const key = staticPropertyName(property.name);
+        const value = unwrapExpression(property.initializer);
+        if (key === null || !ts.isStringLiteralLike(value)) {
+            return { attributes: null, error: "dynamic import attribute keys and values need static string proofs" };
+        }
+        attributes.set(key, value.text);
+    }
+    return {
+        attributes: [...attributes].map(([key, value]) => ({ key, value }))
+            .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0),
+        error: null,
+    };
+}
+
+/** Derive the finite canonical ModuleRequest worklist for one ImportCall. */
+export function moduleRequestsFromDynamicImport(
+    call: ts.CallExpression,
+): DynamicModuleRequestsParseResult | null {
+    if (call.expression.kind !== ts.SyntaxKind.ImportKeyword) return null;
+    const specifier = call.arguments[0];
+    if (!specifier) return { requests: null, error: "dynamic import requires a module specifier" };
+    const specifiers = staticStringExpressionTexts(specifier);
+    if (specifiers.length === 0) {
+        return { requests: null, error: "dynamic import needs a finite AOT specifier proof" };
+    }
+    const parsedAttributes = dynamicImportAttributes(call.arguments[1]);
+    if (parsedAttributes.attributes === null) {
+        return { requests: null, error: parsedAttributes.error };
+    }
+    return {
+        requests: specifiers.map((value) => ({
+            specifier: value,
+            attributes: parsedAttributes.attributes,
+        })),
+        error: null,
+    };
+}
+
+/** Locate every ImportCall through one explicit source-tree worklist. */
+export function dynamicImportCalls(root: ts.Node): ts.CallExpression[] {
+    const calls: ts.CallExpression[] = [];
+    const worklist: ts.Node[] = [root];
+    while (worklist.length > 0) {
+        const node = worklist.pop()!;
+        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+            calls.push(node);
+        }
+        node.forEachChild((child) => {
+            worklist.push(child);
+        });
+    }
+    return calls;
+}
 
 /**
  * Derive one canonical ModuleRequest Record from every static module edge.

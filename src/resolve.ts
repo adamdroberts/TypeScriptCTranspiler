@@ -14,9 +14,11 @@ import {
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
 import {
+    dynamicImportCalls,
     type ModuleRequest,
     moduleRequestFromDeclaration,
     moduleRequestKey,
+    moduleRequestsFromDynamicImport,
     staticModuleRequestResolutionError,
 } from "./module-request";
 
@@ -29,6 +31,10 @@ export interface ModuleInfo {
     moduleRequests: ModuleRequest[];
     /** Canonical ModuleRequest identity to resolved module id. */
     resolvedModuleRequests: Map<string, string>;
+    /** Finite canonical ImportCall requests; these are not startup dependencies. */
+    dynamicModuleRequests: ModuleRequest[];
+    /** Dynamic ModuleRequest identity to resolved module id. */
+    resolvedDynamicModuleRequests: Map<string, string>;
     /** Literal module specifier to resolved module id for import/export edges. */
     resolvedSpecifiers: Map<string, string>;
     /** Literal module specifier to resolved module id for CommonJS require edges. */
@@ -95,6 +101,8 @@ export function buildModuleGraph(
             imports: [],
             moduleRequests: [],
             resolvedModuleRequests: new Map(),
+            dynamicModuleRequests: [],
+            resolvedDynamicModuleRequests: new Map(),
             resolvedSpecifiers: new Map(),
             resolvedRequireSpecifiers: new Map(),
             fileName: sf.fileName,
@@ -108,6 +116,7 @@ export function buildModuleGraph(
         const moduleAliases = commonJsModuleAliases(info.sf);
         const requireAliases = commonJsRequireAliases(info.sf, moduleAliases);
         const requests = new Map<string, ModuleRequest>();
+        const dynamicRequests = new Map<string, ModuleRequest>();
         for (const stmt of info.sf.statements) {
             const importRequests: ModuleRequest[] = [];
             const requireSpecs: string[] = [];
@@ -122,6 +131,28 @@ export function buildModuleGraph(
                     const request = requests.get(key) ?? parsed.request;
                     requests.set(key, request);
                     importRequests.push(request);
+                }
+            }
+            for (const call of dynamicImportCalls(stmt)) {
+                const parsed = moduleRequestsFromDynamicImport(call);
+                if (parsed?.error) throw new Error(`${info.sf.fileName}: ${parsed.error}`);
+                for (const parsedRequest of parsed?.requests ?? []) {
+                    const key = moduleRequestKey(parsedRequest);
+                    const request = dynamicRequests.get(key) ?? parsedRequest;
+                    dynamicRequests.set(key, request);
+                    const resolved = ts.resolveModuleName(
+                        request.specifier,
+                        info.sf.fileName,
+                        options,
+                        ts.sys,
+                    ).resolvedModule;
+                    const depId = resolved ? fileToModuleId.get(resolved.resolvedFileName) : undefined;
+                    if (!resolved || !depId) continue;
+                    const requestError = staticModuleRequestResolutionError(request, resolved.resolvedFileName);
+                    if (requestError) {
+                        throw new Error(`${info.sf.fileName}: ${requestError} for ${JSON.stringify(request.specifier)}`);
+                    }
+                    info.resolvedDynamicModuleRequests.set(key, depId);
                 }
             }
             requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires, info.sf.fileName));
@@ -163,6 +194,7 @@ export function buildModuleGraph(
             }
         }
         info.moduleRequests.push(...requests.values());
+        info.dynamicModuleRequests.push(...dynamicRequests.values());
     }
 
     const entryModuleId = fileToModuleId.get(entry);
