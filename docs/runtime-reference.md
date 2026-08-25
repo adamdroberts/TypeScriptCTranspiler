@@ -243,13 +243,15 @@ GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrap
 
 ## Symbols (`tsc_symbol_t`)
 
-Heap-allocated unique symbol identities with an optional description and a small global registry for `Symbol.for`.
+Heap-allocated unique symbol identities with an optional description, a small global registry for `Symbol.for`, and one opaque identity-bearing `tsc_str_t` PropertyKey carrier per identity. Ordinary strings always have a null carrier marker, so a Symbol cannot collide with its description, an empty string, or a runtime-looking string. Ordinary objects, arrays, functions, Reflect, Proxy traps, descriptor maps, and copy operations consume the same canonical internal PropertyKey worklist; public key APIs project carriers back to the original Symbol identity.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_symbol_new(description)` | `tsc_symbol_t*` | `Symbol(description?)`, always creates a new identity |
 | `tsc_symbol_for(key)` | `tsc_symbol_t*` | `Symbol.for(key)` global registry lookup/create |
 | `tsc_symbol_key_for(sym)` | `tsc_str_t*` | `Symbol.keyFor(sym)`, `NULL` for non-global symbols |
+| `tsc_symbol_property_key(sym)` | `tsc_str_t*` | Returns the Symbol identity's opaque internal PropertyKey carrier |
+| `tsc_property_key_symbol(key)` | `tsc_symbol_t*` | Projects a carrier back to its public Symbol identity, or `NULL` for a String key |
 | `tsc_symbol_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.iterator` |
 | `tsc_symbol_async_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.asyncIterator` |
 | `tsc_symbol_dispose()` | `tsc_symbol_t*` | Singleton `Symbol.dispose` |

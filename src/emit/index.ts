@@ -22251,11 +22251,22 @@ class Emitter {
         if (!targetObject) return null;
         const target = this.emitCommonJsObjectLiteralDefaultValue(targetObject);
         const key = this.emitExpr(call.arguments[1]!);
+        if (key.ty.kind === "symbol") {
+            const descriptor = this.emitExpr(call.arguments[2]!);
+            const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: target, target: T_VALUE, node: call.arguments[0]! },
+                { value: key, target: T_VALUE, node: call.arguments[1]! },
+                { value: descriptor, target: T_VALUE, node: call.arguments[2]! },
+                ...ignored,
+            ], ([object, property, desc]) =>
+                `({ if (!tsc_value_define_computed_property_descriptor(${object}, ${property}, ${desc})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${object}; })`,
+            );
+        }
         const descriptor = this.descriptorData(call.arguments[2]!);
         const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
         const dynamicObjectArg = (value: string): string => value;
         if (descriptor.kind === "accessor") {
-            if (key.ty.kind === "symbol") unsupported(call.arguments[1]!, "Object.defineProperty symbol accessor keys are not supported yet");
             const specs: SequencedCallArg[] = [
                 { value: target, target: T_VALUE, node: call.arguments[0]! },
                 { value: key, target: T_STRING, node: call.arguments[1]! },
@@ -22282,12 +22293,11 @@ class Emitter {
             : { c: "tsc_value_undefined()", ty: T_VALUE };
         return this.emitSequencedExpr(T_VALUE, [
             { value: target, target: T_VALUE, node: call.arguments[0]! },
-            { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: call.arguments[1]! },
+            { value: key, target: T_STRING, node: call.arguments[1]! },
             { value, target: T_VALUE, node: descriptor.value ?? call.arguments[2]! },
             ...ignored,
         ], ([object, property, descriptorValue]) => {
-            const fn = key.ty.kind === "symbol" ? "tsc_value_define_symbol_property_desc" : "tsc_value_define_property_desc";
-            return `({ if (!${fn}(${dynamicObjectArg(object!)}, ${property}, ${descriptorValue}, ${descriptor.hasValue}, ${descriptor.writable}, ${descriptor.hasWritable}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object!)}; })`;
+            return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(object!)}, ${property}, ${descriptorValue}, ${descriptor.hasValue}, ${descriptor.writable}, ${descriptor.hasWritable}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object!)}; })`;
         });
     }
 
@@ -46798,6 +46808,16 @@ class Emitter {
                 // Consumers perform the conversion at their own typed boundary.
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
+            if (
+                declaredTy?.kind === "array" &&
+                ty.kind === "array" &&
+                declaredTy.elem?.c !== ty.elem?.c
+            ) {
+                // The backing array's element width is fixed when the binding
+                // is initialized. Flow/type-library narrowing must not
+                // reinterpret a canonical tsc_value_t worklist as pointers.
+                return { c: this.identifierRead(expr), ty: declaredTy };
+            }
             if (ty.kind === "function" && this.isDirectFunctionReferenceValue(expr)) {
                 return this.emitFunctionReferenceClosure(expr, ty);
             }
@@ -51155,8 +51175,8 @@ class Emitter {
             );
         }
         if (mapped.kind === "array") {
-            if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
-                const key = this.emitExpr(keyNode);
+            const key = this.emitExpr(keyNode);
+            if (key.ty.kind === "symbol") {
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_symbol_prop"
                     : "tsc_value_symbol_property_is_enumerable";
@@ -51166,7 +51186,6 @@ class Emitter {
                     ...ignored,
                 ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
             }
-            const key = this.emitExpr(keyNode);
             if (key.ty.kind === "value") {
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_computed_prop"
@@ -51217,8 +51236,8 @@ class Emitter {
                 : `({ (void)${value}; (void)${keyC}; false; })`);
         }
         if (mapped.kind === "value" || mapped.kind === "string") {
-            if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
-                const key = this.emitExpr(keyNode);
+            const key = this.emitExpr(keyNode);
+            if (key.ty.kind === "symbol") {
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_symbol_prop"
                     : "tsc_value_symbol_property_is_enumerable";
@@ -51228,7 +51247,6 @@ class Emitter {
                     ...ignored,
                 ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
             }
-            const key = this.emitExpr(keyNode);
             if (key.ty.kind === "value") {
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_computed_prop"
@@ -51249,7 +51267,7 @@ class Emitter {
             ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
         }
         const key = this.emitExpr(keyNode);
-        if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
+        if (key.ty.kind === "symbol") {
             const fn = method === "hasOwnProperty"
                 ? "tsc_value_has_own_symbol_prop"
                 : "tsc_value_symbol_property_is_enumerable";
@@ -70681,6 +70699,17 @@ class Emitter {
         if (name === "getOwnPropertyDescriptor") {
             if (args.length < 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            const propertyKey = this.emitExpr(args[1]!);
+            if (propertyKey.ty.kind === "symbol" || propertyKey.ty.kind === "value") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: propertyKey, target: T_VALUE, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) =>
+                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_computed_descriptor(${o!}, ${k!}); })`,
+                );
+            }
             if (this.isStaticArrayPrototypeExpression(arg) && this.isSymbolIteratorExpression(args[1]!)) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -70934,14 +70963,22 @@ class Emitter {
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
-            if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
+            const propertyKey = this.emitExpr(args[1]!);
+            if (propertyKey.ty.kind === "symbol") {
                 const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_SYMBOL, node: args[1]! },
+                    { value: propertyKey, target: T_SYMBOL, node: args[1]! },
                     ...ignored,
                 ], ([o, k]) => `tsc_value_has_own_symbol_prop(${o}, ${k})`);
+            }
+            if (propertyKey.ty.kind === "value") {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: propertyKey, target: T_VALUE, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_has_own_computed_prop(${o}, ${k})`);
             }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
@@ -71243,7 +71280,7 @@ class Emitter {
             if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
             const ignored = this.ignoredArgumentSpecs(args, 3);
             const key = this.emitExpr(args[1]!);
-            if (key.ty.kind !== "string" && key.ty.kind !== "symbol") {
+            if (key.ty.kind !== "string") {
                 const obj = this.emitExpr(arg);
                 const descriptor = this.emitExpr(args[2]!);
                 const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
@@ -71260,7 +71297,7 @@ class Emitter {
             }
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                if (ts.isObjectLiteralExpression(args[2]!) && key.ty.kind !== "symbol") {
+                if (ts.isObjectLiteralExpression(args[2]!)) {
                     const desc = this.descriptorData(args[2]!);
                     if (desc.kind !== "accessor") {
                         const arrayObj = obj.ty.kind === "array"
@@ -71275,7 +71312,6 @@ class Emitter {
             }
             const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
             if (!ts.isObjectLiteralExpression(args[2]!)) {
-                if (key.ty.kind === "symbol") unsupported(args[1]!, "Object.defineProperty symbol keys require an object-literal data descriptor");
                 const descValue = this.emitExpr(args[2]!);
                 const obj = this.emitExpr(arg);
                 const objectDefineReturnType = (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
@@ -71294,7 +71330,6 @@ class Emitter {
             const obj = this.emitExpr(arg);
             const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
             if (desc.kind === "accessor") {
-                if (key.ty.kind === "symbol") unsupported(args[1]!, "Object.defineProperty symbol accessor descriptors are not supported yet");
                 const specs: SequencedCallArg[] = [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -71327,15 +71362,12 @@ class Emitter {
                 objectDefineReturnType,
                 [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                    { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: args[1]! },
+                    { value: key, target: T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ...ignored,
                 ],
                 ([o, k, v]) => {
-                    const fn = key.ty.kind === "symbol"
-                        ? "tsc_value_define_symbol_property_desc"
-                        : "tsc_value_define_property_desc";
-                    return `({ if (!${fn}(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                    return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
                 },
             );
         }
@@ -73122,7 +73154,7 @@ class Emitter {
                 const ignored = this.ignoredArgumentSpecs(args, 3);
                 const target = this.emitExpr(args[0]!);
                 const key = this.emitExpr(args[1]!);
-                if (key.ty.kind !== "string" && key.ty.kind !== "symbol") {
+                if (key.ty.kind !== "string") {
                     const descriptor = this.emitExpr(args[2]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -73138,7 +73170,6 @@ class Emitter {
                     }
                 }
                 if (!ts.isObjectLiteralExpression(args[2]!)) {
-                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.defineProperty symbol keys require an object-literal data descriptor");
                     const descValue = this.emitExpr(args[2]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -73149,7 +73180,6 @@ class Emitter {
                 }
                 const desc = this.descriptorData(args[2]!);
                 if (desc.kind === "accessor") {
-                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.defineProperty symbol accessor descriptors are not supported yet");
                     const specs: SequencedCallArg[] = [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
@@ -73182,15 +73212,12 @@ class Emitter {
                     T_BOOLEAN,
                     [
                         { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: args[1]! },
+                        { value: key, target: T_STRING, node: args[1]! },
                         { value, target: T_VALUE, node: desc.value ?? args[2]! },
                         ...ignored,
                     ],
                     ([t, k, v]) => {
-                        const fn = key.ty.kind === "symbol"
-                            ? "tsc_reflect_define_symbol_property_desc"
-                            : "tsc_reflect_define_property_desc";
-                        return `${fn}(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
+                        return `tsc_reflect_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
                     },
                 );
             }
@@ -73231,7 +73258,19 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                const key = this.emitExpr(args[1]!);
                 const receiver = args[2] ? { value: this.emitExpr(args[2]), node: args[2] } : undefined;
+                if (key.ty.kind === "symbol" || key.ty.kind === "value") {
+                    const specs: SequencedCallArg[] = [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_VALUE, node: args[1]! },
+                    ];
+                    if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
+                    specs.push(...ignored);
+                    return this.emitSequencedExpr(T_VALUE, specs, ([t, k, r]) =>
+                        `tsc_reflect_get_computed_prop_receiver(${t}, ${k}, ${receiver ? r : t})`,
+                    );
+                }
                 if (mapped.kind === "array") {
                     return this.emitTypedArrayReflectGet(args[0]!, target, args[1]!, receiver, ignored);
                 }
@@ -73253,7 +73292,6 @@ class Emitter {
                 if (mapped.kind === "class") {
                     return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver, ignored);
                 }
-                const key = this.emitExpr(args[1]!);
                 if (args[2]) {
                     const receiver = this.emitExpr(args[2]!);
                     const cache = this.freshTemp("_prop_cache");
@@ -73285,8 +73323,15 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                const key = this.emitExpr(args[1]!);
+                if (key.ty.kind === "symbol" || key.ty.kind === "value") {
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_VALUE, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_get_own_property_computed_descriptor(${t}, ${k})`);
+                }
                 if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolIteratorExpression(args[1]!)) {
-                    const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, node: args[0]! },
                         { value: key, node: args[1]! },
@@ -73294,7 +73339,6 @@ class Emitter {
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_iterator_descriptor(); })`);
                 }
                 if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolUnscopablesExpression(args[1]!)) {
-                    const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, node: args[0]! },
                         { value: key, node: args[1]! },
@@ -73302,7 +73346,6 @@ class Emitter {
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
                 }
                 if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
-                    const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_SYMBOL, node: args[1]! },
@@ -73312,7 +73355,6 @@ class Emitter {
                 if (this.isStaticArrayPrototypeExpression(args[0]!)) {
                     const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
                     if (keyType.kind !== "symbol") {
-                        const key = this.emitExpr(args[1]!);
                         return this.emitSequencedExpr(T_VALUE, [
                             { value: target, node: args[0]! },
                             { value: key, target: T_STRING, node: args[1]! },
@@ -73339,7 +73381,6 @@ class Emitter {
                     mapped.kind === "hash" ||
                     mapped.kind === "hmac"
                 ) {
-                    const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
@@ -73367,7 +73408,6 @@ class Emitter {
                 if (mapped.kind === "class") {
                     return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType, ignored);
                 }
-                const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_VALUE, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -73389,17 +73429,22 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
-                const reflectHasKeyType = this.prepareType(mapType(args[1]!, this.checker));
-                if (this.isSupportedWellKnownSymbolExpression(args[1]!) || reflectHasKeyType.kind === "symbol") {
-                    const key = this.emitExpr(args[1]!);
+                const key = this.emitExpr(args[1]!);
+                if (key.ty.kind === "symbol") {
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_SYMBOL, node: args[1]! },
                         ...ignored,
                     ], ([t, k]) => `tsc_reflect_has_symbol_prop(${t}, ${k})`);
                 }
+                if (key.ty.kind === "value") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_VALUE, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_has_computed_prop(${t}, ${k})`);
+                }
                 if (mapped.kind === "array") {
-                    const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
@@ -73431,7 +73476,6 @@ class Emitter {
                         ignored,
                     );
                 }
-                const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -73571,8 +73615,20 @@ class Emitter {
                 const key = this.emitExpr(args[1]!);
                 const value = this.emitExpr(args[2]!);
                 if (args[3]) {
-                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.set symbol keys with explicit receiver are not supported yet");
                     const receiver = this.emitExpr(args[3]!);
+                    if (key.ty.kind === "symbol" || key.ty.kind === "value") {
+                        return this.emitSequencedExpr(
+                            T_BOOLEAN,
+                            [
+                                { value: target, target: T_VALUE, node: args[0]! },
+                                { value: key, target: T_VALUE, node: args[1]! },
+                                { value, target: T_VALUE, node: args[2]! },
+                                { value: receiver, target: T_VALUE, node: args[3]! },
+                                ...ignored,
+                            ],
+                            ([t, k, v, r]) => `tsc_reflect_set_computed_prop_receiver(${t}, ${k}, ${v}, ${r})`,
+                        );
+                    }
                     const cache = this.freshTemp("_prop_cache");
                     return this.emitSequencedExpr(
                         T_BOOLEAN,

@@ -428,6 +428,10 @@ static inline uint64_t fnv1a64(const unsigned char* p, size_t len) {
 #endif
 
 static inline uint64_t tsc_str_cached_hash(const tsc_str_t* s) {
+    if (s->symbol_key) {
+        uint64_t h = splitmix64_mix(s->symbol_key->id ^ 0x53594d424f4cULL);
+        return h == 0 ? 1 : h;
+    }
 #ifdef TSC_THREADS
     /* The cached hash is idempotent, so racing writers all store the same
      * value; relaxed atomics just keep the load/store untorn. */

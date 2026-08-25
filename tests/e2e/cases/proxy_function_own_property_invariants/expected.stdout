@@ -8,7 +8,7 @@ cfg define nonconfig: Proxy defineProperty trap cannot report configurable key a
 cfg delete open: true
 side delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
 side has closed: Proxy has trap cannot report false for key on non-extensible target
-side keys missing: Proxy ownKeys trap result missing key on non-extensible target
+side keys missing: TypeError: Proxy ownKeys trap result missing key on non-extensible target
 side keys exact: length,name,prototype,side
-side keys extra: Proxy ownKeys trap result included extra key on non-extensible target
-fixed keys missing: Proxy ownKeys trap result missing non-configurable key
+side keys extra: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
+fixed keys missing: TypeError: Proxy ownKeys trap result missing non-configurable key

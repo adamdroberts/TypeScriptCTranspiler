@@ -817,7 +817,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 
 bool str_lit_eq(const tsc_str_t* s, const char* lit) {
     size_t n = strlen(lit);
-    return s && s->len == n && memcmp(s->data, lit, n) == 0;
+    return s && !s->symbol_key && s->len == n && memcmp(s->data, lit, n) == 0;
 }
 
 static void tsc_dynamic_stats_report(void) {

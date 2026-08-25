@@ -121,6 +121,165 @@ function subjectSource(): string {
             print("computed-delete:" + String(delete computedTarget[computedKey]) + ":" +
                 String(Object.prototype.hasOwnProperty.call(computedTarget, computedKey)));
 
+            var firstCustom = Symbol("same");
+            var secondCustom = Symbol("same");
+            var legacyLookingKey = "__tsc_symbol_iterator";
+            var customTarget = { text: 1 };
+            customTarget[firstCustom] = "first";
+            customTarget[secondCustom] = "second";
+            customTarget[""] = "empty";
+            customTarget[legacyLookingKey] = "legacy";
+            var firstCustomDescriptor = Object.getOwnPropertyDescriptor(customTarget, firstCustom);
+            print("custom-identity:" + [
+                firstCustom !== secondCustom,
+                customTarget[firstCustom],
+                customTarget[secondCustom],
+                customTarget[""],
+                customTarget[legacyLookingKey],
+                firstCustom in customTarget,
+                Object.prototype.hasOwnProperty.call(customTarget, secondCustom),
+                Object.prototype.propertyIsEnumerable.call(customTarget, firstCustom),
+                firstCustomDescriptor.value,
+            ].join(":"));
+            var customSymbols = Object.getOwnPropertySymbols(customTarget);
+            print("custom-symbols:" + [
+                customSymbols.length,
+                customSymbols[0] === firstCustom,
+                customSymbols[1] === secondCustom,
+            ].join(":"));
+            var customOwnKeys = Reflect.ownKeys(customTarget);
+            print("custom-own-key-order:" + [
+                customOwnKeys.length,
+                customOwnKeys[0] === "text",
+                customOwnKeys[1] === "",
+                customOwnKeys[2] === legacyLookingKey,
+                customOwnKeys[3] === firstCustom,
+                customOwnKeys[4] === secondCustom,
+                Object.keys(customTarget).join("|"),
+            ].join(":"));
+
+            var reflectedKey = Symbol("reflected");
+            var reflectedTarget = {};
+            Object.defineProperty(reflectedTarget, reflectedKey, {
+                get: function () { return this.marker; },
+                set: function (value) { this.received = value; },
+                enumerable: true,
+                configurable: true,
+            });
+            var reflectedReceiver = { marker: 13 };
+            var reflectedGet = Reflect.get(reflectedTarget, reflectedKey, reflectedReceiver);
+            var reflectedSet = Reflect.set(reflectedTarget, reflectedKey, 14, reflectedReceiver);
+            var reflectedHas = Reflect.has(reflectedTarget, reflectedKey);
+            var reflectedDelete = Reflect.deleteProperty(reflectedTarget, reflectedKey);
+            print("custom-reflect:" + [
+                reflectedGet,
+                reflectedSet,
+                reflectedReceiver.received,
+                reflectedHas,
+                reflectedDelete,
+                Reflect.has(reflectedTarget, reflectedKey),
+            ].join(":"));
+
+            var definedKey = Symbol("defined");
+            var descriptorMap = {};
+            descriptorMap[definedKey] = {
+                value: 15,
+                writable: true,
+                enumerable: true,
+                configurable: true,
+            };
+            var definedTarget = {};
+            Object.defineProperties(definedTarget, descriptorMap);
+            var definedDescriptors = Object.getOwnPropertyDescriptors(definedTarget);
+            var assignedTarget = Object.assign({}, customTarget);
+            var assignedSymbols = Object.getOwnPropertySymbols(assignedTarget);
+            print("custom-copy-descriptors:" + [
+                definedTarget[definedKey],
+                definedDescriptors[definedKey].value,
+                assignedTarget[firstCustom],
+                assignedTarget[secondCustom],
+                assignedSymbols[0] === firstCustom,
+                assignedSymbols[1] === secondCustom,
+            ].join(":"));
+
+            var proxyKey = Symbol("proxy");
+            /** @type {any} */ var proxyTarget = {};
+            Object.defineProperty(proxyTarget, proxyKey, {
+                value: 17,
+                writable: true,
+                enumerable: true,
+                configurable: false,
+            });
+            /** @type {any} */ var proxyLog = [];
+            /** @type {any} */ var symbolProxy = new Proxy(proxyTarget, {
+                ownKeys: function () {
+                    proxyLog.push("ownKeys");
+                    return [proxyKey];
+                },
+                getOwnPropertyDescriptor: function (target, key) {
+                    proxyLog.push("descriptor:" + String(key === proxyKey));
+                    return Reflect.getOwnPropertyDescriptor(target, key);
+                },
+                get: function (target, key, receiver) {
+                    proxyLog.push("get:" + String(key === proxyKey));
+                    return Reflect.get(target, key, receiver);
+                },
+            });
+            var proxyOwnKeys = Reflect.ownKeys(symbolProxy);
+            var proxySymbols = Object.getOwnPropertySymbols(symbolProxy);
+            print("proxy-symbol-ownkeys:" + [
+                proxyOwnKeys.length,
+                proxyOwnKeys[0] === proxyKey,
+                proxySymbols.length,
+                proxySymbols[0] === proxyKey,
+                proxyLog.join("|"),
+            ].join(":"));
+            proxyLog.length = 0;
+            print("proxy-symbol-string-projection:" + [
+                Object.keys(symbolProxy).length,
+                proxyLog.join("|"),
+            ].join(":"));
+            proxyLog.length = 0;
+            var proxyAssigned = Object.assign({}, symbolProxy);
+            print("proxy-symbol-assign:" + [
+                proxyAssigned[proxyKey],
+                proxyLog.join("|"),
+            ].join(":"));
+            proxyLog.length = 0;
+            var proxyDescriptors = Object.getOwnPropertyDescriptors(symbolProxy);
+            print("proxy-symbol-descriptors:" + [
+                proxyDescriptors[proxyKey].value,
+                proxyLog.join("|"),
+            ].join(":"));
+            print("proxy-symbol-invariants:" + [
+                errorName(function () {
+                    return Reflect.ownKeys(new Proxy({}, {
+                        ownKeys: function () { return [proxyKey, proxyKey]; },
+                    }));
+                }),
+                errorName(function () {
+                    return Reflect.ownKeys(new Proxy(proxyTarget, {
+                        ownKeys: function () { return []; },
+                    }));
+                }),
+            ].join(":"));
+
+            var stressTarget = {};
+            var stressSymbols = [];
+            for (var stressIndex = 0; stressIndex < 257; stressIndex++) {
+                var stressSymbol = Symbol(String(stressIndex));
+                stressSymbols.push(stressSymbol);
+                stressTarget[stressSymbol] = stressIndex;
+            }
+            var stressObserved = Object.getOwnPropertySymbols(stressTarget);
+            var stressValid = stressObserved.length === stressSymbols.length;
+            for (var stressCheck = 0; stressCheck < stressSymbols.length; stressCheck++) {
+                stressValid = stressValid &&
+                    stressObserved[stressCheck] === stressSymbols[stressCheck] &&
+                    stressTarget[stressSymbols[stressCheck]] === stressCheck;
+            }
+            print("custom-symbol-worklist:" + String(stressValid));
+
             var toPrimitiveDescriptor = Object.getOwnPropertyDescriptor(Symbol.prototype, Symbol.toPrimitive);
             var descriptionDescriptor = Object.getOwnPropertyDescriptor(Symbol.prototype, "description");
             print("prototype-intrinsics:" + [
@@ -172,12 +331,23 @@ function expectedOutput(): string {
         "ordinary-string:ten",
         "computed-symbol:retained:true:true:true:retained:true:true:true",
         "computed-delete:true:false",
+        "custom-identity:true:first:second:empty:legacy:true:true:true:first",
+        "custom-symbols:2:true:true",
+        "custom-own-key-order:5:true:true:true:true:true:text||__tsc_symbol_iterator",
+        "custom-reflect:13:true:14:true:true:false",
+        "custom-copy-descriptors:15:15:first:second:true:true",
+        "proxy-symbol-ownkeys:1:true:1:true:ownKeys|ownKeys",
+        "proxy-symbol-string-projection:0:ownKeys",
+        "proxy-symbol-assign:17:ownKeys|descriptor:true|get:true",
+        "proxy-symbol-descriptors:17:ownKeys|descriptor:true",
+        "proxy-symbol-invariants:TypeError:TypeError",
+        "custom-symbol-worklist:true",
         "prototype-intrinsics:[Symbol.toPrimitive]:1:false:false:true:function:get description::false:true:described:true:true:Symbol",
     );
     return `${lines.join("\n")}\n`;
 }
 
-test("well-known Symbols and ToPrimitive share canonical property-key semantics", async () => {
+test("Symbols and ToPrimitive share canonical identity-bearing property-key semantics", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-symbol-coercion-property-"));
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/symbol-coercion.js#sloppy";

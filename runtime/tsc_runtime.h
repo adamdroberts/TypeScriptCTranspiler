@@ -87,6 +87,9 @@ typedef struct tsc_str {
     size_t len;
     const char* data;
     uint64_t hash;
+    /* Opaque identity-bearing encoding for an ECMAScript Symbol
+     * PropertyKey. Ordinary strings always leave this NULL. */
+    struct tsc_symbol* symbol_key;
 } tsc_str_t;
 struct tsc_array; /* fwd */
 
@@ -192,11 +195,14 @@ typedef struct tsc_symbol {
     uint64_t id;
     tsc_str_t* description;
     tsc_str_t* global_key;
+    tsc_str_t* property_key;
 } tsc_symbol_t;
 
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description);
 tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key);
 tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym);
+tsc_str_t* tsc_symbol_property_key(tsc_symbol_t* sym);
+tsc_symbol_t* tsc_property_key_symbol(const tsc_str_t* key);
 typedef enum {
     TSC_WELL_KNOWN_SYMBOL_ASYNC_ITERATOR,
     TSC_WELL_KNOWN_SYMBOL_ASYNC_DISPOSE,
@@ -885,6 +891,7 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
 tsc_value_t tsc_value_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver, tsc_prop_cache_t* cache);
 /** Apply ECMAScript computed-key coercion once for a dynamically typed key. */
 tsc_value_t tsc_value_get_computed_prop(tsc_value_t v, tsc_value_t key);
+tsc_value_t tsc_value_get_computed_prop_receiver(tsc_value_t v, tsc_value_t key, tsc_value_t receiver);
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
 bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value);
@@ -932,6 +939,7 @@ bool tsc_value_set_computed_prop_receiver(tsc_value_t v, tsc_value_t key, tsc_va
 tsc_value_t tsc_reflect_get_prop(tsc_value_t v, const tsc_str_t* key);
 tsc_value_t tsc_reflect_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
+tsc_value_t tsc_reflect_get_computed_prop_receiver(tsc_value_t v, tsc_value_t key, tsc_value_t receiver);
 tsc_value_t tsc_reflect_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver, tsc_prop_cache_t* cache);
 bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
 bool tsc_reflect_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value);
@@ -955,6 +963,7 @@ bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_reflect_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
+bool tsc_reflect_has_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key);
 bool tsc_reflect_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
@@ -968,6 +977,9 @@ bool tsc_value_freeze(tsc_value_t v);
 bool tsc_value_is_sealed(tsc_value_t v);
 bool tsc_value_is_frozen(tsc_value_t v);
 tsc_array_t* tsc_value_own_keys(tsc_value_t v);
+/* Canonical internal [[OwnPropertyKeys]] worklist. Entries are ordinary
+ * strings or identity-bearing Symbol PropertyKey carriers. */
+tsc_array_t* tsc_value_raw_own_keys(tsc_value_t v);
 tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v);
 tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key);
 tsc_value_t tsc_value_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key);

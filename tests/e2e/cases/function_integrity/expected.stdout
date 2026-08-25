@@ -22,7 +22,7 @@ typed function define: true true false 1
 typed function prototype define: true true
 typed function delete: true true true true true
 function length samevalue: true false true
-function length samevalue object: Object.defineProperty failed
+function length samevalue object: TypeError: Object.defineProperty failed
 seal before: false false
 seal: true false true false
 freeze: true false true true
@@ -33,9 +33,9 @@ proxy freeze: true true true
 proxy function get length: 9
 proxy function set length: true
 proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
-proxy function keys missing: Proxy ownKeys trap result missing non-configurable key
+proxy function keys missing: TypeError: Proxy ownKeys trap result missing non-configurable key
 proxy function keys complete: 3
-proxy function keys extra: Proxy ownKeys trap result included extra key on non-extensible target
+proxy function keys extra: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 proxy function has length: false
 proxy function has missing: false
 proxy function define same: Proxy defineProperty trap cannot report configurable key as non-configurable

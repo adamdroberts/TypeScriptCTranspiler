@@ -9535,7 +9535,7 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         0.0,
         tsc_str_from_lit("close", 5)
     ));
-    tsc_object_set(object, tsc_str_from_cstr("__tsc_symbol_asyncDispose"), tsc_value_function_builtin_named(
+    tsc_object_set(object, tsc_symbol_property_key(tsc_symbol_async_dispose()), tsc_value_function_builtin_named(
         tsc_fs_file_handle_close_builtin,
         handle,
         0.0,
@@ -15101,13 +15101,13 @@ static tsc_value_t tsc_fs_dir_value(tsc_fs_dir_t* state) {
     tsc_object_set(object, tsc_str_from_lit("closeSync", 9), tsc_value_function_builtin_named(
         tsc_fs_dir_close_sync_builtin, state, 0.0, tsc_str_from_lit("closeSync", 9)
     ));
-    tsc_object_set(object, tsc_str_from_cstr("__tsc_symbol_dispose"), tsc_value_function_builtin_named(
+    tsc_object_set(object, tsc_symbol_property_key(tsc_symbol_dispose()), tsc_value_function_builtin_named(
         tsc_fs_dir_close_sync_builtin, state, 0.0, tsc_str_from_lit("dispose", 7)
     ));
     tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_builtin_named(
         tsc_fs_dir_close_builtin, state, 0.0, tsc_str_from_lit("close", 5)
     ));
-    tsc_object_set(object, tsc_str_from_cstr("__tsc_symbol_asyncDispose"), tsc_value_function_builtin_named(
+    tsc_object_set(object, tsc_symbol_property_key(tsc_symbol_async_dispose()), tsc_value_function_builtin_named(
         tsc_fs_dir_close_builtin, state, 0.0, tsc_str_from_lit("asyncDispose", 12)
     ));
     tsc_object_set(object, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(

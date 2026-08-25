@@ -10,11 +10,11 @@ closed ext true: Proxy isExtensible trap result does not match target
 fake prevent: Proxy preventExtensions trap cannot report success for extensible target
 fake still extensible: true
 real prevent: true
-missing prototype key: Proxy ownKeys trap result missing non-configurable key
+missing prototype key: TypeError: Proxy ownKeys trap result missing non-configurable key
 exact function keys: length,name,prototype
-extra closed function keys: Proxy ownKeys trap result included extra key on non-extensible target
+extra closed function keys: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 accessor function keys: length,name
-extra closed accessor keys: Proxy ownKeys trap result included extra key on non-extensible target
+extra closed accessor keys: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 prototype descriptor: true false false true
 prototype define downgrade: true
 nonwritable prototype descriptor: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable

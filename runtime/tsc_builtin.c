@@ -45,6 +45,12 @@ tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     sym->id = TSC_ID_INC(tsc_next_symbol_id) - 1;
     sym->description = (tsc_str_t*)description;
     sym->global_key = NULL;
+    sym->property_key = (tsc_str_t*)TSC_GC_MALLOC(sizeof(tsc_str_t));
+    sym->property_key->len = 0;
+    sym->property_key->data = "";
+    sym->property_key->hash = splitmix64_mix(sym->id ^ 0x53594d424f4cULL);
+    if (sym->property_key->hash == 0) sym->property_key->hash = 1;
+    sym->property_key->symbol_key = sym;
     return sym;
 }
 
@@ -70,6 +76,14 @@ tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key) {
 
 tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym) {
     return sym ? sym->global_key : NULL;
+}
+
+tsc_str_t* tsc_symbol_property_key(tsc_symbol_t* sym) {
+    return sym ? sym->property_key : NULL;
+}
+
+tsc_symbol_t* tsc_property_key_symbol(const tsc_str_t* key) {
+    return key ? key->symbol_key : NULL;
 }
 
 const tsc_well_known_symbol_descriptor_t* tsc_symbol_well_known_descriptor(
@@ -1152,6 +1166,7 @@ tsc_str_t* tsc_json_escape_string(const tsc_str_t* s) {
     out->data = buf;
     out->len = pos;
     out->hash = 0;
+    out->symbol_key = NULL;
     return out;
 }
 

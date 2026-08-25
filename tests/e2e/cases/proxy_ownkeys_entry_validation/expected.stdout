@@ -1,4 +1,4 @@
-reflect numeric: Proxy ownKeys trap entries must be strings
-object mixed: Proxy ownKeys trap entries must be strings
+reflect numeric: TypeError: Proxy ownKeys trap entries must be strings or symbols
+object mixed: TypeError: Proxy ownKeys trap entries must be strings or symbols
 valid: a
 events: ignored:r|numeric trap:1|ignored:o|mixed trap:1|valid trap:1

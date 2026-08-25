@@ -11,6 +11,7 @@ tsc_str_t* str_alloc(size_t len) {
     s->len = len;
     s->data = buf;
     s->hash = 0;
+    s->symbol_key = NULL;
     return s;
 }
 
@@ -19,6 +20,7 @@ tsc_str_t* tsc_str_from_lit(const char* data, size_t len) {
     s->len = len;
     s->data = data;
     s->hash = 0;
+    s->symbol_key = NULL;
     return s;
 }
 
@@ -572,6 +574,9 @@ tsc_str_t* tsc_str_from_code_point_n(size_t n, ...) {
 
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b) {
     if (a == b) return true;
+    if (a->symbol_key || b->symbol_key) {
+        return a->symbol_key && a->symbol_key == b->symbol_key;
+    }
     if (a->len != b->len) return false;
     uint64_t ah = a->hash;
     uint64_t bh = b->hash;
@@ -580,6 +585,13 @@ bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b) {
 }
 
 int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b) {
+    if (a->symbol_key || b->symbol_key) {
+        if (!a->symbol_key) return -1;
+        if (!b->symbol_key) return 1;
+        if (a->symbol_key->id < b->symbol_key->id) return -1;
+        if (a->symbol_key->id > b->symbol_key->id) return 1;
+        return 0;
+    }
     size_t m = a->len < b->len ? a->len : b->len;
     int r = memcmp(a->data, b->data, m);
     if (r != 0) return r;
@@ -1156,6 +1168,7 @@ tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b) {
     s->len = b->len;
     s->data = b->data;
     s->hash = 0;
+    s->symbol_key = NULL;
     return s;
 }
 

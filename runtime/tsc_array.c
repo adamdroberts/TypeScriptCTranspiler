@@ -134,7 +134,7 @@ tsc_value_t tsc_array_constructor_value(void) {
         );
         (void)tsc_value_define_accessor_desc(
             array_constructor_value,
-            tsc_str_from_lit("__tsc_symbol_species", 20),
+            tsc_symbol_property_key(tsc_symbol_species()),
             array_constructor_species_getter,
             NULL,
             true,
@@ -1066,11 +1066,11 @@ tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
     }
     tsc_value_t iterator_desc = tsc_array_symbol_iterator_descriptor();
     if (!tsc_value_is_undefined(iterator_desc)) {
-        tsc_object_set(out, tsc_str_from_lit("__tsc_symbol_iterator", 21), iterator_desc);
+        tsc_object_set(out, tsc_symbol_property_key(tsc_symbol_iterator()), iterator_desc);
     }
     tsc_value_t unscopables_desc = tsc_array_symbol_unscopables_descriptor();
     if (!tsc_value_is_undefined(unscopables_desc)) {
-        tsc_object_set(out, tsc_str_from_lit("__tsc_symbol_unscopables", 24), unscopables_desc);
+        tsc_object_set(out, tsc_symbol_property_key(tsc_symbol_unscopables()), unscopables_desc);
     }
     return tsc_value_object(out);
 }

@@ -451,7 +451,7 @@ static tsc_value_t async_from_sync_iterator_wrap(tsc_value_t iterator) {
     );
     tsc_object_set(
         wrapper,
-        tsc_str_from_lit("__tsc_symbol_asyncIterator", 27),
+        tsc_symbol_property_key(tsc_symbol_async_iterator()),
         tsc_value_function_builtin_named(
             async_from_sync_async_iterator,
             state,

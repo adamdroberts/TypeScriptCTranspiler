@@ -105,7 +105,7 @@ static tsc_value_t test262_abstract_module_source_constructor(void) {
         true,
         true
     );
-    tsc_str_t* tag_key = tsc_str_from_cstr("__tsc_symbol_toStringTag");
+    tsc_str_t* tag_key = tsc_symbol_property_key(tsc_symbol_to_string_tag());
     (void)tsc_object_define_accessor(
         (tsc_object_t*)value_ptr(prototype),
         tag_key,
@@ -272,6 +272,7 @@ static void append_stdout_field(tsc_jsonbuf_t* out) {
         .len = g_test262_stdout.len,
         .data = g_test262_stdout.data,
         .hash = 0,
+        .symbol_key = NULL,
     };
     tsc_jsonbuf_str(out, &value);
 }
@@ -389,11 +390,13 @@ void tsc_test262_write_normal(const char* scenario_id, bool async_test) {
             .len = sizeof("Test262Error") - 1,
             .data = "Test262Error",
             .hash = 0,
+            .symbol_key = NULL,
         };
         tsc_str_t failure_name = {
             .len = markers.failure_name_length,
             .data = markers.failure_name,
             .hash = 0,
+            .symbol_key = NULL,
         };
         write_throw_with_name(
             scenario_id,

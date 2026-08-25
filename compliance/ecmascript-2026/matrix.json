@@ -488,8 +488,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary internal methods", "function objects", "arguments", "arrays", "proxies", "module namespace objects"],
-      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["object_descriptors", "array_property_descriptors", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c"] },
-      "knownGaps": ["Pinned namespace scenarios that depend on general super lowering remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified."]
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["object_descriptors", "array_property_descriptors", "proxy", "proxy_ownkeys_invariants", "proxy_get_own_property_symbols", "proxy_object_assign_source"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_string.c", "src/emit/index.ts"] },
+      "knownGaps": ["Pinned namespace scenarios that depend on general super lowering remain unsupported; exact ordinary/Proxy/Symbol PropertyKey clause partitions and namespace-proxy interactions are not yet clause-verified."]
     },
     {
       "id": "source-text",
@@ -577,9 +577,9 @@
       "rootClause": "sec-global-object",
       "scope": "required",
       "tracking": "in-progress",
-      "semanticPartitions": ["value properties", "global functions", "constructors", "global object semantics"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["global_number_predicates", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
-      "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance."]
+      "semanticPartitions": ["value properties", "global functions", "constructors", "Reflect", "global object semantics"],
+      "localEvidence": { "property": ["tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["global_number_predicates", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance; Reflect operations still require exact clause partitions and exhaustive pinned Test262 evidence."]
     },
     {
       "id": "fundamental-objects",
@@ -588,8 +588,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Object", "Function", "Boolean", "Symbol", "Error and native errors"],
-      "localEvidence": { "property": ["tests/property/function-bind.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "object_prototypes", "function_prototypes", "symbols"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_object.c", "runtime/tsc_value.c#tsc_value_bind_function"] },
-      "knownGaps": ["Clause-level descriptor, prototype, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open."]
+      "localEvidence": { "property": ["tests/property/function-bind.property.test.ts", "tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "object_prototypes", "function_prototypes", "symbols", "object_get_own_property_symbols", "proxy_get_own_property_symbols"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_object.c", "runtime/tsc_value.c#tsc_value_bind_function", "runtime/tsc_builtin.c", "runtime/tsc_string.c"] },
+      "knownGaps": ["Clause-level descriptor, prototype, Symbol, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open."]
     },
     {
       "id": "numbers-dates",

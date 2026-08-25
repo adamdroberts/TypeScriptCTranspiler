@@ -1,10 +1,10 @@
-missing length: Proxy ownKeys trap result missing non-configurable key
+missing length: TypeError: Proxy ownKeys trap result missing non-configurable key
 extra open: 0|ghost|length
-missing closed: Proxy ownKeys trap result missing key on non-extensible target
-extra closed: Proxy ownKeys trap result included extra key on non-extensible target
+missing closed: TypeError: Proxy ownKeys trap result missing key on non-extensible target
+extra closed: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 exact closed: 0|1|length
-missing sealed: Proxy ownKeys trap result missing non-configurable key
-missing side configurable: Proxy ownKeys trap result missing key on non-extensible target
-missing side fixed: Proxy ownKeys trap result missing non-configurable key
+missing sealed: TypeError: Proxy ownKeys trap result missing non-configurable key
+missing side configurable: TypeError: Proxy ownKeys trap result missing key on non-extensible target
+missing side fixed: TypeError: Proxy ownKeys trap result missing non-configurable key
 exact side: 0|length|extra
 events: ignored:missing length|missing length trap:1|ignored:extra open|extra open trap:1|ignored:missing closed|missing closed trap:2|ignored:extra closed|extra closed trap:2|ignored:exact closed|exact closed trap:2|ignored:missing sealed|missing closed trap:2|ignored:missing side configurable|missing side trap:1|ignored:missing side fixed|missing side trap:1|ignored:exact side|exact side trap:1:present

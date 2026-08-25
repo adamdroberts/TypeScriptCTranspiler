@@ -466,8 +466,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-canbeheldweakly` — CanBeHeldWeakly ( _v_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
 - [ ] **Ordinary and Exotic Objects Behaviours** (`sec-ordinary-and-exotic-objects-behaviours`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary internal methods; function objects; arguments; arrays; proxies; module namespace objects.
-  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: object_descriptors, array_property_descriptors, proxy.
-  - Known blockers: Pinned namespace scenarios that depend on general super lowering remain unsupported; proxy interactions with namespace exotic objects are not yet clause-verified.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/symbol-coercion.property.test.ts; stress: module_namespace_export_width; E2E: object_descriptors, array_property_descriptors, proxy, proxy_ownkeys_invariants, proxy_get_own_property_symbols, proxy_object_assign_source.
+  - Known blockers: Pinned namespace scenarios that depend on general super lowering remain unsupported; exact ordinary/Proxy/Symbol PropertyKey clause partitions and namespace-proxy interactions are not yet clause-verified.
   - [ ] `sec-ordinary-and-exotic-objects-behaviours` — Ordinary and Exotic Objects Behaviours: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots` — Ordinary Object Internal Methods and Internal Slots: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof` — [[GetPrototypeOf]] ( ): a normal completion containing either an Object or null: exact disposition and partitions missing.
@@ -1061,9 +1061,9 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - Known blockers: Broad built-in path evidence must be refined to exact clauses before verification; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
   - [ ] `sec-ecmascript-standard-built-in-objects` — ECMAScript Standard Built-in Objects: exact disposition and partitions missing.
 - [ ] **The Global Object** (`sec-global-object`) — tracking: `in-progress`, scope: `required`
-  - Semantic partitions: value properties; global functions; constructors; global object semantics.
-  - Linked local regression evidence: E2E: global_number_predicates, runtime_eval.
-  - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance.
+  - Semantic partitions: value properties; global functions; constructors; Reflect; global object semantics.
+  - Linked local regression evidence: property: tests/property/symbol-coercion.property.test.ts; E2E: global_number_predicates, runtime_eval, proxy_ownkeys_invariants.
+  - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance; Reflect operations still require exact clause partitions and exhaustive pinned Test262 evidence.
   - [ ] `sec-global-object` — The Global Object: exact disposition and partitions missing.
   - [ ] `sec-value-properties-of-the-global-object` — Value Properties of the Global Object: exact disposition and partitions missing.
   - [ ] `sec-globalthis` — globalThis: exact disposition and partitions missing.
@@ -1137,8 +1137,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-reflect` — Reflect: exact disposition and partitions missing.
 - [ ] **Fundamental Objects** (`sec-fundamental-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Object; Function; Boolean; Symbol; Error and native errors.
-  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, object_prototypes, function_prototypes, symbols.
-  - Known blockers: Clause-level descriptor, prototype, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
+  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts, tests/property/symbol-coercion.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, object_prototypes, function_prototypes, symbols, object_get_own_property_symbols, proxy_get_own_property_symbols.
+  - Known blockers: Clause-level descriptor, prototype, Symbol, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
   - [ ] `sec-fundamental-objects` — Fundamental Objects: exact disposition and partitions missing.
   - [ ] `sec-object-objects` — Object Objects: exact disposition and partitions missing.
   - [ ] `sec-object-constructor` — The Object Constructor: exact disposition and partitions missing.

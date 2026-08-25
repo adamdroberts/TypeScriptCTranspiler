@@ -383,6 +383,15 @@ void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message) {
     }
 }
 
+/* Object storage uses one opaque tsc_str_t carrier for either PropertyKey
+ * kind. Proxy traps must receive the original public String or Symbol value. */
+static tsc_value_t property_key_value(const tsc_str_t* key) {
+    tsc_symbol_t* symbol = tsc_property_key_symbol(key);
+    return symbol
+        ? tsc_value_symbol(symbol)
+        : tsc_value_string((tsc_str_t*)key);
+}
+
 static bool proxy_trap_missing(const tsc_object_t* o, const char* name, size_t len) {
     tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit(name, len));
     return tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap);
@@ -1198,7 +1207,7 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
         tsc_proxy_require_callable_trap(trap, "Proxy set trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_array_push_value(args, value);
         tsc_array_push_value(args, receiver);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
@@ -1259,7 +1268,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_array_push_value(args, tsc_value_object(desc));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
@@ -1373,7 +1382,7 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
 
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_array_push_value(args, tsc_value_object(desc));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
@@ -1515,7 +1524,7 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         tsc_proxy_require_callable_trap(trap, "Proxy get trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_array_push_value(args, receiver);
         tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         validate_proxy_get_result(o, key, result);
@@ -1593,7 +1602,7 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_proxy_require_callable_trap(trap, "Proxy getOwnPropertyDescriptor trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         tsc_proxy_validate_get_own_property_descriptor_result(o, key, res);
         return !tsc_value_is_undefined(res);
@@ -1621,7 +1630,7 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
         tsc_proxy_require_callable_trap(trap, "Proxy getOwnPropertyDescriptor trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         tsc_proxy_validate_get_own_property_descriptor_result(o, key, res);
         if (tsc_value_is_undefined(res)) return false;
@@ -1648,7 +1657,7 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
         tsc_proxy_require_callable_trap(trap, "Proxy has trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool found = tsc_value_is_truthy(res);
         if (!found && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
@@ -1728,7 +1737,7 @@ bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
         tsc_proxy_require_callable_trap(trap, "Proxy deleteProperty trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)key));
+        tsc_array_push_value(args, property_key_value(key));
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool deleted = tsc_value_is_truthy(res);
         if (deleted && value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_ARRAY) {
@@ -1969,11 +1978,18 @@ static bool str_array_contains(const tsc_array_t* keys, const tsc_str_t* key) {
     return false;
 }
 
-static tsc_str_t* proxy_own_key_to_string(tsc_value_t v) {
+static void proxy_own_keys_type_error(const char* message) {
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
+}
+
+static tsc_str_t* proxy_own_key_to_property_key(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return (tsc_str_t*)value_ptr(v);
     }
-    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap entries must be strings"));
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_symbol_property_key((tsc_symbol_t*)value_ptr(v));
+    }
+    proxy_own_keys_type_error("Proxy ownKeys trap entries must be strings or symbols");
     return tsc_str_from_lit("", 0);
 }
 
@@ -1988,13 +2004,13 @@ static tsc_array_t* proxy_own_keys_result_to_list(const tsc_object_t* proxy, tsc
             value_tag(result) != TSC_VALUE_TAG_FUNCTION
         )
     ) {
-        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array-like object"));
+        proxy_own_keys_type_error("Proxy ownKeys trap must return an array-like object");
     }
     size_t length = (size_t)tsc_value_length(result);
     tsc_array_t* keys = tsc_array_new(sizeof(tsc_str_t*), length ? length : 1);
     for (size_t i = 0; i < length; i++) {
         tsc_value_t item = tsc_value_get_index(result, (double)i);
-        tsc_str_t* key = proxy_own_key_to_string(item);
+        tsc_str_t* key = proxy_own_key_to_property_key(item);
         tsc_array_push_raw(keys, &key);
     }
     validate_proxy_own_keys_result(proxy, keys);
@@ -2007,23 +2023,23 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
         tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
         for (size_t j = i + 1; j < keys->len; j++) {
             if (tsc_str_eq(key, TSC_ARR(tsc_str_t*, keys, j))) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap returned duplicate key"));
+                proxy_own_keys_type_error("Proxy ownKeys trap returned duplicate key");
             }
         }
     }
     if (proxy && value_is_box(proxy->proxy_target) && value_tag(proxy->proxy_target) == TSC_VALUE_TAG_ARRAY) {
         const tsc_array_t* target = (const tsc_array_t*)value_ptr(proxy->proxy_target);
         if (!str_array_contains(keys, tsc_str_from_lit("length", 6))) {
-            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+            proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
         }
         if (target->sealed || target->frozen || !target->extensible) {
             for (size_t i = 0; i < target->len; i++) {
                 tsc_str_t* key = tsc_str_from_int((int64_t)i);
                 if (!str_array_contains(keys, key)) {
                     if (target->sealed || target->frozen) {
-                        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+                        proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
                     }
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result missing key on non-extensible target");
                 }
             }
         }
@@ -2031,17 +2047,17 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
             for (size_t i = 0; i < target->props->len; i++) {
                 const tsc_object_prop_t* prop = &target->props->props[i];
                 if (!prop->configurable && !str_array_contains(keys, prop->key)) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
                 }
                 if (!target->extensible && !str_array_contains(keys, prop->key)) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result missing key on non-extensible target");
                 }
             }
         }
         if (!target->extensible) {
             for (size_t i = 0; i < keys->len; i++) {
                 if (!tsc_array_has_own_key(target, TSC_ARR(tsc_str_t*, keys, i))) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result included extra key on non-extensible target"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result included extra key on non-extensible target");
                 }
             }
         }
@@ -2056,16 +2072,16 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
         if (!str_array_contains(keys, tsc_str_from_lit("length", 6)) ||
             !str_array_contains(keys, tsc_str_from_lit("name", 4)) ||
             (target_has_prototype && !str_array_contains(keys, tsc_str_from_lit("prototype", 9)))) {
-            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+            proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
         }
         if (target->props) {
             for (size_t i = 0; i < target->props->len; i++) {
                 const tsc_object_prop_t* prop = &target->props->props[i];
                 if (!prop->configurable && !str_array_contains(keys, prop->key)) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
                 }
                 if (!target->extensible && !str_array_contains(keys, prop->key)) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result missing key on non-extensible target");
                 }
             }
         }
@@ -2080,7 +2096,7 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
                     continue;
                 }
                 if (!target->props || object_find(target->props, key) < 0) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result included extra key on non-extensible target"));
+                    proxy_own_keys_type_error("Proxy ownKeys trap result included extra key on non-extensible target");
                 }
             }
         }
@@ -2091,16 +2107,16 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
     for (size_t i = 0; i < target->len; i++) {
         const tsc_object_prop_t* prop = &target->props[i];
         if (!prop->configurable && !str_array_contains(keys, prop->key)) {
-            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
+            proxy_own_keys_type_error("Proxy ownKeys trap result missing non-configurable key");
         }
         if (!target->extensible && !str_array_contains(keys, prop->key)) {
-            tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing key on non-extensible target"));
+            proxy_own_keys_type_error("Proxy ownKeys trap result missing key on non-extensible target");
         }
     }
     if (!target->extensible) {
         for (size_t i = 0; i < keys->len; i++) {
             if (object_find(target, TSC_ARR(tsc_str_t*, keys, i)) < 0) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result included extra key on non-extensible target"));
+                proxy_own_keys_type_error("Proxy ownKeys trap result included extra key on non-extensible target");
             }
         }
     }
@@ -2122,6 +2138,9 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
         tsc_array_t* enumerable = tsc_array_new(sizeof(tsc_str_t*), result->len);
         for (size_t i = 0; i < result->len; i++) {
             tsc_str_t* key = TSC_ARR(tsc_str_t*, result, i);
+            /* EnumerableOwnProperties ignores Symbol keys without invoking
+             * [[GetOwnProperty]] for them. */
+            if (tsc_property_key_symbol(key)) continue;
             if (!tsc_object_property_is_enumerable(o, key)) continue;
             tsc_array_push_raw(enumerable, &key);
         }
@@ -2130,6 +2149,7 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
         tsc_str_t* key = o->props[i].key;
+        if (tsc_property_key_symbol(key)) continue;
         if (!tsc_object_property_is_enumerable(o, key)) continue;
         tsc_array_push_raw(a, &key);
     }
@@ -2142,7 +2162,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'ownKeys' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("ownKeys", 7));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            return tsc_value_own_keys(o->proxy_target);
+            return tsc_value_raw_own_keys(o->proxy_target);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy ownKeys trap must be callable");
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
@@ -2151,8 +2171,16 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
         return proxy_own_keys_result_to_list(o, res);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
+    /* Ordinary [[OwnPropertyKeys]] orders String keys before Symbol keys;
+     * each partition retains the object's canonical insertion order. */
     for (size_t i = 0; i < o->len; i++) {
         tsc_str_t* key = o->props[i].key;
+        if (tsc_property_key_symbol(key)) continue;
+        tsc_array_push_raw(a, &key);
+    }
+    for (size_t i = 0; i < o->len; i++) {
+        tsc_str_t* key = o->props[i].key;
+        if (!tsc_property_key_symbol(key)) continue;
         tsc_array_push_raw(a, &key);
     }
     return a;
@@ -2171,6 +2199,7 @@ tsc_array_t* tsc_object_values_dyn(const tsc_object_t* o) {
         return a;
     }
     for (size_t i = 0; i < o->len; i++) {
+        if (tsc_property_key_symbol(o->props[i].key)) continue;
         if (!o->props[i].enumerable) continue;
         tsc_value_t v = tsc_object_get(o, o->props[i].key);
         tsc_array_push_raw(a, &v);
@@ -2196,6 +2225,7 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o) {
         return a;
     }
     for (size_t i = 0; i < o->len; i++) {
+        if (tsc_property_key_symbol(o->props[i].key)) continue;
         if (!o->props[i].enumerable) continue;
         tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t key = tsc_value_string(o->props[i].key);
@@ -2283,6 +2313,7 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
                 return tsc_str_concat(out, tsc_str_from_lit("}", 1));
             }
             for (size_t i = 0; i < o->len; i++) {
+                if (tsc_property_key_symbol(o->props[i].key)) continue;
                 if (!o->props[i].enumerable) continue;
                 tsc_value_t prop_value = tsc_object_get(o, o->props[i].key);
                 if (value_json_omits_object_property(prop_value)) continue;
