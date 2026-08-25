@@ -172,8 +172,6 @@ export function finiteEvalScriptSourceGraph(
             const node = worklist.pop()!;
             if (
                 ts.isPropertyAccessExpression(node) &&
-                ts.isIdentifier(node.expression) &&
-                node.expression.text === "$262" &&
                 node.name.text === "evalScript"
             ) {
                 const parent = node.parent;

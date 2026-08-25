@@ -4,6 +4,9 @@ static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
 static tsc_test262_eval_script_callback_t g_test262_eval_script_callback = NULL;
 static tsc_test262_direct_eval_callback_t g_test262_direct_eval_callback = NULL;
+static const char test262_host_realm_state_key;
+
+static void test262_install_current_realm_globals(void);
 
 static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
@@ -44,7 +47,8 @@ tsc_value_t tsc_test262_direct_eval_call(
         const tsc_function_identity_t* identity =
             (const tsc_function_identity_t*)value_ptr(callee);
         if (identity->kind == TSC_FUNCTION_IDENTITY_BUILTIN &&
-            identity->code.generic == test262_eval_intrinsic && identity->env == NULL) {
+            identity->code.generic == test262_eval_intrinsic &&
+            identity->env == tsc_realm_current()) {
             tsc_array_t* list = tsc_value_as_array(args);
             tsc_value_t source = list && list->len > 0
                 ? TSC_ARR(tsc_value_t, list, 0)
@@ -98,15 +102,30 @@ static tsc_value_t test262_host_detach_array_buffer(void* env, tsc_value_t this_
 }
 
 static tsc_value_t test262_host_eval_script(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
     (void)this_arg;
     if (!g_test262_eval_script_callback) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("evalScript has no finite AOT source graph"));
     }
+    tsc_realm_t* realm = env ? (tsc_realm_t*)env : tsc_realm_current();
+    tsc_realm_t* previous = tsc_realm_swap(realm);
     tsc_value_t source = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
-    return g_test262_eval_script_callback(tsc_value_to_string(source));
+    tsc_value_t result = g_test262_eval_script_callback(tsc_value_to_string(source));
+    (void)tsc_realm_swap(previous);
+    return result;
+}
+
+static tsc_value_t test262_host_create_realm(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+    tsc_realm_t* realm = tsc_realm_new();
+    tsc_realm_t* previous = tsc_realm_swap(realm);
+    tsc_value_t host = tsc_test262_host_object();
+    test262_install_current_realm_globals();
+    (void)tsc_realm_swap(previous);
+    return host;
 }
 
 static tsc_value_t test262_host_html_dda(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -135,9 +154,10 @@ static tsc_value_t test262_abstract_module_source_tag(void* env, tsc_value_t rec
 }
 
 static tsc_value_t test262_abstract_module_source_constructor(void) {
+    tsc_realm_t* realm = tsc_realm_current();
     tsc_value_t constructor = tsc_value_function_generic_named(
         test262_abstract_module_source_body,
-        NULL,
+        realm,
         0.0,
         tsc_str_from_lit("AbstractModuleSource", 20)
     );
@@ -205,10 +225,12 @@ static tsc_value_t test262_abstract_module_source_constructor(void) {
 }
 
 tsc_value_t tsc_test262_host_object(void) {
-    static tsc_object_t* host = NULL;
+    tsc_object_t* host = (tsc_object_t*)tsc_realm_state_get(&test262_host_realm_state_key);
     if (!host) {
+        tsc_realm_t* realm = tsc_realm_current();
         tsc_value_t global = tsc_global_object();
         tsc_runtime_lock();
+        host = (tsc_object_t*)tsc_realm_state_get(&test262_host_realm_state_key);
         if (!host) {
             tsc_object_t* object = tsc_object_new();
             (void)tsc_object_define_desc(
@@ -228,7 +250,7 @@ tsc_value_t tsc_test262_host_object(void) {
                 tsc_str_from_lit("gc", 2),
                 tsc_value_function_builtin_named(
                     test262_host_gc,
-                    NULL,
+                    realm,
                     0.0,
                     tsc_str_from_lit("gc", 2)
                 ),
@@ -245,9 +267,26 @@ tsc_value_t tsc_test262_host_object(void) {
                 tsc_str_from_lit("evalScript", 10),
                 tsc_value_function_builtin_named(
                     test262_host_eval_script,
-                    NULL,
+                    realm,
                     1.0,
                     tsc_str_from_lit("evalScript", 10)
+                ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("createRealm", 11),
+                tsc_value_function_builtin_named(
+                    test262_host_create_realm,
+                    realm,
+                    0.0,
+                    tsc_str_from_lit("createRealm", 11)
                 ),
                 true,
                 true,
@@ -262,7 +301,7 @@ tsc_value_t tsc_test262_host_object(void) {
                 tsc_str_from_lit("detachArrayBuffer", 17),
                 tsc_value_function_builtin_named(
                     test262_host_detach_array_buffer,
-                    NULL,
+                    realm,
                     1.0,
                     tsc_str_from_lit("detachArrayBuffer", 17)
                 ),
@@ -276,7 +315,7 @@ tsc_value_t tsc_test262_host_object(void) {
             );
             tsc_value_t html_dda = tsc_value_function_builtin_named(
                 test262_host_html_dda,
-                NULL,
+                realm,
                 0.0,
                 tsc_str_from_lit("IsHTMLDDA", 9)
             );
@@ -306,6 +345,7 @@ tsc_value_t tsc_test262_host_object(void) {
                 true
             );
             host = object;
+            tsc_realm_state_set(&test262_host_realm_state_key, host);
         }
         tsc_runtime_unlock();
     }
@@ -421,12 +461,8 @@ static async_markers_t scan_async_markers(void) {
     return markers;
 }
 
-void tsc_test262_begin(void) {
-    if (!g_test262_started) {
-        tsc_jsonbuf_init(&g_test262_stdout);
-        g_test262_started = true;
-    }
-
+static void test262_install_current_realm_globals(void) {
+    tsc_realm_t* realm = tsc_realm_current();
     typedef struct {
         const char* name;
         size_t length;
@@ -439,7 +475,7 @@ void tsc_test262_begin(void) {
             4,
             tsc_value_function_builtin_named(
                 test262_eval_intrinsic,
-                NULL,
+                realm,
                 1.0,
                 tsc_str_from_lit("eval", 4)
             )
@@ -449,7 +485,7 @@ void tsc_test262_begin(void) {
             5,
             tsc_value_function_builtin_named(
                 test262_host_print,
-                NULL,
+                realm,
                 1.0,
                 tsc_str_from_lit("print", 5)
             )
@@ -472,6 +508,14 @@ void tsc_test262_begin(void) {
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot install Test262 host global"));
         }
     }
+}
+
+void tsc_test262_begin(void) {
+    if (!g_test262_started) {
+        tsc_jsonbuf_init(&g_test262_stdout);
+        g_test262_started = true;
+    }
+    test262_install_current_realm_globals();
 }
 
 void tsc_test262_write_normal(const char* scenario_id, bool async_test) {

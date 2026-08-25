@@ -71,6 +71,25 @@ typedef enum {
     TSC_VALUE_TAG_SYMBOL = 9,
 } tsc_value_tag_t;
 
+typedef struct tsc_realm_state_entry {
+    const void* key;
+    void* value;
+    struct tsc_realm_state_entry* next;
+} tsc_realm_state_entry_t;
+
+struct tsc_global_lexical_binding;
+struct tsc_realm {
+    tsc_object_t* global_object;
+    struct tsc_global_lexical_binding* global_lexical_bindings;
+    tsc_realm_state_entry_t* states;
+};
+
+tsc_realm_t* tsc_realm_new(void);
+tsc_realm_t* tsc_realm_current(void);
+tsc_realm_t* tsc_realm_swap(tsc_realm_t* realm);
+void* tsc_realm_state_get(const void* key);
+void tsc_realm_state_set(const void* key, void* value);
+
 _Static_assert(TSC_VALUE_TAG_SYMBOL < 16, "dynamic value tags must fit the NaN-box tag field");
 
 typedef struct tsc_object_prop {

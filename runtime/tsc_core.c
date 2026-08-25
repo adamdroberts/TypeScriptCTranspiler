@@ -2,6 +2,62 @@
 
 tsc_function_identity_t* g_function_identities = NULL;
 
+static tsc_realm_t* volatile g_default_realm = NULL;
+static TSC_TLS tsc_realm_t* g_current_realm = NULL;
+
+tsc_realm_t* tsc_realm_new(void) {
+    return (tsc_realm_t*)TSC_GC_MALLOC(sizeof(tsc_realm_t));
+}
+
+tsc_realm_t* tsc_realm_current(void) {
+    if (g_current_realm) return g_current_realm;
+    tsc_realm_t* realm = g_default_realm;
+    if (!realm) {
+        tsc_runtime_lock();
+        realm = g_default_realm;
+        if (!realm) {
+            realm = tsc_realm_new();
+            g_default_realm = realm;
+        }
+        tsc_runtime_unlock();
+    }
+    g_current_realm = realm;
+    return realm;
+}
+
+tsc_realm_t* tsc_realm_swap(tsc_realm_t* realm) {
+    if (!realm) tsc_panic("cannot enter a null Realm");
+    tsc_realm_t* previous = tsc_realm_current();
+    g_current_realm = realm;
+    return previous;
+}
+
+void* tsc_realm_state_get(const void* key) {
+    if (!key) return NULL;
+    for (tsc_realm_state_entry_t* entry = tsc_realm_current()->states;
+         entry;
+         entry = entry->next) {
+        if (entry->key == key) return entry->value;
+    }
+    return NULL;
+}
+
+void tsc_realm_state_set(const void* key, void* value) {
+    if (!key) tsc_panic("Realm state key is null");
+    tsc_realm_t* realm = tsc_realm_current();
+    for (tsc_realm_state_entry_t* entry = realm->states; entry; entry = entry->next) {
+        if (entry->key != key) continue;
+        entry->value = value;
+        return;
+    }
+    tsc_realm_state_entry_t* entry =
+        (tsc_realm_state_entry_t*)TSC_GC_MALLOC(sizeof(tsc_realm_state_entry_t));
+    entry->key = key;
+    entry->value = value;
+    entry->next = realm->states;
+    realm->states = entry;
+}
+
 tsc_value_t tsc_value_array(tsc_array_t* a) { return value_box(TSC_VALUE_TAG_ARRAY, (uintptr_t)a); }
 tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_OBJECT, (uintptr_t)o); }
 
@@ -874,6 +930,7 @@ void tsc_bootstrap(int argc, char** argv) {
     if (clock_gettime(CLOCK_MONOTONIC, &g_boot_time) == 0) {
         g_boot_time_set = true;
     }
+    (void)tsc_realm_current();
 }
 
 void tsc_panic(const char* msg) {
@@ -1904,6 +1961,7 @@ tsc_value_t tsc_call_arguments(void) {
 
 void tsc_try_push(tsc_try_frame_t* f) {
     f->prev = g_try_top;
+    f->realm = tsc_realm_current();
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
     f->roots = (tsc_try_roots_t*)TSC_GC_MALLOC(sizeof(tsc_try_roots_t));
@@ -1951,6 +2009,7 @@ _Noreturn void tsc_throw_str(tsc_str_t* message) {
          * and can leave g_try_top pointing at an expired async stack frame. */
         g_call_activation_top = f->activation_top;
         tsc_value_callee_restore(f->callee_top);
+        (void)tsc_realm_swap(f->realm);
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);
@@ -1971,6 +2030,7 @@ _Noreturn void tsc_throw_value(tsc_value_t value) {
         /* The setjmp landing path owns the matching tsc_try_pop(). */
         g_call_activation_top = f->activation_top;
         tsc_value_callee_restore(f->callee_top);
+        (void)tsc_realm_swap(f->realm);
         longjmp(f->jb, 1);
     }
     fputs("Uncaught: ", stderr);

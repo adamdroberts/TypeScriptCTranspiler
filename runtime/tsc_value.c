@@ -1198,8 +1198,8 @@ static void global_define_intrinsic(tsc_object_t* global, const tsc_global_intri
 }
 
 tsc_value_t tsc_global_object(void) {
-    static tsc_object_t* global = NULL;
-    if (global) return tsc_value_object(global);
+    tsc_realm_t* realm = tsc_realm_current();
+    if (realm->global_object) return tsc_value_object(realm->global_object);
 
     /* Build every dependency before publishing the object.  Several intrinsic
      * constructors have their own singleton locks, so this ordering also keeps
@@ -1266,9 +1266,9 @@ tsc_value_t tsc_global_object(void) {
     );
 
     tsc_runtime_lock();
-    if (!global) global = built;
+    if (!realm->global_object) realm->global_object = built;
     tsc_runtime_unlock();
-    return tsc_value_object(global);
+    return tsc_value_object(realm->global_object);
 }
 
 typedef struct tsc_global_lexical_binding {
@@ -1280,10 +1280,8 @@ typedef struct tsc_global_lexical_binding {
     struct tsc_global_lexical_binding* next;
 } tsc_global_lexical_binding_t;
 
-static tsc_global_lexical_binding_t* g_global_lexical_bindings = NULL;
-
 static tsc_global_lexical_binding_t* global_lexical_find(const tsc_str_t* key) {
-    for (tsc_global_lexical_binding_t* binding = g_global_lexical_bindings;
+    for (tsc_global_lexical_binding_t* binding = tsc_realm_current()->global_lexical_bindings;
          binding;
          binding = binding->next) {
         if (binding->name == key || tsc_str_eq(binding->name, key)) return binding;
@@ -1323,8 +1321,9 @@ static void global_create_lexical(const tsc_global_declaration_t* declaration) {
     binding->value_gc_root = NULL;
     binding->initialized = false;
     binding->mutable = declaration->kind == TSC_GLOBAL_DECL_LEXICAL_MUTABLE;
-    binding->next = g_global_lexical_bindings;
-    g_global_lexical_bindings = binding;
+    tsc_realm_t* realm = tsc_realm_current();
+    binding->next = realm->global_lexical_bindings;
+    realm->global_lexical_bindings = binding;
 }
 
 static void global_create_var(tsc_str_t* key, bool deletable) {

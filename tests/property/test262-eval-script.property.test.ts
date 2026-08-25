@@ -13,6 +13,7 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     const directSloppy = 'var directSloppy = 5; eval("var directNested = 6;");';
     const directSourceStrict = '"use strict"; var directSourceStrict = 7;';
     const strictRecord = '"use strict"; eval("var directCallerStrict = 8;");';
+    const createdRealmRecord = "var createdRealmValue = 9;";
     const root = finiteEvalScriptSourceGraph([{
         path: "root.js",
         source: `
@@ -21,6 +22,7 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
             flag && $262.evalScript(${JSON.stringify(branch)});
             eval(flag ? ${JSON.stringify(directSloppy)} : ${JSON.stringify(directSourceStrict)});
             $262.evalScript(${JSON.stringify(strictRecord)});
+            $262.createRealm().evalScript(${JSON.stringify(createdRealmRecord)});
         `,
     }]);
     expect(root.error).toBeNull();
@@ -31,6 +33,7 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
         sibling,
         branch,
         strictRecord,
+        createdRealmRecord,
     ]));
     expect(new Set(root.directEvalSources.map((entry) => JSON.stringify(entry)))).toEqual(new Set([
         JSON.stringify({ source: directSloppy, strictCaller: false, strict: false }),
@@ -89,6 +92,14 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     const directCompletionSource = "sentinel;";
     const directThrowSource = "throw sentinel;";
     const invalidDirectSource = "let = ;";
+    const realmDeclarationSource = `
+        let realmLexical = 41;
+        var realmVar = 42;
+        globalThis.realmObject = {};
+    `;
+    const realmMutationSource = "realmLexical += 1; realmVar += 1;";
+    const realmObservationSource = "({ lexical: realmLexical, variable: realmVar, object: realmObject });";
+    const realmThrowSource = "throw realmSentinel;";
     const lexicalSource = `
         var sawTdz = false;
         try { evalTdz; } catch (error) { sawTdz = error instanceof ReferenceError; }
@@ -186,6 +197,10 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["throw.js", throwSource],
         ["direct-shadow.js", directShadowSource],
         ["direct-caller-strict.js", directCallerStrictRecord],
+        ["realm-declarations.js", realmDeclarationSource],
+        ["realm-mutation.js", realmMutationSource],
+        ["realm-observation.js", realmObservationSource],
+        ["realm-throw.js", realmThrowSource],
         ["lexical.js", lexicalSource],
         ["shadow.js", shadowSource],
         ["var-collision.js", varCollisionSource],
@@ -367,6 +382,35 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             try { eval(${JSON.stringify(invalidDirectSource)}); }
             catch (error) { directSyntax = error instanceof SyntaxError; }
             if (!directSyntax) throw new Error("direct eval ParseScript failure differed");
+
+            var defaultRealmGlobal = globalThis;
+            var realmA = $262.createRealm();
+            var realmB = $262.createRealm();
+            if (realmA === realmB || realmA.global === realmB.global ||
+                realmA.global === defaultRealmGlobal || realmB.global === defaultRealmGlobal ||
+                realmA.global.globalThis !== realmA.global || realmB.global.globalThis !== realmB.global) {
+                throw new Error("createRealm did not create independent global identities");
+            }
+            realmA.evalScript(${JSON.stringify(realmDeclarationSource)});
+            realmB.evalScript(${JSON.stringify(realmDeclarationSource)});
+            realmA.evalScript(${JSON.stringify(realmMutationSource)});
+            var realmAObservation = realmA.evalScript(${JSON.stringify(realmObservationSource)});
+            var realmBObservation = realmB.evalScript(${JSON.stringify(realmObservationSource)});
+            if (realmAObservation.lexical !== 42 || realmAObservation.variable !== 43 ||
+                realmBObservation.lexical !== 41 || realmBObservation.variable !== 42 ||
+                realmAObservation.object !== realmA.global.realmObject ||
+                realmBObservation.object !== realmB.global.realmObject ||
+                realmAObservation.object === realmBObservation.object ||
+                typeof realmLexical !== "undefined" || typeof realmVar !== "undefined") {
+                throw new Error("Realm global/declarative environment isolation differed");
+            }
+            realmA.global.realmSentinel = sentinel;
+            var realmThrowExact = false;
+            try { realmA.evalScript(${JSON.stringify(realmThrowSource)}); }
+            catch (error) { realmThrowExact = error === sentinel; }
+            if (!realmThrowExact || globalThis !== defaultRealmGlobal || $262.global !== defaultRealmGlobal) {
+                throw new Error("abrupt cross-Realm evaluation did not restore the caller Realm");
+            }
 
             $262.evalScript(${JSON.stringify(mutationSource)});
             if (executions !== 1 || created !== 1 || readCreated() !== 1) {

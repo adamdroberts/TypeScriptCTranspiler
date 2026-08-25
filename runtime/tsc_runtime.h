@@ -69,6 +69,7 @@ void* tsc_no_gc_malloc_uninit(size_t n);
 #endif
 
 typedef uint64_t tsc_value_t;
+typedef struct tsc_realm tsc_realm_t;
 
 /* A continuation may retain a mutable closure binding rather than a value
  * snapshot.  Copying this handle between states preserves both the shared
@@ -1683,6 +1684,7 @@ typedef struct tsc_try_roots {
 typedef struct tsc_try_frame {
     jmp_buf jb;
     struct tsc_try_frame* prev;
+    tsc_realm_t* realm;
     tsc_call_activation_t* activation_top;
     void* callee_top;
     /* NaN-boxed pointer payloads and TLS slots are invisible to conservative
