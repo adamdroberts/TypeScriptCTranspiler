@@ -696,6 +696,170 @@ tsc_value_t tsc_string_constructor_value(void) { return primitive_constructor_va
 tsc_value_t tsc_number_constructor_value(void) { return primitive_constructor_value(&primitive_number); }
 tsc_value_t tsc_boolean_constructor_value(void) { return primitive_constructor_value(&primitive_boolean); }
 
+static tsc_value_t object_constructor_arg(tsc_array_t* args, size_t index) {
+    return args && index < args->len
+        ? TSC_ARR(tsc_value_t, args, index)
+        : tsc_value_undefined();
+}
+
+static const tsc_primitive_descriptor_t* object_constructor_primitive_descriptor(tsc_value_t value) {
+    if (!value_is_box(value)) return &primitive_number;
+    if (value_tag(value) == TSC_VALUE_TAG_FALSE || value_tag(value) == TSC_VALUE_TAG_TRUE) {
+        return &primitive_boolean;
+    }
+    if (value_tag(value) == TSC_VALUE_TAG_STRING) return &primitive_string;
+    return NULL;
+}
+
+static tsc_value_t object_constructor_box_primitive(
+    const tsc_primitive_descriptor_t* descriptor,
+    tsc_value_t value
+) {
+    tsc_value_t receiver = tsc_value_object(tsc_object_new());
+    (void)tsc_value_set_prototype_of(
+        receiver,
+        primitive_prototype((tsc_primitive_descriptor_t*)descriptor)
+    );
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, value);
+    return primitive_constructor_construct((void*)descriptor, receiver, args);
+}
+
+static tsc_value_t object_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t value = object_constructor_arg(args, 0);
+    if (tsc_value_is_nullish(value)) return tsc_value_object(tsc_object_new());
+    if (tsc_value_is_object(value)) return value;
+    const tsc_primitive_descriptor_t* descriptor = object_constructor_primitive_descriptor(value);
+    if (!descriptor) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object cannot box this primitive value"));
+    }
+    return object_constructor_box_primitive(descriptor, value);
+}
+
+static void object_static_require_target(tsc_value_t target, const char* method) {
+    if (tsc_value_is_nullish(target)) {
+        char message[128];
+        snprintf(message, sizeof message, "Object.%s target must not be null or undefined", method);
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
+    }
+}
+
+static tsc_value_t object_static_define_property(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    if (!tsc_value_is_object(target)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));
+    }
+    tsc_str_t* key = tsc_value_to_string(object_constructor_arg(args, 1));
+    tsc_value_t descriptor = object_constructor_arg(args, 2);
+    if (!tsc_value_define_property_descriptor(target, key, descriptor)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed"));
+    }
+    return target;
+}
+
+static tsc_value_t object_static_get_own_property_descriptor(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    object_static_require_target(target, "getOwnPropertyDescriptor");
+    tsc_str_t* key = tsc_value_to_string(object_constructor_arg(args, 1));
+    return tsc_value_get_own_property_descriptor(target, key);
+}
+
+static tsc_value_t object_static_get_own_property_names(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    object_static_require_target(target, "getOwnPropertyNames");
+    tsc_array_t* keys = tsc_value_own_keys(target);
+    tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), keys->len ? keys->len : 1);
+    for (size_t index = 0; index < keys->len; index++) {
+        tsc_array_push_value(values, tsc_value_string(TSC_ARR(tsc_str_t*, keys, index)));
+    }
+    return tsc_value_array(values);
+}
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_generic_function_t apply;
+} tsc_object_static_method_t;
+
+static const tsc_object_static_method_t object_static_methods[] = {
+    { "defineProperty", 14, 3.0, object_static_define_property },
+    { "getOwnPropertyDescriptor", 24, 2.0, object_static_get_own_property_descriptor },
+    { "getOwnPropertyNames", 19, 1.0, object_static_get_own_property_names },
+};
+
+static void object_constructor_define_static_method(
+    tsc_value_t constructor,
+    const tsc_object_static_method_t* method
+) {
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit(method->name, method->name_len),
+        tsc_value_function_builtin_named(
+            method->apply,
+            NULL,
+            method->arity,
+            tsc_str_from_lit(method->name, method->name_len)
+        ),
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+}
+
+tsc_value_t tsc_object_constructor_value(void) {
+    static bool initialized = false;
+    static tsc_value_t constructor;
+    if (!initialized) {
+        tsc_runtime_lock();
+        if (!initialized) {
+            constructor = tsc_value_function_generic_named(
+                object_constructor_apply,
+                NULL,
+                1.0,
+                tsc_str_from_lit("Object", 6)
+            );
+            tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+            tsc_value_t prototype = tsc_value_object_prototype();
+            identity->func_prototype = prototype;
+            (void)tsc_value_define_property_desc(
+                prototype,
+                tsc_str_from_lit("constructor", 11),
+                constructor,
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            for (
+                size_t index = 0;
+                index < sizeof(object_static_methods) / sizeof(object_static_methods[0]);
+                index++
+            ) {
+                object_constructor_define_static_method(constructor, &object_static_methods[index]);
+            }
+            initialized = true;
+        }
+        tsc_runtime_unlock();
+    }
+    return constructor;
+}
+
 static bool value_is_callable_function(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) return true;

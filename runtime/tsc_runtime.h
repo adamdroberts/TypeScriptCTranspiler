@@ -715,6 +715,7 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_function_constructor_value(void);
+tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);
 tsc_value_t tsc_boolean_constructor_value(void);

@@ -45107,6 +45107,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Object")) {
+                return { c: "tsc_object_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
             }
