@@ -80,6 +80,10 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->proxy_handler = tsc_value_undefined();
     o->proxy_target_root = NULL;
     o->proxy_handler_root = NULL;
+    o->has_primitive_value = false;
+    o->primitive_kind = 0;
+    o->primitive_value = tsc_value_undefined();
+    o->primitive_value_root = NULL;
     o->prototype = prototype;
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     if (g_shape_diagnostics_enabled) {

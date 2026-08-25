@@ -119,6 +119,10 @@ typedef struct tsc_function_identity {
             uint64_t order;
         } event_raw_identity;
     } code;
+    /* NULL for non-constructors.  Ordinary functions use code.generic as
+     * their [[Construct]] body; built-ins opt in with this separate hook so
+     * callability never implies constructability. */
+    tsc_generic_function_t construct;
     void* env;
     struct tsc_function_identity* next;
 } tsc_function_identity_t;
@@ -133,6 +137,12 @@ struct tsc_shape {
     size_t transitions_len;
     size_t transitions_cap;
 };
+
+typedef enum {
+    TSC_PRIMITIVE_BOOLEAN = 1,
+    TSC_PRIMITIVE_NUMBER = 2,
+    TSC_PRIMITIVE_STRING = 3,
+} tsc_primitive_kind_t;
 
 struct tsc_object {
     size_t len;
@@ -162,6 +172,13 @@ struct tsc_object {
     /* Keep tagged proxy slots conservatively rooted for Boehm GC. */
     void* proxy_target_root;
     void* proxy_handler_root;
+    /* Canonical [[PrimitiveData]] storage for Boolean, Number, and String
+     * wrapper objects.  The companion pointer keeps a boxed string alive
+     * under conservative GC. */
+    bool has_primitive_value;
+    uint8_t primitive_kind;
+    tsc_value_t primitive_value;
+    void* primitive_value_root;
     tsc_value_t prototype;
     tsc_object_prop_t* props;
 };

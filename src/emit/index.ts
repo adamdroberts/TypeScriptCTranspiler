@@ -44853,6 +44853,12 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "String")) {
                 return { c: "tsc_string_constructor_value()", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Number")) {
+                return { c: "tsc_number_constructor_value()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
+                return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
                 return { c: "tsc_builtin_reflect()", ty: T_VALUE };
             }
@@ -71482,6 +71488,14 @@ class Emitter {
         }
         if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
+        }
+        const primitiveConstructor =
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "String") ? "tsc_string_constructor_value()" :
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "Number") ? "tsc_number_constructor_value()" :
+            this.isUnshadowedGlobalIdentifier(ctorExpr, "Boolean") ? "tsc_boolean_constructor_value()" :
+            undefined;
+        if (primitiveConstructor) {
+            return this.emitDynamicValueConstruct(n, { c: primitiveConstructor, ty: T_VALUE });
         }
         if (this.functionValueIsConstructable(ctorExpr)) {
             const functionValue = this.emitExpr(n.expression);

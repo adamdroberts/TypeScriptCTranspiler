@@ -49,6 +49,7 @@ tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env,
     entry->func_prototype_writable = true;
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
+    entry->construct = NULL;
     tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.event_listener.fn = fn;
     entry->code.event_listener.identity = identity;
@@ -80,6 +81,7 @@ tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* 
     entry->func_prototype_writable = true;
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
+    entry->construct = NULL;
     tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.event_raw_identity.fn = fn;
     entry->code.event_raw_identity.identity = identity;

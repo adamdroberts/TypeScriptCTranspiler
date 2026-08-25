@@ -7418,6 +7418,7 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     entry->func_prototype_writable = true;
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
+    entry->construct = NULL;
     tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.getter = getter;
     entry->env = env;
@@ -7442,6 +7443,7 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     entry->func_prototype_writable = true;
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
+    entry->construct = NULL;
     tsc_function_init_metadata(entry, 1.0, tsc_str_from_lit("", 0));
     entry->code.setter = setter;
     entry->env = env;
@@ -7514,6 +7516,12 @@ double tsc_value_as_num(tsc_value_t v) {
         if (!end || end == p || *end != '\0') n = NAN;
         free(text);
         return n;
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        const tsc_object_t* object = (const tsc_object_t*)value_ptr(v);
+        if (object && object->has_primitive_value) {
+            return tsc_value_as_num(object->primitive_value);
+        }
     }
     return NAN;
 }
@@ -7691,6 +7699,9 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
             }
             if (tsc_proxy_trap_is_callable(v)) {
                 return tsc_str_from_lit("[function]", 10);
+            }
+            if (o && o->has_primitive_value) {
+                return tsc_value_to_string(o->primitive_value);
             }
             if (o && o->is_error) {
                 return tsc_error_to_string((const tsc_error_t*)o->class_ptr);

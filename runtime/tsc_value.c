@@ -86,6 +86,11 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
             }
             if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
             if (value_proxy_chain_is_array(v)) return tsc_str_from_lit("[object Array]", 14);
+            if (o && o->has_primitive_value) {
+                if (o->primitive_kind == TSC_PRIMITIVE_BOOLEAN) return tsc_str_from_lit("[object Boolean]", 16);
+                if (o->primitive_kind == TSC_PRIMITIVE_NUMBER) return tsc_str_from_lit("[object Number]", 15);
+                if (o->primitive_kind == TSC_PRIMITIVE_STRING) return tsc_str_from_lit("[object String]", 15);
+            }
             if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
             return tsc_str_from_lit("[object Object]", 15);
         }
@@ -125,6 +130,7 @@ void* tsc_value_as_class(tsc_value_t v) {
 
 static tsc_value_t tsc_value_function_named_kind(
     tsc_generic_function_t fn,
+    tsc_generic_function_t construct,
     void* env,
     double length,
     tsc_str_t* name,
@@ -132,7 +138,7 @@ static tsc_value_t tsc_value_function_named_kind(
 ) {
     if (!name) name = tsc_str_from_lit("", 0);
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == kind && cur->code.generic == fn && cur->env == env) {
+        if (cur->kind == kind && cur->code.generic == fn && cur->construct == construct && cur->env == env) {
             if (length > cur->length) {
                 cur->length = length;
                 (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("length", 6), tsc_value_num(length), true, false, false, false, false, false, false);
@@ -152,6 +158,7 @@ static tsc_value_t tsc_value_function_named_kind(
     id->func_prototype_writable = true;
     id->prototype = tsc_function_default_prototype();
     id->func_prototype = tsc_value_undefined();
+    id->construct = construct;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
@@ -169,34 +176,212 @@ tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* en
 }
 
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
-    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_GENERIC);
+    return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_GENERIC);
 }
 
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
-    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_CLOSURE);
+    return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_CLOSURE);
 }
 
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
-    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
+    return tsc_value_function_named_kind(fn, NULL, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
 }
 
-static tsc_value_t string_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)this_arg;
-    if (!args || args->len == 0) {
-        return tsc_value_string(tsc_str_from_lit("", 0));
+typedef struct {
+    tsc_primitive_kind_t kind;
+    const char* name;
+    size_t name_len;
+    tsc_object_t* prototype;
+} tsc_primitive_descriptor_t;
+
+static tsc_primitive_descriptor_t primitive_boolean = { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL };
+static tsc_primitive_descriptor_t primitive_number = { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL };
+static tsc_primitive_descriptor_t primitive_string = { TSC_PRIMITIVE_STRING, "String", 6, NULL };
+
+static bool primitive_matches(tsc_primitive_kind_t kind, tsc_value_t value) {
+    if (kind == TSC_PRIMITIVE_NUMBER) return !value_is_box(value);
+    if (!value_is_box(value)) return false;
+    if (kind == TSC_PRIMITIVE_BOOLEAN) {
+        return value_tag(value) == TSC_VALUE_TAG_FALSE || value_tag(value) == TSC_VALUE_TAG_TRUE;
     }
-    return tsc_value_string(tsc_value_to_string(TSC_ARR(tsc_value_t, args, 0)));
+    return kind == TSC_PRIMITIVE_STRING && value_tag(value) == TSC_VALUE_TAG_STRING;
 }
 
-tsc_value_t tsc_string_constructor_value(void) {
-    return tsc_value_function_builtin_named(
-        string_constructor_apply,
-        NULL,
-        1.0,
-        tsc_str_from_lit("String", 6)
-    );
+static bool primitive_receiver_value(
+    const tsc_primitive_descriptor_t* descriptor,
+    tsc_value_t receiver,
+    tsc_value_t* out
+) {
+    if (primitive_matches(descriptor->kind, receiver)) {
+        *out = receiver;
+        return true;
+    }
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT) {
+        const tsc_object_t* object = (const tsc_object_t*)value_ptr(receiver);
+        if (
+            object && object->has_primitive_value &&
+            object->primitive_kind == (uint8_t)descriptor->kind
+        ) {
+            *out = object->primitive_value;
+            return true;
+        }
+    }
+    return false;
 }
+
+static tsc_value_t primitive_default(const tsc_primitive_descriptor_t* descriptor) {
+    if (descriptor->kind == TSC_PRIMITIVE_BOOLEAN) return tsc_value_bool(false);
+    if (descriptor->kind == TSC_PRIMITIVE_NUMBER) return tsc_value_num(0.0);
+    return tsc_value_string(tsc_str_from_lit("", 0));
+}
+
+static tsc_value_t primitive_convert(
+    const tsc_primitive_descriptor_t* descriptor,
+    tsc_array_t* args
+) {
+    if (!args || args->len == 0) return primitive_default(descriptor);
+    tsc_value_t input = TSC_ARR(tsc_value_t, args, 0);
+    if (descriptor->kind == TSC_PRIMITIVE_BOOLEAN) {
+        return tsc_value_bool(tsc_value_is_truthy(input));
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
+        return tsc_value_num(tsc_value_as_num(input));
+    }
+    return tsc_value_string(tsc_value_to_string(input));
+}
+
+static tsc_value_t primitive_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return primitive_convert((const tsc_primitive_descriptor_t*)env, args);
+}
+
+static tsc_value_t primitive_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr("primitive constructor receiver is not an object"));
+    }
+    tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
+    object->has_primitive_value = true;
+    object->primitive_kind = (uint8_t)descriptor->kind;
+    object->primitive_value = primitive_convert(descriptor, args);
+    object->primitive_value_root = tsc_value_gc_root(object->primitive_value);
+    if (descriptor->kind == TSC_PRIMITIVE_STRING) {
+        const tsc_str_t* string = (const tsc_str_t*)value_ptr(object->primitive_value);
+        tsc_object_define(object, tsc_str_from_lit("length", 6), tsc_value_num((double)string->len), false, false, false);
+        for (size_t index = 0; index < string->len; index++) {
+            tsc_object_define(
+                object,
+                tsc_str_from_num((double)index),
+                tsc_value_string(tsc_str_char_at(string, (double)index)),
+                false,
+                true,
+                false
+            );
+        }
+    }
+    return receiver;
+}
+
+static tsc_value_t primitive_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(descriptor, this_arg, &primitive)) {
+        tsc_throw_str(tsc_str_from_cstr("primitive valueOf called on incompatible receiver"));
+    }
+    return primitive;
+}
+
+static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(descriptor, this_arg, &primitive)) {
+        tsc_throw_str(tsc_str_from_cstr("primitive toString called on incompatible receiver"));
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
+        tsc_value_t radix = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+        return tsc_value_string(
+            tsc_value_is_undefined(radix)
+                ? tsc_str_from_num(value_as_num(primitive))
+                : tsc_str_from_num_radix(value_as_num(primitive), tsc_value_as_num(radix))
+        );
+    }
+    return tsc_value_string(tsc_value_to_string(primitive));
+}
+
+static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
+    if (!descriptor->prototype) {
+        tsc_runtime_lock();
+        if (!descriptor->prototype) {
+            tsc_object_t* prototype = tsc_object_new();
+            prototype->has_primitive_value = true;
+            prototype->primitive_kind = (uint8_t)descriptor->kind;
+            prototype->primitive_value = primitive_default(descriptor);
+            prototype->primitive_value_root = tsc_value_gc_root(prototype->primitive_value);
+            tsc_object_define(
+                prototype,
+                tsc_str_from_lit("valueOf", 7),
+                tsc_value_function_builtin_named(primitive_prototype_value_of, descriptor, 0.0, tsc_str_from_lit("valueOf", 7)),
+                true,
+                false,
+                true
+            );
+            tsc_object_define(
+                prototype,
+                tsc_str_from_lit("toString", 8),
+                tsc_value_function_builtin_named(
+                    primitive_prototype_to_string,
+                    descriptor,
+                    descriptor->kind == TSC_PRIMITIVE_NUMBER ? 1.0 : 0.0,
+                    tsc_str_from_lit("toString", 8)
+                ),
+                true,
+                false,
+                true
+            );
+            descriptor->prototype = prototype;
+        }
+        tsc_runtime_unlock();
+    }
+    return tsc_value_object(descriptor->prototype);
+}
+
+static tsc_value_t ordinary_primitive_prototype(tsc_object_t** slot) {
+    if (!*slot) {
+        tsc_runtime_lock();
+        if (!*slot) *slot = tsc_object_new();
+        tsc_runtime_unlock();
+    }
+    return tsc_value_object(*slot);
+}
+
+static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descriptor) {
+    tsc_value_t constructor = tsc_value_function_named_kind(
+        primitive_constructor_apply,
+        primitive_constructor_construct,
+        descriptor,
+        1.0,
+        tsc_str_from_lit(descriptor->name, descriptor->name_len),
+        TSC_FUNCTION_IDENTITY_BUILTIN
+    );
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    if (tsc_value_is_undefined(identity->func_prototype)) {
+        identity->func_prototype = primitive_prototype(descriptor);
+        tsc_object_define(
+            descriptor->prototype,
+            tsc_str_from_lit("constructor", 11),
+            constructor,
+            true,
+            false,
+            true
+        );
+    }
+    return constructor;
+}
+
+tsc_value_t tsc_string_constructor_value(void) { return primitive_constructor_value(&primitive_string); }
+tsc_value_t tsc_number_constructor_value(void) { return primitive_constructor_value(&primitive_number); }
+tsc_value_t tsc_boolean_constructor_value(void) { return primitive_constructor_value(&primitive_boolean); }
 
 static bool value_is_callable_function(tsc_value_t v) {
     if (!value_is_box(v)) return false;
@@ -214,7 +399,7 @@ bool tsc_value_is_constructable(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
-        return ident && ident->kind == TSC_FUNCTION_IDENTITY_GENERIC;
+        return ident && (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL);
     }
     if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
@@ -323,7 +508,7 @@ tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
-        if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
+        if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL) {
             if (!tsc_value_is_constructable(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
@@ -333,7 +518,8 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
             if (value_is_valid_prototype(new_target_proto) && !value_is_null_value(new_target_proto)) {
                 (void)tsc_value_set_prototype_of(receiver, new_target_proto);
             }
-            tsc_value_t result = ident->code.generic(ident->env, receiver, list);
+            tsc_generic_function_t construct = ident->construct ? ident->construct : ident->code.generic;
+            tsc_value_t result = construct(ident->env, receiver, list);
             if (
                 value_is_box(result) &&
                 (
@@ -457,7 +643,7 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
 }
 
 static bool tsc_function_has_prototype_metadata(const tsc_function_identity_t* fn) {
-    return fn && fn->kind == TSC_FUNCTION_IDENTITY_GENERIC;
+    return fn && (fn->kind == TSC_FUNCTION_IDENTITY_GENERIC || fn->construct != NULL);
 }
 
 static bool tsc_function_metadata_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
@@ -1467,38 +1653,26 @@ tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
     return tsc_value_undefined();
 }
 
-static tsc_value_t primitive_prototype(tsc_object_t** slot) {
-    if (!*slot) {
-        tsc_runtime_lock();
-        if (!*slot) *slot = tsc_object_new();
-        tsc_runtime_unlock();
-    }
-    return tsc_value_object(*slot);
-}
-
 tsc_value_t tsc_value_number_prototype(void) {
-    static tsc_object_t* proto = NULL;
-    return primitive_prototype(&proto);
+    return primitive_prototype(&primitive_number);
 }
 
 tsc_value_t tsc_value_boolean_prototype(void) {
-    static tsc_object_t* proto = NULL;
-    return primitive_prototype(&proto);
+    return primitive_prototype(&primitive_boolean);
 }
 
 tsc_value_t tsc_value_string_prototype(void) {
-    static tsc_object_t* proto = NULL;
-    return primitive_prototype(&proto);
+    return primitive_prototype(&primitive_string);
 }
 
 tsc_value_t tsc_value_bigint_prototype(void) {
     static tsc_object_t* proto = NULL;
-    return primitive_prototype(&proto);
+    return ordinary_primitive_prototype(&proto);
 }
 
 tsc_value_t tsc_value_symbol_prototype(void) {
     static tsc_object_t* proto = NULL;
-    return primitive_prototype(&proto);
+    return ordinary_primitive_prototype(&proto);
 }
 
 tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v) {

@@ -1,0 +1,7 @@
+functions: function String 1 function Number 1 function Boolean 1
+calls:  12 0 12.5 false false true
+objects: object object object false false false
+values: abc 42 false 42 NaN true
+prototypes: true true true true true true
+string exotic: 3 a c true
+order: abc|ignored
