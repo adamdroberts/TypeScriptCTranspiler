@@ -2543,6 +2543,26 @@ bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     return true;
 }
 
+/* A dynamically typed ECMAScript property key is normalized by one runtime
+ * path before the ordinary object operation.  Keys already represented by
+ * tsc_value_t use this path; native Symbol keys use the parallel symbol
+ * operation until Symbols themselves enter the tagged-value representation. */
+tsc_value_t tsc_value_get_computed_prop(tsc_value_t v, tsc_value_t key) {
+    return tsc_value_get_prop(v, tsc_value_to_string(key));
+}
+
+bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value) {
+    return tsc_value_set_prop(v, tsc_value_to_string(key), value);
+}
+
+bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key) {
+    return tsc_value_has_prop(v, tsc_value_to_string(key));
+}
+
+bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key) {
+    return tsc_value_delete_prop(v, tsc_value_to_string(key));
+}
+
 bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
     return tsc_value_delete_prop(v, key);

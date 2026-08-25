@@ -784,6 +784,8 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key);
 tsc_value_t tsc_value_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
 tsc_value_t tsc_value_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver, tsc_prop_cache_t* cache);
+/** Apply ECMAScript computed-key coercion once for a dynamically typed key. */
+tsc_value_t tsc_value_get_computed_prop(tsc_value_t v, tsc_value_t key);
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
 bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value);
@@ -824,6 +826,7 @@ bool tsc_value_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t val
 bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache);
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache);
+bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value);
 tsc_value_t tsc_reflect_get_prop(tsc_value_t v, const tsc_str_t* key);
 tsc_value_t tsc_reflect_get_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 tsc_value_t tsc_reflect_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc_value_t receiver);
@@ -840,8 +843,10 @@ bool tsc_value_symbol_property_is_enumerable(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
+bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key);
 bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
+bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_reflect_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);

@@ -151,6 +151,17 @@ function nativeSource(plans: readonly ActivationPlan[]): string {
                 }
             }
             strictCallee();
+            /**
+             * @param {object} object
+             * @param {string|symbol} name
+             * @param {PropertyDescriptor|undefined} descriptor
+             * @param {object} [options]
+             */
+            function aliasTarget(object, name, descriptor, options) {
+                return arguments.length === 3 && object !== null && name === "name" && descriptor === undefined;
+            }
+            var aliasFunction = aliasTarget;
+            console.log(String(aliasFunction({}, "name", undefined)));
         `,
     ].join("\n");
 }
@@ -195,6 +206,7 @@ test("ordinary calls preserve one source-derived activation and parameter-map mo
                 ...plans.map(expectedLine),
                 "outer",
                 "lexical",
+                "true",
                 "true",
                 "true",
             ]);

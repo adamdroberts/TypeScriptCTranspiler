@@ -27406,6 +27406,11 @@ class Emitter {
                                     `tsc_value_set_symbol_prop(${receiverTemp}, ${indexTemp}, ` +
                                     `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
                                 );
+                            } else if (indexType.kind === "value") {
+                                callback.line(
+                                    `tsc_value_set_computed_prop(${receiverTemp}, ${indexTemp}, ` +
+                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
+                                );
                             } else {
                                 callback.line(
                                     `tsc_value_set_prop(${receiverTemp}, ` +
@@ -38782,6 +38787,12 @@ class Emitter {
                         { value: left, target: T_SYMBOL, node: bin.left },
                     ], ([array, key]) => `tsc_value_has_symbol_prop(tsc_value_array(${array}), ${key})`);
                 }
+                if (left.ty.kind === "value") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: right, node: bin.right },
+                        { value: left, target: T_VALUE, node: bin.left },
+                    ], ([array, key]) => `tsc_value_has_computed_prop(tsc_value_array(${array}), ${key})`);
+                }
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: right, node: bin.right },
                     { value: left, target: T_STRING, node: bin.left },
@@ -38810,6 +38821,16 @@ class Emitter {
                         { value: right, target: T_VALUE, node: bin.right },
                     ],
                     ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
+                );
+            }
+            if (left.ty.kind === "value") {
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: left, target: T_VALUE, node: bin.left },
+                        { value: right, target: T_VALUE, node: bin.right },
+                    ],
+                    ([key, obj]) => `tsc_value_has_computed_prop(${obj}, ${key})`,
                 );
             }
             return this.emitSequencedExpr(
@@ -39179,7 +39200,12 @@ class Emitter {
             const requireType = d.initializer
                 ? this.commonJsWholeModuleRequireInitializerType(d.initializer)
                 : null;
-            const baseCt = requireType
+            const sourceJavaScriptFunction = d.initializer
+                ? this.javaScriptFunctionLikeForExpression(d.initializer)
+                : null;
+            const baseCt = sourceJavaScriptFunction
+                ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
+                : requireType
                 ? this.variableStorageType(requireType)
                 : d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
@@ -45890,6 +45916,12 @@ class Emitter {
                     { value: key, target: T_SYMBOL, node: expr.argumentExpression },
                 ]);
             }
+            if (key.ty.kind === "value") {
+                return this.emitSequencedCall("tsc_value_delete_computed_prop", T_BOOLEAN, [
+                    { value: recv, target: T_VALUE, node: expr.expression },
+                    { value: key, target: T_VALUE, node: expr.argumentExpression },
+                ]);
+            }
             if (mapped.kind === "array") {
                 return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression);
             }
@@ -45942,6 +45974,8 @@ class Emitter {
         let recvExpr: ts.Expression | null = null;
         let keyExpr: ts.Expression | null = null;
         let indexUpdate = false;
+        let symbolUpdate = false;
+        let computedUpdate = false;
         let literalKey: string | null = null;
 
         if (ts.isPropertyAccessExpression(operand)) {
@@ -45982,7 +46016,22 @@ class Emitter {
         if (keyExpr) {
             const key = this.emitExpr(keyExpr);
             indexUpdate = key.ty.kind === "number";
-            specs.push({ value: key, target: indexUpdate ? T_NUMBER : T_STRING, node: keyExpr });
+            symbolUpdate = key.ty.kind === "symbol";
+            computedUpdate = key.ty.kind === "value";
+            if (symbolUpdate && !this.isSupportedWellKnownSymbolExpression(keyExpr)) {
+                unsupported(keyExpr, "computed update needs a supported well-known Symbol key");
+            }
+            specs.push({
+                value: key,
+                target: indexUpdate
+                    ? T_NUMBER
+                    : symbolUpdate
+                        ? T_SYMBOL
+                        : computedUpdate
+                            ? T_VALUE
+                            : T_STRING,
+                node: keyExpr,
+            });
         }
 
         const fn = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_add" : "tsc_value_sub";
@@ -45993,14 +46042,22 @@ class Emitter {
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const cur = this.freshTemp("_dynupd");
             const next = this.freshTemp("_dynupd_next");
-            if (!indexUpdate) {
+            if (!indexUpdate && !symbolUpdate && !computedUpdate) {
                 const cache = this.freshTemp("_prop_cache");
                 const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
                 const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
                 return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
             }
-            const existing = `tsc_value_get_index(${obj}, ${keyC})`;
-            const set = `tsc_value_set_index(${obj}, ${keyC}, ${next})`;
+            const existing = indexUpdate
+                ? `tsc_value_get_index(${obj}, ${keyC})`
+                : symbolUpdate
+                    ? `tsc_value_get_symbol_prop(${obj}, ${keyC})`
+                    : `tsc_value_get_computed_prop(${obj}, ${keyC})`;
+            const set = indexUpdate
+                ? `tsc_value_set_index(${obj}, ${keyC}, ${next})`
+                : symbolUpdate
+                    ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${next})`
+                    : `tsc_value_set_computed_prop(${obj}, ${keyC}, ${next})`;
             return `({ tsc_value_t ${cur} = tsc_value_pos(${existing}); tsc_value_t ${next} = ${fn}(${cur}, tsc_value_num(1.0)); ${set}; ${prefix ? next : cur}; })`;
         });
     }
@@ -47267,6 +47324,7 @@ class Emitter {
         let keyExpr: ts.Expression | null = null;
         let key: EmitResult | null = null;
         let indexAssignment = false;
+        let computedAssignment = false;
         let literalKey: string | null = null;
 
         if (ts.isPropertyAccessExpression(bin.left)) {
@@ -47309,9 +47367,16 @@ class Emitter {
         if (keyExpr) {
             key = this.emitExpr(keyExpr);
             indexAssignment = key.ty.kind === "number";
+            computedAssignment = key.ty.kind === "value";
             specs.push({
                 value: key,
-                target: indexAssignment ? T_NUMBER : key.ty.kind === "symbol" ? T_SYMBOL : T_STRING,
+                target: indexAssignment
+                    ? T_NUMBER
+                    : key.ty.kind === "symbol"
+                        ? T_SYMBOL
+                        : computedAssignment
+                            ? T_VALUE
+                            : T_STRING,
                 node: keyExpr,
             });
         }
@@ -47363,17 +47428,23 @@ class Emitter {
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const out = this.freshTemp("_dynassign");
             const symbolAssignment = key?.ty.kind === "symbol";
-            const cache = !indexAssignment && !symbolAssignment ? this.freshTemp("_prop_cache") : null;
+            const cache = !indexAssignment && !symbolAssignment && !computedAssignment
+                ? this.freshTemp("_prop_cache")
+                : null;
             const existing = indexAssignment
                 ? `tsc_value_get_index(${obj}, ${keyC})`
                 : symbolAssignment
-                    ? `tsc_value_undefined()`
-                : `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
+                    ? `tsc_value_get_symbol_prop(${obj}, ${keyC})`
+                    : computedAssignment
+                        ? `tsc_value_get_computed_prop(${obj}, ${keyC})`
+                        : `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
             const set = (value: string) => indexAssignment
                 ? `tsc_value_set_index(${obj}, ${keyC}, ${value})`
                 : symbolAssignment
                     ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${value})`
-                : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
+                    : computedAssignment
+                        ? `tsc_value_set_computed_prop(${obj}, ${keyC}, ${value})`
+                        : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
             const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
             if (logicalOp) {
                 const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
@@ -73190,22 +73261,23 @@ class Emitter {
             if (idx.ty.kind === "value" &&
                 ts.isYieldExpression(yieldedIndex) &&
                 this.lazyGeneratorMultiYieldResumeValues?.has(yieldedIndex)) {
-                const key = this.coerce(idx, T_STRING, ea.argumentExpression);
                 return {
-                    c: `tsc_value_get_prop(${recv.c}, ${key})`,
+                    c: `tsc_value_get_computed_prop(${recv.c}, ${idx.c})`,
                     ty: T_VALUE,
                 };
             }
             if (isOpt) {
-                let accessKind: "index" | "prop" | "symbol";
+                let accessKind: "index" | "prop" | "symbol" | "computed";
                 if (idx.ty.kind === "number") {
                     accessKind = "index";
                 } else if (idx.ty.kind === "string") {
                     accessKind = "prop";
                 } else if (idx.ty.kind === "symbol" && this.isSupportedWellKnownSymbolExpression(ea.argumentExpression)) {
                     accessKind = "symbol";
+                } else if (idx.ty.kind === "value") {
+                    accessKind = "computed";
                 } else {
-                    unsupported(ea.argumentExpression, "dynamic optional index must be number, string, or supported symbol");
+                    unsupported(ea.argumentExpression, "computed optional key cannot be represented");
                 }
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -73215,7 +73287,9 @@ class Emitter {
                             ? `tsc_value_get_index(${obj}, ${index})`
                             : accessKind === "prop"
                                 ? `tsc_value_get_prop(${obj}, ${index})`
-                                : `tsc_value_get_symbol_prop(${obj}, ${index})`;
+                                : accessKind === "symbol"
+                                    ? `tsc_value_get_symbol_prop(${obj}, ${index})`
+                                    : `tsc_value_get_computed_prop(${obj}, ${index})`;
                         return `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : ${access}`;
                     },
                 );
@@ -73236,7 +73310,17 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
-            unsupported(ea.argumentExpression, "dynamic index must be number or string");
+            if (idx.ty.kind === "value") {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [
+                        { value: recv, target: T_VALUE, node: ea.expression },
+                        { value: idx, target: T_VALUE, node: ea.argumentExpression },
+                    ],
+                    ([object, key]) => `tsc_value_get_computed_prop(${object}, ${key})`,
+                );
+            }
+            unsupported(ea.argumentExpression, "computed property key cannot be represented");
         }
         unsupported(ea, `index access on ${recv.ty.c}`);
     }
