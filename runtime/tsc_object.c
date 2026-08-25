@@ -1465,6 +1465,21 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         if (str_lit_eq(key, "code")) return error->code;
         if (str_lit_eq(key, "errors") && error->errors) return tsc_value_array(error->errors);
     }
+    if (o->is_array_buffer && o->class_ptr && str_lit_eq(key, "byteLength")) {
+        return tsc_value_num(tsc_array_buffer_byte_length((const tsc_array_buffer_t*)o->class_ptr));
+    }
+    if (o->is_data_view && o->class_ptr) {
+        const tsc_data_view_t* view = (const tsc_data_view_t*)o->class_ptr;
+        if (str_lit_eq(key, "buffer")) {
+            return tsc_value_array_buffer(tsc_data_view_buffer(view));
+        }
+        if (str_lit_eq(key, "byteOffset")) {
+            return tsc_value_num(tsc_data_view_byte_offset(view));
+        }
+        if (str_lit_eq(key, "byteLength")) {
+            return tsc_value_num(tsc_data_view_byte_length(view));
+        }
+    }
     if (o->is_promise) {
         tsc_value_t method = tsc_promise_get_method((tsc_promise_t*)o->class_ptr, key);
         if (!tsc_value_is_undefined(method)) return method;

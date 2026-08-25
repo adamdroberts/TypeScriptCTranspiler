@@ -1094,6 +1094,8 @@ tsc_array_buffer_t* tsc_array_buffer_new(double byte_length) {
     tsc_array_buffer_t* b = (tsc_array_buffer_t*)TSC_GC_MALLOC(sizeof(tsc_array_buffer_t));
     b->byte_length = len;
     b->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len ? len : 1);
+    b->detached = false;
+    b->object = NULL;
     if (len == 0) b->data[0] = 0;
     return b;
 }
@@ -1102,8 +1104,24 @@ double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b) {
     return b ? (double)b->byte_length : 0.0;
 }
 
+void tsc_array_buffer_detach(tsc_array_buffer_t* b) {
+    if (!b || b->detached) return;
+    b->byte_length = 0;
+    b->data = NULL;
+    b->detached = true;
+}
+
+static void data_view_require_attached(const tsc_data_view_t* view) {
+    if (!view || !view->buffer || view->buffer->detached) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("DataView buffer is detached"));
+    }
+}
+
 tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offset, double byte_length, bool has_byte_length) {
     if (!buffer) tsc_throw_str(tsc_str_from_cstr("DataView buffer must be an ArrayBuffer"));
+    if (buffer->detached) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("DataView buffer is detached"));
+    }
     size_t offset = array_buffer_to_index(byte_offset, "DataView byteOffset must be a non-negative finite integer");
     if (offset > buffer->byte_length) {
         tsc_throw_str(tsc_str_from_cstr("DataView byteOffset is outside the ArrayBuffer"));
@@ -1119,6 +1137,7 @@ tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offse
     v->buffer = buffer;
     v->byte_offset = offset;
     v->byte_length = length;
+    v->object = NULL;
     return v;
 }
 
@@ -1127,10 +1146,12 @@ tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v) {
 }
 
 double tsc_data_view_byte_offset(const tsc_data_view_t* v) {
+    data_view_require_attached(v);
     return v ? (double)v->byte_offset : 0.0;
 }
 
 double tsc_data_view_byte_length(const tsc_data_view_t* v) {
+    data_view_require_attached(v);
     return v ? (double)v->byte_length : 0.0;
 }
 

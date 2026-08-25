@@ -15,6 +15,16 @@ static tsc_value_t test262_host_gc(void* env, tsc_value_t this_arg, tsc_array_t*
     return tsc_value_undefined();
 }
 
+static tsc_value_t test262_host_detach_array_buffer(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t value = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_array_buffer_detach(tsc_value_as_array_buffer(value));
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_test262_host_object(void) {
     static tsc_object_t* host = NULL;
     if (!host) {
@@ -42,6 +52,23 @@ tsc_value_t tsc_test262_host_object(void) {
                     NULL,
                     0.0,
                     tsc_str_from_lit("gc", 2)
+                ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("detachArrayBuffer", 17),
+                tsc_value_function_builtin_named(
+                    test262_host_detach_array_buffer,
+                    NULL,
+                    1.0,
+                    tsc_str_from_lit("detachArrayBuffer", 17)
                 ),
                 true,
                 true,

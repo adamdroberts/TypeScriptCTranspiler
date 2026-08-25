@@ -5295,15 +5295,19 @@ tsc_value_t tsc_value_url_search_params(tsc_url_search_params_t* params) {
 
 tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* buffer) {
     if (!buffer) return tsc_value_null();
+    if (buffer->object) return tsc_value_object(buffer->object);
     tsc_object_t* o = tsc_object_new_class(buffer);
     o->is_array_buffer = true;
+    buffer->object = o;
     return tsc_value_object(o);
 }
 
 tsc_value_t tsc_value_data_view(tsc_data_view_t* view) {
     if (!view) return tsc_value_null();
+    if (view->object) return tsc_value_object(view->object);
     tsc_object_t* o = tsc_object_new_class(view);
     o->is_data_view = true;
+    view->object = o;
     return tsc_value_object(o);
 }
 

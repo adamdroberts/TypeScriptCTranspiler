@@ -469,14 +469,18 @@ typedef struct tsc_buffer {
 typedef struct tsc_array_buffer {
     size_t byte_length;
     uint8_t* data;
+    bool detached;
+    struct tsc_object* object;
 } tsc_array_buffer_t;
 typedef struct tsc_data_view {
     tsc_array_buffer_t* buffer;
     size_t byte_offset;
     size_t byte_length;
+    struct tsc_object* object;
 } tsc_data_view_t;
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length);
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b);
+void tsc_array_buffer_detach(tsc_array_buffer_t* b);
 tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offset, double byte_length, bool has_byte_length);
 tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v);
 double tsc_data_view_byte_offset(const tsc_data_view_t* v);
