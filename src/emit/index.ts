@@ -23725,12 +23725,28 @@ class Emitter {
     private isTest262ScriptGlobalVarDeclaration(
         decl: ts.Node,
     ): decl is ts.VariableDeclaration & { name: ts.Identifier } {
-        return ts.isVariableDeclaration(decl) &&
-            ts.isIdentifier(decl.name) &&
-            ts.isVariableDeclarationList(decl.parent) &&
-            (decl.parent.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
-            this.isTest262ScriptSourceFile(decl.getSourceFile()) &&
-            this.isTopLevelValueDeclaration(decl);
+        if (
+            !ts.isVariableDeclaration(decl) ||
+            !ts.isIdentifier(decl.name) ||
+            !ts.isVariableDeclarationList(decl.parent) ||
+            (decl.parent.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0
+        ) {
+            return false;
+        }
+        const sourceFile = decl.getSourceFile();
+        if (!this.isTest262ScriptSourceFile(sourceFile)) return false;
+        for (let ancestor: ts.Node | undefined = decl.parent; ancestor; ancestor = ancestor.parent) {
+            if (ancestor === sourceFile) return true;
+            if (
+                ts.isFunctionLike(ancestor) ||
+                ts.isClassLike(ancestor) ||
+                ts.isClassStaticBlockDeclaration(ancestor) ||
+                ts.isModuleBlock(ancestor)
+            ) {
+                return false;
+            }
+        }
+        return false;
     }
 
     private isTest262ScriptGlobalFunctionDeclaration(

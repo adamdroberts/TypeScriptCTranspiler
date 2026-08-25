@@ -22,6 +22,14 @@ interface ReferencePlan {
     readonly deep: string;
 }
 
+interface VarScopePlan {
+    readonly unreachable: string;
+    readonly forInitializer: string;
+    readonly forOf: string;
+    readonly forIn: string;
+    readonly functionLocal: string;
+}
+
 function bindingPlans(seed: number): BindingPlan[] {
     let state = seed >>> 0;
     const next = (): number => {
@@ -50,6 +58,17 @@ function referencePlan(seed: number): ReferencePlan {
         orderedLeft: name("ordered_left"),
         immutable: name("immutable"),
         deep: name("deep"),
+    };
+}
+
+function varScopePlan(seed: number): VarScopePlan {
+    const suffix = (seed >>> 0).toString(16);
+    return {
+        unreachable: `generatedVar_unreachable_${suffix}`,
+        forInitializer: `generatedVar_for_initializer_${suffix}`,
+        forOf: `generatedVar_for_of_${suffix}`,
+        forIn: `generatedVar_for_in_${suffix}`,
+        functionLocal: `generatedVar_function_local_${suffix}`,
     };
 }
 
@@ -181,8 +200,35 @@ function subjectSource(plans: readonly BindingPlan[], references: ReferencePlan)
     const deepName = "representativeDeepGlobal";
     const deepValue = 7331;
     const lexicalName = "representativeGlobalLexical";
+    const scoped = varScopePlan(0x31c7a5e2);
+    const scopedGlobalNames = [scoped.unreachable, scoped.forInitializer, scoped.forOf, scoped.forIn];
     return `
         if ($262.global !== globalThis || this !== globalThis) throw new Error("global identity differs");
+        ${scopedGlobalNames.map((name) => `
+            if (!(${JSON.stringify(name)} in globalThis) || globalThis[${JSON.stringify(name)}] !== undefined) {
+                throw new Error("var-scoped declaration was not instantiated before evaluation");
+            }
+        `).join("\n")}
+
+        if (false) { var ${scoped.unreachable} = 99; }
+        for (var ${scoped.forInitializer} = 0; ${scoped.forInitializer} < 3; ${scoped.forInitializer}++) {}
+        for (var ${scoped.forOf} of [41]) {}
+        for (var ${scoped.forIn} in { slot: 1 }) {}
+        function generatedVarScopeBoundary() {
+            var ${scoped.functionLocal} = 43;
+            return ${scoped.functionLocal};
+        }
+        if (${scoped.unreachable} !== undefined ||
+            ${scoped.forInitializer} !== 3 ||
+            ${scoped.forOf} !== 41 ||
+            ${scoped.forIn} !== "slot" ||
+            globalThis[${JSON.stringify(scoped.forInitializer)}] !== 3 ||
+            globalThis[${JSON.stringify(scoped.forOf)}] !== 41 ||
+            globalThis[${JSON.stringify(scoped.forIn)}] !== "slot" ||
+            ${JSON.stringify(scoped.functionLocal)} in globalThis ||
+            generatedVarScopeBoundary() !== 43) {
+            throw new Error("var-scoped declaration partition differs");
+        }
         ${plans.map(bindingAssertions).join("\n")}
 
         var logicalAndGlobal = 1;
