@@ -23541,6 +23541,31 @@ class Emitter {
         return found;
     }
 
+    private functionUsesOwnActivationBinding(fn: ts.FunctionLikeDeclaration): boolean {
+        if (ts.isArrowFunction(fn)) return false;
+        let found = false;
+        const visit = (node: ts.Node): void => {
+            if (found) return;
+            if (node !== fn && ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return;
+            if (
+                node.kind === ts.SyntaxKind.ThisKeyword ||
+                ts.isIdentifier(node) && this.isImplicitArgumentsIdentifier(node) ||
+                ts.isMetaProperty(node) &&
+                    node.keywordToken === ts.SyntaxKind.NewKeyword &&
+                    node.name.text === "target"
+            ) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        for (const parameter of fn.parameters) {
+            if (parameter.initializer) visit(parameter.initializer);
+        }
+        if (fn.body) visit(fn.body);
+        return found;
+    }
+
     private functionHasMappedArgumentsObject(fn: ts.FunctionLikeDeclaration): boolean {
         if (!this.isJavaScriptSourceFile(fn.getSourceFile()) ||
             this.functionHasStrictThisBinding(fn) ||
@@ -49298,6 +49323,7 @@ class Emitter {
     private isInlineYieldFreeClosureCall(call: ts.CallExpression): boolean {
         const target = this.unwrapTransparentExpression(call.expression);
         if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return false;
+        if (this.functionUsesOwnActivationBinding(target)) return false;
         if (this.nodeContainsYield(target)) return false;
         if (call.arguments.some((argument) => ts.isSpreadElement(argument))) {
             const signature = this.checker.getResolvedSignature(call);

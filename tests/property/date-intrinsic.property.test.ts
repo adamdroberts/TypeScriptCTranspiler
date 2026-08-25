@@ -173,8 +173,15 @@ function subjectSource(stress: readonly StressOperation[]): string {
         }));
 
         var sentinel = { marker: "sentinel" };
+        var argumentsObject = (function () { return arguments; }());
         print("date-receiver-error:" + errorKind(function () {
             D.prototype.getTime.call({});
+        }, sentinel));
+        print("date-receiver-array-error:" + errorKind(function () {
+            D.prototype.getTime.call([]);
+        }, sentinel));
+        print("date-receiver-arguments-error:" + errorKind(function () {
+            D.prototype.getTime.call(argumentsObject);
         }, sentinel));
         print("date-abrupt:" + errorKind(function () {
             date.setTime({ valueOf: function () { throw sentinel; } });
@@ -211,6 +218,8 @@ function expectedOutput(stress: readonly StressOperation[]): string {
         "date-number-primitive:7:v",
         "date-json:generic-json",
         "date-receiver-error:TypeError",
+        "date-receiver-array-error:TypeError",
+        "date-receiver-arguments-error:TypeError",
         "date-abrupt:identity",
         "date-call:string",
         "date-static:1000:1000",

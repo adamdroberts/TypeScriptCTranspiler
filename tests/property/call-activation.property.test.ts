@@ -137,6 +137,12 @@ function nativeSource(plans: readonly ActivationPlan[]): string {
                 console.log(String(readOuter("inner")));
             }
             lexicalArguments("lexical");
+            function nestedActivation(value) {
+                var innerLength = (function () { return arguments.length; }());
+                var readOuter = () => arguments[0];
+                console.log(String(innerLength) + ":" + String(readOuter()));
+            }
+            nestedActivation("nested-outer");
             function calleeIdentity() {
                 console.log(String(arguments.callee === calleeIdentity));
             }
@@ -239,6 +245,7 @@ test("ordinary calls preserve one source-derived activation and parameter-map mo
                 ...plans.map(expectedLine),
                 "outer",
                 "lexical",
+                "0:nested-outer",
                 "true",
                 "true",
                 "true",
