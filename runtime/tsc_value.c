@@ -4380,6 +4380,66 @@ tsc_array_t* tsc_value_object_entries(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
+/*
+ * Collect dynamic-import attributes through the same ordinary object path as
+ * Object.entries. That path performs OwnPropertyKeys, descriptor/enumerability
+ * checks, and Get in one canonical worklist, including Proxy traps and abrupt
+ * completions. The AOT host intentionally supports one attribute key, `type`.
+ */
+tsc_dynamic_import_attribute_type_t tsc_dynamic_import_collect_attributes(tsc_value_t options) {
+    if (tsc_value_is_undefined(options)) return TSC_DYNAMIC_IMPORT_ATTRIBUTES_NONE;
+    if (!tsc_value_is_object(options)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("dynamic import options must be an object"));
+    }
+
+    tsc_value_t attributes = tsc_value_get_prop(options, tsc_str_from_lit("with", 4));
+    if (tsc_value_is_undefined(attributes)) return TSC_DYNAMIC_IMPORT_ATTRIBUTES_NONE;
+    if (!tsc_value_is_object(attributes)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("dynamic import attributes must be an object"));
+    }
+
+    /* EnumerableOwnProperties finishes collecting before host support is
+     * checked, so every getter/trap runs even when a later key is unsupported. */
+    tsc_array_t* entries = tsc_value_object_entries(attributes);
+    tsc_dynamic_import_attribute_type_t result = TSC_DYNAMIC_IMPORT_ATTRIBUTES_NONE;
+    for (size_t index = 0; index < entries->len; index++) {
+        tsc_value_t pair_value = TSC_ARR(tsc_value_t, entries, index);
+        tsc_array_t* pair = tsc_value_as_array(pair_value);
+        tsc_str_t* key = tsc_value_as_string(TSC_ARR(tsc_value_t, pair, 0));
+        tsc_value_t raw_value = TSC_ARR(tsc_value_t, pair, 1);
+        if (!value_is_box(raw_value) || value_tag(raw_value) != TSC_VALUE_TAG_STRING) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("dynamic import attribute values must be strings"));
+        }
+        tsc_str_t* value = (tsc_str_t*)value_ptr(raw_value);
+        if (!str_lit_eq(key, "type")) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("unsupported dynamic import attribute"));
+        }
+        if (str_lit_eq(value, "javascript")) {
+            result = TSC_DYNAMIC_IMPORT_ATTRIBUTES_JAVASCRIPT;
+        } else if (str_lit_eq(value, "json")) {
+            result = TSC_DYNAMIC_IMPORT_ATTRIBUTES_JSON;
+        } else {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("unsupported dynamic import attribute type"));
+        }
+    }
+    return result;
+}
+
+void tsc_dynamic_import_validate_resource(
+    tsc_dynamic_import_attribute_type_t attributes,
+    bool json_resource
+) {
+    if (json_resource) {
+        if (attributes != TSC_DYNAMIC_IMPORT_ATTRIBUTES_JSON) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("JSON modules require import attribute type json"));
+        }
+        return;
+    }
+    if (attributes == TSC_DYNAMIC_IMPORT_ATTRIBUTES_JSON) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("import attribute type json does not match an ECMAScript Module"));
+    }
+}
+
 tsc_value_t tsc_value_object_from_entries(tsc_value_t entries) {
     tsc_object_t* out = tsc_object_new();
     if (!value_is_box(entries) || value_tag(entries) != TSC_VALUE_TAG_ARRAY) {

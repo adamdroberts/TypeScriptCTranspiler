@@ -17,8 +17,7 @@ import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
 import { createEcmaSourceFile, ecmaImportAttributesParserShadow } from "./ecmascript-source";
 import {
     dynamicImportCalls,
-    type ModuleRequest,
-    moduleRequestsFromDynamicImport,
+    dynamicImportSpecifiersFromCall,
 } from "./module-request";
 
 export interface BuildProgramOpts {
@@ -178,8 +177,8 @@ function collectStaticRequireRoots(
                     queue.push(resolvedFile);
                 }
             }
-            for (const request of dynamicModuleRequests(stmt)) {
-                const resolvedFile = resolveTypeScriptModuleName(request.specifier, fileName, compilerOptions);
+            for (const specifier of dynamicModuleSpecifiers(stmt)) {
+                const resolvedFile = resolveTypeScriptModuleName(specifier, fileName, compilerOptions);
                 if (resolvedFile && !seen.has(resolvedFile)) {
                     seen.add(resolvedFile);
                     roots.push(resolvedFile);
@@ -198,13 +197,13 @@ function collectStaticRequireRoots(
     return roots;
 }
 
-function dynamicModuleRequests(root: ts.Node): ModuleRequest[] {
-    const requests: ModuleRequest[] = [];
+function dynamicModuleSpecifiers(root: ts.Node): string[] {
+    const specifiers: string[] = [];
     for (const call of dynamicImportCalls(root)) {
-        const parsed = moduleRequestsFromDynamicImport(call);
-        if (parsed?.requests) requests.push(...parsed.requests);
+        const parsed = dynamicImportSpecifiersFromCall(call);
+        if (parsed?.specifiers) specifiers.push(...parsed.specifiers);
     }
-    return requests;
+    return specifiers;
 }
 
 function moduleImportSpecifier(stmt: ts.Statement): string | null {

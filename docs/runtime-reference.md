@@ -214,6 +214,8 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_object_new/set/define/define_accessor/get(...)` | varies | Runtime backing store for dynamic objects, data descriptors, and accessor descriptors with optional callback environments |
 | `tsc_value_object_keys/values(v)` | `tsc_array_t*` | Enumerable `Object.keys` / `Object.values` for dynamic objects, arrays, and strings |
 | `tsc_value_object_entries(v)` | `tsc_array_t*` | Enumerable `Object.entries` for dynamic objects/arrays/strings, returning dynamic `[key, value]` arrays |
+| `tsc_dynamic_import_collect_attributes(options)` | `tsc_dynamic_import_attribute_type_t` | Performs runtime ImportCall `options.with` access plus enumerable-own string entry collection; preserves Proxy/accessor abrupt completions and throws `TypeError` for invalid host attributes |
+| `tsc_dynamic_import_validate_resource(attributes, json_resource)` | `void` | Enforces the finite-AOT host's JavaScript/JSON resource-type policy after runtime attribute collection |
 | `tsc_value_object_from_entries(entries)` | `tsc_value_t` | Dynamic `Object.fromEntries`, accepting dynamic arrays of dynamic `[key, value]` pairs |
 | `tsc_json_parse(text)` | `tsc_value_t` | Recursive JSON parser for objects, arrays, strings, numbers, booleans, and null |
 

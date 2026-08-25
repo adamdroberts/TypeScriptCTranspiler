@@ -3,3 +3,5 @@ after
 lazy-init
 262
 true
+runtime-options:262
+invalid-options:true

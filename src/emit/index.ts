@@ -82,9 +82,7 @@ import {
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 import { validateJsonSyntax } from "../json-syntax";
 import {
-    type ModuleRequest,
-    moduleRequestKey,
-    moduleRequestsFromDynamicImport,
+    dynamicImportSpecifiersFromCall,
 } from "../module-request";
 
 const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
@@ -39670,7 +39668,7 @@ class Emitter {
                     continue;
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
@@ -39694,14 +39692,14 @@ class Emitter {
                     expr = prop.name;
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         unsupported(prop.name, "dynamic object method key must be a string/number literal");
                     }
                     fieldName = staticName;
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
                     }
                     const value = this.emitClosureExpression(prop);
@@ -48025,7 +48023,9 @@ class Emitter {
         if (
             (op === ts.SyntaxKind.AmpersandAmpersandToken ||
                 op === ts.SyntaxKind.BarBarToken) &&
-            this.prepareType(mapType(bin, this.checker)).kind === "boolean"
+            this.prepareType(mapType(bin, this.checker)).kind === "boolean" &&
+            this.prepareType(mapType(bin.left, this.checker)).kind === "boolean" &&
+            this.prepareType(mapType(bin.right, this.checker)).kind === "boolean"
         ) {
             const leftBoolean = this.staticBooleanValue(bin.left);
             if (leftBoolean !== null) {
@@ -48220,7 +48220,9 @@ class Emitter {
                         ty: T_STRING,
                     };
                 }
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                    left.ty.kind === "void" || right.ty.kind === "void" ||
+                    left.ty.kind === "never" || right.ty.kind === "never") {
                     const rc = this.coerce(right, T_VALUE, bin.right);
                     return this.emitSequencedExpr(
                         T_VALUE,
@@ -48249,7 +48251,9 @@ class Emitter {
                         ty: T_STRING,
                     };
                 }
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                    left.ty.kind === "void" || right.ty.kind === "void" ||
+                    left.ty.kind === "never" || right.ty.kind === "never") {
                     const rc = this.coerce(right, T_VALUE, bin.right);
                     return this.emitSequencedExpr(
                         T_VALUE,
@@ -48262,7 +48266,9 @@ class Emitter {
                 return { c: `(${lb} || ${rb})`, ty: T_BOOLEAN };
             }
             case ts.SyntaxKind.QuestionQuestionToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                    left.ty.kind === "void" || right.ty.kind === "void" ||
+                    left.ty.kind === "never" || right.ty.kind === "never") {
                     const rc = this.coerce(right, T_VALUE, bin.right);
                     return this.emitSequencedExpr(
                         T_VALUE,
@@ -50599,13 +50605,13 @@ class Emitter {
         return result;
     }
 
-    private resolvedDynamicModuleInfoForRequest(
-        request: ModuleRequest,
+    private resolvedDynamicModuleInfoForSpecifier(
+        specifier: string,
         containingFile: string,
     ): ModuleInfo | null {
         const moduleId = this.graph.fileToModuleId.get(containingFile);
         const importer = moduleId ? this.graph.modules.get(moduleId) : undefined;
-        const targetId = importer?.resolvedDynamicModuleRequests.get(moduleRequestKey(request));
+        const targetId = importer?.resolvedDynamicSpecifiers.get(specifier);
         return targetId ? this.graph.modules.get(targetId) ?? null : null;
     }
 
@@ -50637,63 +50643,83 @@ class Emitter {
     }
 
     private emitDynamicImportCall(call: ts.CallExpression): EmitResult {
-        const parsed = moduleRequestsFromDynamicImport(call);
-        if (!parsed || parsed.requests === null) {
+        const parsed = dynamicImportSpecifiersFromCall(call);
+        if (!parsed || parsed.specifiers === null) {
             unsupported(call, parsed?.error ?? "invalid dynamic import request");
         }
         const specifierNode = call.arguments[0]!;
         const specifier = this.emitExpr(specifierNode);
-        const adapter = this.ensureDynamicImportAdapter(call, parsed.requests);
+        const optionsNode = call.arguments[1];
+        const options = optionsNode
+            ? this.emitExpr(optionsNode)
+            : { c: "tsc_value_undefined()", ty: T_VALUE };
+        const adapter = this.ensureDynamicImportAdapter(call, parsed.specifiers);
         const stateType = `${adapter}_state_t`;
         return this.emitSequencedExpr(
             promiseType(T_VALUE),
-            [{ value: specifier, target: T_STRING, node: specifierNode }],
-            ([specifierValue]) => {
+            [
+                { value: specifier, target: T_VALUE, node: specifierNode },
+                { value: options, target: T_VALUE, node: optionsNode ?? specifierNode },
+            ],
+            ([specifierValue, optionsValue]) => {
                 const promise = this.freshTemp("_dynamic_import");
                 const state = this.freshTemp("_dynamic_import_state");
+                const frame = this.freshTemp("_dynamic_import_eh");
+                const specifierString = this.freshTemp("_dynamic_import_specifier");
+                const attributes = this.freshTemp("_dynamic_import_attributes");
+                const reason = this.freshTemp("_dynamic_import_reason");
                 return `({ tsc_promise_t* ${promise} = tsc_promise_pending(); ` +
+                    `TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame}); ` +
+                    `if (setjmp(${frame}.jb) == 0) { ` +
+                    `tsc_str_t* ${specifierString} = tsc_value_to_string(${specifierValue}); ` +
+                    `tsc_dynamic_import_attribute_type_t ${attributes} = tsc_dynamic_import_collect_attributes(${optionsValue}); ` +
                     `${stateType}* ${state} = (${stateType}*)TSC_GC_MALLOC(sizeof(${stateType})); ` +
-                    `${state}->promise = ${promise}; ${state}->specifier = ${specifierValue}; ` +
-                    `tsc_queue_microtask(${adapter}, ${state}); ${promise}; })`;
+                    `${state}->promise = ${promise}; ${state}->specifier = ${specifierString}; ` +
+                    `${state}->attributes = ${attributes}; tsc_queue_microtask(${adapter}, ${state}); ` +
+                    `tsc_try_pop(); } else { tsc_value_t ${reason} = tsc_current_error_value(); ` +
+                    `tsc_try_pop(); tsc_promise_reject_in_place(${promise}, ${reason}); } ${promise}; })`;
             },
         );
     }
 
     private ensureDynamicImportAdapter(
         call: ts.CallExpression,
-        requests: readonly ModuleRequest[],
+        specifiers: readonly string[],
     ): string {
         const adapter = this.freshTemp("tsc_dynamic_import_job");
         const stateType = `${adapter}_state_t`;
         const body = new CBuf();
-        body.line(`typedef struct { tsc_promise_t* promise; tsc_str_t* specifier; } ${stateType};`);
+        body.line(`typedef struct { tsc_promise_t* promise; tsc_str_t* specifier; tsc_dynamic_import_attribute_type_t attributes; } ${stateType};`);
         body.open(`static void ${adapter}(void* opaque)`);
         body.line(`${stateType}* state = (${stateType}*)opaque;`);
         body.line(`TSC_TRY_FRAME(${adapter}_frame);`);
         body.line(`tsc_try_push(&${adapter}_frame);`);
         body.open(`if (setjmp(${adapter}_frame.jb) == 0)`);
-        for (const [index, request] of requests.entries()) {
-            const target = this.resolvedDynamicModuleInfoForRequest(
-                request,
+        let emittedBranch = false;
+        for (const specifier of specifiers) {
+            const target = this.resolvedDynamicModuleInfoForSpecifier(
+                specifier,
                 call.getSourceFile().fileName,
             );
-            if (!target) unsupported(call, `dynamic import ${JSON.stringify(request.specifier)} is outside the AOT module graph`);
+            if (!target) continue;
             const namespace = this.ensureModuleNamespacePlan(target);
-            const condition = `tsc_str_eq(state->specifier, tsc_str_from_lit("${escapeCString(request.specifier)}", ${utf8ByteLen(request.specifier)}))`;
-            body.open(`${index === 0 ? "if" : "else if"} (${condition})`);
+            const condition = `tsc_str_eq(state->specifier, tsc_str_from_lit("${escapeCString(specifier)}", ${utf8ByteLen(specifier)}))`;
+            body.open(`${emittedBranch ? "else if" : "if"} (${condition})`);
+            emittedBranch = true;
+            body.line(`tsc_dynamic_import_validate_resource(state->attributes, ${/\.json$/i.test(target.fileName) ? "true" : "false"});`);
             for (const moduleId of this.dynamicModuleInitializationOrder(target)) {
                 body.line(`mod_init_${moduleId}();`);
             }
             body.line(`tsc_promise_fulfill_in_place(state->promise, ${namespace.factory}());`);
             body.close();
         }
-        body.open("else");
+        if (emittedBranch) body.open("else");
         body.line(
             `tsc_promise_reject_in_place(state->promise, tsc_value_error(` +
             `tsc_error_new_named(tsc_str_from_lit("TypeError", 9), ` +
             `tsc_str_from_cstr("dynamic import resolved outside finite AOT set"))));`,
         );
-        body.close();
+        if (emittedBranch) body.close();
         body.line("tsc_try_pop();");
         body.close(" else {");
         body.indent++;
@@ -75906,7 +75932,7 @@ class Emitter {
                     continue;
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
@@ -75943,7 +75969,7 @@ class Emitter {
                     expr = prop.name;
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         if (
                             ts.isComputedPropertyName(prop.name) &&
                             this.isSupportedWellKnownSymbolExpression(prop.name.expression)
@@ -75963,7 +75989,7 @@ class Emitter {
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (!staticName) {
+                    if (staticName === null) {
                         unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
                     }
                     const value = this.emitClosureExpression(prop);

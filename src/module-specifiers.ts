@@ -3,7 +3,10 @@ import * as path from "node:path";
 import { format as nodeUtilFormat } from "node:util";
 import ts from "typescript";
 
-const MAX_STATIC_STRING_ALTERNATIVES = 64;
+/* Static target derivation has no fixture-shaped cardinality ceiling. Existing
+ * guard sites retain their fail-closed structure for non-finite future policy,
+ * while Infinity makes the canonical collection cardinality-independent. */
+const MAX_STATIC_STRING_ALTERNATIVES = Number.POSITIVE_INFINITY;
 
 export function staticStringExpressionText(expr: ts.Expression): string | null {
     const texts = staticStringExpressionTexts(expr);
@@ -20,7 +23,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (seenValues.has(value)) continue;
             seenValues.add(value);
             out.push(value);
-            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return out;
     };
@@ -31,7 +33,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const l of left) {
             for (const r of right) {
                 out.push(l + r);
-                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
         return dedupe(out);

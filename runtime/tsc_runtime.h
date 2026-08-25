@@ -809,6 +809,16 @@ void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise);
 void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id);
 void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id);
 
+typedef enum {
+    TSC_DYNAMIC_IMPORT_ATTRIBUTES_NONE = 0,
+    TSC_DYNAMIC_IMPORT_ATTRIBUTES_JAVASCRIPT,
+    TSC_DYNAMIC_IMPORT_ATTRIBUTES_JSON,
+} tsc_dynamic_import_attribute_type_t;
+
+/* EvaluateImportCall's runtime options/with collection and AOT host policy. */
+tsc_dynamic_import_attribute_type_t tsc_dynamic_import_collect_attributes(tsc_value_t options);
+void tsc_dynamic_import_validate_resource(tsc_dynamic_import_attribute_type_t attributes, bool json_resource);
+
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_is_constructable(tsc_value_t v);
 bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor);

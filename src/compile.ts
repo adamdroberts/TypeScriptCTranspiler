@@ -39,8 +39,8 @@ import {
     UnsupportedError,
 } from "./diagnostics";
 import {
+    dynamicImportSpecifiersFromCall,
     moduleRequestFromDeclaration,
-    moduleRequestsFromDynamicImport,
     staticModuleRequestResolutionError,
 } from "./module-request";
 
@@ -312,21 +312,9 @@ function permanentLimitDiagnostics(
                         });
                     }
                 } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
-                    const requests = moduleRequestsFromDynamicImport(node);
-                    if (requests?.error) {
-                        diagnostics.push({ node, message: requests.error });
-                    }
-                    for (const request of requests?.requests ?? []) {
-                        const resolved = ts.resolveModuleName(
-                            request.specifier,
-                            sf.fileName,
-                            program.getCompilerOptions(),
-                            ts.sys,
-                        ).resolvedModule;
-                        if (resolved) {
-                            const message = staticModuleRequestResolutionError(request, resolved.resolvedFileName);
-                            if (message) diagnostics.push({ node, message });
-                        }
+                    const parsed = dynamicImportSpecifiersFromCall(node);
+                    if (parsed?.error) {
+                        diagnostics.push({ node, message: parsed.error });
                     }
                     const spec = node.arguments[0];
                     const literalSpec = spec ? stringSpecifierText(spec) : null;
