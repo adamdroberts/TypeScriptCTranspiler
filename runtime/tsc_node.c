@@ -7706,6 +7706,7 @@ tsc_str_t* tsc_value_typeof(tsc_value_t v) {
 }
 
 tsc_str_t* tsc_value_to_string(tsc_value_t v) {
+    if (tsc_value_is_object(v)) return tsc_value_to_string_coercion(v);
     if (!value_is_box(v)) return tsc_str_from_num(value_as_num(v));
     switch (value_tag(v)) {
         case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("[function]", 10);

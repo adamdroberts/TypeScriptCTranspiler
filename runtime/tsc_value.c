@@ -655,6 +655,101 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
     return tsc_value_string(tsc_value_to_string(primitive));
 }
 
+static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor);
+
+static tsc_value_t symbol_prototype_to_primitive_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)args;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(&primitive_symbol, this_arg, &primitive)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Symbol.prototype[Symbol.toPrimitive] called on incompatible receiver")
+        );
+    }
+    return primitive;
+}
+
+static tsc_value_t symbol_prototype_description_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)args;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(&primitive_symbol, this_arg, &primitive)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Symbol.prototype.description called on incompatible receiver")
+        );
+    }
+    tsc_str_t* description = tsc_symbol_description(
+        (const tsc_symbol_t*)value_ptr(primitive)
+    );
+    return description ? tsc_value_string(description) : tsc_value_undefined();
+}
+
+static void symbol_prototype_install_intrinsics(tsc_value_t prototype) {
+    tsc_value_t to_primitive = tsc_value_function_builtin_named(
+        symbol_prototype_to_primitive_apply,
+        NULL,
+        1.0,
+        tsc_str_from_lit("[Symbol.toPrimitive]", 20)
+    );
+    (void)tsc_value_define_symbol_property_desc(
+        prototype,
+        tsc_symbol_to_primitive(),
+        to_primitive,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+    (void)tsc_value_define_symbol_property_desc(
+        prototype,
+        tsc_symbol_to_string_tag(),
+        tsc_value_string(tsc_str_from_lit("Symbol", 6)),
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+
+    tsc_value_t getter = tsc_value_function_builtin_named(
+        symbol_prototype_description_apply,
+        NULL,
+        0.0,
+        tsc_str_from_lit("get description", 15)
+    );
+    tsc_value_t* getter_env = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));
+    *getter_env = getter;
+    (void)tsc_value_define_accessor_desc(
+        prototype,
+        tsc_str_from_lit("description", 11),
+        tsc_value_dynamic_accessor_getter,
+        getter_env,
+        true,
+        NULL,
+        NULL,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+}
+
 static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
     if (!descriptor->prototype) {
         tsc_runtime_lock();
@@ -850,6 +945,7 @@ tsc_value_t tsc_symbol_constructor_value(void) {
         tsc_str_from_lit("Symbol", 6)
     );
     primitive_link_nonconstructable_constructor(&primitive_symbol, constructor);
+    symbol_prototype_install_intrinsics(primitive_prototype(&primitive_symbol));
     symbol_constructor_define_value(
         constructor,
         "for",
@@ -862,26 +958,15 @@ tsc_value_t tsc_symbol_constructor_value(void) {
         6,
         tsc_value_function_builtin_named(symbol_key_for_apply, NULL, 1.0, tsc_str_from_lit("keyFor", 6))
     );
-    const struct {
-        const char* name;
-        size_t name_len;
-        tsc_symbol_t* (*value)(void);
-    } well_known[] = {
-        { "iterator", 8, tsc_symbol_iterator },
-        { "asyncIterator", 13, tsc_symbol_async_iterator },
-        { "asyncDispose", 12, tsc_symbol_async_dispose },
-        { "dispose", 7, tsc_symbol_dispose },
-        { "unscopables", 11, tsc_symbol_unscopables },
-        { "isConcatSpreadable", 18, tsc_symbol_is_concat_spreadable },
-        { "toStringTag", 11, tsc_symbol_to_string_tag },
-        { "species", 7, tsc_symbol_species },
-    };
-    for (size_t index = 0; index < sizeof(well_known) / sizeof(well_known[0]); index++) {
+    for (size_t index = 0; index < TSC_WELL_KNOWN_SYMBOL_COUNT; index++) {
+        tsc_well_known_symbol_kind_t kind = (tsc_well_known_symbol_kind_t)index;
+        const tsc_well_known_symbol_descriptor_t* descriptor =
+            tsc_symbol_well_known_descriptor(kind);
         symbol_constructor_define_value(
             constructor,
-            well_known[index].name,
-            well_known[index].name_len,
-            tsc_value_symbol(well_known[index].value())
+            descriptor->property_name,
+            descriptor->property_name_len,
+            tsc_value_symbol(tsc_symbol_well_known(kind))
         );
     }
     primitive_symbol.constructor = constructor;
@@ -948,9 +1033,9 @@ static tsc_value_t object_static_define_property(void* env, tsc_value_t this_arg
     if (!tsc_value_is_object(target)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));
     }
-    tsc_str_t* key = tsc_value_to_string(object_constructor_arg(args, 1));
+    tsc_value_t key = object_constructor_arg(args, 1);
     tsc_value_t descriptor = object_constructor_arg(args, 2);
-    if (!tsc_value_define_property_descriptor(target, key, descriptor)) {
+    if (!tsc_value_define_computed_property_descriptor(target, key, descriptor)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed"));
     }
     return target;
@@ -961,8 +1046,10 @@ static tsc_value_t object_static_get_own_property_descriptor(void* env, tsc_valu
     (void)this_arg;
     tsc_value_t target = object_constructor_arg(args, 0);
     object_static_require_target(target, "getOwnPropertyDescriptor");
-    tsc_str_t* key = tsc_value_to_string(object_constructor_arg(args, 1));
-    return tsc_value_get_own_property_descriptor(target, key);
+    return tsc_value_get_own_property_computed_descriptor(
+        target,
+        object_constructor_arg(args, 1)
+    );
 }
 
 static tsc_value_t object_static_get_own_property_names(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -2053,53 +2140,38 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
 }
 
 static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key) {
-    if (key == tsc_symbol_iterator()) {
-        return tsc_str_from_cstr("__tsc_symbol_iterator");
-    }
-    if (key == tsc_symbol_async_iterator()) {
-        return tsc_str_from_cstr("__tsc_symbol_asyncIterator");
-    }
-    if (key == tsc_symbol_async_dispose()) {
-        return tsc_str_from_cstr("__tsc_symbol_asyncDispose");
-    }
-    if (key == tsc_symbol_dispose()) {
-        return tsc_str_from_cstr("__tsc_symbol_dispose");
-    }
-    if (key == tsc_symbol_unscopables()) {
-        return tsc_str_from_cstr("__tsc_symbol_unscopables");
-    }
-    if (key == tsc_symbol_is_concat_spreadable()) {
-        return tsc_str_from_cstr("__tsc_symbol_isConcatSpreadable");
-    }
-    if (key == tsc_symbol_to_string_tag()) {
-        return tsc_str_from_cstr("__tsc_symbol_toStringTag");
-    }
-    if (key == tsc_symbol_species()) {
-        return tsc_str_from_cstr("__tsc_symbol_species");
+    for (size_t index = 0; index < TSC_WELL_KNOWN_SYMBOL_COUNT; index++) {
+        tsc_well_known_symbol_kind_t kind = (tsc_well_known_symbol_kind_t)index;
+        if (key != tsc_symbol_well_known(kind)) continue;
+        const tsc_well_known_symbol_descriptor_t* descriptor =
+            tsc_symbol_well_known_descriptor(kind);
+        return tsc_str_from_lit(descriptor->internal_key, descriptor->internal_key_len);
     }
     return NULL;
 }
 
 static bool value_is_known_symbol_internal_key(const tsc_str_t* key) {
-    return str_lit_eq(key, "__tsc_symbol_iterator") ||
-        str_lit_eq(key, "__tsc_symbol_asyncIterator") ||
-        str_lit_eq(key, "__tsc_symbol_asyncDispose") ||
-        str_lit_eq(key, "__tsc_symbol_dispose") ||
-        str_lit_eq(key, "__tsc_symbol_unscopables") ||
-        str_lit_eq(key, "__tsc_symbol_isConcatSpreadable") ||
-        str_lit_eq(key, "__tsc_symbol_toStringTag") ||
-        str_lit_eq(key, "__tsc_symbol_species");
+    for (size_t index = 0; index < TSC_WELL_KNOWN_SYMBOL_COUNT; index++) {
+        const tsc_well_known_symbol_descriptor_t* descriptor =
+            tsc_symbol_well_known_descriptor((tsc_well_known_symbol_kind_t)index);
+        if (
+            key && key->len == descriptor->internal_key_len &&
+            memcmp(key->data, descriptor->internal_key, descriptor->internal_key_len) == 0
+        ) return true;
+    }
+    return false;
 }
 
 static tsc_symbol_t* value_known_symbol_from_internal_key(const tsc_str_t* key) {
-    if (str_lit_eq(key, "__tsc_symbol_iterator")) return tsc_symbol_iterator();
-    if (str_lit_eq(key, "__tsc_symbol_asyncIterator")) return tsc_symbol_async_iterator();
-    if (str_lit_eq(key, "__tsc_symbol_asyncDispose")) return tsc_symbol_async_dispose();
-    if (str_lit_eq(key, "__tsc_symbol_dispose")) return tsc_symbol_dispose();
-    if (str_lit_eq(key, "__tsc_symbol_unscopables")) return tsc_symbol_unscopables();
-    if (str_lit_eq(key, "__tsc_symbol_isConcatSpreadable")) return tsc_symbol_is_concat_spreadable();
-    if (str_lit_eq(key, "__tsc_symbol_toStringTag")) return tsc_symbol_to_string_tag();
-    if (str_lit_eq(key, "__tsc_symbol_species")) return tsc_symbol_species();
+    for (size_t index = 0; index < TSC_WELL_KNOWN_SYMBOL_COUNT; index++) {
+        tsc_well_known_symbol_kind_t kind = (tsc_well_known_symbol_kind_t)index;
+        const tsc_well_known_symbol_descriptor_t* descriptor =
+            tsc_symbol_well_known_descriptor(kind);
+        if (
+            key && key->len == descriptor->internal_key_len &&
+            memcmp(key->data, descriptor->internal_key, descriptor->internal_key_len) == 0
+        ) return tsc_symbol_well_known(kind);
+    }
     return NULL;
 }
 
@@ -2351,6 +2423,38 @@ bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_val
     return apply_property_descriptor(v, key, &parsed);
 }
 
+bool tsc_value_define_computed_property_descriptor(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t desc
+) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        tsc_symbol_t* symbol = (tsc_symbol_t*)value_ptr(key);
+        tsc_parsed_property_descriptor_t parsed = parse_property_descriptor(desc);
+        if (parsed.accessor) {
+            tsc_str_t* internal_key = value_known_symbol_internal_key(symbol);
+            if (!internal_key || (value_symbol_uses_array_prototype_slot(symbol) && value_array_is_prototype_value(v))) {
+                return false;
+            }
+            return apply_property_descriptor(v, internal_key, &parsed);
+        }
+        return tsc_value_define_symbol_property_desc(
+            v,
+            symbol,
+            parsed.value,
+            parsed.has_value,
+            parsed.writable,
+            parsed.has_writable,
+            parsed.enumerable,
+            parsed.has_enumerable,
+            parsed.configurable,
+            parsed.has_configurable
+        );
+    }
+    return tsc_value_define_property_descriptor(v, (tsc_str_t*)value_ptr(key), desc);
+}
+
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
     if (!value_is_property_descriptor_object(descriptors)) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
@@ -2528,6 +2632,15 @@ bool tsc_reflect_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, t
 bool tsc_reflect_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
     require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
     return tsc_value_define_property_descriptor(v, key, desc);
+}
+
+bool tsc_reflect_define_computed_property_descriptor(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t desc
+) {
+    require_reflect_object_target(v, "Reflect.defineProperty target must be an object");
+    return tsc_value_define_computed_property_descriptor(v, key, desc);
 }
 
 bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
@@ -2969,6 +3082,14 @@ bool tsc_value_has_own_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     return false;
 }
 
+bool tsc_value_has_own_computed_prop(tsc_value_t v, tsc_value_t key) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_has_own_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
+    }
+    return tsc_value_has_own_prop(v, (tsc_str_t*)value_ptr(key));
+}
+
 bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_property_is_enumerable((tsc_object_t*)value_ptr(v), key);
@@ -2996,6 +3117,14 @@ bool tsc_value_symbol_property_is_enumerable(tsc_value_t v, tsc_symbol_t* key) {
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
     if (internal_key) return tsc_value_property_is_enumerable(v, internal_key);
     return false;
+}
+
+bool tsc_value_computed_property_is_enumerable(tsc_value_t v, tsc_value_t key) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_symbol_property_is_enumerable(v, (tsc_symbol_t*)value_ptr(key));
+    }
+    return tsc_value_property_is_enumerable(v, (tsc_str_t*)value_ptr(key));
 }
 
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
@@ -3127,23 +3256,37 @@ bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
 }
 
 /* A dynamically typed ECMAScript property key is normalized by one runtime
- * path before the ordinary object operation.  Keys already represented by
- * tsc_value_t use this path; native Symbol keys use the parallel symbol
- * operation until Symbols themselves enter the tagged-value representation. */
+ * path before the ordinary object operation. */
 tsc_value_t tsc_value_get_computed_prop(tsc_value_t v, tsc_value_t key) {
-    return tsc_value_get_prop(v, tsc_value_to_string(key));
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_get_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
+    }
+    return tsc_value_get_prop(v, (tsc_str_t*)value_ptr(key));
 }
 
 bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value) {
-    return tsc_value_set_prop(v, tsc_value_to_string(key), value);
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_set_symbol_prop(v, (tsc_symbol_t*)value_ptr(key), value);
+    }
+    return tsc_value_set_prop(v, (tsc_str_t*)value_ptr(key), value);
 }
 
 bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key) {
-    return tsc_value_has_prop(v, tsc_value_to_string(key));
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_has_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
+    }
+    return tsc_value_has_prop(v, (tsc_str_t*)value_ptr(key));
 }
 
 bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key) {
-    return tsc_value_delete_prop(v, tsc_value_to_string(key));
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_delete_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
+    }
+    return tsc_value_delete_prop(v, (tsc_str_t*)value_ptr(key));
 }
 
 bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key) {
@@ -3752,6 +3895,20 @@ tsc_value_t tsc_value_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symb
     return tsc_value_undefined();
 }
 
+tsc_value_t tsc_value_get_own_property_computed_descriptor(
+    tsc_value_t v,
+    tsc_value_t key
+) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_get_own_property_symbol_descriptor(
+            v,
+            (tsc_symbol_t*)value_ptr(key)
+        );
+    }
+    return tsc_value_get_own_property_descriptor(v, (tsc_str_t*)value_ptr(key));
+}
+
 tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
     return tsc_value_get_own_property_descriptor(v, key);
@@ -3760,6 +3917,14 @@ tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* ke
 tsc_value_t tsc_reflect_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key) {
     require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
     return tsc_value_get_own_property_symbol_descriptor(v, key);
+}
+
+tsc_value_t tsc_reflect_get_own_property_computed_descriptor(
+    tsc_value_t v,
+    tsc_value_t key
+) {
+    require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
+    return tsc_value_get_own_property_computed_descriptor(v, key);
 }
 
 
@@ -4123,7 +4288,16 @@ tsc_value_t tsc_value_object_from_entries(tsc_value_t entries) {
     return tsc_value_object(out);
 }
 
-static tsc_value_t value_to_primitive_default(tsc_value_t object);
+typedef enum {
+    TSC_TO_PRIMITIVE_DEFAULT,
+    TSC_TO_PRIMITIVE_NUMBER,
+    TSC_TO_PRIMITIVE_STRING,
+} tsc_to_primitive_hint_t;
+
+static tsc_value_t value_to_primitive(
+    tsc_value_t object,
+    tsc_to_primitive_hint_t hint
+);
 
 typedef enum {
     TSC_NUMERIC_ADD,
@@ -4144,12 +4318,15 @@ static bool value_is_bigint(tsc_value_t value) {
     return value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_BIGINT;
 }
 
-static tsc_value_t value_to_primitive_if_object(tsc_value_t value) {
-    return tsc_value_is_object(value) ? value_to_primitive_default(value) : value;
+static tsc_value_t value_to_primitive_if_object(
+    tsc_value_t value,
+    tsc_to_primitive_hint_t hint
+) {
+    return tsc_value_is_object(value) ? value_to_primitive(value, hint) : value;
 }
 
 tsc_value_t tsc_value_to_numeric(tsc_value_t value) {
-    tsc_value_t primitive = value_to_primitive_if_object(value);
+    tsc_value_t primitive = value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_NUMBER);
     if (value_is_bigint(primitive)) return primitive;
     return tsc_value_num(tsc_value_as_num(primitive));
 }
@@ -4232,8 +4409,8 @@ static tsc_value_t value_numeric_binary(
 }
 
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b) {
-    a = value_to_primitive_if_object(a);
-    b = value_to_primitive_if_object(b);
+    a = value_to_primitive_if_object(a, TSC_TO_PRIMITIVE_DEFAULT);
+    b = value_to_primitive_if_object(b, TSC_TO_PRIMITIVE_DEFAULT);
     bool stringy =
         (value_is_box(a) && value_tag(a) == TSC_VALUE_TAG_STRING) ||
         (value_is_box(b) && value_tag(b) == TSC_VALUE_TAG_STRING);
@@ -4250,7 +4427,9 @@ tsc_value_t tsc_value_mod(tsc_value_t a, tsc_value_t b) { return value_numeric_b
 tsc_value_t tsc_value_pow(tsc_value_t a, tsc_value_t b) { return value_numeric_binary(a, b, TSC_NUMERIC_POW); }
 
 tsc_value_t tsc_value_pos(tsc_value_t value) {
-    return tsc_value_num(tsc_value_as_num(value_to_primitive_if_object(value)));
+    return tsc_value_num(tsc_value_as_num(
+        value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_NUMBER)
+    ));
 }
 
 tsc_value_t tsc_value_inc(tsc_value_t value) {
@@ -4357,13 +4536,59 @@ static tsc_abstract_type_t abstract_equality_type(tsc_value_t value) {
     return TSC_ABSTRACT_UNDEFINED;
 }
 
-static tsc_value_t value_to_primitive_default(tsc_value_t object) {
-    static const char* const methods[] = { "valueOf", "toString" };
-    static const size_t method_lengths[] = { 7, 8 };
-    for (size_t index = 0; index < sizeof(methods) / sizeof(methods[0]); index++) {
+static tsc_value_t value_to_primitive(
+    tsc_value_t object,
+    tsc_to_primitive_hint_t hint
+) {
+    static const struct {
+        const char* name;
+        size_t name_len;
+    } ordinary_methods[][2] = {
+        [TSC_TO_PRIMITIVE_DEFAULT] = { { "valueOf", 7 }, { "toString", 8 } },
+        [TSC_TO_PRIMITIVE_NUMBER] = { { "valueOf", 7 }, { "toString", 8 } },
+        [TSC_TO_PRIMITIVE_STRING] = { { "toString", 8 }, { "valueOf", 7 } },
+    };
+    static const struct {
+        const char* name;
+        size_t name_len;
+    } hints[] = {
+        [TSC_TO_PRIMITIVE_DEFAULT] = { "default", 7 },
+        [TSC_TO_PRIMITIVE_NUMBER] = { "number", 6 },
+        [TSC_TO_PRIMITIVE_STRING] = { "string", 6 },
+    };
+
+    tsc_value_t exotic = tsc_value_get_symbol_prop(object, tsc_symbol_to_primitive());
+    if (!tsc_value_is_nullish(exotic)) {
+        if (!tsc_value_is_callable(exotic)) {
+            tsc_throw_error(
+                TSC_ERROR_TYPE,
+                tsc_str_from_cstr("Symbol.toPrimitive property is not callable")
+            );
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_value_t hint_value = tsc_value_string(tsc_str_from_lit(
+            hints[(size_t)hint].name,
+            hints[(size_t)hint].name_len
+        ));
+        tsc_array_push_raw(args, &hint_value);
+        tsc_value_t result = tsc_value_apply_function(
+            exotic,
+            object,
+            tsc_value_array(args)
+        );
+        if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Symbol.toPrimitive must return a primitive value")
+        );
+    }
+
+    for (size_t index = 0; index < 2; index++) {
+        const char* method_name = ordinary_methods[(size_t)hint][index].name;
+        size_t method_name_len = ordinary_methods[(size_t)hint][index].name_len;
         tsc_value_t method = tsc_value_get_prop(
             object,
-            tsc_str_from_lit(methods[index], method_lengths[index])
+            tsc_str_from_lit(method_name, method_name_len)
         );
         if (!tsc_value_is_callable(method)) continue;
         tsc_value_t result = tsc_value_apply_function(
@@ -4374,6 +4599,23 @@ static tsc_value_t value_to_primitive_default(tsc_value_t object) {
         if (abstract_equality_type(result) != TSC_ABSTRACT_OBJECT) return result;
     }
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert object to primitive value"));
+}
+
+tsc_str_t* tsc_value_to_string_coercion(tsc_value_t value) {
+    return tsc_value_to_string(
+        value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_STRING)
+    );
+}
+
+tsc_value_t tsc_value_to_property_key(tsc_value_t value) {
+    tsc_value_t primitive = value_to_primitive_if_object(
+        value,
+        TSC_TO_PRIMITIVE_STRING
+    );
+    if (value_is_box(primitive) && value_tag(primitive) == TSC_VALUE_TAG_SYMBOL) {
+        return primitive;
+    }
+    return tsc_value_string(tsc_value_to_string(primitive));
 }
 
 static bool abstract_bigint_number_equal(tsc_value_t bigint, tsc_value_t number) {
@@ -4428,10 +4670,10 @@ bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
         return tsc_value_abstract_eq(a, tsc_value_num(tsc_value_as_num(b)));
     }
     if (at == TSC_ABSTRACT_OBJECT && bt != TSC_ABSTRACT_OBJECT) {
-        return tsc_value_abstract_eq(value_to_primitive_default(a), b);
+        return tsc_value_abstract_eq(value_to_primitive(a, TSC_TO_PRIMITIVE_DEFAULT), b);
     }
     if (at != TSC_ABSTRACT_OBJECT && bt == TSC_ABSTRACT_OBJECT) {
-        return tsc_value_abstract_eq(a, value_to_primitive_default(b));
+        return tsc_value_abstract_eq(a, value_to_primitive(b, TSC_TO_PRIMITIVE_DEFAULT));
     }
     return false;
 }
@@ -4457,8 +4699,8 @@ bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b) {
 }
 
 int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
-    a = value_to_primitive_if_object(a);
-    b = value_to_primitive_if_object(b);
+    a = value_to_primitive_if_object(a, TSC_TO_PRIMITIVE_NUMBER);
+    b = value_to_primitive_if_object(b, TSC_TO_PRIMITIVE_NUMBER);
     if (
         value_is_box(a) && value_is_box(b) &&
         value_tag(a) == TSC_VALUE_TAG_STRING &&
@@ -6135,7 +6377,7 @@ static tsc_value_t reflect_define_property_method(void* env, tsc_value_t this_ar
     tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     tsc_value_t desc = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
-    return tsc_value_bool(tsc_reflect_define_property_descriptor(target, tsc_value_to_string(key), desc));
+    return tsc_value_bool(tsc_reflect_define_computed_property_descriptor(target, key, desc));
 }
 
 static tsc_value_t reflect_delete_property_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -6160,7 +6402,7 @@ static tsc_value_t reflect_get_own_property_descriptor_method(void* env, tsc_val
     (void)this_arg;
     tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_value_t key = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
-    return tsc_reflect_get_own_property_descriptor(target, tsc_value_to_string(key));
+    return tsc_reflect_get_own_property_computed_descriptor(target, key);
 }
 
 static tsc_value_t reflect_get_prototype_of_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {

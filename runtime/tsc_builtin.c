@@ -10,14 +10,35 @@ typedef struct tsc_symbol_registry_entry {
 
 static uint64_t tsc_next_symbol_id = 1;
 static tsc_symbol_registry_entry_t* tsc_symbol_registry = NULL;
-static tsc_symbol_t* tsc_symbol_iterator_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_async_iterator_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_async_dispose_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_dispose_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_unscopables_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_is_concat_spreadable_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_to_string_tag_singleton = NULL;
-static tsc_symbol_t* tsc_symbol_species_singleton = NULL;
+
+typedef struct {
+    tsc_well_known_symbol_descriptor_t descriptor;
+    tsc_symbol_t* value;
+} tsc_well_known_symbol_entry_t;
+
+#define TSC_WELL_KNOWN_SYMBOL_ENTRY(property, description, internal_key) \
+    { { property, sizeof(property) - 1, description, sizeof(description) - 1, \
+        internal_key, sizeof(internal_key) - 1 }, NULL }
+
+static tsc_well_known_symbol_entry_t tsc_well_known_symbols[TSC_WELL_KNOWN_SYMBOL_COUNT] = {
+    [TSC_WELL_KNOWN_SYMBOL_ASYNC_ITERATOR] = TSC_WELL_KNOWN_SYMBOL_ENTRY("asyncIterator", "Symbol.asyncIterator", "__tsc_symbol_asyncIterator"),
+    [TSC_WELL_KNOWN_SYMBOL_ASYNC_DISPOSE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("asyncDispose", "Symbol.asyncDispose", "__tsc_symbol_asyncDispose"),
+    [TSC_WELL_KNOWN_SYMBOL_DISPOSE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("dispose", "Symbol.dispose", "__tsc_symbol_dispose"),
+    [TSC_WELL_KNOWN_SYMBOL_HAS_INSTANCE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("hasInstance", "Symbol.hasInstance", "__tsc_symbol_hasInstance"),
+    [TSC_WELL_KNOWN_SYMBOL_IS_CONCAT_SPREADABLE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("isConcatSpreadable", "Symbol.isConcatSpreadable", "__tsc_symbol_isConcatSpreadable"),
+    [TSC_WELL_KNOWN_SYMBOL_ITERATOR] = TSC_WELL_KNOWN_SYMBOL_ENTRY("iterator", "Symbol.iterator", "__tsc_symbol_iterator"),
+    [TSC_WELL_KNOWN_SYMBOL_MATCH] = TSC_WELL_KNOWN_SYMBOL_ENTRY("match", "Symbol.match", "__tsc_symbol_match"),
+    [TSC_WELL_KNOWN_SYMBOL_MATCH_ALL] = TSC_WELL_KNOWN_SYMBOL_ENTRY("matchAll", "Symbol.matchAll", "__tsc_symbol_matchAll"),
+    [TSC_WELL_KNOWN_SYMBOL_REPLACE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("replace", "Symbol.replace", "__tsc_symbol_replace"),
+    [TSC_WELL_KNOWN_SYMBOL_SEARCH] = TSC_WELL_KNOWN_SYMBOL_ENTRY("search", "Symbol.search", "__tsc_symbol_search"),
+    [TSC_WELL_KNOWN_SYMBOL_SPECIES] = TSC_WELL_KNOWN_SYMBOL_ENTRY("species", "Symbol.species", "__tsc_symbol_species"),
+    [TSC_WELL_KNOWN_SYMBOL_SPLIT] = TSC_WELL_KNOWN_SYMBOL_ENTRY("split", "Symbol.split", "__tsc_symbol_split"),
+    [TSC_WELL_KNOWN_SYMBOL_TO_PRIMITIVE] = TSC_WELL_KNOWN_SYMBOL_ENTRY("toPrimitive", "Symbol.toPrimitive", "__tsc_symbol_toPrimitive"),
+    [TSC_WELL_KNOWN_SYMBOL_TO_STRING_TAG] = TSC_WELL_KNOWN_SYMBOL_ENTRY("toStringTag", "Symbol.toStringTag", "__tsc_symbol_toStringTag"),
+    [TSC_WELL_KNOWN_SYMBOL_UNSCOPABLES] = TSC_WELL_KNOWN_SYMBOL_ENTRY("unscopables", "Symbol.unscopables", "__tsc_symbol_unscopables"),
+};
+
+#undef TSC_WELL_KNOWN_SYMBOL_ENTRY
 
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     tsc_symbol_t* sym = (tsc_symbol_t*)TSC_GC_MALLOC(sizeof(tsc_symbol_t));
@@ -51,101 +72,44 @@ tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym) {
     return sym ? sym->global_key : NULL;
 }
 
-tsc_symbol_t* tsc_symbol_iterator(void) {
-    if (!tsc_symbol_iterator_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_iterator_singleton) {
-            tsc_symbol_iterator_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.iterator", 15));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_iterator_singleton;
+const tsc_well_known_symbol_descriptor_t* tsc_symbol_well_known_descriptor(
+    tsc_well_known_symbol_kind_t kind
+) {
+    if ((size_t)kind >= TSC_WELL_KNOWN_SYMBOL_COUNT) return NULL;
+    return &tsc_well_known_symbols[(size_t)kind].descriptor;
 }
 
-tsc_symbol_t* tsc_symbol_async_iterator(void) {
-    if (!tsc_symbol_async_iterator_singleton) {
+tsc_symbol_t* tsc_symbol_well_known(tsc_well_known_symbol_kind_t kind) {
+    if ((size_t)kind >= TSC_WELL_KNOWN_SYMBOL_COUNT) return NULL;
+    tsc_well_known_symbol_entry_t* entry = &tsc_well_known_symbols[(size_t)kind];
+    if (!entry->value) {
         tsc_runtime_lock();
-        if (!tsc_symbol_async_iterator_singleton) {
-            tsc_symbol_async_iterator_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.asyncIterator", 20));
+        if (!entry->value) {
+            entry->value = tsc_symbol_new(tsc_str_from_lit(
+                entry->descriptor.description,
+                entry->descriptor.description_len
+            ));
         }
         tsc_runtime_unlock();
     }
-    return tsc_symbol_async_iterator_singleton;
+    return entry->value;
 }
 
-tsc_symbol_t* tsc_symbol_async_dispose(void) {
-    if (!tsc_symbol_async_dispose_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_async_dispose_singleton) {
-            tsc_symbol_async_dispose_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.asyncDispose", 19));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_async_dispose_singleton;
-}
-
-tsc_symbol_t* tsc_symbol_dispose(void) {
-    if (!tsc_symbol_dispose_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_dispose_singleton) {
-            tsc_symbol_dispose_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.dispose", 14));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_dispose_singleton;
-}
-
-tsc_symbol_t* tsc_symbol_unscopables(void) {
-    if (!tsc_symbol_unscopables_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_unscopables_singleton) {
-            tsc_symbol_unscopables_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.unscopables", 18));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_unscopables_singleton;
-}
-
-tsc_symbol_t* tsc_symbol_is_concat_spreadable(void) {
-    if (!tsc_symbol_is_concat_spreadable_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_is_concat_spreadable_singleton) {
-            tsc_symbol_is_concat_spreadable_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.isConcatSpreadable", 25));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_is_concat_spreadable_singleton;
-}
-
-tsc_symbol_t* tsc_symbol_to_string_tag(void) {
-    if (!tsc_symbol_to_string_tag_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_to_string_tag_singleton) {
-            tsc_symbol_to_string_tag_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.toStringTag", 18));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_to_string_tag_singleton;
-}
-
-tsc_symbol_t* tsc_symbol_species(void) {
-    if (!tsc_symbol_species_singleton) {
-        tsc_runtime_lock();
-        if (!tsc_symbol_species_singleton) {
-            tsc_symbol_species_singleton =
-                tsc_symbol_new(tsc_str_from_lit("Symbol.species", 14));
-        }
-        tsc_runtime_unlock();
-    }
-    return tsc_symbol_species_singleton;
-}
+tsc_symbol_t* tsc_symbol_async_iterator(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_ASYNC_ITERATOR); }
+tsc_symbol_t* tsc_symbol_async_dispose(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_ASYNC_DISPOSE); }
+tsc_symbol_t* tsc_symbol_dispose(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_DISPOSE); }
+tsc_symbol_t* tsc_symbol_has_instance(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_HAS_INSTANCE); }
+tsc_symbol_t* tsc_symbol_is_concat_spreadable(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_IS_CONCAT_SPREADABLE); }
+tsc_symbol_t* tsc_symbol_iterator(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_ITERATOR); }
+tsc_symbol_t* tsc_symbol_match(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_MATCH); }
+tsc_symbol_t* tsc_symbol_match_all(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_MATCH_ALL); }
+tsc_symbol_t* tsc_symbol_replace(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_REPLACE); }
+tsc_symbol_t* tsc_symbol_search(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_SEARCH); }
+tsc_symbol_t* tsc_symbol_species(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_SPECIES); }
+tsc_symbol_t* tsc_symbol_split(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_SPLIT); }
+tsc_symbol_t* tsc_symbol_to_primitive(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_TO_PRIMITIVE); }
+tsc_symbol_t* tsc_symbol_to_string_tag(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_TO_STRING_TAG); }
+tsc_symbol_t* tsc_symbol_unscopables(void) { return tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_UNSCOPABLES); }
 
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym) {
     return sym ? sym->description : NULL;

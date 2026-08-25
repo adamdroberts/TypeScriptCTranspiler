@@ -83,6 +83,26 @@ import type { ModuleGraph, ModuleInfo } from "../resolve";
 
 const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
 
+const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
+    asyncIterator: "tsc_symbol_async_iterator",
+    asyncDispose: "tsc_symbol_async_dispose",
+    dispose: "tsc_symbol_dispose",
+    hasInstance: "tsc_symbol_has_instance",
+    isConcatSpreadable: "tsc_symbol_is_concat_spreadable",
+    iterator: "tsc_symbol_iterator",
+    match: "tsc_symbol_match",
+    matchAll: "tsc_symbol_match_all",
+    replace: "tsc_symbol_replace",
+    search: "tsc_symbol_search",
+    species: "tsc_symbol_species",
+    split: "tsc_symbol_split",
+    toPrimitive: "tsc_symbol_to_primitive",
+    toStringTag: "tsc_symbol_to_string_tag",
+    unscopables: "tsc_symbol_unscopables",
+} as const;
+
+type WellKnownSymbolName = keyof typeof WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS;
+
 interface EmitResult {
     c: string;
     ty: CType;
@@ -12352,9 +12372,7 @@ class Emitter {
     }
 
     private isSideEffectFreeWellKnownSymbolRead(expr: ts.Expression): boolean {
-        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
-        return this.isUnshadowedGlobalIdentifier(expr.expression, "Symbol") &&
-            (expr.name.text === "iterator" || expr.name.text === "asyncIterator");
+        return this.wellKnownSymbolName(expr) !== null;
     }
 
     private isSideEffectFreeStaticNumericPropertyRead(expr: ts.Expression): boolean {
@@ -38890,9 +38908,14 @@ class Emitter {
             const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
             if (bigint) return bigint;
             if (left.ty.kind === "string" || right.ty.kind === "string") {
-                const ls = this.coerceToString(left, bin.left);
-                const rs = this.coerceToString(right, bin.right);
-                return { c: `tsc_str_concat(${ls}, ${rs})`, ty: T_STRING };
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [
+                        { value: left, node: bin.left, stringify: true },
+                        { value: right, node: bin.right, stringify: true },
+                    ],
+                    ([leftString, rightString]) => `tsc_str_concat(${leftString}, ${rightString})`,
+                );
             }
             requireNumber(bin, left.ty);
             requireNumber(bin, right.ty);
@@ -39013,7 +39036,7 @@ class Emitter {
                 });
             }
             if (right.ty.kind === "array") {
-                if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
+                if (this.isSupportedWellKnownSymbolExpression(bin.left) || left.ty.kind === "symbol") {
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: right, node: bin.right },
                         { value: left, target: T_SYMBOL, node: bin.left },
@@ -39046,6 +39069,16 @@ class Emitter {
                 unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
             }
             if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: left, target: T_SYMBOL, node: bin.left },
+                        { value: right, target: T_VALUE, node: bin.right },
+                    ],
+                    ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
+                );
+            }
+            if (left.ty.kind === "symbol") {
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
@@ -45433,6 +45466,12 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "BigInt")) {
+                return { c: "tsc_bigint_constructor_value()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
+                return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
+            }
             const errorConstructorKind = this.errorConstructorRuntimeKind(expr.text);
             if (
                 errorConstructorKind &&
@@ -46542,16 +46581,16 @@ class Emitter {
 
         if (leaves.length < 3) return null; // 2-operand `+` already optimal
 
-        // Emit each leaf and coerce to string.
-        const parts: string[] = [];
-        for (const leaf of leaves) {
-            const r = this.emitExpr(leaf);
-            parts.push(this.coerceToString(r, leaf));
-        }
-        return {
-            c: `tsc_str_concat_n(${parts.length}, ${parts.join(", ")})`,
-            ty: T_STRING,
-        };
+        const specs = leaves.map((leaf): SequencedCallArg => ({
+            value: this.emitExpr(leaf),
+            node: leaf,
+            stringify: true,
+        }));
+        return this.emitSequencedExpr(
+            T_STRING,
+            specs,
+            (parts) => `tsc_str_concat_n(${parts.length}, ${parts.join(", ")})`,
+        );
     }
 
     private stringLiteralInfo(expr: ts.Expression): { text: string; escaped: string; len: number } | null {
@@ -46692,7 +46731,7 @@ class Emitter {
                     );
                 }
                 if (right.ty.kind === "array") {
-                    if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
+                    if (this.isSupportedWellKnownSymbolExpression(bin.left) || left.ty.kind === "symbol") {
                         return this.emitSequencedExpr(T_BOOLEAN, [
                             { value: right },
                             { value: left, target: T_SYMBOL, node: bin.left },
@@ -46719,6 +46758,26 @@ class Emitter {
                         ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
                     );
                 }
+                if (left.ty.kind === "symbol") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: left, target: T_SYMBOL, node: bin.left },
+                            { value: right, target: T_VALUE, node: bin.right },
+                        ],
+                        ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
+                    );
+                }
+                if (left.ty.kind === "value") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: left, target: T_VALUE, node: bin.left },
+                            { value: right, target: T_VALUE, node: bin.right },
+                        ],
+                        ([key, obj]) => `tsc_value_has_computed_prop(${obj}, ${key})`,
+                    );
+                }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
@@ -46738,9 +46797,14 @@ class Emitter {
                 const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
                 if (bigint) return bigint;
                 if (left.ty.kind === "string" || right.ty.kind === "string") {
-                    const ls = this.coerceToString(left, bin.left);
-                    const rs = this.coerceToString(right, bin.right);
-                    return { c: `tsc_str_concat(${ls}, ${rs})`, ty: T_STRING };
+                    return this.emitSequencedExpr(
+                        T_STRING,
+                        [
+                            { value: left, node: bin.left, stringify: true },
+                            { value: right, node: bin.right, stringify: true },
+                        ],
+                        ([leftString, rightString]) => `tsc_str_concat(${leftString}, ${rightString})`,
+                    );
                 }
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
@@ -48772,6 +48836,25 @@ class Emitter {
                 }
                 unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
             }
+            if (!argument) unsupported(call.expression, "computed method call requires a property key");
+            const receiverNode = call.expression.expression;
+            const receiver = this.emitExpr(receiverNode);
+            const key = this.emitExpr(argument);
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [
+                    { value: receiver, target: T_VALUE, node: receiverNode },
+                    { value: key, target: T_VALUE, node: argument },
+                ],
+                ([receiverValue, keyValue]) => this.emitDynamicValueCall(
+                    call,
+                    {
+                        c: `tsc_value_get_computed_prop(${receiverValue}, ${keyValue})`,
+                        ty: T_VALUE,
+                    },
+                    { c: receiverValue!, ty: T_VALUE },
+                ).c,
+            );
         }
         if (!ts.isIdentifier(call.expression)) {
             const requireExportsDecl = this.requireCallModuleExportsDeclaration(call.expression);
@@ -49600,6 +49683,16 @@ class Emitter {
                 ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
             }
             const key = this.emitExpr(keyNode);
+            if (key.ty.kind === "value") {
+                const fn = method === "hasOwnProperty"
+                    ? "tsc_value_has_own_computed_prop"
+                    : "tsc_value_computed_property_is_enumerable";
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    { value: key, target: T_VALUE, node: keyNode },
+                    ...ignored,
+                ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
+            }
             const fn = method === "hasOwnProperty"
                 ? "tsc_array_has_own_key"
                 : "tsc_array_property_is_enumerable_key";
@@ -49652,6 +49745,16 @@ class Emitter {
                 ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
             }
             const key = this.emitExpr(keyNode);
+            if (key.ty.kind === "value") {
+                const fn = method === "hasOwnProperty"
+                    ? "tsc_value_has_own_computed_prop"
+                    : "tsc_value_computed_property_is_enumerable";
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    { value: key, target: T_VALUE, node: keyNode },
+                    ...ignored,
+                ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
+            }
             const fn = method === "hasOwnProperty"
                 ? "tsc_value_has_own_prop"
                 : "tsc_value_property_is_enumerable";
@@ -49669,6 +49772,16 @@ class Emitter {
             return this.emitSequencedExpr(T_BOOLEAN, [
                 { value: target, target: T_VALUE, node: targetNode },
                 { value: key, target: T_SYMBOL, node: keyNode },
+                ...ignored,
+            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
+        }
+        if (key.ty.kind === "value") {
+            const fn = method === "hasOwnProperty"
+                ? "tsc_value_has_own_computed_prop"
+                : "tsc_value_computed_property_is_enumerable";
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, target: T_VALUE, node: targetNode },
+                { value: key, target: T_VALUE, node: keyNode },
                 ...ignored,
             ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
         }
@@ -49733,22 +49846,29 @@ class Emitter {
         );
     }
 
-    private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {
+    private emitDynamicValueCall(
+        call: ts.CallExpression,
+        callee: EmitResult,
+        thisArg: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE },
+    ): EmitResult {
         if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
             if (call.questionDotToken) {
                 return this.emitSequencedExpr(
                     T_VALUE,
-                    [{ value: callee, target: T_VALUE, node: call.expression }],
-                    ([fn]) => {
+                    [
+                        { value: callee, target: T_VALUE, node: call.expression },
+                        { value: thisArg, target: T_VALUE, node: call.expression },
+                    ],
+                    ([fn, receiver]) => {
                         const list = this.emitSpreadCallArgumentList(call.arguments);
-                        return `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${list.c}))`;
+                        return `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${list.c}))`;
                     },
                 );
             }
             const list = this.emitSpreadCallArgumentList(call.arguments);
             return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
                 { value: callee, target: T_VALUE, node: call.expression },
-                { value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call.expression },
+                { value: thisArg, target: T_VALUE, node: call.expression },
                 { value: list, target: T_VALUE, node: call },
             ]);
         }
@@ -49757,15 +49877,16 @@ class Emitter {
             T_VALUE,
             [
                 { value: callee, target: T_VALUE, node: call.expression },
+                { value: thisArg, target: T_VALUE, node: call.expression },
                 ...args.map((value, index) => ({ value, target: T_VALUE, node: call.arguments[index]! })),
             ],
-            ([fn, ...vals]) => {
+            ([fn, receiver, ...vals]) => {
                 const av = this.freshTemp("_dyn_call_args");
                 const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
                 for (const value of vals) {
                     pieces.push(`tsc_array_push_value(${av}, ${value})`);
                 }
-                const invoke = `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`;
+                const invoke = `tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${av}))`;
                 pieces.push(call.questionDotToken
                     ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
                     : invoke);
@@ -68189,71 +68310,42 @@ class Emitter {
         return memberName == null ? null : `${kind}_${memberName}`;
     }
 
+    private wellKnownSymbolName(expr: ts.Expression): WellKnownSymbolName | null {
+        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return null;
+        if (!this.isUnshadowedGlobalIdentifier(expr.expression, "Symbol")) return null;
+        const name = expr.name.text;
+        return Object.prototype.hasOwnProperty.call(WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS, name)
+            ? name as WellKnownSymbolName
+            : null;
+    }
+
+    private wellKnownSymbolRuntimeCall(expr: ts.Expression): string | null {
+        const name = this.wellKnownSymbolName(expr);
+        return name === null ? null : `${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[name]}()`;
+    }
+
     private isSymbolIteratorExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "iterator";
+        return this.wellKnownSymbolName(expr) === "iterator";
     }
 
     private isSymbolAsyncIteratorExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "asyncIterator";
+        return this.wellKnownSymbolName(expr) === "asyncIterator";
     }
 
     private isSymbolAsyncDisposeExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "asyncDispose";
+        return this.wellKnownSymbolName(expr) === "asyncDispose";
     }
 
     private isSymbolDisposeExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "dispose";
+        return this.wellKnownSymbolName(expr) === "dispose";
     }
 
     private isSymbolUnscopablesExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "unscopables";
-    }
-
-    private isSymbolIsConcatSpreadableExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "isConcatSpreadable";
-    }
-
-    private isSymbolToStringTagExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "toStringTag";
-    }
-
-    private isSymbolSpeciesExpression(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "Symbol" &&
-            expr.name.text === "species";
+        return this.wellKnownSymbolName(expr) === "unscopables";
     }
 
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
-        return this.isSymbolIteratorExpression(expr) ||
-            this.isSymbolAsyncIteratorExpression(expr) ||
-            this.isSymbolAsyncDisposeExpression(expr) ||
-            this.isSymbolDisposeExpression(expr) ||
-            this.isSymbolUnscopablesExpression(expr) ||
-            this.isSymbolIsConcatSpreadableExpression(expr) ||
-            this.isSymbolToStringTagExpression(expr) ||
-            this.isSymbolSpeciesExpression(expr);
+        return this.wellKnownSymbolName(expr) !== null;
     }
 
     private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
@@ -69104,10 +69196,10 @@ class Emitter {
             const key = this.emitExpr(args[1]!);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: obj, target: T_VALUE, node: arg },
-                { value: key, target: T_STRING, node: args[1]! },
+                { value: key, target: T_VALUE, node: args[1]! },
                 ...ignored,
             ], ([o, k]) =>
-                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_descriptor(${o!}, ${k!}); })`,
+                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_computed_descriptor(${o!}, ${k!}); })`,
             );
         }
         if (name === "getOwnPropertyDescriptors") {
@@ -73458,30 +73550,8 @@ class Emitter {
                     }
                 }
             }
-            if (pa.expression.text === "Symbol" && pa.name.text === "iterator") {
-                return { c: `tsc_symbol_iterator()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "asyncIterator") {
-                return { c: `tsc_symbol_async_iterator()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "asyncDispose") {
-                return { c: `tsc_symbol_async_dispose()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "dispose") {
-                return { c: `tsc_symbol_dispose()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "unscopables") {
-                return { c: `tsc_symbol_unscopables()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "isConcatSpreadable") {
-                return { c: `tsc_symbol_is_concat_spreadable()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "toStringTag") {
-                return { c: `tsc_symbol_to_string_tag()`, ty: T_SYMBOL };
-            }
-            if (pa.expression.text === "Symbol" && pa.name.text === "species") {
-                return { c: `tsc_symbol_species()`, ty: T_SYMBOL };
-            }
+            const wellKnownSymbol = this.wellKnownSymbolRuntimeCall(pa);
+            if (wellKnownSymbol) return { c: wellKnownSymbol, ty: T_SYMBOL };
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
         if (this.isProcessEnvObject(pa.expression)) {
@@ -73588,7 +73658,11 @@ class Emitter {
             return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "symbol" && pa.name.text === "description") {
-            return { c: `tsc_symbol_description(${recv.c})`, ty: T_STRING };
+            const description = this.freshTemp("_symbol_description");
+            return {
+                c: `({ tsc_str_t* ${description} = tsc_symbol_description(${recv.c}); ${description} ? tsc_value_string(${description}) : tsc_value_undefined(); })`,
+                ty: T_VALUE,
+            };
         }
         if (recv.ty.kind === "regexp") {
             switch (pa.name.text) {
@@ -74202,6 +74276,23 @@ class Emitter {
                         const key = this.emitExpr(prop.name.expression);
                         const keyTemp = this.freshTemp("_obj_key");
                         const value = this.emitExpr(prop.initializer);
+                        if (
+                            key.ty.kind === "symbol" &&
+                            this.isSupportedWellKnownSymbolExpression(prop.name.expression)
+                        ) {
+                            pieces.push(
+                                `${T_SYMBOL.c} const ${keyTemp} = ${key.c}`,
+                                `tsc_value_set_symbol_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                            );
+                            continue;
+                        }
+                        if (key.ty.kind === "value") {
+                            pieces.push(
+                                `${T_VALUE.c} const ${keyTemp} = ${key.c}`,
+                                `tsc_value_set_computed_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                            );
+                            continue;
+                        }
                         pieces.push(
                             `${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, prop.name.expression)}`,
                             `tsc_object_set(${obj}, ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
@@ -74216,6 +74307,19 @@ class Emitter {
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (!staticName) {
+                        if (
+                            ts.isComputedPropertyName(prop.name) &&
+                            this.isSupportedWellKnownSymbolExpression(prop.name.expression)
+                        ) {
+                            const key = this.emitExpr(prop.name.expression);
+                            const value = this.emitClosureExpression(prop);
+                            const keyTemp = this.freshTemp("_obj_method_key");
+                            pieces.push(
+                                `${T_SYMBOL.c} const ${keyTemp} = ${this.coerce(key, T_SYMBOL, prop.name.expression)}`,
+                                `tsc_value_set_symbol_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop)})`,
+                            );
+                            continue;
+                        }
                         unsupported(prop.name, "dynamic object method key must be a string/number literal");
                     }
                     fieldName = staticName;

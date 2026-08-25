@@ -123,14 +123,14 @@ static tsc_value_t object_prototype_has_own_property(void* env, tsc_value_t this
     (void)env;
     object_prototype_require_receiver(this_arg, "hasOwnProperty");
     tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_bool(tsc_value_has_own_prop(this_arg, tsc_value_to_string(key_value)));
+    return tsc_value_bool(tsc_value_has_own_computed_prop(this_arg, key_value));
 }
 
 static tsc_value_t object_prototype_property_is_enumerable(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     object_prototype_require_receiver(this_arg, "propertyIsEnumerable");
     tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_bool(tsc_value_property_is_enumerable(this_arg, tsc_value_to_string(key_value)));
+    return tsc_value_bool(tsc_value_computed_property_is_enumerable(this_arg, key_value));
 }
 
 static tsc_value_t object_prototype_is_prototype_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {

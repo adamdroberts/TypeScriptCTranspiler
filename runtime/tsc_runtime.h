@@ -197,12 +197,47 @@ typedef struct tsc_symbol {
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description);
 tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key);
 tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym);
+typedef enum {
+    TSC_WELL_KNOWN_SYMBOL_ASYNC_ITERATOR,
+    TSC_WELL_KNOWN_SYMBOL_ASYNC_DISPOSE,
+    TSC_WELL_KNOWN_SYMBOL_DISPOSE,
+    TSC_WELL_KNOWN_SYMBOL_HAS_INSTANCE,
+    TSC_WELL_KNOWN_SYMBOL_IS_CONCAT_SPREADABLE,
+    TSC_WELL_KNOWN_SYMBOL_ITERATOR,
+    TSC_WELL_KNOWN_SYMBOL_MATCH,
+    TSC_WELL_KNOWN_SYMBOL_MATCH_ALL,
+    TSC_WELL_KNOWN_SYMBOL_REPLACE,
+    TSC_WELL_KNOWN_SYMBOL_SEARCH,
+    TSC_WELL_KNOWN_SYMBOL_SPECIES,
+    TSC_WELL_KNOWN_SYMBOL_SPLIT,
+    TSC_WELL_KNOWN_SYMBOL_TO_PRIMITIVE,
+    TSC_WELL_KNOWN_SYMBOL_TO_STRING_TAG,
+    TSC_WELL_KNOWN_SYMBOL_UNSCOPABLES,
+    TSC_WELL_KNOWN_SYMBOL_COUNT,
+} tsc_well_known_symbol_kind_t;
+typedef struct {
+    const char* property_name;
+    size_t property_name_len;
+    const char* description;
+    size_t description_len;
+    const char* internal_key;
+    size_t internal_key_len;
+} tsc_well_known_symbol_descriptor_t;
+const tsc_well_known_symbol_descriptor_t* tsc_symbol_well_known_descriptor(tsc_well_known_symbol_kind_t kind);
+tsc_symbol_t* tsc_symbol_well_known(tsc_well_known_symbol_kind_t kind);
 tsc_symbol_t* tsc_symbol_iterator(void);
 tsc_symbol_t* tsc_symbol_async_iterator(void);
 tsc_symbol_t* tsc_symbol_async_dispose(void);
 tsc_symbol_t* tsc_symbol_dispose(void);
+tsc_symbol_t* tsc_symbol_has_instance(void);
 tsc_symbol_t* tsc_symbol_unscopables(void);
 tsc_symbol_t* tsc_symbol_is_concat_spreadable(void);
+tsc_symbol_t* tsc_symbol_match(void);
+tsc_symbol_t* tsc_symbol_match_all(void);
+tsc_symbol_t* tsc_symbol_replace(void);
+tsc_symbol_t* tsc_symbol_search(void);
+tsc_symbol_t* tsc_symbol_split(void);
+tsc_symbol_t* tsc_symbol_to_primitive(void);
 tsc_symbol_t* tsc_symbol_to_string_tag(void);
 tsc_symbol_t* tsc_symbol_species(void);
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym);
@@ -790,6 +825,8 @@ bool tsc_value_is_promise(tsc_value_t v);
 void* tsc_value_gc_root(tsc_value_t v);
 tsc_promise_t* tsc_value_as_promise(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
+tsc_str_t* tsc_value_to_string_coercion(tsc_value_t v);
+tsc_value_t tsc_value_to_property_key(tsc_value_t v);
 tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
@@ -841,6 +878,7 @@ tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t
 bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc);
+bool tsc_value_define_computed_property_descriptor(tsc_value_t v, tsc_value_t key, tsc_value_t desc);
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors);
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t getter);
@@ -850,6 +888,7 @@ tsc_value_t tsc_value_object_lookup_setter(tsc_value_t v, tsc_str_t* key);
 bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_reflect_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_reflect_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc);
+bool tsc_reflect_define_computed_property_descriptor(tsc_value_t v, tsc_value_t key, tsc_value_t desc);
 bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_value_object_create(tsc_value_t prototype);
 bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object);
@@ -883,8 +922,10 @@ bool tsc_reflect_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t va
 bool tsc_reflect_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache);
 bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_own_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
+bool tsc_value_has_own_computed_prop(tsc_value_t v, tsc_value_t key);
 bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_symbol_property_is_enumerable(tsc_value_t v, tsc_symbol_t* key);
+bool tsc_value_computed_property_is_enumerable(tsc_value_t v, tsc_value_t key);
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
@@ -909,9 +950,11 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v);
 tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v);
 tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key);
 tsc_value_t tsc_value_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key);
+tsc_value_t tsc_value_get_own_property_computed_descriptor(tsc_value_t v, tsc_value_t key);
 tsc_array_t* tsc_reflect_own_keys(tsc_value_t v);
 tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key);
 tsc_value_t tsc_reflect_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key);
+tsc_value_t tsc_reflect_get_own_property_computed_descriptor(tsc_value_t v, tsc_value_t key);
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v);
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 double tsc_value_length(tsc_value_t v);
