@@ -1,7 +1,7 @@
-has length: Proxy has trap cannot report false for non-configurable key
-has sealed: Proxy has trap cannot report false for non-configurable key
-has closed: Proxy has trap cannot report false for key on non-extensible target
-delete length: Proxy deleteProperty trap cannot report deletion of non-configurable key
-delete sealed: Proxy deleteProperty trap cannot report deletion of non-configurable key
-delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
+has length: TypeError: Proxy has trap cannot report false for non-configurable key
+has sealed: TypeError: Proxy has trap cannot report false for non-configurable key
+has closed: TypeError: Proxy has trap cannot report false for key on non-extensible target
+delete length: TypeError: Proxy deleteProperty trap cannot report deletion of non-configurable key
+delete sealed: TypeError: Proxy deleteProperty trap cannot report deletion of non-configurable key
+delete closed: TypeError: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
 events: has:length|has:0|has:0|ignored:delete length|delete:length|ignored:delete sealed|delete:0|ignored:delete closed|delete:0

@@ -1,5 +1,5 @@
 types: function function object function
-string: [function] [object Object]
+string: function add() { [native code] } [object Object]
 apply: 15
 construct: ok
 json object: {"objectProxy":{},"value":"kept"}
@@ -7,5 +7,5 @@ json list: [null,{}]
 json top: undefined {}
 revoked type before: function
 revoked type after: function
-revoked string: Cannot perform 'get' on a proxy that has been revoked
-revoked json: Cannot perform 'get' on a proxy that has been revoked
+revoked string: TypeError: Cannot perform 'get' on a proxy that has been revoked
+revoked json: TypeError: Cannot perform 'get' on a proxy that has been revoked

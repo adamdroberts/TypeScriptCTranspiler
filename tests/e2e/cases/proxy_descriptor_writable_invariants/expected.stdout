@@ -1,7 +1,7 @@
-object downgrade: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
-object missing writable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
+object downgrade: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
+object missing writable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
 object same writable: true
-array downgrade: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
-array missing writable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
+array downgrade: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
+array missing writable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
 array same writable: true
 events: downgrade:fixed|missing:fixed|same:fixed|downgrade:0|missing:0|same:0

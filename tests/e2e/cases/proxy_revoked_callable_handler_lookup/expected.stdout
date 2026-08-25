@@ -1,4 +1,4 @@
 apply before: ctx:x
 construct before: y
-apply after: Cannot perform 'get' on a proxy that has been revoked
-construct after: Cannot perform 'get' on a proxy that has been revoked
+apply after: TypeError: Cannot perform 'get' on a proxy that has been revoked
+construct after: TypeError: Cannot perform 'get' on a proxy that has been revoked

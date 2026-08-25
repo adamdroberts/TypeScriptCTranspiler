@@ -1,4 +1,4 @@
-bad get: Proxy get trap must be callable
+bad get: TypeError: Proxy get trap must be callable
 undefined get: A
 null ownKeys: visible
 events: badGetKey|badGetReceiver|badGet:bad|undefinedGetKey|undefinedGetReceiver|undefinedGet:undefined|nullOwnKeys:nullish

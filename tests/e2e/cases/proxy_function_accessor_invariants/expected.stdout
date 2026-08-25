@@ -1,7 +1,7 @@
-get no getter: Proxy get trap cannot report value for non-configurable accessor without getter
-set no setter: Proxy set trap cannot report success for non-configurable accessor without setter
-define data: Proxy defineProperty trap cannot redefine non-configurable accessor key as data
-define getter: Proxy defineProperty trap cannot change non-configurable accessor getter
-descriptor data: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
-descriptor getter: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
+get no getter: TypeError: Proxy get trap cannot report value for non-configurable accessor without getter
+set no setter: TypeError: Proxy set trap cannot report success for non-configurable accessor without setter
+define data: TypeError: Proxy defineProperty trap cannot redefine non-configurable accessor key as data
+define getter: TypeError: Proxy defineProperty trap cannot change non-configurable accessor getter
+descriptor data: TypeError: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
+descriptor getter: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
 descriptor match: function function true false

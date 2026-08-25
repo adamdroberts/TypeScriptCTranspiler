@@ -164,6 +164,12 @@ typedef struct tsc_function_identity {
     bool extensible;
     bool sealed;
     bool frozen;
+    /* Most ECMAScript constructors expose an own `prototype` and allocate an
+     * ordinary receiver before running [[Construct]].  Exotic constructors
+     * such as %Proxy% do neither, so represent those semantics explicitly
+     * instead of inferring them from the presence of a construct callback. */
+    bool has_prototype_property;
+    bool construct_allocates_receiver;
     bool func_prototype_writable;
     bool func_prototype_initialized;
     double length;

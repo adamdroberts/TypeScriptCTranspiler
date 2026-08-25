@@ -1,17 +1,17 @@
 before: 1 true a
-get: Cannot perform 'get' on a proxy that has been revoked
-set: Cannot perform 'set' on a proxy that has been revoked
-has: Cannot perform 'has' on a proxy that has been revoked
-delete: Cannot perform 'deleteProperty' on a proxy that has been revoked
-ownKeys: Cannot perform 'ownKeys' on a proxy that has been revoked
-keys: Cannot perform 'ownKeys' on a proxy that has been revoked
-descriptor: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
-define: Cannot perform 'defineProperty' on a proxy that has been revoked
-get proto: Cannot perform 'getPrototypeOf' on a proxy that has been revoked
-set proto: Cannot perform 'setPrototypeOf' on a proxy that has been revoked
-is extensible: Cannot perform 'isExtensible' on a proxy that has been revoked
-prevent extensions: Cannot perform 'preventExtensions' on a proxy that has been revoked
-seal: Cannot perform 'seal' on a proxy that has been revoked
-freeze: Cannot perform 'freeze' on a proxy that has been revoked
-is sealed: Cannot perform 'isSealed' on a proxy that has been revoked
-is frozen: Cannot perform 'isFrozen' on a proxy that has been revoked
+get: TypeError: Cannot perform 'get' on a proxy that has been revoked
+set: TypeError: Cannot perform 'set' on a proxy that has been revoked
+has: TypeError: Cannot perform 'has' on a proxy that has been revoked
+delete: TypeError: Cannot perform 'deleteProperty' on a proxy that has been revoked
+ownKeys: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked
+keys: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked
+descriptor: TypeError: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
+define: TypeError: Cannot perform 'defineProperty' on a proxy that has been revoked
+get proto: TypeError: Cannot perform 'getPrototypeOf' on a proxy that has been revoked
+set proto: TypeError: Cannot perform 'setPrototypeOf' on a proxy that has been revoked
+is extensible: TypeError: Cannot perform 'isExtensible' on a proxy that has been revoked
+prevent extensions: TypeError: Cannot perform 'preventExtensions' on a proxy that has been revoked
+seal: TypeError: Cannot perform 'seal' on a proxy that has been revoked
+freeze: TypeError: Cannot perform 'freeze' on a proxy that has been revoked
+is sealed: TypeError: Cannot perform 'isSealed' on a proxy that has been revoked
+is frozen: TypeError: Cannot perform 'isFrozen' on a proxy that has been revoked

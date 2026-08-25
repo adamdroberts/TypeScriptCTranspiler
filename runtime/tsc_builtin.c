@@ -2441,7 +2441,10 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
             value_tag(target) != TSC_VALUE_TAG_FUNCTION
         )
     ) {
-            tsc_throw_str(tsc_str_from_cstr("Cannot create proxy with a non-object as target or handler"));
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Cannot create proxy with a non-object as target or handler")
+        );
     }
     if (
         !value_is_box(handler) ||
@@ -2451,7 +2454,10 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
             value_tag(handler) != TSC_VALUE_TAG_FUNCTION
         )
     ) {
-        tsc_throw_str(tsc_str_from_cstr("Cannot create proxy with a non-object as target or handler"));
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Cannot create proxy with a non-object as target or handler")
+        );
     }
     tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
     o->len = 0;

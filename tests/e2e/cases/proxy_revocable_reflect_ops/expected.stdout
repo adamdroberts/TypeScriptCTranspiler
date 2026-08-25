@@ -1,12 +1,12 @@
 before: 1 true a
-reflect get: Cannot perform 'get' on a proxy that has been revoked
-reflect set: Cannot perform 'set' on a proxy that has been revoked
-reflect has: Cannot perform 'has' on a proxy that has been revoked
-reflect delete: Cannot perform 'deleteProperty' on a proxy that has been revoked
-reflect ownKeys: Cannot perform 'ownKeys' on a proxy that has been revoked
-reflect descriptor: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
-reflect define: Cannot perform 'defineProperty' on a proxy that has been revoked
-reflect get proto: Cannot perform 'getPrototypeOf' on a proxy that has been revoked
-reflect set proto: Cannot perform 'setPrototypeOf' on a proxy that has been revoked
-reflect is extensible: Cannot perform 'isExtensible' on a proxy that has been revoked
-reflect prevent extensions: Cannot perform 'preventExtensions' on a proxy that has been revoked
+reflect get: TypeError: Cannot perform 'get' on a proxy that has been revoked
+reflect set: TypeError: Cannot perform 'set' on a proxy that has been revoked
+reflect has: TypeError: Cannot perform 'has' on a proxy that has been revoked
+reflect delete: TypeError: Cannot perform 'deleteProperty' on a proxy that has been revoked
+reflect ownKeys: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked
+reflect descriptor: TypeError: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
+reflect define: TypeError: Cannot perform 'defineProperty' on a proxy that has been revoked
+reflect get proto: TypeError: Cannot perform 'getPrototypeOf' on a proxy that has been revoked
+reflect set proto: TypeError: Cannot perform 'setPrototypeOf' on a proxy that has been revoked
+reflect is extensible: TypeError: Cannot perform 'isExtensible' on a proxy that has been revoked
+reflect prevent extensions: TypeError: Cannot perform 'preventExtensions' on a proxy that has been revoked

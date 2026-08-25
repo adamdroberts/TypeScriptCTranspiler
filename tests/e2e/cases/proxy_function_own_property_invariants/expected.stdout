@@ -1,13 +1,13 @@
 cfg get: fake
-fixed get: Proxy get trap cannot report different value for non-configurable non-writable key
+fixed get: TypeError: Proxy get trap cannot report different value for non-configurable non-writable key
 cfg set: true
-fixed set: Proxy set trap cannot report success changing non-configurable non-writable key
+fixed set: TypeError: Proxy set trap cannot report success changing non-configurable non-writable key
 cfg hidden desc: true
-cfg hidden closed desc: Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target
-cfg define nonconfig: Proxy defineProperty trap cannot report configurable key as non-configurable
+cfg hidden closed desc: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target
+cfg define nonconfig: TypeError: Proxy defineProperty trap cannot report configurable key as non-configurable
 cfg delete open: true
-side delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
-side has closed: Proxy has trap cannot report false for key on non-extensible target
+side delete closed: TypeError: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
+side has closed: TypeError: Proxy has trap cannot report false for key on non-extensible target
 side keys missing: TypeError: Proxy ownKeys trap result missing key on non-extensible target
 side keys exact: length,name,prototype,side
 side keys extra: TypeError: Proxy ownKeys trap result included extra key on non-extensible target

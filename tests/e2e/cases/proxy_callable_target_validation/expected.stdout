@@ -1,3 +1,3 @@
-object apply: Proxy apply target must be callable
+object apply: TypeError: Proxy apply target must be callable
 object construct: TypeError: Proxy construct target must be constructor
 events: args:apply|args:construct

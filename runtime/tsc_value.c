@@ -86,7 +86,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
         case TSC_VALUE_TAG_OBJECT: {
             tsc_object_t* o = (tsc_object_t*)value_ptr(v);
             if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
-                tsc_throw_str(tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
             }
             if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
             if (value_proxy_chain_is_array(v)) return tsc_str_from_lit("[object Array]", 14);
@@ -1448,6 +1448,102 @@ tsc_value_t tsc_object_constructor_value(void) {
     return intrinsic->constructor;
 }
 
+static tsc_value_t proxy_constructor_construct(
+    void* env,
+    tsc_value_t receiver,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)receiver;
+    tsc_value_t target = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_value_t handler = args && args->len > 1
+        ? TSC_ARR(tsc_value_t, args, 1)
+        : tsc_value_undefined();
+    return tsc_proxy_new(target, handler);
+}
+
+static tsc_value_t proxy_revocable_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_value_t handler = args && args->len > 1
+        ? TSC_ARR(tsc_value_t, args, 1)
+        : tsc_value_undefined();
+    return tsc_proxy_revocable(target, handler);
+}
+
+typedef struct {
+    int initialization_state;
+    tsc_value_t constructor;
+} tsc_proxy_constructor_intrinsic_t;
+
+static const char proxy_constructor_realm_state_key = 0;
+
+tsc_value_t tsc_proxy_constructor_value(void) {
+    tsc_proxy_constructor_intrinsic_t* intrinsic =
+        (tsc_proxy_constructor_intrinsic_t*)tsc_realm_state_get(
+            &proxy_constructor_realm_state_key
+        );
+    if (!intrinsic) {
+        tsc_runtime_lock();
+        intrinsic = (tsc_proxy_constructor_intrinsic_t*)tsc_realm_state_get(
+            &proxy_constructor_realm_state_key
+        );
+        if (!intrinsic) {
+            intrinsic = (tsc_proxy_constructor_intrinsic_t*)TSC_GC_MALLOC(
+                sizeof(tsc_proxy_constructor_intrinsic_t)
+            );
+            memset(intrinsic, 0, sizeof(*intrinsic));
+            tsc_realm_state_set(&proxy_constructor_realm_state_key, intrinsic);
+        }
+        tsc_runtime_unlock();
+    }
+    if (intrinsic->initialization_state == 0) {
+        tsc_runtime_lock();
+        if (intrinsic->initialization_state == 0) {
+            intrinsic->initialization_state = 1;
+            intrinsic->constructor = tsc_value_function_class_named(
+                proxy_constructor_construct,
+                NULL,
+                2.0,
+                tsc_str_from_lit("Proxy", 5)
+            );
+            tsc_function_identity_t* identity =
+                (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
+            identity->has_prototype_property = false;
+            identity->construct_allocates_receiver = false;
+            (void)tsc_value_define_property_desc(
+                intrinsic->constructor,
+                tsc_str_from_lit("revocable", 9),
+                tsc_value_function_builtin_named(
+                    proxy_revocable_apply,
+                    NULL,
+                    2.0,
+                    tsc_str_from_lit("revocable", 9)
+                ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            intrinsic->initialization_state = 2;
+        }
+        tsc_runtime_unlock();
+    }
+    return intrinsic->constructor;
+}
+
 typedef struct {
     const char* name;
     size_t length;
@@ -1549,6 +1645,7 @@ tsc_value_t tsc_global_object(void) {
         { "Boolean", 7, tsc_boolean_constructor_value() },
         { "BigInt", 6, tsc_bigint_constructor_value() },
         { "Symbol", 6, tsc_symbol_constructor_value() },
+        { "Proxy", 5, tsc_proxy_constructor_value() },
         { "Date", 4, tsc_date_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
@@ -2092,9 +2189,9 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
         if (o->is_proxy) {
-            if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
+            if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
             if (!value_is_callable_function(o->proxy_target)) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy apply target must be callable"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply target must be callable"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
@@ -2102,7 +2199,7 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
                 return tsc_value_apply_function(o->proxy_target, this_arg, tsc_value_array(list));
             }
             if (!value_is_callable_function(trap)) {
-                tsc_throw_str(tsc_str_from_cstr("Proxy apply trap must be callable"));
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply trap must be callable"));
             }
             tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_array_push_value(trap_args, o->proxy_target);
@@ -2194,18 +2291,21 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
-            tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
-            if (!value_is_valid_prototype(new_target_proto) || value_is_null_value(new_target_proto)) {
-                tsc_realm_t* new_target_realm = tsc_value_function_realm(new_target);
-                tsc_realm_t* previous_realm = tsc_realm_swap(new_target_realm);
-                new_target_proto = value_intrinsic_default_prototype(
-                    ident->construct_default_prototype
+            tsc_value_t receiver = tsc_value_undefined();
+            if (ident->construct_allocates_receiver) {
+                tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
+                if (!value_is_valid_prototype(new_target_proto) || value_is_null_value(new_target_proto)) {
+                    tsc_realm_t* new_target_realm = tsc_value_function_realm(new_target);
+                    tsc_realm_t* previous_realm = tsc_realm_swap(new_target_realm);
+                    new_target_proto = value_intrinsic_default_prototype(
+                        ident->construct_default_prototype
+                    );
+                    (void)tsc_realm_swap(previous_realm);
+                }
+                receiver = tsc_value_object(
+                    tsc_object_new_with_prototype(new_target_proto)
                 );
-                (void)tsc_realm_swap(previous_realm);
             }
-            tsc_value_t receiver = tsc_value_object(
-                tsc_object_new_with_prototype(new_target_proto)
-            );
             tsc_generic_function_t construct = ident->construct ? ident->construct : ident->code.generic;
             tsc_realm_t* previous_realm = tsc_realm_swap(
                 ident->realm ? ident->realm : tsc_realm_current()
@@ -2228,6 +2328,12 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
                 )
             ) {
                 return result;
+            }
+            if (!ident->construct_allocates_receiver) {
+                tsc_throw_error(
+                    TSC_ERROR_TYPE,
+                    tsc_str_from_cstr("exotic constructor must return an object")
+                );
             }
             return receiver;
         }
@@ -2342,7 +2448,7 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
 }
 
 static bool tsc_function_has_prototype_metadata(const tsc_function_identity_t* fn) {
-    return fn && (fn->kind == TSC_FUNCTION_IDENTITY_GENERIC || fn->construct != NULL);
+    return fn && fn->has_prototype_property;
 }
 
 static bool tsc_function_metadata_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
@@ -4586,7 +4692,7 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
     if (o->is_proxy) {
-        if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
+        if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
             return tsc_value_get_own_property_descriptor(o->proxy_target, key);

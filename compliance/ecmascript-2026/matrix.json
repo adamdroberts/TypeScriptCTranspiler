@@ -668,8 +668,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Reflect internal-method forwarding", "Proxy traps", "invariants and revocation"],
-      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c"] },
-      "knownGaps": ["Proxy invariant and abrupt-completion partitions remain unverified."]
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/proxy-constructor.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "knownGaps": ["Exact terminal clause registration and the remaining Reflect/Proxy internal-method semantic partitions are unverified."]
     },
     {
       "id": "memory-model",

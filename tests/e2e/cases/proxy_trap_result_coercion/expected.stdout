@@ -3,16 +3,16 @@ string set: true undefined
 zero has: false false
 string has: true true
 empty define: false false
-object empty define: Object.defineProperty failed
+object empty define: TypeError: Object.defineProperty failed
 object define: true false
 empty delete: false 1
 object delete: true 1
 zero set proto: false false
-object zero set proto: Object.setPrototypeOf failed
+object zero set proto: TypeError: Object.setPrototypeOf failed
 string set proto: true false
 empty prevent: false true
 object empty prevent: Object.preventExtensions failed
 string isExtensible: true true
 zero isExtensible: false false
-zero isExtensible mismatch: Proxy isExtensible trap result does not match target
-string isExtensible mismatch: Proxy isExtensible trap result does not match target
+zero isExtensible mismatch: TypeError: Proxy isExtensible trap result does not match target
+string isExtensible mismatch: TypeError: Proxy isExtensible trap result does not match target

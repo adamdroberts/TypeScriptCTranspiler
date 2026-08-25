@@ -1,7 +1,7 @@
-hide length: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
-hide sealed: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
-new closed: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
-length configurable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
-frozen length writable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
+hide length: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+hide sealed: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+new closed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
+length configurable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
+frozen length writable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
 real frozen: f false false
 events: ignored:hide length|hide:length|ignored:hide sealed|hide:0|ignored:new closed|data:2|ignored:length configurable|config length:length|ignored:frozen length writable|writable frozen length:length|ignored:real frozen|real:0

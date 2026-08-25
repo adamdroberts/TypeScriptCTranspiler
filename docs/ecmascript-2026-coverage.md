@@ -2272,8 +2272,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `await` — Await ( _value_: an ECMAScript language value, ): either a normal completion containing either an ECMAScript language value or ~empty~, or a throw completion: exact disposition and partitions missing.
 - [ ] **Reflection** (`sec-reflection`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Reflect internal-method forwarding; Proxy traps; invariants and revocation.
-  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts; stress: module_namespace_export_width; E2E: reflect_dynamic, proxy.
-  - Known blockers: Proxy invariant and abrupt-completion partitions remain unverified.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/proxy-constructor.property.test.ts; stress: module_namespace_export_width; E2E: reflect_dynamic, proxy.
+  - Known blockers: Exact terminal clause registration and the remaining Reflect/Proxy internal-method semantic partitions are unverified.
   - [ ] `sec-reflection` — Reflection: exact disposition and partitions missing.
   - [ ] `sec-reflect-object` — The Reflect Object: exact disposition and partitions missing.
   - [ ] `sec-reflect.apply` — Reflect.apply ( _target_, _thisArgument_, _argumentsList_ ): exact disposition and partitions missing.

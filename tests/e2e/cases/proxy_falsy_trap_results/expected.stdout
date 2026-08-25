@@ -4,4 +4,4 @@ reflect delete: false 1
 reflect prevent: false true
 object prevent: Object.preventExtensions failed
 reflect set proto: false false
-object set proto: Object.setPrototypeOf failed
+object set proto: TypeError: Object.setPrototypeOf failed

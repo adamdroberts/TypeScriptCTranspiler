@@ -3,9 +3,9 @@ target read: 3
 proxy set: true 14 14
 events: define:score:true:true
 fallback define: true 14
-bad accessor trap: Proxy defineProperty trap must be callable
-closed accessor: Proxy defineProperty trap cannot add key to non-extensible target
-fixed data accessor: Proxy defineProperty trap cannot redefine non-configurable data key as accessor
-fixed accessor getter: Proxy defineProperty trap cannot change non-configurable accessor getter
-fixed accessor setter: Proxy defineProperty trap cannot change non-configurable accessor setter
+bad accessor trap: TypeError: Proxy defineProperty trap must be callable
+closed accessor: TypeError: Proxy defineProperty trap cannot add key to non-extensible target
+fixed data accessor: TypeError: Proxy defineProperty trap cannot redefine non-configurable data key as accessor
+fixed accessor getter: TypeError: Proxy defineProperty trap cannot change non-configurable accessor getter
+fixed accessor setter: TypeError: Proxy defineProperty trap cannot change non-configurable accessor setter
 fixed accessor same: true

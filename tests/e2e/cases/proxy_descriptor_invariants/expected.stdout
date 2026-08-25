@@ -1,27 +1,27 @@
-bad descriptor: Proxy getOwnPropertyDescriptor trap must return object or undefined
-hide fixed: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
-hide closed: Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target
-new closed: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
+bad descriptor: TypeError: Proxy getOwnPropertyDescriptor trap must return object or undefined
+hide fixed: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+hide closed: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide key on non-extensible target
+new closed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report new key on non-extensible target
 array descriptor object: array true true
 array target descriptor object: array true true
 function target descriptor object: function true true
-mixed descriptor: Proxy getOwnPropertyDescriptor trap descriptor cannot mix value/writable with get/set
-bad getter: Proxy getOwnPropertyDescriptor trap getter must be callable
-bad setter: Proxy getOwnPropertyDescriptor trap setter must be callable
-new fixed: Proxy getOwnPropertyDescriptor trap cannot report new non-configurable key
-config false: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
-wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
-inherited wrong fixed: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
-inherited configurable: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
-writable fixed: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
-wrong enumerable: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
-missing value: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
-missing enumerable: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
-accessor as data: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
-accessor wrong getter: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
-accessor wrong setter: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
-accessor missing getter: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
-accessor missing setter: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
+mixed descriptor: TypeError: Proxy getOwnPropertyDescriptor trap descriptor cannot mix value/writable with get/set
+bad getter: TypeError: Proxy getOwnPropertyDescriptor trap getter must be callable
+bad setter: TypeError: Proxy getOwnPropertyDescriptor trap setter must be callable
+new fixed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report new non-configurable key
+config false: TypeError: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
+wrong fixed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+inherited wrong fixed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+inherited configurable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
+writable fixed: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable non-writable key as writable
+wrong enumerable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
+missing value: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+missing enumerable: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different enumerable flag for non-configurable key
+accessor as data: TypeError: Proxy getOwnPropertyDescriptor trap cannot report data descriptor for non-configurable accessor key
+accessor wrong getter: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
+accessor wrong setter: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
+accessor missing getter: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different getter for non-configurable accessor key
+accessor missing setter: TypeError: Proxy getOwnPropertyDescriptor trap cannot report different setter for non-configurable accessor key
 real descriptor: 1 false false
-keys descriptor: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+keys descriptor: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
 events: ignored:bad descriptor|bad trap:x|ignored:hide fixed|hide trap:fixed|ignored:hide closed|hide trap:x|ignored:new closed|data trap:missing|ignored:array descriptor object|array object trap:x|ignored:array target descriptor object|array object trap:side|ignored:function target descriptor object|function object trap:side|ignored:mixed descriptor|mixed trap:x|ignored:bad getter|bad getter trap:x|ignored:bad setter|bad setter trap:x|ignored:new fixed|fixed new trap:x|ignored:config false|config false trap:x|ignored:wrong fixed|wrong fixed trap:fixed|ignored:inherited wrong fixed|inherited wrong fixed trap:fixed|ignored:inherited configurable|inherited configurable trap:fixed|ignored:writable fixed|writable fixed trap:fixed|ignored:wrong enumerable|wrong enumerable trap:fixed|ignored:missing value|missing value trap:fixed|ignored:missing enumerable|missing enumerable trap:fixed|ignored:accessor as data|accessor as data trap:x|ignored:accessor wrong getter|wrong accessor getter trap:x|ignored:accessor wrong setter|wrong accessor setter trap:x|ignored:accessor missing getter|missing accessor getter trap:x|ignored:accessor missing setter|missing accessor setter trap:x|ignored:real descriptor|real trap:fixed|ignored:keys descriptor|own fixed trap|hide trap:fixed

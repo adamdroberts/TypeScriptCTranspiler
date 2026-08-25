@@ -1,7 +1,7 @@
-has fixed: Proxy has trap cannot report false for non-configurable key
-has closed: Proxy has trap cannot report false for key on non-extensible target
-delete fixed: Proxy deleteProperty trap cannot report deletion of non-configurable key
-delete closed: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
+has fixed: TypeError: Proxy has trap cannot report false for non-configurable key
+has closed: TypeError: Proxy has trap cannot report false for key on non-extensible target
+delete fixed: TypeError: Proxy deleteProperty trap cannot report deletion of non-configurable key
+delete closed: TypeError: Proxy deleteProperty trap cannot report deletion of key on non-extensible target
 loose has: false
 loose delete: true 5
 events: has:fixed|has:open|delete:fixed|delete:open|has:open|delete:open

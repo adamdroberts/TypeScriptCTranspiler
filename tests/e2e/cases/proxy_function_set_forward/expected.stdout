@@ -1,4 +1,4 @@
 assign: true next
 reflect: true true reflect
 receiver: true kept undefined
-revoked set: Cannot perform 'set' on a proxy that has been revoked
+revoked set: TypeError: Cannot perform 'set' on a proxy that has been revoked

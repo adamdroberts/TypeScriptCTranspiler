@@ -1,4 +1,4 @@
 proxy: 3
 revocable: 4
-revoked: Cannot perform 'get' on a proxy that has been revoked
+revoked: TypeError: Cannot perform 'get' on a proxy that has been revoked
 marks: abc

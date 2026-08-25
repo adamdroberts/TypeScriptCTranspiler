@@ -1,7 +1,7 @@
 forward default: object
 forward set: true next
-get closed: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
+get closed: TypeError: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
 get exact: base
-set closed: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
+set closed: TypeError: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
 set same: true
 events: ignored:forward default|ignored:forward set|ignored:get closed|other proto trap:1|ignored:get exact|base proto trap:1|ignored:set closed|set proto:next|ignored:set same|set proto:base

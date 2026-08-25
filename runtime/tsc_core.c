@@ -65,6 +65,9 @@ void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, t
     if (!entry) return;
     if (!name) name = tsc_str_from_lit("", 0);
     entry->is_html_dda = false;
+    entry->has_prototype_property =
+        entry->kind == TSC_FUNCTION_IDENTITY_GENERIC || entry->construct != NULL;
+    entry->construct_allocates_receiver = entry->has_prototype_property;
     entry->length = length;
     entry->name = name;
     entry->props = tsc_object_new();

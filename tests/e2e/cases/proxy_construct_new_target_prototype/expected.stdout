@@ -2,4 +2,4 @@ direct: direct true direct-proto
 proxy: proxy true proxy-proto get:prototype
 function proto: function true
 array proto: array true
-revoked: Cannot perform 'get' on a proxy that has been revoked
+revoked: TypeError: Cannot perform 'get' on a proxy that has been revoked

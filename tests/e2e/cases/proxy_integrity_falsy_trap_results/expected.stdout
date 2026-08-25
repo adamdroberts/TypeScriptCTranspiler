@@ -1,4 +1,4 @@
-object seal: Object.seal failed
+object seal: TypeError: Object.seal failed
 seal target extensible: true
-object freeze: Object.freeze failed
+object freeze: TypeError: Object.freeze failed
 freeze target extensible: true

@@ -3,8 +3,8 @@ construct: TypeError: Reflect.construct target is not a supported constructor
 direct before: 1
 direct first: undefined
 direct second: undefined
-direct after: Cannot perform 'get' on a proxy that has been revoked
+direct after: TypeError: Cannot perform 'get' on a proxy that has been revoked
 detached before: 2
 detached first: undefined
 detached second: undefined
-detached after: Cannot perform 'get' on a proxy that has been revoked
+detached after: TypeError: Cannot perform 'get' on a proxy that has been revoked

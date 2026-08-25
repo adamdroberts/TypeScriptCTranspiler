@@ -1,3 +1,3 @@
 names: visible,hidden,virtual ab ownKeys
 bad: TypeError: Proxy ownKeys trap must return an array-like object ownKeys|badOwnKeys
-revoked: Cannot perform 'ownKeys' on a proxy that has been revoked
+revoked: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked

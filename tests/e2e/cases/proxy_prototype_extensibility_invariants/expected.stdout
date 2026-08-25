@@ -1,10 +1,10 @@
-bad proto: Proxy getPrototypeOf trap must return object or null
-closed proto: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
-set closed: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
+bad proto: TypeError: Proxy getPrototypeOf trap must return object or null
+closed proto: TypeError: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
+set closed: TypeError: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
 set same: true
-extensible mismatch: Proxy isExtensible trap result does not match target
-closed extensible mismatch: Proxy isExtensible trap result does not match target
-prevent mismatch: Proxy preventExtensions trap cannot report success for extensible target
+extensible mismatch: TypeError: Proxy isExtensible trap result does not match target
+closed extensible mismatch: TypeError: Proxy isExtensible trap result does not match target
+prevent mismatch: TypeError: Proxy preventExtensions trap cannot report success for extensible target
 real before: true
 real prevent: true false
 real after: false

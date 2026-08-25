@@ -800,6 +800,7 @@ tsc_value_t tsc_number_constructor_value(void);
 tsc_value_t tsc_boolean_constructor_value(void);
 tsc_value_t tsc_bigint_constructor_value(void);
 tsc_value_t tsc_symbol_constructor_value(void);
+tsc_value_t tsc_proxy_constructor_value(void);
 /* One canonical ECMAScript Global Environment Record.  Generated Script
  * records submit one declaration collection so preflight remains atomic and
  * independent of declaration cardinality. */

@@ -1,3 +1,3 @@
 before: A
-get after: Cannot perform 'get' on a proxy that has been revoked
-ownKeys after: Cannot perform 'get' on a proxy that has been revoked
+get after: TypeError: Cannot perform 'get' on a proxy that has been revoked
+ownKeys after: TypeError: Cannot perform 'get' on a proxy that has been revoked

@@ -1,4 +1,4 @@
 array: true array x function function
-function: function [function]
+function: function function ReturnedFunction() { [native code] }
 object: object y function
 primitive: TypeError: Proxy construct trap must return an object

@@ -1,7 +1,7 @@
 has: true true true false true
 enum: true false true false
 events: desc:visible|desc:hidden|desc:virtual|desc:missing|desc:virtual|desc:visible|desc:hidden|desc:virtual|desc:missing
-bad has: Proxy getOwnPropertyDescriptor trap must return object or undefined
-bad enum: Proxy getOwnPropertyDescriptor trap must return object or undefined
-revoked has: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
-revoked enum: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
+bad has: TypeError: Proxy getOwnPropertyDescriptor trap must return object or undefined
+bad enum: TypeError: Proxy getOwnPropertyDescriptor trap must return object or undefined
+revoked has: TypeError: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
+revoked enum: TypeError: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked

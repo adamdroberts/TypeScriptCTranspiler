@@ -1,4 +1,4 @@
-bad apply: Proxy apply trap must be callable
+bad apply: TypeError: Proxy apply trap must be callable
 undefined apply: ctx:x
 bad construct: TypeError: Proxy construct trap must be callable
 null construct: y

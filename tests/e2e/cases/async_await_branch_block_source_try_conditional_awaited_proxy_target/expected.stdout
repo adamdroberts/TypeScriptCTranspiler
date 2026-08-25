@@ -2,7 +2,7 @@ constructor-true constructor-true LT
 constructor-target-error caught-constructor L
 constructor-reject caught-constructor L
 revocable-true revocable-true LTM
-revocable-target-error rejected-Cannot create proxy with a non-object as target or handler LM
+revocable-target-error rejected-TypeError: Cannot create proxy with a non-object as target or handler LM
 revocable-reject rejected-proxy-target-bad LM
 arrow-true arrow-true LTV
 arrow-target-error caught-arrow LV

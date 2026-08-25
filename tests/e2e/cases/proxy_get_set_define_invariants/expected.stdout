@@ -1,14 +1,14 @@
-get fixed: Proxy get trap cannot report different value for non-configurable non-writable key
-get accessor: Proxy get trap cannot report value for non-configurable accessor without getter
+get fixed: TypeError: Proxy get trap cannot report different value for non-configurable non-writable key
+get accessor: TypeError: Proxy get trap cannot report value for non-configurable accessor without getter
 get accessor ok: undefined
-set fixed: Proxy set trap cannot report success changing non-configurable non-writable key
+set fixed: TypeError: Proxy set trap cannot report success changing non-configurable non-writable key
 set same: true
-set accessor: Proxy set trap cannot report success for non-configurable accessor without setter
-define closed: Proxy defineProperty trap cannot add key to non-extensible target
-define new fixed: Proxy defineProperty trap cannot report new non-configurable key
-define configurable fixed: Proxy defineProperty trap cannot report configurable key as non-configurable
-define fixed changed: Proxy defineProperty trap cannot change non-configurable non-writable key
+set accessor: TypeError: Proxy set trap cannot report success for non-configurable accessor without setter
+define closed: TypeError: Proxy defineProperty trap cannot add key to non-extensible target
+define new fixed: TypeError: Proxy defineProperty trap cannot report new non-configurable key
+define configurable fixed: TypeError: Proxy defineProperty trap cannot report configurable key as non-configurable
+define fixed changed: TypeError: Proxy defineProperty trap cannot change non-configurable non-writable key
 define fixed same: true
 define writable downgrade: true
-define accessor data: Proxy defineProperty trap cannot redefine non-configurable accessor key as data
+define accessor data: TypeError: Proxy defineProperty trap cannot redefine non-configurable accessor key as data
 events: ignored:get fixed|get:fixed|ignored:get accessor|get:hidden|ignored:get accessor ok|pass get:hidden|ignored:set fixed|set:fixed=changed|ignored:set same|set:fixed=fixed|ignored:set accessor|set:hidden=value|ignored:define closed|define:x|ignored:define new fixed|define:x|ignored:define configurable fixed|define:x|ignored:define fixed changed|define:x|ignored:define fixed same|define:x|ignored:define writable downgrade|define:x|ignored:define accessor data|define:x

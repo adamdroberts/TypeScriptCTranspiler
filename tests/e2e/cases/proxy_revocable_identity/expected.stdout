@@ -1,5 +1,5 @@
 before: function object
 after: function object
-string: Cannot perform 'get' on a proxy that has been revoked
-json callable: Cannot perform 'get' on a proxy that has been revoked
-json object: Cannot perform 'get' on a proxy that has been revoked
+string: TypeError: Cannot perform 'get' on a proxy that has been revoked
+json callable: TypeError: Cannot perform 'get' on a proxy that has been revoked
+json object: TypeError: Cannot perform 'get' on a proxy that has been revoked

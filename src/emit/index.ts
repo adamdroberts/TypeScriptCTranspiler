@@ -47614,6 +47614,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
                 return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Proxy")) {
+                return { c: "tsc_proxy_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Date")) {
                 return { c: "tsc_date_constructor_value()", ty: T_VALUE };
             }
@@ -51124,6 +51127,21 @@ class Emitter {
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
+        if (
+            ts.isPropertyAccessExpression(call.expression) &&
+            ts.isIdentifier(call.expression.expression) &&
+            call.expression.expression.text === "Proxy" &&
+            this.isTest262DynamicGlobalReference(call.expression.expression)
+        ) {
+            return this.emitDynamicMethod(
+                call,
+                {
+                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
+                    ty: T_VALUE,
+                },
+                call.expression.name.text,
+            );
+        }
         const inlineClosure = this.emitInlineClosureCall(call);
         if (inlineClosure) return inlineClosure;
         /* JavaScript calls always cross one canonical argument-list boundary.
@@ -51165,7 +51183,7 @@ class Emitter {
         if (
             ts.isPropertyAccessExpression(call.expression) &&
             ts.isIdentifier(call.expression.expression) &&
-            call.expression.expression.text === "Proxy" &&
+            this.isUnshadowedGlobalIdentifier(call.expression.expression, "Proxy") &&
             call.expression.name.text === "revocable"
         ) {
             if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
@@ -51294,6 +51312,15 @@ class Emitter {
         }
         const calleeId = call.expression;
         const name = calleeId.text;
+        if (
+            name === "Proxy" &&
+            this.isTest262DynamicGlobalReference(calleeId)
+        ) {
+            return this.emitDynamicValueCall(call, {
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
+                ty: T_VALUE,
+            });
+        }
         if (name === "eval" && this.options.test262Observation &&
             this.isTest262OutOfBandIdentifier(calleeId)) {
             return this.emitTest262DirectEvalCall(call);
@@ -54987,7 +55014,10 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Promise") {
             return this.emitPromiseStatic(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Proxy") {
+        if (
+            ts.isIdentifier(recvExpr) &&
+            this.isUnshadowedGlobalIdentifier(recvExpr, "Proxy")
+        ) {
             if (memberName !== "revocable") unsupported(call, `Proxy.${memberName}`);
             if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
             const target = this.emitExpr(call.arguments[0]!);
@@ -75526,6 +75556,15 @@ class Emitter {
         if (scriptGlobal) {
             return this.emitDynamicValueConstruct(n, {
                 c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                ty: T_VALUE,
+            });
+        }
+        if (
+            ctorExpr.text === "Proxy" &&
+            this.isTest262DynamicGlobalReference(ctorExpr)
+        ) {
+            return this.emitDynamicValueConstruct(n, {
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
                 ty: T_VALUE,
             });
         }

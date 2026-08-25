@@ -32,13 +32,13 @@ proxy seal: true true true
 proxy freeze: true true true
 proxy function get length: 9
 proxy function set length: true
-proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
+proxy function desc name: TypeError: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
 proxy function keys missing: TypeError: Proxy ownKeys trap result missing non-configurable key
 proxy function keys complete: 3
 proxy function keys extra: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 proxy function has length: false
 proxy function has missing: false
-proxy function define same: Proxy defineProperty trap cannot report configurable key as non-configurable
+proxy function define same: TypeError: Proxy defineProperty trap cannot report configurable key as non-configurable
 proxy function define changed: true
 proxy function delete length: true
 proxy function delete missing: true

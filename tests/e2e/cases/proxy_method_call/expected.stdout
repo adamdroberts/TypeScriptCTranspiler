@@ -2,5 +2,5 @@ method: 35
 events: trap:20:2,3
 forward: 39
 rev before: 53
-rev after: Cannot perform 'apply' on a proxy that has been revoked
-object method: Proxy apply target must be callable
+rev after: TypeError: Cannot perform 'apply' on a proxy that has been revoked
+object method: TypeError: Proxy apply target must be callable

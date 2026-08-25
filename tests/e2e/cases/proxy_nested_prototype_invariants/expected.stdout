@@ -3,6 +3,6 @@ extensible set: true
 isExtensible target: false
 isExtensible p1: false
 isExtensible p2: false
-non-extensible get error: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
-non-extensible set error: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
+non-extensible get error: TypeError: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
+non-extensible set error: TypeError: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
 events: p2 getPrototypeOf|p2 setPrototypeOf|p2 getPrototypeOf|p1 getPrototypeOf|p2 setPrototypeOf|p1 getPrototypeOf

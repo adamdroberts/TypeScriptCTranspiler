@@ -1,13 +1,13 @@
 forward default: function
 forward set: true next
 forward ext: true true false
-get closed: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
+get closed: TypeError: Proxy getPrototypeOf trap cannot report different prototype for non-extensible target
 get exact: base
-set closed: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
+set closed: TypeError: Proxy setPrototypeOf trap cannot change prototype of non-extensible target
 set same: true
-open ext false: Proxy isExtensible trap result does not match target
-closed ext true: Proxy isExtensible trap result does not match target
-fake prevent: Proxy preventExtensions trap cannot report success for extensible target
+open ext false: TypeError: Proxy isExtensible trap result does not match target
+closed ext true: TypeError: Proxy isExtensible trap result does not match target
+fake prevent: TypeError: Proxy preventExtensions trap cannot report success for extensible target
 fake still extensible: true
 real prevent: true
 missing prototype key: TypeError: Proxy ownKeys trap result missing non-configurable key
@@ -17,9 +17,9 @@ accessor function keys: length,name
 extra closed accessor keys: TypeError: Proxy ownKeys trap result included extra key on non-extensible target
 prototype descriptor: true false false true
 prototype define downgrade: true
-nonwritable prototype descriptor: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
-configurable prototype descriptor: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
-hidden prototype descriptor: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
+nonwritable prototype descriptor: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable writable key as non-writable
+configurable prototype descriptor: TypeError: Proxy getOwnPropertyDescriptor trap cannot report non-configurable key as configurable
+hidden prototype descriptor: TypeError: Proxy getOwnPropertyDescriptor trap cannot hide non-configurable key
 real prototype descriptor: true false
 locked prototype before: true false
 locked prototype define: true
