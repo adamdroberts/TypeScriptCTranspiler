@@ -3,6 +3,48 @@
 static tsc_jsonbuf_t g_test262_stdout;
 static bool g_test262_started = false;
 
+static tsc_value_t test262_host_gc(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    (void)args;
+#ifdef TSC_NO_GC
+    tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr("garbage collection is unavailable in this runtime build"));
+#else
+    GC_gcollect();
+#endif
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_test262_host_object(void) {
+    static tsc_object_t* host = NULL;
+    if (!host) {
+        tsc_runtime_lock();
+        if (!host) {
+            tsc_object_t* object = tsc_object_new();
+            (void)tsc_object_define_desc(
+                object,
+                tsc_str_from_lit("gc", 2),
+                tsc_value_function_builtin_named(
+                    test262_host_gc,
+                    NULL,
+                    0.0,
+                    tsc_str_from_lit("gc", 2)
+                ),
+                true,
+                true,
+                true,
+                false,
+                true,
+                true,
+                true
+            );
+            host = object;
+        }
+        tsc_runtime_unlock();
+    }
+    return tsc_value_object(host);
+}
+
 static void append_literal(tsc_jsonbuf_t* out, const char* value) {
     tsc_jsonbuf_append(out, value, strlen(value));
 }

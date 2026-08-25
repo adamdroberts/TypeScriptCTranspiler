@@ -45103,6 +45103,12 @@ class Emitter {
             if (this.isImplicitArgumentsIdentifier(expr)) {
                 return { c: "tsc_call_arguments()", ty: T_VALUE };
             }
+            if (
+                this.options.test262Observation &&
+                this.isTest262HostBinding(expr, "$262")
+            ) {
+                return { c: "tsc_test262_host_object()", ty: T_VALUE };
+            }
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };

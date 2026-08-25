@@ -38,7 +38,7 @@
     "host-$262-detachArrayBuffer": false,
     "host-$262-agent": false,
     "can-block-agent-selection": false,
-    "host-$262-gc": false,
+    "host-$262-gc": true,
     "host-$262-IsHTMLDDA": false,
     "no-semantic-delegation": true
   }

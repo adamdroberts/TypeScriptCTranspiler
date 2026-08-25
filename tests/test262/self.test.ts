@@ -152,6 +152,9 @@ describe("host result contract", () => {
             "if (!(error instanceof HarnessError)) throw new TypeError('bad function prototype');",
             "if (error.describe() !== 'HarnessError: native') throw new TypeError('bad function this');",
             "if (add(20, 22) !== 42) throw new TypeError('bad setup realm');",
+            "var collect = $262.gc;",
+            "if (typeof collect !== 'function' || collect.length !== 0 || collect.name !== 'gc') throw new TypeError('bad gc hook');",
+            "collect();",
             "print('native-ok');",
             "",
         ].join("\n");
