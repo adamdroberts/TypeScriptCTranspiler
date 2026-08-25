@@ -233,6 +233,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             additionalRoots: setupEntries,
             initializationEntries: [...setupEntries, testEntry],
             moduleRoots,
+            ignoreCheckJsDirectiveRoots: [...new Set([...setupEntries, testEntry, ...moduleRoots])],
             test262Observation: {
                 kind: "test262-native-observation",
                 scenarioId: request.scenarioId,

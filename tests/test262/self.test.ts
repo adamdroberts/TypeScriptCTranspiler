@@ -34,6 +34,8 @@ import { validatePropertyJUnit } from "../property/run";
 import { buildEvidenceContainment, supervisedArguments } from "./process-supervision";
 import { requireCanonicalMergedShards } from "./check-claim";
 import { prepareNativeRequest } from "./native-host";
+import ts from "typescript";
+import { buildProgram, resolvePackageRoot } from "../../src/program";
 
 describe("Test262 metadata and scenarios", () => {
     test("parses CRLF YAML and preserves exact negative phase/type", () => {
@@ -110,11 +112,33 @@ describe("Test262 metadata and scenarios", () => {
 });
 
 describe("host result contract", () => {
+    test("ignores editor-only @ts-check metadata only for exact host roots", async () => {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-check-js-self-test-"));
+        const entry = path.join(root, "checked.js");
+        const source = "// @ts-check\nfunction identity(value) { return value; }\nidentity(1);\n";
+        await fs.writeFile(entry, source);
+        try {
+            const ordinary = buildProgram({ entry, packageRoot: resolvePackageRoot() });
+            expect(ts.getPreEmitDiagnostics(ordinary.program).some((diagnostic) => diagnostic.code === 7006)).toBe(true);
+
+            const hostScoped = buildProgram({
+                entry,
+                packageRoot: resolvePackageRoot(),
+                ignoreCheckJsDirectiveRoots: [entry],
+            });
+            expect(ts.getPreEmitDiagnostics(hostScoped.program).some((diagnostic) => diagnostic.code === 7006)).toBe(false);
+            expect(hostScoped.entrySourceFile.text).toBe(source);
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    });
+
     test("prepares separate global Scripts as one runner-owned native observation", async () => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-host-self-test-"));
         const artifactDirectory = path.join(root, "artifacts");
         await fs.mkdir(artifactDirectory);
         const setupSource = [
+            "// @ts-check",
             "function HarnessError(message) {",
             "  if (!(this instanceof HarnessError)) return new HarnessError(message);",
             "  this.message = message || '';",

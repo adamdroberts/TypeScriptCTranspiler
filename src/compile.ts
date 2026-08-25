@@ -48,6 +48,8 @@ export interface CompileOptions {
     initializationEntries?: readonly string[];
     /** Exact files whose parse/binding goal is Module even without import/export syntax. */
     moduleRoots?: readonly string[];
+    /** Exact JavaScript records whose source-level `@ts-check` directive is ignored out of band. */
+    ignoreCheckJsDirectiveRoots?: readonly string[];
     /** Native structured observation mode used only by the non-delegating Test262 host. */
     test262Observation?: Test262NativeObservationPlan;
     /** Override compiler diagnostic output without changing its contents. */
@@ -758,6 +760,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         packageRoot: pkg,
         additionalRoots: opts.additionalRoots,
         moduleRoots: opts.moduleRoots,
+        ignoreCheckJsDirectiveRoots: opts.ignoreCheckJsDirectiveRoots,
         dynamicRequires,
         customConditions: opts.customConditions,
     });

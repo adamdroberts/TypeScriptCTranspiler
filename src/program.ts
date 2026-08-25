@@ -22,6 +22,8 @@ export interface BuildProgramOpts {
     additionalRoots?: readonly string[];
     /** Source records that must be parsed/bound with the ECMAScript Module goal. */
     moduleRoots?: readonly string[];
+    /** Exact JavaScript records whose source-level `@ts-check` directive is ignored out of band. */
+    ignoreCheckJsDirectiveRoots?: readonly string[];
     dynamicRequires?: DynamicRequireManifest;
     customConditions?: string[];
 }
@@ -80,6 +82,9 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const rootNames = [libCoreDts, ...new Set([...sourceRoots, ...discoveredRoots])];
 
     const moduleRoots = new Set((opts.moduleRoots ?? []).map((filename) => path.resolve(filename)));
+    const ignoreCheckJsDirectiveRoots = new Set(
+        (opts.ignoreCheckJsDirectiveRoots ?? []).map((filename) => path.resolve(filename)),
+    );
     const compilerHost = ts.createCompilerHost(compilerOptions);
     const getSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
@@ -89,6 +94,16 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             // also contains empty or syntax-free Module records, so bind the requested
             // goal out of band without changing one source byte.
             (sourceFile as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= sourceFile;
+        }
+        if (sourceFile && ignoreCheckJsDirectiveRoots.has(path.resolve(sourceFile.fileName))) {
+            // Test262 harness files contain editor-facing `@ts-check` directives.
+            // Disable only the compiler metadata flag: SourceFile.text and the
+            // runner-attested input bytes remain exactly unchanged.
+            (sourceFile as ts.SourceFile & { checkJsDirective?: ts.CheckJsDirective }).checkJsDirective = {
+                enabled: false,
+                pos: 0,
+                end: 0,
+            };
         }
         return sourceFile;
     };
