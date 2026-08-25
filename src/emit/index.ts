@@ -464,6 +464,16 @@ interface ModuleVarBindingPlan {
     readonly gcRoot: string;
 }
 
+interface ModuleLexicalBindingPlan {
+    readonly symbol: ts.Symbol;
+    readonly name: ts.Identifier;
+    readonly declaration: ts.VariableDeclaration;
+    readonly cName: string;
+    readonly initialized: string;
+    readonly gcRoot: string;
+    readonly immutable: boolean;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -555,6 +565,12 @@ class Emitter {
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     private moduleVarDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
+    /** Direct module `let`/`const` declarations share exporter-owned slots.
+     * The initialized bit is the canonical TDZ state read by local references,
+     * imports, and indirect re-exports. */
+    private moduleLexicalBindings = new Map<ts.Symbol, ModuleLexicalBindingPlan>();
+    private moduleLexicalDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
+    private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
     private nextTickAdapters = new Map<string, string>();
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
@@ -14990,7 +15006,10 @@ class Emitter {
         // one program-wide preparation pass.
         for (const modId of emitOrder) {
             const info = this.graph.modules.get(modId);
-            if (info) this.collectModuleVarBindings(info.sf, modId);
+            if (info) {
+                this.collectModuleVarBindings(info.sf, modId);
+                this.collectModuleLexicalBindings(info.sf, modId);
+            }
         }
         this.analyzeReferencedTopLevelFunctions(emitOrder);
         // Emit each module in program order so type-only dependencies can still
@@ -15156,6 +15175,7 @@ class Emitter {
             this.analyzeIntegerSymbols(sf);
             this.analyzeStrbufSymbols(sf);
             this.emitModuleVarDeclarationInstantiation(initBuf, sf);
+            this.emitModuleLexicalDeclarationInstantiation(initBuf, sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
@@ -15610,6 +15630,8 @@ class Emitter {
         }
         const moduleVar = sym ? this.moduleVarBindings.get(sym) : undefined;
         if (moduleVar) return moduleVar.cName;
+        const moduleLexical = sym ? this.moduleLexicalBindings.get(sym) : undefined;
+        if (moduleLexical) return moduleLexical.cName;
         if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
             const parts = [...this.declarationNamespaceParts(decl), id.text];
             return mangleIdent(parts.join("_"));
@@ -15904,6 +15926,8 @@ class Emitter {
             const symbol = this.symbolForIdentifier(decl.name);
             const moduleVar = symbol ? this.moduleVarBindings.get(symbol) : undefined;
             if (moduleVar) return moduleVar.cName;
+            const moduleLexical = symbol ? this.moduleLexicalBindings.get(symbol) : undefined;
+            if (moduleLexical) return moduleLexical.cName;
         }
         const name = this.declarationName(decl);
         if (name) return this.declaredName(name);
@@ -22994,6 +23018,29 @@ class Emitter {
         return scope ? this.asyncContinuationCellScopes.get(scope)?.get(sym) ?? null : null;
     }
 
+    private moduleLexicalBindingForIdentifier(id: ts.Identifier): ModuleLexicalBindingPlan | null {
+        const symbol = this.symbolForIdentifier(id);
+        return symbol ? this.moduleLexicalBindings.get(symbol) ?? null : null;
+    }
+
+    private localModuleLexicalBindingIdentifier(
+        expression: ts.Expression,
+    ): { id: ts.Identifier; binding: ModuleLexicalBindingPlan } | null {
+        const target = this.unwrapTransparentExpression(expression);
+        if (!ts.isIdentifier(target)) return null;
+        const raw = this.checker.getSymbolAtLocation(target);
+        if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
+        const binding = this.moduleLexicalBindingForIdentifier(target);
+        return binding ? { id: target, binding } : null;
+    }
+
+    private moduleLexicalRead(binding: ModuleLexicalBindingPlan): string {
+        const message = escapeCString(`Cannot access '${binding.name.text}' before initialization`);
+        return `({ if (!${binding.initialized}) ` +
+            `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${message}")); ` +
+            `${binding.cName}; })`;
+    }
+
     private identifierRead(id: ts.Identifier): string {
         if (this.isTest262OutOfBandGlobalBinding(id, "globalThis")) {
             return "tsc_global_object()";
@@ -23002,6 +23049,8 @@ class Emitter {
         if (scriptGlobal) {
             return `tsc_global_binding_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
         }
+        const moduleLexical = this.moduleLexicalBindingForIdentifier(id);
+        if (moduleLexical) return this.moduleLexicalRead(moduleLexical);
         const sym = this.symbolForIdentifier(id);
         if (sym) {
             const currentScope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
@@ -23353,6 +23402,92 @@ class Emitter {
                 declaration.initializer,
             );
         }
+        return true;
+    }
+
+    /** Module LexicallyScopedDeclarations contains only declarations directly
+     * in the module statement list. Loop and nested-block `let`/`const`
+     * declarations own distinct declarative environments and deliberately do
+     * not enter this worklist. */
+    private collectModuleLexicalBindings(
+        sf: ts.SourceFile,
+        modId: string,
+    ): ModuleLexicalBindingPlan[] {
+        const prepared = this.moduleLexicalBindingsBySource.get(sf);
+        if (prepared) return prepared;
+        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) return [];
+
+        const plans: ModuleLexicalBindingPlan[] = [];
+        for (const statement of sf.statements) {
+            if (!ts.isVariableStatement(statement)) continue;
+            const flags = statement.declarationList.flags;
+            if ((flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) continue;
+            // AwaitUsing is a composite flag that includes Const; the Using
+            // bit alone distinguishes both resource-declaration forms from a
+            // plain `const` declaration.
+            if ((flags & ts.NodeFlags.Using) !== 0) continue;
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name)) {
+                    // Binding-pattern declarations retain the existing stable
+                    // fail-closed diagnostic until their BoundNames join this
+                    // same plan.
+                    continue;
+                }
+                const symbol = this.symbolForIdentifier(declaration.name);
+                if (!symbol) continue;
+                const cName = `${modId}_${this.declaredName(declaration.name)}`;
+                const plan: ModuleLexicalBindingPlan = {
+                    symbol,
+                    name: declaration.name,
+                    declaration,
+                    cName,
+                    initialized: this.freshTemp(`_${cName}_module_lexical_initialized`),
+                    gcRoot: this.freshTemp(`_${cName}_module_lexical_gc_root`),
+                    immutable: (flags & ts.NodeFlags.Const) !== 0,
+                };
+                this.moduleLexicalBindings.set(symbol, plan);
+                this.moduleLexicalDeclarationSymbols.set(declaration, symbol);
+                this.symbolStorageTypes.set(symbol, T_VALUE);
+                plans.push(plan);
+            }
+        }
+        this.moduleLexicalBindingsBySource.set(sf, plans);
+        return plans;
+    }
+
+    private emitModuleLexicalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
+        for (const binding of this.collectModuleLexicalBindings(sf, this.currentModuleId)) {
+            this.symbolStorageTypes.set(binding.symbol, T_VALUE);
+            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
+            this.globalDecls.line(`static bool ${binding.initialized};`);
+            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.globalDynamicRoots.set(binding.symbol, binding.gcRoot);
+            buf.line(`${binding.cName} = tsc_value_undefined();`);
+            buf.line(`${binding.initialized} = false;`);
+            buf.line(`${binding.gcRoot} = NULL;`);
+        }
+    }
+
+    private moduleLexicalBindingForDeclaration(
+        declaration: ts.VariableDeclaration,
+    ): ModuleLexicalBindingPlan | null {
+        const symbol = this.moduleLexicalDeclarationSymbols.get(declaration);
+        return symbol ? this.moduleLexicalBindings.get(symbol) ?? null : null;
+    }
+
+    private emitModuleLexicalInitializer(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+    ): boolean {
+        const binding = this.moduleLexicalBindingForDeclaration(declaration);
+        if (!binding) return false;
+        const value = declaration.initializer
+            ? this.emitExpr(declaration.initializer)
+            : { c: "tsc_value_undefined()", ty: T_VALUE };
+        const boxed = this.coerce(value, T_VALUE, declaration.initializer ?? declaration.name);
+        buf.line(`${binding.cName} = ${boxed};`);
+        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+        buf.line(`${binding.initialized} = true;`);
         return true;
     }
 
@@ -39624,6 +39759,7 @@ class Emitter {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(initBuf, d)) continue;
+            if (this.emitModuleLexicalInitializer(initBuf, d)) continue;
             if (this.emitModuleVarInitializer(initBuf, d)) continue;
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
@@ -40257,6 +40393,7 @@ class Emitter {
             (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
+            if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
@@ -46003,7 +46140,15 @@ class Emitter {
                 ty: T_STRING,
             };
         }
-        const staticResult = this.sideEffectFreeTypeofString(to.expression, new Set());
+        // `typeof` performs GetValue for resolvable lexical References, so an
+        // uninitialized module slot must throw rather than being folded from
+        // its declared or initializer type.
+        const moduleLexical = ts.isIdentifier(to.expression)
+            ? this.moduleLexicalBindingForIdentifier(to.expression)
+            : null;
+        const staticResult = moduleLexical
+            ? null
+            : this.sideEffectFreeTypeofString(to.expression, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
         const inner = this.emitExpr(to.expression);
         const result = this.typeofName(to.expression, inner.ty);
@@ -46480,6 +46625,82 @@ class Emitter {
             null;
     }
 
+    private moduleLexicalPut(binding: ModuleLexicalBindingPlan, value: string): string {
+        const tdzMessage = escapeCString(`Cannot access '${binding.name.text}' before initialization`);
+        if (binding.immutable) {
+            return `({ if (!${binding.initialized}) ` +
+                `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${tdzMessage}")); ` +
+                `(void)(${value}); ` +
+                `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding")); ` +
+                `tsc_value_undefined(); })`;
+        }
+        return `({ if (!${binding.initialized}) ` +
+            `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${tdzMessage}")); ` +
+            `${binding.cName} = ${value}; ` +
+            `${binding.gcRoot} = tsc_value_gc_root(${binding.cName}); ` +
+            `${binding.cName}; })`;
+    }
+
+    private emitModuleLexicalUpdate(
+        operand: ts.Expression,
+        op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
+        prefix: boolean,
+    ): EmitResult | null {
+        const local = this.localModuleLexicalBindingIdentifier(operand);
+        if (!local) return null;
+        const current = this.emitExpr(local.id);
+        const numeric = this.freshTemp("_module_lexical_update_numeric");
+        const next = this.freshTemp("_module_lexical_update_next");
+        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        return {
+            c: `({ tsc_value_t ${numeric} = tsc_value_to_numeric(${current.c}); ` +
+                `tsc_value_t ${next} = ${operation}(${numeric}); ` +
+                `${this.moduleLexicalPut(local.binding, next)}; ${prefix ? next : numeric}; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private emitModuleLexicalAssignment(
+        bin: ts.BinaryExpression,
+        op: ts.SyntaxKind,
+    ): EmitResult | null {
+        const local = this.localModuleLexicalBindingIdentifier(bin.left);
+        if (!local) return null;
+        const rhs = this.emitExpr(bin.right);
+        if (op === ts.SyntaxKind.EqualsToken) {
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: rhs, target: T_VALUE, node: bin.right },
+            ], ([value]) => this.moduleLexicalPut(local.binding, value));
+        }
+
+        const current = this.emitExpr(local.id);
+        if (this.isLogicalAssignmentOperator(op)) {
+            const slot = this.freshTemp("_module_lexical_logical_current");
+            const assign = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                ? `tsc_value_is_truthy(${slot})`
+                : op === ts.SyntaxKind.BarBarEqualsToken
+                    ? `!tsc_value_is_truthy(${slot})`
+                    : `tsc_value_is_nullish(${slot})`;
+            const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
+            return {
+                c: `({ tsc_value_t ${slot} = ${current.c}; ` +
+                    `${assign} ? ${this.moduleLexicalPut(local.binding, rhsValue)} : ${slot}; })`,
+                ty: T_VALUE,
+            };
+        }
+
+        const operation = this.dynamicCompoundAssignmentOperation(op);
+        if (!operation) unsupported(bin, `unsupported module lexical assignment ${ts.SyntaxKind[op]}`);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: current, target: T_VALUE, node: local.id },
+            { value: rhs, target: T_VALUE, node: bin.right },
+        ], ([left, right]) => {
+            const next = this.freshTemp("_module_lexical_compound_next");
+            return `({ tsc_value_t ${next} = ${operation}(${left}, ${right}); ` +
+                `${this.moduleLexicalPut(local.binding, next)}; })`;
+        });
+    }
+
     private emitImmutableImportUpdate(
         operand: ts.Expression,
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
@@ -46546,6 +46767,8 @@ class Emitter {
         if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
             const importUpdate = this.emitImmutableImportUpdate(pu.operand, op);
             if (importUpdate) return importUpdate;
+            const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, op, true);
+            if (moduleLexicalUpdate) return moduleLexicalUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(pu.operand, op, true);
             if (globalUpdate) return globalUpdate;
             const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
@@ -46718,6 +46941,8 @@ class Emitter {
         if (pu.operator === ts.SyntaxKind.PlusPlusToken || pu.operator === ts.SyntaxKind.MinusMinusToken) {
             const importUpdate = this.emitImmutableImportUpdate(pu.operand, pu.operator);
             if (importUpdate) return importUpdate;
+            const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, pu.operator, false);
+            if (moduleLexicalUpdate) return moduleLexicalUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(
                 pu.operand,
                 pu.operator,
@@ -47856,6 +48081,9 @@ class Emitter {
     ): EmitResult {
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
         if (immutableImportAssignment) return immutableImportAssignment;
+
+        const moduleLexicalAssignment = this.emitModuleLexicalAssignment(bin, op);
+        if (moduleLexicalAssignment) return moduleLexicalAssignment;
 
         const globalAssignment = this.emitTest262GlobalAssignment(bin, op);
         if (globalAssignment) return globalAssignment;
@@ -50549,6 +50777,14 @@ class Emitter {
         // initializer; mutable bindings use ordinary closure/value storage.
         if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
+        if (ts.isIdentifier(decl.name)) {
+            const symbol = this.symbolForIdentifier(decl.name);
+            // JavaScript module lexical bindings need an explicit TDZ slot.
+            // Their function initializer therefore takes the ordinary boxed
+            // closure path instead of replacing the binding with a bare C
+            // function identity.
+            if (symbol && this.moduleLexicalBindings.has(symbol)) return false;
+        }
         return this.isTopLevelValueDeclaration(decl);
     }
 
