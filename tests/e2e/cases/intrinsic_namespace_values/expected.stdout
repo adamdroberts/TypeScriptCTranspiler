@@ -1,0 +1,4 @@
+identity: true true object object false false
+math dynamic: 7 9 5 true true
+math metadata: abs 1 true false false false true true false true
+json dynamic: 42 {"answer":42} parse 2 stringify 3

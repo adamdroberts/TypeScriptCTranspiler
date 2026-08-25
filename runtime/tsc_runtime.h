@@ -100,6 +100,8 @@ tsc_value_t tsc_node_function_call(tsc_value_t fn, struct tsc_array* args);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, struct tsc_array* args);
 tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, struct tsc_array* args);
+tsc_value_t tsc_builtin_math(void);
+tsc_value_t tsc_builtin_json(void);
 tsc_value_t tsc_builtin_reflect(void);
 
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);

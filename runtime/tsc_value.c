@@ -4647,6 +4647,212 @@ bool tsc_util_types_is_array_buffer_view(tsc_value_t v) {
     return false;
 }
 
+static void intrinsic_define_method(
+    tsc_object_t* object,
+    const char* name,
+    size_t name_len,
+    double arity,
+    tsc_generic_function_t function,
+    void* env
+) {
+    tsc_object_define(
+        object,
+        tsc_str_from_lit(name, name_len),
+        tsc_value_function_builtin_named(function, env, arity, tsc_str_from_lit(name, name_len)),
+        true,
+        false,
+        true
+    );
+}
+
+typedef double (*tsc_math_unary_fn_t)(double);
+typedef double (*tsc_math_binary_fn_t)(double, double);
+
+typedef enum {
+    TSC_MATH_UNARY,
+    TSC_MATH_BINARY,
+    TSC_MATH_HYPOT,
+    TSC_MATH_MIN,
+    TSC_MATH_MAX,
+    TSC_MATH_RANDOM,
+} tsc_math_intrinsic_kind_t;
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_math_intrinsic_kind_t kind;
+    union {
+        tsc_math_unary_fn_t unary;
+        tsc_math_binary_fn_t binary;
+    } implementation;
+} tsc_math_intrinsic_t;
+
+#define TSC_MATH_UNARY_ENTRY(name_literal, function) \
+    { name_literal, sizeof(name_literal) - 1, 1.0, TSC_MATH_UNARY, { .unary = function } }
+#define TSC_MATH_BINARY_ENTRY(name_literal, function) \
+    { name_literal, sizeof(name_literal) - 1, 2.0, TSC_MATH_BINARY, { .binary = function } }
+#define TSC_MATH_VARIADIC_ENTRY(name_literal, length_value, kind_value) \
+    { name_literal, sizeof(name_literal) - 1, length_value, kind_value, { .unary = NULL } }
+
+static const tsc_math_intrinsic_t math_intrinsics[] = {
+    TSC_MATH_UNARY_ENTRY("abs", fabs),
+    TSC_MATH_UNARY_ENTRY("acos", acos),
+    TSC_MATH_UNARY_ENTRY("acosh", acosh),
+    TSC_MATH_UNARY_ENTRY("asin", asin),
+    TSC_MATH_UNARY_ENTRY("asinh", asinh),
+    TSC_MATH_UNARY_ENTRY("atan", atan),
+    TSC_MATH_UNARY_ENTRY("atanh", atanh),
+    TSC_MATH_BINARY_ENTRY("atan2", atan2),
+    TSC_MATH_UNARY_ENTRY("cbrt", cbrt),
+    TSC_MATH_UNARY_ENTRY("ceil", ceil),
+    TSC_MATH_UNARY_ENTRY("clz32", tsc_math_clz32),
+    TSC_MATH_UNARY_ENTRY("cos", cos),
+    TSC_MATH_UNARY_ENTRY("cosh", cosh),
+    TSC_MATH_UNARY_ENTRY("exp", exp),
+    TSC_MATH_UNARY_ENTRY("expm1", expm1),
+    TSC_MATH_UNARY_ENTRY("f16round", tsc_math_f16round),
+    TSC_MATH_UNARY_ENTRY("floor", floor),
+    TSC_MATH_UNARY_ENTRY("fround", tsc_math_fround),
+    TSC_MATH_VARIADIC_ENTRY("hypot", 2.0, TSC_MATH_HYPOT),
+    TSC_MATH_BINARY_ENTRY("imul", tsc_math_imul),
+    TSC_MATH_UNARY_ENTRY("log", log),
+    TSC_MATH_UNARY_ENTRY("log1p", log1p),
+    TSC_MATH_UNARY_ENTRY("log10", log10),
+    TSC_MATH_UNARY_ENTRY("log2", log2),
+    TSC_MATH_VARIADIC_ENTRY("max", 2.0, TSC_MATH_MAX),
+    TSC_MATH_VARIADIC_ENTRY("min", 2.0, TSC_MATH_MIN),
+    TSC_MATH_BINARY_ENTRY("pow", pow),
+    TSC_MATH_VARIADIC_ENTRY("random", 0.0, TSC_MATH_RANDOM),
+    TSC_MATH_UNARY_ENTRY("round", tsc_math_round),
+    TSC_MATH_UNARY_ENTRY("sign", tsc_math_sign),
+    TSC_MATH_UNARY_ENTRY("sin", sin),
+    TSC_MATH_UNARY_ENTRY("sinh", sinh),
+    TSC_MATH_UNARY_ENTRY("sqrt", sqrt),
+    TSC_MATH_UNARY_ENTRY("tan", tan),
+    TSC_MATH_UNARY_ENTRY("tanh", tanh),
+    TSC_MATH_UNARY_ENTRY("trunc", trunc),
+};
+
+#undef TSC_MATH_UNARY_ENTRY
+#undef TSC_MATH_BINARY_ENTRY
+#undef TSC_MATH_VARIADIC_ENTRY
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double value;
+} tsc_math_constant_t;
+
+static const tsc_math_constant_t math_constants[] = {
+    { "E", 1, M_E },
+    { "LN10", 4, M_LN10 },
+    { "LN2", 3, M_LN2 },
+    { "LOG10E", 6, M_LOG10E },
+    { "LOG2E", 5, M_LOG2E },
+    { "PI", 2, M_PI },
+    { "SQRT1_2", 7, M_SQRT1_2 },
+    { "SQRT2", 5, M_SQRT2 },
+};
+
+static double math_argument(const tsc_array_t* args, size_t index) {
+    return index < args->len
+        ? tsc_value_as_num(TSC_ARR(tsc_value_t, args, index))
+        : NAN;
+}
+
+static tsc_value_t math_intrinsic_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    const tsc_math_intrinsic_t* intrinsic = (const tsc_math_intrinsic_t*)env;
+    if (intrinsic->kind == TSC_MATH_UNARY) {
+        return tsc_value_num(intrinsic->implementation.unary(math_argument(args, 0)));
+    }
+    if (intrinsic->kind == TSC_MATH_BINARY) {
+        return tsc_value_num(intrinsic->implementation.binary(math_argument(args, 0), math_argument(args, 1)));
+    }
+    if (intrinsic->kind == TSC_MATH_RANDOM) {
+        return tsc_value_num(tsc_math_random());
+    }
+    if (intrinsic->kind == TSC_MATH_HYPOT) {
+        double result = 0.0;
+        for (size_t index = 0; index < args->len; index++) {
+            result = hypot(result, math_argument(args, index));
+        }
+        return tsc_value_num(result);
+    }
+    double result = intrinsic->kind == TSC_MATH_MIN ? INFINITY : -INFINITY;
+    for (size_t index = 0; index < args->len; index++) {
+        double value = math_argument(args, index);
+        if (isnan(value)) return tsc_value_num(NAN);
+        result = intrinsic->kind == TSC_MATH_MIN ? fmin(result, value) : fmax(result, value);
+    }
+    return tsc_value_num(result);
+}
+
+tsc_value_t tsc_builtin_math(void) {
+    static tsc_object_t* math = NULL;
+    if (!math) {
+        tsc_runtime_lock();
+        if (!math) {
+            tsc_object_t* built = tsc_object_new();
+            for (size_t index = 0; index < sizeof(math_intrinsics) / sizeof(math_intrinsics[0]); index++) {
+                const tsc_math_intrinsic_t* intrinsic = &math_intrinsics[index];
+                intrinsic_define_method(
+                    built,
+                    intrinsic->name,
+                    intrinsic->name_len,
+                    intrinsic->arity,
+                    math_intrinsic_apply,
+                    (void*)intrinsic
+                );
+            }
+            for (size_t index = 0; index < sizeof(math_constants) / sizeof(math_constants[0]); index++) {
+                const tsc_math_constant_t* constant = &math_constants[index];
+                tsc_object_define(
+                    built,
+                    tsc_str_from_lit(constant->name, constant->name_len),
+                    tsc_value_num(constant->value),
+                    false,
+                    false,
+                    false
+                );
+            }
+            math = built;
+        }
+        tsc_runtime_unlock();
+    }
+    return tsc_value_object(math);
+}
+
+static tsc_value_t json_parse_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t text = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_json_parse(tsc_value_to_string(text));
+}
+
+static tsc_value_t json_stringify_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_json_stringify_top(value);
+}
+
+tsc_value_t tsc_builtin_json(void) {
+    static tsc_object_t* json = NULL;
+    if (!json) {
+        tsc_runtime_lock();
+        if (!json) {
+            tsc_object_t* built = tsc_object_new();
+            intrinsic_define_method(built, "parse", 5, 2.0, json_parse_apply, NULL);
+            intrinsic_define_method(built, "stringify", 9, 3.0, json_stringify_apply, NULL);
+            json = built;
+        }
+        tsc_runtime_unlock();
+    }
+    return tsc_value_object(json);
+}
+
 static tsc_value_t reflect_apply_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
@@ -4754,14 +4960,7 @@ static tsc_value_t reflect_set_prototype_of_method(void* env, tsc_value_t this_a
 }
 
 static void reflect_define_method(tsc_object_t* reflect, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
-    tsc_object_define(
-        reflect,
-        tsc_str_from_lit(name, len),
-        tsc_value_function_builtin_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
-        true,
-        false,
-        true
-    );
+    intrinsic_define_method(reflect, name, len, arity, fn, NULL);
 }
 
 tsc_value_t tsc_builtin_reflect(void) {

@@ -44859,6 +44859,12 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
             }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Math")) {
+                return { c: "tsc_builtin_math()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "JSON")) {
+                return { c: "tsc_builtin_json()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
                 return { c: "tsc_builtin_reflect()", ty: T_VALUE };
             }
@@ -50958,13 +50964,13 @@ class Emitter {
         ) {
             return this.emitProcessModuleCall(call, "hrtime");
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Math") {
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Math")) {
             return this.emitMathCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
             return this.emitCryptoCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "JSON") {
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "JSON")) {
             return this.emitJsonCall(call, memberName);
         }
         if (this.isUrlConstructorExpression(recvExpr)) {
@@ -61914,32 +61920,31 @@ class Emitter {
     private emitMathCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         const one = (build: (x: string) => string): EmitResult => {
-            if (args.length < 1) unsupported(call, `Math.${name} expects at least 1 arg`);
-            const r = this.emitExpr(args[0]!);
-            requireNumber(args[0]!, r.ty);
+            const specs: SequencedCallArg[] = [];
+            if (args[0]) {
+                const value = this.emitExpr(args[0]);
+                requireNumber(args[0], value.ty);
+                specs.push({ value, target: T_NUMBER, node: args[0] });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 1));
             return this.emitSequencedExpr(
                 T_NUMBER,
-                [
-                    { value: r, target: T_NUMBER, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ],
-                ([x]) => build(x!),
+                specs,
+                ([x]) => build(x ?? "NAN"),
             );
         };
         const two = (build: (a: string, b: string) => string): EmitResult => {
-            if (args.length < 2) unsupported(call, `Math.${name} expects at least 2 args`);
-            const a = this.emitExpr(args[0]!);
-            const b = this.emitExpr(args[1]!);
-            requireNumber(args[0]!, a.ty);
-            requireNumber(args[1]!, b.ty);
+            const specs: SequencedCallArg[] = [];
+            for (const argument of args.slice(0, 2)) {
+                const value = this.emitExpr(argument);
+                requireNumber(argument, value.ty);
+                specs.push({ value, target: T_NUMBER, node: argument });
+            }
+            specs.push(...this.ignoredArgumentSpecs(args, 2));
             return this.emitSequencedExpr(
                 T_NUMBER,
-                [
-                    { value: a, target: T_NUMBER, node: args[0]! },
-                    { value: b, target: T_NUMBER, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ],
-                ([x, y]) => build(x!, y!),
+                specs,
+                ([x, y]) => build(x ?? "NAN", y ?? "NAN"),
             );
         };
         switch (name) {
@@ -72333,7 +72338,7 @@ class Emitter {
             ) {
                 return { c: "tsc_array_prototype()", ty: arrayType(T_VALUE) };
             }
-            if (pa.expression.text === "Math") {
+            if (this.isUnshadowedGlobalIdentifier(pa.expression, "Math")) {
                 const name = pa.name.text;
                 switch (name) {
                     case "PI": return { c: `((double)M_PI)`, ty: T_NUMBER };
