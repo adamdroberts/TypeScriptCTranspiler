@@ -69,6 +69,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Replaced ArrowFunction's hard-coded lexical-`this` closure slot with one ordered descriptor collection for lexical `this`, implicit `arguments`, and `new.target`. Escaped and nested arrows now preserve activation identity across call/apply/bind, mapped and unmapped argument objects, ordinary and reflective construction, alternate new targets, and parameter initializers; the compact dual-memory property and representative deep lexical-environment tree verify the shared path. The ECMAScript-only no-LineTerminator rule no longer rejects valid TypeScript Arrows whose return annotation precedes a line-broken `=>`.
 - Balanced runtime exception frames across `longjmp`; added GC-visible companion roots for dynamic async-state fields, parameters, initialized/assigned prelude locals, mutable shared closure cells, and nested object slots; and made pointer-bearing `Set` storage scannable. This removes nondeterministic corruption and crashes from the semantic GC/lifetime partitions and representative generated depth stress.
 - Fixed GC lifetime of NaN-boxed Promise results and rejection reasons while their reactions are queued.
 - Replaced async loop-body completion flags with typed continue, break, return, and throw edges shared by loop-condition lowering.

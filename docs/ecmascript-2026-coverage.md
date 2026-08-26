@@ -902,7 +902,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 - [ ] **ECMAScript Language: Functions and Classes** (`sec-ecmascript-language-functions-and-classes`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary functions; arrows and methods; classes and private state; generators; async functions; async generators.
   - Linked local regression evidence: property: tests/property/arrow-function.property.test.ts; generated regression: async-leading-await-chain; stress: arrow_formal_binding_tree, async-leading-await-chain; E2E: function_closures, generic_function_values, classes.
-  - Known blockers: ArrowFunction lexical arguments, super, and new.target plus remaining object metadata/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete.
+  - Known blockers: ArrowFunction lexical super plus remaining object metadata/private-environment/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete.
   - [ ] `sec-ecmascript-language-functions-and-classes` — ECMAScript Language: Functions and Classes: exact disposition and partitions missing.
   - [ ] `sec-parameter-lists` — Parameter Lists: exact disposition and partitions missing.
   - [ ] `sec-parameter-lists-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.

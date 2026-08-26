@@ -101,6 +101,10 @@ function arrowHasLineTerminatorBeforeToken(node: ts.ArrowFunction): boolean {
     return /[\n\r\u2028\u2029]/u.test(sourceFile.text.slice(boundary, arrowStart));
 }
 
+function isJavaScriptSourceFile(sourceFile: ts.SourceFile): boolean {
+    return /\.[cm]?jsx?$/iu.test(sourceFile.fileName);
+}
+
 function directBodyLexicalNames(
     body: ts.ConciseBody | undefined,
 ): ReturnType<typeof bindingNameEntries> {
@@ -161,7 +165,7 @@ function functionLikeFailure(
     }
 
     if (!ts.isArrowFunction(node)) return null;
-    if (arrowHasLineTerminatorBeforeToken(node)) {
+    if (isJavaScriptSourceFile(node.getSourceFile()) && arrowHasLineTerminatorBeforeToken(node)) {
         return {
             node: node.equalsGreaterThanToken,
             message: "a line terminator is not permitted before an arrow token",

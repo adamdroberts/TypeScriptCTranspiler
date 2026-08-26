@@ -120,6 +120,16 @@ test("arrow static semantics derive from one source worklist and binding tree", 
         const staticFailure = earlyFunctionStaticSemanticsFailure(sourceFile);
         expect(diagnostics.length === 0 && staticFailure === null).toBe(partition.valid);
     }
+
+    const typedReturn = ts.createSourceFile(
+        "arrow-function-property.ts",
+        "const identity = (value: number): number\n=> value;\n",
+        ts.ScriptTarget.ESNext,
+        true,
+        ts.ScriptKind.TS,
+    );
+    expect(parseDiagnostics(typedReturn)).toHaveLength(0);
+    expect(earlyFunctionStaticSemanticsFailure(typedReturn)).toBeNull();
 });
 
 function subjectSource(): string {
@@ -214,6 +224,69 @@ function subjectSource(): string {
         var nested = makeNestedArrow.call(receiver)();
         check(nested.call({}) === receiver, "nested-lexical-this");
 
+        function makeArguments(first) {
+            var getArguments = () => arguments;
+            var getNestedArguments = () => () => arguments;
+            var getFirst = () => first;
+            first = 41;
+            return [getArguments, getNestedArguments(), getFirst];
+        }
+        var argumentClosures = makeArguments(7, 8, 9);
+        var escapedArguments = argumentClosures[0].call(null, 100, 101);
+        check(escapedArguments.length === 3 && escapedArguments[0] === 41 &&
+            escapedArguments[1] === 8 && escapedArguments[2] === 9,
+            "lexical-arguments-escaped-and-mapped");
+        check(argumentClosures[0].apply(null, [102]) === escapedArguments &&
+            argumentClosures[0].bind(null, 103)() === escapedArguments &&
+            argumentClosures[1]() === escapedArguments,
+            "lexical-arguments-identity-call-apply-bind-nested");
+        escapedArguments[0] = 43;
+        check(argumentClosures[2]() === 43, "lexical-arguments-mapped-write");
+
+        function makeStrictArguments(first) {
+            "use strict";
+            var getArguments = () => arguments;
+            var getFirst = () => first;
+            first = 47;
+            return [getArguments, getFirst];
+        }
+        var strictArgumentClosures = makeStrictArguments(5);
+        check(strictArgumentClosures[0]()[0] === 5 && strictArgumentClosures[1]() === 47,
+            "lexical-arguments-strict-unmapped");
+
+        function makeDefaultArguments(first = 11) {
+            var getArguments = () => arguments;
+            var getFirst = () => first;
+            first = 53;
+            return [getArguments, getFirst];
+        }
+        var defaultArgumentClosures = makeDefaultArguments(undefined);
+        check(defaultArgumentClosures[0]()[0] === undefined && defaultArgumentClosures[1]() === 53,
+            "lexical-arguments-nonsimple-unmapped");
+
+        function shadowedArguments(arguments) { return () => arguments; }
+        check(shadowedArguments(59)() === 59, "lexical-arguments-explicit-shadow");
+
+        function makeNewTarget() { return () => new.target; }
+        var ordinaryNewTarget = makeNewTarget();
+        check(ordinaryNewTarget.call({}) === undefined, "lexical-new-target-call");
+        var constructedNewTarget = new makeNewTarget();
+        check(constructedNewTarget.apply(null, []) === makeNewTarget,
+            "lexical-new-target-construct");
+        function AlternateNewTarget() {}
+        var reflectedNewTarget = Reflect.construct(makeNewTarget, [], AlternateNewTarget);
+        check(reflectedNewTarget.bind(null)() === AlternateNewTarget,
+            "lexical-new-target-reflect-construct");
+
+        function makeNestedNewTarget() { return () => () => new.target; }
+        var nestedNewTarget = Reflect.construct(makeNestedNewTarget, [], AlternateNewTarget)();
+        check(nestedNewTarget.call(null) === AlternateNewTarget,
+            "nested-lexical-new-target");
+
+        function parameterNewTarget(factory = () => new.target) { return factory; }
+        var parameterTarget = Reflect.construct(parameterNewTarget, [], AlternateNewTarget);
+        check(parameterTarget() === AlternateNewTarget, "parameter-lexical-new-target");
+
         var surface = () => {};
         check(!surface.hasOwnProperty("caller") && !surface.hasOwnProperty("arguments"),
             "restricted-not-own");
@@ -237,7 +310,7 @@ function subjectSource(): string {
     `;
 }
 
-test("arrow functions share one formal-binding and lexical-this runtime path", async () => {
+test("arrow functions share one formal-binding and lexical-environment runtime path", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-arrow-function-property-"));
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/arrow-function.js#sloppy";

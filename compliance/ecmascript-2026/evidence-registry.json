@@ -400,10 +400,10 @@
         "sec-static-semantics-concisebodycontainsusestrict#expression-vs-directive-prologue-classification"
       ],
       "stressReview": {
-        "dimension": "ArrowFormalParameters binding-tree and directive-prologue depth",
+        "dimension": "ArrowFormalParameters binding-tree, directive-prologue, and lexical-environment depth",
         "parameter": "depth",
         "representativeHighDepth": 64,
-        "rationale": "One generated JavaScript native case independently stresses the canonical alternating BindingName tree, source-ordered directive collection, default/reference initialization, rest slice, capture, and lexical-this boundary; successive depths are not evidence units.",
+        "rationale": "One generated JavaScript native case independently stresses the canonical alternating BindingName tree, source-ordered directive collection, default/reference initialization, rest slice, capture, and nested lexical this/arguments/new.target environment boundary; successive depths are not evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },

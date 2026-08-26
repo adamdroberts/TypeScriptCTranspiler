@@ -587,6 +587,7 @@ function reflectConstructArgumentWidthSource(width: number): string {
 function arrowFormalBindingTreeDepthSource(depth: number): string {
     let pattern = "leaf";
     let value = "41";
+    let lexicalChain = "() => [this, arguments, new.target]";
     for (let level = 0; level < depth; level++) {
         if (level % 2 === 0) {
             pattern = `[${pattern}]`;
@@ -595,6 +596,7 @@ function arrowFormalBindingTreeDepthSource(depth: number): string {
             pattern = `{ value: ${pattern} }`;
             value = `{ value: ${value} }`;
         }
+        lexicalChain = `() => (${lexicalChain})`;
     }
     const directivePrefix = Array.from(
         { length: depth },
@@ -611,9 +613,20 @@ function arrowFormalBindingTreeDepthSource(depth: number): string {
         '    "use strict";',
         "    return value;",
         "};",
+        "function AlternateTarget() {}",
+        "function makeLexicalChain(marker) {",
+        `    return ${lexicalChain};`,
+        "}",
+        "var lexicalResult = Reflect.construct(makeLexicalChain, [43], AlternateTarget);",
+        `for (var level = 0; level <= ${depth}; level++) {`,
+        "    lexicalResult = lexicalResult.call({ wrong: true }, level);",
+        "}",
+        "var lexicalValid = lexicalResult[0] instanceof AlternateTarget &&",
+        "    lexicalResult[1][0] === 43 &&",
+        "    lexicalResult[2] === AlternateTarget;",
         "var arrow = makeArrow.call({ base: 1 });",
         `var result = arrow.call({ base: 999 }, ${value}, undefined, 7, 8);`,
-        'console.log("arrow formal binding tree:", result === 85 && directiveProbe() === 1);',
+        'console.log("arrow formal binding tree:", result === 85 && directiveProbe() === 1 && lexicalValid);',
         "",
     ].join("\n");
 }

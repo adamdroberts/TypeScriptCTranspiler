@@ -403,6 +403,15 @@ interface ClosureCapture {
     lexical: { readonly name: string; readonly immutable: boolean } | null;
 }
 
+const ARROW_LEXICAL_CAPTURE_KINDS = ["this", "arguments", "new-target"] as const;
+type ArrowLexicalCaptureKind = typeof ARROW_LEXICAL_CAPTURE_KINDS[number];
+
+interface ArrowLexicalCapture {
+    readonly kind: ArrowLexicalCaptureKind;
+    readonly field: string;
+    readonly value: EmitResult;
+}
+
 interface ClosureEnvBinding {
     type: CType;
     ptr: string;
@@ -662,6 +671,10 @@ class Emitter {
     private currentClass: string | null = null;
     private currentBaseClass: string | null = null;
     private functionThisStack: EmitResult[] = [];
+    private arrowLexicalBindingsByOwner = new WeakMap<
+        ts.ArrowFunction,
+        ReadonlyMap<ArrowLexicalCaptureKind, EmitResult>
+    >();
     private currentModuleId = "";
     private currentSf: ts.SourceFile | null = null;
     private asyncAwaitReturnContextTypes = new WeakMap<ts.Expression, ts.Type>();
@@ -26063,16 +26076,19 @@ class Emitter {
         return found;
     }
 
-    /** Arrow functions inherit one lexical this binding. Nested arrows remain
-     * in the same Contains worklist, while ordinary functions and classes
-     * establish independent this environments. */
-    private arrowFunctionUsesLexicalThis(fn: ts.ArrowFunction): boolean {
+    /** Arrow lexical bindings are derived from one source-tree worklist.
+     * Nested arrows remain in the same environment partition, while ordinary
+     * functions and classes establish a boundary.  The result is projected
+     * through a fixed semantic descriptor set, never through fixture shapes. */
+    private collectArrowLexicalCaptures(fn: ts.ArrowFunction): ArrowLexicalCapture[] {
+        const requested = new Set<ArrowLexicalCaptureKind>();
         const worklist: ts.Node[] = [];
         for (const parameter of fn.parameters) worklist.push(parameter);
         worklist.push(fn.body);
         while (worklist.length > 0) {
             const node = worklist.pop()!;
-            if (node.kind === ts.SyntaxKind.ThisKeyword) return true;
+            const kind = this.arrowLexicalCaptureKind(node);
+            if (kind) requested.add(kind);
             if (node !== fn &&
                 (ts.isClassLike(node) || ts.isFunctionLike(node) && !ts.isArrowFunction(node))) {
                 continue;
@@ -26083,10 +26099,57 @@ class Emitter {
                 worklist.push(children[index]!);
             }
         }
-        return false;
+        return ARROW_LEXICAL_CAPTURE_KINDS
+            .filter((kind) => requested.has(kind))
+            .map((kind) => ({
+                kind,
+                field: `lexical_${kind.replace("-", "_")}`,
+                value: this.lexicalValueForArrow(fn, kind),
+            }));
     }
 
-    private lexicalThisValueForArrow(fn: ts.ArrowFunction): EmitResult {
+    private arrowLexicalCaptureKind(node: ts.Node): ArrowLexicalCaptureKind | null {
+        if (node.kind === ts.SyntaxKind.ThisKeyword) return "this";
+        if (ts.isIdentifier(node) && this.isImplicitArgumentsIdentifier(node)) return "arguments";
+        if (
+            ts.isMetaProperty(node) &&
+            node.keywordToken === ts.SyntaxKind.NewKeyword &&
+            node.name.text === "target"
+        ) {
+            return "new-target";
+        }
+        return null;
+    }
+
+    /** Resolve a binding only when the active environment is reached through
+     * arrows.  An intervening ordinary function or class is a hard lexical
+     * boundary.  This also makes immediately-inlined nested arrows inherit the
+     * same descriptor map without manufacturing another activation. */
+    private activeArrowLexicalBinding(
+        node: ts.Node,
+        kind: ArrowLexicalCaptureKind,
+    ): EmitResult | null {
+        for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
+            if (ts.isClassLike(current) || ts.isFunctionLike(current) && !ts.isArrowFunction(current)) {
+                return null;
+            }
+            if (ts.isArrowFunction(current)) {
+                const binding = this.arrowLexicalBindingsByOwner.get(current)?.get(kind);
+                if (binding) return binding;
+            }
+        }
+        return null;
+    }
+
+    private lexicalValueForArrow(
+        fn: ts.ArrowFunction,
+        kind: ArrowLexicalCaptureKind,
+    ): EmitResult {
+        const inherited = this.activeArrowLexicalBinding(fn, kind);
+        if (inherited) return inherited;
+        if (kind === "arguments") return { c: "tsc_call_arguments()", ty: T_VALUE };
+        if (kind === "new-target") return { c: "tsc_value_current_new_target()", ty: T_VALUE };
+
         const enclosing = this.functionThisStack[this.functionThisStack.length - 1];
         if (enclosing) return enclosing;
         if (this.isTest262ScriptSourceFile(fn.getSourceFile()) ||
@@ -49008,9 +49071,19 @@ class Emitter {
             return { c: "self", ty: classType(this.currentClass!) };
         }
 
+        if (
+            ts.isMetaProperty(expr) &&
+            expr.keywordToken === ts.SyntaxKind.NewKeyword &&
+            expr.name.text === "target"
+        ) {
+            return this.activeArrowLexicalBinding(expr, "new-target") ??
+                { c: "tsc_value_current_new_target()", ty: T_VALUE };
+        }
+
         if (ts.isIdentifier(expr)) {
             if (this.isImplicitArgumentsIdentifier(expr)) {
-                return { c: "tsc_call_arguments()", ty: T_VALUE };
+                return this.activeArrowLexicalBinding(expr, "arguments") ??
+                    { c: "tsc_call_arguments()", ty: T_VALUE };
             }
             const hostGlobal = this.test262HostGlobalBindingName(expr);
             if (hostGlobal) {
@@ -54735,12 +54808,12 @@ class Emitter {
             ));
         const ret = this.prepareType(type.ret!);
         const captures = this.collectClosureCaptures(fn);
-        const lexicalThis = ts.isArrowFunction(fn) && this.arrowFunctionUsesLexicalThis(fn)
-            ? this.lexicalThisValueForArrow(fn)
-            : null;
+        const arrowLexicalCaptures = ts.isArrowFunction(fn)
+            ? this.collectArrowLexicalCaptures(fn)
+            : [];
         const implName = `tsc_closure_${this.closureCounter++}`;
         let envType: string | null = null;
-        if (captures.length > 0 || lexicalThis) {
+        if (captures.length > 0 || arrowLexicalCaptures.length > 0) {
             envType = `${implName}_env_t`;
             this.structDecls.open(`typedef struct ${envType}`);
             for (const cap of captures) {
@@ -54748,14 +54821,14 @@ class Emitter {
                 if (cap.type.kind === "value") this.structDecls.line(`void** ${cap.field}_gc_root;`);
                 if (cap.lexical) this.structDecls.line(`bool* ${cap.field}_initialized;`);
             }
-            if (lexicalThis) {
-                this.structDecls.line("tsc_value_t lexical_this;");
-                this.structDecls.line("void* lexical_this_gc_root;");
+            for (const capture of arrowLexicalCaptures) {
+                this.structDecls.line(`tsc_value_t ${capture.field};`);
+                this.structDecls.line(`void* ${capture.field}_gc_root;`);
             }
             this.structDecls.close(` ${envType};`);
         }
 
-        this.emitClosureImplementation(fn, implName, envType, captures, type, !!lexicalThis);
+        this.emitClosureImplementation(fn, implName, envType, captures, arrowLexicalCaptures, type);
 
         const tmp = this.freshTemp("_fn");
         const pieces = [
@@ -54798,9 +54871,9 @@ class Emitter {
                     pieces.push(`${env}->${cap.field}_initialized = ${initializedPtr}`);
                 }
             }
-            if (lexicalThis) {
-                pieces.push(`${env}->lexical_this = ${this.coerce(lexicalThis, T_VALUE, fn)}`);
-                pieces.push(`${env}->lexical_this_gc_root = tsc_value_gc_root(${env}->lexical_this)`);
+            for (const capture of arrowLexicalCaptures) {
+                pieces.push(`${env}->${capture.field} = ${this.coerce(capture.value, T_VALUE, fn)}`);
+                pieces.push(`${env}->${capture.field}_gc_root = tsc_value_gc_root(${env}->${capture.field})`);
             }
             pieces.push(`${tmp}->env = ${env}`);
         } else {
@@ -54819,8 +54892,8 @@ class Emitter {
         implName: string,
         envType: string | null,
         captures: readonly ClosureCapture[],
+        arrowLexicalCaptures: readonly ArrowLexicalCapture[],
         type: CType,
-        capturesLexicalThis: boolean,
     ): void {
         if (type.kind !== "function" || !type.ret) {
             unsupported(fn, "closure implementation needs a function type");
@@ -54848,7 +54921,7 @@ class Emitter {
         const body = new CBuf();
         body.open(signature);
         const envBindings = new Map<ts.Symbol, ClosureEnvBinding>();
-        let lexicalThisBinding: EmitResult | null = null;
+        const arrowLexicalBindings = new Map<ArrowLexicalCaptureKind, EmitResult>();
         if (envType) {
             const envLocal = this.freshTemp("_env");
             body.line(`${envType}* ${envLocal} = (${envType}*)${envParam};`);
@@ -54864,11 +54937,17 @@ class Emitter {
                     } : {}),
                 });
             }
-            if (capturesLexicalThis) {
-                lexicalThisBinding = { c: `${envLocal}->lexical_this`, ty: T_VALUE };
+            for (const capture of arrowLexicalCaptures) {
+                arrowLexicalBindings.set(capture.kind, {
+                    c: `${envLocal}->${capture.field}`,
+                    ty: T_VALUE,
+                });
             }
         } else {
             body.line(`(void)${envParam};`);
+        }
+        if (ts.isArrowFunction(fn)) {
+            this.arrowLexicalBindingsByOwner.set(fn, arrowLexicalBindings);
         }
         const argumentScope = new Map<ts.Symbol, string>();
         const argumentTypeScope = new Map<ts.Symbol, CType>();
@@ -55092,7 +55171,7 @@ class Emitter {
                 this.cellScopes.push(capturedCells);
                 const functionThisBinding = type.thisParam
                     ? { c: "__tsc_this", ty: type.thisParam }
-                    : lexicalThisBinding;
+                    : arrowLexicalBindings.get("this") ?? null;
                 if (functionThisBinding) {
                     this.functionThisStack.push(functionThisBinding);
                 }

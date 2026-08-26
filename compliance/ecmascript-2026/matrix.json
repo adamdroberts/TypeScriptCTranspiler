@@ -965,7 +965,7 @@
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary functions", "arrows and methods", "classes and private state", "generators", "async functions", "async generators"],
       "localEvidence": { "property": ["tests/property/arrow-function.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["function_closures", "generic_function_values", "classes"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/function-static-semantics.ts"] },
-      "knownGaps": ["ArrowFunction lexical arguments, super, and new.target plus remaining object metadata/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete."]
+      "knownGaps": ["ArrowFunction lexical super plus remaining object metadata/private-environment/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete."]
     },
     {
       "id": "scripts-modules",
