@@ -327,8 +327,9 @@ interface AsyncAwaitContinuationParam {
     name: string;
     type: CType;
     field: string;
+    lexical?: { readonly name: string; readonly immutable: boolean };
     cell?:
-        | { kind: "entry"; ptr: string; rootPtr: string | null }
+        | { kind: "entry"; ptr: string; rootPtr: string | null; initializedPtr: string | null }
         | { kind: "local" };
 }
 
@@ -389,18 +390,45 @@ interface CaptureCell {
     type: CType;
     cellName: string;
     rootCellName?: string;
+    /** Local lexical bindings carry their TDZ state beside the captured
+     * value so a closure can outlive the declaring CaseBlock without losing
+     * the environment record's initialization state. */
+    initializedCellName?: string;
 }
 
 interface ClosureCapture {
     symbol: ts.Symbol;
     type: CType;
     field: string;
+    lexical: { readonly name: string; readonly immutable: boolean } | null;
 }
 
 interface ClosureEnvBinding {
     type: CType;
     ptr: string;
     rootPtr?: string;
+    initializedPtr?: string;
+    lexicalName?: string;
+    immutable?: boolean;
+}
+
+interface SwitchLexicalBindingPlan {
+    readonly symbol: ts.Symbol;
+    readonly declaration: ts.VariableDeclaration;
+    readonly name: string;
+    readonly immutable: boolean;
+    readonly value: string;
+    readonly initialized: string;
+    readonly gcRoot: string;
+}
+
+interface LocalLexicalReference {
+    readonly type: CType;
+    readonly name: string;
+    readonly immutable: boolean;
+    readonly value: string;
+    readonly initialized: string;
+    readonly gcRoot: string | null;
 }
 
 interface DescriptorAccessor {
@@ -684,6 +712,10 @@ class Emitter {
     private capturedCellsCache = new WeakMap<ts.Node, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
+    /** Compile-time projection of the running CaseBlock declarative
+     * environment. Every direct lexical declaration in a switch is allocated
+     * from one source-ordered collection before any case selector executes. */
+    private switchLexicalScopes: Map<ts.Symbol, SwitchLexicalBindingPlan>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private asyncContinuationCellScopes = new WeakMap<Map<ts.Symbol, string>, Map<ts.Symbol, string>>();
     private argumentValueTypeScopes: Map<ts.Symbol, CType>[] = [];
@@ -23806,6 +23838,48 @@ class Emitter {
         return ts.isIdentifier(name) ? this.checker.getSymbolAtLocation(name) : undefined;
     }
 
+    private localLexicalMetadataForSymbol(
+        symbol: ts.Symbol | undefined,
+    ): { readonly name: string; readonly immutable: boolean; readonly declaration: ts.VariableDeclaration } | null {
+        if (!symbol) return null;
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (!declaration || !ts.isVariableDeclaration(declaration) ||
+            !ts.isIdentifier(declaration.name)) return null;
+        if (ts.isCatchClause(declaration.parent)) {
+            return {
+                name: declaration.name.text,
+                immutable: false,
+                declaration,
+            };
+        }
+        if (!ts.isVariableDeclarationList(declaration.parent) ||
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0) return null;
+        return {
+            name: declaration.name.text,
+            immutable: (declaration.parent.flags & ts.NodeFlags.Const) !== 0,
+            declaration,
+        };
+    }
+
+    private isDirectSwitchLexicalDeclaration(declaration: ts.VariableDeclaration): boolean {
+        if (!ts.isVariableDeclarationList(declaration.parent) ||
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0 ||
+            !ts.isVariableStatement(declaration.parent.parent)) return false;
+        const owner = declaration.parent.parent.parent;
+        return ts.isCaseClause(owner) || ts.isDefaultClause(owner);
+    }
+
+    private switchLexicalBindingForSymbol(
+        symbol: ts.Symbol | undefined,
+    ): SwitchLexicalBindingPlan | null {
+        if (!symbol) return null;
+        for (let index = this.switchLexicalScopes.length - 1; index >= 0; index--) {
+            const binding = this.switchLexicalScopes[index]!.get(symbol);
+            if (binding) return binding;
+        }
+        return null;
+    }
+
     private captureCellForSymbol(sym: ts.Symbol | undefined): CaptureCell | null {
         if (!sym) return null;
         for (let i = this.cellScopes.length - 1; i >= 0; i--) {
@@ -23829,9 +23903,118 @@ class Emitter {
         return null;
     }
 
+    private captureInitializationPtrForSymbol(sym: ts.Symbol): string | null {
+        const asyncCell = this.asyncContinuationCellForSymbol(sym);
+        if (asyncCell && this.localLexicalMetadataForSymbol(sym)) {
+            return `${asyncCell}.initialized_cell`;
+        }
+        const env = this.closureEnvBindingForSymbol(sym);
+        if (env?.initializedPtr) return env.initializedPtr;
+        const cell = this.captureCellForSymbol(sym);
+        if (cell?.initializedCellName) return cell.initializedCellName;
+        const binding = this.switchLexicalBindingForSymbol(sym);
+        return binding ? `&${binding.initialized}` : null;
+    }
+
+    private localLexicalReferenceForIdentifier(id: ts.Identifier): LocalLexicalReference | null {
+        const symbol = this.symbolForIdentifier(id);
+        const metadata = this.localLexicalMetadataForSymbol(symbol);
+        if (!symbol || !metadata) return null;
+
+        const env = this.closureEnvBindingForSymbol(symbol);
+        if (env?.initializedPtr) {
+            return {
+                type: env.type,
+                name: env.lexicalName ?? metadata.name,
+                immutable: env.immutable ?? metadata.immutable,
+                value: `(*${env.ptr})`,
+                initialized: `(*${env.initializedPtr})`,
+                gcRoot: env.rootPtr ? `(*${env.rootPtr})` : null,
+            };
+        }
+
+        const asyncCell = this.asyncContinuationCellForSymbol(symbol);
+        if (asyncCell) {
+            const type = this.identifierScopedType(id) ??
+                this.variableStorageType(this.prepareType(mapType(metadata.declaration, this.checker)));
+            return {
+                type,
+                name: metadata.name,
+                immutable: metadata.immutable,
+                value: `(*(${type.c}*)${asyncCell}.value_cell)`,
+                initialized: `(*${asyncCell}.initialized_cell)`,
+                gcRoot: type.kind === "value" ? `(*${asyncCell}.gc_root_cell)` : null,
+            };
+        }
+
+        const switchBinding = this.switchLexicalBindingForSymbol(symbol);
+        if (switchBinding) {
+            return {
+                type: T_VALUE,
+                name: switchBinding.name,
+                immutable: switchBinding.immutable,
+                value: switchBinding.value,
+                initialized: switchBinding.initialized,
+                gcRoot: switchBinding.gcRoot,
+            };
+        }
+
+        const cell = this.captureCellForSymbol(symbol);
+        if (cell?.initializedCellName) {
+            return {
+                type: cell.type,
+                name: metadata.name,
+                immutable: metadata.immutable,
+                value: `(*${cell.cellName})`,
+                initialized: `(*${cell.initializedCellName})`,
+                gcRoot: cell.rootCellName ? `(*${cell.rootCellName})` : null,
+            };
+        }
+        return null;
+    }
+
+    private localLexicalBindingIdentifier(
+        expression: ts.Expression,
+    ): { id: ts.Identifier; reference: LocalLexicalReference } | null {
+        const target = this.unwrapTransparentExpression(expression);
+        if (!ts.isIdentifier(target)) return null;
+        const raw = this.checker.getSymbolAtLocation(target);
+        if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
+        const reference = this.localLexicalReferenceForIdentifier(target);
+        return reference ? { id: target, reference } : null;
+    }
+
+    private localLexicalRead(reference: LocalLexicalReference): string {
+        const message = escapeCString(`Cannot access '${reference.name}' before initialization`);
+        return `({ if (!${reference.initialized}) ` +
+            `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${message}")); ` +
+            `${reference.value}; })`;
+    }
+
+    private localLexicalPut(reference: LocalLexicalReference, value: string): string {
+        const tdzMessage = escapeCString(`Cannot access '${reference.name}' before initialization`);
+        if (reference.immutable) {
+            return `({ if (!${reference.initialized}) ` +
+                `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${tdzMessage}")); ` +
+                `(void)(${value}); ` +
+                `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding")); ` +
+                `${this.zeroValue(reference.type)}; })`;
+        }
+        const refresh = reference.gcRoot
+            ? `${reference.gcRoot} = tsc_value_gc_root(${reference.value}); `
+            : "";
+        return `({ if (!${reference.initialized}) ` +
+            `tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("${tdzMessage}")); ` +
+            `${reference.value} = ${value}; ${refresh}${reference.value}; })`;
+    }
+
     private capturePtrForSymbol(sym: ts.Symbol): string | null {
         const asyncCell = this.asyncContinuationCellForSymbol(sym);
-        if (asyncCell) return `((${this.prepareType(mapType(sym.valueDeclaration ?? sym.declarations?.[0]!, this.checker)).c}*)${asyncCell}.value_cell)`;
+        if (asyncCell) {
+            const type = this.scopedTypeForSymbol(sym) ??
+                this.prepareType(mapType(sym.valueDeclaration ?? sym.declarations?.[0]!, this.checker));
+            return `((${type.c}*)${asyncCell}.value_cell)`;
+        }
         const env = this.closureEnvBindingForSymbol(sym);
         if (env) return env.ptr;
         const cell = this.captureCellForSymbol(sym);
@@ -23928,6 +24111,8 @@ class Emitter {
         const moduleLexical = this.moduleLexicalBindingForIdentifier(id);
         if (moduleLexical) return this.moduleLexicalRead(moduleLexical);
         const sym = this.symbolForIdentifier(id);
+        const localLexical = this.localLexicalReferenceForIdentifier(id);
+        if (localLexical) return this.localLexicalRead(localLexical);
         if (sym) {
             const currentScope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
             const currentValue = currentScope?.get(sym);
@@ -23966,7 +24151,8 @@ class Emitter {
             if (param.cell.kind !== "entry") {
                 throw new Error(`async continuation cell ${param.field} has no entry pointer`);
             }
-            return `(tsc_async_cell_ref_t){ (void*)${param.cell.ptr}, ${param.cell.rootPtr ?? "NULL"} }`;
+            return `(tsc_async_cell_ref_t){ (void*)${param.cell.ptr}, ` +
+                `${param.cell.rootPtr ?? "NULL"}, ${param.cell.initializedPtr ?? "NULL"} }`;
         }
         const root = this.asyncAwaitPreludeDynamicRoots.get(param.symbol);
         if (root) return `({ (void)${root}; ${param.name}; })`;
@@ -24007,7 +24193,10 @@ class Emitter {
 
     private identifierScopedType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
-        if (!sym) return null;
+        return sym ? this.scopedTypeForSymbol(sym) : null;
+    }
+
+    private scopedTypeForSymbol(sym: ts.Symbol): CType | null {
         const cell = this.captureCellForSymbol(sym);
         if (cell) return cell.type;
         const closureBinding = this.closureEnvBindingForSymbol(sym);
@@ -24349,7 +24538,13 @@ class Emitter {
         while (worklist.length > 0) {
             const current = worklist.pop()!;
             if (ts.isFunctionDeclaration(current)) {
-                if (current.name && this.test262AnnexBFunctionHasCandidateParent(current)) {
+                /* Annex B.3.2 only synthesizes the var-style companion for
+                 * ordinary FunctionDeclarations. Async/generator forms remain
+                 * lexical declarations of the CaseBlock. */
+                if (current.name &&
+                    !current.asteriskToken &&
+                    !this.isAsyncDeclaration(current) &&
+                    this.test262AnnexBFunctionHasCandidateParent(current)) {
                     out.push(current);
                 }
                 continue;
@@ -25473,6 +25668,7 @@ class Emitter {
                         type: cap.type,
                         cellName,
                         ...(cap.type.kind === "value" ? { rootCellName: `${cellName}__gc_root` } : {}),
+                        ...(cap.lexical ? { initializedCellName: `${cellName}__initialized` } : {}),
                     });
                 }
                 return;
@@ -25599,6 +25795,7 @@ class Emitter {
                 if (
                     sym &&
                     decl &&
+                    !this.test262ScriptGlobalBindingName(node) &&
                     !this.isNodeWithin(decl, fn) &&
                     (!this.isTopLevelValueDeclaration(decl) ||
                         (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
@@ -25611,11 +25808,25 @@ class Emitter {
                             this.checker,
                         ),
                     );
-                    const type = ts.isVariableDeclaration(decl)
-                        ? this.variableDeclarationStorageType(decl, declaredType)
-                        : declaredType;
+                    const lexical = this.localLexicalMetadataForSymbol(sym);
+                    /* A CaseBlock Environment Record is a runtime language
+                     * environment. Keep each direct lexical binding in the
+                     * canonical value representation so checker narrowing
+                     * cannot change its storage or closure-capture ABI. */
+                    const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+                        ? T_VALUE
+                        : ts.isVariableDeclaration(decl)
+                            ? this.variableDeclarationStorageType(decl, declaredType)
+                            : declaredType;
                     const field = `${mangleIdent(node.text)}_${captures.size}`;
-                    captures.set(sym, { symbol: sym, type, field });
+                    captures.set(sym, {
+                        symbol: sym,
+                        type,
+                        field,
+                        lexical: lexical
+                            ? { name: lexical.name, immutable: lexical.immutable }
+                            : null,
+                    });
                 }
             }
             ts.forEachChild(node, visit);
@@ -28764,13 +28975,22 @@ class Emitter {
         }
     }
 
-    private emitCaptureCellInitialization(buf: CBuf, cell: CaptureCell, value: string): void {
+    private emitCaptureCellInitialization(
+        buf: CBuf,
+        cell: CaptureCell,
+        value: string,
+        initialized = true,
+    ): void {
         const qualifier = cell.type.kind === "value" ? "volatile " : "";
         buf.line(`${qualifier}${cell.type.c}* ${cell.cellName} = (${qualifier}${cell.type.c}*)TSC_GC_MALLOC(sizeof(${cell.type.c}));`);
         buf.line(`*${cell.cellName} = ${value};`);
         if (cell.rootCellName) {
             buf.line(`void** ${cell.rootCellName} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
             buf.line(`*${cell.rootCellName} = tsc_value_gc_root(*${cell.cellName});`);
+        }
+        if (cell.initializedCellName) {
+            buf.line(`bool* ${cell.initializedCellName} = (bool*)TSC_GC_MALLOC(sizeof(bool));`);
+            buf.line(`*${cell.initializedCellName} = ${initialized ? "true" : "false"};`);
         }
     }
 
@@ -29013,8 +29233,11 @@ class Emitter {
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(declaration, symbol)) return false;
-            const type = cell?.type ??
-                this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+            const lexical = this.localLexicalMetadataForSymbol(symbol);
+            const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+                ? T_VALUE
+                : cell?.type ??
+                    this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
             if (type.kind === "void" &&
                 !symbolHasUseOutsideDeclaration(symbol, declaration.name)) {
                 seenSymbols.add(symbol);
@@ -29027,7 +29250,10 @@ class Emitter {
                 name: this.identifierName(declaration.name),
                 type,
                 field: `cfg_local_${localParams.length}`,
-                ...(cell ? { cell: { kind: "local" as const } } : {}),
+                ...(cell || lexical ? { cell: { kind: "local" as const } } : {}),
+                ...(lexical ? {
+                    lexical: { name: lexical.name, immutable: lexical.immutable },
+                } : {}),
             });
         }
         for (const identifier of graph.bindingIdentifiers) {
@@ -29036,8 +29262,11 @@ class Emitter {
             if (seenSymbols.has(symbol)) continue;
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(identifier, symbol)) return false;
-            const type = cell?.type ??
-                this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
+            const lexical = this.localLexicalMetadataForSymbol(symbol);
+            const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+                ? T_VALUE
+                : cell?.type ??
+                    this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
             if (type.kind === "void" || type.kind === "never" ||
                 !this.isAsyncAwaitPreludeCaptureType(type)) return false;
             seenSymbols.add(symbol);
@@ -29046,7 +29275,10 @@ class Emitter {
                 name: this.identifierName(identifier),
                 type,
                 field: `cfg_local_${localParams.length}`,
-                ...(cell ? { cell: { kind: "local" as const } } : {}),
+                ...(cell || lexical ? { cell: { kind: "local" as const } } : {}),
+                ...(lexical ? {
+                    lexical: { name: lexical.name, immutable: lexical.immutable },
+                } : {}),
             });
         }
         const fields = [...params, ...localParams];
@@ -29490,11 +29722,15 @@ class Emitter {
         const scope = new Map<ts.Symbol, string>();
         for (const field of fields) scope.set(field.symbol, this.asyncAwaitContinuationParamRead(field, "state", scope));
         this.argumentValueScopes.push(scope);
+        this.argumentValueTypeScopes.push(new Map(
+            fields.map((field) => [field.symbol, field.type] as const),
+        ));
         const emitCfgCellAllocation = (
             target: CBuf,
             field: AsyncAwaitContinuationParam,
             env = "state",
             initialValue?: string,
+            initiallyInitialized = "false",
         ): void => {
             if (!field.cell) return;
             const valueCell = this.freshTemp("_async_cfg_cell");
@@ -29507,7 +29743,17 @@ class Emitter {
                 target.line(`*${dynamicRootCell} = tsc_value_gc_root(*${valueCell});`);
                 rootCell = dynamicRootCell;
             }
-            target.line(`${env}->${field.field} = (tsc_async_cell_ref_t){ (void*)${valueCell}, ${rootCell} };`);
+            let initializedCell = "NULL";
+            if (field.lexical) {
+                const dynamicInitializedCell = this.freshTemp("_async_cfg_initialized_cell");
+                target.line(`bool* const ${dynamicInitializedCell} = (bool*)TSC_GC_MALLOC(sizeof(bool));`);
+                target.line(`*${dynamicInitializedCell} = ${initiallyInitialized};`);
+                initializedCell = dynamicInitializedCell;
+            }
+            target.line(
+                `${env}->${field.field} = (tsc_async_cell_ref_t){ ` +
+                `(void*)${valueCell}, ${rootCell}, ${initializedCell} };`,
+            );
         };
         const cfgFieldValue = (
             field: AsyncAwaitContinuationParam,
@@ -29521,8 +29767,45 @@ class Emitter {
             value: EmitResult,
             node: ts.Node,
             env = "state",
+            initializeLexical = false,
         ): void => {
             const lvalue = cfgFieldValue(field, env);
+            if (field.lexical) {
+                const staged = this.freshTemp("_async_cfg_lexical_value");
+                target.line(
+                    `${field.type.c} const ${staged} = ` +
+                    `${this.coerce(value, field.type, node)};`,
+                );
+                if (!initializeLexical) {
+                    const tdzMessage = escapeCString(
+                        `Cannot access '${field.lexical.name}' before initialization`,
+                    );
+                    target.line(
+                        `if (!*${env}->${field.field}.initialized_cell) ` +
+                        `tsc_throw_error(TSC_ERROR_REFERENCE, ` +
+                        `tsc_str_from_cstr("${tdzMessage}"));`,
+                    );
+                    if (field.lexical.immutable) {
+                        target.line(`(void)${staged};`);
+                        target.line(
+                            `tsc_throw_error(TSC_ERROR_TYPE, ` +
+                            `tsc_str_from_cstr("assignment to immutable lexical binding"));`,
+                        );
+                        return;
+                    }
+                }
+                target.line(`${lvalue} = ${staged};`);
+                if (field.type.kind === "value") {
+                    target.line(
+                        `*${env}->${field.field}.gc_root_cell = ` +
+                        `tsc_value_gc_root(${lvalue});`,
+                    );
+                }
+                if (initializeLexical) {
+                    target.line(`*${env}->${field.field}.initialized_cell = true;`);
+                }
+                return;
+            }
             target.line(`${lvalue} = ${this.coerce(value, field.type, node)};`);
             if (field.type.kind !== "value") return;
             if (field.cell) {
@@ -29530,6 +29813,13 @@ class Emitter {
             } else {
                 target.line(`${env}->${field.field}_gc_root = tsc_value_gc_root(${lvalue});`);
             }
+        };
+        const cfgAssignmentInitializesLexical = (identifier: ts.Identifier): boolean => {
+            const declaration = identifier.parent;
+            return ts.isVariableDeclaration(declaration) &&
+                declaration.name === identifier &&
+                ts.isVariableDeclarationList(declaration.parent) &&
+                (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0;
         };
         const emitFreshCfgBindingCells = (
             binding: ts.BindingName,
@@ -29552,7 +29842,15 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(binding);
                 const field = symbol ? fieldBySymbol.get(symbol) : undefined;
                 if (field?.cell) {
-                    emitCfgCellAllocation(callback, field, "state", cfgFieldValue(field));
+                    emitCfgCellAllocation(
+                        callback,
+                        field,
+                        "state",
+                        cfgFieldValue(field),
+                        field.lexical
+                            ? `*state->${field.field}.initialized_cell`
+                            : "false",
+                    );
                 }
                 return;
             }
@@ -29660,6 +29958,7 @@ class Emitter {
                     readonly receiver: EmitResult;
                     readonly index: EmitResult | null;
                 }> = new Map(),
+                initializeLexical = false,
             ): void => {
                 const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
                     const assignmentTarget = assignmentTargets.get(identifier);
@@ -29775,7 +30074,14 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(identifier);
                     const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                     if (!local) unsupported(identifier, `${label} binding is missing CFG storage`);
-                    emitCfgFieldAssignment(callback, local, value, identifier);
+                    emitCfgFieldAssignment(
+                        callback,
+                        local,
+                        value,
+                        identifier,
+                        "state",
+                        initializeLexical,
+                    );
                 };
                 if (ts.isIdentifier(binding)) {
                     assignIdentifier(binding, source);
@@ -29908,13 +30214,22 @@ class Emitter {
                             if (!local) return false;
                             if (declaration.initializer) {
                                 const initializer = this.emitExpr(declaration.initializer);
-                                emitCfgFieldAssignment(callback, local, initializer, declaration.initializer);
+                                emitCfgFieldAssignment(
+                                    callback,
+                                    local,
+                                    initializer,
+                                    declaration.initializer,
+                                    "state",
+                                    (stateNode.statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0,
+                                );
                             } else if ((stateNode.statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) {
                                 emitCfgFieldAssignment(
                                     callback,
                                     local,
                                     { c: this.zeroValue(local.type), ty: local.type },
                                     declaration,
+                                    "state",
+                                    true,
                                 );
                             }
                         }
@@ -29996,6 +30311,9 @@ class Emitter {
                             { c: element, ty: plan.elementType },
                             ts.isForInStatement(plan.statement) ? "for-in" : "for-of",
                             plan.assignmentTargets,
+                            new Map(),
+                            ts.isVariableDeclarationList(plan.statement.initializer) &&
+                                (plan.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0,
                         );
                     } else {
                         emitBindingValueAssignment(
@@ -30061,6 +30379,9 @@ class Emitter {
                             { c: item, ty: T_VALUE },
                             "async iterator",
                             stateNode.assignmentTargets,
+                            new Map(),
+                            ts.isVariableDeclarationList(stateNode.statement.initializer) &&
+                                (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0,
                         );
                     } else {
                         emitBindingValueAssignment(
@@ -30354,7 +30675,14 @@ class Emitter {
                         if (awaitedType.kind !== "void") {
                             if (!local) return false;
                             const fulfilled = awaitFulfilledValue(promiseType);
-                            emitCfgFieldAssignment(callback, local, fulfilled, stateNode.awaitExpr);
+                            emitCfgFieldAssignment(
+                                callback,
+                                local,
+                                fulfilled,
+                                stateNode.awaitExpr,
+                                "state",
+                                cfgAssignmentInitializesLexical(stateNode.assignment),
+                            );
                         }
                     }
                     callback.line("state->awaiting = false;");
@@ -30496,7 +30824,14 @@ class Emitter {
                         const symbol = this.symbolForIdentifier(stateNode.assignment);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local) return false;
-                        emitCfgFieldAssignment(callback, local, result, stateNode.expression);
+                        emitCfgFieldAssignment(
+                            callback,
+                            local,
+                            result,
+                            stateNode.expression,
+                            "state",
+                            cfgAssignmentInitializesLexical(stateNode.assignment),
+                        );
                         emitTransition(stateNode.next.id);
                     } else if (stateNode.completion?.kind === "return") {
                         result = normalizeCfgReturn(result, stateNode.expression);
@@ -30535,6 +30870,9 @@ class Emitter {
                             stateNode.binding,
                             { c: "state->exception_value", ty: T_VALUE },
                             "catch",
+                            new Map(),
+                            new Map(),
+                            true,
                         );
                     }
                     callback.line("state->exception_value = tsc_value_undefined();");
@@ -30549,6 +30887,9 @@ class Emitter {
                         stateNode.binding,
                         { c: `state->expression_result_${stateNode.resultSlot}`, ty: storageType },
                         "declaration",
+                        new Map(),
+                        new Map(),
+                        true,
                     );
                     callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.zeroValue(storageType)};`);
                     if (storageType.kind === "value") {
@@ -30705,6 +31046,7 @@ class Emitter {
                             operation.assignmentTarget ? "iterator assignment" : "declaration",
                             assignmentTargets,
                             preparedAssignmentTargets,
+                            !operation.assignmentTarget,
                         );
                         for (const staged of preparedSlots) {
                             if (!releaseBindingStagedValue(staged)) return false;
@@ -30836,6 +31178,7 @@ class Emitter {
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
+            this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
         }
         callback.close();
@@ -31000,6 +31343,7 @@ class Emitter {
                         kind: "entry",
                         ptr: cell.cellName,
                         rootPtr: cell.rootCellName ?? null,
+                        initializedPtr: cell.initializedCellName ?? null,
                     },
                 } : {}),
             });
@@ -31022,7 +31366,14 @@ class Emitter {
                 kind: "entry",
                 ptr: env.ptr,
                 rootPtr: env.rootPtr ?? null,
+                initializedPtr: env.initializedPtr ?? null,
             },
+            ...(env.initializedPtr ? {
+                lexical: {
+                    name: env.lexicalName ?? symbol.getName(),
+                    immutable: env.immutable ?? false,
+                },
+            } : {}),
         };
     }
 
@@ -42168,6 +42519,23 @@ class Emitter {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
+            if (ts.isIdentifier(d.name)) {
+                const switchBinding = this.switchLexicalBindingForSymbol(
+                    this.symbolForIdentifier(d.name),
+                );
+                if (switchBinding) {
+                    const value = d.initializer
+                        ? this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer)
+                        : "tsc_value_undefined()";
+                    buf.line(`${switchBinding.value} = ${value};`);
+                    buf.line(
+                        `${switchBinding.gcRoot} = ` +
+                        `tsc_value_gc_root(${switchBinding.value});`,
+                    );
+                    buf.line(`${switchBinding.initialized} = true;`);
+                    continue;
+                }
+            }
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
                     this.emitLocalCommonJsModuleDestructuring(buf, d, isConst);
@@ -47118,9 +47486,45 @@ class Emitter {
         return true;
     }
 
+    private directSwitchLexicalVariableDeclarations(
+        sw: ts.SwitchStatement,
+    ): ts.VariableDeclaration[] {
+        const declarations: ts.VariableDeclaration[] = [];
+        for (const clause of sw.caseBlock.clauses) {
+            for (const statement of clause.statements) {
+                if (!ts.isVariableStatement(statement) ||
+                    (statement.declarationList.flags & ts.NodeFlags.BlockScoped) === 0) continue;
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name)) {
+                        unsupported(
+                            declaration.name,
+                            "direct switch lexical binding patterns require canonical binding initialization",
+                        );
+                    }
+                    declarations.push(declaration);
+                }
+            }
+        }
+        return declarations;
+    }
+
+    private switchHasDirectLexicalDeclarations(sw: ts.SwitchStatement): boolean {
+        return sw.caseBlock.clauses.some((clause) => clause.statements.some((statement) =>
+            ts.isFunctionDeclaration(statement) ||
+            ts.isClassDeclaration(statement) ||
+            ts.isVariableStatement(statement) &&
+                (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0));
+    }
+
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
         this.assertExhaustiveSwitch(sw);
-        const selected = this.staticSwitchSelectedStatements(sw);
+        const scriptCompletion = this.isTest262ScriptEvaluationNode(sw)
+            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
+            : undefined;
+        const hasLexicalDeclarations = this.switchHasDirectLexicalDeclarations(sw);
+        const selected = !hasLexicalDeclarations && !scriptCompletion
+            ? this.staticSwitchSelectedStatements(sw)
+            : null;
         if (selected) {
             if (selected.statements) {
                 for (const s of selected.statements) {
@@ -47132,15 +47536,74 @@ class Emitter {
         }
         const disc = this.emitExpr(sw.expression);
         const dv = this.freshTemp("_sw");
+        const dvRoot = this.freshTemp("_sw_gc_root");
         const start = this.freshTemp("_switch_start");
         const endLabel = this.freshTemp("_switch_end");
         buf.open("");
         buf.line(`${T_VALUE.c} ${dv} = ${this.coerce(disc, T_VALUE, sw.expression)};`);
+        buf.line(`void* volatile ${dvRoot} = tsc_value_gc_root(${dv});`);
+        buf.line(`(void)${dvRoot};`);
+        if (scriptCompletion) {
+            /* Switch Evaluation applies UpdateEmpty(..., undefined), so an
+             * empty/unmatched switch replaces an earlier Script value. */
+            buf.line(`${scriptCompletion.value} = tsc_value_undefined();`);
+            buf.line(`${scriptCompletion.gcRoot} = NULL;`);
+        }
+
+        const lexicalScope = new Map<ts.Symbol, SwitchLexicalBindingPlan>();
+        for (const declaration of this.directSwitchLexicalVariableDeclarations(sw)) {
+            const symbol = this.symbolForIdentifier(declaration.name as ts.Identifier);
+            if (!symbol) unsupported(declaration.name, "unresolved direct switch lexical binding");
+            if (lexicalScope.has(symbol)) continue;
+            const metadata = this.localLexicalMetadataForSymbol(symbol);
+            if (!metadata) unsupported(declaration, "invalid direct switch lexical binding metadata");
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (cell) {
+                if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
+                    unsupported(
+                        declaration,
+                        "captured direct switch lexical binding requires a canonical value/TDZ cell",
+                    );
+                }
+                this.emitCaptureCellInitialization(
+                    buf,
+                    cell,
+                    "tsc_value_undefined()",
+                    false,
+                );
+                lexicalScope.set(symbol, {
+                    symbol,
+                    declaration,
+                    name: metadata.name,
+                    immutable: metadata.immutable,
+                    value: `(*${cell.cellName})`,
+                    initialized: `(*${cell.initializedCellName})`,
+                    gcRoot: `(*${cell.rootCellName})`,
+                });
+                continue;
+            }
+            const value = this.freshTemp(`_switch_lex_${metadata.name}`);
+            const initialized = this.freshTemp(`_switch_lex_${metadata.name}_initialized`);
+            const gcRoot = this.freshTemp(`_switch_lex_${metadata.name}_gc_root`);
+            buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
+            buf.line(`bool ${initialized} = false;`);
+            buf.line(`void* volatile ${gcRoot} = NULL;`);
+            lexicalScope.set(symbol, {
+                symbol,
+                declaration,
+                name: metadata.name,
+                immutable: metadata.immutable,
+                value,
+                initialized,
+                gcRoot,
+            });
+        }
         buf.line(`int ${start} = -1;`);
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
             return this.switchStrictEqualityCondition(dv, caseVal, caseExpr);
         };
+        this.switchLexicalScopes.push(lexicalScope);
         this.activeBreakTargets.push(endLabel);
         try {
             for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
@@ -47170,6 +47633,8 @@ class Emitter {
             }
         } finally {
             this.activeBreakTargets.pop();
+            const popped = this.switchLexicalScopes.pop();
+            if (popped !== lexicalScope) throw new Error("switch lexical scope stack corruption");
         }
         buf.line(`${endLabel}:;`);
         buf.close();
@@ -47812,6 +48277,10 @@ class Emitter {
             if (moduleLexical) {
                 return { c: this.moduleLexicalRead(moduleLexical), ty: T_VALUE };
             }
+            const localLexical = this.localLexicalReferenceForIdentifier(expr);
+            if (localLexical) {
+                return { c: this.localLexicalRead(localLexical), ty: localLexical.type };
+            }
             if (this.decoratedClassConstructorAliasIdentifier(expr)) {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
@@ -48058,10 +48527,13 @@ class Emitter {
         const moduleLexical = ts.isIdentifier(to.expression)
             ? this.moduleLexicalBindingForIdentifier(to.expression)
             : null;
+        const localLexical = ts.isIdentifier(to.expression)
+            ? this.localLexicalReferenceForIdentifier(to.expression)
+            : null;
         const scriptGlobal = ts.isIdentifier(to.expression)
             ? this.test262ScriptGlobalBindingName(to.expression)
             : null;
-        const staticResult = moduleLexical || scriptGlobal
+        const staticResult = moduleLexical || localLexical || scriptGlobal
             ? null
             : this.sideEffectFreeTypeofString(to.expression, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
@@ -48543,6 +49015,74 @@ class Emitter {
             null;
     }
 
+    private emitLocalLexicalUpdate(
+        operand: ts.Expression,
+        op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
+        prefix: boolean,
+    ): EmitResult | null {
+        const local = this.localLexicalBindingIdentifier(operand);
+        if (!local) return null;
+        const current = this.emitExpr(local.id);
+        const numeric = this.freshTemp("_local_lexical_update_numeric");
+        const next = this.freshTemp("_local_lexical_update_next");
+        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        const stored = this.coerce({ c: next, ty: T_VALUE }, local.reference.type, local.id);
+        return {
+            c: `({ tsc_value_t ${numeric} = tsc_value_to_numeric(` +
+                `${this.coerce(current, T_VALUE, local.id)}); ` +
+                `tsc_value_t ${next} = ${operation}(${numeric}); ` +
+                `${this.localLexicalPut(local.reference, stored)}; ${prefix ? next : numeric}; })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private emitLocalLexicalAssignment(
+        bin: ts.BinaryExpression,
+        op: ts.SyntaxKind,
+    ): EmitResult | null {
+        const local = this.localLexicalBindingIdentifier(bin.left);
+        if (!local) return null;
+        const rhs = this.emitExpr(bin.right);
+        if (op === ts.SyntaxKind.EqualsToken) {
+            return this.emitSequencedExpr(local.reference.type, [
+                { value: rhs, target: local.reference.type, node: bin.right },
+            ], ([value]) => this.localLexicalPut(local.reference, value));
+        }
+
+        const current = this.emitExpr(local.id);
+        if (this.isLogicalAssignmentOperator(op)) {
+            const slot = this.freshTemp("_local_lexical_logical_current");
+            const currentValue: EmitResult = { c: slot, ty: local.reference.type };
+            const assign = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                ? this.truthyC(currentValue, local.id)
+                : op === ts.SyntaxKind.BarBarEqualsToken
+                    ? `!(${this.truthyC(currentValue, local.id)})`
+                    : this.nullishExprFromEmitResult(currentValue, local.id);
+            const rhsValue = this.coerce(rhs, local.reference.type, bin.right);
+            return {
+                c: `({ ${local.reference.type.c} ${slot} = ${current.c}; ` +
+                    `${assign} ? ${this.localLexicalPut(local.reference, rhsValue)} : ${slot}; })`,
+                ty: local.reference.type,
+            };
+        }
+
+        const operation = this.dynamicCompoundAssignmentOperation(op);
+        if (!operation) unsupported(bin, `unsupported local lexical assignment ${ts.SyntaxKind[op]}`);
+        return this.emitSequencedExpr(local.reference.type, [
+            { value: current, target: T_VALUE, node: local.id },
+            { value: rhs, target: T_VALUE, node: bin.right },
+        ], ([left, right]) => {
+            const next = this.freshTemp("_local_lexical_compound_next");
+            const stored = this.coerce(
+                { c: next, ty: T_VALUE },
+                local.reference.type,
+                bin,
+            );
+            return `({ tsc_value_t ${next} = ${operation}(${left}, ${right}); ` +
+                `${this.localLexicalPut(local.reference, stored)}; })`;
+        });
+    }
+
     private moduleLexicalPut(binding: ModuleLexicalBindingPlan, value: string): string {
         const tdzMessage = escapeCString(`Cannot access '${binding.name.text}' before initialization`);
         if (binding.immutable) {
@@ -48685,6 +49225,8 @@ class Emitter {
         if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
             const importUpdate = this.emitImmutableImportUpdate(pu.operand, op);
             if (importUpdate) return importUpdate;
+            const localLexicalUpdate = this.emitLocalLexicalUpdate(pu.operand, op, true);
+            if (localLexicalUpdate) return localLexicalUpdate;
             const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, op, true);
             if (moduleLexicalUpdate) return moduleLexicalUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(pu.operand, op, true);
@@ -48868,6 +49410,8 @@ class Emitter {
         if (pu.operator === ts.SyntaxKind.PlusPlusToken || pu.operator === ts.SyntaxKind.MinusMinusToken) {
             const importUpdate = this.emitImmutableImportUpdate(pu.operand, pu.operator);
             if (importUpdate) return importUpdate;
+            const localLexicalUpdate = this.emitLocalLexicalUpdate(pu.operand, pu.operator, false);
+            if (localLexicalUpdate) return localLexicalUpdate;
             const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, pu.operator, false);
             if (moduleLexicalUpdate) return moduleLexicalUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(
@@ -50017,6 +50561,9 @@ class Emitter {
     ): EmitResult {
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
         if (immutableImportAssignment) return immutableImportAssignment;
+
+        const localLexicalAssignment = this.emitLocalLexicalAssignment(bin, op);
+        if (localLexicalAssignment) return localLexicalAssignment;
 
         const moduleLexicalAssignment = this.emitModuleLexicalAssignment(bin, op);
         if (moduleLexicalAssignment) return moduleLexicalAssignment;
@@ -53238,6 +53785,7 @@ class Emitter {
             for (const cap of captures) {
                 this.structDecls.line(`${cap.type.kind === "value" ? "volatile " : ""}${cap.type.c}* ${cap.field};`);
                 if (cap.type.kind === "value") this.structDecls.line(`void** ${cap.field}_gc_root;`);
+                if (cap.lexical) this.structDecls.line(`bool* ${cap.field}_initialized;`);
             }
             this.structDecls.close(` ${envType};`);
         }
@@ -53276,6 +53824,13 @@ class Emitter {
                     const rootPtr = dynamicRootPtr ?? this.captureRootPtrForSymbol(cap.symbol);
                     if (!rootPtr) unsupported(fn, `cannot root dynamic capture ${cap.symbol.getName()}`);
                     pieces.push(`${env}->${cap.field}_gc_root = ${rootPtr}`);
+                }
+                if (cap.lexical) {
+                    const initializedPtr = this.captureInitializationPtrForSymbol(cap.symbol);
+                    if (!initializedPtr) {
+                        unsupported(fn, `cannot capture lexical initialization state for ${cap.symbol.getName()}`);
+                    }
+                    pieces.push(`${env}->${cap.field}_initialized = ${initializedPtr}`);
                 }
             }
             pieces.push(`${tmp}->env = ${env}`);
@@ -53326,6 +53881,11 @@ class Emitter {
                     type: cap.type,
                     ptr: `${envLocal}->${cap.field}`,
                     ...(cap.type.kind === "value" ? { rootPtr: `${envLocal}->${cap.field}_gc_root` } : {}),
+                    ...(cap.lexical ? {
+                        initializedPtr: `${envLocal}->${cap.field}_initialized`,
+                        lexicalName: cap.lexical.name,
+                        immutable: cap.lexical.immutable,
+                    } : {}),
                 });
             }
         } else {

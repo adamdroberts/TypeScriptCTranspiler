@@ -38,6 +38,11 @@ export interface SwitchClauseWorklistWidthSpec {
     width: number;
 }
 
+export interface SwitchCaseBlockEnvironmentDepthSpec {
+    generator: "switch-caseblock-environment-depth";
+    depth: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -46,7 +51,8 @@ export type GeneratedCaseSpec =
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
-    | SwitchClauseWorklistWidthSpec;
+    | SwitchClauseWorklistWidthSpec
+    | SwitchCaseBlockEnvironmentDepthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -137,6 +143,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             width,
+        };
+    }
+    if (spec.generator === "switch-caseblock-environment-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
         };
     }
     throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
@@ -387,6 +403,35 @@ function switchClauseWorklistWidthSource(width: number): string {
     ].join("\n");
 }
 
+function switchCaseBlockEnvironmentDepthSource(depth: number): string {
+    const lines = [
+        "function verifyCaseBlockEnvironments(): boolean {",
+        "    let valid = true;",
+        `    let ${Array.from({ length: depth }, (_, index) => `selector_${index}: (() => number) | undefined`).join(", ")};`,
+    ];
+    for (let index = 0; index < depth; index++) {
+        lines.push(
+            `${"    ".repeat(index + 1)}switch (0 as any) {`,
+            `${"    ".repeat(index + 2)}case (selector_${index} = function() { return binding_${index}; }, 0):`,
+            `${"    ".repeat(index + 3)}let binding_${index} = ${index};`,
+        );
+    }
+    for (let index = depth - 1; index >= 0; index--) {
+        lines.push(
+            `${"    ".repeat(index + 3)}if (!selector_${index} || selector_${index}() !== binding_${index}) valid = false;`,
+            `${"    ".repeat(index + 3)}break;`,
+            `${"    ".repeat(index + 1)}}`,
+        );
+    }
+    lines.push(
+        "    return valid;",
+        "}",
+        'console.log("switch CaseBlock environment:", verifyCaseBlockEnvironments());',
+        "",
+    );
+    return lines.join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -406,5 +451,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return stringCodeUnitListWidthSource(spec.width);
         case "switch-clause-worklist-width":
             return switchClauseWorklistWidthSource(spec.width);
+        case "switch-caseblock-environment-depth":
+            return switchCaseBlockEnvironmentDepthSource(spec.depth);
     }
 }

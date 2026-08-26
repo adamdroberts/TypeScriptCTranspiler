@@ -83,6 +83,59 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     expect(nonFiniteIndirect.error).toBeNull();
 });
 
+test("switch direct eval eligibility is proved from the complete source worklist", () => {
+    const globalVarOnly = [
+        "var switchEvalNumber = 1;",
+        'var switchEvalString = "value";',
+        "var switchEvalUninitialized;",
+    ].join("\n");
+    const admitted = finiteEvalScriptSourceGraph([{
+        path: "switch-eval.js",
+        source: `switch ((eval(${JSON.stringify(globalVarOnly)}), 0)) { case 0: break; }`,
+    }]);
+    expect(admitted.error).toBeNull();
+    expect(admitted.directEvalSources).toEqual([{
+        source: globalVarOnly,
+        strictCaller: false,
+        strict: false,
+    }]);
+
+    const strictDiscriminator = finiteEvalScriptSourceGraph([{
+        path: "strict-switch-discriminator-eval.js",
+        source: `
+            "use strict";
+            switch ((eval("var discriminatorLocal = 1;"), 0)) {
+                case 0: let laterLexical = 1;
+            }
+        `,
+    }]);
+    expect(strictDiscriminator.error).toBeNull();
+    expect(strictDiscriminator.directEvalSources).toEqual([{
+        source: "var discriminatorLocal = 1;",
+        strictCaller: true,
+        strict: true,
+    }]);
+
+    const lexicalDependency = finiteEvalScriptSourceGraph([{
+        path: "switch-lexical-eval.js",
+        source: `
+            switch (0) {
+                case (eval("var observed = lexical;"), 0):
+                    let lexical = 1;
+            }
+        `,
+    }]);
+    expect(lexicalDependency.error).toBeNull();
+    expect(lexicalDependency.directEvalSources).toEqual([]);
+
+    const strictCaller = finiteEvalScriptSourceGraph([{
+        path: "strict-switch-eval.js",
+        source: `"use strict"; switch (0) { case (eval("var isolated = 1;"), 0): break; }`,
+    }]);
+    expect(strictCaller.error).toBeNull();
+    expect(strictCaller.directEvalSources).toEqual([]);
+});
+
 test("finite AOT evalScript records parse and evaluate on every call", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-test262-eval-script-property-"));
     const main = path.join(temporary, "main.js");
@@ -216,6 +269,28 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         try { 40; } finally { 41; }
     `;
     const completionStressSource = `${"{".repeat(128)}sentinel;${"}".repeat(128)}`;
+    const completionSwitchEmptySource = "sentinel; switch (0) {}";
+    const completionSwitchUnmatchedSource = "sentinel; switch (0) { case 1: 2; }";
+    const completionSwitchMatchedEmptySource = "sentinel; switch (0) { case 0: break; }";
+    const completionSwitchFallthroughSource = "switch (0) { case 0: 50; case 1: ; break; }";
+    const completionSwitchDefaultMiddleSource = `
+        switch (2) { case 0: 51; default: 52; case 2: 60; break; }
+    `;
+    const completionSwitchDefaultFallthroughSource = `
+        switch (9) { case 0: 53; default: 61; case 2: 62; }
+    `;
+    const completionSwitchNestedEmptySource = `
+        70; switch (0) { case 0: 71; switch (1) {} break; }
+    `;
+    const completionSwitchIdentitySource = `
+        switch (0) { case 0: sentinel; break; }
+    `;
+    const completionSwitchLabelledBreakSource = `
+        completionLabel: switch (0) { case 0: 80; break completionLabel; }
+    `;
+    const completionSwitchAbruptSource = `
+        switch (0) { case (function() { throw sentinel; })(): 81; }
+    `;
     const bindingPatternSource = `
         let {
             first: lexicalPatternFirst,
@@ -276,6 +351,16 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ["completion-catch-value.js", completionCatchValueSource],
         ["completion-finally.js", completionFinallySource],
         ["completion-stress.js", completionStressSource],
+        ["completion-switch-empty.js", completionSwitchEmptySource],
+        ["completion-switch-unmatched.js", completionSwitchUnmatchedSource],
+        ["completion-switch-matched-empty.js", completionSwitchMatchedEmptySource],
+        ["completion-switch-fallthrough.js", completionSwitchFallthroughSource],
+        ["completion-switch-default-middle.js", completionSwitchDefaultMiddleSource],
+        ["completion-switch-default-fallthrough.js", completionSwitchDefaultFallthroughSource],
+        ["completion-switch-nested-empty.js", completionSwitchNestedEmptySource],
+        ["completion-switch-identity.js", completionSwitchIdentitySource],
+        ["completion-switch-labelled-break.js", completionSwitchLabelledBreakSource],
+        ["completion-switch-abrupt.js", completionSwitchAbruptSource],
         ["binding-pattern.js", bindingPatternSource],
         ["binding-iterator.js", iteratorPatternSource],
         ["binding-iterator-abrupt.js", abruptIteratorPatternSource],
@@ -917,8 +1002,23 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 $262.evalScript(${JSON.stringify(completionCaughtEmptySource)}) !== 20 ||
                 $262.evalScript(${JSON.stringify(completionCatchValueSource)}) !== 30 ||
                 $262.evalScript(${JSON.stringify(completionFinallySource)}) !== 40 ||
-                $262.evalScript(${JSON.stringify(completionStressSource)}) !== sentinel) {
+                $262.evalScript(${JSON.stringify(completionStressSource)}) !== sentinel ||
+                $262.evalScript(${JSON.stringify(completionSwitchEmptySource)}) !== undefined ||
+                $262.evalScript(${JSON.stringify(completionSwitchUnmatchedSource)}) !== undefined ||
+                $262.evalScript(${JSON.stringify(completionSwitchMatchedEmptySource)}) !== undefined ||
+                $262.evalScript(${JSON.stringify(completionSwitchFallthroughSource)}) !== 50 ||
+                $262.evalScript(${JSON.stringify(completionSwitchDefaultMiddleSource)}) !== 60 ||
+                $262.evalScript(${JSON.stringify(completionSwitchDefaultFallthroughSource)}) !== 62 ||
+                $262.evalScript(${JSON.stringify(completionSwitchNestedEmptySource)}) !== undefined ||
+                $262.evalScript(${JSON.stringify(completionSwitchIdentitySource)}) !== sentinel ||
+                $262.evalScript(${JSON.stringify(completionSwitchLabelledBreakSource)}) !== 80) {
                 throw new Error("ScriptEvaluation completion propagation differed");
+            }
+            var switchAbruptIdentity = false;
+            try { $262.evalScript(${JSON.stringify(completionSwitchAbruptSource)}); }
+            catch (error) { switchAbruptIdentity = error === sentinel; }
+            if (!switchAbruptIdentity) {
+                throw new Error("switch abrupt completion identity differed");
             }
             print("test262-eval-script-ok");
         `, "utf8"),
@@ -1008,4 +1108,4 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });
     }
-}, 90_000);
+}, 180_000);

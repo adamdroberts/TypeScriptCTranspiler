@@ -1,0 +1,3 @@
+{
+  "description": "Generated representative stress for nested CaseBlock environments, selector closures, TDZ cells, and restoration through one switch lowering"
+}

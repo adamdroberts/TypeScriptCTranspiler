@@ -77,6 +77,9 @@ typedef struct tsc_realm tsc_realm_t;
 typedef struct tsc_async_cell_ref {
     void* value_cell;
     void** gc_root_cell;
+    /* Null for parameters/`var`; lexical bindings point at the canonical TDZ
+     * bit shared by the continuation and every captured closure. */
+    bool* initialized_cell;
 } tsc_async_cell_ref_t;
 
 /* ------------- bootstrap ------------- */
