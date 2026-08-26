@@ -1536,7 +1536,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-relative-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered relative start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.split` — String.prototype.split ( _separator_, _limit_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.startswith` — String.prototype.startsWith ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ )
+    - [ ] `generic-tostring-clamped-swapped-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered clamped and swapped start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( ): exact disposition and partitions missing.

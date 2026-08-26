@@ -115,6 +115,12 @@
   ],
   "pathRules": [
     {
+      "prefix": "test/built-ins/String/prototype/substring/",
+      "clauses": ["sec-string.prototype.substring"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.substring semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "prefix": "test/built-ins/String/prototype/slice/",
       "clauses": ["sec-string.prototype.slice"],
       "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.slice semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
@@ -178,6 +184,14 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.slice"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.slice intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/substring/not-a-constructor.js",
+      "sourceSha256": "8663d3711492f125c04e4cc77e21f29d0615d59301029be2b5612262a7655939",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.substring"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.substring intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
       "reviewedBy": "tsc2c compliance review"
     }
   ]

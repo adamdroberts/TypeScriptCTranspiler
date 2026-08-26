@@ -112,11 +112,27 @@ function subjectSource(): string {
                 "index-abrupt-order-identity");
         }
 
-        String.prototype.at = function() { return "replacement"; };
-        check(String.prototype.at.call("abc", 0) === "replacement", "writable-surface");
-        String.prototype.at = intrinsic;
-        check(String.prototype.at === intrinsic && intrinsic.call("abc", 1) === "b",
-            "surface-restored");
+        var atArgumentEvaluated = false;
+        String.prototype.at = function(index) { return this + ":" + index; };
+        check("abc".at((atArgumentEvaluated = true, 1)) === "abc:1" && atArgumentEvaluated,
+            "direct-call-observes-writable-surface");
+        Object.defineProperty(String.prototype, "at", {
+            configurable: true,
+            get: function() {
+                check(!atArgumentEvaluated, "lookup-before-argument-evaluation");
+                return function() { return "getter-selected"; };
+            }
+        });
+        atArgumentEvaluated = false;
+        check("abc".at((atArgumentEvaluated = true, 1)) === "getter-selected" && atArgumentEvaluated,
+            "getter-selected-before-arguments");
+        Object.defineProperty(String.prototype, "at", {
+            value: intrinsic,
+            writable: true,
+            enumerable: false,
+            configurable: true
+        });
+        check(String.prototype.at === intrinsic && "abc".at(1) === "b", "surface-restored");
 
         print(failures.length === 0 ? "string-at-ok" : failures.join(","));
     `;

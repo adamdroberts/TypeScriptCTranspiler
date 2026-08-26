@@ -86,6 +86,18 @@ import {
 
 const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
 
+/** String intrinsics whose observable mutable prototype surface is shared by
+ * typed and dynamic receivers. Keep call selection on this one method set;
+ * the runtime descriptor collection owns the corresponding implementations. */
+const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
+    "at",
+    "replace",
+    "replaceAll",
+    "slice",
+    "split",
+    "substring",
+]);
+
 const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
     asyncIterator: "tsc_symbol_async_iterator",
     asyncDispose: "tsc_symbol_async_dispose",
@@ -57403,7 +57415,7 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
-        if (method === "replace" || method === "replaceAll" || method === "split" || method === "slice") {
+        if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -57513,8 +57525,6 @@ class Emitter {
                 return oneRequiredOneOptional("tsc_value_method_index_of", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "lastIndexOf":
                 return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
-            case "at":
-                return oneArg("tsc_value_method_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "__defineGetter__":
             case "__defineSetter__": {
                 if (args.length < 2) unsupported(call, `${method} expects key and accessor`);
@@ -57967,16 +57977,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_entries(${target})`,
                 );
-            case "substring": {
-                const start = args[0] ? this.emitExpr(args[0]) : missing;
-                const end = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: start, target: T_VALUE, node: args[0] ?? call.expression },
-                    { value: end, target: T_VALUE, node: args[1] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ], ([target, startArg, endArg]) => `tsc_value_method_substring(${target}, ${startArg}, ${endArg})`);
-            }
             case "substr": {
                 const start = args[0] ? this.emitExpr(args[0]) : missing;
                 const length = args[1] ? this.emitExpr(args[1]) : missing;
@@ -66837,7 +66837,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
-        if (method === "replace" || method === "replaceAll" || method === "split" || method === "slice") {
+        if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method, false);
         }
         const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
@@ -66884,18 +66884,6 @@ class Emitter {
                         { value: idx, target: T_NUMBER, node: args[0] },
                     ]),
                     ([s, i]) => `tsc_str_char_code_at(${s}, ${i})`,
-                );
-            }
-            case "at": {
-                const idx = optionalNumberArg(0, "0.0");
-                const result = this.freshTemp("_string_at");
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0] },
-                    ]),
-                    ([s, i]) => `({ tsc_str_t* ${result} = tsc_str_at(${s}, ${i}); ${result} ? tsc_value_string(${result}) : tsc_value_undefined(); })`,
                 );
             }
             case "includes": {
@@ -66978,19 +66966,6 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "substring": {
-                const start = optionalNumberArg(0, "0.0");
-                const end = optionalNumberArg(1, "INFINITY");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: start, target: T_NUMBER, node: args[0] },
-                    { value: end, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
-                    `tsc_str_substring(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "substr": {

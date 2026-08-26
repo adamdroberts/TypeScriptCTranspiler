@@ -342,13 +342,14 @@
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, ranges, literal replace/split, the generic functional-replacement match-position worklist, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring ranges, literal replace/split, the generic functional-replacement match-position worklist, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -358,7 +359,8 @@
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -388,7 +390,8 @@
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -431,7 +434,17 @@
       "id": "stdlib/lib.core.d.ts#String",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -439,7 +452,8 @@
       "id": "src/emit/index.ts#emitStringMethod",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -447,7 +461,8 @@
       "id": "runtime/tsc_value.c#string_prototype_install_intrinsics",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -455,7 +470,8 @@
       "id": "runtime/tsc_value.c#string_prototype_method_apply",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -504,7 +520,9 @@
       "kind": "implementation",
       "id": "src/emit/index.ts#emitDynamicNamedPropertyCall",
       "targets": [
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
@@ -526,6 +544,48 @@
       "id": "runtime/tsc_string.c#tsc_str_slice",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/string-substring.property.test.ts",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_substring",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_string_substring",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_substring_from_values",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_substring",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_substring",
+      "targets": [
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
       ]
     },
     {
