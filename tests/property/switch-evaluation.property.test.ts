@@ -397,6 +397,33 @@ function subjectSource(): string {
                 asyncNestedValue === 23,
                 "async CFG hoisted async function identity, TDZ, and capture");
 
+            var asyncClassSelector, asyncClassAfter, asyncClassSet, asyncClassReplacement;
+            var asyncClassTdz = false;
+            switch (await Promise.resolve(0)) {
+                case (asyncClassSelector = function() { return AsyncCaseBlockClass; },
+                    (function() {
+                        try { AsyncCaseBlockClass; }
+                        catch (error) { asyncClassTdz = error instanceof ReferenceError; }
+                        return 0;
+                    })(), await Promise.resolve(0)):
+                    class AsyncCaseBlockClass {}
+                    asyncClassSet = function(value) { AsyncCaseBlockClass = value; };
+                    await Promise.resolve();
+                    asyncClassAfter = AsyncCaseBlockClass;
+                    break;
+            }
+            const asyncClassInstance = new asyncClassAfter();
+            check(asyncClassTdz && asyncClassSelector() === asyncClassAfter &&
+                asyncClassAfter.name === "AsyncCaseBlockClass" &&
+                asyncClassInstance instanceof asyncClassAfter &&
+                asyncClassInstance.constructor === asyncClassAfter,
+                "async CFG class evaluation and lifetime");
+            asyncClassSet(function replacementAsyncCaseClass() {});
+            asyncClassReplacement = asyncClassSelector();
+            await Promise.resolve();
+            check(asyncClassSelector() === asyncClassReplacement,
+                "async CFG mutable class binding across suspension");
+
             var asyncPatternBefore;
             switch (await Promise.resolve(0)) {
                 case (asyncPatternBefore = function() { return asyncPatternLeaf; }, await Promise.resolve(0)):

@@ -357,6 +357,7 @@ export interface AsyncControlFlowPlannerOptions {
     readonly isStableSynchronousTail: (expression: ts.Expression) => boolean;
     readonly isStableBeforeSuspension?: (expression: ts.Expression) => boolean;
     readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
+    readonly isSupportedNestedClass?: (node: ts.ClassDeclaration) => boolean;
 }
 
 interface LoopTargets {
@@ -2028,12 +2029,19 @@ export function planAsyncControlFlowGraph(
             const switchFunctions = statement.caseBlock.clauses.flatMap((clause) =>
                 clause.statements.filter((candidate): candidate is ts.FunctionDeclaration & { name: ts.Identifier } =>
                     ts.isFunctionDeclaration(candidate) && !!candidate.name));
+            const switchClasses = statement.caseBlock.clauses.flatMap((clause) =>
+                clause.statements.filter((candidate): candidate is ts.ClassDeclaration & { name: ts.Identifier } =>
+                    ts.isClassDeclaration(candidate) && !!candidate.name));
             const switchBindings = [
                 ...statement.caseBlock.clauses.flatMap((clause) =>
                     collectDirectLexicalBindings(clause.statements)),
                 ...switchFunctions.map((declaration) => declaration.name),
+                ...switchClasses.map((declaration) => declaration.name),
             ];
-            bindingIdentifiers.push(...switchFunctions.map((declaration) => declaration.name));
+            bindingIdentifiers.push(
+                ...switchFunctions.map((declaration) => declaration.name),
+                ...switchClasses.map((declaration) => declaration.name),
+            );
             // The CaseBlock environment is created after the discriminator
             // and before the first case expression, even when no lexical
             // declarations contribute captured cells.
@@ -2402,7 +2410,8 @@ export function planAsyncControlFlowGraph(
                 !opaqueSynchronousLoopSupported(statement)) ||
             (ts.isFunctionDeclaration(statement) &&
                 !options.isSupportedNestedFunction?.(statement)) ||
-            ts.isClassDeclaration(statement)) {
+            (ts.isClassDeclaration(statement) &&
+                !options.isSupportedNestedClass?.(statement))) {
             supported = false;
             return next;
         }

@@ -24352,7 +24352,7 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
-        if (base.kind === "class" && this.typeIncludesDirectSwitchClass(declaration)) {
+        if (this.typeIncludesDirectSwitchClass(declaration)) {
             /* A direct CaseBlock class is a runtime constructor/object pair,
              * not one of the statically laid-out TypeScript class structs.
              * Preserve that representation after the value escapes through
@@ -29307,6 +29307,8 @@ class Emitter {
                 visit(node);
                 return safe;
             },
+            isSupportedNestedClass: (node) =>
+                this.isSupportedDirectSwitchClassDeclaration(node),
         });
         if (!graph) return false;
 
@@ -29399,10 +29401,12 @@ class Emitter {
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(declaration, symbol)) return false;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
+            const inferred = this.variableStorageType(
+                this.prepareType(mapType(declaration, this.checker)),
+            );
             const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
                 ? T_VALUE
-                : cell?.type ??
-                    this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+                : cell?.type ?? this.variableDeclarationStorageType(declaration, inferred);
             if (type.kind === "void" &&
                 !symbolHasUseOutsideDeclaration(symbol, declaration.name)) {
                 seenSymbols.add(symbol);
@@ -29656,6 +29660,11 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(declaration.name);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
+            } else if (stateNode.kind === "sync" && ts.isClassDeclaration(stateNode.statement)) {
+                const declaration = stateNode.statement;
+                if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) return false;
+                const symbol = this.symbolForIdentifier(declaration.name);
+                if (!symbol || !fieldBySymbol.has(symbol)) return false;
             } else if (stateNode.kind === "iterator-init") {
                 if (stateNode.sourceResultSlot !== null) {
                     const storageType = expressionResultTypes[stateNode.sourceResultSlot];
@@ -30403,6 +30412,20 @@ class Emitter {
                                 );
                             }
                         }
+                    } else if (ts.isClassDeclaration(stateNode.statement)) {
+                        const declaration = stateNode.statement;
+                        if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) return false;
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                        if (!local) return false;
+                        emitCfgFieldAssignment(
+                            callback,
+                            local,
+                            this.directEmptyClassConstructorValue(declaration),
+                            declaration,
+                            "state",
+                            true,
+                        );
                     } else {
                         this.emitStmt(callback, stateNode.statement);
                     }
