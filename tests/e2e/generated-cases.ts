@@ -53,6 +53,12 @@ export interface ReflectConstructArgumentWidthSpec {
     width: number;
 }
 
+export interface ArrowFormalBindingTreeDepthSpec {
+    generator: "arrow-formal-binding-tree-depth";
+    depth: number;
+    sourceKind: "javascript";
+}
+
 export interface ArrayStaticFactoryItemWidthSpec {
     generator: "array-static-factory-item-width";
     width: number;
@@ -105,6 +111,7 @@ export type GeneratedCaseSpec =
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
     | ReflectConstructArgumentWidthSpec
+    | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
@@ -233,6 +240,20 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             width,
+        };
+    }
+    if (spec.generator === "arrow-formal-binding-tree-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        if (spec.sourceKind !== "javascript") {
+            throw new Error(`invalid generated case spec ${filename}: sourceKind must be javascript`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+            sourceKind: spec.sourceKind,
         };
     }
     if (spec.generator === "array-static-factory-item-width") {
@@ -563,6 +584,40 @@ function reflectConstructArgumentWidthSource(width: number): string {
     ].join("\n");
 }
 
+function arrowFormalBindingTreeDepthSource(depth: number): string {
+    let pattern = "leaf";
+    let value = "41";
+    for (let level = 0; level < depth; level++) {
+        if (level % 2 === 0) {
+            pattern = `[${pattern}]`;
+            value = `[${value}]`;
+        } else {
+            pattern = `{ value: ${pattern} }`;
+            value = `{ value: ${value} }`;
+        }
+    }
+    const directivePrefix = Array.from(
+        { length: depth },
+        (_, index) => `    "directive-${index}";`,
+    );
+    return [
+        "function makeArrow() {",
+        `    return (${pattern}, prior = leaf, ...rest) =>`,
+        "        this.base + leaf + prior + rest.length;",
+        "}",
+        "var directiveProbe = (value = 1) => {",
+        ...directivePrefix,
+        "    0;",
+        '    "use strict";',
+        "    return value;",
+        "};",
+        "var arrow = makeArrow.call({ base: 1 });",
+        `var result = arrow.call({ base: 999 }, ${value}, undefined, 7, 8);`,
+        'console.log("arrow formal binding tree:", result === 85 && directiveProbe() === 1);',
+        "",
+    ].join("\n");
+}
+
 function switchClauseWorklistWidthSource(width: number): string {
     const cases = Array.from({ length: width - 1 }, (_, index) =>
         `    case select(${index + 1}, ${index + 2}): result = "wrong"; break;`,
@@ -871,6 +926,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return stringCodeUnitListWidthSource(spec.width);
         case "reflect-construct-argument-width":
             return reflectConstructArgumentWidthSource(spec.width);
+        case "arrow-formal-binding-tree-depth":
+            return arrowFormalBindingTreeDepthSource(spec.depth);
         case "array-static-factory-item-width":
             return arrayStaticFactoryItemWidthSource(spec.width);
         case "switch-clause-worklist-width":

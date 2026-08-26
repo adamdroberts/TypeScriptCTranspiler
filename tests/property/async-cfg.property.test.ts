@@ -164,7 +164,11 @@ function suspensionOwner(state: AsyncControlFlowState): ts.AwaitExpression | nul
     }
 }
 
-function assertClosedCanonicalGraph(graph: AsyncControlFlowGraph, body: ts.Block): void {
+function assertClosedCanonicalGraph(
+    graph: AsyncControlFlowGraph,
+    body: ts.Block,
+    requireEverySourceAwait = true,
+): void {
     const states = new Map<number, AsyncControlFlowState>();
     for (const state of graph.states) {
         expect(states.has(state.id)).toBeFalse();
@@ -190,13 +194,20 @@ function assertClosedCanonicalGraph(graph: AsyncControlFlowGraph, body: ts.Block
         [...states.keys()].sort((left, right) => left - right),
     );
 
+    const sourceAwaitSet = new Set(sourceAwaits(body));
     const owners = new Map<ts.AwaitExpression, number>();
     for (const state of graph.states) {
         const awaitExpression = suspensionOwner(state);
         if (awaitExpression) owners.set(awaitExpression, (owners.get(awaitExpression) ?? 0) + 1);
     }
-    for (const awaitExpression of sourceAwaits(body)) {
-        expect(owners.get(awaitExpression)).toBe(1);
+    for (const [awaitExpression, ownerCount] of owners) {
+        expect(sourceAwaitSet.has(awaitExpression)).toBeTrue();
+        expect(ownerCount).toBe(1);
+    }
+    if (requireEverySourceAwait) {
+        for (const awaitExpression of sourceAwaitSet) {
+            expect(owners.get(awaitExpression)).toBe(1);
+        }
     }
     expect(graph.awaitCount).toBe(owners.size);
 }
@@ -221,4 +232,27 @@ test("unsupported suspension trees fail closed", () => {
         value += new UnsupportedNestedClass() instanceof UnsupportedNestedClass ? 1 : 0;
     `);
     expect(planAsyncControlFlowGraph(body, plannerOptions)).toBeNull();
+});
+
+test("reachability pruning retains the canonical graph after an abrupt protected completion", () => {
+    const { body } = parseSubject(`
+        do {
+            try {
+                throw "inner";
+            } catch (reason) {
+                throw reason;
+            } finally {
+                value += 1;
+            }
+            value += await settled(1);
+            continue;
+        } while (await settled(flag));
+        return await settled(value);
+    `);
+    const graph = planAsyncControlFlowGraph(body, plannerOptions);
+    if (!graph) throw new Error("reachable abrupt-completion graph failed to plan");
+    assertClosedCanonicalGraph(graph, body, false);
+    expect(graph.awaitCount).toBe(0);
+    expect(graph.states.some((state) => state.kind === "throw-route")).toBeTrue();
+    expect(graph.states.some((state) => state.kind === "finally-exit")).toBeTrue();
 });

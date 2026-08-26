@@ -257,6 +257,7 @@ export async function e2eEvidenceManifestDigest(): Promise<string> {
         name: entry.name,
         generator: entry.generator,
         generatorParameters: entry.generatorParameters,
+        generatedSourceKind: entry.generatedSourceKind,
         generatedSourceSha256: entry.generatedSource === undefined ? undefined : sha256Text(entry.generatedSource),
         expectedExitCode: entry.expectedExitCode,
         emitCOnly: entry.emitCOnly,

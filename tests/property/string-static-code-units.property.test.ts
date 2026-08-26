@@ -123,6 +123,12 @@ function subjectSource(): string {
         var pointObject = { valueOf: function() { return 71; } };
         check(String.fromCodePoint(pointObject) === "G", "code-point-object");
 
+        var iteratorText = "A" + String.fromCodePoint(0x1f600) + "B";
+        var iteratorValues = Array.from(iteratorText);
+        check(iteratorValues.length === 3, "string-iterator-code-point-cardinality");
+        check(iteratorValues[0] === "A" && iteratorValues[1].codePointAt(0) === 0x1f600 &&
+            iteratorValues[2] === "B", "string-iterator-code-point-values");
+
         function isRangeError(value) {
             try { String.fromCodePoint(value); }
             catch (error) { return error instanceof RangeError; }
@@ -160,7 +166,7 @@ function subjectSource(): string {
     `;
 }
 
-test("String code-unit constructors consume one runtime argument worklist", async () => {
+test("String constructors and iteration share canonical argument and code-point worklists", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-string-code-units-property-"));
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/string-static-code-units.js#sloppy";

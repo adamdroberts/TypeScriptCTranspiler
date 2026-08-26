@@ -1,7 +1,7 @@
 char-true char-true LT
 char-reject caught-string-static-bad L
 point-true point-true LTM
-point-reject rejected-String.fromCodePoint: invalid code point LM
+point-reject rejected-RangeError: String.fromCodePoint: invalid code point LM
 arrow-true arrow-true LTV
 arrow-reject caught-string-static-bad LV
 point-declaration-true point-declaration-true LT

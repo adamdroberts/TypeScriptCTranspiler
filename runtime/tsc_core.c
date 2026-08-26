@@ -236,6 +236,21 @@ static tsc_value_t function_prototype_to_string(void* env, tsc_value_t this_arg,
     return tsc_value_string(source);
 }
 
+static tsc_value_t function_prototype_restricted_get(void* env, tsc_value_t receiver) {
+    (void)env;
+    (void)receiver;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted function property"));
+    return tsc_value_undefined();
+}
+
+static bool function_prototype_restricted_set(void* env, tsc_value_t receiver, tsc_value_t value) {
+    (void)env;
+    (void)receiver;
+    (void)value;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted function property"));
+    return false;
+}
+
 static void function_prototype_define_method(
     tsc_function_identity_t* prototype,
     const char* name,
@@ -327,6 +342,24 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         function_prototype_define_method(intrinsics->prototype_identity, "bind", 4, 1.0, function_prototype_bind);
         function_prototype_define_method(intrinsics->prototype_identity, "call", 4, 1.0, function_prototype_call);
         function_prototype_define_method(intrinsics->prototype_identity, "toString", 8, 0.0, function_prototype_to_string);
+        const char* restricted_names[] = { "caller", "arguments" };
+        const size_t restricted_lengths[] = { 6, 9 };
+        for (size_t index = 0; index < 2; index++) {
+            tsc_object_define_accessor(
+                intrinsics->prototype_identity->props,
+                tsc_str_from_lit(restricted_names[index], restricted_lengths[index]),
+                function_prototype_restricted_get,
+                NULL,
+                true,
+                function_prototype_restricted_set,
+                NULL,
+                true,
+                false,
+                true,
+                false,
+                true
+            );
+        }
 
         tsc_function_identity_set_prototype(intrinsics->constructor_identity, prototype);
         tsc_function_identity_set_own_prototype(intrinsics->constructor_identity, prototype);

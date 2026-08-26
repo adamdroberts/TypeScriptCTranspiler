@@ -386,6 +386,65 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/arrow-function.property.test.ts",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors",
+        "sec-static-semantics-concisebodycontainsusestrict#expression-vs-directive-prologue-classification"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "arrow_formal_binding_tree",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors",
+        "sec-static-semantics-concisebodycontainsusestrict#expression-vs-directive-prologue-classification"
+      ],
+      "stressReview": {
+        "dimension": "ArrowFormalParameters binding-tree and directive-prologue depth",
+        "parameter": "depth",
+        "representativeHighDepth": 64,
+        "rationale": "One generated JavaScript native case independently stresses the canonical alternating BindingName tree, source-ordered directive collection, default/reference initialization, rest slice, capture, and lexical-this boundary; successive depths are not evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/function-static-semantics.ts#earlyFunctionStaticSemanticsFailure",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors",
+        "sec-static-semantics-concisebodycontainsusestrict#expression-vs-directive-prologue-classification"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/function-static-semantics.ts#arrowHasLineTerminatorBeforeToken",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/function-static-semantics.ts#containsUseStrict",
+      "targets": [
+        "sec-static-semantics-concisebodycontainsusestrict#expression-vs-directive-prologue-classification"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-static-semantics.ts#bindingNameEntries",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/compile.ts#functionStaticSemanticsDiagnostics",
+      "targets": [
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/module-namespace-exotic.property.test.ts",
       "targets": [
         "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",

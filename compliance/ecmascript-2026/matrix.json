@@ -263,6 +263,86 @@
       "rationale": "The complete Reflect.construct algorithm is represented as one terminal validation-and-worklist partition with reciprocal property, independent stress, native E2E, declaration, implementation, and pinned Test262 evidence."
     },
     {
+      "clause": "sec-arrow-function-definitions-static-semantics-early-errors",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "complete-arrow-parameter-and-body-early-errors",
+          "title": "ArrowParameters suspension containment, UniqueFormalParameters and cover grammar, use-strict restriction, and parameter/body lexical-name intersection",
+          "surface": "syntax",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "tree",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-arrow-function-definitions-static-semantics-early-errors" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/arrow-function.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["arrow_formal_binding_tree"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/function-static-semantics.ts#earlyFunctionStaticSemanticsFailure",
+              "src/function-static-semantics.ts#arrowHasLineTerminatorBeforeToken",
+              "src/module-static-semantics.ts#bindingNameEntries",
+              "src/compile.ts#functionStaticSemanticsDiagnostics"
+            ]
+          },
+          "rationale": "The independent property derives the complete rule partition from the grammar: YieldExpression and AwaitExpression containment with nested-function boundaries, simple versus nested duplicate BoundNames, direct body lexical-name intersections, non-simple use-strict bodies, rest/cover failures, and the no-LineTerminator restriction. The frontend and diagnostic Test262 host execute one explicit source-tree worklist; all BoundNames come from the shared recursive BindingName tree rather than recognized fixture shapes. A separate generated JavaScript input traverses one representative deep alternating ArrowFormalParameters tree and directive prologue while executing the native result in both memory modes. This row is intentionally limited to the exact Early Errors clause; unregistered ArrowFunction instantiation and evaluation clauses remain claim blockers."
+        }
+      ],
+      "rationale": "The complete ArrowFunction Early Errors rule list is one terminal syntax-tree partition with reciprocal property, independent JavaScript stress, frontend diagnostics, and pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-static-semantics-concisebodycontainsusestrict",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "expression-vs-directive-prologue-classification",
+          "title": "ExpressionBody false result and FunctionBody directive-prologue use-strict classification",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "esid", "equals": "sec-arrow-function-definitions-static-semantics-early-errors" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/arrow-function.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["arrow_formal_binding_tree"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/function-static-semantics.ts#containsUseStrict",
+              "src/function-static-semantics.ts#earlyFunctionStaticSemanticsFailure"
+            ]
+          },
+          "rationale": "The property crosses expression and block ConciseBody forms, directive and non-directive boundaries, and simple versus non-simple formal lists. The implementation scans the one source-ordered directive collection and never derives behavior from a bounded family of body shapes. The distinct generated JavaScript case supplies a representative long non-use-strict directive prefix followed by a terminating non-directive, as well as a deep non-simple parameter tree, so both inputs to the early-error decision are exercised without creating a succession of count-based tasks. The exact pinned use-strict scenario is selected through its authored current esid."
+        }
+      ],
+      "rationale": "Both grammar alternatives of ConciseBodyContainsUseStrict are represented by one terminal directive-collection partition with reciprocal property, independent stress, implementation, and pinned metadata evidence."
+    },
+    {
       "clause": "sec-array.from",
       "disposition": "evidence",
       "partitions": [
@@ -884,8 +964,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary functions", "arrows and methods", "classes and private state", "generators", "async functions", "async generators"],
-      "localEvidence": { "property": [], "generatedRegression": ["async-leading-await-chain"], "stress": ["async-leading-await-chain"], "e2e": ["function_closures", "generic_function_values", "classes"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
-      "knownGaps": ["General generator state machines, async generators, and remaining async suspension graphs are incomplete."]
+      "localEvidence": { "property": ["tests/property/arrow-function.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["function_closures", "generic_function_values", "classes"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/function-static-semantics.ts"] },
+      "knownGaps": ["ArrowFunction lexical arguments, super, and new.target plus remaining object metadata/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete."]
     },
     {
       "id": "scripts-modules",

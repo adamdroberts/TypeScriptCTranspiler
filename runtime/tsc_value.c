@@ -3751,7 +3751,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
             return true;
         }
         if (tsc_function_metadata_key(fn, key)) return false;
-        return tsc_object_set_receiver(fn->props, key, value, v);
+        return tsc_value_set_prop_receiver(v, key, value, v);
     }
     return false;
 }
@@ -3821,6 +3821,9 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
         if (fn->props && tsc_object_has_own(fn->props, key)) {
             return tsc_object_set_receiver(fn->props, key, value, receiver);
+        }
+        if (!tsc_value_is_nullish(fn->prototype)) {
+            return tsc_value_set_prop_receiver(fn->prototype, key, value, receiver);
         }
         return tsc_value_define_receiver_data(receiver, key, value);
     }
@@ -4424,10 +4427,14 @@ tsc_array_t* value_string_keys(const tsc_str_t* src, bool include_length) {
 }
 
 tsc_array_t* value_string_values(const tsc_str_t* src) {
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
-    if (!src) return out;
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_value_t value = tsc_value_string(tsc_str_char_at(src, (double)i));
+    if (!src) return tsc_array_new(sizeof(tsc_value_t), 1);
+    /* String iterator values are code-point strings, unlike indexed String
+     * properties, which remain UTF-16 code units.  Reuse the canonical
+     * code-point worklist so every iterable consumer observes the same split. */
+    tsc_array_t* chars = tsc_str_chars(src);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), chars->len ? chars->len : 1);
+    for (size_t i = 0; i < chars->len; i++) {
+        tsc_value_t value = tsc_value_string(TSC_ARR(tsc_str_t*, chars, i));
         tsc_array_push_raw(out, &value);
     }
     return out;

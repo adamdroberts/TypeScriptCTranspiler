@@ -901,8 +901,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-debugger-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Functions and Classes** (`sec-ecmascript-language-functions-and-classes`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary functions; arrows and methods; classes and private state; generators; async functions; async generators.
-  - Linked local regression evidence: generated regression: async-leading-await-chain; stress: async-leading-await-chain; E2E: function_closures, generic_function_values, classes.
-  - Known blockers: General generator state machines, async generators, and remaining async suspension graphs are incomplete.
+  - Linked local regression evidence: property: tests/property/arrow-function.property.test.ts; generated regression: async-leading-await-chain; stress: arrow_formal_binding_tree, async-leading-await-chain; E2E: function_closures, generic_function_values, classes.
+  - Known blockers: ArrowFunction lexical arguments, super, and new.target plus remaining object metadata/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete.
   - [ ] `sec-ecmascript-language-functions-and-classes` — ECMAScript Language: Functions and Classes: exact disposition and partitions missing.
   - [ ] `sec-parameter-lists` — Parameter Lists: exact disposition and partitions missing.
   - [ ] `sec-parameter-lists-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
@@ -918,8 +918,10 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-runtime-semantics-instantiateordinaryfunctionexpression` — Runtime Semantics: InstantiateOrdinaryFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
   - [ ] `sec-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-arrow-function-definitions` — Arrow Function Definitions: exact disposition and partitions missing.
-  - [ ] `sec-arrow-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
-  - [ ] `sec-static-semantics-concisebodycontainsusestrict` — Static Semantics: ConciseBodyContainsUseStrict ( ): a Boolean: exact disposition and partitions missing.
+  - [ ] `sec-arrow-function-definitions-static-semantics-early-errors` — Static Semantics: Early Errors
+    - [ ] `complete-arrow-parameter-and-body-early-errors` (syntax, unbounded): ArrowParameters suspension containment, UniqueFormalParameters and cover grammar, use-strict restriction, and parameter/body lexical-name intersection.
+  - [ ] `sec-static-semantics-concisebodycontainsusestrict` — Static Semantics: ConciseBodyContainsUseStrict ( ): a Boolean
+    - [ ] `expression-vs-directive-prologue-classification` (algorithm, unbounded): ExpressionBody false result and FunctionBody directive-prologue use-strict classification.
   - [ ] `sec-runtime-semantics-evaluateconcisebody` — Runtime Semantics: EvaluateConciseBody ( _functionObject_: an ECMAScript function object, _argumentsList_: a List of ECMAScript language values, ): a return completion or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-runtime-semantics-instantiatearrowfunctionexpression` — Runtime Semantics: InstantiateArrowFunctionExpression ( optional _name_: a property key or a Private Name, ): an ECMAScript function object: exact disposition and partitions missing.
   - [ ] `sec-arrow-function-definitions-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
@@ -2663,7 +2665,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `array-find-from-last` — standard, tracking: `todo`; no clause mapping.
 - [ ] `array-grouping` — standard, tracking: `todo`; no clause mapping.
 - [ ] `arraybuffer-transfer` — standard, tracking: `todo`; no clause mapping.
-- [ ] `arrow-function` — standard, tracking: `todo`; no clause mapping.
+- [ ] `arrow-function` — standard, tracking: `ready-for-verification`; `sec-arrow-function-definitions`.
 - [ ] `async-functions` — standard, tracking: `todo`; no clause mapping.
 - [ ] `async-iteration` — standard, tracking: `todo`; no clause mapping.
 - `await-dictionary` — post-edition, tracking: `ready-for-verification`; no clause mapping.

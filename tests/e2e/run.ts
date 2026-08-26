@@ -15,6 +15,7 @@ interface Case {
     name: string;
     entry: string;
     generatedSource?: string;
+    generatedSourceKind?: "typescript" | "javascript";
     expected?: string;
     expectedStderrContains?: string;
     expectedExitCode?: number;
@@ -96,6 +97,7 @@ async function discoverCases(): Promise<Case[]> {
                 name: d,
                 entry,
                 generatedSource: manifest.generatedSource,
+                generatedSourceKind: manifest.generatedSourceKind,
                 expectedExitCode: manifest.expectedExitCode,
                 expectedStderrContains,
                 expectedMainCContains,
@@ -125,6 +127,7 @@ async function discoverCases(): Promise<Case[]> {
             name: d,
             entry,
             generatedSource: manifest.generatedSource,
+            generatedSourceKind: manifest.generatedSourceKind,
             expected,
             expectedStderrContains,
             expectedMainCContains,
@@ -222,7 +225,7 @@ async function main(): Promise<void> {
         const buildDir = path.join(tmpRoot, c.name + "-build");
         const entry = c.generatedSource === undefined
             ? c.entry
-            : path.join(tmpRoot, c.name + ".ts");
+            : path.join(tmpRoot, c.name + (c.generatedSourceKind === "javascript" ? ".js" : ".ts"));
         if (c.generatedSource !== undefined) {
             await fs.writeFile(entry, c.generatedSource);
         }

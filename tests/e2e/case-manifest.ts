@@ -15,6 +15,7 @@ export interface E2eCaseManifestEntry {
     name: string;
     entry: string;
     generatedSource?: string;
+    generatedSourceKind?: "typescript" | "javascript";
     generator?: string;
     generatorParameters?: Readonly<Record<string, number>>;
     expectedExitCode?: number;
@@ -106,6 +107,11 @@ export async function discoverE2eCaseManifest(
         const generatedSource = generatedRaw === undefined
             ? undefined
             : generateE2eCaseSource(generatedRaw, generatedCasePath);
+        const generatedSourceKind = generatedSpec === undefined
+            ? undefined
+            : generatedSpec.generator === "arrow-formal-binding-tree-depth"
+                ? generatedSpec.sourceKind
+                : "typescript";
         const generator = generatedSpec?.generator;
         const generatorParameters = generatedSpec === undefined
             ? undefined
@@ -140,6 +146,7 @@ export async function discoverE2eCaseManifest(
             name,
             entry,
             generatedSource,
+            generatedSourceKind,
             generator,
             generatorParameters,
             expectedExitCode,

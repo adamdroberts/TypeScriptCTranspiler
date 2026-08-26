@@ -1,0 +1,5 @@
+{
+  "generator": "arrow-formal-binding-tree-depth",
+  "depth": 64,
+  "sourceKind": "javascript"
+}

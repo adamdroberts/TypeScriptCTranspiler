@@ -4,6 +4,7 @@ import * as path from "node:path";
 import ts from "typescript";
 import { compile } from "../../src/compile";
 import { earlyControlFlowFailure } from "../../src/control-static-semantics";
+import { earlyFunctionStaticSemanticsFailure } from "../../src/function-static-semantics";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
@@ -616,11 +617,21 @@ function parseFailure(
     const controlFailure = diagnostics.length === 0 && !goalMismatch
         ? earlyControlFlowFailure(sourceFile)
         : null;
-    const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && goal === "module"
+    const functionFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure
+        ? earlyFunctionStaticSemanticsFailure(sourceFile)
+        : null;
+    const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && goal === "module"
         ? earlyModuleStaticSemanticsFailure(sourceFile)
         : null;
-    if (diagnostics.length === 0 && !goalMismatch && !controlFailure && !moduleFailure) return null;
-    const formatted = controlFailure ?? (moduleFailure
+    if (diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && !moduleFailure) return null;
+    const formatted = controlFailure ?? (functionFailure
+        ? (() => {
+            const start = sourceFile.getLineAndCharacterOfPosition(
+                Math.max(0, functionFailure.node.getStart(sourceFile)),
+            );
+            return `${filename}:${start.line + 1}:${start.character + 1}: ${functionFailure.message}`;
+        })()
+        : moduleFailure
         ? (() => {
             const start = sourceFile.getLineAndCharacterOfPosition(
                 Math.max(0, moduleFailure.node.getStart(sourceFile)),

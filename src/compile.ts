@@ -3,6 +3,10 @@ import {
     earlyControlFlowStaticSemanticsFailure,
     type ControlStaticSemanticsFailure,
 } from "./control-static-semantics";
+import {
+    earlyFunctionStaticSemanticsFailure,
+    type FunctionStaticSemanticsFailure,
+} from "./function-static-semantics";
 import { execFile } from "node:child_process";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
@@ -228,6 +232,18 @@ function controlStaticSemanticsDiagnostics(
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
         const failure = earlyControlFlowStaticSemanticsFailure(sourceFile);
+        if (failure) failures.push(failure);
+    }
+    return failures;
+}
+
+function functionStaticSemanticsDiagnostics(
+    program: ts.Program,
+): FunctionStaticSemanticsFailure[] {
+    const failures: FunctionStaticSemanticsFailure[] = [];
+    for (const sourceFile of program.getSourceFiles()) {
+        if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
+        const failure = earlyFunctionStaticSemanticsFailure(sourceFile);
         if (failure) failures.push(failure);
     }
     return failures;
@@ -851,6 +867,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     });
     const staticSemanticsFailures = [
         ...controlStaticSemanticsDiagnostics(program),
+        ...functionStaticSemanticsDiagnostics(program),
         ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),
     ];
     if (staticSemanticsFailures.length > 0) {

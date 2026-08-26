@@ -10,9 +10,8 @@ interface NameEntry {
     readonly node: ts.Node;
 }
 
-const strictBindingIdentifierNames = new Set([
+export const strictModeBindingIdentifierNames = new Set([
     "arguments",
-    "await",
     "eval",
     "implements",
     "interface",
@@ -23,6 +22,11 @@ const strictBindingIdentifierNames = new Set([
     "public",
     "static",
     "yield",
+]);
+
+const moduleBindingIdentifierNames = new Set([
+    ...strictModeBindingIdentifierNames,
+    "await",
 ]);
 
 function pushChildren(worklist: ts.Node[], node: ts.Node): void {
@@ -174,7 +178,7 @@ function moduleVarDeclaredNames(sourceFile: ts.SourceFile): NameEntry[] {
 
 function strictModuleFailure(sourceFile: ts.SourceFile): ModuleStaticSemanticsFailure | null {
     const invalidBinding = (entry: NameEntry): ModuleStaticSemanticsFailure | null =>
-        strictBindingIdentifierNames.has(entry.name)
+        moduleBindingIdentifierNames.has(entry.name)
             ? {
                 node: entry.node,
                 message: `binding identifier '${entry.name}' is not permitted in Module strict mode`,

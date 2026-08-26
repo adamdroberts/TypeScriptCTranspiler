@@ -772,9 +772,11 @@
     {
       "tag": "arrow-function",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-arrow-function-definitions"
+      ],
+      "rationale": "The standard arrow-function tag denotes the ArrowFunction grammar and its shared definition contract. More specific current or reviewed legacy metadata retains the exact static-semantics, instantiation, evaluation, destructuring, and forbidden-extension owners; mapping this tag to the parent does not mark those child partitions supported."
     },
     {
       "tag": "async-functions",

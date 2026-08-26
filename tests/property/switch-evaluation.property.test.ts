@@ -475,6 +475,59 @@ test("Switch Evaluation uses one CaseBlock lexical environment across synchronou
     }
 }, 90_000);
 
+test("typed scalar reads cross one canonical CaseBlock value boundary", async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-switch-scalar-property-"));
+    const entry = path.join(temporary, "subject.ts");
+    try {
+        await fs.writeFile(entry, `
+            async function subject(): Promise<string> {
+                let total = 1;
+                let result = "";
+                for (const item of [0]) {
+                    await Promise.resolve(item);
+                    switch (total) {
+                        case 1:
+                            let numeric: number;
+                            let text: string;
+                            let selected: boolean;
+                            numeric = 20;
+                            text = "scalar";
+                            selected = true;
+                            total += numeric;
+                            result = text + (selected ? ":before" : ":wrong");
+                            await Promise.resolve();
+                            total += numeric;
+                            result += selected ? ":after" : ":wrong";
+                            break;
+                    }
+                }
+                return result + ":" + total;
+            }
+            subject().then((value) => console.log(value));
+        `, "utf8");
+        for (const noGc of [false, true]) {
+            const mode = noGc ? "no-gc" : "gc";
+            const executable = path.join(temporary, `subject-${mode}`);
+            const diagnostics: string[] = [];
+            const result = await compile({
+                entry,
+                output: executable,
+                buildDir: path.join(temporary, `build-${mode}`),
+                noGc,
+                diagnosticWriter: (message) => diagnostics.push(message),
+            });
+            expect(diagnostics.join("")).toBe("");
+            expect(result.exitCode).toBe(0);
+            const process = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
+            expect(process.exitCode).toBe(0);
+            expect(process.stderr.toString()).toBe("");
+            expect(process.stdout.toString()).toBe("scalar:before:after:41\n");
+        }
+    } finally {
+        await fs.rm(temporary, { recursive: true, force: true });
+    }
+}, 90_000);
+
 test("unsupported CaseBlock class definitions fail closed at the shared class-definition boundary", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-switch-class-diagnostic-"));
     const entry = path.join(temporary, "subject.js");

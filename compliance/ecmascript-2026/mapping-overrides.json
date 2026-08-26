@@ -1,7 +1,14 @@
 {
   "schemaVersion": 1,
   "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias, exact or semantic-boundary legacy metadata rule, or semantic-directory rule; an esid-qualified directory rule may redirect pinned informative metadata to its exact normative requirement. Exact source-hashed test overrides add the specific normative owner only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
-  "esidAliases": [],
+  "esidAliases": [
+    {
+      "esid": "sec-arrow-definitions-runtime-semantics-evaluation",
+      "clauses": ["sec-arrow-function-definitions-runtime-semantics-evaluation"],
+      "reason": "The pinned forbidden-extension scenarios use the historical shortened arrow-definitions anchor for the current ArrowFunction Evaluation clause.",
+      "reviewedBy": "tsc2c compliance review"
+    }
+  ],
   "legacyIdRules": [
     {
       "field": "es5id",
@@ -42,9 +49,61 @@
       "clauses": ["sec-reflect.construct"],
       "reason": "The exact legacy ES6 anchor 26.1.2 is the current Reflect.construct intrinsic clause; the semantic metadata maps independently of its filename or surrounding fixture inventory.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "14.2",
+      "clauses": ["sec-arrow-function-definitions"],
+      "reason": "The exact ES6 Arrow Function Definitions section is the current Arrow Function Definitions parent clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "14.2.1",
+      "clauses": ["sec-arrow-function-definitions-static-semantics-early-errors"],
+      "reason": "The exact ES6 Arrow Function Definitions static-semantics section is the current ArrowFunction Early Errors clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "14.2.16",
+      "clauses": [
+        "sec-runtime-semantics-instantiatearrowfunctionexpression",
+        "sec-arrow-function-definitions-runtime-semantics-evaluation"
+      ],
+      "reason": "The exact ES6 ArrowFunction Evaluation algorithm was split into the current InstantiateArrowFunctionExpression and Evaluation syntax-directed operations.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "14.1.6",
+      "clauses": [
+        "sec-static-semantics-expectedargumentcount",
+        "sec-setfunctionlength"
+      ],
+      "reason": "The exact ES6 function-length rule is now expressed by ExpectedArgumentCount and SetFunctionLength, both of which are observed by the pinned arrow length descriptor scenario.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "16.1",
+      "clauses": ["sec-forbidden-extensions"],
+      "reason": "The exact ES6 forbidden-extensions section is the current Forbidden Extensions clause, including the restriction on own caller and arguments properties of ArrowFunction objects.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [
+    {
+      "prefix": "test/language/expressions/arrow-function/",
+      "clauses": ["sec-arrow-function-definitions"],
+      "reason": "Every scenario in the pinned ArrowFunction semantic directory exercises the parent Arrow Function Definitions grammar or object contract; exact metadata and feature mappings add its narrower normative owners independently of filenames.",
+      "reviewedBy": "tsc2c compliance review"
+    },
     {
       "prefix": "test/language/expressions/async-generator/",
       "esid": "sec-strict-mode-of-ecmascript",

@@ -274,9 +274,16 @@ type AsyncControlFlowStateCore =
         readonly kind: "finally-enter";
         readonly id: number;
         readonly region: number;
-        readonly completion: "normal" | "throw";
+        readonly completion: "normal";
         readonly finallyTarget: AsyncControlFlowTarget;
         readonly normalTarget: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "finally-enter";
+        readonly id: number;
+        readonly region: number;
+        readonly completion: "throw";
+        readonly finallyTarget: AsyncControlFlowTarget;
     }
     | {
         readonly kind: "finally-exit";
@@ -1394,7 +1401,6 @@ export function planAsyncControlFlowGraph(
             region,
             completion: "throw",
             finallyTarget: finallyEntry,
-            normalTarget: next,
         }, context.exceptionTarget);
         const returnEnterId = reserve();
         const returnEnter = setState({
@@ -2547,7 +2553,14 @@ export function planAsyncControlFlowGraph(
             ? 1
             : 0
     ), 0);
-    if (reachableAwaitCount < 1) return null;
+    /* Keep the direct synchronous async-function path only when graph
+     * construction found no suspension at all. A source function can contain
+     * suspensions whose states are all removed by the reachability worklist
+     * (for example, code following an unconditional abrupt completion in a
+     * protected region). In that case this zero-suspension graph is the
+     * canonical proof that the syntax is unreachable; rejecting it would send
+     * the original await-bearing tree to an emitter which must fail closed. */
+    if (reachableAwaitCount < 1 && awaitCount < 1) return null;
     return {
         kind: "async-control-flow",
         entry,
