@@ -61702,8 +61702,14 @@ class Emitter {
                     c: `${result}.service ? ${result}.service : tsc_str_from_lit("", 0)`,
                     ty: T_STRING,
                 };
-                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, hostname, service], callbackNode);
-                return `({ tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); if (${result}.error) tsc_drain_microtasks_and_next_ticks(); (void)${callbackCall}; })`;
+                const callbackSchedule = this.emitImmediateCallbackSchedule(
+                    call,
+                    callbackType,
+                    callbackC!,
+                    [err, hostname, service],
+                    callbackNode,
+                );
+                return `({ tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); ${callbackSchedule}; })`;
             });
         }
         if (call.arguments.length < 2) {
@@ -61729,7 +61735,6 @@ class Emitter {
         if (optionsNode && evaluateDefaultOptions) {
             specs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
         }
-        const checkpointBeforeCallback = method === "lookup" && this.dnsLookupCallbackNeedsMicrotaskCheckpoint(optionsNode);
         specs.push(
             { value: callback, target: callbackType, node: callbackNode },
             ...this.ignoredArgumentSpecs(call.arguments, callbackIndex + 1),
@@ -61748,8 +61753,8 @@ class Emitter {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                     ty: arrayType(ttl ? T_VALUE : T_STRING),
                 };
-                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4")}(${hostC}); (void)${callbackCall}; })`;
+                const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4")}(${hostC}); ${callbackSchedule}; })`;
             }
             if (method === "resolve6") {
                 const ttl = this.dnsResolveOptions(optionsNode, "dns.resolve6");
@@ -61757,8 +61762,8 @@ class Emitter {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                     ty: arrayType(ttl ? T_VALUE : T_STRING),
                 };
-                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6")}(${hostC}); (void)${callbackCall}; })`;
+                const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6")}(${hostC}); ${callbackSchedule}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
@@ -61766,16 +61771,16 @@ class Emitter {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                     ty: arrayType(T_VALUE),
                 };
-                const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${checkpointBeforeCallback ? "tsc_drain_microtasks_and_next_ticks(); " : ""}(void)${callbackCall}; })`;
+                const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, callbackC!, [err, addresses], callbackNode);
+                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${callbackSchedule}; })`;
             }
             const address: EmitResult = {
                 c: `${result}.address ? ${result}.address : tsc_str_from_lit("", 0)`,
                 ty: T_STRING,
             };
             const family: EmitResult = { c: `${result}.family`, ty: T_NUMBER };
-            const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, address, family], callbackNode);
-            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${checkpointBeforeCallback ? "tsc_drain_microtasks_and_next_ticks(); " : ""}(void)${callbackCall}; })`;
+            const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, callbackC!, [err, address, family], callbackNode);
+            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${callbackSchedule}; })`;
         });
     }
 
@@ -61823,7 +61828,7 @@ class Emitter {
                 c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                 ty: arrayType(T_STRING),
             };
-            const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
+            const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, callbackC!, [err, addresses], callbackNode);
             const resultType = rrtype === "CNAME"
                 ? "tsc_dns_resolve_cname_result_t"
                 : rrtype === "PTR"
@@ -61834,7 +61839,7 @@ class Emitter {
                 : rrtype === "PTR"
                     ? "tsc_dns_resolve_ptr"
                     : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
-            return `({ ${resultType} ${result} = ${resolver}(${values[0]}); (void)${callbackCall}; })`;
+            return `({ ${resultType} ${result} = ${resolver}(${values[0]}); ${callbackSchedule}; })`;
         });
     }
 
@@ -61864,29 +61869,9 @@ class Emitter {
                 c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                 ty: arrayType(T_VALUE),
             };
-            const callbackCall = this.promiseCallbackCall(call, callbackType, values[1]!, [err, records], callbackNode);
-            return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); (void)${callbackCall}; })`;
+            const callbackSchedule = this.emitImmediateCallbackSchedule(call, callbackType, values[1]!, [err, records], callbackNode);
+            return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); ${callbackSchedule}; })`;
         });
-    }
-
-    private dnsLookupCallbackNeedsMicrotaskCheckpoint(options: ts.Expression | undefined): boolean {
-        if (!options) return false;
-        if (this.shouldEvaluateDnsDefaultOptions(options)) return true;
-        const resolved = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(resolved) || this.isNullExpression(resolved)) return true;
-        const numericFamily = this.dnsLookupNumberValue(resolved);
-        if (numericFamily !== null) return false;
-        if (!ts.isObjectLiteralExpression(resolved)) return false;
-        for (const prop of resolved.properties) {
-            let key: string | null = null;
-            if (ts.isPropertyAssignment(prop)) {
-                key = this.staticPropertyName(prop.name);
-            } else if (ts.isShorthandPropertyAssignment(prop)) {
-                key = prop.name.text;
-            }
-            if (key === "hints" || key === "order" || key === "verbatim") return false;
-        }
-        return true;
     }
 
     private dnsLookupHintConstant(name: string): number | null {
@@ -61898,38 +61883,60 @@ class Emitter {
         return null;
     }
 
-    private dnsLookupNumberValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): number | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text);
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.dnsLookupNumberValue(init, seenConsts) : null;
+    private resolveDnsLookupStaticAlias(expr: ts.Expression): ts.Expression {
+        const origin = expr;
+        const seen = new Set<ts.Symbol>();
+        let current = this.unwrapTransparentExpression(expr);
+        while (ts.isIdentifier(current)) {
+            const symbol = this.symbolForIdentifier(current);
+            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+            if (
+                !symbol ||
+                !declaration ||
+                !ts.isVariableDeclaration(declaration) ||
+                !declaration.initializer ||
+                !ts.isIdentifier(declaration.name) ||
+                (declaration.parent.flags & ts.NodeFlags.Const) === 0
+            ) {
+                return current;
+            }
+            const source = current.getSourceFile();
+            if (
+                declaration.getSourceFile() !== source ||
+                declaration.getStart(source) >= current.getStart(source)
+            ) {
+                return current;
+            }
+            if (seen.has(symbol)) {
+                unsupported(origin, "dns lookup static option const aliases must be acyclic");
+            }
+            seen.add(symbol);
+            current = this.unwrapTransparentExpression(declaration.initializer);
+        }
+        return current;
     }
 
-    private dnsLookupBooleanValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): boolean | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+    private dnsLookupNumberValue(expr: ts.Expression): number | null {
+        const unwrapped = this.resolveDnsLookupStaticAlias(expr);
+        if (ts.isNumericLiteral(unwrapped)) return Number(unwrapped.text);
+        return null;
+    }
+
+    private dnsLookupBooleanValue(expr: ts.Expression): boolean | null {
+        const unwrapped = this.resolveDnsLookupStaticAlias(expr);
         if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.dnsLookupBooleanValue(init, seenConsts) : null;
+        return null;
     }
 
-    private dnsLookupStringValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): string | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+    private dnsLookupStringValue(expr: ts.Expression): string | null {
+        const unwrapped = this.resolveDnsLookupStaticAlias(expr);
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) return unwrapped.text;
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.dnsLookupStringValue(init, seenConsts) : null;
+        return null;
     }
 
-    private dnsLookupHintValue(expr: ts.Expression, seenConsts = new Set<ts.Symbol>()): number {
-        while (
-            ts.isParenthesizedExpression(expr) ||
-            ts.isAsExpression(expr) ||
-            ts.isTypeAssertionExpression(expr) ||
-            ts.isNonNullExpression(expr) ||
-            ts.isSatisfiesExpression(expr)
-        ) {
-            expr = expr.expression;
-        }
+    private dnsLookupHintValue(expr: ts.Expression): number {
+        expr = this.resolveDnsLookupStaticAlias(expr);
         if (ts.isNumericLiteral(expr)) return Number(expr.text);
         if (ts.isIdentifier(expr)) {
             const dnsExport = this.namedImportExportName(expr, ["dns", "node:dns"]);
@@ -61937,26 +61944,13 @@ class Emitter {
             if (value !== null) {
                 return value;
             }
-            const symbol = this.checker.getSymbolAtLocation(expr);
-            const decl = symbol?.valueDeclaration;
-            if (symbol && decl && !seenConsts.has(symbol) && ts.isVariableDeclaration(decl) && decl.initializer && ts.isIdentifier(decl.name)) {
-                const list = decl.parent;
-                if (ts.isVariableDeclarationList(list) && (list.flags & ts.NodeFlags.Const) !== 0) {
-                    seenConsts.add(symbol);
-                    try {
-                        return this.dnsLookupHintValue(decl.initializer, seenConsts);
-                    } finally {
-                        seenConsts.delete(symbol);
-                    }
-                }
-            }
         }
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && this.isDnsModuleIdentifier(expr.expression)) {
             const value = this.dnsLookupHintConstant(expr.name.text);
             if (value !== null) return value;
         }
         if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.BarToken) {
-            return this.dnsLookupHintValue(expr.left, seenConsts) | this.dnsLookupHintValue(expr.right, seenConsts);
+            return this.dnsLookupHintValue(expr.left) | this.dnsLookupHintValue(expr.right);
         }
         unsupported(expr, "dns.lookup hints must be a numeric literal or DNS hint constants in this subset");
     }
@@ -61973,7 +61967,7 @@ class Emitter {
     private dnsLookupOptions(options: ts.Expression | undefined): { family: number; all: boolean; hints: number; order: number } {
         const out = { family: 0, all: false, hints: 0, order: 0 };
         if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
-        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        options = this.resolveDnsLookupStaticAlias(options);
         if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return out;
         const numericFamily = this.dnsLookupNumberValue(options);
         if (numericFamily !== null) {
@@ -61993,10 +61987,10 @@ class Emitter {
             let valueNode: ts.Expression | undefined;
             if (ts.isPropertyAssignment(prop)) {
                 key = this.staticPropertyName(prop.name);
-                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                valueNode = this.resolveDnsLookupStaticAlias(prop.initializer);
             } else if (ts.isShorthandPropertyAssignment(prop)) {
                 key = prop.name.text;
-                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+                valueNode = this.resolveDnsLookupStaticAlias(prop.name);
             } else {
                 unsupported(prop, "dns.lookup options only support property assignments and shorthand property assignments");
             }
@@ -62046,7 +62040,7 @@ class Emitter {
 
     private dnsResolveOptions(options: ts.Expression | undefined, label: string): boolean {
         if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return false;
-        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        options = this.resolveDnsLookupStaticAlias(options);
         if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return false;
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
@@ -62057,10 +62051,10 @@ class Emitter {
             let valueNode: ts.Expression | undefined;
             if (ts.isPropertyAssignment(prop)) {
                 key = this.staticPropertyName(prop.name);
-                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                valueNode = this.resolveDnsLookupStaticAlias(prop.initializer);
             } else if (ts.isShorthandPropertyAssignment(prop)) {
                 key = prop.name.text;
-                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+                valueNode = this.resolveDnsLookupStaticAlias(prop.name);
             } else {
                 unsupported(prop, `${label} options only support property assignments and shorthand property assignments`);
             }
@@ -62130,8 +62124,8 @@ class Emitter {
             return `({ ` +
                 `${resultType} ${result} = ${resolver}(${values[0]}); ` +
                 `tsc_promise_t* ${out}; ` +
-                `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
+                `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
                 `${out}; })`;
         });
     }
@@ -62154,8 +62148,8 @@ class Emitter {
             return `({ ` +
                 `tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); ` +
                 `tsc_promise_t* ${out}; ` +
-                `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                `${out} = tsc_promise_resolve(tsc_value_array(${records})); } ` +
+                `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
+                `${out} = tsc_promise_settle_immediate(tsc_value_array(${records}), false); } ` +
                 `${out}; })`;
         });
     }
@@ -62229,11 +62223,11 @@ class Emitter {
                 return `({ ` +
                     `tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
                     `tsc_object_t* ${obj} = tsc_object_new(); ` +
                     `tsc_object_set(${obj}, tsc_str_from_lit("hostname", 8), tsc_value_string(${hostname})); ` +
                     `tsc_object_set(${obj}, tsc_str_from_lit("service", 7), tsc_value_string(${service})); ` +
-                    `${out} = tsc_promise_resolve(tsc_value_object(${obj})); } ` +
+                    `${out} = tsc_promise_settle_immediate(tsc_value_object(${obj}), false); } ` +
                     `${out}; })`;
             });
         }
@@ -62254,8 +62248,8 @@ class Emitter {
                 return `({ ` +
                     `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t"} ${result} = ${ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
+                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
                     `${out}; })`;
             }
             if (method === "resolve6") {
@@ -62264,8 +62258,8 @@ class Emitter {
                 return `({ ` +
                     `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t"} ${result} = ${ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
+                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
                     `${out}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
@@ -62274,8 +62268,8 @@ class Emitter {
                 return `({ ` +
                     `tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
+                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
                     `${out}; })`;
             }
             const obj = this.freshTemp("_dns_result");
@@ -62283,11 +62277,11 @@ class Emitter {
             return `({ ` +
                 `tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ` +
                 `tsc_promise_t* ${out}; ` +
-                `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
                 `tsc_object_t* ${obj} = tsc_object_new(); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("address", 7), tsc_value_string(${address})); ` +
                 `tsc_object_set(${obj}, tsc_str_from_lit("family", 6), tsc_value_num(${result}.family)); ` +
-                `${out} = tsc_promise_resolve(tsc_value_object(${obj})); } ` +
+                `${out} = tsc_promise_settle_immediate(tsc_value_object(${obj}), false); } ` +
                 `${out}; })`;
         });
     }
@@ -63575,10 +63569,45 @@ class Emitter {
                 `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
                 `${env}->fn = ${fn}`,
             ];
-            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
+            args.forEach((arg, i) => {
+                pieces.push(`${env}->arg${i} = ${arg}`);
+                if (this.prepareType(params[i]!).kind === "value") {
+                    pieces.push(`${env}->arg${i}_gc_root = tsc_value_gc_root(${env}->arg${i})`);
+                }
+            });
             pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
             return `({ ${pieces.join("; ")}; })`;
         });
+    }
+
+    private emitImmediateCallbackSchedule(
+        call: ts.CallExpression,
+        callbackType: CType,
+        callbackValue: string,
+        values: readonly EmitResult[],
+        node: ts.Expression,
+    ): string {
+        const prepared = this.prepareType(callbackType);
+        if (prepared.kind !== "function" || !prepared.ret) {
+            unsupported(node, "deferred callback must be a function");
+        }
+        const params = (prepared.params ?? []).map((param) => this.prepareType(param));
+        const adapter = this.ensureImmediateAdapter(node, prepared, params);
+        const envType = `${adapter}_env_t`;
+        const env = this.freshTemp("_immediate_env");
+        const pieces = [
+            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+            `${env}->fn = ${callbackValue}`,
+        ];
+        params.forEach((param, index) => {
+            const value = values[index] ?? { c: "tsc_value_undefined()", ty: T_VALUE };
+            pieces.push(`${env}->arg${index} = ${this.coerce(value, param, call)}`);
+            if (param.kind === "value") {
+                pieces.push(`${env}->arg${index}_gc_root = tsc_value_gc_root(${env}->arg${index})`);
+            }
+        });
+        pieces.push(`(void)tsc_set_immediate(${adapter}, ${env})`);
+        return `({ ${pieces.join("; ")}; })`;
     }
 
     private emitDispatchCall(call: ts.CallExpression, name: string): EmitResult {
@@ -64431,7 +64460,10 @@ class Emitter {
         this.immediateAdapters.set(key, name);
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line(`${prepared.c} fn;`);
-        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
+        args.forEach((arg, i) => {
+            this.structDecls.line(`${arg.c} arg${i};`);
+            if (arg.kind === "value") this.structDecls.line(`void* arg${i}_gc_root;`);
+        });
         this.structDecls.close(` ${envType};`);
         this.protos.line(`void ${name}(void* env);`);
         const buf = new CBuf();

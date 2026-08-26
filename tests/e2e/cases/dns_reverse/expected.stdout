@@ -1,10 +1,10 @@
+marks: cp
 callback reverse: true true
 callback resolve PTR: true true
 callback default reverse: true true
 callback IPv6 reverse: true true
 callback trailing: true true
 invalid callback: true true
-marks: cp
 promise reverse: true
 promise resolve PTR: true
 promise default reverse: true

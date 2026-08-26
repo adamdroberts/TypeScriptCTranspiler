@@ -1,0 +1,3 @@
+dns alias stress sync
+dns alias stress callback: true true 6
+dns alias stress promise: true 6

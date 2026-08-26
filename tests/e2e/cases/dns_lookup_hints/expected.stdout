@@ -1,9 +1,9 @@
 constants: 32 8 32 16
 callback hints: true true 6
-callback const hints: true true 6
-callback order alias: true true 4
-callback verbatim false: true true 4
 promise hints: true 6
+callback const hints: true true 6
 promise const hints: true 6
+callback order alias: true true 4
 promise verbatim alias: true 4
+callback verbatim false: true true 4
 promise order option: true 4

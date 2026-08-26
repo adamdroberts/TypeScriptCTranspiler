@@ -1,3 +1,3 @@
 {
-  "description": "immediate dns.promises.lookup fulfilled result objects"
+  "description": "dns.promises.lookup settles result objects through deferred completion jobs"
 }

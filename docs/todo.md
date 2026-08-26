@@ -107,7 +107,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
 - **Phases 11–13 — async Node stdlib**
   - Finish the `fs.promises` and `FileHandle` API/option/result matrix on libuv, with AbortSignal cancellation, descriptor lifetime, ordering, and platform error parity.
   - Generalize `events.on` / `events.once` and `for await...of` consumption through the Phase 6 async IR, including arbitrary bindings, body control flow, IteratorClose, backpressure, cancellation, and error-object identity.
-  - Implement full readable, writable, transform, and pipe stream behavior; complete socket/server/DNS options and lifecycle semantics; and route scheduling APIs through the shared event-loop ordering model.
+  - Implement full readable, writable, transform, and pipe stream behavior; complete socket/server/DNS options and lifecycle semantics; move the still-blocking DNS host operation onto an asynchronous transport while retaining its canonical completion worklist; and route the remaining scheduling APIs through the shared event-loop ordering model.
   - Complete child-process lifecycle and stream semantics, `spawn` / `spawnSync` options, `fork`, `cluster`, and `worker_threads` with structured-clone messaging.
 
 - **Phase 14 — npm integration**

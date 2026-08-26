@@ -1,8 +1,8 @@
+marks: cp
 callback default: true 127.0.0.1
 callback named A: true 127.0.0.1
 callback default AAAA: true ::1
 callback trailing: true 127.0.0.1
-marks: cp
 promise default: 127.0.0.1
 promise named AAAA: ::1
 promise default A: 127.0.0.1

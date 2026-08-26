@@ -18,6 +18,11 @@ export interface DispatchCaptureWorklistWidthSpec {
     width: number;
 }
 
+export interface DnsLookupOptionAliasDepthSpec {
+    generator: "dns-lookup-option-alias-depth";
+    depth: number;
+}
+
 export interface StrictEqualityExpressionDepthSpec {
     generator: "strict-equality-expression-depth";
     depth: number;
@@ -114,6 +119,7 @@ export type GeneratedCaseSpec =
     | AsyncBindingDefaultDepthSpec
     | AsyncLogicalExpressionDepthSpec
     | DispatchCaptureWorklistWidthSpec
+    | DnsLookupOptionAliasDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleStaticSemanticsWidthSpec
@@ -182,6 +188,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             width,
+        };
+    }
+    if (spec.generator === "dns-lookup-option-alias-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
         };
     }
     if (spec.generator === "strict-equality-expression-depth") {
@@ -535,6 +551,26 @@ function dispatchCaptureWorklistWidthSource(width: number): string {
         "});",
         ...mutations,
         `pending.then((result) => console.log("dispatch capture worklist:", result === ${(width * (width - 1)) / 2}));`,
+        "",
+    ].join("\n");
+}
+
+function dnsLookupOptionAliasDepthSource(depth: number): string {
+    const aliases = Array.from(
+        { length: depth },
+        (_, index) => `const lookupOptions_${index + 1} = lookupOptions_${index};`,
+    );
+    return [
+        'import { ALL, V4MAPPED, lookup, promises } from "dns";',
+        "const lookupOptions_0 = { family: 6, hints: V4MAPPED | ALL } as const;",
+        ...aliases,
+        `lookup("127.0.0.1", lookupOptions_${depth}, (error: any, address: string, family: number): void => {`,
+        '    console.log("dns alias stress callback:", error === null, address.indexOf("127.0.0.1") >= 0, family);',
+        "});",
+        `promises.lookup("127.0.0.1", lookupOptions_${depth}).then((result: any): void => {`,
+        '    console.log("dns alias stress promise:", result.address.indexOf("127.0.0.1") >= 0, result.family);',
+        "});",
+        'console.log("dns alias stress sync");',
         "",
     ].join("\n");
 }
@@ -1016,6 +1052,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return asyncLogicalExpressionDepthSource(spec.depth);
         case "dispatch-capture-worklist-width":
             return dispatchCaptureWorklistWidthSource(spec.width);
+        case "dns-lookup-option-alias-depth":
+            return dnsLookupOptionAliasDepthSource(spec.depth);
         case "strict-equality-expression-depth":
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":

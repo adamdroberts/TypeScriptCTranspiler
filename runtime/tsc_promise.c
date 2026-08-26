@@ -1015,6 +1015,37 @@ tsc_promise_t* tsc_promise_pending(void) {
     return p;
 }
 
+typedef struct {
+    tsc_promise_t* promise;
+    tsc_value_t value;
+    void* value_gc_root;
+    bool rejected;
+} tsc_promise_immediate_settlement_t;
+
+static void tsc_promise_run_immediate_settlement(void* env) {
+    tsc_promise_immediate_settlement_t* state =
+        (tsc_promise_immediate_settlement_t*)env;
+    if (!state || !state->promise) return;
+    if (state->rejected) {
+        tsc_promise_reject_in_place(state->promise, state->value);
+    } else {
+        tsc_promise_fulfill_in_place(state->promise, state->value);
+    }
+    state->value_gc_root = NULL;
+}
+
+tsc_promise_t* tsc_promise_settle_immediate(tsc_value_t value, bool rejected) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_promise_immediate_settlement_t* state =
+        (tsc_promise_immediate_settlement_t*)TSC_GC_MALLOC(sizeof(*state));
+    state->promise = promise;
+    state->value = value;
+    state->value_gc_root = tsc_value_gc_root(value);
+    state->rejected = rejected;
+    (void)tsc_set_immediate(tsc_promise_run_immediate_settlement, state);
+    return promise;
+}
+
 tsc_value_t tsc_promise_with_resolvers(void) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_promise_thenable_state_t* state =

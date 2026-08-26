@@ -1070,6 +1070,7 @@ tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src);
 tsc_value_t tsc_promise_get_method(tsc_promise_t* promise, const tsc_str_t* key);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
+tsc_promise_t* tsc_promise_settle_immediate(tsc_value_t value, bool rejected);
 tsc_value_t tsc_promise_with_resolvers(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
 void tsc_promise_fulfill_in_place(tsc_promise_t* p, tsc_value_t value);

@@ -4,7 +4,7 @@ numeric const callback: true 127.0.0.1 4
 object const extras: true 127.0.0.1 4
 numeric promise: 127.0.0.1 4
 numeric const promise: 127.0.0.1 4
-undefined callback options: true 127.0.0.1 4 C
+undefined callback options: true 127.0.0.1 4 CPI
 undefined promise options: 127.0.0.1 4 CPI
 null callback options: true 127.0.0.1 4
 null promise options: 127.0.0.1 4
