@@ -1065,8 +1065,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-ecmascript-standard-built-in-objects` — ECMAScript Standard Built-in Objects: exact disposition and partitions missing.
 - [ ] **The Global Object** (`sec-global-object`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: value properties; global functions; constructors; Reflect; global object semantics.
-  - Linked local regression evidence: property: tests/property/symbol-coercion.property.test.ts; E2E: global_number_predicates, runtime_eval, proxy_ownkeys_invariants.
-  - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance; Reflect operations still require exact clause partitions and exhaustive pinned Test262 evidence.
+  - Linked local regression evidence: property: tests/property/reflect-construct.property.test.ts, tests/property/symbol-coercion.property.test.ts; stress: reflect_construct_argument_width; E2E: global_number_predicates, reflect_construct_validation, runtime_eval, proxy_ownkeys_invariants.
+  - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance; the remaining Reflect operations require exact clause partitions and exhaustive pinned Test262 evidence.
   - [ ] `sec-global-object` — The Global Object: exact disposition and partitions missing.
   - [ ] `sec-value-properties-of-the-global-object` — Value Properties of the Global Object: exact disposition and partitions missing.
   - [ ] `sec-globalthis` — globalThis: exact disposition and partitions missing.
@@ -2278,12 +2278,14 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `await` — Await ( _value_: an ECMAScript language value, ): either a normal completion containing either an ECMAScript language value or ~empty~, or a throw completion: exact disposition and partitions missing.
 - [ ] **Reflection** (`sec-reflection`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Reflect internal-method forwarding; Proxy traps; invariants and revocation.
-  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/proxy-constructor.property.test.ts; stress: module_namespace_export_width; E2E: reflect_dynamic, proxy.
-  - Known blockers: Exact terminal clause registration and the remaining Reflect/Proxy internal-method semantic partitions are unverified.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/proxy-constructor.property.test.ts, tests/property/reflect-construct.property.test.ts; stress: module_namespace_export_width, reflect_construct_argument_width; E2E: reflect_construct_validation, reflect_dynamic, proxy.
+  - Known blockers: The remaining Reflect operations and Proxy internal-method semantic partitions still require exact terminal clause registration and pinned verification.
   - [ ] `sec-reflection` — Reflection: exact disposition and partitions missing.
-  - [ ] `sec-reflect-object` — The Reflect Object: exact disposition and partitions missing.
+  - [ ] `sec-reflect-object` — The Reflect Object
+    - [ ] `realm-global-ordinary-object-and-noncallable-surface` (intrinsic, finite): Realm-owned global %Reflect% identity, ordinary Object prototype, and absence of [[Call]] and [[Construct]].
   - [ ] `sec-reflect.apply` — Reflect.apply ( _target_, _thisArgument_, _argumentsList_ ): exact disposition and partitions missing.
-  - [ ] `sec-reflect.construct` — Reflect.construct ( _target_, _argumentsList_ [ , _newTarget_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.construct` — Reflect.construct ( _target_, _argumentsList_ [ , _newTarget_ ] )
+    - [ ] `validated-target-newtarget-and-array-like-argument-worklist` (intrinsic, unbounded): Ordered target/newTarget constructor validation, CreateListFromArrayLike, and Construct over one canonical argument worklist.
   - [ ] `sec-reflect.defineproperty` — Reflect.defineProperty ( _target_, _propertyKey_, _attributes_ ): exact disposition and partitions missing.
   - [ ] `sec-reflect.deleteproperty` — Reflect.deleteProperty ( _target_, _propertyKey_ ): exact disposition and partitions missing.
   - [ ] `sec-reflect.get` — Reflect.get ( _target_, _propertyKey_ [ , _receiver_ ] ): exact disposition and partitions missing.
@@ -2610,8 +2612,8 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Promise.any` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Promise.prototype.finally` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Proxy` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Reflect` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Reflect.construct` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Reflect` — standard, tracking: `ready-for-verification`; `sec-reflect-object`.
+- [ ] `Reflect.construct` — standard, tracking: `ready-for-verification`; `sec-reflect.construct`.
 - [ ] `Reflect.set` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Reflect.setPrototypeOf` — standard, tracking: `todo`; no clause mapping.
 - [ ] `RegExp.escape` — standard, tracking: `todo`; no clause mapping.

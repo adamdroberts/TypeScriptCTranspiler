@@ -2088,12 +2088,10 @@ bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor) {
 }
 
 static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {
-    if (value_is_box(args) && value_tag(args) == TSC_VALUE_TAG_ARRAY) {
-        return (tsc_array_t*)value_ptr(args);
-    }
     if (
         !value_is_box(args) ||
         (
+            value_tag(args) != TSC_VALUE_TAG_ARRAY &&
             value_tag(args) != TSC_VALUE_TAG_OBJECT &&
             value_tag(args) != TSC_VALUE_TAG_FUNCTION
         )
@@ -2101,11 +2099,12 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
     }
     tsc_value_t length_value = tsc_value_get_prop(args, tsc_str_from_lit("length", 6));
-    double length_num = tsc_value_as_num(length_value);
-    size_t length = 0;
-    if (isfinite(length_num) && length_num > 0.0) {
-        length = (size_t)floor(length_num);
-    }
+    double length_num = tsc_value_to_number(length_value);
+    if (isnan(length_num) || length_num <= 0.0) length_num = 0.0;
+    else if (isinf(length_num) || length_num >= 9007199254740991.0) {
+        length_num = 9007199254740991.0;
+    } else length_num = floor(length_num);
+    size_t length = (size_t)length_num;
     tsc_array_t* list = tsc_array_new(sizeof(tsc_value_t), length ? length : 1);
     for (size_t i = 0; i < length; i++) {
         tsc_value_t item = tsc_value_get_index(args, (double)i);
@@ -2209,7 +2208,10 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         }
     }
     if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
-        tsc_throw_str(tsc_str_from_cstr("Reflect.apply target is not a function"));
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Reflect.apply target is not a function")
+        );
     }
     tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
     tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
@@ -2258,39 +2260,25 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     return tsc_value_undefined();
 }
 
-tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
-    return tsc_value_construct_with_new_target(target, args, target);
-}
-
-tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target) {
+static tsc_value_t construct_from_argument_list(
+    tsc_value_t target,
+    tsc_array_t* list,
+    tsc_value_t new_target
+) {
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_BOUND) {
             tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)ident->env;
-            if (!bound || !tsc_value_is_constructable(bound->target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("bound function target is not a constructor"));
-            }
-            if (!tsc_value_is_constructable(new_target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
-            }
-            tsc_array_t* list = value_to_argument_list(
-                args,
-                "Reflect.construct argumentsList must be an array or array-like object"
-            );
             const tsc_value_t effective_new_target = new_target == target
                 ? bound->target
                 : new_target;
-            return tsc_value_construct_with_new_target(
+            return construct_from_argument_list(
                 bound->target,
-                tsc_value_array(bound_function_arguments(bound, list)),
+                bound_function_arguments(bound, list),
                 effective_new_target
             );
         }
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL) {
-            if (!tsc_value_is_constructable(new_target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
-            }
-            tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t receiver = tsc_value_undefined();
             if (ident->construct_allocates_receiver) {
                 tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
@@ -2342,16 +2330,9 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
         tsc_object_t* o = (tsc_object_t*)value_ptr(target);
         if (o->is_proxy) {
             if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
-            if (!tsc_value_is_constructable(o->proxy_target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy construct target must be constructor"));
-            }
-            if (!tsc_value_is_constructable(new_target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
-            }
-            tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-                return tsc_value_construct_with_new_target(o->proxy_target, tsc_value_array(list), new_target);
+                return construct_from_argument_list(o->proxy_target, list, new_target);
             }
             if (!value_is_callable_function(trap)) {
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy construct trap must be callable"));
@@ -2376,6 +2357,34 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
     }
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Reflect.construct target is not a supported constructor"));
     return tsc_value_undefined();
+}
+
+tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args) {
+    return tsc_value_construct_with_new_target(target, args, target);
+}
+
+tsc_value_t tsc_value_construct_with_new_target(
+    tsc_value_t target,
+    tsc_value_t args,
+    tsc_value_t new_target
+) {
+    if (!tsc_value_is_constructable(target)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Reflect.construct target is not a supported constructor")
+        );
+    }
+    if (!tsc_value_is_constructable(new_target)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Reflect.construct newTarget is not a constructor")
+        );
+    }
+    tsc_array_t* list = value_to_argument_list(
+        args,
+        "Reflect.construct argumentsList must be an array or array-like object"
+    );
+    return construct_from_argument_list(target, list, new_target);
 }
 
 
@@ -8155,33 +8164,71 @@ static tsc_value_t reflect_set_prototype_of_method(void* env, tsc_value_t this_a
     return tsc_value_bool(tsc_reflect_set_prototype_of(target, prototype));
 }
 
-static void reflect_define_method(tsc_object_t* reflect, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
-    intrinsic_define_method(reflect, name, len, arity, fn, NULL);
-}
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_generic_function_t apply;
+} tsc_reflect_method_descriptor_t;
+
+#define TSC_REFLECT_METHOD(NAME, ARITY, APPLY) \
+    { NAME, sizeof(NAME) - 1, ARITY, APPLY }
+
+static const tsc_reflect_method_descriptor_t reflect_method_descriptors[] = {
+    TSC_REFLECT_METHOD("apply", 3.0, reflect_apply_method),
+    TSC_REFLECT_METHOD("construct", 2.0, reflect_construct_method),
+    TSC_REFLECT_METHOD("defineProperty", 3.0, reflect_define_property_method),
+    TSC_REFLECT_METHOD("deleteProperty", 2.0, reflect_delete_property_method),
+    TSC_REFLECT_METHOD("get", 2.0, reflect_get_method),
+    TSC_REFLECT_METHOD("getOwnPropertyDescriptor", 2.0, reflect_get_own_property_descriptor_method),
+    TSC_REFLECT_METHOD("getPrototypeOf", 1.0, reflect_get_prototype_of_method),
+    TSC_REFLECT_METHOD("has", 2.0, reflect_has_method),
+    TSC_REFLECT_METHOD("isExtensible", 1.0, reflect_is_extensible_method),
+    TSC_REFLECT_METHOD("ownKeys", 1.0, reflect_own_keys_method),
+    TSC_REFLECT_METHOD("preventExtensions", 1.0, reflect_prevent_extensions_method),
+    TSC_REFLECT_METHOD("set", 3.0, reflect_set_method),
+    TSC_REFLECT_METHOD("setPrototypeOf", 2.0, reflect_set_prototype_of_method),
+};
 
 tsc_value_t tsc_builtin_reflect(void) {
     tsc_namespace_intrinsics_state_t* state = namespace_intrinsics_for_current_realm();
     tsc_object_t* reflect = state->reflect;
     if (!reflect) {
         tsc_runtime_lock();
+        reflect = state->reflect;
         if (reflect) {
             tsc_runtime_unlock();
             return tsc_value_object(reflect);
         }
         tsc_object_t* built = tsc_object_new();
-        reflect_define_method(built, "apply", 5, 3.0, reflect_apply_method);
-        reflect_define_method(built, "construct", 9, 2.0, reflect_construct_method);
-        reflect_define_method(built, "defineProperty", 14, 3.0, reflect_define_property_method);
-        reflect_define_method(built, "deleteProperty", 14, 2.0, reflect_delete_property_method);
-        reflect_define_method(built, "get", 3, 2.0, reflect_get_method);
-        reflect_define_method(built, "getOwnPropertyDescriptor", 24, 2.0, reflect_get_own_property_descriptor_method);
-        reflect_define_method(built, "getPrototypeOf", 14, 1.0, reflect_get_prototype_of_method);
-        reflect_define_method(built, "has", 3, 2.0, reflect_has_method);
-        reflect_define_method(built, "isExtensible", 12, 1.0, reflect_is_extensible_method);
-        reflect_define_method(built, "ownKeys", 7, 1.0, reflect_own_keys_method);
-        reflect_define_method(built, "preventExtensions", 17, 1.0, reflect_prevent_extensions_method);
-        reflect_define_method(built, "set", 3, 3.0, reflect_set_method);
-        reflect_define_method(built, "setPrototypeOf", 14, 2.0, reflect_set_prototype_of_method);
+        for (
+            size_t index = 0;
+            index < sizeof(reflect_method_descriptors) / sizeof(reflect_method_descriptors[0]);
+            index++
+        ) {
+            const tsc_reflect_method_descriptor_t* descriptor =
+                &reflect_method_descriptors[index];
+            intrinsic_define_method(
+                built,
+                descriptor->name,
+                descriptor->name_len,
+                descriptor->arity,
+                descriptor->apply,
+                NULL
+            );
+        }
+        (void)tsc_value_define_property_desc(
+            tsc_value_object(built),
+            tsc_symbol_property_key(tsc_symbol_to_string_tag()),
+            tsc_value_string(tsc_str_from_lit("Reflect", 7)),
+            true,
+            false,
+            true,
+            false,
+            true,
+            true,
+            true
+        );
         state->reflect = built;
         reflect = built;
         tsc_runtime_unlock();

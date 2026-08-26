@@ -48,6 +48,11 @@ export interface StringCodeUnitListWidthSpec {
     width: number;
 }
 
+export interface ReflectConstructArgumentWidthSpec {
+    generator: "reflect-construct-argument-width";
+    width: number;
+}
+
 export interface ArrayStaticFactoryItemWidthSpec {
     generator: "array-static-factory-item-width";
     width: number;
@@ -99,6 +104,7 @@ export type GeneratedCaseSpec =
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
+    | ReflectConstructArgumentWidthSpec
     | ArrayStaticFactoryItemWidthSpec
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
@@ -210,6 +216,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-code-unit-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "reflect-construct-argument-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -521,6 +537,32 @@ function stringCodeUnitListWidthSource(width: number): string {
     ].join("\n");
 }
 
+function reflectConstructArgumentWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const reflectObject = Reflect;",
+        "const argumentsList: any = { length: width };",
+        "for (let index = 0; index < width; index++) argumentsList[index] = index;",
+        "function Target(this: any, ...values: any[]): void {",
+        "    this.count = values.length;",
+        "    this.first = values[0];",
+        "    this.middle = values[Math.floor(values.length / 2)];",
+        "    this.last = values[values.length - 1];",
+        "}",
+        "const result: any = Reflect.construct(Target as any, argumentsList);",
+        "const valid =",
+        "    result.count === width &&",
+        "    result.first === 0 &&",
+        "    result.middle === Math.floor(width / 2) &&",
+        "    result.last === width - 1 &&",
+        "    result instanceof Target &&",
+        "    Reflect === reflectObject &&",
+        "    Object.getPrototypeOf(Reflect) === Object.prototype;",
+        'console.log("reflect construct argument worklist:", valid);',
+        "",
+    ].join("\n");
+}
+
 function switchClauseWorklistWidthSource(width: number): string {
     const cases = Array.from({ length: width - 1 }, (_, index) =>
         `    case select(${index + 1}, ${index + 2}): result = "wrong"; break;`,
@@ -827,6 +869,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return uriPercentCodecLengthSource(spec.length);
         case "string-code-unit-list-width":
             return stringCodeUnitListWidthSource(spec.width);
+        case "reflect-construct-argument-width":
+            return reflectConstructArgumentWidthSource(spec.width);
         case "array-static-factory-item-width":
             return arrayStaticFactoryItemWidthSource(spec.width);
         case "switch-clause-worklist-width":

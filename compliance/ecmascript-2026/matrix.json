@@ -174,6 +174,95 @@
       "rationale": "The complete String.fromCharCode intrinsic is represented as one terminal worklist partition with reciprocal property, independent width stress, native E2E, declaration, implementation, and pinned Test262 evidence."
     },
     {
+      "clause": "sec-reflect-object",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "realm-global-ordinary-object-and-noncallable-surface",
+          "title": "Realm-owned global %Reflect% identity, ordinary Object prototype, and absence of [[Call]] and [[Construct]]",
+          "surface": "intrinsic",
+          "cardinality": "finite",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-reflect-object" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/reflect-construct.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["reflect_construct_argument_width"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"],
+            "implementation": [
+              "src/emit/index.ts#emitCall",
+              "src/emit/index.ts#emitDynamicMethod",
+              "runtime/tsc_value.c#reflect_method_descriptors",
+              "runtime/tsc_value.c#tsc_builtin_reflect"
+            ]
+          },
+          "rationale": "The independent property observes the stable Realm-global identity and descriptor, ordinary Object prototype, object branding, non-callability, non-constructability, and mutable global/method lookup boundaries. The runtime creates %Reflect% from one canonical method-descriptor collection and installs it as one ordinary global value; JavaScript source reads and calls that value through ordinary global and property lookup, while the typed static call boundary enters the same runtime constructor helper. The separately generated native case retains those object invariants while independently stressing the construct member's arbitrary argument worklist. The shared Reflect feature mapping deliberately makes every dependent Reflect scenario part of this parent obligation, so unresolved child operations remain visible rather than being hidden by a narrow path inventory."
+        }
+      ],
+      "rationale": "The complete normative parent-object surface is one terminal intrinsic partition backed by independent semantic, collection, declaration, implementation, and pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-reflect.construct",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "validated-target-newtarget-and-array-like-argument-worklist",
+          "title": "Ordered target/newTarget constructor validation, CreateListFromArrayLike, and Construct over one canonical argument worklist",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-reflect.construct" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/reflect-construct.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["reflect_construct_argument_width"],
+            "e2e": [
+              "reflect_arguments_array_like",
+              "reflect_construct_validation"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"],
+            "implementation": [
+              "src/emit/index.ts#emitCall",
+              "src/emit/index.ts#emitDynamicMethod",
+              "src/emit/index.ts#emitReflectConstruct",
+              "src/emit/index.ts#ensureDynamicFunctionAdapter",
+              "runtime/tsc_value.c#reflect_construct_method",
+              "runtime/tsc_value.c#value_to_argument_list",
+              "runtime/tsc_value.c#tsc_value_construct_with_new_target",
+              "runtime/tsc_value.c#construct_from_argument_list"
+            ]
+          },
+          "rationale": "The independent property derives the constructor/non-constructor target and newTarget partitions, omitted newTarget, ordinary/proxy/bound targets, object-versus-primitive constructor returns, custom newTarget prototypes, array and general array-like input, ToLength and indexed-Get order, holes, abrupt identity, method/global replacement, and proxy trap normalization. Target and explicit newTarget validation precede one CreateListFromArrayLike worklist; every ordinary, bound, and proxy construct branch consumes that already validated List, and a boxed rest formal receives a cardinality-independent slice of the same runtime argument collection. One distinct generated native case stresses representative array-like and rest-binding width in both memory modes; ordinary E2E cases retain validation and array-like regressions. Any unresolved feature dependency or non-passing signed scenario remains a claim blocker."
+        }
+      ],
+      "rationale": "The complete Reflect.construct algorithm is represented as one terminal validation-and-worklist partition with reciprocal property, independent stress, native E2E, declaration, implementation, and pinned Test262 evidence."
+    },
+    {
       "clause": "sec-array.from",
       "disposition": "evidence",
       "partitions": [
@@ -835,8 +924,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["value properties", "global functions", "constructors", "Reflect", "global object semantics"],
-      "localEvidence": { "property": ["tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["global_number_predicates", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
-      "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance; Reflect operations still require exact clause partitions and exhaustive pinned Test262 evidence."]
+      "localEvidence": { "property": ["tests/property/reflect-construct.property.test.ts", "tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": ["reflect_construct_argument_width"], "e2e": ["global_number_predicates", "reflect_construct_validation", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance; the remaining Reflect operations require exact clause partitions and exhaustive pinned Test262 evidence."]
     },
     {
       "id": "fundamental-objects",
@@ -925,8 +1014,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Reflect internal-method forwarding", "Proxy traps", "invariants and revocation"],
-      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/proxy-constructor.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
-      "knownGaps": ["Exact terminal clause registration and the remaining Reflect/Proxy internal-method semantic partitions are unverified."]
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/proxy-constructor.property.test.ts", "tests/property/reflect-construct.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width", "reflect_construct_argument_width"], "e2e": ["reflect_construct_validation", "reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "knownGaps": ["The remaining Reflect operations and Proxy internal-method semantic partitions still require exact terminal clause registration and pinned verification."]
     },
     {
       "id": "memory-model",

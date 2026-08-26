@@ -411,16 +411,20 @@
     {
       "tag": "Reflect",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-reflect-object"
+      ],
+      "rationale": "The shared Reflect tag denotes use of the Realm-owned ordinary %Reflect% global object. It binds only the parent object's identity, prototype, and non-callable/non-constructable surface; exact esid metadata or method-specific feature tags remain authoritative for individual Reflect operations."
     },
     {
       "tag": "Reflect.construct",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-reflect.construct"
+      ],
+      "rationale": "This operation-specific tag binds legacy and current pinned scenarios to the exact Reflect.construct algorithm: target/newTarget constructor validation, CreateListFromArrayLike, and Construct. The shared Reflect tag separately supplies the parent object dependency."
     },
     {
       "tag": "Reflect.set",

@@ -276,6 +276,116 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/reflect-construct.property.test.ts",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "reflect_construct_argument_width",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ],
+      "stressReview": {
+        "dimension": "Reflect.construct CreateListFromArrayLike argument-worklist width",
+        "parameter": "width",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native call independently stresses the canonical array-like intake, validated construction List, and boxed rest-parameter slice while retaining the Realm-global Reflect object invariants; successive argument counts are not evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "reflect_arguments_array_like",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "reflect_construct_validation",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#ReflectConstructor",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitCall",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitDynamicMethod",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitReflectConstruct",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#ensureDynamicFunctionAdapter",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#reflect_method_descriptors",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_builtin_reflect",
+      "targets": [
+        "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#reflect_construct_method",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#value_to_argument_list",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#construct_from_argument_list",
+      "targets": [
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/module-namespace-exotic.property.test.ts",
       "targets": [
         "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",
@@ -556,7 +666,8 @@
       "id": "runtime/tsc_value.c#tsc_value_construct_with_new_target",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
-        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+        "sec-array.of#generic-constructor-item-list-and-length-finalization",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
       ]
     }
   ]

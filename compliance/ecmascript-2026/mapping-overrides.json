@@ -34,6 +34,14 @@
       "clauses": ["sec-string.fromcharcode"],
       "reason": "The exact legacy ES6 anchor 21.1.2.1 is the current String.fromCharCode intrinsic clause.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "26.1.2",
+      "clauses": ["sec-reflect.construct"],
+      "reason": "The exact legacy ES6 anchor 26.1.2 is the current Reflect.construct intrinsic clause; the semantic metadata maps independently of its filename or surrounding fixture inventory.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [

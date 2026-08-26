@@ -25645,14 +25645,14 @@ class Emitter {
 
     /** Resolve the source function behind a direct callable expression.  This
      * is identity-based (checker symbols), so a same-spelled global or local
-     * does not accidentally enter the JavaScript activation path. */
-    private javaScriptFunctionLikeForExpression(
+     * does not accidentally determine the runtime call ABI. */
+    private functionLikeForExpression(
         expression: ts.Expression,
         seen = new Set<ts.Symbol>(),
     ): ts.FunctionLikeDeclaration | null {
         const current = this.unwrapTransparentExpression(expression);
         if (ts.isFunctionExpression(current) || ts.isArrowFunction(current)) {
-            return this.isJavaScriptSourceFile(current.getSourceFile()) ? current : null;
+            return current;
         }
         if (!ts.isIdentifier(current)) return null;
         const symbol = this.symbolForIdentifier(current);
@@ -25660,12 +25660,24 @@ class Emitter {
         seen.add(symbol);
         const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
         if (declaration && ts.isFunctionDeclaration(declaration)) {
-            return this.isJavaScriptSourceFile(declaration.getSourceFile()) ? declaration : null;
+            return declaration;
         }
         if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) {
-            return this.javaScriptFunctionLikeForExpression(declaration.initializer, seen);
+            return this.functionLikeForExpression(declaration.initializer, seen);
         }
         return null;
+    }
+
+    /** JavaScript-source functions additionally require dynamic activation
+     * semantics; typed source functions still use their syntax to describe
+     * rest binding and observable function length. */
+    private javaScriptFunctionLikeForExpression(
+        expression: ts.Expression,
+    ): ts.FunctionLikeDeclaration | null {
+        const sourceFunction = this.functionLikeForExpression(expression);
+        return sourceFunction && this.isJavaScriptSourceFile(sourceFunction.getSourceFile())
+            ? sourceFunction
+            : null;
     }
 
     private directivePrologueHasUseStrict(statements: readonly ts.Statement[]): boolean {
@@ -48681,6 +48693,19 @@ class Emitter {
             ) {
                 return { c: "tsc_global_object()", ty: T_VALUE };
             }
+            if (
+                this.isJavaScriptSourceFile(expr.getSourceFile()) &&
+                expr.text === "Reflect" &&
+                (
+                    this.isUnshadowedGlobalIdentifier(expr, "Reflect") ||
+                    this.isTest262DynamicGlobalReference(expr)
+                )
+            ) {
+                return {
+                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                    ty: T_VALUE,
+                };
+            }
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };
@@ -52310,6 +52335,25 @@ class Emitter {
     private emitCall(call: ts.CallExpression): EmitResult {
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
+        }
+        if (
+            ts.isPropertyAccessExpression(call.expression) &&
+            ts.isIdentifier(call.expression.expression) &&
+            this.isJavaScriptSourceFile(call.getSourceFile()) &&
+            call.expression.expression.text === "Reflect" &&
+            (
+                this.isUnshadowedGlobalIdentifier(call.expression.expression, "Reflect") ||
+                this.isTest262DynamicGlobalReference(call.expression.expression)
+            )
+        ) {
+            return this.emitDynamicMethod(
+                call,
+                {
+                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                    ty: T_VALUE,
+                },
+                call.expression.name.text,
+            );
         }
         if (
             ts.isPropertyAccessExpression(call.expression) &&
@@ -76775,6 +76819,19 @@ class Emitter {
             });
         }
         if (
+            this.isJavaScriptSourceFile(n.getSourceFile()) &&
+            ctorExpr.text === "Reflect" &&
+            (
+                this.isUnshadowedGlobalIdentifier(ctorExpr, "Reflect") ||
+                this.isTest262DynamicGlobalReference(ctorExpr)
+            )
+        ) {
+            return this.emitDynamicValueConstruct(n, {
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                ty: T_VALUE,
+            });
+        }
+        if (
             ctorExpr.text === "Proxy" &&
             this.isTest262DynamicGlobalReference(ctorExpr)
         ) {
@@ -79190,7 +79247,7 @@ class Emitter {
                 }
                 case "function": {
                     const sourceFunction = ts.isExpression(node)
-                        ? this.javaScriptFunctionLikeForExpression(node)
+                        ? this.functionLikeForExpression(node)
                         : ts.isFunctionDeclaration(node) ||
                             ts.isMethodDeclaration(node) ||
                             ts.isGetAccessorDeclaration(node) ||
@@ -79370,14 +79427,16 @@ class Emitter {
         }
         this.prepareType(type);
         const sourceFunction = ts.isExpression(node)
-            ? this.javaScriptFunctionLikeForExpression(node)
+            ? this.functionLikeForExpression(node)
             : ts.isFunctionDeclaration(node) ||
                 ts.isMethodDeclaration(node) ||
                 ts.isGetAccessorDeclaration(node) ||
                 ts.isSetAccessorDeclaration(node)
                 ? node
                 : null;
-        const createsActivation = !!sourceFunction && !ts.isArrowFunction(sourceFunction);
+        const createsActivation = !!sourceFunction &&
+            this.isJavaScriptSourceFile(sourceFunction.getSourceFile()) &&
+            !ts.isArrowFunction(sourceFunction);
         const normalizesSloppyThis = createsActivation &&
             !!sourceFunction &&
             !this.functionHasStrictThisBinding(sourceFunction);
