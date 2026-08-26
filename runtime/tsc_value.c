@@ -816,6 +816,66 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
 
 static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor);
 
+static tsc_value_t string_at_from_values(tsc_value_t receiver, tsc_value_t index) {
+    if (tsc_value_is_nullish(receiver)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("String.prototype.at called on null or undefined", 47)
+        );
+    }
+    /* RequireObjectCoercible/ToString must complete before index conversion. */
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double relative_index = tsc_value_to_number(index);
+    tsc_str_t* result = tsc_str_at(string, relative_index);
+    return result ? tsc_value_string(result) : tsc_value_undefined();
+}
+
+static tsc_value_t string_prototype_at_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    (void)env;
+    tsc_value_t index = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return string_at_from_values(this_arg, index);
+}
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    double arity;
+    tsc_generic_function_t apply;
+} tsc_string_prototype_method_t;
+
+static const tsc_string_prototype_method_t string_prototype_methods[] = {
+    { "at", 2, 1.0, string_prototype_at_apply },
+};
+
+static void string_prototype_install_intrinsics(tsc_value_t prototype) {
+    for (
+        size_t index = 0;
+        index < sizeof(string_prototype_methods) / sizeof(string_prototype_methods[0]);
+        index++
+    ) {
+        const tsc_string_prototype_method_t* method = &string_prototype_methods[index];
+        tsc_object_define(
+            (tsc_object_t*)value_ptr(prototype),
+            tsc_str_from_lit(method->name, method->name_len),
+            tsc_value_function_builtin_named(
+                method->apply,
+                NULL,
+                method->arity,
+                tsc_str_from_lit(method->name, method->name_len)
+            ),
+            true,
+            false,
+            true
+        );
+    }
+}
+
 static tsc_value_t symbol_prototype_to_primitive_apply(
     void* env,
     tsc_value_t this_arg,
@@ -949,6 +1009,9 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
                 false,
                 true
             );
+            if (descriptor->kind == TSC_PRIMITIVE_STRING) {
+                string_prototype_install_intrinsics(tsc_value_object(prototype));
+            }
             descriptor->prototype = prototype;
         }
         tsc_runtime_unlock();
@@ -2546,6 +2609,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         if (tsc_str_array_index(key, &idx) && idx < length) {
             return tsc_value_string(tsc_str_char_at(s, (double)idx));
         }
+        return tsc_value_get_prop_receiver(tsc_value_string_prototype(), key, v);
     }
     if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
         return tsc_value_get_prop_receiver(tsc_value_bigint_prototype(), key, v);
@@ -2651,7 +2715,18 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
         return tsc_value_get_prop_receiver(a->prototype, key, receiver);
     }
     if (value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_get_prop(v, key);
+        const tsc_str_t* string = (const tsc_str_t*)value_ptr(v);
+        size_t length = tsc_str_utf16_length(string);
+        if (tsc_str_is_length_key(key)) return tsc_value_num((double)length);
+        size_t index = 0;
+        if (tsc_str_array_index(key, &index) && index < length) {
+            return tsc_value_string(tsc_str_char_at(string, (double)index));
+        }
+        return tsc_value_get_prop_receiver(
+            tsc_value_string_prototype(),
+            key,
+            receiver
+        );
     }
     if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
         return tsc_value_get_prop_receiver(tsc_value_bigint_prototype(), key, receiver);
@@ -6666,18 +6741,12 @@ tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle,
 
 tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        const tsc_str_t* s = (const tsc_str_t*)value_ptr(recv);
-        double n = tsc_value_as_num(index);
-        if (isnan(n)) n = 0.0;
-        n = n < 0.0 ? ceil(n) : floor(n);
-        double length = (double)tsc_str_utf16_length(s);
-        if (n < 0) n = length + n;
-        if (isinf(n) || n < 0 || n >= length) return tsc_value_undefined();
-        return tsc_value_string(tsc_str_char_at(s, n));
+        return string_at_from_values(recv, index);
     }
     if (!value_is_box(recv)) return tsc_value_undefined();
-    double n = tsc_value_as_num(index);
+    double n = tsc_value_to_number(index);
     if (isnan(n)) n = 0.0;
+    n = n < 0.0 ? ceil(n) : floor(n);
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         if (n < 0) n = (double)a->len + n;

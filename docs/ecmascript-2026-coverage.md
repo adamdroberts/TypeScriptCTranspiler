@@ -1506,7 +1506,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype` — String.prototype: exact disposition and partitions missing.
   - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-string-prototype-object` — Properties of the String Prototype Object: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.at` — String.prototype.at ( _index_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.at` — String.prototype.at ( _index_ )
+    - [ ] `generic-tostring-relative-index-and-code-unit` (intrinsic, unbounded): Generic receiver ToString, ordered ToIntegerOrInfinity relative indexing, UTF-16 code-unit result, undefined range, abrupt completion, and intrinsic surface.
   - [ ] `sec-string.prototype.charat` — String.prototype.charAt ( _pos_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.charcodeat` — String.prototype.charCodeAt ( _pos_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.codepointat` — String.prototype.codePointAt ( _pos_ ): exact disposition and partitions missing.
@@ -2625,7 +2626,7 @@ The claim profile implements all normative-optional material, including inline a
 - `ShadowRealm` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `SharedArrayBuffer` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.fromCodePoint` — standard, tracking: `ready-for-verification`; `sec-string.fromcodepoint`.
-- [ ] `String.prototype.at` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.at` — standard, tracking: `ready-for-verification`; `sec-string.prototype.at`.
 - [ ] `String.prototype.endsWith` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.includes` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.isWellFormed` — standard, tracking: `todo`; no clause mapping.

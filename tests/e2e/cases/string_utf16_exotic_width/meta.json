@@ -1,3 +1,3 @@
 {
-  "description": "Generated representative stress for canonical UTF-16 String exotic length, index, descriptor, key, and iterator projections"
+  "description": "Generated representative stress for canonical UTF-16 String exotic length, index, descriptor, key, at-relative-index, and iterator projections"
 }

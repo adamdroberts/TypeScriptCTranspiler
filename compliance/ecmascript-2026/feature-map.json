@@ -480,9 +480,11 @@
     {
       "tag": "String.prototype.at",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.at"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.at intrinsic clause, whose terminal canonical UTF-16 relative-index partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.endsWith",

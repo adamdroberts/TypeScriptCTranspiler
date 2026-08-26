@@ -262,6 +262,51 @@
       "rationale": "One direct terminal partition binds the exact String exotic [[GetOwnProperty]] clause to reciprocal semantic, cardinality, implementation, and pinned Test262 evidence without claiming adjacent String exotic algorithms."
     },
     {
+      "clause": "sec-string.prototype.at",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-relative-index-and-code-unit",
+          "title": "Generic receiver ToString, ordered ToIntegerOrInfinity relative indexing, UTF-16 code-unit result, undefined range, abrupt completion, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-string.prototype.at" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-at.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": ["string_at", "dynamic_string_at"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#emitStringMethod",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_at_apply",
+              "runtime/tsc_value.c#string_at_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#tsc_value_method_at",
+              "runtime/tsc_string.c#tsc_str_at",
+              "runtime/tsc_string.c#tsc_str_utf16_length"
+            ]
+          },
+          "rationale": "The independent property derives the intrinsic metadata and mutable descriptor surface; primitive, boxed, ordinary-object, array, BigInt, Symbol, and nullish receiver partitions; omitted, Boolean, null, String, array, object, BigInt, Symbol, NaN, fractional, infinite, positive, negative, and out-of-range index partitions; exact receiver/index abrupt identity and order; and UTF-16 scalar, astral-surrogate, lone-surrogate, and relative-index results in both memory modes. The generic intrinsic wrapper performs RequireObjectCoercible and receiver ToString before one ToNumber/ToIntegerOrInfinity index conversion, then both reflective/dynamic calls and the optimized typed emitter consume the same nullable tsc_str_at projection over the canonical UTF-16 view. The existing distinct mixed-code-point native stress independently derives every expected code unit and exercises positive, relative, generic, and undefined-range paths at representative width. The exact pinned directory executes natively, while adjacent String methods, other exotic algorithms, host eligibility, and exhaustive signed reporting remain separate obligations."
+        }
+      ],
+      "rationale": "The complete String.prototype.at intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, feature mapping, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-reflect-object",
       "disposition": "evidence",
       "partitions": [

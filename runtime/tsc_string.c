@@ -799,7 +799,7 @@ tsc_str_t* tsc_str_at(const tsc_str_t* s, double idx) {
     idx = idx < 0.0 ? ceil(idx) : floor(idx);
     double length = (double)tsc_str_utf16_length(s);
     if (idx < 0) idx = length + idx;
-    if (isinf(idx) || idx < 0 || idx >= length) return tsc_str_from_lit("", 0);
+    if (isinf(idx) || idx < 0 || idx >= length) return NULL;
     return tsc_str_char_at(s, idx);
 }
 

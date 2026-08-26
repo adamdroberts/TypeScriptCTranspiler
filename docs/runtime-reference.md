@@ -59,7 +59,7 @@ typedef struct tsc_str {
 |--------|---------|---------------|
 | `tsc_str_length` | `double` | `.length` |
 | `tsc_str_char_at(s, i)` | `tsc_str_t*` | `.charAt(i)` |
-| `tsc_str_at(s, i)` | `tsc_str_t*` | `.at(i)`, negative indices OK |
+| `tsc_str_at(s, i)` | nullable `tsc_str_t*` | `.at(i)`, negative indices OK and `NULL` for the ECMAScript `undefined` range result |
 | `tsc_str_char_code_at(s, i)` | `double` | `.charCodeAt(i)`, using JS UTF-16 indices |
 | `tsc_str_code_point_at(s, i)` | `double` | `.codePointAt(i)`, using JS UTF-16 indices |
 | `tsc_str_index_of(h, n, position)` | `double` | `.indexOf(n, position?)` (-1 if missing) |

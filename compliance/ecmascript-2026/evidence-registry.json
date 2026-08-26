@@ -340,13 +340,14 @@
       "kind": "stress",
       "id": "string_utf16_exotic_width",
       "targets": [
-        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
       ],
       "stressReview": {
-        "dimension": "String exotic UTF-16 code-unit, descriptor, and own-key projection width",
+        "dimension": "String exotic and String.prototype.at UTF-16 code-unit projection width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and stresses the canonical length/index/descriptor/key projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and stresses canonical length/index/descriptor/key plus positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -354,7 +355,8 @@
       "kind": "implementation",
       "id": "runtime/tsc_string.c#tsc_str_utf16_length",
       "targets": [
-        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
       ]
     },
     {
@@ -382,7 +384,8 @@
       "kind": "implementation",
       "id": "runtime/tsc_value.c#tsc_value_get_prop",
       "targets": [
-        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
       ]
     },
     {
@@ -397,6 +400,76 @@
       "id": "runtime/tsc_value.c#tsc_value_has_own_prop",
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/string-at.property.test.ts",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_at",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_string_at",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#String",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitStringMethod",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_prototype_install_intrinsics",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_prototype_at_apply",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_at_from_values",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_at",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_at",
+      "targets": [
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
       ]
     },
     {

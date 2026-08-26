@@ -66948,13 +66948,14 @@ class Emitter {
             }
             case "at": {
                 const idx = optionalNumberArg(0, "0.0");
+                const result = this.freshTemp("_string_at");
                 return this.emitSequencedExpr(
-                    T_STRING,
+                    T_VALUE,
                     optionalStringSpecs(1, [
                         { value: recv },
                         { value: idx, target: T_NUMBER, node: args[0] },
                     ]),
-                    ([s, i]) => `tsc_str_at(${s}, ${i})`,
+                    ([s, i]) => `({ tsc_str_t* ${result} = tsc_str_at(${s}, ${i}); ${result} ? tsc_value_string(${result}) : tsc_value_undefined(); })`,
                 );
             }
             case "includes": {
