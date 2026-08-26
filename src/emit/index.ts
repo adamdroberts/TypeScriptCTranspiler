@@ -16109,7 +16109,7 @@ class Emitter {
             !!declaration.name &&
             !!declaration.body &&
             !this.isGenericFunction(declaration) &&
-            !this.isAsyncDeclaration(declaration);
+            !(this.isAsyncDeclaration(declaration) && declaration.asteriskToken);
     }
 
     private identifierName(id: ts.Identifier): string {
@@ -23993,18 +23993,10 @@ class Emitter {
         const metadata = this.localLexicalMetadataForSymbol(symbol);
         if (!symbol || !metadata) return null;
 
-        const env = this.closureEnvBindingForSymbol(symbol);
-        if (env?.initializedPtr) {
-            return {
-                type: env.type,
-                name: env.lexicalName ?? metadata.name,
-                immutable: env.immutable ?? metadata.immutable,
-                value: `(*${env.ptr})`,
-                initialized: `(*${env.initializedPtr})`,
-                gcRoot: env.rootPtr ? `(*${env.rootPtr})` : null,
-            };
-        }
-
+        /* A resumed callback is the innermost active execution environment.
+         * Its cell handle may itself point into an enclosing closure, but all
+         * callback emission must name that state-carried handle rather than a
+         * creation-time closure local that is no longer in C scope. */
         const asyncCell = this.asyncContinuationCellForSymbol(symbol);
         if (asyncCell) {
             const type = this.identifierScopedType(id) ??
@@ -24016,6 +24008,18 @@ class Emitter {
                 value: `(*(${type.c}*)${asyncCell}.value_cell)`,
                 initialized: `(*${asyncCell}.initialized_cell)`,
                 gcRoot: type.kind === "value" ? `(*${asyncCell}.gc_root_cell)` : null,
+            };
+        }
+
+        const env = this.closureEnvBindingForSymbol(symbol);
+        if (env?.initializedPtr) {
+            return {
+                type: env.type,
+                name: env.lexicalName ?? metadata.name,
+                immutable: env.immutable ?? metadata.immutable,
+                value: `(*${env.ptr})`,
+                initialized: `(*${env.initializedPtr})`,
+                gcRoot: env.rootPtr ? `(*${env.rootPtr})` : null,
             };
         }
 
@@ -24210,8 +24214,12 @@ class Emitter {
     }
 
     private asyncAwaitContinuationParamValue(param: AsyncAwaitContinuationParam): string {
-        for (let i = this.argumentValueScopes.length - 1; i >= 0; i--) {
-            const scope = this.argumentValueScopes[i]!;
+        /* Continuation construction belongs to the current ECMAScript
+         * function. Never search through an enclosing function's emitter
+         * scope: an entry capture already records the closure/cell pointer
+         * that crosses that function boundary. */
+        const scope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
+        if (scope) {
             if (param.cell) {
                 const cell = this.asyncContinuationCellScopes.get(scope)?.get(param.symbol);
                 if (cell) return cell;
@@ -25571,9 +25579,13 @@ class Emitter {
             .map((parameter) => this.prepareType(
                 parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE,
             ));
-        const ret = !this.isAsyncDeclaration(fn) && !this.isGeneratorDeclaration(fn)
-            ? T_VALUE
-            : this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
+        const isAsync = this.isAsyncDeclaration(fn);
+        const isGenerator = this.isGeneratorDeclaration(fn);
+        const ret = isAsync && !isGenerator
+            ? promiseType(T_VALUE)
+            : !isAsync && !isGenerator
+                ? T_VALUE
+                : this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
         const thisType = this.signatureThisType(sig, fn);
         return this.prepareType(functionType(params, ret, thisType ?? undefined));
     }
@@ -31326,14 +31338,14 @@ class Emitter {
         callback.open("else");
         callback.line("tsc_try_pop();");
         callback.open("if (state->exception_pc >= 0)");
-        callback.line("state->exception_value = tsc_value_string(tsc_current_error());");
+        callback.line("state->exception_value = tsc_current_error_value();");
         callback.line("state->exception_value_gc_root = tsc_value_gc_root(state->exception_value);");
         callback.line("state->pc = state->exception_pc;");
         callback.line("state->awaiting = false;");
         callback.line(`${name}(state);`);
         callback.line("return;");
         callback.close();
-        callback.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        callback.line("tsc_promise_reject_in_place(_ret, tsc_current_error_value());");
         callback.close();
         callback.close();
         callback.line();

@@ -163,6 +163,23 @@ function subjectSource(): string {
         check(caseGeneratorOriginal.name === "hoistedCaseGenerator" && caseGeneratorOriginal.length === 0,
             "hoisted generator metadata");
 
+        var caseAsyncFunction, caseAsyncFunctionOriginal, caseAsyncFunctionSet;
+        var caseAsyncTdzPromise;
+        switch (0) {
+            case (caseAsyncFunction = hoistedCaseAsyncFunction,
+                caseAsyncTdzPromise = caseAsyncFunction(0), 0):
+                async function hoistedCaseAsyncFunction(depth) {
+                    const leaf = caseAsyncFunctionLeaf;
+                    await Promise.resolve();
+                    if (depth === 0) return leaf;
+                    return (await hoistedCaseAsyncFunction(depth - 1)) + 1;
+                }
+                let caseAsyncFunctionLeaf = 61;
+                caseAsyncFunctionOriginal = caseAsyncFunction;
+                caseAsyncFunctionSet = function(value) { hoistedCaseAsyncFunction = value; };
+                break;
+        }
+
         var defaultFunction, defaultFunctionTdz = false, defaultFunctionValue;
         switch (0) {
             case (defaultFunction = hoistedDefaultFunction,
@@ -245,6 +262,19 @@ function subjectSource(): string {
         ${nestedSwitchFixture(3)}
 
         async function asyncCaseBlock() {
+            var caseAsyncTdz = false;
+            try { await caseAsyncTdzPromise; }
+            catch (error) { caseAsyncTdz = error instanceof ReferenceError; }
+            check(caseAsyncTdz, "hoisted async function observes CaseBlock TDZ");
+            check(await caseAsyncFunctionOriginal(2) === 63,
+                "hoisted async function capture and recursion");
+            caseAsyncFunctionSet(async function replacementCaseAsyncFunction() { return 90; });
+            check(await caseAsyncFunctionOriginal(1) === 91,
+                "hoisted async function live binding across suspension");
+            check(caseAsyncFunctionOriginal.name === "hoistedCaseAsyncFunction" &&
+                caseAsyncFunctionOriginal.length === 1,
+                "hoisted async function metadata");
+
             let asyncShared = "outside";
             var asyncDiscriminator, asyncSelector, asyncBefore, asyncAfter;
             switch ((asyncDiscriminator = function() { return asyncShared; }, await Promise.resolve(0))) {
@@ -280,8 +310,11 @@ function subjectSource(): string {
             check(asyncConstRhs && asyncConstError, "async const write order");
 
             var asyncHoistedSelector, asyncHoistedAfter, asyncFunctionBodyTdz = false;
+            var asyncNestedSelector, asyncNestedAfter, asyncNestedTdzPromise;
             switch (await Promise.resolve(0)) {
                 case (asyncHoistedSelector = function() { return asyncHoistedFunction; },
+                    asyncNestedSelector = asyncNestedCaseFunction,
+                    asyncNestedTdzPromise = asyncNestedSelector(0),
                     (function() {
                         try { asyncHoistedFunction(0); }
                         catch (error) { asyncFunctionBodyTdz = error instanceof ReferenceError; }
@@ -290,14 +323,28 @@ function subjectSource(): string {
                     function asyncHoistedFunction(depth) {
                         return depth === 0 ? asyncFunctionLeaf : asyncHoistedFunction(depth - 1) + 1;
                     }
+                    async function asyncNestedCaseFunction(depth) {
+                        const leaf = asyncFunctionLeaf;
+                        await Promise.resolve();
+                        if (depth === 0) return leaf;
+                        return (await asyncNestedCaseFunction(depth - 1)) + 1;
+                    }
                     let asyncFunctionLeaf = 21;
                     await Promise.resolve();
                     asyncHoistedAfter = asyncHoistedFunction;
+                    asyncNestedAfter = asyncNestedCaseFunction;
                     break;
             }
             check(asyncFunctionBodyTdz, "async function body observes later CaseBlock TDZ");
             check(asyncHoistedSelector() === asyncHoistedAfter && asyncHoistedAfter(2) === 23,
                 "async hoisted function identity and capture");
+            var asyncNestedTdz = false;
+            try { await asyncNestedTdzPromise; }
+            catch (error) { asyncNestedTdz = error instanceof ReferenceError; }
+            const asyncNestedValue = await asyncNestedAfter(2);
+            check(asyncNestedTdz && asyncNestedSelector === asyncNestedAfter &&
+                asyncNestedValue === 23,
+                "async CFG hoisted async function identity, TDZ, and capture");
 
             var asyncPatternBefore;
             switch (await Promise.resolve(0)) {

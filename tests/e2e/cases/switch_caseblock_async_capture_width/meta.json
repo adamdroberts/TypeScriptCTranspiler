@@ -1,0 +1,3 @@
+{
+  "description": "Representative stress for the canonical async-CFG closure-capture cell worklist across CaseBlock lifetime and suspension"
+}
