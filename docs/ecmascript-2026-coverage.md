@@ -1643,17 +1643,19 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-regexp-string-iterator-instances` — Properties of RegExp String Iterator Instances: exact disposition and partitions missing.
 - [ ] **Indexed Collections** (`sec-indexed-collections`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Array; typed arrays; iterators; sparse and exotic indexed properties.
-  - Linked local regression evidence: stress: array_literal_stack_alloc_growth; E2E: array_prototypes, array_property_descriptors, array_buffer_dataview.
+  - Linked local regression evidence: property: tests/property/array-static-factory.property.test.ts; stress: array_literal_stack_alloc_growth, array_static_factory_item_width; E2E: array_prototypes, array_property_descriptors, array_buffer_dataview.
   - Known blockers: TypedArray and full array exotic semantics remain unverified.
   - [ ] `sec-indexed-collections` — Indexed Collections: exact disposition and partitions missing.
   - [ ] `sec-array-objects` — Array Objects: exact disposition and partitions missing.
   - [ ] `sec-array-constructor` — The Array Constructor: exact disposition and partitions missing.
   - [ ] `sec-array` — Array ( ..._values_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-array-constructor` — Properties of the Array Constructor: exact disposition and partitions missing.
-  - [ ] `sec-array.from` — Array.from ( _items_ [ , _mapper_ [ , _thisArg_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-array.from` — Array.from ( _items_ [ , _mapper_ [ , _thisArg_ ] ] )
+    - [ ] `generic-constructor-iteration-mapping-and-array-like-fallback` (intrinsic, unbounded): Generic construction, iterator preference and closing, mapping, CreateDataProperty, length finalization, and array-like fallback.
   - [ ] `sec-array.fromasync` — Array.fromAsync ( _items_ [ , _mapper_ [ , _thisArg_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-array.isarray` — Array.isArray ( _arg_ ): exact disposition and partitions missing.
-  - [ ] `sec-array.of` — Array.of ( ..._items_ ): exact disposition and partitions missing.
+  - [ ] `sec-array.of` — Array.of ( ..._items_ )
+    - [ ] `generic-constructor-item-list-and-length-finalization` (intrinsic, unbounded): Generic construction, item-list CreateDataProperty operations, and length finalization.
   - [ ] `sec-array.prototype` — Array.prototype: exact disposition and partitions missing.
   - [ ] `sec-get-array-%symbol.species%` — get Array [ %Symbol.species% ]: exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-array-prototype-object` — Properties of the Array Prototype Object: exact disposition and partitions missing.

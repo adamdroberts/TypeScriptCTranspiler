@@ -52,6 +52,154 @@ static tsc_value_t array_constructor_result(tsc_array_t* result, tsc_value_t rec
     return tsc_value_array(result);
 }
 
+static tsc_value_t array_create_with_length(double length) {
+    if (
+        !isfinite(length) ||
+        length < 0.0 ||
+        floor(length) != length ||
+        length > 4294967295.0
+    ) {
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_cstr("Invalid array length")
+        );
+    }
+    const size_t count = (size_t)length;
+    tsc_array_t* array = tsc_array_new(sizeof(tsc_value_t), count);
+    const tsc_value_t undefined = tsc_value_undefined();
+    for (size_t index = 0; index < count; index++) {
+        tsc_array_push_raw(array, &undefined);
+        tsc_array_mark_hole(array, index);
+    }
+    return tsc_value_array(array);
+}
+
+static tsc_value_t array_static_create_result(
+    tsc_value_t constructor,
+    double length,
+    bool pass_length
+) {
+    if (!tsc_value_is_constructable(constructor)) {
+        return array_create_with_length(length);
+    }
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), pass_length ? 1 : 0);
+    if (pass_length) tsc_array_push_value(arguments, tsc_value_num(length));
+    return tsc_value_construct(constructor, tsc_value_array(arguments));
+}
+
+static void array_create_data_property_or_throw(
+    tsc_value_t target,
+    double index,
+    tsc_value_t value
+) {
+    if (!tsc_value_define_property_desc(
+        target,
+        tsc_str_from_num(index),
+        value,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+    )) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Array factory could not create an indexed property")
+        );
+    }
+}
+
+static void array_set_length_or_throw(tsc_value_t target, double length) {
+    if (!tsc_value_set_prop(
+        target,
+        tsc_str_from_lit("length", 6),
+        tsc_value_num(length)
+    )) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Array factory could not set length")
+        );
+    }
+}
+
+static _Noreturn void array_iterator_close_preserving_throw(
+    tsc_sync_iterator_t* iterator,
+    tsc_value_t abrupt
+) {
+    void* volatile abrupt_gc_root = tsc_value_gc_root(abrupt);
+    (void)abrupt_gc_root;
+    TSC_TRY_FRAME(close_frame);
+    tsc_try_push(&close_frame);
+    if (setjmp(close_frame.jb) == 0) {
+        tsc_sync_iterator_close(iterator);
+        tsc_try_pop();
+    } else {
+        /* IteratorClose preserves an existing throw completion even when
+         * retrieving or calling `return` produces another abrupt result. */
+        tsc_try_pop();
+    }
+    tsc_throw_value(abrupt);
+}
+
+static tsc_value_t array_from_map_with_close(
+    tsc_sync_iterator_t* iterator,
+    tsc_value_t mapper,
+    tsc_value_t mapper_this,
+    tsc_value_t value,
+    double index
+) {
+    TSC_TRY_FRAME(map_frame);
+    tsc_try_push(&map_frame);
+    if (setjmp(map_frame.jb) == 0) {
+        tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(arguments, value);
+        tsc_array_push_value(arguments, tsc_value_num(index));
+        tsc_value_t mapped = tsc_value_apply_function(
+            mapper,
+            mapper_this,
+            tsc_value_array(arguments)
+        );
+        tsc_try_pop();
+        return mapped;
+    }
+    tsc_value_t abrupt = tsc_current_error_value();
+    tsc_try_pop();
+    array_iterator_close_preserving_throw(iterator, abrupt);
+}
+
+static void array_from_create_data_property_with_close(
+    tsc_sync_iterator_t* iterator,
+    tsc_value_t target,
+    double index,
+    tsc_value_t value
+) {
+    TSC_TRY_FRAME(define_frame);
+    tsc_try_push(&define_frame);
+    if (setjmp(define_frame.jb) == 0) {
+        array_create_data_property_or_throw(target, index, value);
+        tsc_try_pop();
+        return;
+    }
+    tsc_value_t abrupt = tsc_current_error_value();
+    tsc_try_pop();
+    array_iterator_close_preserving_throw(iterator, abrupt);
+}
+
+static double array_length_of_array_like(tsc_value_t source) {
+    tsc_value_t raw_length = tsc_value_get_prop(
+        source,
+        tsc_str_from_lit("length", 6)
+    );
+    double length = tsc_value_to_number(raw_length);
+    if (isnan(length) || length <= 0.0) return 0.0;
+    if (isinf(length) || length >= 9007199254740991.0) {
+        return 9007199254740991.0;
+    }
+    return floor(length);
+}
+
 static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
@@ -60,13 +208,8 @@ static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, ts
         tsc_value_t first = TSC_ARR(tsc_value_t, args, 0);
         if (!value_is_box(first)) {
             double length = tsc_value_as_num(first);
-            if (!isfinite(length) || length < 0.0 || floor(length) != length || length > 4294967295.0) {
-                tsc_throw_str(tsc_str_from_cstr("Array length must be a finite non-negative integer"));
-            }
-            tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), (size_t)length);
-            tsc_value_t undef = tsc_value_undefined();
-            for (size_t i = 0; i < (size_t)length; i++) tsc_array_push_raw(out, &undef);
-            return array_constructor_result(out, this_arg);
+            tsc_value_t created = array_create_with_length(length);
+            return array_constructor_result(tsc_value_as_array(created), this_arg);
         }
     }
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
@@ -93,19 +236,20 @@ static tsc_value_t array_static_is_array(void* env, tsc_value_t this_arg, tsc_ar
 
 static tsc_value_t array_static_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    (void)this_arg;
     size_t count = args ? args->len : 0;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
+    tsc_value_t result = array_static_create_result(this_arg, (double)count, true);
+    void* volatile result_gc_root = tsc_value_gc_root(result);
+    (void)result_gc_root;
     for (size_t i = 0; i < count; i++) {
         tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
-        tsc_array_push_raw(out, &value);
+        array_create_data_property_or_throw(result, (double)i, value);
     }
-    return tsc_value_array(out);
+    array_set_length_or_throw(result, (double)count);
+    return result;
 }
 
 static tsc_value_t array_static_from(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    (void)this_arg;
     tsc_value_t source = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
@@ -115,23 +259,102 @@ static tsc_value_t array_static_from(void* env, tsc_value_t this_arg, tsc_array_
     tsc_value_t mapper_this = args && args->len > 2
         ? TSC_ARR(tsc_value_t, args, 2)
         : tsc_value_undefined();
-    tsc_array_t* values = tsc_value_array_from_values(source);
-    if (tsc_value_is_undefined(mapper)) {
-        return tsc_value_array(values);
+    const bool mapping = !tsc_value_is_undefined(mapper);
+    if (mapping && !tsc_value_is_callable(mapper)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Array.from mapper must be callable")
+        );
     }
-    if (!tsc_value_is_callable(mapper)) {
-        tsc_throw_str(tsc_str_from_cstr("Array.from mapper must be callable"));
+    if (tsc_value_is_nullish(source)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_cstr("Array.from source must not be null or undefined")
+        );
     }
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), values->len ? values->len : 1);
-    for (size_t i = 0; i < values->len; i++) {
-        tsc_value_t value = TSC_ARR(tsc_value_t, values, i);
-        tsc_array_t* cb_args = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_array_push_value(cb_args, value);
-        tsc_array_push_value(cb_args, tsc_value_num((double)i));
-        tsc_value_t mapped = tsc_value_apply_function(mapper, mapper_this, tsc_value_array(cb_args));
-        tsc_array_push_value(out, mapped);
+
+    tsc_value_t iterator_method = tsc_value_get_symbol_prop(
+        source,
+        tsc_symbol_iterator()
+    );
+    void* volatile iterator_method_gc_root = tsc_value_gc_root(iterator_method);
+    (void)iterator_method_gc_root;
+    const bool string_iterator_fallback =
+        value_is_box(source) && value_tag(source) == TSC_VALUE_TAG_STRING;
+    if (!tsc_value_is_nullish(iterator_method) || string_iterator_fallback) {
+        if (!string_iterator_fallback && !tsc_value_is_callable(iterator_method)) {
+            tsc_throw_error(
+                TSC_ERROR_TYPE,
+                tsc_str_from_cstr("Array.from iterator method must be callable")
+            );
+        }
+        tsc_value_t result = array_static_create_result(this_arg, 0.0, false);
+        void* volatile result_gc_root = tsc_value_gc_root(result);
+        (void)result_gc_root;
+        tsc_sync_iterator_t iterator = tsc_sync_iterator_open_with_method(
+            source,
+            iterator_method
+        );
+        double index = 0.0;
+        for (;;) {
+            if (index >= 9007199254740991.0) {
+                tsc_value_t error = tsc_value_error(tsc_error_new_named(
+                    tsc_str_from_lit("TypeError", 9),
+                    tsc_str_from_cstr("Array.from result exceeds the maximum safe length")
+                ));
+                array_iterator_close_preserving_throw(&iterator, error);
+            }
+            tsc_value_t next;
+            if (!tsc_sync_iterator_step(&iterator, &next)) {
+                array_set_length_or_throw(result, index);
+                return result;
+            }
+            void* volatile next_gc_root = tsc_value_gc_root(next);
+            (void)next_gc_root;
+            tsc_value_t mapped = mapping
+                ? array_from_map_with_close(
+                    &iterator,
+                    mapper,
+                    mapper_this,
+                    next,
+                    index
+                )
+                : next;
+            void* volatile mapped_gc_root = tsc_value_gc_root(mapped);
+            (void)mapped_gc_root;
+            array_from_create_data_property_with_close(
+                &iterator,
+                result,
+                index,
+                mapped
+            );
+            index += 1.0;
+        }
     }
-    return tsc_value_array(out);
+
+    const double length = array_length_of_array_like(source);
+    tsc_value_t result = array_static_create_result(this_arg, length, true);
+    void* volatile result_gc_root = tsc_value_gc_root(result);
+    (void)result_gc_root;
+    for (double index = 0.0; index < length; index += 1.0) {
+        tsc_value_t value = tsc_value_get_index(source, index);
+        void* volatile value_gc_root = tsc_value_gc_root(value);
+        (void)value_gc_root;
+        if (mapping) {
+            tsc_array_t* mapper_arguments = tsc_array_new(sizeof(tsc_value_t), 2);
+            tsc_array_push_value(mapper_arguments, value);
+            tsc_array_push_value(mapper_arguments, tsc_value_num(index));
+            value = tsc_value_apply_function(
+                mapper,
+                mapper_this,
+                tsc_value_array(mapper_arguments)
+            );
+            value_gc_root = tsc_value_gc_root(value);
+        }
+        array_create_data_property_or_throw(result, index, value);
+    }
+    array_set_length_or_throw(result, length);
+    return result;
 }
 
 static void array_constructor_define_method(tsc_value_t constructor, const char* name, size_t len, double arity, tsc_generic_function_t fn) {

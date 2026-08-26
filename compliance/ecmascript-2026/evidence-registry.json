@@ -225,6 +225,66 @@
       "targets": [
         "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/array-static-factory.property.test.ts",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "array_static_factory_item_width",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ],
+      "stressReview": {
+        "dimension": "Array static-factory runtime item-worklist width",
+        "parameter": "width",
+        "representativeHighDepth": 1024,
+        "rationale": "One generated native case independently stresses the canonical Array.from iterator worklist and Array.of runtime argument worklist without treating successive item counts as completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#ArrayConstructor",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_array.c#array_static_from",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_array.c#array_static_of",
+      "targets": [
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_sync_iterator_open_with_method",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_construct_with_new_target",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
     }
   ]
 }

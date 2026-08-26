@@ -4930,7 +4930,10 @@ enum {
     TSC_SYNC_ITERATOR_STRING = 2,
 };
 
-tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
+tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
+    tsc_value_t source,
+    tsc_value_t method
+) {
     if (tsc_value_is_nullish(source)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
     }
@@ -4945,7 +4948,6 @@ tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
         .kind = TSC_SYNC_ITERATOR_DYNAMIC,
         .done = false,
     };
-    tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
     void* volatile method_gc_root = tsc_value_gc_root(method);
     (void)method_gc_root;
     if (
@@ -4984,6 +4986,11 @@ tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator next method is not callable"));
     }
     return record;
+}
+
+tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
+    tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
+    return tsc_sync_iterator_open_with_method(source, method);
 }
 
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {

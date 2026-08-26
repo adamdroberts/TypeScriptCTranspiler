@@ -33,6 +33,11 @@ export interface StringCodeUnitListWidthSpec {
     width: number;
 }
 
+export interface ArrayStaticFactoryItemWidthSpec {
+    generator: "array-static-factory-item-width";
+    width: number;
+}
+
 export interface SwitchClauseWorklistWidthSpec {
     generator: "switch-clause-worklist-width";
     width: number;
@@ -76,6 +81,7 @@ export type GeneratedCaseSpec =
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
+    | ArrayStaticFactoryItemWidthSpec
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
     | SwitchCaseBlockBindingDepthSpec
@@ -156,6 +162,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-code-unit-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "array-static-factory-item-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -656,6 +672,24 @@ function switchCaseBlockClassWorklistWidthSource(width: number): string {
     ].join("\n");
 }
 
+function arrayStaticFactoryItemWidthSource(width: number): string {
+    return [
+        "const source: any[] = [];",
+        `for (let index = 0; index < ${width}; index++) source.push(index);`,
+        "const dynamicSource: any = source;",
+        "const copied: any = (Array.from as any).call(Array, dynamicSource, function(value: any, index: number): number {",
+        "    return value + index;",
+        "});",
+        "const collected: any = (Array.of as any).call(Array, ...dynamicSource);",
+        `let valid = copied.length === ${width} && collected.length === ${width};`,
+        `for (let index = 0; index < ${width}; index++) {`,
+        "    if (copied[index] !== index * 2 || collected[index] !== index) valid = false;",
+        "}",
+        'console.log("array static factory item worklist:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -673,6 +707,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return uriPercentCodecLengthSource(spec.length);
         case "string-code-unit-list-width":
             return stringCodeUnitListWidthSource(spec.width);
+        case "array-static-factory-item-width":
+            return arrayStaticFactoryItemWidthSource(spec.width);
         case "switch-clause-worklist-width":
             return switchClauseWorklistWidthSource(spec.width);
         case "switch-caseblock-environment-depth":

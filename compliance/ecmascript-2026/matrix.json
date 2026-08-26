@@ -45,6 +45,85 @@
       "rationale": "One direct terminal partition binds the pinned IsStrictlyEqual scenarios to independent semantic, cardinality, and implementation evidence."
     },
     {
+      "clause": "sec-array.from",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-constructor-iteration-mapping-and-array-like-fallback",
+          "title": "Generic construction, iterator preference and closing, mapping, CreateDataProperty, length finalization, and array-like fallback",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-array.from" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/array-static-factory.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["array_static_factory_item_width"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"],
+            "implementation": [
+              "runtime/tsc_array.c#array_static_from",
+              "runtime/tsc_value.c#tsc_sync_iterator_open_with_method",
+              "runtime/tsc_value.c#tsc_value_construct_with_new_target"
+            ]
+          },
+          "rationale": "The independent property crosses iterable and array-like inputs, constructor and non-constructor receivers, constructor arity, ordered mapper validation and invocation, descriptor creation, length finalization, nullish failures, and the distinct mapper/definition/next abrupt-completion closing rules. Array.from consumes one iterator or indexed worklist; the separate generated native case stresses that worklist at representative width. The exact pinned clause query remains authoritative: any unsupported or failing scenario keeps the claim blocked."
+        }
+      ],
+      "rationale": "The complete Array.from algorithm is represented as one terminal worklist partition with reciprocal property, stress, declaration, runtime, and pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-array.of",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-constructor-item-list-and-length-finalization",
+          "title": "Generic construction, item-list CreateDataProperty operations, and length finalization",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-array.of" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/array-static-factory.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["array_static_factory_item_width"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"],
+            "implementation": [
+              "runtime/tsc_array.c#array_static_of",
+              "runtime/tsc_value.c#tsc_value_construct_with_new_target"
+            ]
+          },
+          "rationale": "The independent property crosses constructor and non-constructor receivers, constructor length delivery, data-property descriptors, failure propagation, stable result ordering, and final length. Array.of consumes the runtime argument list through one canonical worklist; the separate generated native case stresses the same path at representative width. The exact pinned clause query must still pass exhaustively before this evidence can contribute to a claim."
+        }
+      ],
+      "rationale": "The complete Array.of algorithm is represented as one terminal item-worklist partition with reciprocal property, stress, declaration, runtime, and pinned Test262 evidence."
+    },
+    {
       "clause": "sec-runtime-semantics-caseclauseisselected",
       "disposition": "evidence",
       "partitions": [
@@ -662,7 +741,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Array", "typed arrays", "iterators", "sparse and exotic indexed properties"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth"], "e2e": ["array_prototypes", "array_property_descriptors", "array_buffer_dataview"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_array.c", "runtime/tsc_value.c"] },
+      "localEvidence": { "property": ["tests/property/array-static-factory.property.test.ts"], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth", "array_static_factory_item_width"], "e2e": ["array_prototypes", "array_property_descriptors", "array_buffer_dataview"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"], "implementation": ["runtime/tsc_array.c", "runtime/tsc_value.c"] },
       "knownGaps": ["TypedArray and full array exotic semantics remain unverified."]
     },
     {

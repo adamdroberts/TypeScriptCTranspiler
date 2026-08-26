@@ -1034,6 +1034,7 @@ typedef struct {
     bool done;
 } tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
+tsc_sync_iterator_t tsc_sync_iterator_open_with_method(tsc_value_t source, tsc_value_t method);
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* iterator, tsc_value_t* value);
 void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v);
