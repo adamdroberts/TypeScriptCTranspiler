@@ -709,6 +709,12 @@ class Emitter {
     private moduleLexicalBindings = new Map<ts.Symbol, ModuleLexicalBindingPlan>();
     private moduleLexicalDeclarationSymbols = new WeakMap<ts.Declaration, ts.Symbol>();
     private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
+    /** TypeScript/non-Module top-level lexical bindings retain one real TDZ
+     * bit when a closure boundary needs environment state.  The source-file
+     * collection is prepared before any function body is emitted, so a
+     * dispatch snapshot never substitutes textual order for runtime state. */
+    private topLevelLexicalInitializationStates = new Map<ts.Symbol, string>();
+    private topLevelLexicalInitializationStatesBySource = new WeakMap<ts.SourceFile, string[]>();
     /** `export default <expression>` owns an uninitialized `*default*`
      * binding until evaluation reaches the ExportAssignment. */
     private moduleDefaultExportBindings = new WeakMap<ts.ExportAssignment | ts.ClassDeclaration, ModuleDefaultExportBindingPlan>();
@@ -15661,6 +15667,7 @@ class Emitter {
             this.emitModuleVarDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleLexicalDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
+            this.emitTopLevelLexicalInitializationStateInstantiation(instantiationBuf, sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
@@ -24096,7 +24103,11 @@ class Emitter {
         const cell = this.captureCellForSymbol(sym);
         if (cell?.initializedCellName) return cell.initializedCellName;
         const binding = this.switchLexicalBindingForSymbol(sym);
-        return binding ? `&${binding.initialized}` : null;
+        if (binding) return `&${binding.initialized}`;
+        const moduleLexical = this.moduleLexicalBindings.get(sym);
+        if (moduleLexical) return `&${moduleLexical.initialized}`;
+        const topLevelLexical = this.topLevelLexicalInitializationStates.get(sym);
+        return topLevelLexical ? `&${topLevelLexical}` : null;
     }
 
     private localLexicalReferenceForIdentifier(id: ts.Identifier): LocalLexicalReference | null {
@@ -24240,6 +24251,10 @@ class Emitter {
         if (env) return env.ptr;
         const cell = this.captureCellForSymbol(sym);
         if (cell) return cell.cellName;
+        const moduleVar = this.moduleVarBindings.get(sym);
+        if (moduleVar) return `&${moduleVar.cName}`;
+        const moduleLexical = this.moduleLexicalBindings.get(sym);
+        if (moduleLexical) return `&${moduleLexical.cName}`;
         const decl = sym.valueDeclaration ?? sym.declarations?.[0];
         const name = decl ? this.declarationName(decl) : null;
         if (decl && name && this.isTopLevelValueDeclaration(decl)) {
@@ -24331,18 +24346,18 @@ class Emitter {
         if (scriptGlobal) {
             return `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
         }
-        const moduleLexical = this.moduleLexicalBindingForIdentifier(id);
-        if (moduleLexical) return this.moduleLexicalRead(moduleLexical);
         const sym = this.symbolForIdentifier(id);
         const localLexical = this.localLexicalReferenceForIdentifier(id);
         if (localLexical) return this.localLexicalRead(localLexical);
+        const env = this.closureEnvBindingForSymbol(sym);
+        if (env) return `(*${env.ptr})`;
+        const moduleLexical = this.moduleLexicalBindingForIdentifier(id);
+        if (moduleLexical) return this.moduleLexicalRead(moduleLexical);
         if (sym) {
             const currentScope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
             const currentValue = currentScope?.get(sym);
             if (currentValue) return currentValue;
         }
-        const env = this.closureEnvBindingForSymbol(sym);
-        if (env) return `(*${env.ptr})`;
         if (sym) {
             for (let i = this.argumentValueScopes.length - 2; i >= 0; i--) {
                 const value = this.argumentValueScopes[i]!.get(sym);
@@ -25095,6 +25110,42 @@ class Emitter {
             buf.line(`${binding.initialized} = false;`);
             buf.line(`${binding.gcRoot} = NULL;`);
         }
+    }
+
+    /** Direct top-level `let`/`const` bindings outside the JavaScript Module
+     * Environment Record still need an observable initialized bit when their
+     * environment crosses a dispatch boundary.  One statement collection
+     * creates those bits independently of closure/capture cardinality. */
+    private emitTopLevelLexicalInitializationStateInstantiation(
+        buf: CBuf,
+        sf: ts.SourceFile,
+    ): void {
+        const prepared = this.topLevelLexicalInitializationStatesBySource.get(sf);
+        if (prepared) {
+            for (const initialized of prepared) buf.line(`${initialized} = false;`);
+            return;
+        }
+        const states: string[] = [];
+        for (const statement of sf.statements) {
+            if (!ts.isVariableStatement(statement)) continue;
+            const flags = statement.declarationList.flags;
+            if ((flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                (flags & ts.NodeFlags.Using) !== 0) continue;
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name)) continue;
+                const symbol = this.symbolForIdentifier(declaration.name);
+                if (!symbol || this.moduleLexicalBindings.has(symbol) ||
+                    this.topLevelLexicalInitializationStates.has(symbol)) continue;
+                const initialized = this.freshTemp(
+                    `_${this.declaredName(declaration.name)}_top_level_lexical_initialized`,
+                );
+                this.topLevelLexicalInitializationStates.set(symbol, initialized);
+                states.push(initialized);
+                this.globalDecls.line(`static bool ${initialized};`);
+                buf.line(`${initialized} = false;`);
+            }
+        }
+        this.topLevelLexicalInitializationStatesBySource.set(sf, states);
     }
 
     private moduleLexicalBindingForDeclaration(
@@ -26235,17 +26286,31 @@ class Emitter {
                     );
                     const lexical = this.localLexicalMetadataForSymbol(sym);
                     const formalParameter = this.javaScriptFormalParameterForDeclaration(decl);
+                    const existingStorageType = this.scopedTypeForSymbol(sym) ??
+                        this.symbolStorageTypes.get(sym);
                     /* A CaseBlock Environment Record is a runtime language
                      * environment. Keep each direct lexical binding in the
                      * canonical value representation so checker narrowing
                      * cannot change its storage or closure-capture ABI. */
-                    const type = formalParameter
+                    let type = existingStorageType ?? (formalParameter
                         ? T_VALUE
                         : lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
                         ? T_VALUE
                         : ts.isVariableDeclaration(decl)
                             ? this.variableDeclarationStorageType(decl, declaredType)
-                            : declaredType;
+                            : declaredType);
+                    /* Top-level TypeScript variables are physically planned
+                     * after function bodies. Mirror the one integer-storage
+                     * decision here so dispatch capture descriptors never
+                     * reinterpret an int64_t slot as a double slot. */
+                    if (!existingStorageType &&
+                        this.dispatchCaptureClone &&
+                        ts.isVariableDeclaration(decl) &&
+                        this.isTopLevelValueDeclaration(decl) &&
+                        type.c === "double" &&
+                        this.intSymbols.has(sym)) {
+                        type = T_NUMBER_INT;
+                    }
                     const field = `${mangleIdent(node.text)}_${captures.size}`;
                     captures.set(sym, {
                         symbol: sym,
@@ -42737,6 +42802,10 @@ class Emitter {
                 }
                 unsupported(d, "destructuring at module scope");
             }
+            const sym = this.checker.getSymbolAtLocation(d.name);
+            const lexicalInitialized = sym
+                ? this.topLevelLexicalInitializationStates.get(sym)
+                : undefined;
             if (
                 this.isCommonJsObjectAssignExportSourceDeclaration(d) ||
                 this.isCommonJsDefinePropertiesExportSourceDeclaration(d) ||
@@ -42746,6 +42815,7 @@ class Emitter {
                 this.isCommonJsExportsAliasDeclaration(d) ||
                 this.isCommonJsRequireAliasDeclaration(d)
             ) {
+                if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
                 continue;
             }
             if (!this.shouldEmitTopLevelVariable(d)) {
@@ -42753,6 +42823,7 @@ class Emitter {
                     const value = this.emitExpr(d.initializer);
                     initBuf.line(`${value.c};`);
                 }
+                if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
                 continue;
             }
             const name = this.declaredName(d.name);
@@ -42783,7 +42854,6 @@ class Emitter {
 
             // If this number is provably integer-shape, store as int64_t.
             // C's implicit conversion handles boundaries (calls, etc.).
-            const sym = this.checker.getSymbolAtLocation(d.name);
             const useInt = baseCt.c === "double" && sym !== undefined && this.intSymbols.has(sym);
             const ct = useInt ? T_NUMBER_INT : baseCt;
             if (sym) this.symbolStorageTypes.set(sym, ct);
@@ -42794,6 +42864,7 @@ class Emitter {
             if (lit !== null && baseCt.c === "double") {
                 const literalValue = useInt ? `((int64_t)(${lit}))` : lit;
                 this.globalDecls.line(`static const ${ct.c} ${name} = ${literalValue};`);
+                if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
                 continue;
             }
 
@@ -42818,6 +42889,7 @@ class Emitter {
                 initBuf.line(`${name} = tsc_value_undefined();`);
                 if (dynamicRoot) initBuf.line(`${dynamicRoot} = NULL;`);
             }
+            if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
         }
     }
 
@@ -49319,10 +49391,6 @@ class Emitter {
             if (moduleNamespace) {
                 return { c: `${moduleNamespace.factory}()`, ty: T_VALUE };
             }
-            const moduleLexical = this.moduleLexicalBindingForIdentifier(expr);
-            if (moduleLexical) {
-                return { c: this.moduleLexicalRead(moduleLexical), ty: T_VALUE };
-            }
             const localLexical = this.localLexicalReferenceForIdentifier(expr);
             if (localLexical) {
                 const read = this.localLexicalRead(localLexical);
@@ -49330,6 +49398,10 @@ class Emitter {
                 return scalarType
                     ? { c: this.unboxDynamicValue(read, scalarType, expr), ty: scalarType }
                     : { c: read, ty: localLexical.type };
+            }
+            const moduleLexical = this.moduleLexicalBindingForIdentifier(expr);
+            if (moduleLexical) {
+                return { c: this.moduleLexicalRead(moduleLexical), ty: T_VALUE };
             }
             if (this.decoratedClassConstructorAliasIdentifier(expr)) {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
@@ -54900,12 +54972,32 @@ class Emitter {
                 const ptr = this.capturePtrForSymbol(cap.symbol);
                 if (!ptr) unsupported(fn, `cannot capture ${cap.symbol.getName()}`);
                 let dynamicRootPtr: string | null = null;
-                if (this.dispatchCaptureClone && this.dispatchCaptureCloneable(cap.type)) {
+                let clonedInitializationPtr: string | null = null;
+                const cloneDispatchCapture = this.dispatchCaptureClone &&
+                    this.dispatchCaptureCloneable(cap.type);
+                if (this.dispatchCaptureClone && cap.lexical) {
+                    const initializedPtr = this.captureInitializationPtrForSymbol(cap.symbol);
+                    if (!initializedPtr) {
+                        unsupported(
+                            fn,
+                            `cannot snapshot lexical initialization state for ${cap.symbol.getName()}`,
+                        );
+                    }
+                    const initializedStorage = this.freshTemp("_dispatch_capture_initialized");
+                    pieces.push(`bool* ${initializedStorage} = (bool*)TSC_GC_MALLOC(sizeof(bool))`);
+                    pieces.push(`*${initializedStorage} = *${initializedPtr}`);
+                    clonedInitializationPtr = initializedStorage;
+                }
+                if (cloneDispatchCapture) {
                     const storage = this.freshTemp("_dispatch_capture");
                     const boxed = this.coerce({ c: `*${ptr}`, ty: cap.type }, T_VALUE, fn);
                     const cloned = this.coerce({ c: `tsc_structured_clone(${boxed})`, ty: T_VALUE }, cap.type, fn);
                     pieces.push(`${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`);
-                    pieces.push(`*${storage} = ${cloned}`);
+                    pieces.push(
+                        `*${storage} = ${clonedInitializationPtr
+                            ? `(*${clonedInitializationPtr} ? ${cloned} : ${this.zeroValue(cap.type)})`
+                            : cloned}`,
+                    );
                     pieces.push(`${env}->${cap.field} = ${storage}`);
                     if (cap.type.kind === "value") {
                         const rootStorage = this.freshTemp("_dispatch_capture_root");
@@ -54913,6 +55005,16 @@ class Emitter {
                         pieces.push(`*${rootStorage} = tsc_value_gc_root(*${storage})`);
                         dynamicRootPtr = rootStorage;
                     }
+                } else if (this.dispatchCaptureClone) {
+                    const storage = this.freshTemp("_dispatch_capture");
+                    const copied = clonedInitializationPtr
+                        ? `(*${clonedInitializationPtr} ? *${ptr} : ${this.zeroValue(cap.type)})`
+                        : `*${ptr}`;
+                    pieces.push(
+                        `${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`,
+                    );
+                    pieces.push(`*${storage} = ${copied}`);
+                    pieces.push(`${env}->${cap.field} = ${storage}`);
                 } else {
                     pieces.push(`${env}->${cap.field} = ${ptr}`);
                 }
@@ -54922,7 +55024,8 @@ class Emitter {
                     pieces.push(`${env}->${cap.field}_gc_root = ${rootPtr}`);
                 }
                 if (cap.lexical) {
-                    const initializedPtr = this.captureInitializationPtrForSymbol(cap.symbol);
+                    const initializedPtr = clonedInitializationPtr ??
+                        this.captureInitializationPtrForSymbol(cap.symbol);
                     if (!initializedPtr) {
                         unsupported(fn, `cannot capture lexical initialization state for ${cap.symbol.getName()}`);
                     }

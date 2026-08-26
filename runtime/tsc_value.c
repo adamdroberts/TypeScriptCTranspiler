@@ -7632,7 +7632,8 @@ static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen)
             tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Custom classes, Dates, Maps, Sets, or Buffers cannot be cloned"));
             return tsc_value_undefined();
         }
-        if (!tsc_value_is_nullish(src_obj->prototype)) {
+        if (!tsc_value_is_nullish(src_obj->prototype) &&
+            !tsc_value_eq(src_obj->prototype, tsc_value_object_prototype())) {
             tsc_throw_str(tsc_str_from_cstr("TypeError: structuredClone: Objects with custom prototypes cannot be cloned"));
             return tsc_value_undefined();
         }

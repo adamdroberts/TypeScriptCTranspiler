@@ -2,9 +2,10 @@
 
 Status: **MVP implemented (2026-07-19).** Stages 1–4 below are landed except the items still
 unchecked; `todo.md` carries the remaining work under "Dispatch concurrency (optional,
-libdispatch-backed) — remainder". Verified: `dispatch_async_basic`, `dispatch_error_propagation`,
-`dispatch_capture_const_diagnostic`, `dispatch_await_diagnostic` e2e cases plus a 100-task
-concurrent allocation stress run under GC pressure. Two implementation notes discovered en route:
+libdispatch-backed) — remainder". Capture safety now follows one canonical descriptor collection
+whose value, decoded-root, and lexical-initialization snapshots are checked by a compact property
+specification plus one distinct representative worklist stress. Existing dispatch E2E inventories
+and concurrent runs are regression detectors, never cardinality evidence. Two implementation notes discovered en route:
 libdispatch's Linux workqueue threads start with all signals blocked, so the task trampoline must
 unblock Boehm's suspend/restart signals before `GC_register_my_thread`; and workers must
 register/unregister per task (guarded against `dispatch_sync`'s run-inline-on-caller optimization)
@@ -163,10 +164,15 @@ on Phase 6, cross-referenced from Phases 11/13.
 - [x] Emitter recognition of `dispatch.*` calls (same pattern-match style as the existing stdlib
   surface), reusing the existing closure-lowering output for the task fn/env.
 - [x] **Capture discipline (the safety core):** at each `dispatch.async`/`sync` boundary, validate
-  captures via `collectClosureCaptures` + checker types. MVP rule: captures must be primitives,
-  `readonly`-typed data, or const arrays/dynamic values are automatically deep-copied via
-  `structuredClone`. `await` inside a dispatched closure is a compile error (MVP). Later: `Shared<T>`
-  locked-accessor escape hatch; queue-confinement ("actor") typing.
+  one `collectClosureCaptures` descriptor collection plus checker types. Every descriptor receives
+  fresh value storage: primitives and queues are copied directly, const array/dynamic values pass
+  through `structuredClone` with a fresh decoded-root slot, and every lexical descriptor receives
+  a copied runtime initialized bit.
+  Module bindings reuse the canonical Module Environment state, while TypeScript/non-Module
+  top-level bindings are induced by one source-statement worklist. An uninitialized capture is
+  represented without reading its value and later fails through the normal TDZ boundary. `await`
+  inside a dispatched closure is a compile error (MVP). Later: `Shared<T>` locked-accessor escape
+  hatch; queue-confinement ("actor") typing.
   Top-level helper functions referenced by a task are recursively audited so transitive mutable or
   non-primitive global access is rejected. Test: `dispatch_capture_transitive_diagnostic`.
 - [x] Usage flag → `src/compile.ts`: append `tsc_dispatch.c`, define `TSC_THREADS`, probe and link
@@ -179,6 +185,9 @@ on Phase 6, cross-referenced from Phases 11/13.
   deterministic via groups/`dispatch.sync` joins and order-independent assertions; runner skips
   when libdispatch probe fails.
 - [x] Capture-discipline diagnostics tests (compile-error cases).
+- [x] Independent capture property across scope/storage/mutation/TDZ partitions in both memory
+  modes, plus `dispatch_capture_worklist` as one separate representative descriptor-worklist
+  stress. Neither its width nor aggregate fixture passes are used as a support denominator.
 - [x] Serial-fallback differential tests: `dispatch_serial` exercises the same sync/async program
   shape as `dispatch_async_basic`, `dispatch_serial_after` mirrors `dispatch_after`, and
   `dispatch_serial_group_barrier` covers group/barrier scheduling; all produce identical output

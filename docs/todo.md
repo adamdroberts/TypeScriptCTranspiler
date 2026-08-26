@@ -89,6 +89,7 @@ These are mandatory acceptance criteria for new work, not backlog items. An exce
 ## 2. Dependent phases
 
 - **Dispatch concurrency (optional, libdispatch-backed) — remainder** (design/status: [`dispatch_async_todo.md`](dispatch_async_todo.md))
+  - Current capture status: one canonical closure-capture descriptor collection now drives fresh value storage, structured-clone conversion/rooting where required, and copied lexical-initialization state across local, Module, and TypeScript/non-Module top-level bindings. The compact property proves the semantic partitions and `dispatch_capture_worklist` is the distinct representative worklist stress; dispatch fixture totals are regression information only.
   - Remaining work: `Shared<T>`/queue-confinement capture escape hatches beyond const primitives; broader task return types beyond number/string/boolean/array/Map/Set/Date/RegExp/Error/Buffer/URL/URLSearchParams/ArrayBuffer/DataView/TextEncoder/TextDecoder/void; relaxing the awaited-shape dependence once Phase 6 general state-machine lowering lands (dispatch promises awaited outside the recognized continuation subsets currently hit the pending-await bail); and a many-thread GC soak + TSan CI configuration and a CI job that builds libdispatch from source.
 
 - **Phase 7 remainder — ES language features**

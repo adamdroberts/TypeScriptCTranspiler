@@ -13,6 +13,11 @@ export interface AsyncLogicalExpressionDepthSpec {
     depth: number;
 }
 
+export interface DispatchCaptureWorklistWidthSpec {
+    generator: "dispatch-capture-worklist-width";
+    width: number;
+}
+
 export interface StrictEqualityExpressionDepthSpec {
     generator: "strict-equality-expression-depth";
     depth: number;
@@ -108,6 +113,7 @@ export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | AsyncLogicalExpressionDepthSpec
+    | DispatchCaptureWorklistWidthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleStaticSemanticsWidthSpec
@@ -166,6 +172,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         return {
             generator: spec.generator,
             depth,
+        };
+    }
+    if (spec.generator === "dispatch-capture-worklist-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
         };
     }
     if (spec.generator === "strict-equality-expression-depth") {
@@ -492,6 +508,33 @@ function asyncLogicalExpressionDepthSource(depth: number): string {
         "    return result === 197 && calls === depth && ordered && finishCalls === 1;",
         "}",
         'logicalDepth().then((result) => console.log("async logical expression depth:", result));',
+        "",
+    ].join("\n");
+}
+
+function dispatchCaptureWorklistWidthSource(width: number): string {
+    const declarations = Array.from(
+        { length: width },
+        (_, index) => `const capture_${index}: number[] = [${index}];`,
+    );
+    const observations = Array.from(
+        { length: width },
+        (_, index) => `        total += capture_${index}[0];`,
+    );
+    const mutations = Array.from(
+        { length: width },
+        (_, index) => `capture_${index}[0] = ${width + index};`,
+    );
+    return [
+        "const queue = new DispatchQueue('capture-worklist');",
+        ...declarations,
+        "const pending = dispatch.async(queue, () => {",
+        "    let total = 0;",
+        ...observations,
+        "    return total;",
+        "});",
+        ...mutations,
+        `pending.then((result) => console.log("dispatch capture worklist:", result === ${(width * (width - 1)) / 2}));`,
         "",
     ].join("\n");
 }
@@ -971,6 +1014,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return asyncBindingDefaultDepthSource(spec.depth);
         case "async-logical-expression-depth":
             return asyncLogicalExpressionDepthSource(spec.depth);
+        case "dispatch-capture-worklist-width":
+            return dispatchCaptureWorklistWidthSource(spec.width);
         case "strict-equality-expression-depth":
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":
