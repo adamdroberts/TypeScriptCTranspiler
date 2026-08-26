@@ -96,6 +96,84 @@ function subjectSource(): string {
         }
         check(clauseOne() === "shared" && clauseTwo() === "shared", "clause sharing");
 
+        let hoistedCaseFunction = function() { return "outside"; };
+        var functionDiscriminator, functionSelector, functionBodyTdz = false;
+        var functionOriginal, functionOriginalValue, functionPeerValue, functionReplacement;
+        switch ((functionDiscriminator = function() { return hoistedCaseFunction; }, 0)) {
+            case (functionSelector = function() { return hoistedCaseFunction; },
+                (function() {
+                    try { hoistedCaseFunction(1); }
+                    catch (error) { functionBodyTdz = error instanceof ReferenceError; }
+                    return 0;
+                })()):
+                function hoistedCaseFunction(depth) {
+                    return depth === 0 ? caseFunctionLeaf : hoistedCaseFunction(depth - 1) + 1;
+                }
+                function caseFunctionPeer() { return hoistedCaseFunction(2); }
+                let caseFunctionLeaf = 40;
+                functionOriginal = functionSelector();
+                functionOriginalValue = functionOriginal(2);
+                functionPeerValue = caseFunctionPeer();
+                hoistedCaseFunction = function() { return 99; };
+                functionReplacement = functionSelector();
+                break;
+        }
+        check(functionDiscriminator()() === "outside", "function discriminator environment");
+        check(functionBodyTdz, "function body observes later CaseBlock TDZ");
+        check(functionOriginalValue === 42 && functionPeerValue === 42,
+            "hoisted function recursion and cross-reference");
+        check(functionOriginal !== functionReplacement && functionOriginal(2) === 100 &&
+            functionReplacement() === 99,
+            "mutable function binding identity");
+        check(functionOriginal.name === "hoistedCaseFunction" && functionOriginal.length === 1,
+            "hoisted function metadata");
+
+        var caseConstructor, constructedCase;
+        switch (0) {
+            case (caseConstructor = HoistedCaseConstructor, 0):
+                function HoistedCaseConstructor(value) { this.value = value; }
+                constructedCase = new caseConstructor(37);
+                break;
+        }
+        check(constructedCase.value === 37 && caseConstructor.name === "HoistedCaseConstructor",
+            "hoisted function construction");
+
+        var defaultFunction, defaultFunctionTdz = false, defaultFunctionValue;
+        switch (0) {
+            case (defaultFunction = hoistedDefaultFunction,
+                (function() {
+                    try { defaultFunction(); }
+                    catch (error) { defaultFunctionTdz = error instanceof ReferenceError; }
+                    return 0;
+                })()):
+                function hoistedDefaultFunction(value = defaultFunctionLeaf) { return value; }
+                let defaultFunctionLeaf = 84;
+                defaultFunctionValue = defaultFunction();
+                break;
+        }
+        check(defaultFunctionTdz && defaultFunctionValue === 84,
+            "hoisted function parameter environment capture");
+
+        var unselectedFunction;
+        switch (0) {
+            case (unselectedFunction = functionFromUnselectedClause, 0):
+                break;
+            default:
+                function functionFromUnselectedClause() { return "unselected"; }
+        }
+        check(unselectedFunction() === "unselected", "unselected clause function instantiation");
+
+        var duplicateFunction;
+        switch (0) {
+            case 0:
+                function duplicateCaseFunction() { return "first"; }
+                duplicateFunction = duplicateCaseFunction;
+                break;
+            default:
+                function duplicateCaseFunction() { return "last"; }
+        }
+        check(duplicateFunction() === "last", "sloppy duplicate function replacement");
+
         var patternBefore, patternAfter, patternImmutable = false;
         var patternEvents = [];
         function patternKey() { patternEvents.push("key"); return "selected"; }
@@ -175,6 +253,26 @@ function subjectSource(): string {
                     break;
             }
             check(asyncConstRhs && asyncConstError, "async const write order");
+
+            var asyncHoistedSelector, asyncHoistedAfter, asyncFunctionBodyTdz = false;
+            switch (await Promise.resolve(0)) {
+                case (asyncHoistedSelector = function() { return asyncHoistedFunction; },
+                    (function() {
+                        try { asyncHoistedFunction(0); }
+                        catch (error) { asyncFunctionBodyTdz = error instanceof ReferenceError; }
+                        return 0;
+                    })(), await Promise.resolve(0)):
+                    function asyncHoistedFunction(depth) {
+                        return depth === 0 ? asyncFunctionLeaf : asyncHoistedFunction(depth - 1) + 1;
+                    }
+                    let asyncFunctionLeaf = 21;
+                    await Promise.resolve();
+                    asyncHoistedAfter = asyncHoistedFunction;
+                    break;
+            }
+            check(asyncFunctionBodyTdz, "async function body observes later CaseBlock TDZ");
+            check(asyncHoistedSelector() === asyncHoistedAfter && asyncHoistedAfter(2) === 23,
+                "async hoisted function identity and capture");
 
             var asyncPatternBefore;
             switch (await Promise.resolve(0)) {

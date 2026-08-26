@@ -412,9 +412,17 @@ interface ClosureEnvBinding {
     immutable?: boolean;
 }
 
+type NamedSwitchLexicalDeclaration =
+    | (ts.FunctionDeclaration & { readonly name: ts.Identifier })
+    | (ts.ClassDeclaration & { readonly name: ts.Identifier });
+
+type SwitchLexicalDeclaration =
+    | ts.VariableDeclaration
+    | NamedSwitchLexicalDeclaration;
+
 interface SwitchLexicalBindingPlan {
     readonly symbol: ts.Symbol;
-    readonly declaration: ts.VariableDeclaration;
+    readonly declaration: SwitchLexicalDeclaration;
     readonly name: string;
     readonly immutable: boolean;
     readonly value: string;
@@ -922,6 +930,7 @@ class Emitter {
             if (
                 ts.isFunctionDeclaration(node) &&
                 this.isPrunableLocalFunction(node) &&
+                !this.isDirectSwitchLexicalDeclaration(node) &&
                 !this.referencedLocalFunctions.has(node)
             ) {
                 return;
@@ -1013,6 +1022,13 @@ class Emitter {
                 return;
             }
             if (ts.isSwitchStatement(node)) {
+                /* BlockDeclarationInstantiation creates every direct function
+                 * object before selection, including functions in clauses
+                 * that are never entered. Their bodies therefore contribute
+                 * reachability edges independently of static clause pruning. */
+                for (const declaration of this.directSwitchLexicalDeclarations(node)) {
+                    if (ts.isFunctionDeclaration(declaration)) visit(declaration);
+                }
                 const selected = this.staticSwitchSelectedStatements(node);
                 if (selected) {
                     if (selected.statements) visitStatementList(selected.statements);
@@ -16055,6 +16071,7 @@ class Emitter {
             !this.isPrunableLocalFunction(fd) || this.isGenericFunction(fd)) {
             return false;
         }
+        if (this.isDirectSwitchLexicalDeclaration(fd)) return false;
         if (this.isTest262AnnexBGlobalFunctionDeclaration(fd)) {
             return this.collectClosureCaptures(fd).length === 0;
         }
@@ -16083,6 +16100,17 @@ class Emitter {
         };
         visit(fd.body);
         return safe;
+    }
+
+    private isSupportedDirectSwitchFunctionDeclaration(
+        declaration: ts.FunctionDeclaration,
+    ): declaration is ts.FunctionDeclaration & { name: ts.Identifier; body: ts.Block } {
+        return this.isDirectSwitchLexicalDeclaration(declaration) &&
+            !!declaration.name &&
+            !!declaration.body &&
+            !this.isGenericFunction(declaration) &&
+            !this.isAsyncDeclaration(declaration) &&
+            !declaration.asteriskToken;
     }
 
     private identifierName(id: ts.Identifier): string {
@@ -23849,22 +23877,38 @@ class Emitter {
     ): {
         readonly name: string;
         readonly immutable: boolean;
-        readonly declaration: ts.VariableDeclaration;
+        readonly declaration: SwitchLexicalDeclaration | ts.VariableDeclaration;
         readonly identifier: ts.Identifier;
     } | null {
         if (!symbol) return null;
         const symbolDeclaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
         if (!symbolDeclaration) return null;
-        const identifier = ts.isVariableDeclaration(symbolDeclaration) &&
-            ts.isIdentifier(symbolDeclaration.name)
+        const directNamedDeclaration =
+            (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration)) &&
+            symbolDeclaration.name &&
+            this.isDirectSwitchLexicalDeclaration(symbolDeclaration)
+                ? symbolDeclaration as NamedSwitchLexicalDeclaration
+                : null;
+        const identifier = directNamedDeclaration
+            ? directNamedDeclaration.name
+            : ts.isVariableDeclaration(symbolDeclaration) && ts.isIdentifier(symbolDeclaration.name)
             ? symbolDeclaration.name
             : ts.isBindingElement(symbolDeclaration) && ts.isIdentifier(symbolDeclaration.name)
                 ? symbolDeclaration.name
                 : ts.isIdentifier(symbolDeclaration)
                     ? symbolDeclaration
                     : null;
-        const declaration = this.test262BindingVariableDeclaration(symbolDeclaration);
+        const declaration = directNamedDeclaration ??
+            this.test262BindingVariableDeclaration(symbolDeclaration);
         if (!identifier || !declaration) return null;
+        if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+            return {
+                name: identifier.text,
+                immutable: false,
+                declaration,
+                identifier,
+            };
+        }
         if (ts.isCatchClause(declaration.parent)) {
             return {
                 name: identifier.text,
@@ -23883,7 +23927,14 @@ class Emitter {
         };
     }
 
-    private isDirectSwitchLexicalDeclaration(declaration: ts.VariableDeclaration): boolean {
+    private isDirectSwitchLexicalDeclaration(
+        declaration: ts.Declaration,
+    ): declaration is SwitchLexicalDeclaration {
+        if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+            return !!declaration.name &&
+                (ts.isCaseClause(declaration.parent) || ts.isDefaultClause(declaration.parent));
+        }
+        if (!ts.isVariableDeclaration(declaration)) return false;
         if (!ts.isVariableDeclarationList(declaration.parent) ||
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0 ||
             !ts.isVariableStatement(declaration.parent.parent)) return false;
@@ -25189,7 +25240,8 @@ class Emitter {
             buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
         }
         for (const declaration of declarations.annexBFunctions) {
-            if (!this.isSupportedLocalFunctionDeclaration(declaration)) {
+            if (!this.isSupportedLocalFunctionDeclaration(declaration) &&
+                !this.isSupportedDirectSwitchFunctionDeclaration(declaration)) {
                 unsupported(
                     declaration,
                     "Annex B global block function requires the canonical closure-capable function lowering",
@@ -25210,9 +25262,18 @@ class Emitter {
     ): boolean {
         const enabled = this.test262AnnexBFunctionEnabled.get(declaration);
         if (!enabled || !declaration.name) return false;
-        const type = this.javaScriptFunctionValueType(declaration);
-        const closure = this.emitFunctionDeclarationReferenceClosure(declaration, type);
-        const value = this.coerce(closure, T_VALUE, declaration.name);
+        const lexical = this.localLexicalReferenceForIdentifier(declaration.name);
+        const value = lexical
+            ? this.coerce(
+                { c: this.localLexicalRead(lexical), ty: lexical.type },
+                T_VALUE,
+                declaration.name,
+            )
+            : (() => {
+                const type = this.javaScriptFunctionValueType(declaration);
+                const closure = this.emitFunctionDeclarationReferenceClosure(declaration, type);
+                return this.coerce(closure, T_VALUE, declaration.name);
+            })();
         buf.open(`if (${enabled})`);
         buf.line(
             `tsc_global_reference_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
@@ -25710,6 +25771,22 @@ class Emitter {
                 }
                 return;
             }
+            if (
+                node !== owner &&
+                ts.isFunctionDeclaration(node) &&
+                this.isSupportedDirectSwitchFunctionDeclaration(node)
+            ) {
+                for (const cap of this.collectClosureCaptures(node)) {
+                    const cellName = this.cellNameForCapture(cap.symbol, cap.field);
+                    captures.set(cap.symbol, {
+                        type: cap.type,
+                        cellName,
+                        ...(cap.type.kind === "value" ? { rootCellName: `${cellName}__gc_root` } : {}),
+                        ...(cap.lexical ? { initializedCellName: `${cellName}__initialized` } : {}),
+                    });
+                }
+                return;
+            }
             if (node !== owner && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
             ts.forEachChild(node, visit);
         };
@@ -25833,7 +25910,11 @@ class Emitter {
                     sym &&
                     decl &&
                     !this.test262ScriptGlobalBindingName(node) &&
-                    !this.isNodeWithin(decl, fn) &&
+                    (
+                        !this.isNodeWithin(decl, fn) ||
+                        decl === fn && ts.isFunctionDeclaration(fn) &&
+                            this.isSupportedDirectSwitchFunctionDeclaration(fn)
+                    ) &&
                     (!this.isTopLevelValueDeclaration(decl) ||
                         (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
                     this.isCapturableValueDeclaration(decl)
@@ -25868,6 +25949,7 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
+        for (const parameter of fn.parameters) ts.forEachChild(parameter, visit);
         if (fn.body) visit(fn.body);
         return [...captures.values()];
     }
@@ -25882,7 +25964,9 @@ class Emitter {
         return (
             ts.isVariableDeclaration(decl) ||
             ts.isParameter(decl) ||
-            ts.isBindingElement(decl)
+            ts.isBindingElement(decl) ||
+            ts.isFunctionDeclaration(decl) &&
+                this.isSupportedDirectSwitchFunctionDeclaration(decl)
         );
     }
 
@@ -29159,6 +29243,7 @@ class Emitter {
             },
             isSupportedNestedFunction: (node) => {
                 if (ts.isFunctionDeclaration(node)) {
+                    if (this.isSupportedDirectSwitchFunctionDeclaration(node)) return true;
                     return this.isSupportedLocalFunctionDeclaration(node);
                 }
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
@@ -29519,6 +29604,11 @@ class Emitter {
         for (const stateNode of graph.states) {
             if (stateNode.kind === "scope-enter" || stateNode.kind === "scope-clone") {
                 if (!stateNode.bindings.every((binding) => validateCfgBinding(binding))) return false;
+                if (stateNode.kind === "scope-enter" && !stateNode.functions.every((declaration) => {
+                    if (!this.isSupportedDirectSwitchFunctionDeclaration(declaration)) return false;
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    return !!symbol && fieldBySymbol.has(symbol);
+                })) return false;
             } else if (stateNode.kind === "sync" && ts.isVariableStatement(stateNode.statement)) {
                 for (const declaration of stateNode.statement.declarationList.declarations) {
                     if (!ts.isIdentifier(declaration.name)) return false;
@@ -30279,6 +30369,19 @@ class Emitter {
                 } else if (stateNode.kind === "scope-enter") {
                     for (const binding of stateNode.bindings) {
                         emitFreshCfgBindingCells(binding);
+                    }
+                    for (const declaration of stateNode.functions) {
+                        const symbol = this.symbolForIdentifier(declaration.name!);
+                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                        if (!local) return false;
+                        emitCfgFieldAssignment(
+                            callback,
+                            local,
+                            this.emitClosureExpression(declaration),
+                            declaration,
+                            "state",
+                            true,
+                        );
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "scope-clone") {
@@ -41722,6 +41825,7 @@ class Emitter {
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
             if (this.emitTest262AnnexBGlobalFunctionUpdate(buf, stmt)) return;
+            if (this.isSupportedDirectSwitchFunctionDeclaration(stmt)) return;
             if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
             if (!this.isSupportedLocalFunctionDeclaration(stmt)) {
                 unsupported(stmt, "referenced local function declaration is not supported by the canonical lowering");
@@ -47536,28 +47640,39 @@ class Emitter {
         return true;
     }
 
-    private directSwitchLexicalVariableDeclarations(
+    private directSwitchLexicalDeclarations(
         sw: ts.SwitchStatement,
-    ): ts.VariableDeclaration[] {
-        const declarations: ts.VariableDeclaration[] = [];
+    ): SwitchLexicalDeclaration[] {
+        const declarations: SwitchLexicalDeclaration[] = [];
         for (const clause of sw.caseBlock.clauses) {
             for (const statement of clause.statements) {
-                if (!ts.isVariableStatement(statement) ||
-                    (statement.declarationList.flags & ts.NodeFlags.BlockScoped) === 0) continue;
-                for (const declaration of statement.declarationList.declarations) {
-                    declarations.push(declaration);
+                if (ts.isVariableStatement(statement) &&
+                    (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                    declarations.push(...statement.declarationList.declarations);
+                    continue;
+                }
+                if (ts.isFunctionDeclaration(statement) && statement.name) {
+                    declarations.push(statement as typeof statement & { name: ts.Identifier });
+                    continue;
+                }
+                if (ts.isClassDeclaration(statement) && statement.name) {
+                    declarations.push(statement as typeof statement & { name: ts.Identifier });
                 }
             }
         }
         return declarations;
     }
 
+    private switchLexicalDeclarationNames(
+        declaration: SwitchLexicalDeclaration,
+    ): readonly ts.Identifier[] {
+        return ts.isVariableDeclaration(declaration)
+            ? this.test262BindingNames(declaration.name)
+            : [declaration.name];
+    }
+
     private switchHasDirectLexicalDeclarations(sw: ts.SwitchStatement): boolean {
-        return sw.caseBlock.clauses.some((clause) => clause.statements.some((statement) =>
-            ts.isFunctionDeclaration(statement) ||
-            ts.isClassDeclaration(statement) ||
-            ts.isVariableStatement(statement) &&
-                (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0));
+        return this.directSwitchLexicalDeclarations(sw).length > 0;
     }
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
@@ -47595,8 +47710,9 @@ class Emitter {
         }
 
         const lexicalScope = new Map<ts.Symbol, SwitchLexicalBindingPlan>();
-        for (const declaration of this.directSwitchLexicalVariableDeclarations(sw)) {
-            for (const identifier of this.test262BindingNames(declaration.name)) {
+        const lexicalDeclarations = this.directSwitchLexicalDeclarations(sw);
+        for (const declaration of lexicalDeclarations) {
+            for (const identifier of this.switchLexicalDeclarationNames(declaration)) {
                 const symbol = this.symbolForIdentifier(identifier);
                 if (!symbol) unsupported(identifier, "unresolved direct switch lexical binding");
                 if (lexicalScope.has(symbol)) continue;
@@ -47644,41 +47760,62 @@ class Emitter {
                 });
             }
         }
-        buf.line(`int ${start} = -1;`);
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
             return this.switchStrictEqualityCondition(dv, caseVal, caseExpr);
         };
         this.switchLexicalScopes.push(lexicalScope);
-        this.activeBreakTargets.push(endLabel);
         try {
-            for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
-                const clause = sw.caseBlock.clauses[index]!;
-                if (clause.kind === ts.SyntaxKind.CaseClause) {
-                    const cond = buildCond(clause.expression);
-                    buf.open(`if (${start} < 0 && (${cond}))`);
-                    buf.line(`${start} = ${index};`);
+            for (const declaration of lexicalDeclarations) {
+                if (!ts.isFunctionDeclaration(declaration)) continue;
+                if (!this.isSupportedDirectSwitchFunctionDeclaration(declaration)) {
+                    unsupported(
+                        declaration,
+                        "direct switch function declaration is not supported by the canonical closure lowering",
+                    );
+                }
+                const symbol = this.symbolForIdentifier(declaration.name);
+                const binding = this.switchLexicalBindingForSymbol(symbol);
+                if (!binding) {
+                    unsupported(declaration.name, "direct switch function is missing its CaseBlock cell");
+                }
+                const closure = this.emitClosureExpression(declaration);
+                buf.line(`${binding.value} = ${this.coerce(closure, T_VALUE, declaration)};`);
+                buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
+                buf.line(`${binding.initialized} = true;`);
+            }
+            buf.line(`int ${start} = -1;`);
+            this.activeBreakTargets.push(endLabel);
+            try {
+                for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
+                    const clause = sw.caseBlock.clauses[index]!;
+                    if (clause.kind === ts.SyntaxKind.CaseClause) {
+                        const cond = buildCond(clause.expression);
+                        buf.open(`if (${start} < 0 && (${cond}))`);
+                        buf.line(`${start} = ${index};`);
+                        buf.close();
+                    }
+                }
+                const defaultIndex = sw.caseBlock.clauses.findIndex(
+                    (clause) => clause.kind === ts.SyntaxKind.DefaultClause,
+                );
+                if (defaultIndex >= 0) {
+                    buf.open(`if (${start} < 0)`);
+                    buf.line(`${start} = ${defaultIndex};`);
                     buf.close();
                 }
-            }
-            const defaultIndex = sw.caseBlock.clauses.findIndex(
-                (clause) => clause.kind === ts.SyntaxKind.DefaultClause,
-            );
-            if (defaultIndex >= 0) {
-                buf.open(`if (${start} < 0)`);
-                buf.line(`${start} = ${defaultIndex};`);
-                buf.close();
-            }
-            for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
-                const clause = sw.caseBlock.clauses[index]!;
-                buf.open(`if (${start} >= 0 && ${start} <= ${index})`);
-                if (clause.kind === ts.SyntaxKind.CaseClause || clause.kind === ts.SyntaxKind.DefaultClause) {
-                    for (const s of clause.statements) this.emitStmt(buf, s);
+                for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
+                    const clause = sw.caseBlock.clauses[index]!;
+                    buf.open(`if (${start} >= 0 && ${start} <= ${index})`);
+                    if (clause.kind === ts.SyntaxKind.CaseClause || clause.kind === ts.SyntaxKind.DefaultClause) {
+                        for (const s of clause.statements) this.emitStmt(buf, s);
+                    }
+                    buf.close();
                 }
-                buf.close();
+            } finally {
+                this.activeBreakTargets.pop();
             }
         } finally {
-            this.activeBreakTargets.pop();
             const popped = this.switchLexicalScopes.pop();
             if (popped !== lexicalScope) throw new Error("switch lexical scope stack corruption");
         }
@@ -53473,7 +53610,9 @@ class Emitter {
     private isDirectCallableIdentifier(id: ts.Identifier): boolean {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isFunctionDeclaration(decl)) return true;
+        if (decl && ts.isFunctionDeclaration(decl)) {
+            return !this.isDirectSwitchLexicalDeclaration(decl);
+        }
         const commonJsValueDecl = decl ? this.commonJsObjectExportValueDeclaration(decl) : null;
         if (commonJsValueDecl && ts.isFunctionDeclaration(commonJsValueDecl)) return true;
         if (decl && ts.isVariableDeclaration(decl)) {

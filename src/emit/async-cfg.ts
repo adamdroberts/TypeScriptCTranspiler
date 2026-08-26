@@ -106,6 +106,7 @@ type AsyncControlFlowStateCore =
         readonly kind: "scope-enter";
         readonly id: number;
         readonly bindings: readonly ts.BindingName[];
+        readonly functions: readonly ts.FunctionDeclaration[];
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -1358,7 +1359,7 @@ export function planAsyncControlFlowGraph(
         const bindings = collectDirectLexicalBindings(block.statements);
         if (bindings.length === 0) return entry;
         const id = reserve();
-        return setState({ kind: "scope-enter", id, bindings, next: entry }, context.exceptionTarget);
+        return setState({ kind: "scope-enter", id, bindings, functions: [], next: entry }, context.exceptionTarget);
     };
 
     const buildFinalizationRegion = (
@@ -2024,8 +2025,15 @@ export function planAsyncControlFlowGraph(
                     defaultTarget,
                 }, context.exceptionTarget);
             }
-            const switchBindings = statement.caseBlock.clauses.flatMap((clause) =>
-                collectDirectLexicalBindings(clause.statements));
+            const switchFunctions = statement.caseBlock.clauses.flatMap((clause) =>
+                clause.statements.filter((candidate): candidate is ts.FunctionDeclaration & { name: ts.Identifier } =>
+                    ts.isFunctionDeclaration(candidate) && !!candidate.name));
+            const switchBindings = [
+                ...statement.caseBlock.clauses.flatMap((clause) =>
+                    collectDirectLexicalBindings(clause.statements)),
+                ...switchFunctions.map((declaration) => declaration.name),
+            ];
+            bindingIdentifiers.push(...switchFunctions.map((declaration) => declaration.name));
             // The CaseBlock environment is created after the discriminator
             // and before the first case expression, even when no lexical
             // declarations contribute captured cells.
@@ -2034,6 +2042,7 @@ export function planAsyncControlFlowGraph(
                 kind: "scope-enter",
                 id: scopeId,
                 bindings: switchBindings,
+                functions: switchFunctions,
                 next: selectionEntry,
             }, context.exceptionTarget);
             const entry = buildExpressionResult(
@@ -2077,6 +2086,7 @@ export function planAsyncControlFlowGraph(
                         kind: "scope-enter",
                         id: scopeId,
                         bindings: [binding],
+                        functions: [],
                         next: bound,
                     }, catchContext.exceptionTarget);
                 }
