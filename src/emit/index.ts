@@ -91,6 +91,9 @@ const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
  * the runtime descriptor collection owns the corresponding implementations. */
 const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "at",
+    "charAt",
+    "charCodeAt",
+    "codePointAt",
     "replace",
     "replaceAll",
     "slice",
@@ -24658,7 +24661,10 @@ class Emitter {
         // Async/other normalized control-flow graphs may carry synthesized
         // statements that deliberately have no source-file parent chain.
         // Such nodes cannot be top-level ScriptEvaluation completions.
-        if (!source || !this.isTest262ScriptSourceFile(source)) return false;
+        if (!source || (
+            !this.isTest262ScriptSourceFile(source) &&
+            !this.isTest262EvalSourceFile(source)
+        )) return false;
         for (let current: ts.Node | undefined = node.parent; current && current !== source; current = current.parent) {
             if (
                 ts.isFunctionLike(current) ||
@@ -50965,7 +50971,12 @@ class Emitter {
                 );
             }
             case ts.SyntaxKind.PlusToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
+                if (
+                    left.ty.kind === "value" ||
+                    right.ty.kind === "value" ||
+                    !["number", "bigint", "string"].includes(left.ty.kind) ||
+                    !["number", "bigint", "string"].includes(right.ty.kind)
+                ) {
                     return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
                 }
                 const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
@@ -57500,12 +57511,6 @@ class Emitter {
                         `tsc_value_apply_function(${fn}, ${thisArgValue}, ${argListValue})`,
                 );
             }
-            case "charAt":
-                return oneArg("tsc_value_method_char_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
-            case "charCodeAt":
-                return oneArg("tsc_value_method_char_code_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
-            case "codePointAt":
-                return oneArg("tsc_value_method_code_point_at", { c: "tsc_value_num(0.0)", ty: T_VALUE });
             case "isWellFormed":
             case "toWellFormed": {
                 const callee = method === "isWellFormed"
@@ -66844,39 +66849,6 @@ class Emitter {
             ...this.ignoredArgumentSpecs(args, consumed),
         ];
         switch (method) {
-            case "codePointAt": {
-                const idx = optionalNumberArg(0, "0.0");
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0] },
-                    ]),
-                    ([s, i]) => `tsc_str_code_point_at(${s}, ${i})`,
-                );
-            }
-            case "charAt": {
-                const idx = optionalNumberArg(0, "0.0");
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0] },
-                    ]),
-                    ([s, i]) => `tsc_str_char_at(${s}, ${i})`,
-                );
-            }
-            case "charCodeAt": {
-                const idx = optionalNumberArg(0, "0.0");
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: idx, target: T_NUMBER, node: args[0] },
-                    ]),
-                    ([s, i]) => `tsc_str_char_code_at(${s}, ${i})`,
-                );
-            }
             case "includes": {
                 if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
                 const needle = this.emitExpr(args[0]!);

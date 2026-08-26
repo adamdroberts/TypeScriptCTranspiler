@@ -160,6 +160,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         var directCallerStrictVar = 35;
         function directCallerStrictFunction() { return 36; }
     `;
+    const directCompletionSource = "sentinel;";
     const directCallerStrictRecord = `
         "use strict";
         eval(${JSON.stringify(directCallerStrictBody)});
@@ -167,8 +168,10 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             typeof directCallerStrictFunction !== "undefined") {
             throw new Error("strict-caller eval declarations escaped");
         }
+        if (eval(${JSON.stringify(directCompletionSource)}) !== sentinel) {
+            throw new Error("strict-caller eval completion identity differed");
+        }
     `;
-    const directCompletionSource = "sentinel;";
     const directThrowSource = "throw sentinel;";
     const invalidDirectSource = "let = ;";
     const indirectDeclarationSource = `
@@ -394,6 +397,12 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             entry: path.join(temporary, "direct-completion.js"),
             strictCaller: false,
             strict: false,
+        },
+        {
+            source: directCompletionSource,
+            entry: path.join(temporary, "direct-completion-strict.js"),
+            strictCaller: true,
+            strict: true,
         },
         {
             source: directThrowSource,

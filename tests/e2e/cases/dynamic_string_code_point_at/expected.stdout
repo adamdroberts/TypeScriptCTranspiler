@@ -1,4 +1,4 @@
 points 65 65 128512 56832 90
-missing NaN NaN
-non-string NaN
+missing undefined undefined
+non-string 49
 ignored p

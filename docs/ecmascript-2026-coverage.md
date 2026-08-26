@@ -1508,9 +1508,12 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-the-string-prototype-object` — Properties of the String Prototype Object: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.at` — String.prototype.at ( _index_ )
     - [ ] `generic-tostring-relative-index-and-code-unit` (intrinsic, unbounded): Generic receiver ToString, ordered ToIntegerOrInfinity relative indexing, UTF-16 code-unit result, undefined range, abrupt completion, and intrinsic surface.
-  - [ ] `sec-string.prototype.charat` — String.prototype.charAt ( _pos_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.charcodeat` — String.prototype.charCodeAt ( _pos_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.codepointat` — String.prototype.codePointAt ( _pos_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.charat` — String.prototype.charAt ( _pos_ )
+    - [ ] `generic-tostring-index-and-code-unit-string` (intrinsic, unbounded): Generic receiver ToString, ordered integer index conversion, UTF-16 code-unit String projection, empty out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface.
+  - [ ] `sec-string.prototype.charcodeat` — String.prototype.charCodeAt ( _pos_ )
+    - [ ] `generic-tostring-index-and-code-unit-number` (intrinsic, unbounded): Generic receiver ToString, ordered integer index conversion, UTF-16 code-unit Number projection, NaN out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface.
+  - [ ] `sec-string.prototype.codepointat` — String.prototype.codePointAt ( _pos_ )
+    - [ ] `generic-tostring-index-and-utf16-decode` (intrinsic, unbounded): Generic receiver ToString, ordered integer index conversion, UTF-16 surrogate decoding, undefined out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.concat` — String.prototype.concat ( ..._args_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.constructor` — String.prototype.constructor: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.endswith` — String.prototype.endsWith ( _searchString_ [ , _endPosition_ ] ): exact disposition and partitions missing.

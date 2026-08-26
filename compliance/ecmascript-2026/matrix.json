@@ -309,6 +309,132 @@
       "rationale": "The complete String.prototype.at intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, feature mapping, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.charat",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-index-and-code-unit-string",
+          "title": "Generic receiver ToString, ordered integer index conversion, UTF-16 code-unit String projection, empty out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            { "allOf": [{ "field": "clause", "equals": "sec-string.prototype.charat" }] }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-index-access.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": ["string_char_code_at"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+              "src/emit/index.ts#emitStringMethod",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_method_apply",
+              "runtime/tsc_value.c#string_char_at_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#tsc_value_method_char_at",
+              "runtime/tsc_string.c#tsc_str_char_at"
+            ]
+          },
+          "rationale": "The independent indexed-access property derives the intrinsic metadata and mutable descriptor surface; primitive, boxed, ordinary-object, array, BigInt, Symbol, and nullish receiver partitions; omitted, undefined, Boolean, String, array, object, BigInt, Symbol, NaN, fractional, infinite, negative, valid, and out-of-range index partitions; exact receiver/index abrupt identity and order; ordinary lookup before argument evaluation; borrowed primitive lookup; and UTF-16 scalar, surrogate-half, and lone-surrogate results in both memory modes. One shared emitter method set routes typed and dynamic receivers through the ordinary receiver/property/argument worklist. The generic intrinsic performs RequireObjectCoercible, receiver ToString, and index ToNumber before one tsc_str_char_at projection over the canonical arbitrary-length UTF-16 sequence. The distinct mixed-code-point stress independently derives every expected code unit and validates direct and generic access across representative sequence width. The exact pinned semantic directory executes natively in both Script variants; host eligibility and exhaustive signed reporting remain separate global obligations."
+        }
+      ],
+      "rationale": "The complete String.prototype.charAt intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regression, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.charcodeat",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-index-and-code-unit-number",
+          "title": "Generic receiver ToString, ordered integer index conversion, UTF-16 code-unit Number projection, NaN out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            { "allOf": [{ "field": "clause", "equals": "sec-string.prototype.charcodeat" }] }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-index-access.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": ["string_char_code_at"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+              "src/emit/index.ts#emitStringMethod",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_method_apply",
+              "runtime/tsc_value.c#string_char_code_at_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#tsc_value_method_char_code_at",
+              "runtime/tsc_string.c#tsc_str_char_code_at"
+            ]
+          },
+          "rationale": "The independent indexed-access property derives the intrinsic metadata and mutable descriptor surface; generic and borrowed receiver partitions; the complete observable index-conversion, abrupt-order, valid-code-unit, and NaN out-of-range partitions; and scalar, surrogate-half, and lone-surrogate code units in both memory modes. One shared emitter method set routes typed and dynamic receivers through the ordinary receiver/property/argument worklist. The generic intrinsic performs RequireObjectCoercible, receiver ToString, and index ToNumber before one tsc_str_char_code_at projection over the canonical arbitrary-length UTF-16 sequence. The distinct mixed-code-point stress independently derives every expected code unit and validates direct and generic numeric access across representative sequence width. The exact pinned semantic directory executes natively in both Script variants; host eligibility and exhaustive signed reporting remain separate global obligations."
+        }
+      ],
+      "rationale": "The complete String.prototype.charCodeAt intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regression, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.codepointat",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-index-and-utf16-decode",
+          "title": "Generic receiver ToString, ordered integer index conversion, UTF-16 surrogate decoding, undefined out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            { "allOf": [{ "field": "clause", "equals": "sec-string.prototype.codepointat" }] }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-index-access.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": ["string_char_code_at", "dynamic_string_code_point_at", "string_codepoints"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+              "src/emit/index.ts#emitStringMethod",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_method_apply",
+              "runtime/tsc_value.c#string_code_point_at_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#tsc_value_method_code_point_at",
+              "runtime/tsc_string.c#tsc_str_code_point_at"
+            ]
+          },
+          "rationale": "The independent indexed-access property derives the intrinsic metadata and mutable descriptor surface; generic and borrowed receiver partitions; the complete observable index-conversion and abrupt-order partitions; undefined negative/over-length results; leading-pair decoding; trailing and lone-surrogate code-unit results; and scalar values in both memory modes. One shared emitter method set routes typed and dynamic receivers through the ordinary receiver/property/argument worklist. The generic intrinsic performs RequireObjectCoercible, receiver ToString, and index ToNumber before one tsc_str_code_point_at projection over the canonical arbitrary-length UTF-16 sequence, translating only the core's absent sentinel to ECMAScript undefined. The distinct mixed-code-point stress independently derives expected code points from adjacent code units and validates direct and generic decoding across representative sequence width. The exact pinned semantic directory executes natively in both Script variants; host eligibility and exhaustive signed reporting remain separate global obligations."
+        }
+      ],
+      "rationale": "The complete String.prototype.codePointAt intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

@@ -8,5 +8,5 @@ function mark(label: string): string {
 
 console.log("points", text.codePointAt(), text.codePointAt(0, mark("p")), text.codePointAt(1), text.codePointAt(2), text.codePointAt(3));
 console.log("missing", text.codePointAt(9), text.codePointAt(-1));
-console.log("non-string", nonString.codePointAt(0));
+console.log("non-string", String.prototype.codePointAt.call(nonString, 0));
 console.log("ignored", seen);

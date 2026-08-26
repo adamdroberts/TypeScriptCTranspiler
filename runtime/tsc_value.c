@@ -836,6 +836,28 @@ static tsc_value_t string_at_from_values(tsc_value_t receiver, tsc_value_t index
     return result ? tsc_value_string(result) : tsc_value_undefined();
 }
 
+static tsc_value_t string_char_at_from_values(tsc_value_t receiver, tsc_value_t index) {
+    string_require_object_coercible(receiver, "String.prototype.charAt");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double position = tsc_value_to_number(index);
+    return tsc_value_string(tsc_str_char_at(string, position));
+}
+
+static tsc_value_t string_char_code_at_from_values(tsc_value_t receiver, tsc_value_t index) {
+    string_require_object_coercible(receiver, "String.prototype.charCodeAt");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double position = tsc_value_to_number(index);
+    return tsc_value_num(tsc_str_char_code_at(string, position));
+}
+
+static tsc_value_t string_code_point_at_from_values(tsc_value_t receiver, tsc_value_t index) {
+    string_require_object_coercible(receiver, "String.prototype.codePointAt");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double position = tsc_value_to_number(index);
+    double code_point = tsc_str_code_point_at(string, position);
+    return isnan(code_point) ? tsc_value_undefined() : tsc_value_num(code_point);
+}
+
 static tsc_value_t string_slice_from_values(
     tsc_value_t receiver,
     tsc_value_t start,
@@ -883,6 +905,9 @@ static tsc_value_t string_substr_from_values(
 
 typedef enum {
     TSC_STRING_PROTOTYPE_AT,
+    TSC_STRING_PROTOTYPE_CHAR_AT,
+    TSC_STRING_PROTOTYPE_CHAR_CODE_AT,
+    TSC_STRING_PROTOTYPE_CODE_POINT_AT,
     TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_SUBSTRING,
     TSC_STRING_PROTOTYPE_SUBSTR,
@@ -900,6 +925,9 @@ typedef struct {
 
 static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "at", 2, 1.0, TSC_STRING_PROTOTYPE_AT },
+    { "charAt", 6, 1.0, TSC_STRING_PROTOTYPE_CHAR_AT },
+    { "charCodeAt", 10, 1.0, TSC_STRING_PROTOTYPE_CHAR_CODE_AT },
+    { "codePointAt", 11, 1.0, TSC_STRING_PROTOTYPE_CODE_POINT_AT },
     { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "substring", 9, 2.0, TSC_STRING_PROTOTYPE_SUBSTRING },
     { "substr", 6, 2.0, TSC_STRING_PROTOTYPE_SUBSTR },
@@ -924,6 +952,12 @@ static tsc_value_t string_prototype_method_apply(
     switch (method->operation) {
         case TSC_STRING_PROTOTYPE_AT:
             return string_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_CHAR_AT:
+            return string_char_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_CHAR_CODE_AT:
+            return string_char_code_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_CODE_POINT_AT:
+            return string_code_point_at_from_values(this_arg, first);
         case TSC_STRING_PROTOTYPE_SLICE:
             return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SUBSTRING:
@@ -6717,24 +6751,15 @@ tsc_str_t* value_join_part(tsc_value_t v) {
 }
 
 tsc_value_t tsc_value_method_char_at(tsc_value_t recv, tsc_value_t index) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_char_at((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(index)));
-    }
-    return tsc_value_undefined();
+    return string_char_at_from_values(recv, index);
 }
 
 tsc_value_t tsc_value_method_char_code_at(tsc_value_t recv, tsc_value_t index) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_num(tsc_str_char_code_at((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(index)));
-    }
-    return tsc_value_num(NAN);
+    return string_char_code_at_from_values(recv, index);
 }
 
 tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_num(tsc_str_code_point_at((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(index)));
-    }
-    return tsc_value_num(NAN);
+    return string_code_point_at_from_values(recv, index);
 }
 
 tsc_value_t tsc_value_method_is_well_formed(tsc_value_t recv) {
