@@ -348,7 +348,12 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
@@ -397,6 +402,11 @@
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -446,6 +456,11 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -460,6 +475,11 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -474,6 +494,11 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -484,10 +509,26 @@
     },
     {
       "kind": "implementation",
+      "id": "src/emit/index.ts#emitPropertyAccess",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "implementation",
       "id": "runtime/tsc_value.c#string_prototype_install_intrinsics",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -502,6 +543,11 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -663,6 +709,107 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-search.property.test.ts",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_search_positions",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_search_positions",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_last_index_of",
+      "targets": [
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_last_index_of",
+      "targets": [
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_search_from_values",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_value_is_regexp",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_includes",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_index_of",
+      "targets": [
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_last_index_of",
+      "targets": [
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_starts_with",
+      "targets": [
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_ends_with",
+      "targets": [
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -688,6 +835,11 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
+        "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
+        "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
+        "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
+        "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",

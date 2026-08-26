@@ -476,6 +476,200 @@
       "rationale": "The complete String.prototype.concat intrinsic is represented as one terminal canonical-collection partition with reciprocal property, distinct argument-worklist stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.includes",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-regexp-rejection-position-and-utf16-search",
+        "title": "Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and forward UTF-16 code-unit containment",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.includes" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-search.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["string_search_positions", "dynamic_search_positions"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_search_from_values",
+            "runtime/tsc_value.c#string_value_is_regexp",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_includes",
+            "runtime/tsc_string.c#tsc_str_index_of"
+          ]
+        },
+        "rationale": "The independent shared search property derives the intrinsic surface, generic receiver/search/position conversion, omitted and abrupt inputs, native and Symbol.match-defined RegExp rejection, ordinary lookup, and UTF-16 scalar/surrogate partitions in both memory modes. One Realm-owned descriptor and generic operation perform receiver ToString, IsRegExp, search ToString, and position ToNumber in specified order before the canonical code-unit matcher scans forward from a clamped integer position. The distinct mixed-code-point stress derives expected code units independently and exercises includes across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.includes intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regression, declaration, implementation, feature, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.indexof",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-position-and-forward-utf16-search",
+        "title": "Generic receiver/search ToString, ordered position coercion, and first forward UTF-16 code-unit match",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.indexof" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-search.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["string_search_positions", "dynamic_search_positions"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_search_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_index_of"
+          ]
+        },
+        "rationale": "The independent shared search property derives the intrinsic surface, generic receiver/search/position conversion, omitted and abrupt inputs, non-special RegExp ToString, ordinary lookup, clamped position classes, and UTF-16 scalar/surrogate matches in both memory modes. One Realm-owned descriptor and generic operation perform receiver ToString, search ToString, and position ToNumber in specified order before the canonical code-unit matcher returns the first forward match. The distinct mixed-code-point stress derives expected code units independently and exercises indexOf across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.indexOf intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.lastindexof",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-position-and-reverse-utf16-search",
+        "title": "Generic receiver/search ToString, ordered NaN/default position coercion, and last reverse UTF-16 code-unit match",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.lastindexof" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-search.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["string_last_index_of", "dynamic_last_index_of"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_search_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_last_index_of"
+          ]
+        },
+        "rationale": "The independent shared search property derives the intrinsic surface, generic receiver/search/position conversion, omitted/undefined/NaN positive-infinity selection, abrupt inputs, non-special RegExp ToString, ordinary lookup, clamped position classes, and UTF-16 scalar/surrogate matches in both memory modes. One Realm-owned descriptor and generic operation performs conversions in specified order before the canonical code-unit matcher returns the last match at or before the derived position. The distinct mixed-code-point stress derives expected code units independently and exercises lastIndexOf across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.lastIndexOf intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.startswith",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-regexp-rejection-position-and-utf16-prefix",
+        "title": "Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and UTF-16 code-unit prefix matching",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.startswith" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-search.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["string_search_positions", "dynamic_search_positions"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_search_from_values",
+            "runtime/tsc_value.c#string_value_is_regexp",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_starts_with"
+          ]
+        },
+        "rationale": "The independent shared search property derives the intrinsic surface, generic receiver/search/position conversion, omitted and abrupt inputs, native and Symbol.match-defined RegExp rejection, ordinary lookup, clamped position classes, empty search, and UTF-16 scalar/surrogate prefix partitions in both memory modes. One Realm-owned descriptor and generic operation performs conversions in specified order before one canonical code-unit boundary comparison. The distinct mixed-code-point stress derives expected units independently and exercises startsWith across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.startsWith intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.endswith",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
+        "title": "Generic receiver ToString, IsRegExp rejection, ordered search/end-position coercion, and UTF-16 code-unit suffix matching",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.endswith" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-search.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["string_search_positions", "dynamic_search_positions"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_search_from_values",
+            "runtime/tsc_value.c#string_value_is_regexp",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_ends_with"
+          ]
+        },
+        "rationale": "The independent shared search property derives the intrinsic surface, generic receiver/search/end-position conversion, omitted/undefined string-length default, abrupt inputs, native and Symbol.match-defined RegExp rejection, ordinary lookup, clamped end positions, empty search, and UTF-16 scalar/surrogate suffix partitions in both memory modes. One Realm-owned descriptor and generic operation performs conversions in specified order before one canonical code-unit boundary comparison. The distinct mixed-code-point stress derives expected units independently and exercises endsWith across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.endsWith intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, feature, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

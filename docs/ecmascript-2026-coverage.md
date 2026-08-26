@@ -1517,11 +1517,15 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.concat` — String.prototype.concat ( ..._args_ )
     - [ ] `generic-tostring-and-variadic-string-list` (intrinsic, unbounded): Generic receiver ToString followed by an ordered variadic argument ToString worklist, UTF-16-preserving single-allocation join, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.constructor` — String.prototype.constructor: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.endswith` — String.prototype.endsWith ( _searchString_ [ , _endPosition_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.includes` — String.prototype.includes ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.indexof` — String.prototype.indexOf ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.endswith` — String.prototype.endsWith ( _searchString_ [ , _endPosition_ ] )
+    - [ ] `generic-tostring-regexp-rejection-end-position-and-utf16-suffix` (intrinsic, unbounded): Generic receiver ToString, IsRegExp rejection, ordered search/end-position coercion, and UTF-16 code-unit suffix matching.
+  - [ ] `sec-string.prototype.includes` — String.prototype.includes ( _searchString_ [ , _position_ ] )
+    - [ ] `generic-tostring-regexp-rejection-position-and-utf16-search` (intrinsic, unbounded): Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and forward UTF-16 code-unit containment.
+  - [ ] `sec-string.prototype.indexof` — String.prototype.indexOf ( _searchString_ [ , _position_ ] )
+    - [ ] `generic-tostring-position-and-forward-utf16-search` (intrinsic, unbounded): Generic receiver/search ToString, ordered position coercion, and first forward UTF-16 code-unit match.
   - [ ] `sec-string.prototype.iswellformed` — String.prototype.isWellFormed ( ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.lastindexof` — String.prototype.lastIndexOf ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.lastindexof` — String.prototype.lastIndexOf ( _searchString_ [ , _position_ ] )
+    - [ ] `generic-tostring-position-and-reverse-utf16-search` (intrinsic, unbounded): Generic receiver/search ToString, ordered NaN/default position coercion, and last reverse UTF-16 code-unit match.
   - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
@@ -1539,7 +1543,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.slice` — String.prototype.slice ( _start_, _end_ )
     - [ ] `generic-tostring-relative-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered relative start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.split` — String.prototype.split ( _separator_, _limit_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.startswith` — String.prototype.startsWith ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.startswith` — String.prototype.startsWith ( _searchString_ [ , _position_ ] )
+    - [ ] `generic-tostring-regexp-rejection-position-and-utf16-prefix` (intrinsic, unbounded): Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and UTF-16 code-unit prefix matching.
   - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ )
     - [ ] `generic-tostring-clamped-swapped-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered clamped and swapped start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
@@ -2577,7 +2582,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Atomics` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Atomics.pause` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Atomics.waitAsync` — standard, tracking: `todo`; no clause mapping.
-- [ ] `BigInt` — standard, tracking: `todo`; no clause mapping.
+- [ ] `BigInt` — standard, tracking: `ready-for-verification`; `sec-bigint-objects`, `sec-ecmascript-language-types-bigint-type`.
 - [ ] `DataView` — standard, tracking: `todo`; no clause mapping.
 - [ ] `DataView.prototype.getFloat32` — standard, tracking: `todo`; no clause mapping.
 - [ ] `DataView.prototype.getFloat64` — standard, tracking: `todo`; no clause mapping.
@@ -2634,8 +2639,8 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `SharedArrayBuffer` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.fromCodePoint` — standard, tracking: `ready-for-verification`; `sec-string.fromcodepoint`.
 - [ ] `String.prototype.at` — standard, tracking: `ready-for-verification`; `sec-string.prototype.at`.
-- [ ] `String.prototype.endsWith` — standard, tracking: `todo`; no clause mapping.
-- [ ] `String.prototype.includes` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.endsWith` — standard, tracking: `ready-for-verification`; `sec-string.prototype.endswith`.
+- [ ] `String.prototype.includes` — standard, tracking: `ready-for-verification`; `sec-string.prototype.includes`.
 - [ ] `String.prototype.isWellFormed` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.matchAll` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.replaceAll` — standard, tracking: `todo`; no clause mapping.
@@ -2647,14 +2652,14 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Symbol.hasInstance` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.isConcatSpreadable` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.iterator` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Symbol.match` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.match` — standard, tracking: `ready-for-verification`; `sec-symbol.match`.
 - [ ] `Symbol.matchAll` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.prototype.description` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.replace` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.search` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.species` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.split` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Symbol.toPrimitive` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol.toPrimitive` — standard, tracking: `ready-for-verification`; `sec-symbol.toprimitive`.
 - [ ] `Symbol.toStringTag` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.unscopables` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Temporal` — standard, tracking: `todo`; no clause mapping.
@@ -2692,7 +2697,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `class-static-fields-public` — standard, tracking: `todo`; no clause mapping.
 - [ ] `class-static-methods-private` — standard, tracking: `todo`; no clause mapping.
 - [ ] `coalesce-expression` — standard, tracking: `todo`; no clause mapping.
-- [ ] `computed-property-names` — standard, tracking: `todo`; no clause mapping.
+- [ ] `computed-property-names` — standard, tracking: `ready-for-verification`; `sec-object-initializer`.
 - [ ] `const` — standard, tracking: `todo`; no clause mapping.
 - [ ] `cross-realm` — standard, tracking: `todo`; no clause mapping.
 - `decorators` — post-edition, tracking: `ready-for-verification`; no clause mapping.

@@ -930,11 +930,73 @@ static tsc_value_t string_concat_from_values(
 }
 
 typedef enum {
+    TSC_STRING_SEARCH_INCLUDES,
+    TSC_STRING_SEARCH_INDEX_OF,
+    TSC_STRING_SEARCH_LAST_INDEX_OF,
+    TSC_STRING_SEARCH_STARTS_WITH,
+    TSC_STRING_SEARCH_ENDS_WITH,
+} tsc_string_search_operation_t;
+
+static bool string_value_is_regexp(tsc_value_t value);
+
+static tsc_value_t string_search_from_values(
+    tsc_value_t receiver,
+    tsc_value_t search,
+    tsc_value_t position,
+    tsc_string_search_operation_t operation
+) {
+    string_require_object_coercible(receiver, "String search receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    const bool rejects_regexp =
+        operation == TSC_STRING_SEARCH_INCLUDES ||
+        operation == TSC_STRING_SEARCH_STARTS_WITH ||
+        operation == TSC_STRING_SEARCH_ENDS_WITH;
+    if (rejects_regexp && string_value_is_regexp(search)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("String search argument must not be a RegExp", 43)
+        );
+    }
+    const tsc_str_t* needle = tsc_value_to_string(search);
+
+    double numeric_position;
+    if (operation == TSC_STRING_SEARCH_ENDS_WITH && tsc_value_is_undefined(position)) {
+        numeric_position = (double)tsc_str_utf16_length(string);
+    } else if (operation == TSC_STRING_SEARCH_LAST_INDEX_OF) {
+        numeric_position = tsc_value_is_undefined(position)
+            ? INFINITY
+            : tsc_value_to_number(position);
+        if (isnan(numeric_position)) numeric_position = INFINITY;
+    } else {
+        numeric_position = tsc_value_to_number(position);
+    }
+
+    switch (operation) {
+        case TSC_STRING_SEARCH_INCLUDES:
+            return tsc_value_bool(tsc_str_includes(string, needle, numeric_position));
+        case TSC_STRING_SEARCH_INDEX_OF:
+            return tsc_value_num(tsc_str_index_of(string, needle, numeric_position));
+        case TSC_STRING_SEARCH_LAST_INDEX_OF:
+            return tsc_value_num(tsc_str_last_index_of(string, needle, numeric_position));
+        case TSC_STRING_SEARCH_STARTS_WITH:
+            return tsc_value_bool(tsc_str_starts_with(string, needle, numeric_position));
+        case TSC_STRING_SEARCH_ENDS_WITH:
+            return tsc_value_bool(tsc_str_ends_with(string, needle, numeric_position));
+    }
+    tsc_panic("unknown String search operation");
+}
+
+typedef enum {
     TSC_STRING_PROTOTYPE_AT,
     TSC_STRING_PROTOTYPE_CHAR_AT,
     TSC_STRING_PROTOTYPE_CHAR_CODE_AT,
     TSC_STRING_PROTOTYPE_CODE_POINT_AT,
     TSC_STRING_PROTOTYPE_CONCAT,
+    TSC_STRING_PROTOTYPE_INCLUDES,
+    TSC_STRING_PROTOTYPE_INDEX_OF,
+    TSC_STRING_PROTOTYPE_LAST_INDEX_OF,
+    TSC_STRING_PROTOTYPE_STARTS_WITH,
+    TSC_STRING_PROTOTYPE_ENDS_WITH,
     TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_SUBSTRING,
     TSC_STRING_PROTOTYPE_SUBSTR,
@@ -956,6 +1018,11 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "charCodeAt", 10, 1.0, TSC_STRING_PROTOTYPE_CHAR_CODE_AT },
     { "codePointAt", 11, 1.0, TSC_STRING_PROTOTYPE_CODE_POINT_AT },
     { "concat", 6, 1.0, TSC_STRING_PROTOTYPE_CONCAT },
+    { "includes", 8, 1.0, TSC_STRING_PROTOTYPE_INCLUDES },
+    { "indexOf", 7, 1.0, TSC_STRING_PROTOTYPE_INDEX_OF },
+    { "lastIndexOf", 11, 1.0, TSC_STRING_PROTOTYPE_LAST_INDEX_OF },
+    { "startsWith", 10, 1.0, TSC_STRING_PROTOTYPE_STARTS_WITH },
+    { "endsWith", 8, 1.0, TSC_STRING_PROTOTYPE_ENDS_WITH },
     { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "substring", 9, 2.0, TSC_STRING_PROTOTYPE_SUBSTRING },
     { "substr", 6, 2.0, TSC_STRING_PROTOTYPE_SUBSTR },
@@ -988,6 +1055,16 @@ static tsc_value_t string_prototype_method_apply(
             return string_code_point_at_from_values(this_arg, first);
         case TSC_STRING_PROTOTYPE_CONCAT:
             return string_concat_from_values(this_arg, args);
+        case TSC_STRING_PROTOTYPE_INCLUDES:
+            return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_INCLUDES);
+        case TSC_STRING_PROTOTYPE_INDEX_OF:
+            return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_INDEX_OF);
+        case TSC_STRING_PROTOTYPE_LAST_INDEX_OF:
+            return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_LAST_INDEX_OF);
+        case TSC_STRING_PROTOTYPE_STARTS_WITH:
+            return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_STARTS_WITH);
+        case TSC_STRING_PROTOTYPE_ENDS_WITH:
+            return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_ENDS_WITH);
         case TSC_STRING_PROTOTYPE_SLICE:
             return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SUBSTRING:
@@ -6803,10 +6880,6 @@ tsc_value_t tsc_value_method_to_well_formed(tsc_value_t recv) {
 }
 
 tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        double start = value_slice_arg(position, 0.0);
-        return tsc_value_bool(tsc_str_includes((const tsc_str_t*)value_ptr(recv), tsc_value_to_string(needle), start));
-    }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         size_t start = value_array_forward_start(a->len, value_slice_arg(position, 0.0));
@@ -6825,10 +6898,6 @@ tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_
 }
 
 tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        double start = value_slice_arg(position, 0.0);
-        return tsc_value_num(tsc_str_index_of((const tsc_str_t*)value_ptr(recv), tsc_value_to_string(needle), start));
-    }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         size_t start = value_array_forward_start(a->len, value_slice_arg(position, 0.0));
@@ -6853,10 +6922,6 @@ tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_
 }
 
 tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        double start = value_slice_arg(position, INFINITY);
-        return tsc_value_num(tsc_str_last_index_of((const tsc_str_t*)value_ptr(recv), tsc_value_to_string(needle), start));
-    }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         size_t i = 0;
@@ -7870,20 +7935,6 @@ tsc_value_t tsc_value_method_match_all_regex(tsc_value_t recv, const tsc_regexp_
         tsc_array_push_raw(out, &group);
     }
     return tsc_value_array(out);
-}
-
-tsc_value_t tsc_value_method_starts_with(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_bool(tsc_str_starts_with((const tsc_str_t*)value_ptr(recv), tsc_value_to_string(needle), value_slice_arg(position, 0.0)));
-    }
-    return tsc_value_bool(false);
-}
-
-tsc_value_t tsc_value_method_ends_with(tsc_value_t recv, tsc_value_t needle, tsc_value_t end_position) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_bool(tsc_str_ends_with((const tsc_str_t*)value_ptr(recv), tsc_value_to_string(needle), value_slice_arg(end_position, INFINITY)));
-    }
-    return tsc_value_bool(false);
 }
 
 tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {

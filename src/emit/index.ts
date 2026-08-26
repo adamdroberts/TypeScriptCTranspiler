@@ -95,12 +95,17 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "charCodeAt",
     "codePointAt",
     "concat",
+    "endsWith",
+    "includes",
+    "indexOf",
+    "lastIndexOf",
     "replace",
     "replaceAll",
     "slice",
     "split",
     "substr",
     "substring",
+    "startsWith",
 ]);
 
 const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
@@ -57526,12 +57531,6 @@ class Emitter {
                     ([target]) => `${callee}(${target})`,
                 );
             }
-            case "includes":
-                return oneRequiredOneOptional("tsc_value_method_includes", { c: "tsc_value_num(0.0)", ty: T_VALUE });
-            case "indexOf":
-                return oneRequiredOneOptional("tsc_value_method_index_of", { c: "tsc_value_num(0.0)", ty: T_VALUE });
-            case "lastIndexOf":
-                return oneRequiredOneOptional("tsc_value_method_last_index_of", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "__defineGetter__":
             case "__defineSetter__": {
                 if (args.length < 2) unsupported(call, `${method} expects key and accessor`);
@@ -58031,10 +58030,6 @@ class Emitter {
                     ...ignored,
                 ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
             }
-            case "startsWith":
-                return oneRequiredOneOptional("tsc_value_method_starts_with", { c: "tsc_value_num(0.0)", ty: T_VALUE });
-            case "endsWith":
-                return oneRequiredOneOptional("tsc_value_method_ends_with", { c: "tsc_value_num(INFINITY)", ty: T_VALUE });
             case "toLowerCase":
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -66822,48 +66817,6 @@ class Emitter {
             ...this.ignoredArgumentSpecs(args, consumed),
         ];
         switch (method) {
-            case "includes": {
-                if (args.length < 1) unsupported(call, "includes expects at least 1 arg");
-                const needle = this.emitExpr(args[0]!);
-                const position = optionalNumberArg(1, "0.0");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: needle, target: T_STRING, node: args[0]! },
-                    { value: position, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_includes(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "indexOf": {
-                if (args.length < 1) unsupported(call, "indexOf expects at least 1 arg");
-                const needle = this.emitExpr(args[0]!);
-                const position = optionalNumberArg(1, "0.0");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: needle, target: T_STRING, node: args[0]! },
-                    { value: position, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `tsc_str_index_of(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "lastIndexOf": {
-                if (args.length < 1) unsupported(call, "lastIndexOf expects at least 1 arg");
-                const needle = this.emitExpr(args[0]!);
-                const position = optionalNumberArg(1, "INFINITY");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: needle, target: T_STRING, node: args[0]! },
-                    { value: position, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `tsc_str_last_index_of(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
             case "localeCompare": {
                 if (args.length < 1) unsupported(call, "localeCompare expects at least 1 arg");
                 const other = this.emitExpr(args[0]!);
@@ -66874,34 +66827,6 @@ class Emitter {
                         { value: other, target: T_STRING, node: args[0]! },
                     ]),
                     ([s, otherStr]) => `tsc_str_locale_compare(${s}, ${otherStr})`,
-                );
-            }
-            case "startsWith": {
-                if (args.length < 1) unsupported(call, "startsWith expects at least 1 arg");
-                const p = this.emitExpr(args[0]!);
-                const position = optionalNumberArg(1, "0.0");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: p, target: T_STRING, node: args[0]! },
-                    { value: position, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_starts_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "endsWith": {
-                if (args.length < 1) unsupported(call, "endsWith expects at least 1 arg");
-                const p = this.emitExpr(args[0]!);
-                const endPosition = optionalNumberArg(1, "INFINITY");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: p, target: T_STRING, node: args[0]! },
-                    { value: endPosition, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
-                    `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "toLocaleString":
@@ -78289,6 +78214,22 @@ class Emitter {
         const isOpt = !!pa.questionDotToken;
         if (recv.ty.kind === "string" && pa.name.text === "length") {
             return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "string" && ORDINARY_STRING_PROTOTYPE_METHODS.has(pa.name.text)) {
+            const key = this.stringLit(pa.name.text);
+            if (isOpt) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }],
+                    ([value]) => `${value} != NULL ? ` +
+                        `tsc_value_get_prop(tsc_value_string(${value}), ${key}) : ` +
+                        "tsc_value_undefined()",
+                );
+            }
+            return {
+                c: `tsc_value_get_prop(tsc_value_string(${recv.c}), ${key})`,
+                ty: T_VALUE,
+            };
         }
         if (recv.ty.kind === "array" && pa.name.text === "length") {
             return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };

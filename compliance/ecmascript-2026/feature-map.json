@@ -82,9 +82,12 @@
     {
       "tag": "BigInt",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-bigint-objects",
+        "sec-ecmascript-language-types-bigint-type"
+      ],
+      "rationale": "The broad standard BigInt tag denotes the shared BigInt language type and BigInt Objects parent contract used by syntax, conversions, wrappers, and consumers. Exact esid metadata and operation-specific feature tags remain authoritative for numeric algorithms, constructors/prototypes, typed arrays, and individual consumers; this dependency mapping does not mark those terminal partitions supported."
     },
     {
       "tag": "DataView",
@@ -489,16 +492,20 @@
     {
       "tag": "String.prototype.endsWith",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.endswith"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.endsWith intrinsic clause, whose terminal generic UTF-16 search partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.includes",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.includes"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.includes intrinsic clause, whose terminal generic UTF-16 search partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.isWellFormed",
@@ -583,9 +590,11 @@
     {
       "tag": "Symbol.match",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-symbol.match"
+      ],
+      "rationale": "The broad well-known Symbol.match tag denotes the Realm-owned Symbol.match identity used by IsRegExp and protocol consumers. Exact esid metadata remains authoritative for RegExp.prototype@@match, String match/search predicates, and other consumer algorithms; this dependency mapping does not mark those terminal partitions supported."
     },
     {
       "tag": "Symbol.matchAll",
@@ -632,9 +641,11 @@
     {
       "tag": "Symbol.toPrimitive",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-symbol.toprimitive"
+      ],
+      "rationale": "The broad well-known Symbol.toPrimitive tag denotes the Realm-owned Symbol.toPrimitive identity consulted by the shared ToPrimitive operation. Exact esid metadata remains authoritative for Symbol/Date prototype methods, conversion algorithms, and each consumer; this dependency mapping does not mark those terminal partitions supported."
     },
     {
       "tag": "Symbol.toStringTag",
@@ -900,9 +911,11 @@
     {
       "tag": "computed-property-names",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-object-initializer"
+      ],
+      "rationale": "The pinned catalog routes the broad computed-property-names syntax tag through the ComputedPropertyName production owned by the Object Initializer parent; exact production/esid metadata remains authoritative for class, object, method, binding, ToPropertyKey, and consumer partitions. This dependency classification does not mark those terminal partitions supported."
     },
     {
       "tag": "const",
