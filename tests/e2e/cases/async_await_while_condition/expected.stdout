@@ -10,6 +10,7 @@ method-for-declaration-initializer
 method-for-declaration-initializer
 value-for-declaration-initializer
 value-for-declaration-initializer
+await-while-conditional-false conditional-no
 await-while-expressionless-return-true
 await-while-expressionless-return-false
 await-method-expressionless-return-true
@@ -244,7 +245,6 @@ await-for-condition-false for-no
 await-while-logical-true logical-yes
 await-while-logical-false logical-no
 await-while-conditional-true conditional-yes
-await-while-conditional-false conditional-no
 await-while-nullish-true nullish-yes
 await-while-nullish-false nullish-no
 await-while-method-false method-loop-no
@@ -410,10 +410,10 @@ await-while-return-await-alias-post-switch-true body-return-post-switchbody-retu
 await-while-return-await-alias-post-switch-false body-return-post-switchbody-return
 await-while-throw-await-alias-post-switch-true body-throw-post-switch-switch
 await-while-throw-await-alias-post-switch-false body-throw-post-switch
-await-while-return-await-alias-post-for-of-true body-return-post-for-ofbody-return-for-of
-await-while-throw-await-alias-post-for-of-true body-throw-post-for-ofbody-throw
-await-while-return-await-alias-post-for-in-true body-return-post-for-inbody-return-for-in
-await-while-throw-await-alias-post-for-in-true body-throw-post-for-inbody-throw
+await-while-return-await-alias-post-for-of-true body-return-post-for-of-item-for-of
+await-while-throw-await-alias-post-for-of-true body-throw-post-for-of-item
+await-while-return-await-alias-post-for-in-true body-return-post-for-in0-for-in
+await-while-throw-await-alias-post-for-in-true body-throw-post-for-in0
 await-while-return-await-alias-post-for-of-local-true body-return-post-for-of-localbody-return-item
 await-while-return-await-alias-post-for-in-local-true body-return-post-for-in-localbody-return0
 await-while-return-await-alias-post-mutable-iterators-true body-return-post-mutable-iteratorsbody-return-of0-var-of0

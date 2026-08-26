@@ -2,5 +2,5 @@ number: 10
 string: ready!
 once: 42 1
 dynamic promise: dynamic!
-dynamic leading: first:second:third:fourth:fifth
 dynamic prelude: return
+dynamic leading: first:second:third:fourth:fifth
