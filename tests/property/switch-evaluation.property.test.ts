@@ -163,6 +163,57 @@ function subjectSource(): string {
         check(caseGeneratorOriginal.name === "hoistedCaseGenerator" && caseGeneratorOriginal.length === 0,
             "hoisted generator metadata");
 
+        function makeCaseBlockClass() {
+            var selector, setter;
+            var selectorTdz = false, callRejected = false;
+            switch (0) {
+                case (selector = function() { return CaseBlockClass; },
+                    (function() {
+                        try { CaseBlockClass; }
+                        catch (error) { selectorTdz = error instanceof ReferenceError; }
+                        return 0;
+                    })()):
+                    class CaseBlockClass {}
+                    const original = CaseBlockClass;
+                    setter = function(value) { CaseBlockClass = value; };
+                    try { original(); }
+                    catch (error) { callRejected = error instanceof TypeError; }
+                    return { original, selector, setter, selectorTdz, callRejected };
+            }
+        }
+        const firstCaseClass = makeCaseBlockClass();
+        const secondCaseClass = makeCaseBlockClass();
+        const caseClassInstance = new firstCaseClass.original();
+        check(firstCaseClass.selectorTdz && firstCaseClass.callRejected,
+            "class TDZ and call rejection");
+        check(firstCaseClass.selector() === firstCaseClass.original &&
+            firstCaseClass.original !== secondCaseClass.original,
+            "class binding and fresh evaluation identity");
+        check(firstCaseClass.original.name === "CaseBlockClass" &&
+            firstCaseClass.original.length === 0,
+            "class metadata");
+        check(caseClassInstance instanceof firstCaseClass.original &&
+            caseClassInstance.constructor === firstCaseClass.original,
+            "class default construction");
+        const caseClassReplacement = function() { return "replacement"; };
+        firstCaseClass.setter(caseClassReplacement);
+        check(firstCaseClass.selector() === caseClassReplacement &&
+            firstCaseClass.original !== caseClassReplacement,
+            "mutable outer class binding");
+
+        var unselectedClassTdz = false;
+        switch (0) {
+            case ((function() {
+                try { NeverSelectedCaseClass; }
+                catch (error) { unselectedClassTdz = error instanceof ReferenceError; }
+                return 0;
+            })()):
+                break;
+            default:
+                class NeverSelectedCaseClass {}
+        }
+        check(unselectedClassTdz, "unselected class remains TDZ during selection");
+
         var caseAsyncFunction, caseAsyncFunctionOriginal, caseAsyncFunctionSet;
         var caseAsyncTdzPromise;
         switch (0) {
@@ -396,3 +447,34 @@ test("Switch Evaluation uses one CaseBlock lexical environment across synchronou
         await fs.rm(temporary, { recursive: true, force: true });
     }
 }, 90_000);
+
+test("unsupported CaseBlock class definitions fail closed at the shared class-definition boundary", async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-switch-class-diagnostic-"));
+    const entry = path.join(temporary, "subject.js");
+    try {
+        await fs.writeFile(entry, `
+            switch (0) {
+                case 0:
+                    class UnsupportedCaseClass {
+                        method() { return 1; }
+                    }
+                    console.log(new UnsupportedCaseClass().method());
+                    break;
+            }
+        `, "utf8");
+        const diagnostics: string[] = [];
+        const result = await compile({
+            entry,
+            output: path.join(temporary, "subject"),
+            buildDir: path.join(temporary, "build"),
+            diagnosticWriter: (message) => diagnostics.push(message),
+        });
+        expect(result.exitCode).not.toBe(0);
+        expect(diagnostics.join("")).toContain(
+            "direct switch class declaration requires the canonical class-definition lowering; " +
+            "only an empty base class is currently supported",
+        );
+    } finally {
+        await fs.rm(temporary, { recursive: true, force: true });
+    }
+});

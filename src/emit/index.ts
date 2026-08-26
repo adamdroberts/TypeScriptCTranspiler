@@ -715,6 +715,7 @@ class Emitter {
     private valueFunctionAdapters = new Map<string, string>();
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
+    private directEmptyClassConstructAdapter: string | null = null;
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -24351,6 +24352,13 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
+        if (base.kind === "class" && this.typeIncludesDirectSwitchClass(declaration)) {
+            /* A direct CaseBlock class is a runtime constructor/object pair,
+             * not one of the statically laid-out TypeScript class structs.
+             * Preserve that representation after the value escapes through
+             * inference into another declaration. */
+            return T_VALUE;
+        }
         if (this.isJavaScriptSourceFile(declaration.getSourceFile()) && declaration.initializer) {
             const sourceFunction = this.javaScriptFunctionLikeForExpression(declaration.initializer);
             if (sourceFunction) {
@@ -24365,6 +24373,26 @@ class Emitter {
             }
         }
         return this.variableStorageType(base);
+    }
+
+    private typeIncludesDirectSwitchClass(node: ts.Node): boolean {
+        const pending: ts.Type[] = [this.checker.getTypeAtLocation(node)];
+        const seen = new Set<ts.Type>();
+        while (pending.length > 0) {
+            const current = pending.pop()!;
+            if (seen.has(current)) continue;
+            seen.add(current);
+            if (current.isUnionOrIntersection()) {
+                pending.push(...current.types);
+            }
+            const symbol = current.getSymbol() ?? current.aliasSymbol;
+            if (symbol?.declarations?.some((candidate) =>
+                ts.isClassDeclaration(candidate) &&
+                this.isSupportedDirectSwitchClassDeclaration(candidate))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private isAsyncAwaitPreludeCaptureType(type: CType): boolean {
@@ -25977,7 +26005,9 @@ class Emitter {
             ts.isParameter(decl) ||
             ts.isBindingElement(decl) ||
             ts.isFunctionDeclaration(decl) &&
-                this.isSupportedDirectSwitchFunctionDeclaration(decl)
+                this.isSupportedDirectSwitchFunctionDeclaration(decl) ||
+            ts.isClassDeclaration(decl) &&
+                this.isSupportedDirectSwitchClassDeclaration(decl)
         );
     }
 
@@ -41867,6 +41897,7 @@ class Emitter {
             return;
         }
         if (ts.isClassDeclaration(stmt)) {
+            if (this.emitDirectSwitchClassDeclaration(buf, stmt)) return;
             if (!this.shouldEmitLocalClassDeclaration(stmt)) return;
             unsupported(stmt, "referenced local class declarations are not supported yet");
         }
@@ -47692,6 +47723,82 @@ class Emitter {
             }
         }
         return declarations;
+    }
+
+    private isSupportedDirectSwitchClassDeclaration(
+        declaration: ts.ClassDeclaration,
+    ): declaration is ts.ClassDeclaration & { readonly name: ts.Identifier } {
+        return !!declaration.name &&
+            this.isDirectSwitchLexicalDeclaration(declaration) &&
+            !declaration.typeParameters?.length &&
+            !declaration.heritageClauses?.length &&
+            !this.classHasDecorators(declaration) &&
+            declaration.members.every((member) =>
+                member.kind === ts.SyntaxKind.SemicolonClassElement);
+    }
+
+    private ensureDirectEmptyClassConstructAdapter(): string {
+        if (this.directEmptyClassConstructAdapter) {
+            return this.directEmptyClassConstructAdapter;
+        }
+        const name = "tsc_direct_empty_class_construct";
+        this.directEmptyClassConstructAdapter = name;
+        const signature =
+            `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+        this.protos.line(`${signature};`);
+        const body = new CBuf();
+        body.open(signature);
+        body.line("(void)env;");
+        body.line("(void)this_arg;");
+        body.line("(void)args;");
+        /* Ordinary [[Construct]] keeps the receiver when a base constructor
+         * returns a primitive.  One shared adapter therefore implements the
+         * default constructor algorithm; the fresh environment pointer below
+         * supplies the per-evaluation function identity. */
+        body.line("return tsc_value_undefined();");
+        body.close();
+        body.line();
+        this.closureDefs.write(body.toString());
+        return name;
+    }
+
+    private directEmptyClassConstructorValue(
+        declaration: ts.ClassDeclaration & { readonly name: ts.Identifier },
+    ): EmitResult {
+        const adapter = this.ensureDirectEmptyClassConstructAdapter();
+        const identity = this.freshTemp("_switch_class_identity");
+        const runtimeName = declaration.name.text;
+        return {
+            c: `({ void* const ${identity} = TSC_GC_MALLOC(sizeof(char)); ` +
+                `tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ` +
+                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})); })`,
+            ty: T_VALUE,
+        };
+    }
+
+    private emitDirectSwitchClassDeclaration(
+        buf: CBuf,
+        declaration: ts.ClassDeclaration,
+    ): boolean {
+        if (!this.isDirectSwitchLexicalDeclaration(declaration) ||
+            this.switchLexicalScopes.length === 0) return false;
+        if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) {
+            unsupported(
+                declaration,
+                "direct switch class declaration requires the canonical class-definition lowering; " +
+                "only an empty base class is currently supported",
+            );
+        }
+        const symbol = this.symbolForIdentifier(declaration.name);
+        const binding = this.switchLexicalBindingForSymbol(symbol);
+        if (!binding || binding.declaration !== declaration) {
+            unsupported(declaration.name, "direct switch class is missing its CaseBlock cell");
+        }
+        const value = this.directEmptyClassConstructorValue(declaration);
+        buf.line(`${binding.value} = ${value.c};`);
+        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
+        buf.line(`${binding.initialized} = true;`);
+        return true;
     }
 
     private switchLexicalDeclarationNames(
@@ -76411,6 +76518,10 @@ class Emitter {
                 return this.emitDynamicValueConstruct(n, ctor);
             }
             unsupported(n, "new expression must use a class identifier or dynamic constructor value");
+        }
+        const localConstructor = this.localLexicalReferenceForIdentifier(ctorExpr);
+        if (localConstructor?.type.kind === "value") {
+            return this.emitDynamicValueConstruct(n, this.emitExpr(n.expression));
         }
         const scriptGlobal = this.test262ScriptGlobalBindingName(ctorExpr);
         if (scriptGlobal) {

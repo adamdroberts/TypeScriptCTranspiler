@@ -63,6 +63,11 @@ export interface SwitchCaseBlockAsyncCaptureWidthSpec {
     width: number;
 }
 
+export interface SwitchCaseBlockClassWorklistWidthSpec {
+    generator: "switch-caseblock-class-worklist-width";
+    width: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -76,7 +81,8 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockBindingDepthSpec
     | SwitchCaseBlockFunctionWorklistWidthSpec
     | SwitchCaseBlockGeneratorCaptureWidthSpec
-    | SwitchCaseBlockAsyncCaptureWidthSpec;
+    | SwitchCaseBlockAsyncCaptureWidthSpec
+    | SwitchCaseBlockClassWorklistWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -210,6 +216,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "switch-caseblock-async-capture-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "switch-caseblock-class-worklist-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -613,6 +629,33 @@ function switchCaseBlockAsyncCaptureWidthSource(width: number): string {
     ].join("\n");
 }
 
+function switchCaseBlockClassWorklistWidthSource(width: number): string {
+    const declarations = Array.from({ length: width }, (_, index) => [
+        `            class CaseBlockClass_${index} {}`,
+        `            constructors.push(CaseBlockClass_${index});`,
+    ]).flat();
+    return [
+        "function verifyCaseBlockClassWorklist(): boolean {",
+        "    const constructors: any[] = [];",
+        "    switch (0 as any) {",
+        "        case 0:",
+        ...declarations,
+        "            break;",
+        "    }",
+        `    for (let index = 0; index < ${width}; index++) {`,
+        "        const constructor = constructors[index];",
+        "        if (constructor.name !== \"CaseBlockClass_\" + index || constructor.length !== 0) return false;",
+        "        const instance: any = new constructor();",
+        "        if (!(instance instanceof constructor) || instance.constructor !== constructor) return false;",
+        "        if (index > 0 && constructor === constructors[index - 1]) return false;",
+        "    }",
+        "    return true;",
+        "}",
+        'console.log("switch CaseBlock class worklist:", verifyCaseBlockClassWorklist());',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -642,5 +685,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return switchCaseBlockGeneratorCaptureWidthSource(spec.width);
         case "switch-caseblock-async-capture-width":
             return switchCaseBlockAsyncCaptureWidthSource(spec.width);
+        case "switch-caseblock-class-worklist-width":
+            return switchCaseBlockClassWorklistWidthSource(spec.width);
     }
 }
