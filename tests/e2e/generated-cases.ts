@@ -73,6 +73,11 @@ export interface StringUtf16ExoticWidthSpec {
     width: number;
 }
 
+export interface StringConcatArgumentWidthSpec {
+    generator: "string-concat-argument-width";
+    width: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -140,6 +145,7 @@ export type GeneratedCaseSpec =
     | StringCodeUnitListWidthSpec
     | StringCodePointListWidthSpec
     | StringUtf16ExoticWidthSpec
+    | StringConcatArgumentWidthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -303,6 +309,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-utf16-exotic-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "string-concat-argument-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -891,6 +907,37 @@ function stringUtf16ExoticWidthSource(width: number): string {
     ].join("\n");
 }
 
+function stringConcatArgumentWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const unitPlan = [0x41, 0x20ac, 0xd83d, 0xde00, 0xd800, 0x42, 0xdc00];",
+        "const parts: string[] = [];",
+        "const expectedUnits: number[] = [];",
+        "for (let index = 0; index < width; index++) {",
+        "    const unit = unitPlan[index % unitPlan.length];",
+        "    parts.push(String.fromCharCode(unit));",
+        "    expectedUnits.push(unit);",
+        "}",
+        "let receiverConversions = 0;",
+        "const receiver = {",
+        "    toString(): string { receiverConversions++; return \"R\"; },",
+        "};",
+        "const intrinsic = String.prototype.concat;",
+        "const generic = Reflect.apply(intrinsic, receiver, parts);",
+        "const direct = \"R\".concat(...parts);",
+        "let valid = receiverConversions === 1 && generic === direct &&",
+        "    generic.length === expectedUnits.length + 1 && generic.charCodeAt(0) === 0x52;",
+        "for (let index = 0; index < expectedUnits.length; index++) {",
+        "    if (generic.charCodeAt(index + 1) !== expectedUnits[index]) {",
+        "        valid = false;",
+        "        break;",
+        "    }",
+        "}",
+        'console.log("string concat argument worklist:", valid);',
+        "",
+    ].join("\n");
+}
+
 function reflectConstructArgumentWidthSource(width: number): string {
     return [
         `const width = ${width};`,
@@ -1280,6 +1327,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return stringCodePointListWidthSource(spec.width);
         case "string-utf16-exotic-width":
             return stringUtf16ExoticWidthSource(spec.width);
+        case "string-concat-argument-width":
+            return stringConcatArgumentWidthSource(spec.width);
         case "reflect-construct-argument-width":
             return reflectConstructArgumentWidthSource(spec.width);
         case "arrow-formal-binding-tree-depth":

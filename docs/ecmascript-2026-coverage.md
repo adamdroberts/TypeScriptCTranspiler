@@ -1514,7 +1514,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-index-and-code-unit-number` (intrinsic, unbounded): Generic receiver ToString, ordered integer index conversion, UTF-16 code-unit Number projection, NaN out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.codepointat` — String.prototype.codePointAt ( _pos_ )
     - [ ] `generic-tostring-index-and-utf16-decode` (intrinsic, unbounded): Generic receiver ToString, ordered integer index conversion, UTF-16 surrogate decoding, undefined out-of-range result, abrupt completion, ordinary lookup, and intrinsic surface.
-  - [ ] `sec-string.prototype.concat` — String.prototype.concat ( ..._args_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.concat` — String.prototype.concat ( ..._args_ )
+    - [ ] `generic-tostring-and-variadic-string-list` (intrinsic, unbounded): Generic receiver ToString followed by an ordered variadic argument ToString worklist, UTF-16-preserving single-allocation join, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.constructor` — String.prototype.constructor: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.endswith` — String.prototype.endsWith ( _searchString_ [ , _endPosition_ ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.includes` — String.prototype.includes ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.

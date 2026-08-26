@@ -903,11 +903,38 @@ static tsc_value_t string_substr_from_values(
     return tsc_value_string(tsc_str_substr(string, start_index, result_length));
 }
 
+static tsc_value_t string_concat_from_values(
+    tsc_value_t receiver,
+    const tsc_array_t* arguments
+) {
+    string_require_object_coercible(receiver, "String.prototype.concat");
+    const size_t argument_count = arguments ? arguments->len : 0;
+    if (argument_count == SIZE_MAX) {
+        tsc_panic("String.prototype.concat argument list is too large");
+    }
+
+    /* This ordered collection is the complete semantic worklist.  Receiver
+     * conversion precedes every argument conversion, every value is converted
+     * exactly once, and the final byte join is independent of argument count. */
+    tsc_array_t* parts = tsc_array_new(
+        sizeof(tsc_str_t*),
+        argument_count + 1
+    );
+    tsc_str_t* part = tsc_value_to_string(receiver);
+    tsc_array_push_raw(parts, &part);
+    for (size_t index = 0; index < argument_count; index++) {
+        part = tsc_value_to_string(TSC_ARR(tsc_value_t, arguments, index));
+        tsc_array_push_raw(parts, &part);
+    }
+    return tsc_value_string(tsc_str_concat_parts(parts));
+}
+
 typedef enum {
     TSC_STRING_PROTOTYPE_AT,
     TSC_STRING_PROTOTYPE_CHAR_AT,
     TSC_STRING_PROTOTYPE_CHAR_CODE_AT,
     TSC_STRING_PROTOTYPE_CODE_POINT_AT,
+    TSC_STRING_PROTOTYPE_CONCAT,
     TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_SUBSTRING,
     TSC_STRING_PROTOTYPE_SUBSTR,
@@ -928,6 +955,7 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "charAt", 6, 1.0, TSC_STRING_PROTOTYPE_CHAR_AT },
     { "charCodeAt", 10, 1.0, TSC_STRING_PROTOTYPE_CHAR_CODE_AT },
     { "codePointAt", 11, 1.0, TSC_STRING_PROTOTYPE_CODE_POINT_AT },
+    { "concat", 6, 1.0, TSC_STRING_PROTOTYPE_CONCAT },
     { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "substring", 9, 2.0, TSC_STRING_PROTOTYPE_SUBSTRING },
     { "substr", 6, 2.0, TSC_STRING_PROTOTYPE_SUBSTR },
@@ -958,6 +986,8 @@ static tsc_value_t string_prototype_method_apply(
             return string_char_code_at_from_values(this_arg, first);
         case TSC_STRING_PROTOTYPE_CODE_POINT_AT:
             return string_code_point_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_CONCAT:
+            return string_concat_from_values(this_arg, args);
         case TSC_STRING_PROTOTYPE_SLICE:
             return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SUBSTRING:

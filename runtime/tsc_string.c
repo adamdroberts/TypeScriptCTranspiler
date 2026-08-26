@@ -42,6 +42,30 @@ tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b) {
     return s;
 }
 
+tsc_str_t* tsc_str_concat_parts(const tsc_array_t* parts) {
+    size_t total = 0;
+    if (parts) {
+        for (size_t index = 0; index < parts->len; index++) {
+            const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
+            if (part->len > SIZE_MAX - total || part->len == SIZE_MAX - total) {
+                tsc_panic("concatenated String is too large");
+            }
+            total += part->len;
+        }
+    }
+
+    tsc_str_t* result = str_alloc(total);
+    char* destination = (char*)result->data;
+    if (parts) {
+        for (size_t index = 0; index < parts->len; index++) {
+            const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
+            memcpy(destination, part->data, part->len);
+            destination += part->len;
+        }
+    }
+    return result;
+}
+
 tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substitutions) {
     if (tsc_value_is_nullish(template_value)) {
         tsc_throw_str(tsc_str_from_cstr("String.raw template must not be null or undefined"));

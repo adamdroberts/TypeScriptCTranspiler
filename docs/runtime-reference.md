@@ -85,7 +85,8 @@ typedef struct tsc_str {
 | `tsc_str_pad_end(s, len, pad)` | `tsc_str_t*` | `.padEnd(len, pad)` |
 | `tsc_str_replace(s, needle, repl)` | `tsc_str_t*` | `.replace("a", "b")` (first match), with JS replacement-string tokens |
 | `tsc_str_replace_all(s, needle, repl)` | `tsc_str_t*` | `.replaceAll("a", "b")` (all matches), with JS replacement-string tokens |
-| `tsc_str_concat(a, b)` | `tsc_str_t*` | `a + b` and `.concat(...)` |
+| `tsc_str_concat(a, b)` | `tsc_str_t*` | Pairwise internal/string-addition concatenation |
+| `tsc_str_concat_parts(parts)` | `tsc_str_t*` | Single-allocation join of the canonical `tsc_str_t*` argument collection used by generic `String.prototype.concat` |
 | `tsc_str_split(s, sep)` | `tsc_array_t*` | `.split("a")` → array of strings |
 | `tsc_str_split_limit(s, sep, limit)` | `tsc_array_t*` | Bounded split helper using an already-normalized uint32 limit |
 | `tsc_str_split_limit_num(s, sep, limit)` | `tsc_array_t*` | `.split("a", limit)` with JS-style `ToUint32` limit coercion |
@@ -176,7 +177,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_abstract_eq(a, b)` | `bool` | Abstract dynamic equality over the runtime value representation, including primitive coercion and the Test262 HTMLDDA host object's nullish-equality exception |
 | `tsc_value_object_is(a, b)` | `bool` | SameValue comparison used by `Object.is`, including `NaN` and signed-zero handling |
 | `tsc_value_cmp(a, b)` | `int` | Dynamic relational comparison; returns `2` for unordered/NaN comparisons |
-| `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
+| `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, Array `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers. Realm-owned ordinary String methods, including String `concat`, enter through `tsc_value_apply_function`. |
 | `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify; object properties whose values are `undefined` or boxed function identities are omitted, while array slots stringify as `null` |
 | `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
 | `tsc_value_dispose_sync(value)` | `void` | Calls a dynamic value's `[Symbol.dispose]()` method, skipping nullish values and throwing when the value is not synchronously disposable |

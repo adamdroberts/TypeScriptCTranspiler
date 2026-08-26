@@ -94,6 +94,7 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "charAt",
     "charCodeAt",
     "codePointAt",
+    "concat",
     "replace",
     "replaceAll",
     "slice",
@@ -57720,34 +57721,6 @@ class Emitter {
                     return `({ ${prefix}tsc_value_num(tsc_value_length(${targetArg})); })`;
                 });
             }
-            case "concat": {
-                if (args.some((arg) => ts.isSpreadElement(arg))) {
-                    const items = this.emitSpreadCallArgumentList(args);
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: items, target: arrayType(T_VALUE), node: call },
-                    ], ([target, itemList]) => {
-                        const out = this.freshTemp("_concat");
-                        const index = this.freshTemp("_concat_i");
-                        return `({ tsc_value_t ${out} = ${itemList}->len == 0 ? tsc_value_method_concat_empty(${target}) : ${target}; for (size_t ${index} = 0; ${index} < ${itemList}->len; ${index}++) ${out} = tsc_value_method_concat(${out}, TSC_ARR(tsc_value_t, ${itemList}, ${index})); ${out}; })`;
-                    });
-                }
-                if (args.length === 0) {
-                    return this.emitSequencedCall("tsc_value_method_concat_empty", T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                    ]);
-                }
-                const specs: SequencedCallArg[] = [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                ];
-                for (const arg of args) specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
-                return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
-                    const out = this.freshTemp("_concat");
-                    const targetArg = target!;
-                    const calls = values.map((value) => `${out} = tsc_value_method_concat(${out}, ${value})`);
-                    return `({ tsc_value_t ${out} = ${targetArg}; ${calls.join("; ")}; ${out}; })`;
-                });
-            }
             case "flat": {
                 const depth = args[0] ? this.emitExpr(args[0]) : missing;
                 return this.emitSequencedExpr(
@@ -66930,23 +66903,6 @@ class Emitter {
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
-            }
-            case "concat": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                for (const arg of args) {
-                    specs.push({
-                        value: this.emitExpr(arg),
-                        target: T_STRING,
-                        node: arg,
-                    });
-                }
-                return this.emitSequencedExpr(T_STRING, specs, ([head, ...tail]) => {
-                    let expr = head!;
-                    for (const part of tail) {
-                        expr = `tsc_str_concat(${expr}, ${part})`;
-                    }
-                    return expr;
-                });
             }
             case "toLocaleString":
             case "toString":

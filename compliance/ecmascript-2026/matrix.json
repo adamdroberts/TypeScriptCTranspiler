@@ -435,6 +435,47 @@
       "rationale": "The complete String.prototype.codePointAt intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.concat",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-and-variadic-string-list",
+          "title": "Generic receiver ToString followed by an ordered variadic argument ToString worklist, UTF-16-preserving single-allocation join, abrupt completion, ordinary method lookup, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            { "allOf": [{ "field": "clause", "equals": "sec-string.prototype.concat" }] }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-concat.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_concat_argument_width"],
+            "e2e": ["string_concat", "dynamic_string_concat"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+              "src/emit/index.ts#emitStringMethod",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_method_apply",
+              "runtime/tsc_value.c#string_concat_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_string.c#tsc_str_concat_parts"
+            ]
+          },
+          "rationale": "The independent property derives the intrinsic metadata, non-construction, and mutable descriptor surface; primitive, boxed, ordinary-object, array, BigInt, Symbol, and nullish receiver partitions; zero and heterogeneous argument conversion; exact call-expression lookup/evaluation order followed by receiver-first argument coercion; ToPrimitive fallback; exact abrupt identity and short-circuiting; and scalar-equivalent, paired, and isolated-surrogate UTF-16 results in both memory modes. One shared emitter method set routes typed and dynamic calls through the ordinary receiver/property/argument worklist, and the Realm-owned intrinsic converts the receiver and every element of the canonical runtime argument collection exactly once in source order. One tsc_str_concat_parts operation derives the total storage requirement from that collection and performs a single result allocation and ordered copy independent of argument cardinality. A distinct generated native stress independently derives expected UTF-16 units and validates direct-spread and generic reflective calls across one representative argument-worklist width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+        }
+      ],
+      "rationale": "The complete String.prototype.concat intrinsic is represented as one terminal canonical-collection partition with reciprocal property, distinct argument-worklist stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

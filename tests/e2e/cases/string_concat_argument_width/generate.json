@@ -1,0 +1,4 @@
+{
+  "generator": "string-concat-argument-width",
+  "width": 4096
+}

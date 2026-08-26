@@ -396,6 +396,7 @@
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -444,6 +445,7 @@
       "id": "stdlib/lib.core.d.ts#String",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -457,6 +459,7 @@
       "id": "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -470,6 +473,7 @@
       "id": "src/emit/index.ts#emitStringMethod",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -483,6 +487,7 @@
       "id": "runtime/tsc_value.c#string_prototype_install_intrinsics",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -496,6 +501,7 @@
       "id": "runtime/tsc_value.c#string_prototype_method_apply",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
@@ -608,6 +614,55 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-concat.property.test.ts",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "string_concat_argument_width",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ],
+      "stressReview": {
+        "dimension": "String.prototype.concat ordered argument-worklist width",
+        "parameter": "width",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-unit collection and sends the same dynamically sized argument List through direct spread and generic reflective calls backed by one canonical conversion worklist and single-allocation join; successive argument counts are not evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "string_concat",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_string_concat",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_concat_from_values",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_concat_parts",
+      "targets": [
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -632,6 +687,7 @@
       "id": "src/emit/index.ts#emitDynamicNamedPropertyCall",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.concat#generic-tostring-and-variadic-string-list",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
