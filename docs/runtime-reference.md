@@ -5,7 +5,7 @@ The `tsc_*` C runtime — everything in `runtime/tsc_runtime.h` and `runtime/tsc
 Conventions:
 
 - All allocations go through `TSC_GC_MALLOC` (Boehm GC) or `TSC_GC_MALLOC_ATOMIC` (raw bytes, no pointer scan). Under `-DTSC_NO_GC` these expand to `calloc` and the binary leaks.
-- Strings are **immutable UTF-8** with explicit length. Every `tsc_str_*` mutation returns a fresh `tsc_str_t*`.
+- Strings are immutable **WTF-8** with an explicit storage-byte length and a lazy UTF-16 code-unit-length cache. Every `tsc_str_*` mutation returns a fresh `tsc_str_t*`.
 - `double` is the numeric type for all JS numbers (IEEE 754).
 - `bool` comes from `<stdbool.h>`.
 
@@ -21,8 +21,11 @@ Conventions:
 
 ```c
 typedef struct tsc_str {
-    size_t len;         // bytes (not codepoints, for now)
-    const char* data;   // UTF-8 payload, NUL-terminated for C interop but len is authoritative
+    size_t len;                  // immutable WTF-8 storage bytes
+    const char* data;            // NUL-terminated for C interop; len is authoritative
+    uint64_t hash;               // lazy content hash
+    struct tsc_symbol* symbol_key;
+    size_t utf16_len_plus_one;   // 0 until derived; otherwise ECMAScript length + 1
 } tsc_str_t;
 ```
 
@@ -48,6 +51,7 @@ typedef struct tsc_str {
 | `tsc_str_eq` | `(const tsc_str_t*, const tsc_str_t*) -> bool` |
 | `tsc_str_cmp` | `(const tsc_str_t*, const tsc_str_t*) -> int` (strcmp-style) |
 | `tsc_str_locale_compare` | `(const tsc_str_t*, const tsc_str_t*) -> double` (`localeCompare`-style -1/0/1) |
+| `tsc_str_utf16_length` | `(const tsc_str_t*) -> size_t` (cached ECMAScript code-unit length) |
 
 ### Methods (match JS `String.prototype`)
 
@@ -85,7 +89,8 @@ typedef struct tsc_str {
 | `tsc_str_split(s, sep)` | `tsc_array_t*` | `.split("a")` → array of strings |
 | `tsc_str_split_limit(s, sep, limit)` | `tsc_array_t*` | Bounded split helper using an already-normalized uint32 limit |
 | `tsc_str_split_limit_num(s, sep, limit)` | `tsc_array_t*` | `.split("a", limit)` with JS-style `ToUint32` limit coercion |
-| `tsc_str_chars(s)` | `tsc_array_t*` | string `for...of` values, one UTF-8 code point per string |
+| `tsc_str_chars(s)` | `tsc_array_t*` | string `for...of` values, one code-point String per element |
+| `tsc_str_code_units(s)` | `tsc_array_t*` | one canonical collection of one-unit Strings for indexed exotic properties and reflective projections |
 
 ## Numbers
 

@@ -533,7 +533,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-arrayspeciescreate` — ArraySpeciesCreate ( _originalArray_: an Object, _length_: a non-negative integer, ): either a normal completion containing an Object or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-arraysetlength` — ArraySetLength ( _A_: an Array, _Desc_: a Property Descriptor, ): either a normal completion containing a Boolean or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string-exotic-objects` — String Exotic Objects: exact disposition and partitions missing.
-  - [ ] `sec-string-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined: exact disposition and partitions missing.
+  - [ ] `sec-string-exotic-objects-getownproperty-p` — [[GetOwnProperty]] ( _P_: a property key, ): a normal completion containing either a Property Descriptor or undefined
+    - [ ] `utf16-index-descriptor-and-ordinary-fallback` (algorithm, unbounded): UTF-16 code-unit indexed descriptors and ordinary own-property fallback for arbitrary String values.
   - [ ] `sec-string-exotic-objects-defineownproperty-p-desc` — [[DefineOwnProperty]] ( _P_: a property key, _Desc_: a Property Descriptor, ): a normal completion containing a Boolean: exact disposition and partitions missing.
   - [ ] `sec-string-exotic-objects-ownpropertykeys` — [[OwnPropertyKeys]] ( ): a normal completion containing a List of property keys: exact disposition and partitions missing.
   - [ ] `sec-stringcreate` — StringCreate ( _value_: a String, _prototype_: an Object, ): a String exotic object: exact disposition and partitions missing.

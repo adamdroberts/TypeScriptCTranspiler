@@ -12,6 +12,7 @@ tsc_str_t* str_alloc(size_t len) {
     s->data = buf;
     s->hash = 0;
     s->symbol_key = NULL;
+    s->utf16_len_plus_one = 0;
     return s;
 }
 
@@ -21,6 +22,7 @@ tsc_str_t* tsc_str_from_lit(const char* data, size_t len) {
     s->data = data;
     s->hash = 0;
     s->symbol_key = NULL;
+    s->utf16_len_plus_one = 0;
     return s;
 }
 
@@ -691,70 +693,136 @@ double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b) {
     return c < 0 ? -1.0 : c > 0 ? 1.0 : 0.0;
 }
 
-double tsc_str_length(const tsc_str_t* s) { return (double)s->len; }
+size_t tsc_str_utf16_length(const tsc_str_t* s) {
+    if (!s) return 0;
+#ifdef TSC_THREADS
+    size_t cached = __atomic_load_n(
+        &((tsc_str_t*)s)->utf16_len_plus_one,
+        __ATOMIC_RELAXED
+    );
+#else
+    size_t cached = s->utf16_len_plus_one;
+#endif
+    if (cached != 0) return cached - 1;
+    size_t count = 0;
+    size_t pos = 0;
+    while (pos < s->len) {
+        uint32_t code_point = 0xfffd;
+        size_t width = 1;
+        decode_utf8_at(s, pos, &code_point, &width);
+        count += code_point > 0xffff ? 2 : 1;
+        pos += width ? width : 1;
+    }
+#ifdef TSC_THREADS
+    /* The projection is immutable and idempotent, so racing readers derive
+     * and publish the same value. Keep the lazy cache itself race-free. */
+    __atomic_store_n(
+        &((tsc_str_t*)s)->utf16_len_plus_one,
+        count + 1,
+        __ATOMIC_RELAXED
+    );
+#else
+    ((tsc_str_t*)s)->utf16_len_plus_one = count + 1;
+#endif
+    return count;
+}
+
+double tsc_str_length(const tsc_str_t* s) {
+    return (double)tsc_str_utf16_length(s);
+}
+
+static bool string_nonnegative_integer_index(double value, size_t* out) {
+    if (isnan(value)) value = 0.0;
+    if (isinf(value)) return false;
+    double integer = value < 0.0 ? ceil(value) : floor(value);
+    if (integer < 0.0 || integer > (double)SIZE_MAX) return false;
+    *out = (size_t)integer;
+    return true;
+}
+
+static bool tsc_str_utf16_code_unit_at(
+    const tsc_str_t* s,
+    size_t target,
+    uint16_t* out
+) {
+    size_t code_unit_index = 0;
+    size_t pos = 0;
+    while (pos < s->len) {
+        uint32_t code_point = 0xfffd;
+        size_t width = 1;
+        decode_utf8_at(s, pos, &code_point, &width);
+        if (code_point > 0xffff) {
+            uint32_t shifted = code_point - 0x10000u;
+            uint16_t lead = (uint16_t)(0xd800u + (shifted >> 10));
+            uint16_t trail = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
+            if (code_unit_index == target) {
+                *out = lead;
+                return true;
+            }
+            if (code_unit_index + 1 == target) {
+                *out = trail;
+                return true;
+            }
+            code_unit_index += 2;
+        } else {
+            if (code_unit_index == target) {
+                *out = (uint16_t)code_point;
+                return true;
+            }
+            code_unit_index++;
+        }
+        pos += width ? width : 1;
+    }
+    return false;
+}
+
+static tsc_str_t* tsc_str_from_utf16_code_unit(uint16_t code_unit) {
+    size_t width = utf8_len_for_code_point((uint32_t)code_unit);
+    tsc_str_t* out = str_alloc(width);
+    (void)write_utf8_code_point((char*)out->data, (uint32_t)code_unit);
+    out->utf16_len_plus_one = 2;
+    return out;
+}
 
 tsc_str_t* tsc_str_char_at(const tsc_str_t* s, double idx) {
-    size_t i = (size_t)idx;
-    if (idx < 0 || i >= s->len) return tsc_str_from_lit("", 0);
-    tsc_str_t* out = str_alloc(1);
-    ((char*)out->data)[0] = s->data[i];
-    return out;
+    size_t target = 0;
+    uint16_t code_unit = 0;
+    if (!string_nonnegative_integer_index(idx, &target) ||
+        !tsc_str_utf16_code_unit_at(s, target, &code_unit)) {
+        return tsc_str_from_lit("", 0);
+    }
+    return tsc_str_from_utf16_code_unit(code_unit);
 }
 
 tsc_str_t* tsc_str_at(const tsc_str_t* s, double idx) {
     if (isnan(idx)) idx = 0.0;
-    if (idx < 0) idx = (double)s->len + idx;
-    if (isinf(idx) || idx < 0 || idx >= (double)s->len) return tsc_str_from_lit("", 0);
+    idx = idx < 0.0 ? ceil(idx) : floor(idx);
+    double length = (double)tsc_str_utf16_length(s);
+    if (idx < 0) idx = length + idx;
+    if (isinf(idx) || idx < 0 || idx >= length) return tsc_str_from_lit("", 0);
     return tsc_str_char_at(s, idx);
 }
 
 double tsc_str_char_code_at(const tsc_str_t* s, double idx) {
-    if (idx < 0 || isnan(idx) || isinf(idx)) return NAN;
-    size_t target = (size_t)idx;
-    size_t code_unit_index = 0;
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t cp = 0xfffd;
-        size_t adv = 1;
-        decode_utf8_at(s, pos, &cp, &adv);
-        if (cp > 0xffff) {
-            uint32_t shifted = cp - 0x10000u;
-            uint16_t hi = (uint16_t)(0xd800u + (shifted >> 10));
-            uint16_t lo = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
-            if (code_unit_index == target) return (double)hi;
-            if (code_unit_index + 1 == target) return (double)lo;
-            code_unit_index += 2;
-        } else {
-            if (code_unit_index == target) return (double)cp;
-            code_unit_index++;
-        }
-        pos += adv;
-    }
-    return NAN;
+    size_t target = 0;
+    uint16_t code_unit = 0;
+    if (!string_nonnegative_integer_index(idx, &target) ||
+        !tsc_str_utf16_code_unit_at(s, target, &code_unit)) return NAN;
+    return (double)code_unit;
 }
 
 double tsc_str_code_point_at(const tsc_str_t* s, double idx) {
-    if (idx < 0 || isnan(idx) || isinf(idx)) return NAN;
-    size_t target = (size_t)idx;
-    size_t code_unit_index = 0;
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t cp = 0xfffd;
-        size_t adv = 1;
-        decode_utf8_at(s, pos, &cp, &adv);
-        if (cp > 0xffff) {
-            uint32_t shifted = cp - 0x10000u;
-            uint16_t lo = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
-            if (code_unit_index == target) return (double)cp;
-            if (code_unit_index + 1 == target) return (double)lo;
-            code_unit_index += 2;
-        } else {
-            if (code_unit_index == target) return (double)cp;
-            code_unit_index++;
+    size_t target = 0;
+    uint16_t first = 0;
+    if (!string_nonnegative_integer_index(idx, &target) ||
+        !tsc_str_utf16_code_unit_at(s, target, &first)) return NAN;
+    if (is_high_surrogate(first)) {
+        uint16_t second = 0;
+        if (tsc_str_utf16_code_unit_at(s, target + 1, &second) && is_low_surrogate(second)) {
+            return (double)surrogate_pair_to_code_point(first, second);
         }
-        pos += adv;
     }
-    return NAN;
+    return (double)first;
 }
 
 bool tsc_str_is_well_formed(const tsc_str_t* string) {
@@ -1226,6 +1294,33 @@ tsc_array_t* tsc_str_chars(const tsc_str_t* s) {
         pos += adv ? adv : 1;
     }
     return a;
+}
+
+tsc_array_t* tsc_str_code_units(const tsc_str_t* s) {
+    size_t length = tsc_str_utf16_length(s);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), length ? length : 1);
+    size_t pos = 0;
+    while (pos < s->len) {
+        uint32_t code_point = 0xfffd;
+        size_t width = 1;
+        decode_utf8_at(s, pos, &code_point, &width);
+        if (code_point > 0xffff) {
+            uint32_t shifted = code_point - 0x10000u;
+            tsc_str_t* lead = tsc_str_from_utf16_code_unit(
+                (uint16_t)(0xd800u + (shifted >> 10))
+            );
+            tsc_str_t* trail = tsc_str_from_utf16_code_unit(
+                (uint16_t)(0xdc00u + (shifted & 0x3ffu))
+            );
+            tsc_array_push_raw(out, &lead);
+            tsc_array_push_raw(out, &trail);
+        } else {
+            tsc_str_t* unit = tsc_str_from_utf16_code_unit((uint16_t)code_point);
+            tsc_array_push_raw(out, &unit);
+        }
+        pos += width ? width : 1;
+    }
+    return out;
 }
 
 /* ---------------- JSON build buffer ---------------- */

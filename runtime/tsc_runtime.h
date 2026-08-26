@@ -86,14 +86,20 @@ typedef struct tsc_async_cell_ref {
 void tsc_bootstrap(int argc, char** argv);
 void tsc_panic(const char* msg);
 
-/* ------------- strings (immutable, UTF-8) ------------- */
+/* ------------- strings (immutable, WTF-8 storage) ------------- */
 typedef struct tsc_str {
+    /* Byte length of the immutable WTF-8 storage. This is never the
+     * ECMAScript String length for non-ASCII input. */
     size_t len;
     const char* data;
     uint64_t hash;
     /* Opaque identity-bearing encoding for an ECMAScript Symbol
      * PropertyKey. Ordinary strings always leave this NULL. */
     struct tsc_symbol* symbol_key;
+    /* Zero means not yet derived; otherwise stores the immutable UTF-16
+     * code-unit length plus one. Keeping the storage byte count separate
+     * prevents host codecs from being confused with ECMAScript indexing. */
+    size_t utf16_len_plus_one;
 } tsc_str_t;
 struct tsc_array; /* fwd */
 
@@ -153,6 +159,7 @@ tsc_str_t* tsc_str_from_code_point_values(const struct tsc_array* values);
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b);
 int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b);
 double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b);
+size_t tsc_str_utf16_length(const tsc_str_t* s);
 double tsc_str_length(const tsc_str_t* s);
 
 tsc_str_t* tsc_str_char_at(const tsc_str_t* s, double idx);
@@ -195,6 +202,7 @@ struct tsc_array* tsc_str_split(const tsc_str_t* s, const tsc_str_t* sep);
 struct tsc_array* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit);
 struct tsc_array* tsc_str_split_limit_num(const tsc_str_t* s, const tsc_str_t* sep, double limit);
 struct tsc_array* tsc_str_chars(const tsc_str_t* s);
+struct tsc_array* tsc_str_code_units(const tsc_str_t* s);
 
 /* ------------- Symbol ------------- */
 typedef struct tsc_symbol {

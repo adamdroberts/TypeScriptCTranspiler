@@ -68,6 +68,11 @@ export interface StringCodePointListWidthSpec {
     width: number;
 }
 
+export interface StringUtf16ExoticWidthSpec {
+    generator: "string-utf16-exotic-width";
+    width: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -134,6 +139,7 @@ export type GeneratedCaseSpec =
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
     | StringCodePointListWidthSpec
+    | StringUtf16ExoticWidthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -287,6 +293,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-code-point-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "string-utf16-exotic-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -747,6 +763,58 @@ function stringCodePointListWidthSource(width: number): string {
     ].join("\n");
 }
 
+function stringUtf16ExoticWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const codePoints: number[] = [];",
+        "const expectedUnits: number[] = [];",
+        "for (let index = 0; index < width; index++) {",
+        "    const codePoint = index % 3 === 0",
+        "        ? 65 + index % 26",
+        "        : index % 3 === 1",
+        "            ? 0x800 + index % 0x5000",
+        "            : 0x10000 + index % 0x10000;",
+        "    codePoints.push(codePoint);",
+        "    if (codePoint <= 0xffff) expectedUnits.push(codePoint);",
+        "    else {",
+        "        const scalar = codePoint - 0x10000;",
+        "        expectedUnits.push(0xd800 + (scalar >> 10), 0xdc00 + (scalar & 0x3ff));",
+        "    }",
+        "}",
+        "const text = String.fromCodePoint(...codePoints);",
+        "const boxed = Object(text);",
+        "const keys = Object.keys(text);",
+        "const values = Object.values(text);",
+        "const entries = Object.entries(text);",
+        "const names = Object.getOwnPropertyNames(boxed);",
+        "const descriptors = Object.getOwnPropertyDescriptors(text);",
+        "let valid =",
+        "    text.length === expectedUnits.length &&",
+        "    boxed.length === expectedUnits.length &&",
+        "    keys.length === expectedUnits.length &&",
+        "    values.length === expectedUnits.length &&",
+        "    entries.length === expectedUnits.length &&",
+        "    names.length === expectedUnits.length + 1 &&",
+        "    Reflect.get(Reflect.get(descriptors, \"length\"), \"value\") === expectedUnits.length;",
+        "for (let index = 0; index < expectedUnits.length; index++) {",
+        "    const key = String(index);",
+        "    if (keys[index] !== key || names[index] !== key ||",
+        "        values[index].charCodeAt(0) !== expectedUnits[index] ||",
+        "        entries[index][0] !== key || entries[index][1].charCodeAt(0) !== expectedUnits[index] ||",
+        "        descriptors[key].value.charCodeAt(0) !== expectedUnits[index]) valid = false;",
+        "}",
+        "if (names[expectedUnits.length] !== \"length\") valid = false;",
+        "let iterated = 0;",
+        "for (const value of text) {",
+        "    if (value.codePointAt(0) !== codePoints[iterated]) valid = false;",
+        "    iterated++;",
+        "}",
+        "if (iterated !== width) valid = false;",
+        'console.log("string UTF-16 exotic width:", valid);',
+        "",
+    ].join("\n");
+}
+
 function reflectConstructArgumentWidthSource(width: number): string {
     return [
         `const width = ${width};`,
@@ -1134,6 +1202,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return stringCodeUnitListWidthSource(spec.width);
         case "string-code-point-list-width":
             return stringCodePointListWidthSource(spec.width);
+        case "string-utf16-exotic-width":
+            return stringUtf16ExoticWidthSource(spec.width);
         case "reflect-construct-argument-width":
             return reflectConstructArgumentWidthSource(spec.width);
         case "arrow-formal-binding-tree-depth":

@@ -452,7 +452,7 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
     std::string wrapped = "(function(){";
     wrapped += tscToString(body);
     wrapped += "\n})";
-    tsc_str_t source = { wrapped.size(), wrapped.c_str(), 0, nullptr };
+    tsc_str_t source = { wrapped.size(), wrapped.c_str(), 0, nullptr, 0 };
     NodeEmbedState* current = ensureState();
     v8::Isolate* isolate = current->isolate;
     v8::Isolate::Scope isolateScope(isolate);
@@ -550,14 +550,14 @@ extern "C" tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, tsc
     return tsc_value_undefined();
 #else
     if (!args || args->len < 1) {
-        static tsc_str_t empty = { 0, "", 0, nullptr };
+        static tsc_str_t empty = { 0, "", 0, nullptr, 1 };
         return tsc_node_function(&empty);
     }
     tsc_value_t arg = (static_cast<tsc_value_t*>(args->data))[args->len - 1];
     if (valueIsBox(arg) && valueTag(arg) == TSC_VALUE_TAG_STRING) {
         return tsc_node_function(static_cast<tsc_str_t*>(valuePtr(arg)));
     }
-    static tsc_str_t empty = { 0, "", 0, nullptr };
+    static tsc_str_t empty = { 0, "", 0, nullptr, 1 };
     return tsc_node_function(&empty);
 #endif
 }

@@ -60471,16 +60471,10 @@ class Emitter {
         }
         if (source.ty.kind === "string") {
             const tmp = this.freshTemp("_promiseString");
-            const out = this.freshTemp("_promiseItems");
-            const idx = this.freshTemp("_promiseStringIndex");
-            const item = this.freshTemp("_promiseStringItem");
             return {
                 c: (
                     `({ tsc_str_t* const ${tmp} = ${source.c}; ` +
-                    `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${tmp}->len ? ${tmp}->len : 1); ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${tmp}->len; ${idx}++) { ` +
-                    `tsc_value_t ${item} = tsc_value_string(tsc_str_char_at(${tmp}, (double)${idx})); ` +
-                    `tsc_array_push_raw(${out}, &${item}); } ${out}; })`
+                    `tsc_value_iter_values(tsc_value_string(${tmp})); })`
                 ),
                 ty: arrayType(T_VALUE),
             };
@@ -73530,13 +73524,11 @@ class Emitter {
             }
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([str]) => {
-                    const source = this.freshTemp("_osv_src");
-                    const out = this.freshTemp("_osv");
-                    const idx = this.freshTemp("_osv_i");
-                    const ch = this.freshTemp("_osv_ch");
-                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${ch} = tsc_str_char_at(${source}, (double)${idx}); tsc_array_push_raw(${out}, &${ch}); } ${out}; })`;
-                });
+                return this.emitSequencedExpr(
+                    arrayType(T_STRING),
+                    [{ value, target: T_STRING, node: arg }, ...ignored],
+                    ([str]) => `tsc_str_code_units(${str})`,
+                );
             }
             if (mapped.kind === "array") {
                 const value = this.emitExpr(arg);
@@ -73623,12 +73615,13 @@ class Emitter {
             if (mapped.kind === "string") {
                 const value = this.emitExpr(arg);
                 const elemType = entryType(T_STRING);
-                return this.emitSequencedExpr(arrayType(elemType), [{ value, node: arg }, ...ignored], ([str]) => {
+                return this.emitSequencedExpr(arrayType(elemType), [{ value, target: T_STRING, node: arg }, ...ignored], ([str]) => {
                     const source = this.freshTemp("_ose_src");
+                    const units = this.freshTemp("_ose_units");
                     const out = this.freshTemp("_ose");
                     const idx = this.freshTemp("_ose_i");
                     const entry = this.freshTemp("_ose_entry");
-                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, T_STRING, `tsc_str_char_at(${source}, (double)${idx})`)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
+                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${units} = tsc_str_code_units(${source}); tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${units}->len ? ${units}->len : 1); for (size_t ${idx} = 0; ${idx} < ${units}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, T_STRING, `TSC_ARR(tsc_str_t*, ${units}, ${idx})`)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
                 });
             }
             if (mapped.kind === "array") {
@@ -74783,13 +74776,15 @@ class Emitter {
                     pieces.push(`(void)${sourceC}`);
                     continue;
                 }
+                const codeUnits = this.freshTemp("_ta_assign_string_units");
                 const current = {
-                    c: `tsc_str_char_at(${sourceC}, (double)${idx})`,
+                    c: `TSC_ARR(tsc_str_t*, ${codeUnits}, ${idx})`,
                     ty: T_STRING,
                 };
                 const coerced = this.coerce(current, elem, source.node);
                 pieces.push(
-                    `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
+                    `tsc_array_t* ${codeUnits} = tsc_str_code_units(${sourceC}); ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${codeUnits}->len; ${idx}++) { ` +
                         `${elem.c} ${elemTmp} = ${coerced}; ` +
                         `if (${targetC}->frozen) { ${assignFailure}; ` +
                         `} else if (${idx} < ${targetC}->len) { ` +

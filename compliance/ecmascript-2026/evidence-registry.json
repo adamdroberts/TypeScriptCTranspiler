@@ -331,6 +331,76 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-utf16-exotic.property.test.ts",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "string_utf16_exotic_width",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ],
+      "stressReview": {
+        "dimension": "String exotic UTF-16 code-unit, descriptor, and own-key projection width",
+        "parameter": "width",
+        "representativeHighDepth": 2048,
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and stresses the canonical length/index/descriptor/key projections without treating successive string or fixture sizes as evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_utf16_length",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_char_at",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_code_units",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#primitive_constructor_construct",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_get_prop",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#value_descriptor_from_string_key",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_has_own_prop",
+      "targets": [
+        "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/reflect-construct.property.test.ts",
       "targets": [
         "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",

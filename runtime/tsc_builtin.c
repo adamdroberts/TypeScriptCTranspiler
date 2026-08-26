@@ -1479,25 +1479,8 @@ bool buffer_encoding_is_ascii(const tsc_str_t* encoding) {
     return encoding && str_lit_eq(encoding, "ascii");
 }
 
-size_t tsc_str_utf16_len(const tsc_str_t* s) {
-    size_t count = 0;
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t cp = 0xfffd;
-        size_t adv = 1;
-        decode_utf8_at(s, pos, &cp, &adv);
-        if (cp > 0xffff) {
-            count += 2;
-        } else {
-            count += 1;
-        }
-        pos += adv;
-    }
-    return count;
-}
-
 tsc_buffer_t* buffer_from_latin1_ascii(const tsc_str_t* input, bool is_ascii) {
-    size_t len = tsc_str_utf16_len(input);
+    size_t len = tsc_str_utf16_length(input);
     tsc_buffer_t* b = buffer_alloc_len(len);
     size_t pos = 0;
     size_t out_idx = 0;
@@ -1960,7 +1943,7 @@ double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encod
     if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
     if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);
     if (buffer_encoding_is_base64(encoding)) return (double)buffer_from_base64(input)->len;
-    if (buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding)) return (double)tsc_str_utf16_len(input);
+    if (buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding)) return (double)tsc_str_utf16_length(input);
     tsc_throw_str(tsc_str_from_cstr("Buffer.byteLength: only utf8, hex, base64, latin1, ascii, and binary encodings are supported"));
     return 0.0;
 }

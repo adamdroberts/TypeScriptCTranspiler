@@ -51,6 +51,14 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.5.5.5.2-",
+      "clauses": ["sec-string-exotic-objects-getownproperty-p"],
+      "reason": "The pinned historical 15.5.5.2 metadata section explicitly denotes the String exotic [[GetOwnProperty]] algorithm; the semantic-boundary prefix maps that section independently of filenames and scenario inventory size.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "field": "es6id",
       "match": "exact",
       "value": "26.1.2",

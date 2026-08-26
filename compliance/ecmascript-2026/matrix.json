@@ -218,6 +218,50 @@
       "rationale": "The complete String.fromCodePoint intrinsic is represented as one terminal worklist partition with reciprocal property, an independent mixed-code-point width stress, native regressions, declaration, implementation, and pinned Test262 evidence."
     },
     {
+      "clause": "sec-string-exotic-objects-getownproperty-p",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "utf16-index-descriptor-and-ordinary-fallback",
+          "title": "UTF-16 code-unit indexed descriptors and ordinary own-property fallback for arbitrary String values",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-string-exotic-objects-getownproperty-p" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-utf16-exotic.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_string.c#tsc_str_utf16_length",
+              "runtime/tsc_string.c#tsc_str_char_at",
+              "runtime/tsc_string.c#tsc_str_code_units",
+              "runtime/tsc_value.c#primitive_constructor_construct",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#value_descriptor_from_string_key",
+              "runtime/tsc_value.c#tsc_value_has_own_prop"
+            ]
+          },
+          "rationale": "The independent property derives empty, ASCII, BMP, astral, lone-surrogate, and mixed String values, then validates primitive and boxed UTF-16 length/index lookup, exact indexed descriptors, ordinary non-index properties, canonical-index rejection, key order, reflection, compatible and incompatible redefinition, deletion, copying, and the separate code-point iterator projection in both memory modes. One canonical length cache and code-unit collection project the immutable WTF-8 storage into arbitrary ECMAScript indices; boxed construction and primitive reflection consume that representation instead of storage-byte counts. A distinct generated native input independently derives its expected UTF-16 units from a mixed code-point collection and stresses the same descriptor/key projections at representative width. The exact current clause scenario and its reviewed historical metadata section execute natively, while StringCreate, StringGetOwnProperty, the other String exotic internal methods, String.prototype methods, host eligibility, and exhaustive signed reporting remain separate obligations."
+        }
+      ],
+      "rationale": "One direct terminal partition binds the exact String exotic [[GetOwnProperty]] clause to reciprocal semantic, cardinality, implementation, and pinned Test262 evidence without claiming adjacent String exotic algorithms."
+    },
+    {
       "clause": "sec-reflect-object",
       "disposition": "evidence",
       "partitions": [
