@@ -97,8 +97,8 @@ inline-await-return: fn-inline!
 method-inline-await-return: method-inline-class-method-inline!
 arrow-inline-await-return: value-arrow-inline!
 branch-return-await-true: branch-true
-branch-return-await-false: branch-false
 two-await: one:fn-one-two!
+branch-return-await-false: branch-false
 method-branch-return-await-true: method-branch-true
 method-branch-return-await-false: method-branch-false
 arrow-branch-return-await-true: arrow-true
@@ -215,6 +215,7 @@ prelude-symbol-bigint-awaited-local-return: fn-symbol-local:42:value
 prelude-promise-race-return: same:value
 prelude-text-codec-awaited-local-return: fn-codec:8
 prelude-crypto-digest-awaited-local-return: 42134c1a:93774c7c
+prelude-event-emitter-awaited-local-return: true:8:1
 prelude-regexp-inline-await-return: /^fn-inline-value$/:fn-inline-value
 prelude-event-target-awaited-local-return: true:fn-ready:true:fn-target
 prelude-url-params-awaited-local-return: /root/path:fn-url-local:fn-params-local:value

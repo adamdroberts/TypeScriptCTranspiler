@@ -323,6 +323,9 @@ type AsyncControlFlowStateCore =
         readonly kind: "expression-complete";
         readonly id: number;
         readonly expression: ts.Expression;
+        /** A previously materialized expression value. Logical-value routing
+         * uses this instead of evaluating its left operand again. */
+        readonly sourceResultSlot: number | null;
         readonly assignment: ts.Identifier | null;
         readonly completion: {
             readonly kind: "return" | "throw";
@@ -667,6 +670,7 @@ export function planAsyncControlFlowGraph(
             kind: "expression-complete",
             id: completeId,
             expression,
+            sourceResultSlot: null,
             assignment,
             completion,
             branch,
@@ -895,6 +899,7 @@ export function planAsyncControlFlowGraph(
                 kind: "expression-complete",
                 id,
                 expression: arm,
+                sourceResultSlot: null,
                 assignment,
                 completion,
                 branch: null,
@@ -922,9 +927,6 @@ export function planAsyncControlFlowGraph(
         if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
             operator !== ts.SyntaxKind.BarBarToken &&
             operator !== ts.SyntaxKind.QuestionQuestionToken) return null;
-        const left = unwrapExpression(current.left);
-        if (containsAwait(left) || !options.isStableSynchronousTail(left) ||
-            (!ts.isIdentifier(left) && !options.isStableBeforeSuspension?.(left))) return null;
         const complete = (value: ts.Expression): AsyncControlFlowTarget | null => {
             const nested = buildConditionalValueExpression(
                 value, assignment, next, context, completion, resultSlot,
@@ -942,6 +944,7 @@ export function planAsyncControlFlowGraph(
                 kind: "expression-complete",
                 id,
                 expression: value,
+                sourceResultSlot: null,
                 assignment,
                 completion,
                 branch: null,
@@ -950,19 +953,37 @@ export function planAsyncControlFlowGraph(
                 next,
             }, context.exceptionTarget);
         };
-        const leftComplete = complete(current.left);
+        /* Evaluate the left subtree once into a canonical result slot, then
+         * route both the short-circuit result and the right subtree from that
+         * stored value. This is independent of operand shape and recursively
+         * composes nested logical/conditional/await trees. */
+        const leftResultSlot = expressionResults.push(current.left) - 1;
+        const leftCompleteId = reserve();
+        const leftComplete = setState({
+            kind: "expression-complete",
+            id: leftCompleteId,
+            expression: current.left,
+            sourceResultSlot: leftResultSlot,
+            assignment,
+            completion,
+            branch: null,
+            resultSlot,
+            awaitExprs: [],
+            next,
+        }, context.exceptionTarget);
         const rightComplete = complete(current.right);
-        if (!leftComplete || !rightComplete) return null;
+        if (!rightComplete) return null;
         const id = reserve();
         const takeRight = operator === ts.SyntaxKind.AmpersandAmpersandToken
             ? { mode: "truthy" as const, truthy: rightComplete, falsy: leftComplete }
             : operator === ts.SyntaxKind.BarBarToken
                 ? { mode: "truthy" as const, truthy: leftComplete, falsy: rightComplete }
                 : { mode: "nullish" as const, truthy: rightComplete, falsy: leftComplete };
-        return setState({
+        setState({
             kind: "expression-complete",
             id,
             expression: current.left,
+            sourceResultSlot: leftResultSlot,
             assignment: null,
             completion: null,
             branch: takeRight,
@@ -970,6 +991,7 @@ export function planAsyncControlFlowGraph(
             awaitExprs: [],
             next,
         }, context.exceptionTarget);
+        return buildExpressionResult(current.left, leftResultSlot, target(id), context);
     };
     const buildExpressionResult = (
         expression: ts.Expression,
@@ -996,6 +1018,7 @@ export function planAsyncControlFlowGraph(
                 kind: "expression-complete",
                 id,
                 expression,
+                sourceResultSlot: null,
                 assignment: null,
                 completion: null,
                 branch: null,

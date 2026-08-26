@@ -8,6 +8,11 @@ export interface AsyncBindingDefaultDepthSpec {
     depth: number;
 }
 
+export interface AsyncLogicalExpressionDepthSpec {
+    generator: "async-logical-expression-depth";
+    depth: number;
+}
+
 export interface StrictEqualityExpressionDepthSpec {
     generator: "strict-equality-expression-depth";
     depth: number;
@@ -102,6 +107,7 @@ export interface SwitchCaseBlockClassWorklistWidthSpec {
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
+    | AsyncLogicalExpressionDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleStaticSemanticsWidthSpec
@@ -143,6 +149,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "async-binding-default-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+        };
+    }
+    if (spec.generator === "async-logical-expression-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -444,6 +460,38 @@ function asyncBindingDefaultDepthSource(depth: number): string {
         "}",
         "",
         'bindingDepth().then((result) => console.log("binding depth:", result));',
+        "",
+    ].join("\n");
+}
+
+function asyncLogicalExpressionDepthSource(depth: number): string {
+    let expression = "await finish()";
+    for (let index = depth - 1; index >= 0; index--) {
+        const partition = index % 3;
+        const operator = partition === 0 ? "&&" : partition === 1 ? "||" : "??";
+        const value = partition === 0 ? "objectValue" : partition === 1 ? "0" : "undefined";
+        expression = `mark(${index}, ${value}) ${operator} (${expression})`;
+    }
+    return [
+        `const depth = ${depth};`,
+        "const objectValue = { marker: 'truthy' };",
+        "let calls = 0;",
+        "let ordered = true;",
+        "let finishCalls = 0;",
+        "function mark(index: number, value: any): any {",
+        "    ordered = ordered && index === calls;",
+        "    calls++;",
+        "    return value;",
+        "}",
+        "async function finish(): Promise<number> {",
+        "    finishCalls++;",
+        "    return await Promise.resolve(197);",
+        "}",
+        "async function logicalDepth(): Promise<boolean> {",
+        `    const result = ${expression};`,
+        "    return result === 197 && calls === depth && ordered && finishCalls === 1;",
+        "}",
+        'logicalDepth().then((result) => console.log("async logical expression depth:", result));',
         "",
     ].join("\n");
 }
@@ -921,6 +969,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return asyncLeadingAwaitChainSource(spec.awaitCount);
         case "async-binding-default-depth":
             return asyncBindingDefaultDepthSource(spec.depth);
+        case "async-logical-expression-depth":
+            return asyncLogicalExpressionDepthSource(spec.depth);
         case "strict-equality-expression-depth":
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":

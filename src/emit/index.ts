@@ -29981,8 +29981,14 @@ class Emitter {
          * The CFG owns one collection of result slots, so this identity-based
          * projection covers every switch shape without specializing on Type,
          * clause count, or suspension count. */
+        const sourceExpressionResultSlots = new Set<number>();
+        for (const state of graph.states) {
+            if (state.kind === "expression-complete" && state.sourceResultSlot !== null) {
+                sourceExpressionResultSlots.add(state.sourceResultSlot);
+            }
+        }
         const expressionResultTypes = graph.expressionResults.map((expression, slot) =>
-            switchValueResultSlots.has(slot)
+            switchValueResultSlots.has(slot) || sourceExpressionResultSlots.has(slot)
                 ? T_VALUE
                 : this.asyncAwaitContinuationStorageType(
                     expression,
@@ -30116,8 +30122,13 @@ class Emitter {
                 const storageType = expressionSyncTypes[stateNode.slot];
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") return false;
             } else if (stateNode.kind === "expression-complete") {
+                if (stateNode.sourceResultSlot !== null) {
+                    const sourceType = expressionResultTypes[stateNode.sourceResultSlot];
+                    if (!sourceType || sourceType.kind !== "value") return false;
+                }
                 if (stateNode.resultSlot !== null) {
-                    if (stateNode.assignment || stateNode.completion || stateNode.branch) {
+                    if (stateNode.assignment || stateNode.completion ||
+                        stateNode.sourceResultSlot === stateNode.resultSlot) {
                         return false;
                     }
                     const storageType = expressionResultTypes[stateNode.resultSlot];
@@ -31402,64 +31413,84 @@ class Emitter {
                     this.conditionValueScopes.push(syncScope);
                     let result: EmitResult;
                     try {
-                        const expression = this.unwrapTransparentExpression(stateNode.expression);
-                        const objectTruthinessWrapper = stateNode.branch &&
-                            ts.isCallExpression(expression) &&
-                            ts.isIdentifier(expression.expression) &&
-                            this.isUnshadowedGlobalIdentifier(expression.expression, "Object");
-                        if (objectTruthinessWrapper) {
-                            // Object(...) always produces an object and is
-                            // therefore truthy, but every argument still runs
-                            // exactly once in source order.
-                            for (const argument of expression.arguments) {
-                                const evaluated = this.emitExpr(argument);
-                                callback.line(`(void)(${evaluated.c});`);
-                            }
-                            result = { c: "true", ty: T_BOOLEAN };
+                        if (stateNode.sourceResultSlot !== null) {
+                            const sourceType = expressionResultTypes[stateNode.sourceResultSlot];
+                            if (!sourceType || sourceType.kind !== "value") return false;
+                            result = {
+                                c: `state->expression_result_${stateNode.sourceResultSlot}`,
+                                ty: sourceType,
+                            };
                         } else {
-                            result = stateNode.completion?.kind === "return"
-                                ? emitCfgReturnExpression(stateNode.expression)
-                                : this.emitExpr(stateNode.expression);
+                            const expression = this.unwrapTransparentExpression(stateNode.expression);
+                            const objectTruthinessWrapper = stateNode.branch &&
+                                ts.isCallExpression(expression) &&
+                                ts.isIdentifier(expression.expression) &&
+                                this.isUnshadowedGlobalIdentifier(expression.expression, "Object");
+                            if (objectTruthinessWrapper) {
+                                // Object(...) always produces an object and is
+                                // therefore truthy, but every argument still runs
+                                // exactly once in source order.
+                                for (const argument of expression.arguments) {
+                                    const evaluated = this.emitExpr(argument);
+                                    callback.line(`(void)(${evaluated.c});`);
+                                }
+                                result = { c: "true", ty: T_BOOLEAN };
+                            } else {
+                                result = stateNode.completion?.kind === "return"
+                                    ? emitCfgReturnExpression(stateNode.expression)
+                                    : this.emitExpr(stateNode.expression);
+                            }
                         }
                     } finally {
                         this.conditionValueScopes.pop();
                         this.awaitExpressionValueScopes.pop();
                     }
+                    let routedResult = result;
                     if (stateNode.resultSlot !== null) {
                         const storageType = expressionResultTypes[stateNode.resultSlot];
                         if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
                             return false;
                         }
-                        callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.coerce(result, storageType, stateNode.expression)};`);
+                        const storedResult = storageType.kind === "value" &&
+                            sourceExpressionResultSlots.has(stateNode.resultSlot)
+                            ? this.boxAsyncCfgLogicalSource(result, stateNode.expression)
+                            : this.coerce(result, storageType, stateNode.expression);
+                        callback.line(`state->expression_result_${stateNode.resultSlot} = ${storedResult};`);
                         if (storageType.kind === "value") {
                             callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
                         }
-                        emitTransition(stateNode.next.id);
-                    } else if (stateNode.branch) {
+                        routedResult = {
+                            c: `state->expression_result_${stateNode.resultSlot}`,
+                            ty: storageType,
+                        };
+                    }
+                    if (stateNode.branch) {
                         if (stateNode.branch.mode === "tri") {
                             const nullishTarget = stateNode.branch.nullish;
                             if (!nullishTarget) return false;
-                            const valueType = this.prepareType(result.ty);
+                            const valueType = this.prepareType(routedResult.ty);
                             if (valueType.kind === "void") {
-                                callback.line(`(void)(${result.c});`);
+                                callback.line(`(void)(${routedResult.c});`);
                                 callback.line(`state->pc = ${nullishTarget.id};`);
                                 callback.line("continue;");
                                 callback.close();
                                 continue;
                             }
                             const materialized = this.freshTemp("_async_cfg_condition_value");
-                            callback.line(`${valueType.c} ${materialized} = ${result.c};`);
+                            callback.line(`${valueType.c} ${materialized} = ${routedResult.c};`);
                             const value = { c: materialized, ty: valueType };
                             const nullish = this.nullishExprFromEmitResult(value, stateNode.expression);
                             const truthy = this.truthyC(value, stateNode.expression);
                             callback.line(`state->pc = (${nullish}) ? ${nullishTarget.id} : ((${truthy}) ? ${stateNode.branch.truthy.id} : ${stateNode.branch.falsy.id});`);
                         } else {
                             const selected = stateNode.branch.mode === "nullish"
-                                ? this.nullishExprFromEmitResult(result, stateNode.expression)
-                                : this.truthyC(result, stateNode.expression);
+                                ? this.nullishExprFromEmitResult(routedResult, stateNode.expression)
+                                : this.truthyC(routedResult, stateNode.expression);
                             callback.line(`state->pc = (${selected}) ? ${stateNode.branch.truthy.id} : ${stateNode.branch.falsy.id};`);
                         }
                         callback.line("continue;");
+                    } else if (stateNode.resultSlot !== null) {
+                        emitTransition(stateNode.next.id);
                     } else if (stateNode.assignment) {
                         const symbol = this.symbolForIdentifier(stateNode.assignment);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
@@ -41287,6 +41318,33 @@ class Emitter {
         if (isPointerKind(value.ty)) return `(${value.c} == NULL)`;
         this.coerce(value, T_BOOLEAN, node);
         return "false";
+    }
+
+    /** Box one evaluate-once logical source without losing a typed pointer's
+     * nullish identity. A typed pointer is the compact representation for a
+     * nullable static value, whereas the CFG result slot is the canonical
+     * dynamic representation used by all logical operators. */
+    private boxAsyncCfgLogicalSource(value: EmitResult, node: ts.Expression): string {
+        if (value.ty.kind === "value" || !isPointerKind(value.ty)) {
+            return this.coerce(value, T_VALUE, node);
+        }
+        const type = this.checker.getTypeAtLocation(node);
+        const members = type.isUnion() ? type.types : [type];
+        const hasNull = members.some((member) => (member.flags & ts.TypeFlags.Null) !== 0);
+        const hasUndefined = members.some((member) =>
+            (member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) !== 0,
+        );
+        if (!hasNull && !hasUndefined) return this.coerce(value, T_VALUE, node);
+        if (hasNull && hasUndefined) {
+            unsupported(
+                node,
+                "async logical value staging cannot distinguish null from undefined in a typed pointer",
+            );
+        }
+        const materialized = this.freshTemp("_async_cfg_logical_source");
+        const boxed = this.coerce({ c: materialized, ty: value.ty }, T_VALUE, node);
+        const nullish = hasNull ? "tsc_value_null()" : "tsc_value_undefined()";
+        return `({ ${value.ty.c} ${materialized} = ${value.c}; ${materialized} == NULL ? ${nullish} : ${boxed}; })`;
     }
 
     private asyncAwaitContinuationStorageType(awaitExpr: ts.Expression, awaitedType: CType): CType {

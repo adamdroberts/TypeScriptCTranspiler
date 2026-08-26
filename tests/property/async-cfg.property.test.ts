@@ -180,7 +180,7 @@ function assertClosedCanonicalGraph(
     for (const state of graph.states) {
         for (const target of stateTargets(state)) allTargets.add(target);
     }
-    for (const target of allTargets) expect(states.has(target)).toBeTrue();
+    for (const target of allTargets) expect(states.has(target), `missing CFG target ${target}`).toBeTrue();
 
     const reachable = new Set<number>();
     const worklist = [graph.entry.id];
@@ -222,6 +222,48 @@ test("recursive async syntax lowers to one closed canonical state graph", () => 
         const graph = planAsyncControlFlowGraph(body, plannerOptions);
         if (!graph) throw new Error(`generated supported syntax failed to plan (seed ${seed}):\n${statements}`);
         assertClosedCanonicalGraph(graph, body);
+    }
+});
+
+test("logical value routing evaluates every canonical left subtree once", () => {
+    const { body } = parseSubject(`
+        value = touch(0) || (touch(1) && (touch(2) ?? await settled(3)));
+    `);
+    const graph = planAsyncControlFlowGraph(body, plannerOptions);
+    if (!graph) throw new Error("recursive logical value tree failed to plan");
+    assertClosedCanonicalGraph(graph, body);
+
+    const logicalLefts: ts.Expression[] = [];
+    const visit = (node: ts.Node): void => {
+        if (ts.isBinaryExpression(node) && (
+            node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+            node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+            node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+        )) {
+            logicalLefts.push(node.left);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(body);
+
+    for (const left of logicalLefts) {
+        const slots = graph.expressionResults
+            .map((expression, slot) => expression === left ? slot : -1)
+            .filter((slot) => slot >= 0);
+        expect(slots).toHaveLength(1);
+        const slot = slots[0]!;
+        const evaluators = graph.states.filter((state) =>
+            state.kind === "expression-complete" &&
+            state.sourceResultSlot === null &&
+            state.resultSlot === slot &&
+            state.expression === left,
+        );
+        expect(evaluators).toHaveLength(1);
+        const readers = graph.states.filter((state) =>
+            state.kind === "expression-complete" && state.sourceResultSlot === slot,
+        );
+        expect(readers.some((state) => state.kind === "expression-complete" && state.branch !== null)).toBeTrue();
+        expect(readers.some((state) => state.kind === "expression-complete" && state.branch === null)).toBeTrue();
     }
 });
 
