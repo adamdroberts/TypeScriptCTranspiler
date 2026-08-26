@@ -13,6 +13,7 @@ tsc_str_t* str_alloc(size_t len) {
     s->hash = 0;
     s->symbol_key = NULL;
     s->utf16_len_plus_one = 0;
+    s->utf16_cache = NULL;
     return s;
 }
 
@@ -23,6 +24,7 @@ tsc_str_t* tsc_str_from_lit(const char* data, size_t len) {
     s->hash = 0;
     s->symbol_key = NULL;
     s->utf16_len_plus_one = 0;
+    s->utf16_cache = NULL;
     return s;
 }
 
@@ -590,6 +592,137 @@ uint32_t surrogate_pair_to_code_point(uint16_t hi, uint16_t lo) {
     return 0x10000u + ((((uint32_t)hi - 0xd800u) << 10) | ((uint32_t)lo - 0xdc00u));
 }
 
+/* Every ECMAScript String algorithm below consumes this one canonical
+ * projection.  The immutable backing store is WTF-8, but observable String
+ * equality, ordering, indexing and ranges are defined over UTF-16 code
+ * units.  A malformed backing store is an internal invariant violation;
+ * fail closed instead of letting individual algorithms invent recovery
+ * rules. */
+typedef struct {
+    size_t len;
+    const uint16_t* data;
+} tsc_utf16_sequence_t;
+
+typedef struct tsc_utf16_storage {
+    size_t len;
+    uint16_t data[];
+} tsc_utf16_storage_t;
+
+static void publish_utf16_length(const tsc_str_t* string, size_t length) {
+#ifdef TSC_THREADS
+    __atomic_store_n(
+        &((tsc_str_t*)string)->utf16_len_plus_one,
+        length + 1,
+        __ATOMIC_RELAXED
+    );
+#else
+    ((tsc_str_t*)string)->utf16_len_plus_one = length + 1;
+#endif
+}
+
+static tsc_utf16_sequence_t string_utf16_sequence(const tsc_str_t* string) {
+    tsc_utf16_sequence_t sequence = {0, NULL};
+    if (!string) return sequence;
+#ifdef TSC_THREADS
+    const tsc_utf16_storage_t* cached = __atomic_load_n(
+        &((tsc_str_t*)string)->utf16_cache,
+        __ATOMIC_ACQUIRE
+    );
+#else
+    const tsc_utf16_storage_t* cached =
+        (const tsc_utf16_storage_t*)string->utf16_cache;
+#endif
+    if (cached) {
+        sequence.len = cached->len;
+        sequence.data = cached->data;
+        return sequence;
+    }
+    if (string->len > (SIZE_MAX - sizeof(tsc_utf16_storage_t)) / sizeof(uint16_t)) {
+        tsc_panic("UTF-16 String projection is too large");
+    }
+    tsc_utf16_storage_t* candidate = (tsc_utf16_storage_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(tsc_utf16_storage_t) + sizeof(uint16_t) * string->len
+    );
+    candidate->len = 0;
+    size_t offset = 0;
+    while (offset < string->len) {
+        uint32_t code_point = 0;
+        size_t width = 0;
+        if (!decode_wtf8_at_strict(string, offset, &code_point, &width)) {
+            tsc_panic("invalid internal WTF-8 String storage");
+        }
+        if (code_point > 0xffff) {
+            uint32_t shifted = code_point - 0x10000u;
+            candidate->data[candidate->len++] = (uint16_t)(0xd800u + (shifted >> 10));
+            candidate->data[candidate->len++] = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
+        } else {
+            candidate->data[candidate->len++] = (uint16_t)code_point;
+        }
+        offset += width;
+    }
+    publish_utf16_length(string, candidate->len);
+#ifdef TSC_THREADS
+    const tsc_utf16_storage_t* expected = NULL;
+    if (__atomic_compare_exchange_n(
+        &((tsc_str_t*)string)->utf16_cache,
+        &expected,
+        candidate,
+        false,
+        __ATOMIC_RELEASE,
+        __ATOMIC_ACQUIRE
+    )) {
+        cached = candidate;
+    } else {
+        cached = expected;
+    }
+#else
+    ((tsc_str_t*)string)->utf16_cache = candidate;
+    cached = candidate;
+#endif
+    sequence.len = cached->len;
+    sequence.data = cached->data;
+    return sequence;
+}
+
+static tsc_str_t* string_from_utf16_range(
+    const uint16_t* units,
+    size_t start,
+    size_t count
+) {
+    size_t byte_length = 0;
+    size_t end = start + count;
+    for (size_t index = start; index < end; index++) {
+        uint32_t code_point = units[index];
+        if (is_high_surrogate(units[index]) && index + 1 < end &&
+            is_low_surrogate(units[index + 1])) {
+            code_point = surrogate_pair_to_code_point(units[index], units[index + 1]);
+            index++;
+        }
+        size_t width = utf8_len_for_code_point(code_point);
+        if (byte_length > SIZE_MAX - width) {
+            tsc_panic("UTF-16 String materialization is too large");
+        }
+        byte_length += width;
+    }
+
+    tsc_str_t* result = str_alloc(byte_length);
+    size_t output_offset = 0;
+    for (size_t index = start; index < end; index++) {
+        uint32_t code_point = units[index];
+        if (is_high_surrogate(units[index]) && index + 1 < end &&
+            is_low_surrogate(units[index + 1])) {
+            code_point = surrogate_pair_to_code_point(units[index], units[index + 1]);
+            index++;
+        }
+        output_offset += write_utf8_code_point(
+            (char*)result->data + output_offset,
+            code_point
+        );
+    }
+    publish_utf16_length(result, count);
+    return result;
+}
+
 static tsc_str_t* string_from_numeric_values(
     const tsc_array_t* values,
     bool code_points
@@ -665,11 +798,20 @@ bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b) {
     if (a->symbol_key || b->symbol_key) {
         return a->symbol_key && a->symbol_key == b->symbol_key;
     }
-    if (a->len != b->len) return false;
+    if (a->len == b->len && memcmp(a->data, b->data, a->len) == 0) return true;
+    size_t a_length = tsc_str_utf16_length(a);
+    size_t b_length = tsc_str_utf16_length(b);
+    if (a_length != b_length) return false;
     uint64_t ah = a->hash;
     uint64_t bh = b->hash;
     if (ah != 0 && bh != 0 && ah != bh) return false;
-    return memcmp(a->data, b->data, a->len) == 0;
+    tsc_utf16_sequence_t a_sequence = string_utf16_sequence(a);
+    tsc_utf16_sequence_t b_sequence = string_utf16_sequence(b);
+    return memcmp(
+        a_sequence.data,
+        b_sequence.data,
+        a_sequence.len * sizeof(uint16_t)
+    ) == 0;
 }
 
 int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b) {
@@ -680,12 +822,31 @@ int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b) {
         if (a->symbol_key->id > b->symbol_key->id) return 1;
         return 0;
     }
-    size_t m = a->len < b->len ? a->len : b->len;
-    int r = memcmp(a->data, b->data, m);
-    if (r != 0) return r;
-    if (a->len < b->len) return -1;
-    if (a->len > b->len) return 1;
+    tsc_utf16_sequence_t a_sequence = string_utf16_sequence(a);
+    tsc_utf16_sequence_t b_sequence = string_utf16_sequence(b);
+    size_t shared = a_sequence.len < b_sequence.len
+        ? a_sequence.len
+        : b_sequence.len;
+    for (size_t index = 0; index < shared; index++) {
+        if (a_sequence.data[index] < b_sequence.data[index]) return -1;
+        if (a_sequence.data[index] > b_sequence.data[index]) return 1;
+    }
+    if (a_sequence.len < b_sequence.len) return -1;
+    if (a_sequence.len > b_sequence.len) return 1;
     return 0;
+}
+
+uint64_t tsc_str_semantic_hash(const tsc_str_t* string) {
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(string);
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (size_t index = 0; index < sequence.len; index++) {
+        uint16_t unit = sequence.data[index];
+        hash ^= (uint64_t)(unit & 0xffu);
+        hash *= 0x100000001b3ULL;
+        hash ^= (uint64_t)(unit >> 8);
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
 }
 
 double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b) {
@@ -704,27 +865,7 @@ size_t tsc_str_utf16_length(const tsc_str_t* s) {
     size_t cached = s->utf16_len_plus_one;
 #endif
     if (cached != 0) return cached - 1;
-    size_t count = 0;
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t code_point = 0xfffd;
-        size_t width = 1;
-        decode_utf8_at(s, pos, &code_point, &width);
-        count += code_point > 0xffff ? 2 : 1;
-        pos += width ? width : 1;
-    }
-#ifdef TSC_THREADS
-    /* The projection is immutable and idempotent, so racing readers derive
-     * and publish the same value. Keep the lazy cache itself race-free. */
-    __atomic_store_n(
-        &((tsc_str_t*)s)->utf16_len_plus_one,
-        count + 1,
-        __ATOMIC_RELAXED
-    );
-#else
-    ((tsc_str_t*)s)->utf16_len_plus_one = count + 1;
-#endif
-    return count;
+    return string_utf16_sequence(s).len;
 }
 
 double tsc_str_length(const tsc_str_t* s) {
@@ -745,35 +886,10 @@ static bool tsc_str_utf16_code_unit_at(
     size_t target,
     uint16_t* out
 ) {
-    size_t code_unit_index = 0;
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t code_point = 0xfffd;
-        size_t width = 1;
-        decode_utf8_at(s, pos, &code_point, &width);
-        if (code_point > 0xffff) {
-            uint32_t shifted = code_point - 0x10000u;
-            uint16_t lead = (uint16_t)(0xd800u + (shifted >> 10));
-            uint16_t trail = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
-            if (code_unit_index == target) {
-                *out = lead;
-                return true;
-            }
-            if (code_unit_index + 1 == target) {
-                *out = trail;
-                return true;
-            }
-            code_unit_index += 2;
-        } else {
-            if (code_unit_index == target) {
-                *out = (uint16_t)code_point;
-                return true;
-            }
-            code_unit_index++;
-        }
-        pos += width ? width : 1;
-    }
-    return false;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    if (target >= sequence.len) return false;
+    *out = sequence.data[target];
+    return true;
 }
 
 static tsc_str_t* tsc_str_from_utf16_code_unit(uint16_t code_unit) {
@@ -813,13 +929,13 @@ double tsc_str_char_code_at(const tsc_str_t* s, double idx) {
 
 double tsc_str_code_point_at(const tsc_str_t* s, double idx) {
     size_t target = 0;
-    uint16_t first = 0;
-    if (!string_nonnegative_integer_index(idx, &target) ||
-        !tsc_str_utf16_code_unit_at(s, target, &first)) return NAN;
+    if (!string_nonnegative_integer_index(idx, &target)) return NAN;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    if (target >= sequence.len) return NAN;
+    uint16_t first = sequence.data[target];
     if (is_high_surrogate(first)) {
-        uint16_t second = 0;
-        if (tsc_str_utf16_code_unit_at(s, target + 1, &second) && is_low_surrogate(second)) {
-            return (double)surrogate_pair_to_code_point(first, second);
+        if (target + 1 < sequence.len && is_low_surrogate(sequence.data[target + 1])) {
+            return (double)surrogate_pair_to_code_point(first, sequence.data[target + 1]);
         }
     }
     return (double)first;
@@ -827,53 +943,54 @@ double tsc_str_code_point_at(const tsc_str_t* s, double idx) {
 
 bool tsc_str_is_well_formed(const tsc_str_t* string) {
     if (!string) return true;
-    size_t offset = 0;
-    while (offset < string->len) {
-        uint32_t code_point = 0;
-        size_t width = 0;
-        if (!decode_wtf8_at_strict(string, offset, &code_point, &width) ||
-            (code_point >= 0xd800 && code_point <= 0xdfff)) {
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(string);
+    for (size_t index = 0; index < sequence.len; index++) {
+        uint16_t unit = sequence.data[index];
+        if (is_high_surrogate(unit)) {
+            if (index + 1 >= sequence.len ||
+                !is_low_surrogate(sequence.data[index + 1])) return false;
+            index++;
+        } else if (is_low_surrogate(unit)) {
             return false;
         }
-        offset += width;
     }
     return true;
 }
 
 tsc_str_t* tsc_str_to_well_formed(const tsc_str_t* string) {
     if (!string) return tsc_str_from_lit("", 0);
-    if (string->len == 0 || tsc_str_is_well_formed(string)) return (tsc_str_t*)string;
-    if (string->len > SIZE_MAX / 3) tsc_panic("well-formed string output is too large");
-
-    size_t output_length = 0;
-    size_t offset = 0;
-    while (offset < string->len) {
-        uint32_t code_point = 0;
-        size_t width = 0;
-        bool valid = decode_wtf8_at_strict(string, offset, &code_point, &width);
-        bool surrogate = valid && code_point >= 0xd800 && code_point <= 0xdfff;
-        output_length += !valid || surrogate ? 3 : width;
-        offset += valid ? width : 1;
-    }
-
-    tsc_str_t* result = str_alloc(output_length);
-    char* output = (char*)result->data;
-    size_t output_offset = 0;
-    offset = 0;
-    while (offset < string->len) {
-        uint32_t code_point = 0;
-        size_t width = 0;
-        bool valid = decode_wtf8_at_strict(string, offset, &code_point, &width);
-        bool surrogate = valid && code_point >= 0xd800 && code_point <= 0xdfff;
-        if (!valid || surrogate) {
-            output_offset += write_utf8_code_point(output + output_offset, 0xfffd);
-        } else {
-            memcpy(output + output_offset, string->data + offset, width);
-            output_offset += width;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(string);
+    bool changed = false;
+    for (size_t index = 0; index < sequence.len; index++) {
+        uint16_t unit = sequence.data[index];
+        if (is_high_surrogate(unit)) {
+            if (index + 1 < sequence.len &&
+                is_low_surrogate(sequence.data[index + 1])) {
+                index++;
+            } else {
+                changed = true;
+            }
+        } else if (is_low_surrogate(unit)) {
+            changed = true;
         }
-        offset += valid ? width : 1;
     }
-    return result;
+    if (!changed) return (tsc_str_t*)string;
+    uint16_t* repaired = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(uint16_t) * (sequence.len ? sequence.len : 1)
+    );
+    memcpy(repaired, sequence.data, sequence.len * sizeof(uint16_t));
+    for (size_t index = 0; index < sequence.len; index++) {
+        if (is_high_surrogate(repaired[index])) {
+            if (index + 1 < sequence.len && is_low_surrogate(repaired[index + 1])) {
+                index++;
+            } else {
+                repaired[index] = 0xfffd;
+            }
+        } else if (is_low_surrogate(repaired[index])) {
+            repaired[index] = 0xfffd;
+        }
+    }
+    return string_from_utf16_range(repaired, 0, sequence.len);
 }
 
 int64_t string_clamped_position(double value, int64_t len) {
@@ -885,27 +1002,44 @@ int64_t string_clamped_position(double value, int64_t len) {
     return (int64_t)truncated;
 }
 
+static bool utf16_sequence_matches(
+    const tsc_utf16_sequence_t* haystack,
+    size_t offset,
+    const tsc_utf16_sequence_t* needle
+) {
+    if (offset > haystack->len || needle->len > haystack->len - offset) return false;
+    return memcmp(
+        haystack->data + offset,
+        needle->data,
+        needle->len * sizeof(uint16_t)
+    ) == 0;
+}
+
 double tsc_str_index_of(const tsc_str_t* h, const tsc_str_t* n, double position) {
-    int64_t start_i = string_clamped_position(position, (int64_t)h->len);
+    tsc_utf16_sequence_t haystack = string_utf16_sequence(h);
+    tsc_utf16_sequence_t needle = string_utf16_sequence(n);
+    int64_t start_i = string_clamped_position(position, (int64_t)haystack.len);
     size_t start = (size_t)start_i;
-    if (n->len == 0) return (double)start;
-    if (n->len > h->len) return -1.0;
-    for (size_t i = start; i + n->len <= h->len; i++) {
-        if (memcmp(h->data + i, n->data, n->len) == 0) return (double)i;
+    if (needle.len == 0) return (double)start;
+    if (needle.len > haystack.len) return -1.0;
+    for (size_t index = start; index <= haystack.len - needle.len; index++) {
+        if (utf16_sequence_matches(&haystack, index, &needle)) return (double)index;
     }
     return -1.0;
 }
 
 double tsc_str_last_index_of(const tsc_str_t* h, const tsc_str_t* n, double position) {
-    int64_t pos_i = string_clamped_position(position, (int64_t)h->len);
+    tsc_utf16_sequence_t haystack = string_utf16_sequence(h);
+    tsc_utf16_sequence_t needle = string_utf16_sequence(n);
+    int64_t pos_i = string_clamped_position(position, (int64_t)haystack.len);
     size_t pos = (size_t)pos_i;
-    if (n->len == 0) return (double)pos;
-    if (n->len > h->len) return -1.0;
-    size_t max_start = h->len - n->len;
-    size_t i = (pos > max_start ? max_start : pos) + 1;
-    while (i > 0) {
-        i--;
-        if (memcmp(h->data + i, n->data, n->len) == 0) return (double)i;
+    if (needle.len == 0) return (double)pos;
+    if (needle.len > haystack.len) return -1.0;
+    size_t max_start = haystack.len - needle.len;
+    size_t index = (pos > max_start ? max_start : pos) + 1;
+    while (index > 0) {
+        index--;
+        if (utf16_sequence_matches(&haystack, index, &needle)) return (double)index;
     }
     return -1.0;
 }
@@ -915,32 +1049,44 @@ bool tsc_str_includes(const tsc_str_t* h, const tsc_str_t* n, double position) {
 }
 
 bool tsc_str_starts_with(const tsc_str_t* s, const tsc_str_t* p, double position) {
-    int64_t start_i = string_clamped_position(position, (int64_t)s->len);
+    tsc_utf16_sequence_t string = string_utf16_sequence(s);
+    tsc_utf16_sequence_t prefix = string_utf16_sequence(p);
+    int64_t start_i = string_clamped_position(position, (int64_t)string.len);
     size_t start = (size_t)start_i;
-    if (p->len > s->len - start) return false;
-    return memcmp(s->data + start, p->data, p->len) == 0;
+    return utf16_sequence_matches(&string, start, &prefix);
 }
 
 bool tsc_str_ends_with(const tsc_str_t* s, const tsc_str_t* p, double end_position) {
-    int64_t end_i = string_clamped_position(end_position, (int64_t)s->len);
+    tsc_utf16_sequence_t string = string_utf16_sequence(s);
+    tsc_utf16_sequence_t suffix = string_utf16_sequence(p);
+    int64_t end_i = string_clamped_position(end_position, (int64_t)string.len);
     size_t end = (size_t)end_i;
-    if (p->len > end) return false;
-    return memcmp(s->data + (end - p->len), p->data, p->len) == 0;
+    if (suffix.len > end) return false;
+    return utf16_sequence_matches(&string, end - suffix.len, &suffix);
+}
+
+static int64_t relative_string_index(double value, int64_t length) {
+    if (isnan(value)) return 0;
+    if (isinf(value)) return value < 0 ? 0 : length;
+    double integer = value < 0 ? ceil(value) : floor(value);
+    if (integer < 0) {
+        double relative = (double)length + integer;
+        return relative < 0 ? 0 : (int64_t)relative;
+    }
+    return integer > (double)length ? length : (int64_t)integer;
 }
 
 tsc_str_t* tsc_str_slice(const tsc_str_t* s, double start, double end) {
-    int64_t slen = (int64_t)s->len;
-    int64_t i0 = (int64_t)start;
-    int64_t i1 = (int64_t)end;
-    if (i0 < 0) i0 = slen + i0;
-    if (i1 < 0) i1 = slen + i1;
-    if (i0 < 0) i0 = 0;
-    if (i1 > slen) i1 = slen;
-    if (i0 > i1) i0 = i1;
-    size_t n = (size_t)(i1 - i0);
-    tsc_str_t* r = str_alloc(n);
-    memcpy((char*)r->data, s->data + i0, n);
-    return r;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    int64_t length = (int64_t)sequence.len;
+    int64_t from = relative_string_index(start, length);
+    int64_t to = relative_string_index(end, length);
+    if (to < from) to = from;
+    return string_from_utf16_range(
+        sequence.data,
+        (size_t)from,
+        (size_t)(to - from)
+    );
 }
 
 int64_t substring_index(double value, int64_t len) {
@@ -953,7 +1099,8 @@ int64_t substring_index(double value, int64_t len) {
 }
 
 tsc_str_t* tsc_str_substring(const tsc_str_t* s, double start, double end) {
-    int64_t slen = (int64_t)s->len;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    int64_t slen = (int64_t)sequence.len;
     int64_t i0 = substring_index(start, slen);
     int64_t i1 = substring_index(end, slen);
     if (i0 > i1) {
@@ -961,10 +1108,11 @@ tsc_str_t* tsc_str_substring(const tsc_str_t* s, double start, double end) {
         i0 = i1;
         i1 = t;
     }
-    size_t n = (size_t)(i1 - i0);
-    tsc_str_t* r = str_alloc(n);
-    memcpy((char*)r->data, s->data + i0, n);
-    return r;
+    return string_from_utf16_range(
+        sequence.data,
+        (size_t)i0,
+        (size_t)(i1 - i0)
+    );
 }
 
 int64_t substr_start_index(double value, int64_t len) {
@@ -987,12 +1135,11 @@ int64_t substr_count(double value, int64_t remaining) {
 }
 
 tsc_str_t* tsc_str_substr(const tsc_str_t* s, double start, double length) {
-    int64_t slen = (int64_t)s->len;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    int64_t slen = (int64_t)sequence.len;
     int64_t i0 = substr_start_index(start, slen);
     int64_t n = substr_count(length, slen - i0);
-    tsc_str_t* r = str_alloc((size_t)n);
-    memcpy((char*)r->data, s->data + i0, (size_t)n);
-    return r;
+    return string_from_utf16_range(sequence.data, (size_t)i0, (size_t)n);
 }
 
 tsc_str_t* tsc_str_to_upper(const tsc_str_t* s) {
@@ -1156,35 +1303,48 @@ tsc_str_t* tsc_str_repeat(const tsc_str_t* s, double n) {
 }
 
 tsc_str_t* tsc_str_pad_start(const tsc_str_t* s, double target, const tsc_str_t* pad) {
-    if (target <= (double)s->len || pad->len == 0) return (tsc_str_t*)s;
-    size_t t = (size_t)target;
-    size_t need = t - s->len;
-    tsc_str_t* r = str_alloc(t);
-    char* dst = (char*)r->data;
-    size_t filled = 0;
-    while (filled < need) {
-        size_t chunk = (need - filled) < pad->len ? (need - filled) : pad->len;
-        memcpy(dst + filled, pad->data, chunk);
-        filled += chunk;
+    tsc_utf16_sequence_t string = string_utf16_sequence(s);
+    tsc_utf16_sequence_t filler = string_utf16_sequence(pad);
+    if (isnan(target) || target <= (double)string.len || filler.len == 0) {
+        return (tsc_str_t*)s;
     }
-    memcpy(dst + need, s->data, s->len);
-    return r;
+    if (!isfinite(target) || target > (double)(SIZE_MAX / sizeof(uint16_t))) {
+        tsc_panic("padded String is too large");
+    }
+    size_t target_length = (size_t)floor(target);
+    size_t fill_length = target_length - string.len;
+    uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(uint16_t) * (target_length ? target_length : 1)
+    );
+    for (size_t index = 0; index < fill_length; index++) {
+        output[index] = filler.data[index % filler.len];
+    }
+    memcpy(
+        output + fill_length,
+        string.data,
+        string.len * sizeof(uint16_t)
+    );
+    return string_from_utf16_range(output, 0, target_length);
 }
 
 tsc_str_t* tsc_str_pad_end(const tsc_str_t* s, double target, const tsc_str_t* pad) {
-    if (target <= (double)s->len || pad->len == 0) return (tsc_str_t*)s;
-    size_t t = (size_t)target;
-    size_t need = t - s->len;
-    tsc_str_t* r = str_alloc(t);
-    char* dst = (char*)r->data;
-    memcpy(dst, s->data, s->len);
-    size_t filled = 0;
-    while (filled < need) {
-        size_t chunk = (need - filled) < pad->len ? (need - filled) : pad->len;
-        memcpy(dst + s->len + filled, pad->data, chunk);
-        filled += chunk;
+    tsc_utf16_sequence_t string = string_utf16_sequence(s);
+    tsc_utf16_sequence_t filler = string_utf16_sequence(pad);
+    if (isnan(target) || target <= (double)string.len || filler.len == 0) {
+        return (tsc_str_t*)s;
     }
-    return r;
+    if (!isfinite(target) || target > (double)(SIZE_MAX / sizeof(uint16_t))) {
+        tsc_panic("padded String is too large");
+    }
+    size_t target_length = (size_t)floor(target);
+    uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(uint16_t) * (target_length ? target_length : 1)
+    );
+    memcpy(output, string.data, string.len * sizeof(uint16_t));
+    for (size_t index = string.len; index < target_length; index++) {
+        output[index] = filler.data[(index - string.len) % filler.len];
+    }
+    return string_from_utf16_range(output, 0, target_length);
 }
 
 tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl) {
@@ -1281,44 +1441,33 @@ tsc_array_t* tsc_str_split_limit_num(const tsc_str_t* s, const tsc_str_t* sep, d
 }
 
 tsc_array_t* tsc_str_chars(const tsc_str_t* s) {
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), s->len ? s->len : 1);
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t cp = 0xfffd;
-        size_t adv = 1;
-        decode_utf8_at(s, pos, &cp, &adv);
-        size_t len = utf8_len_for_code_point(cp);
-        tsc_str_t* ch = str_alloc(len);
-        write_utf8_code_point((char*)ch->data, cp);
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    tsc_array_t* a = tsc_array_new(
+        sizeof(tsc_str_t*),
+        sequence.len ? sequence.len : 1
+    );
+    for (size_t index = 0; index < sequence.len; index++) {
+        size_t width = 1;
+        if (is_high_surrogate(sequence.data[index]) && index + 1 < sequence.len &&
+            is_low_surrogate(sequence.data[index + 1])) {
+            width = 2;
+        }
+        tsc_str_t* ch = string_from_utf16_range(sequence.data, index, width);
         tsc_array_push_raw(a, &ch);
-        pos += adv ? adv : 1;
+        index += width - 1;
     }
     return a;
 }
 
 tsc_array_t* tsc_str_code_units(const tsc_str_t* s) {
-    size_t length = tsc_str_utf16_length(s);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), length ? length : 1);
-    size_t pos = 0;
-    while (pos < s->len) {
-        uint32_t code_point = 0xfffd;
-        size_t width = 1;
-        decode_utf8_at(s, pos, &code_point, &width);
-        if (code_point > 0xffff) {
-            uint32_t shifted = code_point - 0x10000u;
-            tsc_str_t* lead = tsc_str_from_utf16_code_unit(
-                (uint16_t)(0xd800u + (shifted >> 10))
-            );
-            tsc_str_t* trail = tsc_str_from_utf16_code_unit(
-                (uint16_t)(0xdc00u + (shifted & 0x3ffu))
-            );
-            tsc_array_push_raw(out, &lead);
-            tsc_array_push_raw(out, &trail);
-        } else {
-            tsc_str_t* unit = tsc_str_from_utf16_code_unit((uint16_t)code_point);
-            tsc_array_push_raw(out, &unit);
-        }
-        pos += width ? width : 1;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    tsc_array_t* out = tsc_array_new(
+        sizeof(tsc_str_t*),
+        sequence.len ? sequence.len : 1
+    );
+    for (size_t index = 0; index < sequence.len; index++) {
+        tsc_str_t* unit = tsc_str_from_utf16_code_unit(sequence.data[index]);
+        tsc_array_push_raw(out, &unit);
     }
     return out;
 }
@@ -1443,6 +1592,8 @@ tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b) {
     s->data = b->data;
     s->hash = 0;
     s->symbol_key = NULL;
+    s->utf16_len_plus_one = 0;
+    s->utf16_cache = NULL;
     return s;
 }
 static bool is_uri_always_unescaped(unsigned char code_unit) {

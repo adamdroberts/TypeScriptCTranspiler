@@ -100,6 +100,10 @@ typedef struct tsc_str {
      * code-unit length plus one. Keeping the storage byte count separate
      * prevents host codecs from being confused with ECMAScript indexing. */
     size_t utf16_len_plus_one;
+    /* Lazily published immutable canonical code-unit collection. The cache
+     * record owns its length and trailing uint16_t storage so one atomic
+     * pointer publication makes the entire projection visible. */
+    const struct tsc_utf16_storage* utf16_cache;
 } tsc_str_t;
 struct tsc_array; /* fwd */
 
@@ -158,6 +162,7 @@ tsc_str_t* tsc_str_from_char_code_values(const struct tsc_array* values);
 tsc_str_t* tsc_str_from_code_point_values(const struct tsc_array* values);
 bool tsc_str_eq(const tsc_str_t* a, const tsc_str_t* b);
 int tsc_str_cmp(const tsc_str_t* a, const tsc_str_t* b);
+uint64_t tsc_str_semantic_hash(const tsc_str_t* s);
 double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b);
 size_t tsc_str_utf16_length(const tsc_str_t* s);
 double tsc_str_length(const tsc_str_t* s);

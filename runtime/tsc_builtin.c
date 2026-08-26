@@ -51,6 +51,8 @@ tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     sym->property_key->hash = splitmix64_mix(sym->id ^ 0x53594d424f4cULL);
     if (sym->property_key->hash == 0) sym->property_key->hash = 1;
     sym->property_key->symbol_key = sym;
+    sym->property_key->utf16_len_plus_one = 0;
+    sym->property_key->utf16_cache = NULL;
     return sym;
 }
 
@@ -1358,6 +1360,8 @@ tsc_str_t* tsc_json_escape_string(const tsc_str_t* s) {
     out->len = pos;
     out->hash = 0;
     out->symbol_key = NULL;
+    out->utf16_len_plus_one = 0;
+    out->utf16_cache = NULL;
     return out;
 }
 
