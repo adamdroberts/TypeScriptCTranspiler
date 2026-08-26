@@ -259,6 +259,27 @@
     },
     {
       "kind": "implementation",
+      "id": "src/emit/index.ts#canSpecializeArrayStaticFactoryCall",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitArrayLiteralHole",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitComputedObjectLiteralDefinition",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
       "id": "runtime/tsc_array.c#array_static_from",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
@@ -269,6 +290,20 @@
       "id": "runtime/tsc_array.c#array_static_of",
       "targets": [
         "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_create_data_property",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_generator_next",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
       ]
     },
     {

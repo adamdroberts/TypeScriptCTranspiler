@@ -2391,7 +2391,10 @@ static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc
     }
     tsc_object_t* out = tsc_object_new();
     if (av->iter_pos < av->len) {
-        tsc_value_t current = TSC_ARR(tsc_value_t, av, av->iter_pos++);
+        size_t current_index = av->iter_pos++;
+        tsc_value_t current = av->box_element
+            ? av->box_element((const char*)av->data + current_index * av->es)
+            : TSC_ARR(tsc_value_t, av, current_index);
         tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(false));
         tsc_object_set(out, tsc_str_from_lit("value", 5), current);
     } else {
@@ -3209,6 +3212,46 @@ bool tsc_value_define_computed_property_descriptor(
     return tsc_value_define_property_descriptor(v, (tsc_str_t*)value_ptr(key), desc);
 }
 
+bool tsc_value_create_data_property(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t value
+) {
+    void* volatile key_gc_root = tsc_value_gc_root(key);
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)key_gc_root;
+    (void)value_gc_root;
+    key = tsc_value_to_property_key(key);
+    void* volatile property_key_gc_root = tsc_value_gc_root(key);
+    (void)property_key_gc_root;
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return tsc_value_define_symbol_property_desc(
+            v,
+            (tsc_symbol_t*)value_ptr(key),
+            value,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        );
+    }
+    return tsc_value_define_property_desc(
+        v,
+        (tsc_str_t*)value_ptr(key),
+        value,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+    );
+}
+
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
     if (!value_is_property_descriptor_object(descriptors)) {
         tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
@@ -3337,6 +3380,38 @@ bool tsc_value_object_define_setter(tsc_value_t v, tsc_str_t* key, tsc_value_t s
         true,
         true
     );
+}
+
+static tsc_str_t* computed_accessor_key(tsc_value_t key) {
+    key = tsc_value_to_property_key(key);
+    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
+        return value_known_symbol_internal_key((tsc_symbol_t*)value_ptr(key));
+    }
+    return (tsc_str_t*)value_ptr(key);
+}
+
+bool tsc_value_object_define_computed_getter(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t getter
+) {
+    void* volatile key_gc_root = tsc_value_gc_root(key);
+    void* volatile getter_gc_root = tsc_value_gc_root(getter);
+    (void)key_gc_root;
+    (void)getter_gc_root;
+    return tsc_value_object_define_getter(v, computed_accessor_key(key), getter);
+}
+
+bool tsc_value_object_define_computed_setter(
+    tsc_value_t v,
+    tsc_value_t key,
+    tsc_value_t setter
+) {
+    void* volatile key_gc_root = tsc_value_gc_root(key);
+    void* volatile setter_gc_root = tsc_value_gc_root(setter);
+    (void)key_gc_root;
+    (void)setter_gc_root;
+    return tsc_value_object_define_setter(v, computed_accessor_key(key), setter);
 }
 
 static tsc_value_t lookup_accessor(tsc_value_t v, tsc_str_t* key, const char* field, size_t field_len, const char* nullish_message) {
@@ -4953,6 +5028,7 @@ tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
     if (
         value_is_box(source) &&
         value_tag(source) == TSC_VALUE_TAG_ARRAY &&
+        ((tsc_array_t*)value_ptr(source))->lazy_next == NULL &&
         tsc_value_eq(method, tsc_value_symbol_iterator_method_value())
     ) {
         record.kind = TSC_SYNC_ITERATOR_ARRAY;

@@ -97,6 +97,43 @@ function nativeSource(plans: readonly KeyPlan[], stressKeys: readonly string[]):
         }
         console.log(sharedLine);
 
+        var dataSymbol = Symbol("literal-data");
+        var methodSymbol = Symbol("literal-method");
+        var accessorSymbol = Symbol("literal-accessor");
+        var literalTrace = 0;
+        var backing = 1;
+        function literalKey(key, label) { literalTrace = literalTrace * 10 + label; return key; }
+        var literal = {
+            [literalKey(dataSymbol, 1)]: (literalTrace = literalTrace * 10 + 2, 11),
+            [literalKey(methodSymbol, 3)]() {
+                literalTrace = literalTrace * 10 + 6;
+                return this[dataSymbol];
+            },
+            get [literalKey(accessorSymbol, 4)]() {
+                literalTrace = literalTrace * 10 + 8;
+                return backing;
+            },
+            set [literalKey(accessorSymbol, 5)](value) {
+                literalTrace = literalTrace * 10 + 7;
+                backing = value;
+            }
+        };
+        var methodResult = literal[methodSymbol]();
+        literal[accessorSymbol] = 7;
+        var accessorResult = literal[accessorSymbol];
+        var dataDescriptor = Object.getOwnPropertyDescriptor(literal, dataSymbol);
+        var methodDescriptor = Object.getOwnPropertyDescriptor(literal, methodSymbol);
+        var accessorDescriptor = Object.getOwnPropertyDescriptor(literal, accessorSymbol);
+        console.log(
+            "literal:" + literalTrace + ":" + String(methodResult) + ":" +
+            String(accessorResult) + ":" + String(dataDescriptor.writable) + ":" +
+            String(dataDescriptor.enumerable) + ":" + String(dataDescriptor.configurable) + ":" +
+            String(methodDescriptor.writable) + ":" + String(methodDescriptor.enumerable) + ":" +
+            String(methodDescriptor.configurable) + ":" + String(typeof accessorDescriptor.get) + ":" +
+            String(typeof accessorDescriptor.set) + ":" + String(accessorDescriptor.enumerable) + ":" +
+            String(accessorDescriptor.configurable)
+        );
+
         // One representative wide object exercises the same canonical key
         // path without treating its width as completion evidence.
         var stressKeys = [${stressKeys.map((key) => JSON.stringify(key)).join(", ")}];
@@ -118,6 +155,7 @@ test("computed property operations share one runtime key-coercion model", async 
         const expected = [
             ...plans.map((_, index) => expectedLine(index)),
             expectedSharedLine(plans),
+            "literal:12345678:11:7:true:true:true:true:true:true:function:function:true:true",
             `stress:${stressKeys.reduce((sum, _, index) => sum + index, 0)}`,
         ];
         for (const noGc of [false, true]) {

@@ -38770,6 +38770,47 @@ class Emitter {
         return stable;
     }
 
+    private emitArrayLiteralHole(
+        pieces: string[],
+        array: string,
+        elementType: CType,
+        prefix: string,
+    ): void {
+        const hole = this.freshTemp(prefix);
+        pieces.push(`${elementType.c} ${hole} = ${this.zeroValue(elementType)}`);
+        pieces.push(
+            `tsc_array_push_raw(${array}, &${hole}); tsc_array_mark_hole(${array}, ${array}->len - 1)`,
+        );
+    }
+
+    private emitComputedObjectLiteralDefinition(
+        pieces: string[],
+        object: string,
+        key: EmitResult,
+        keyNode: ts.Expression,
+        value: EmitResult,
+        valueNode: ts.Node,
+        kind: "data" | "getter" | "setter",
+        prefix: string,
+    ): void {
+        const keyTemp = this.freshTemp(`${prefix}_key`);
+        const keyRoot = this.freshTemp(`${prefix}_key_root`);
+        const valueTemp = this.freshTemp(`${prefix}_value`);
+        const valueRoot = this.freshTemp(`${prefix}_value_root`);
+        const define = kind === "data"
+            ? "tsc_value_create_data_property"
+            : kind === "getter"
+                ? "tsc_value_object_define_computed_getter"
+                : "tsc_value_object_define_computed_setter";
+        pieces.push(
+            `tsc_value_t ${keyTemp} = ${this.coerce(key, T_VALUE, keyNode)}`,
+            `void* volatile ${keyRoot} = tsc_value_gc_root(${keyTemp}); (void)${keyRoot}`,
+            `tsc_value_t ${valueTemp} = ${this.coerce(value, T_VALUE, valueNode)}`,
+            `void* volatile ${valueRoot} = tsc_value_gc_root(${valueTemp}); (void)${valueRoot}`,
+            `if (!${define}(tsc_value_object(${object}), ${keyTemp}, ${valueTemp})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
+        );
+    }
+
     private emitLazyMultiYieldArrayLiteral(
         al: ts.ArrayLiteralExpression,
         build: (node: ts.Expression) => EmitResult,
@@ -38786,9 +38827,7 @@ class Emitter {
             pieces.push(`tsc_array_t* ${array} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`);
             for (const element of al.elements) {
                 if (element.kind === ts.SyntaxKind.OmittedExpression) {
-                    const hole = this.freshTemp("_lazy_dyn_hole");
-                    pieces.push(`tsc_value_t ${hole} = tsc_value_undefined()`);
-                    pieces.push(`tsc_array_push_raw(${array}, &${hole}); tsc_array_mark_hole(${array}, ${array}->len - 1)`);
+                    this.emitArrayLiteralHole(pieces, array, T_VALUE, "_lazy_dyn_hole");
                     continue;
                 }
                 if (ts.isSpreadElement(element)) {
@@ -38797,10 +38836,13 @@ class Emitter {
                         const src = this.freshTemp("_lazy_dynspread_src");
                         const index = this.freshTemp("_lazy_dynspread_i");
                         const value = this.freshTemp("_lazy_dynspread_v");
-                        const elem = source.ty.elem!;
-                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${index})`, ty: elem };
-                        const boxed = this.coerce(current, T_VALUE, element.expression);
-                        pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${array}, &${value}); } }`);
+                        const sourceValue = this.freshTemp("_lazy_dynspread_value");
+                        const boxedSource = this.coerce(
+                            { c: src, ty: source.ty },
+                            T_VALUE,
+                            element.expression,
+                        );
+                        pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; tsc_value_t ${sourceValue} = ${boxedSource}; for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { tsc_value_t ${value} = tsc_value_get_index(${sourceValue}, (double)${index}); tsc_array_push_raw(${array}, &${value}); } }`);
                         continue;
                     }
                     if (source.ty.kind === "value" || source.ty.kind === "string") {
@@ -38830,9 +38872,7 @@ class Emitter {
         ];
         for (const element of al.elements) {
             if (element.kind === ts.SyntaxKind.OmittedExpression) {
-                const hole = this.freshTemp("_lazy_hole");
-                pieces.push(`${elemType.c} ${hole} = ${this.zeroValue(elemType)}`);
-                pieces.push(`tsc_array_push_raw(${array}, &${hole}); tsc_array_mark_hole(${array}, ${array}->len - 1)`);
+                this.emitArrayLiteralHole(pieces, array, elemType, "_lazy_hole");
                 continue;
             }
             if (ts.isSpreadElement(element)) {
@@ -38902,23 +38942,55 @@ class Emitter {
                     continue;
                 }
                 if (ts.isMethodDeclaration(property)) {
-                    const name = this.staticPropertyName(property.name) ??
-                        unsupported(property.name, "lazy multi-yield object method keys must be static");
                     const value = this.emitClosureExpression(property);
+                    const staticName = this.staticPropertyName(property.name);
+                    if (staticName === null) {
+                        if (!ts.isComputedPropertyName(property.name)) {
+                            unsupported(property.name, "lazy multi-yield object method key is not representable");
+                        }
+                        const key = build(property.name.expression);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            object,
+                            key,
+                            property.name.expression,
+                            value,
+                            property,
+                            "data",
+                            "_lazy_obj_method",
+                        );
+                        continue;
+                    }
                     pieces.push(
-                        `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, property)})`,
+                        `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${this.coerce(value, T_VALUE, property)})`,
                     );
                     continue;
                 }
                 if (ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
-                    const name = this.staticPropertyName(property.name) ??
-                        unsupported(property.name, "lazy multi-yield object accessor keys must be static");
                     const value = this.emitClosureExpression(property);
+                    const staticName = this.staticPropertyName(property.name);
+                    if (staticName === null) {
+                        if (!ts.isComputedPropertyName(property.name)) {
+                            unsupported(property.name, "lazy multi-yield object accessor key is not representable");
+                        }
+                        const key = build(property.name.expression);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            object,
+                            key,
+                            property.name.expression,
+                            value,
+                            property,
+                            ts.isGetAccessorDeclaration(property) ? "getter" : "setter",
+                            "_lazy_obj_accessor",
+                        );
+                        continue;
+                    }
                     const define = ts.isGetAccessorDeclaration(property)
                         ? "tsc_value_object_define_getter"
                         : "tsc_value_object_define_setter";
                     pieces.push(
-                        `${define}(tsc_value_object(${object}), tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, property)})`,
+                        `${define}(tsc_value_object(${object}), tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${this.coerce(value, T_VALUE, property)})`,
                     );
                     continue;
                 }
@@ -38929,11 +39001,16 @@ class Emitter {
                             unsupported(property.name, "lazy multi-yield dynamic object keys must be computed or static");
                         }
                         const key = build(property.name.expression);
-                        const keyTemp = this.freshTemp("_lazy_obj_key");
-                        pieces.push(`${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, property.name.expression)}`);
                         const value = build(property.initializer);
-                        pieces.push(
-                            `tsc_object_set(${object}, ${keyTemp}, ${this.coerce(value, T_VALUE, property.initializer)})`,
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            object,
+                            key,
+                            property.name.expression,
+                            value,
+                            property.initializer,
+                            "data",
+                            "_lazy_obj_property",
                         );
                         continue;
                     }
@@ -41126,8 +41203,10 @@ class Emitter {
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`
             );
             for (const e of al.elements) {
-                if (e.kind === ts.SyntaxKind.OmittedExpression)
-                    unsupported(e, "sparse array literals");
+                if (e.kind === ts.SyntaxKind.OmittedExpression) {
+                    this.emitArrayLiteralHole(pieces, av, T_VALUE, "_resume_dyn_hole");
+                    continue;
+                }
                 if (ts.isSpreadElement(e)) {
                     const hasYield = !!this.singleYieldExpressionInExpression(e.expression);
                     const r = hasYield
@@ -41137,17 +41216,14 @@ class Emitter {
                         const src = this.freshTemp("_dynspread_src");
                         const idx = this.freshTemp("_dynspread_i");
                         const value = this.freshTemp("_dynspread_v");
-                        const elem = r.ty.elem!;
-                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                        const boxed = this.coerce(
-                            elem.kind === "value"
-                                ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
-                                : current,
+                        const sourceValue = this.freshTemp("_dynspread_source_value");
+                        const boxedSource = this.coerce(
+                            { c: src, ty: r.ty },
                             T_VALUE,
                             e.expression,
                         );
                         pieces.push(
-                            `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${av}, &${value}); } }`
+                            `{ tsc_array_t* const ${src} = ${r.c}; tsc_value_t ${sourceValue} = ${boxedSource}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = tsc_value_get_index(${sourceValue}, (double)${idx}); tsc_array_push_raw(${av}, &${value}); } }`
                         );
                         continue;
                     }
@@ -41228,8 +41304,10 @@ class Emitter {
             `tsc_array_t* ${av} = ${arrayCtor}(sizeof(${et.c}), ${initialCap})`
         );
         for (const e of al.elements) {
-            if (e.kind === ts.SyntaxKind.OmittedExpression)
-                unsupported(e, "sparse array literals");
+            if (e.kind === ts.SyntaxKind.OmittedExpression) {
+                this.emitArrayLiteralHole(pieces, av, et, "_resume_hole");
+                continue;
+            }
             if (ts.isSpreadElement(e)) {
                 const hasYield = !!this.singleYieldExpressionInExpression(e.expression);
                 const r = hasYield
@@ -41283,13 +41361,18 @@ class Emitter {
                         const key = this.singleYieldExpressionInExpression(prop.name.expression)
                             ? this.emitSimpleLazyResumeExpression(prop.name.expression, nextArg)
                             : this.emitExpr(prop.name.expression);
-                        const keyTemp = this.freshTemp("_obj_key");
                         const value = this.singleYieldExpressionInExpression(prop.initializer)
                             ? this.emitSimpleLazyResumeExpression(prop.initializer, nextArg)
                             : this.emitExpr(prop.initializer);
-                        pieces.push(
-                            `${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, prop.name.expression)}`,
-                            `tsc_object_set(${obj}, ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop.initializer,
+                            "data",
+                            "_resume_obj_property",
                         );
                         continue;
                     }
@@ -41301,14 +41384,48 @@ class Emitter {
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (staticName === null) {
-                        unsupported(prop.name, "dynamic object method key must be a string/number literal");
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object method key is not representable");
+                        }
+                        const key = this.singleYieldExpressionInExpression(prop.name.expression)
+                            ? this.emitSimpleLazyResumeExpression(prop.name.expression, nextArg)
+                            : this.emitExpr(prop.name.expression);
+                        const value = this.emitClosureExpression(prop);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop,
+                            "data",
+                            "_resume_obj_method",
+                        );
+                        continue;
                     }
                     fieldName = staticName;
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (staticName === null) {
-                        unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object accessor key is not representable");
+                        }
+                        const key = this.singleYieldExpressionInExpression(prop.name.expression)
+                            ? this.emitSimpleLazyResumeExpression(prop.name.expression, nextArg)
+                            : this.emitExpr(prop.name.expression);
+                        const value = this.emitClosureExpression(prop);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop,
+                            ts.isGetAccessorDeclaration(prop) ? "getter" : "setter",
+                            "_resume_obj_accessor",
+                        );
+                        continue;
                     }
                     const value = this.emitClosureExpression(prop);
                     const define = ts.isGetAccessorDeclaration(prop)
@@ -55031,6 +55148,17 @@ class Emitter {
         return `({ ${steps.join("; ")}; })`;
     }
 
+    private canSpecializeArrayStaticFactoryCall(
+        call: ts.CallExpression,
+        receiver: ts.Expression,
+        memberName: string,
+    ): boolean {
+        return (memberName === "from" || memberName === "of") &&
+            !this.isJavaScriptSourceFile(call.getSourceFile()) &&
+            ts.isIdentifier(receiver) &&
+            this.isUnshadowedGlobalIdentifier(receiver, "Array");
+    }
+
     private emitMethodCall(
         call: ts.CallExpression,
         pa: ts.PropertyAccessExpression,
@@ -56024,7 +56152,7 @@ class Emitter {
         if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "of") {
+        if (memberName === "of" && this.canSpecializeArrayStaticFactoryCall(call, recvExpr, memberName)) {
             const callType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
             if (callType.kind !== "array") unsupported(call, "Array.of result must be an array");
             const et = callType.elem!;
@@ -56071,7 +56199,7 @@ class Emitter {
             pieces.push(av);
             return { c: `({ ${pieces.join("; ")}; })`, ty: callType };
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "from") {
+        if (memberName === "from" && this.canSpecializeArrayStaticFactoryCall(call, recvExpr, memberName)) {
             // Array.from(arrayLike) — array copy for typed and dynamic arrays.
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.from needs an argument");
@@ -78257,28 +78385,16 @@ class Emitter {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
                         const key = this.emitExpr(prop.name.expression);
-                        const keyTemp = this.freshTemp("_obj_key");
                         const value = this.emitExpr(prop.initializer);
-                        if (
-                            key.ty.kind === "symbol" &&
-                            this.isSupportedWellKnownSymbolExpression(prop.name.expression)
-                        ) {
-                            pieces.push(
-                                `${T_SYMBOL.c} const ${keyTemp} = ${key.c}`,
-                                `tsc_value_set_symbol_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
-                            );
-                            continue;
-                        }
-                        if (key.ty.kind === "value") {
-                            pieces.push(
-                                `${T_VALUE.c} const ${keyTemp} = ${key.c}`,
-                                `tsc_value_set_computed_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
-                            );
-                            continue;
-                        }
-                        pieces.push(
-                            `${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, prop.name.expression)}`,
-                            `tsc_object_set(${obj}, ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop.initializer,
+                            "data",
+                            "_obj_property",
                         );
                         continue;
                     }
@@ -78290,27 +78406,44 @@ class Emitter {
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (staticName === null) {
-                        if (
-                            ts.isComputedPropertyName(prop.name) &&
-                            this.isSupportedWellKnownSymbolExpression(prop.name.expression)
-                        ) {
-                            const key = this.emitExpr(prop.name.expression);
-                            const value = this.emitClosureExpression(prop);
-                            const keyTemp = this.freshTemp("_obj_method_key");
-                            pieces.push(
-                                `${T_SYMBOL.c} const ${keyTemp} = ${this.coerce(key, T_SYMBOL, prop.name.expression)}`,
-                                `tsc_value_set_symbol_prop(tsc_value_object(${obj}), ${keyTemp}, ${this.coerce(value, T_VALUE, prop)})`,
-                            );
-                            continue;
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object method key is not representable");
                         }
-                        unsupported(prop.name, "dynamic object method key must be a string/number literal");
+                        const key = this.emitExpr(prop.name.expression);
+                        const value = this.emitClosureExpression(prop);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop,
+                            "data",
+                            "_obj_method",
+                        );
+                        continue;
                     }
                     fieldName = staticName;
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (staticName === null) {
-                        unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object accessor key is not representable");
+                        }
+                        const key = this.emitExpr(prop.name.expression);
+                        const value = this.emitClosureExpression(prop);
+                        this.emitComputedObjectLiteralDefinition(
+                            pieces,
+                            obj,
+                            key,
+                            prop.name.expression,
+                            value,
+                            prop,
+                            ts.isGetAccessorDeclaration(prop) ? "getter" : "setter",
+                            "_obj_accessor",
+                        );
+                        continue;
                     }
                     const value = this.emitClosureExpression(prop);
                     const define = ts.isGetAccessorDeclaration(prop)
@@ -78467,19 +78600,24 @@ class Emitter {
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`,
             );
             for (const e of al.elements) {
-                if (e.kind === ts.SyntaxKind.OmittedExpression)
-                    unsupported(e, "sparse array literals");
+                if (e.kind === ts.SyntaxKind.OmittedExpression) {
+                    this.emitArrayLiteralHole(pieces, av, T_VALUE, "_dyn_hole");
+                    continue;
+                }
                 if (ts.isSpreadElement(e)) {
                     const r = this.emitExpr(e.expression);
                     if (r.ty.kind === "array") {
                         const src = this.freshTemp("_dynspread_src");
                         const idx = this.freshTemp("_dynspread_i");
                         const value = this.freshTemp("_dynspread_v");
-                        const elem = r.ty.elem!;
-                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                        const boxed = this.coerce(current, T_VALUE, e.expression);
+                        const sourceValue = this.freshTemp("_dynspread_source_value");
+                        const boxedSource = this.coerce(
+                            { c: src, ty: r.ty },
+                            T_VALUE,
+                            e.expression,
+                        );
                         pieces.push(
-                            `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${av}, &${value}); } }`,
+                            `{ tsc_array_t* const ${src} = ${r.c}; tsc_value_t ${sourceValue} = ${boxedSource}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = tsc_value_get_index(${sourceValue}, (double)${idx}); tsc_array_push_raw(${av}, &${value}); } }`,
                         );
                         continue;
                     }
@@ -78518,8 +78656,10 @@ class Emitter {
             `tsc_array_t* ${av} = ${arrayCtor}(sizeof(${et.c}), ${initialCap})`,
         );
         for (const e of al.elements) {
-            if (e.kind === ts.SyntaxKind.OmittedExpression)
-                unsupported(e, "sparse array literals");
+            if (e.kind === ts.SyntaxKind.OmittedExpression) {
+                this.emitArrayLiteralHole(pieces, av, et, "_array_hole");
+                continue;
+            }
             if (ts.isSpreadElement(e)) {
                 const r = this.emitExpr(e.expression);
                 if (r.ty.kind === "value") {

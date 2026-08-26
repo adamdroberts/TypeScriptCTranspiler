@@ -931,10 +931,13 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc);
 bool tsc_value_define_computed_property_descriptor(tsc_value_t v, tsc_value_t key, tsc_value_t desc);
+bool tsc_value_create_data_property(tsc_value_t v, tsc_value_t key, tsc_value_t value);
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors);
 bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t getter);
 bool tsc_value_object_define_setter(tsc_value_t v, tsc_str_t* key, tsc_value_t setter);
+bool tsc_value_object_define_computed_getter(tsc_value_t v, tsc_value_t key, tsc_value_t getter);
+bool tsc_value_object_define_computed_setter(tsc_value_t v, tsc_value_t key, tsc_value_t setter);
 tsc_value_t tsc_value_object_lookup_getter(tsc_value_t v, tsc_str_t* key);
 tsc_value_t tsc_value_object_lookup_setter(tsc_value_t v, tsc_str_t* key);
 bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);

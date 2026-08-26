@@ -74,12 +74,17 @@
             "negativeDiagnostics": [],
             "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"],
             "implementation": [
+              "src/emit/index.ts#canSpecializeArrayStaticFactoryCall",
+              "src/emit/index.ts#emitArrayLiteralHole",
+              "src/emit/index.ts#emitComputedObjectLiteralDefinition",
               "runtime/tsc_array.c#array_static_from",
+              "runtime/tsc_value.c#tsc_value_create_data_property",
+              "runtime/tsc_value.c#tsc_value_generator_next",
               "runtime/tsc_value.c#tsc_sync_iterator_open_with_method",
               "runtime/tsc_value.c#tsc_value_construct_with_new_target"
             ]
           },
-          "rationale": "The independent property crosses iterable and array-like inputs, constructor and non-constructor receivers, constructor arity, ordered mapper validation and invocation, descriptor creation, length finalization, nullish failures, and the distinct mapper/definition/next abrupt-completion closing rules. Array.from consumes one iterator or indexed worklist; the separate generated native case stresses that worklist at representative width. The exact pinned clause query remains authoritative: any unsupported or failing scenario keeps the claim blocked."
+          "rationale": "The independent property crosses iterable, generator, sparse-array, and array-like inputs; dynamic computed iterator keys; constructor and non-constructor receivers; constructor arity; ordered mapper validation and invocation; descriptor creation and reconfiguration; length finalization; nullish failures; and the distinct mapper/definition/next abrupt-completion closing rules. JavaScript calls retain ordinary mutable method lookup while only typed calls may enter the static specialization. Array.from consumes one iterator or indexed worklist; array elisions and computed object members each traverse their canonical AST collections; the separate generated native case stresses the result item worklist at representative width. The exact pinned clause query remains authoritative: any unsupported or failing scenario keeps the claim blocked."
         }
       ],
       "rationale": "The complete Array.from algorithm is represented as one terminal worklist partition with reciprocal property, stress, declaration, runtime, and pinned Test262 evidence."

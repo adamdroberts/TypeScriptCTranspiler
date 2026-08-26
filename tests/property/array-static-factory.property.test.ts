@@ -94,6 +94,50 @@ function subjectSource(): string {
             "array-like-result-values");
         check(arrayLikeTrace === "lc2ab", "array-like-order");
 
+        var sparse = [0, , 2];
+        check(sparse.length === 3 && !Object.hasOwn(sparse, "1"),
+            "array-elision-creates-hole");
+        var sparseCopy = Array.from(sparse);
+        check(sparseCopy.length === 3 && Object.hasOwn(sparseCopy, "1") &&
+            sparseCopy[1] === undefined, "array-iterator-materializes-hole");
+
+        var computedKeyCalls = 0;
+        function iteratorKey() {
+            computedKeyCalls += 1;
+            return Symbol.iterator;
+        }
+        var computedIterable = {
+            [iteratorKey()]() {
+                return {
+                    done: false,
+                    next() {
+                        if (this.done) return { done: true };
+                        this.done = true;
+                        return { done: false, value: "computed" };
+                    }
+                };
+            }
+        };
+        var computedCopy = Array.from(computedIterable);
+        check(computedKeyCalls === 1 && computedCopy.length === 1 &&
+            computedCopy[0] === "computed", "computed-iterator-method-key-once");
+
+        function* generatorItems() { yield 2; }
+        function ReconfigurableCollector() {
+            Object.defineProperty(this, "0", {
+                value: 1,
+                writable: false,
+                enumerable: false,
+                configurable: true
+            });
+        }
+        var reconfigured = Array.from.call(ReconfigurableCollector, generatorItems());
+        var reconfiguredDescriptor = Object.getOwnPropertyDescriptor(reconfigured, "0");
+        check(reconfigured[0] === 2 && reconfigured.length === 1 &&
+            reconfiguredDescriptor && reconfiguredDescriptor.writable &&
+            reconfiguredDescriptor.enumerable && reconfiguredDescriptor.configurable,
+            "generator-create-data-property-reconfigures");
+
         var fallbackFrom = Array.from.call({}, { 0: "f", length: 1 });
         var fallbackOf = Array.of.call({}, "o", "p");
         check(Array.isArray(fallbackFrom) && fallbackFrom[0] === "f" && fallbackFrom.length === 1,
