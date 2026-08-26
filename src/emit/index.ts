@@ -55,7 +55,6 @@ import {
     filterSpecifiersByStaticAffix,
     staticStringExpressionText,
     staticStringExpressionTexts,
-    staticStringReplacementCallbackText,
 } from "../module-specifiers";
 import {
     type NativeAddonManifest,
@@ -57404,6 +57403,9 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
+        if (method === "replace" || method === "replaceAll" || method === "split") {
+            return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
+        }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
         const oneArg = (callee: string, fallback: EmitResult = missing): EmitResult => {
             const arg = args[0] ? this.emitExpr(args[0]) : fallback;
@@ -57999,47 +58001,6 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 2),
                 ], ([target, startArg, lengthArg]) => `tsc_value_method_substr(${target}, ${startArg}, ${lengthArg})`);
             }
-            case "replace":
-            case "replaceAll": {
-                if (args.length < 2) unsupported(call, `${method} expects at least 2 args`);
-                const search = this.emitExpr(args[0]!);
-                const replacement = this.emitExpr(args[1]!);
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                if (search.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: search },
-                        { value: replacement, target: T_STRING, node: args[1]! },
-                        ...ignored,
-                    ], ([s, re, repl]) => `tsc_value_string(tsc_str_replace_regex(tsc_value_as_string(${s}), ${re}, ${repl}))`);
-                }
-                const fn = method === "replace" ? "tsc_value_method_replace" : "tsc_value_method_replace_all";
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: search, target: T_VALUE, node: args[0]! },
-                    { value: replacement, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([target, pattern, repl]) => `${fn}(${target}, ${pattern}, ${repl})`);
-            }
-            case "split":
-                if (args.length < 1) unsupported(call, "split expects at least 1 arg");
-                const sep = this.emitExpr(args[0]!);
-                const limit = args[1] ? this.emitExpr(args[1]) : missing;
-                const splitIgnored = this.ignoredArgumentSpecs(args, 2);
-                if (sep.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: sep },
-                        { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
-                        ...splitIgnored,
-                    ], ([target, pattern, max]) => `tsc_value_method_split_regex(${target}, ${pattern}, ${max})`);
-                }
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: sep, target: T_VALUE, node: args[0]! },
-                    { value: limit, target: T_VALUE, node: args[1] ?? call.expression },
-                    ...splitIgnored,
-                ], ([target, pattern, max]) => `tsc_value_method_split(${target}, ${pattern}, ${max})`);
             case "match": {
                 if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
@@ -66890,6 +66851,9 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
+        if (method === "replace" || method === "replaceAll" || method === "split") {
+            return this.emitDynamicNamedPropertyCall(call, recv, method, false);
+        }
         const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
         const optionalNumberArg = (index: number, fallback: string): EmitResult => {
             const arg = args[index];
@@ -66902,16 +66866,6 @@ class Emitter {
             ...specs,
             ...this.ignoredArgumentSpecs(args, consumed),
         ];
-        const replacementArgument = (expr: ts.Expression): EmitResult => {
-            const text = staticStringReplacementCallbackText(expr);
-            if (text === null) return this.emitExpr(expr);
-            // Runtime replacement strings interpret `$` tokens; callback results are literal.
-            const escaped = text.replaceAll("$", "$$");
-            return {
-                c: `tsc_str_from_lit("${escapeCString(escaped)}", ${utf8ByteLen(escaped)})`,
-                ty: T_STRING,
-            };
-        };
         switch (method) {
             case "codePointAt": {
                 const idx = optionalNumberArg(0, "0.0");
@@ -67201,61 +67155,6 @@ class Emitter {
                     return `${fn}(${vals[0]}, ${vals[1]}, ${pad})`;
                 });
             }
-            case "replace": {
-                if (args.length < 2) unsupported(call, "replace expects at least 2 args");
-                const s = this.emitExpr(args[0]!);
-                const r = replacementArgument(args[1]!);
-                if (s.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(
-                        T_STRING,
-                        optionalStringSpecs(2, [
-                            { value: recv },
-                            { value: s },
-                            { value: r, target: T_STRING, node: args[1]! },
-                        ]),
-                        ([target, search, replacement]) => `tsc_str_replace_regex(${target}, ${search}, ${replacement})`,
-                    );
-                }
-                if (s.ty.kind !== "string") {
-                    unsupported(args[0]!, "string.replace: unsupported pattern type");
-                }
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    optionalStringSpecs(2, [
-                        { value: recv },
-                        { value: s, target: T_STRING, node: args[0]! },
-                        { value: r, target: T_STRING, node: args[1]! },
-                    ]),
-                    ([target, search, replacement]) => `tsc_str_replace(${target}, ${search}, ${replacement})`,
-                );
-            }
-            case "replaceAll": {
-                if (args.length < 2) unsupported(call, "replaceAll expects at least 2 args");
-                const s = this.emitExpr(args[0]!);
-                const r = replacementArgument(args[1]!);
-                if (s.ty.kind === "regexp") {
-                    // Force global semantics for replaceAll even if /g isn't on the pattern.
-                    // Simpler: just call tsc_str_replace_regex; works for /g regexes.
-                    return this.emitSequencedExpr(
-                        T_STRING,
-                        optionalStringSpecs(2, [
-                            { value: recv },
-                            { value: s },
-                            { value: r, target: T_STRING, node: args[1]! },
-                        ]),
-                        ([target, search, replacement]) => `tsc_str_replace_regex(${target}, ${search}, ${replacement})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    optionalStringSpecs(2, [
-                        { value: recv },
-                        { value: s, target: T_STRING, node: args[0]! },
-                        { value: r, target: T_STRING, node: args[1]! },
-                    ]),
-                    ([target, search, replacement]) => `tsc_str_replace_all(${target}, ${search}, ${replacement})`,
-                );
-            }
             case "match": {
                 if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
@@ -67332,48 +67231,6 @@ class Emitter {
                         },
                     ]),
                     ([target, regex]) => `tsc_str_search_regex(${target}, ${regex})`,
-                );
-            }
-            case "split": {
-                if (args.length < 1) unsupported(call, "split expects at least 1 arg");
-                const sep = this.emitExpr(args[0]!);
-                const limit = args[1] && !this.isUndefinedExpression(args[1]) ? this.emitExpr(args[1]) : null;
-                if (limit) requireNumber(args[1]!, limit.ty);
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                if (sep.ty.kind === "regexp") {
-                    if (limit) {
-                        return this.emitSequencedExpr(
-                            arrayType(T_STRING),
-                            [{ value: recv }, { value: sep }, { value: limit, target: T_NUMBER, node: args[1]! }, ...ignored],
-                            ([target, regex, limitArg]) => `tsc_str_split_regex_limit_num(${target}, ${regex}, ${limitArg})`,
-                        );
-                    }
-                    return this.emitSequencedExpr(
-                        arrayType(T_STRING),
-                        [{ value: recv }, { value: sep }, ...ignored],
-                        ([target, regex]) => `tsc_str_split_regex(${target}, ${regex})`,
-                    );
-                }
-                if (limit) {
-                    return this.emitSequencedExpr(
-                        arrayType(T_STRING),
-                        [
-                            { value: recv },
-                            { value: sep, target: T_STRING, node: args[0]! },
-                            { value: limit, target: T_NUMBER, node: args[1]! },
-                            ...ignored,
-                        ],
-                        ([target, separator, limitArg]) => `tsc_str_split_limit_num(${target}, ${separator}, ${limitArg})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    [
-                        { value: recv },
-                        { value: sep, target: T_STRING, node: args[0]! },
-                        ...ignored,
-                    ],
-                    ([target, separator]) => `tsc_str_split(${target}, ${separator})`,
                 );
             }
         }

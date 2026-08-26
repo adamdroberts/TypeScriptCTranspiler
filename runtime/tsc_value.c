@@ -830,28 +830,52 @@ static tsc_value_t string_at_from_values(tsc_value_t receiver, tsc_value_t index
     return result ? tsc_value_string(result) : tsc_value_undefined();
 }
 
-static tsc_value_t string_prototype_at_apply(
-    void* env,
-    tsc_value_t this_arg,
-    tsc_array_t* args
-) {
-    (void)env;
-    tsc_value_t index = args && args->len > 0
-        ? TSC_ARR(tsc_value_t, args, 0)
-        : tsc_value_undefined();
-    return string_at_from_values(this_arg, index);
-}
+typedef enum {
+    TSC_STRING_PROTOTYPE_AT,
+    TSC_STRING_PROTOTYPE_REPLACE,
+    TSC_STRING_PROTOTYPE_REPLACE_ALL,
+    TSC_STRING_PROTOTYPE_SPLIT,
+} tsc_string_prototype_operation_t;
 
 typedef struct {
     const char* name;
     size_t name_len;
     double arity;
-    tsc_generic_function_t apply;
+    tsc_string_prototype_operation_t operation;
 } tsc_string_prototype_method_t;
 
 static const tsc_string_prototype_method_t string_prototype_methods[] = {
-    { "at", 2, 1.0, string_prototype_at_apply },
+    { "at", 2, 1.0, TSC_STRING_PROTOTYPE_AT },
+    { "replace", 7, 2.0, TSC_STRING_PROTOTYPE_REPLACE },
+    { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
+    { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
 };
+
+static tsc_value_t string_prototype_method_apply(
+    void* env,
+    tsc_value_t this_arg,
+    tsc_array_t* args
+) {
+    const tsc_string_prototype_method_t* method =
+        (const tsc_string_prototype_method_t*)env;
+    tsc_value_t first = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_value_t second = args && args->len > 1
+        ? TSC_ARR(tsc_value_t, args, 1)
+        : tsc_value_undefined();
+    switch (method->operation) {
+        case TSC_STRING_PROTOTYPE_AT:
+            return string_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_REPLACE:
+            return tsc_value_method_replace(this_arg, first, second);
+        case TSC_STRING_PROTOTYPE_REPLACE_ALL:
+            return tsc_value_method_replace_all(this_arg, first, second);
+        case TSC_STRING_PROTOTYPE_SPLIT:
+            return tsc_value_method_split(this_arg, first, second);
+    }
+    tsc_panic("unknown String prototype operation");
+}
 
 static void string_prototype_install_intrinsics(tsc_value_t prototype) {
     for (
@@ -864,8 +888,8 @@ static void string_prototype_install_intrinsics(tsc_value_t prototype) {
             (tsc_object_t*)value_ptr(prototype),
             tsc_str_from_lit(method->name, method->name_len),
             tsc_value_function_builtin_named(
-                method->apply,
-                NULL,
+                string_prototype_method_apply,
+                (void*)method,
                 method->arity,
                 tsc_str_from_lit(method->name, method->name_len)
             ),
@@ -7442,35 +7466,270 @@ tsc_value_t tsc_value_method_substr(tsc_value_t recv, tsc_value_t start, tsc_val
     return tsc_value_undefined();
 }
 
-tsc_value_t tsc_value_method_replace(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) return tsc_value_undefined();
-    return tsc_value_string(tsc_str_replace(
-        (const tsc_str_t*)value_ptr(recv),
-        tsc_value_to_string(search),
-        tsc_value_to_string(replacement)
-    ));
+static void string_require_object_coercible(tsc_value_t receiver, const char* method) {
+    if (!tsc_value_is_nullish(receiver)) return;
+    tsc_throw_error(
+        TSC_ERROR_TYPE,
+        tsc_str_concat(
+            tsc_str_from_cstr(method),
+            tsc_str_from_lit(" called on null or undefined", 28)
+        )
+    );
 }
 
-tsc_value_t tsc_value_method_replace_all(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) return tsc_value_undefined();
-    return tsc_value_string(tsc_str_replace_all(
-        (const tsc_str_t*)value_ptr(recv),
-        tsc_value_to_string(search),
-        tsc_value_to_string(replacement)
-    ));
+static bool string_protocol_call(
+    tsc_value_t carrier,
+    tsc_symbol_t* symbol,
+    const tsc_value_t* values,
+    size_t value_count,
+    tsc_value_t* result
+) {
+    if (!tsc_value_is_object(carrier)) return false;
+    tsc_value_t method = tsc_value_get_symbol_prop(carrier, symbol);
+    if (tsc_value_is_nullish(method)) return false;
+    if (!tsc_value_is_callable(method)) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("String protocol property is not callable", 40)
+        );
+    }
+    tsc_array_t* args = tsc_array_new(
+        sizeof(tsc_value_t),
+        value_count ? value_count : 1
+    );
+    for (size_t index = 0; index < value_count; index++) {
+        tsc_array_push_value(args, values[index]);
+    }
+    *result = tsc_value_apply_function(method, carrier, tsc_value_array(args));
+    return true;
+}
+
+static tsc_array_t* string_match_position_worklist(
+    const tsc_str_t* source,
+    const tsc_str_t* search,
+    bool all
+) {
+    const size_t source_length = tsc_str_utf16_length(source);
+    const size_t search_length = tsc_str_utf16_length(search);
+    tsc_array_t* positions = tsc_array_new(sizeof(size_t), 4);
+    size_t from = 0;
+    while (from <= source_length) {
+        double found = tsc_str_index_of(source, search, (double)from);
+        if (found < 0.0) break;
+        size_t position = (size_t)found;
+        tsc_array_push_raw(positions, &position);
+        if (!all) break;
+        if (search_length == 0) {
+            if (position >= source_length) break;
+            from = position + 1;
+        } else {
+            from = position + search_length;
+        }
+    }
+    return positions;
+}
+
+static tsc_str_t* string_functional_replacement(
+    const tsc_str_t* source,
+    const tsc_str_t* search,
+    tsc_value_t callback,
+    bool all
+) {
+    tsc_array_t* positions = string_match_position_worklist(source, search, all);
+    if (positions->len == 0) return (tsc_str_t*)source;
+
+    const size_t source_length = tsc_str_utf16_length(source);
+    const size_t search_length = tsc_str_utf16_length(search);
+    tsc_str_t* output = tsc_str_from_lit("", 0);
+    size_t copied_through = 0;
+    for (size_t index = 0; index < positions->len; index++) {
+        const size_t position = TSC_ARR(size_t, positions, index);
+        output = tsc_str_concat(
+            output,
+            tsc_str_slice(source, (double)copied_through, (double)position)
+        );
+        tsc_array_t* callback_args = tsc_array_new(sizeof(tsc_value_t), 3);
+        tsc_array_push_value(callback_args, tsc_value_string((tsc_str_t*)search));
+        tsc_array_push_value(callback_args, tsc_value_num((double)position));
+        tsc_array_push_value(callback_args, tsc_value_string((tsc_str_t*)source));
+        tsc_value_t replacement = tsc_value_apply_function(
+            callback,
+            tsc_value_undefined(),
+            tsc_value_array(callback_args)
+        );
+        output = tsc_str_concat(output, tsc_value_to_string(replacement));
+        copied_through = position + search_length;
+    }
+    return tsc_str_concat(
+        output,
+        tsc_str_slice(source, (double)copied_through, (double)source_length)
+    );
+}
+
+static const tsc_regexp_t* string_native_regexp(tsc_value_t value) {
+    if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_OBJECT) return NULL;
+    const tsc_object_t* object = (const tsc_object_t*)value_ptr(value);
+    return object && object->is_regexp
+        ? (const tsc_regexp_t*)object->class_ptr
+        : NULL;
+}
+
+static bool string_value_is_regexp(tsc_value_t value) {
+    if (!tsc_value_is_object(value)) return false;
+    tsc_value_t matcher = tsc_value_get_symbol_prop(value, tsc_symbol_match());
+    if (!tsc_value_is_undefined(matcher)) return tsc_value_is_truthy(matcher);
+    return string_native_regexp(value) != NULL;
+}
+
+static void string_require_global_regexp(tsc_value_t search) {
+    if (!string_value_is_regexp(search)) return;
+    const tsc_str_t* flags_key = tsc_str_from_lit("flags", 5);
+    tsc_value_t flags = tsc_value_get_prop(search, flags_key);
+    if (
+        tsc_value_is_undefined(flags) &&
+        !tsc_value_has_own_prop(search, flags_key) &&
+        value_is_box(search) &&
+        value_tag(search) == TSC_VALUE_TAG_OBJECT
+    ) {
+        const tsc_object_t* object = (const tsc_object_t*)value_ptr(search);
+        if (object && object->is_regexp && object->class_ptr) {
+            flags = tsc_value_string(((const tsc_regexp_t*)object->class_ptr)->flags);
+        }
+    }
+    string_require_object_coercible(flags, "String.prototype.replaceAll flags");
+    if (!tsc_str_includes(
+        tsc_value_to_string(flags),
+        tsc_str_from_lit("g", 1),
+        0.0
+    )) {
+        tsc_throw_error(
+            TSC_ERROR_TYPE,
+            tsc_str_from_lit("String.prototype.replaceAll requires a global RegExp", 52)
+        );
+    }
+}
+
+static tsc_value_t string_replace_from_values(
+    tsc_value_t receiver,
+    tsc_value_t search,
+    tsc_value_t replacement,
+    bool all
+) {
+    string_require_object_coercible(
+        receiver,
+        all ? "String.prototype.replaceAll" : "String.prototype.replace"
+    );
+    if (all && tsc_value_is_object(search)) string_require_global_regexp(search);
+
+    tsc_value_t protocol_args[] = { receiver, replacement };
+    tsc_value_t protocol_result;
+    if (string_protocol_call(
+        search,
+        tsc_symbol_replace(),
+        protocol_args,
+        sizeof(protocol_args) / sizeof(protocol_args[0]),
+        &protocol_result
+    )) {
+        return protocol_result;
+    }
+
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    const tsc_regexp_t* native_regexp = tsc_value_has_symbol_prop(
+        search,
+        tsc_symbol_replace()
+    )
+        ? NULL
+        : string_native_regexp(search);
+    if (native_regexp) {
+        if (tsc_value_is_callable(replacement)) {
+            tsc_throw_error(
+                TSC_ERROR_TYPE,
+                tsc_str_from_lit("RegExp functional replacement is not yet supported", 50)
+            );
+        }
+        return tsc_value_string(tsc_str_replace_regex(
+            string,
+            native_regexp,
+            tsc_value_to_string(replacement)
+        ));
+    }
+    const tsc_str_t* search_string = tsc_value_to_string(search);
+    if (tsc_value_is_callable(replacement)) {
+        return tsc_value_string(string_functional_replacement(
+            string,
+            search_string,
+            replacement,
+            all
+        ));
+    }
+    const tsc_str_t* replacement_string = tsc_value_to_string(replacement);
+    return tsc_value_string(
+        all
+            ? tsc_str_replace_all(string, search_string, replacement_string)
+            : tsc_str_replace(string, search_string, replacement_string)
+    );
+}
+
+tsc_value_t tsc_value_method_replace(
+    tsc_value_t recv,
+    tsc_value_t search,
+    tsc_value_t replacement
+) {
+    return string_replace_from_values(recv, search, replacement, false);
+}
+
+tsc_value_t tsc_value_method_replace_all(
+    tsc_value_t recv,
+    tsc_value_t search,
+    tsc_value_t replacement
+) {
+    return string_replace_from_values(recv, search, replacement, true);
 }
 
 uint32_t split_limit_from_value(tsc_value_t limit) {
     if (value_is_box(limit) && value_tag(limit) == TSC_VALUE_TAG_UNDEFINED) return UINT32_MAX;
-    return split_limit_from_num(tsc_value_as_num(limit));
+    return split_limit_from_num(tsc_value_to_number(limit));
 }
 
 tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_value_t limit) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) return tsc_value_undefined();
+    string_require_object_coercible(recv, "String.prototype.split");
+    tsc_value_t protocol_args[] = { recv, limit };
+    tsc_value_t protocol_result;
+    if (string_protocol_call(
+        separator,
+        tsc_symbol_split(),
+        protocol_args,
+        sizeof(protocol_args) / sizeof(protocol_args[0]),
+        &protocol_result
+    )) {
+        return protocol_result;
+    }
+    const tsc_str_t* string = tsc_value_to_string(recv);
+    uint32_t split_limit = split_limit_from_value(limit);
+    const tsc_regexp_t* native_regexp = tsc_value_has_symbol_prop(
+        separator,
+        tsc_symbol_split()
+    )
+        ? NULL
+        : string_native_regexp(separator);
+    if (native_regexp) {
+        return tsc_value_array(value_array_from_string_array(
+            tsc_str_split_regex_limit(string, native_regexp, split_limit)
+        ));
+    }
+    const tsc_str_t* separator_string = tsc_value_to_string(separator);
+    if (split_limit == 0) {
+        return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+    }
+    if (tsc_value_is_undefined(separator)) {
+        tsc_array_t* only = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(only, tsc_value_string((tsc_str_t*)string));
+        return tsc_value_array(only);
+    }
     tsc_array_t* parts = tsc_str_split_limit(
-        (const tsc_str_t*)value_ptr(recv),
-        tsc_value_to_string(separator),
-        split_limit_from_value(limit)
+        string,
+        separator_string,
+        split_limit
     );
     return tsc_value_array(value_array_from_string_array(parts));
 }

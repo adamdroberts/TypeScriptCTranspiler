@@ -293,7 +293,7 @@
             "implementation": [
               "src/emit/index.ts#emitStringMethod",
               "runtime/tsc_value.c#string_prototype_install_intrinsics",
-              "runtime/tsc_value.c#string_prototype_at_apply",
+              "runtime/tsc_value.c#string_prototype_method_apply",
               "runtime/tsc_value.c#string_at_from_values",
               "runtime/tsc_value.c#tsc_value_get_prop",
               "runtime/tsc_value.c#tsc_value_method_at",
