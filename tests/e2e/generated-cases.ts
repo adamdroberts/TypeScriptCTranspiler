@@ -63,6 +63,11 @@ export interface StringCodeUnitListWidthSpec {
     width: number;
 }
 
+export interface StringCodePointListWidthSpec {
+    generator: "string-code-point-list-width";
+    width: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -128,6 +133,7 @@ export type GeneratedCaseSpec =
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
+    | StringCodePointListWidthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -271,6 +277,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-code-unit-list-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "string-code-point-list-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -685,6 +701,52 @@ function stringCodeUnitListWidthSource(width: number): string {
     ].join("\n");
 }
 
+function stringCodePointListWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const codePoints: number[] = [];",
+        "for (let index = 0; index < width; index++) {",
+        "    const partition = index % 4;",
+        "    const codePoint = partition === 0",
+        "        ? 65 + index % 26",
+        "        : partition === 1",
+        "            ? 0x80 + index % 0x700",
+        "            : partition === 2",
+        "                ? 0x800 + index % 0x5000",
+        "                : 0x10000 + index % 0x10000;",
+        "    codePoints.push(codePoint);",
+        "}",
+        "const text = String.fromCodePoint(...codePoints);",
+        "let codeUnitIndex = 0;",
+        "let codeUnitsMatch = true;",
+        "for (const codePoint of codePoints) {",
+        "    if (codePoint <= 0xffff) {",
+        "        if (text.charCodeAt(codeUnitIndex) !== codePoint) codeUnitsMatch = false;",
+        "        codeUnitIndex++;",
+        "    } else {",
+        "        const scalar = codePoint - 0x10000;",
+        "        const lead = 0xd800 + (scalar >> 10);",
+        "        const trail = 0xdc00 + (scalar & 0x3ff);",
+        "        if (text.charCodeAt(codeUnitIndex) !== lead || text.charCodeAt(codeUnitIndex + 1) !== trail) {",
+        "            codeUnitsMatch = false;",
+        "        }",
+        "        codeUnitIndex += 2;",
+        "    }",
+        "}",
+        "if (!Number.isNaN(text.charCodeAt(codeUnitIndex))) codeUnitsMatch = false;",
+        "let observed = 0;",
+        "let valuesMatch = true;",
+        "for (const value of text) {",
+        "    const actual = value.codePointAt(0);",
+        "    if (actual !== codePoints[observed]) valuesMatch = false;",
+        "    observed++;",
+        "}",
+        "const valid = codeUnitsMatch && valuesMatch && observed === width;",
+        'console.log("string code-point list width:", valid);',
+        "",
+    ].join("\n");
+}
+
 function reflectConstructArgumentWidthSource(width: number): string {
     return [
         `const width = ${width};`,
@@ -1070,6 +1132,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return uriPercentCodecLengthSource(spec.length);
         case "string-code-unit-list-width":
             return stringCodeUnitListWidthSource(spec.width);
+        case "string-code-point-list-width":
+            return stringCodePointListWidthSource(spec.width);
         case "reflect-construct-argument-width":
             return reflectConstructArgumentWidthSource(spec.width);
         case "arrow-formal-binding-tree-depth":

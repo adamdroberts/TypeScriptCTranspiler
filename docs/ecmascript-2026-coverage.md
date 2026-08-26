@@ -1500,7 +1500,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-the-string-constructor` — Properties of the String Constructor: exact disposition and partitions missing.
   - [ ] `sec-string.fromcharcode` — String.fromCharCode ( ..._codeUnits_ )
     - [ ] `ordered-touint16-code-unit-worklist` (intrinsic, unbounded): Arbitrary rest-argument worklist, ordered ToUint16 conversion, code-unit concatenation, abrupt completion, and intrinsic surface.
-  - [ ] `sec-string.fromcodepoint` — String.fromCodePoint ( ..._codePoints_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.fromcodepoint` — String.fromCodePoint ( ..._codePoints_ )
+    - [ ] `ordered-tonumber-code-point-worklist` (intrinsic, unbounded): Arbitrary rest-argument worklist, ordered ToNumber and range validation, UTF-16 encoding, abrupt completion, and intrinsic surface.
   - [ ] `sec-string.prototype` — String.prototype: exact disposition and partitions missing.
   - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-string-prototype-object` — Properties of the String Prototype Object: exact disposition and partitions missing.
@@ -2622,7 +2623,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Set` — standard, tracking: `todo`; no clause mapping.
 - `ShadowRealm` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `SharedArrayBuffer` — standard, tracking: `todo`; no clause mapping.
-- [ ] `String.fromCodePoint` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.fromCodePoint` — standard, tracking: `ready-for-verification`; `sec-string.fromcodepoint`.
 - [ ] `String.prototype.at` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.endsWith` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.includes` — standard, tracking: `todo`; no clause mapping.

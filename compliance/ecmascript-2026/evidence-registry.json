@@ -194,7 +194,8 @@
       "kind": "property",
       "id": "tests/property/string-static-code-units.property.test.ts",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
@@ -212,6 +213,20 @@
       }
     },
     {
+      "kind": "stress",
+      "id": "string_code_point_list_width",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+      ],
+      "stressReview": {
+        "dimension": "String.fromCodePoint runtime argument, validation, and UTF-16 materialization worklist width",
+        "parameter": "width",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native call independently stresses the canonical argument, ordered code-point validation, and mixed BMP/astral materialization worklists without treating successive argument counts as completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
       "kind": "e2e",
       "id": "string_codepoints",
       "targets": [
@@ -219,24 +234,41 @@
       ]
     },
     {
+      "kind": "e2e",
+      "id": "string_from_code_point",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_from_code_point_errors",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+      ]
+    },
+    {
       "kind": "declarationSurface",
       "id": "stdlib/lib.core.d.ts#StringConstructor",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#emitStringStatic",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#emitSpreadCallArgumentList",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
@@ -250,14 +282,16 @@
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_constructor_install_static_methods",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_string.c#string_from_numeric_values",
       "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {
@@ -272,6 +306,27 @@
       "id": "runtime/tsc_string.c#tsc_str_from_char_code_values",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_static_from_code_point_apply",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#to_valid_code_point",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_from_code_point_values",
+      "targets": [
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
       ]
     },
     {

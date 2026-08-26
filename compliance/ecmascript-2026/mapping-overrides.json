@@ -45,6 +45,14 @@
     {
       "field": "es6id",
       "match": "exact",
+      "value": "21.1.2.2",
+      "clauses": ["sec-string.fromcodepoint"],
+      "reason": "The exact legacy ES6 anchor 21.1.2.2 is the current String.fromCodePoint intrinsic clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
       "value": "26.1.2",
       "clauses": ["sec-reflect.construct"],
       "reason": "The exact legacy ES6 anchor 26.1.2 is the current Reflect.construct intrinsic clause; the semantic metadata maps independently of its filename or surrounding fixture inventory.",
@@ -140,6 +148,14 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.fromcharcode"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.fromCharCode intrinsic under test; add that exact owner while retaining the generic clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/fromCodePoint/not-a-constructor.js",
+      "sourceSha256": "663768f6e34b690530de3085ca3e112d9fdeb0830a111235457f92bca2021413",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.fromcodepoint"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.fromCodePoint intrinsic under test; add that exact owner while retaining the generic clause.",
       "reviewedBy": "tsc2c compliance review"
     }
   ]

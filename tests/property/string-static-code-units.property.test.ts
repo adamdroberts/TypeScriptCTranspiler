@@ -122,6 +122,41 @@ function subjectSource(): string {
         check(String.fromCodePoint("70", true, null) === "F\\u0001\\u0000", "code-point-conversions");
         var pointObject = { valueOf: function() { return 71; } };
         check(String.fromCodePoint(pointObject) === "G", "code-point-object");
+        check(String.fromCodePoint(-0).codePointAt(0) === 0, "code-point-negative-zero");
+
+        var pointConversionTrace = "";
+        var pointFirst = { valueOf: function() { pointConversionTrace += "x"; return 72; } };
+        var pointSecond = { valueOf: function() { pointConversionTrace += "y"; return 0x1f600; } };
+        function pointArgument(label, value) { pointConversionTrace += label; return value; }
+        var pointOrdered = String.fromCodePoint(
+            pointArgument("a", pointFirst),
+            pointArgument("b", pointSecond)
+        );
+        check(pointOrdered.codePointAt(0) === 72 && pointOrdered.codePointAt(1) === 0x1f600,
+            "code-point-object-values");
+        check(pointConversionTrace === "abxy", "code-point-evaluate-then-convert");
+
+        var pointSentinel = {};
+        var pointAbruptTrace = "";
+        var pointAbrupt = { valueOf: function() { pointAbruptTrace += "x"; throw pointSentinel; } };
+        var pointUnconverted = { valueOf: function() { pointAbruptTrace += "y"; return 73; } };
+        var pointExact = false;
+        try {
+            String.fromCodePoint(
+                (pointAbruptTrace += "c", pointAbrupt),
+                (pointAbruptTrace += "d", pointUnconverted)
+            );
+        } catch (error) { pointExact = error === pointSentinel; }
+        check(pointExact, "code-point-abrupt-identity");
+        check(pointAbruptTrace === "cdx", "code-point-abrupt-order");
+
+        var pointRangeTrace = "";
+        var invalidPoint = { valueOf: function() { pointRangeTrace += "x"; return 1.5; } };
+        var afterInvalidPoint = { valueOf: function() { pointRangeTrace += "y"; return 74; } };
+        checkThrows("code-point-range-short-circuit", RangeError, function() {
+            String.fromCodePoint(invalidPoint, afterInvalidPoint);
+        });
+        check(pointRangeTrace === "x", "code-point-range-short-circuit-order");
 
         var iteratorText = "A" + String.fromCodePoint(0x1f600) + "B";
         var iteratorValues = Array.from(iteratorText);

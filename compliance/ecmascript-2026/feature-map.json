@@ -471,9 +471,11 @@
     {
       "tag": "String.fromCodePoint",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.fromcodepoint"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.fromCodePoint intrinsic clause, whose terminal worklist partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.at",
