@@ -13,6 +13,10 @@ import {
 } from "../../src/module-request";
 import { staticStringExpressionTexts } from "../../src/module-specifiers";
 import {
+    bindingNames,
+    earlyModuleStaticSemanticsFailure,
+} from "../../src/module-static-semantics";
+import {
     complianceDir,
     hasArgument,
     readJson,
@@ -730,8 +734,18 @@ function parseFailure(
     const controlFailure = diagnostics.length === 0 && !goalMismatch
         ? earlyControlFlowFailure(sourceFile)
         : null;
-    if (diagnostics.length === 0 && !goalMismatch && !controlFailure) return null;
-    const formatted = controlFailure ?? (diagnostics.length > 0
+    const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && goal === "module"
+        ? earlyModuleStaticSemanticsFailure(sourceFile)
+        : null;
+    if (diagnostics.length === 0 && !goalMismatch && !controlFailure && !moduleFailure) return null;
+    const formatted = controlFailure ?? (moduleFailure
+        ? (() => {
+            const start = sourceFile.getLineAndCharacterOfPosition(
+                Math.max(0, moduleFailure.node.getStart(sourceFile)),
+            );
+            return `${filename}:${start.line + 1}:${start.character + 1}: ${moduleFailure.message}`;
+        })()
+        : diagnostics.length > 0
         ? diagnostics.map((diagnostic) => {
             const start = diagnostic.start ?? 0;
             const location = sourceFile.getLineAndCharacterOfPosition(start);
@@ -757,16 +771,6 @@ function moduleName(name: ts.ModuleExportName): string {
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
     return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false);
-}
-
-function bindingNames(name: ts.BindingName): string[] {
-    if (ts.isIdentifier(name)) return [name.text];
-    const result: string[] = [];
-    for (const element of name.elements) {
-        if (ts.isOmittedExpression(element)) continue;
-        result.push(...bindingNames(element.name));
-    }
-    return result;
 }
 
 function moduleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {

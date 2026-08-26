@@ -43,6 +43,10 @@ import {
     moduleRequestFromDeclaration,
     staticModuleRequestResolutionError,
 } from "./module-request";
+import {
+    earlyModuleStaticSemanticsFailure,
+    type ModuleStaticSemanticsFailure,
+} from "./module-static-semantics";
 
 export interface CompileOptions {
     entry: string;
@@ -187,6 +191,30 @@ async function findExactLibrary(
 interface PermanentLimitDiagnostic {
     node: ts.Node;
     message: string;
+}
+
+function moduleStaticSemanticsDiagnostics(
+    program: ts.Program,
+    moduleRoots: readonly string[] = [],
+): ModuleStaticSemanticsFailure[] {
+    const explicitModuleRoots = new Set(moduleRoots.map((filename) => path.resolve(filename)));
+    const hasModuleSyntax = (sourceFile: ts.SourceFile): boolean => sourceFile.statements.some((statement) =>
+        ts.isImportDeclaration(statement) ||
+        ts.isExportDeclaration(statement) ||
+        ts.isExportAssignment(statement) ||
+        ts.isNamespaceExportDeclaration(statement) ||
+        ts.canHaveModifiers(statement) &&
+            (ts.getModifiers(statement)?.some((modifier) =>
+                modifier.kind === ts.SyntaxKind.ExportKeyword ||
+                modifier.kind === ts.SyntaxKind.DefaultKeyword) ?? false));
+    const failures: ModuleStaticSemanticsFailure[] = [];
+    for (const sourceFile of program.getSourceFiles()) {
+        if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
+        if (!hasModuleSyntax(sourceFile) && !explicitModuleRoots.has(path.resolve(sourceFile.fileName))) continue;
+        const failure = earlyModuleStaticSemanticsFailure(sourceFile);
+        if (failure) failures.push(failure);
+    }
+    return failures;
 }
 
 function permanentLimitDiagnostics(
@@ -805,6 +833,19 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         customConditions: opts.customConditions,
     });
+    const moduleFailures = moduleStaticSemanticsDiagnostics(program, opts.moduleRoots);
+    if (moduleFailures.length > 0) {
+        for (const failure of moduleFailures) {
+            const sourceFile = failure.node.getSourceFile();
+            const location = sourceFile.getLineAndCharacterOfPosition(
+                Math.max(0, failure.node.getStart(sourceFile)),
+            );
+            writeDiagnostic(
+                `${sourceFile.fileName}:${location.line + 1}:${location.character + 1}: ${failure.message}\n`,
+            );
+        }
+        return { exitCode: 2, buildDir, mainC: "" };
+    }
     const permanent = permanentLimitDiagnostics(program, libCoreDts, {
         unsafeEval: opts.unsafeEval,
         nativeAddons,

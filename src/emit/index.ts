@@ -71673,6 +71673,7 @@ class Emitter {
 
     private staticPropertyNames(name: ts.PropertyName): string[] {
         if (ts.isIdentifier(name)) return [name.text];
+        if (ts.isPrivateIdentifier(name)) return [name.text];
         if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
             return [name.text];
         }

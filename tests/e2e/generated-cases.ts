@@ -18,6 +18,11 @@ export interface ModuleNamespaceExportWidthSpec {
     width: number;
 }
 
+export interface ModuleStaticSemanticsWidthSpec {
+    generator: "module-static-semantics-width";
+    width: number;
+}
+
 export interface GlobalNumberParseLengthSpec {
     generator: "global-number-parse-length";
     length: number;
@@ -78,6 +83,7 @@ export type GeneratedCaseSpec =
     | AsyncBindingDefaultDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
+    | ModuleStaticSemanticsWidthSpec
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
@@ -132,6 +138,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "module-namespace-export-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "module-static-semantics-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -690,6 +706,25 @@ function arrayStaticFactoryItemWidthSource(width: number): string {
     ].join("\n");
 }
 
+function moduleStaticSemanticsWidthSource(width: number): string {
+    const declarations: string[] = [];
+    const observations: string[] = [];
+    for (let index = 0; index < width; index++) {
+        declarations.push(`export const lexical_${index}: number = ${index};`);
+        observations.push(`lexical_${index}`);
+    }
+    return [
+        ...declarations,
+        `const observations: number[] = [${observations.join(", ")}];`,
+        `let valid = observations.length === ${width};`,
+        `for (let index = 0; index < ${width}; index++) {`,
+        "    if (observations[index] !== index) valid = false;",
+        "}",
+        'console.log("module static semantics width:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -701,6 +736,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":
             return moduleNamespaceExportWidthSource(spec.width);
+        case "module-static-semantics-width":
+            return moduleStaticSemanticsWidthSource(spec.width);
         case "global-number-parse-length":
             return globalNumberParseLengthSource(spec.length);
         case "uri-percent-codec-length":
