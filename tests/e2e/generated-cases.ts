@@ -53,6 +53,11 @@ export interface SwitchCaseBlockFunctionWorklistWidthSpec {
     width: number;
 }
 
+export interface SwitchCaseBlockGeneratorCaptureWidthSpec {
+    generator: "switch-caseblock-generator-capture-width";
+    width: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -64,7 +69,8 @@ export type GeneratedCaseSpec =
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
     | SwitchCaseBlockBindingDepthSpec
-    | SwitchCaseBlockFunctionWorklistWidthSpec;
+    | SwitchCaseBlockFunctionWorklistWidthSpec
+    | SwitchCaseBlockGeneratorCaptureWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -178,6 +184,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "switch-caseblock-function-worklist-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "switch-caseblock-generator-capture-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -515,6 +531,40 @@ function switchCaseBlockFunctionWorklistWidthSource(width: number): string {
     ].join("\n");
 }
 
+function switchCaseBlockGeneratorCaptureWidthSource(width: number): string {
+    const yields = Array.from({ length: width }, (_, index) =>
+        `                yield caseGeneratorCapture_${index};`,
+    );
+    const declarations = Array.from({ length: width }, (_, index) =>
+        `            let caseGeneratorCapture_${index}: number = ${index};`,
+    );
+    return [
+        "function verifyCaseBlockGeneratorCaptures(): boolean {",
+        "    let selected: any;",
+        "    switch (0 as any) {",
+        "        case (selected = caseGeneratorCaptureWorklist, 0):",
+        "            function* caseGeneratorCaptureWorklist(): Generator<number, string, undefined> {",
+        ...yields,
+        `                yield caseGeneratorCaptureWorklist === selected ? ${width} : -1;`,
+        '                return "done";',
+        "            }",
+        ...declarations,
+        "            break;",
+        "    }",
+        "    if (!selected) return false;",
+        "    const iterator = selected();",
+        `    for (let index = 0; index <= ${width}; index++) {`,
+        "        const step: any = iterator.next();",
+        "        if (step.done || step.value !== index) return false;",
+        "    }",
+        "    const done: any = iterator.next();",
+        '    return done.done === true && done.value === "done";',
+        "}",
+        'console.log("switch CaseBlock generator captures:", verifyCaseBlockGeneratorCaptures());',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -540,5 +590,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return switchCaseBlockBindingDepthSource(spec.depth);
         case "switch-caseblock-function-worklist-width":
             return switchCaseBlockFunctionWorklistWidthSource(spec.width);
+        case "switch-caseblock-generator-capture-width":
+            return switchCaseBlockGeneratorCaptureWidthSource(spec.width);
     }
 }

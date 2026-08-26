@@ -16109,8 +16109,7 @@ class Emitter {
             !!declaration.name &&
             !!declaration.body &&
             !this.isGenericFunction(declaration) &&
-            !this.isAsyncDeclaration(declaration) &&
-            !declaration.asteriskToken;
+            !this.isAsyncDeclaration(declaration);
     }
 
     private identifierName(id: ts.Identifier): string {
@@ -40380,6 +40379,12 @@ class Emitter {
             }
             for (const info of outerCaptureFieldInfos) {
                 this.structDecls.line(`${info.binding.type.c}* ${info.field};`);
+                if (info.binding.rootPtr) {
+                    this.structDecls.line(`void** ${info.field}_gc_root;`);
+                }
+                if (info.binding.initializedPtr) {
+                    this.structDecls.line(`bool* ${info.field}_initialized;`);
+                }
             }
             for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
@@ -40463,6 +40468,14 @@ class Emitter {
                 envBindings.set(info.symbol, {
                     type: info.binding.type,
                     ptr: `${envLocal}->${info.field}`,
+                    ...(info.binding.rootPtr
+                        ? { rootPtr: `${envLocal}->${info.field}_gc_root` }
+                        : {}),
+                    ...(info.binding.initializedPtr ? {
+                        initializedPtr: `${envLocal}->${info.field}_initialized`,
+                        lexicalName: info.binding.lexicalName,
+                        immutable: info.binding.immutable,
+                    } : {}),
                 });
             }
         } else {
@@ -40623,6 +40636,12 @@ class Emitter {
             }
             for (const info of outerCaptureFieldInfos) {
                 buf.line(`${envVar}->${info.field} = ${info.binding.ptr};`);
+                if (info.binding.rootPtr) {
+                    buf.line(`${envVar}->${info.field}_gc_root = ${info.binding.rootPtr};`);
+                }
+                if (info.binding.initializedPtr) {
+                    buf.line(`${envVar}->${info.field}_initialized = ${info.binding.initializedPtr};`);
+                }
             }
             for (const info of compoundResumeInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);

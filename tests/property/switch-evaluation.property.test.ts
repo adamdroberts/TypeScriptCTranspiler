@@ -138,6 +138,31 @@ function subjectSource(): string {
         check(constructedCase.value === 37 && caseConstructor.name === "HoistedCaseConstructor",
             "hoisted function construction");
 
+        var caseGenerator, caseGeneratorTdz = false;
+        switch (0) {
+            case (caseGenerator = hoistedCaseGenerator,
+                (function() {
+                    try { caseGenerator().next(); }
+                    catch (error) { caseGeneratorTdz = error instanceof ReferenceError; }
+                    return 0;
+                })()):
+                function* hoistedCaseGenerator() {
+                    yield caseGeneratorLeaf;
+                    yield hoistedCaseGenerator === caseGenerator;
+                }
+                let caseGeneratorLeaf = 73;
+                break;
+        }
+        const caseGeneratorOriginal = caseGenerator;
+        const caseGeneratorIterator = caseGeneratorOriginal();
+        check(caseGeneratorTdz && caseGeneratorIterator.next().value === 73,
+            "hoisted generator lexical environment and TDZ");
+        caseGenerator = function* replacementCaseGenerator() { yield 99; };
+        check(caseGeneratorIterator.next().value === false && caseGeneratorIterator.next().done,
+            "hoisted generator live function binding");
+        check(caseGeneratorOriginal.name === "hoistedCaseGenerator" && caseGeneratorOriginal.length === 0,
+            "hoisted generator metadata");
+
         var defaultFunction, defaultFunctionTdz = false, defaultFunctionValue;
         switch (0) {
             case (defaultFunction = hoistedDefaultFunction,
