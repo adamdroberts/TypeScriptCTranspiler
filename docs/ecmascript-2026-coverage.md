@@ -1496,7 +1496,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string-constructor` — The String Constructor: exact disposition and partitions missing.
   - [ ] `sec-string-constructor-string-value` — String ( _value_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-string-constructor` — Properties of the String Constructor: exact disposition and partitions missing.
-  - [ ] `sec-string.fromcharcode` — String.fromCharCode ( ..._codeUnits_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.fromcharcode` — String.fromCharCode ( ..._codeUnits_ )
+    - [ ] `ordered-touint16-code-unit-worklist` (intrinsic, unbounded): Arbitrary rest-argument worklist, ordered ToUint16 conversion, code-unit concatenation, abrupt completion, and intrinsic surface.
   - [ ] `sec-string.fromcodepoint` — String.fromCodePoint ( ..._codePoints_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype` — String.prototype: exact disposition and partitions missing.
   - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ ): exact disposition and partitions missing.

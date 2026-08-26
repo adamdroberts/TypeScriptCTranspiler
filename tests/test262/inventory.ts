@@ -57,7 +57,8 @@ interface PathRule extends ReviewedMapping {
 
 export interface LegacyIdRule extends ReviewedMapping {
     field: "es5id" | "es6id";
-    prefix: string;
+    match: "exact" | "prefix";
+    value: string;
 }
 
 interface TestOverride extends ReviewedMapping {
@@ -228,17 +229,19 @@ function belongsToShard(id: string, shard: { index: number; total: number } | nu
     return bucket === shard.index;
 }
 
-/** Resolve reviewed legacy-section metadata independently of filenames.
- * Rule prefixes end at a non-alphanumeric boundary (for example `9.3.1_`),
- * preventing a section from accidentally absorbing a sibling such as
- * `9.3.10`. */
+/** Resolve reviewed legacy metadata independently of filenames. Prefix rules
+ * end at a non-alphanumeric boundary (for example `9.3.1_`), preventing a
+ * section from accidentally absorbing a sibling such as `9.3.10`; exact
+ * rules cover legacy anchors that have no member suffix. */
 export function matchingLegacyIdRules(
     metadata: { readonly es5id?: string; readonly es6id?: string },
     rules: readonly LegacyIdRule[],
 ): LegacyIdRule[] {
     return rules.filter((rule) => {
         const value = rule.field === "es5id" ? metadata.es5id : metadata.es6id;
-        return value?.startsWith(rule.prefix) === true;
+        return rule.match === "exact"
+            ? value === rule.value
+            : value?.startsWith(rule.value) === true;
     });
 }
 
@@ -293,25 +296,34 @@ function normalizeMappings(
     }
     for (const rule of overrides.legacyIdRules ?? []) {
         const field = rule.field;
-        const prefix = rule.prefix;
-        const key = `${field}\0${prefix}`;
-        const overlaps = typeof prefix === "string" && [...legacyIdRules.values()].some((existing) =>
-            existing.field === field &&
-            (existing.prefix.startsWith(prefix) || prefix.startsWith(existing.prefix)));
+        const match = rule.match;
+        const value = rule.value;
+        const key = `${field}\0${match}\0${value}`;
+        const overlaps = typeof value === "string" && [...legacyIdRules.values()].some((existing) => {
+            if (existing.field !== field) return false;
+            if (existing.match === "exact" && match === "exact") return existing.value === value;
+            if (existing.match === "prefix" && match === "prefix") {
+                return existing.value.startsWith(value) || value.startsWith(existing.value);
+            }
+            return existing.match === "prefix"
+                ? value.startsWith(existing.value)
+                : existing.value.startsWith(value);
+        });
         if (
             !validBase(rule) ||
             (field !== "es5id" && field !== "es6id") ||
-            typeof prefix !== "string" ||
-            prefix.trim() !== prefix ||
-            prefix.length === 0 ||
-            /[\s*?\[\]]/.test(prefix) ||
-            /[A-Za-z0-9]$/.test(prefix) ||
+            (match !== "exact" && match !== "prefix") ||
+            typeof value !== "string" ||
+            value.trim() !== value ||
+            value.length === 0 ||
+            /[\s*?\[\]]/.test(value) ||
+            (match === "prefix" && /[A-Za-z0-9]$/.test(value)) ||
             legacyIdRules.has(key) ||
             overlaps
         ) {
             invalid(
-                `${String(field)}:${String(prefix)}`,
-                "legacy id rule must be one unique non-overlapping reviewed metadata prefix ending at a semantic boundary",
+                `${String(field)}:${String(match)}:${String(value)}`,
+                "legacy id rule must be one unique non-overlapping reviewed exact id or semantic-boundary prefix",
             );
         } else legacyIdRules.set(key, rule);
     }
@@ -351,7 +363,7 @@ function normalizeMappings(
     return {
         aliases,
         legacyIdRules: [...legacyIdRules.values()].sort((a, b) =>
-            a.field.localeCompare(b.field) || b.prefix.length - a.prefix.length),
+            a.field.localeCompare(b.field) || a.match.localeCompare(b.match) || b.value.length - a.value.length),
         pathRules: [...rules.values()].sort((a, b) => b.prefix.length - a.prefix.length),
         tests,
     };
@@ -509,6 +521,21 @@ export async function buildInventory(options: {
                 }
             }
         }
+        const exactOverride = mappings.tests.get(test);
+        if (exactOverride) {
+            if (exactOverride.sourceSha256 !== sha256Text(source)) {
+                issues.push({
+                    code: "invalid-override",
+                    test,
+                    detail: "exact test override source hash differs from the pinned corpus",
+                    claimBlocking: true,
+                });
+            } else {
+                mappedClauses = [...new Set([...mappedClauses, ...exactOverride.clauses])].sort();
+                mappingSources.push(`test-override:${test}`);
+                usedTestOverrides.add(test);
+            }
+        }
         let esidResolution: ScenarioRecord["esidResolution"];
         const exactAnchor = metadata.esid ? anchorById.get(metadata.esid) : undefined;
         const exactClause = exactAnchor ? clauseById.get(exactAnchor.clauseId) : undefined;
@@ -533,7 +560,6 @@ export async function buildInventory(options: {
             const pathRule = metadata.esid === undefined
                 ? mappings.pathRules.find((rule) => rule.esid === undefined && test.startsWith(rule.prefix))
                 : undefined;
-            const override = mappings.tests.get(test);
             if (legacyIdRules.length > 1) {
                 issues.push({
                     code: "invalid-override",
@@ -552,25 +578,16 @@ export async function buildInventory(options: {
                 usedAliases.add(alias.esid);
             } else if (legacyIdRule) {
                 mappedClauses = [...new Set([...mappedClauses, ...legacyIdRule.clauses])].sort();
-                mappingSources.push(`legacy-id-rule:${legacyIdRule.field}:${legacyIdRule.prefix}`);
-                usedLegacyIdRules.add(`${legacyIdRule.field}\0${legacyIdRule.prefix}`);
+                mappingSources.push(
+                    `legacy-id-rule:${legacyIdRule.field}:${legacyIdRule.match}:${legacyIdRule.value}`,
+                );
+                usedLegacyIdRules.add(
+                    `${legacyIdRule.field}\0${legacyIdRule.match}\0${legacyIdRule.value}`,
+                );
             } else if (pathRule) {
                 mappedClauses = [...new Set([...mappedClauses, ...pathRule.clauses])].sort();
                 mappingSources.push(`path-rule:${pathRule.prefix}`);
                 usedPathRules.add(`<missing-esid>\0${pathRule.prefix}`);
-            } else if (override) {
-                if (override.sourceSha256 !== sha256Text(source)) {
-                    issues.push({
-                        code: "invalid-override",
-                        test,
-                        detail: "exact test override source hash differs from the pinned corpus",
-                        claimBlocking: true,
-                    });
-                } else {
-                    mappedClauses = [...new Set([...mappedClauses, ...override.clauses])].sort();
-                    mappingSources.push(`test-override:${test}`);
-                    usedTestOverrides.add(test);
-                }
             } else if (metadata.esid && exactAnchor) {
                 issues.push({
                     code: "non-normative-esid",
@@ -642,10 +659,10 @@ export async function buildInventory(options: {
             if (!usedAliases.has(esid)) issues.push({ code: "invalid-override", test: esid, detail: "esid alias is unused by the pinned eligible corpus", claimBlocking: true });
         }
         for (const rule of mappings.legacyIdRules) {
-            const key = `${rule.field}\0${rule.prefix}`;
+            const key = `${rule.field}\0${rule.match}\0${rule.value}`;
             if (!usedLegacyIdRules.has(key)) issues.push({
                 code: "invalid-override",
-                test: `${rule.field}:${rule.prefix}`,
+                test: `${rule.field}:${rule.match}:${rule.value}`,
                 detail: "legacy id rule is unused by the pinned eligible corpus",
                 claimBlocking: true,
             });

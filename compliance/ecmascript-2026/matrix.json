@@ -130,6 +130,50 @@
       "rationale": "The String-input ToNumber algorithm is represented as one terminal complete-input scanner partition with reciprocal property, independent length stress, native regression, implementation, and pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.fromcharcode",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordered-touint16-code-unit-worklist",
+          "title": "Arbitrary rest-argument worklist, ordered ToUint16 conversion, code-unit concatenation, abrupt completion, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-string.fromcharcode" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-static-code-units.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_code_unit_list_width"],
+            "e2e": ["string_codepoints"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#StringConstructor"],
+            "implementation": [
+              "src/emit/index.ts#emitStringStatic",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#string_static_from_char_code_apply",
+              "runtime/tsc_value.c#string_constructor_install_static_methods",
+              "runtime/tsc_string.c#string_from_numeric_values",
+              "runtime/tsc_string.c#to_uint16_code_unit",
+              "runtime/tsc_string.c#tsc_str_from_char_code_values"
+            ]
+          },
+          "rationale": "The independent property derives the empty and arbitrary argument-worklist cases; evaluation-before-conversion order; ordinary object, primitive, BigInt, Symbol, and abrupt ToNumber outcomes; modulo-2^16 conversion; surrogate preservation; spread intake; result ordering; stable identity; writable non-enumerable configurable descriptors; length; aliases; and replacement/accessor lookup. The exact pinned query additionally covers the built-in name attributes and absence of [[Construct]]. The emitter evaluates one ordinary method lookup before one canonical spread-expanded argument worklist, while the runtime converts that worklist in order and materializes its code units through one shared length-driven string path. One separately generated native call stresses representative worklist width, and the ordinary E2E retains the direct UTF-16 regression. Unresolved feature dependencies or a non-passing signed report still block the global claim."
+        }
+      ],
+      "rationale": "The complete String.fromCharCode intrinsic is represented as one terminal worklist partition with reciprocal property, independent width stress, native E2E, declaration, implementation, and pinned Test262 evidence."
+    },
+    {
       "clause": "sec-array.from",
       "disposition": "evidence",
       "partitions": [

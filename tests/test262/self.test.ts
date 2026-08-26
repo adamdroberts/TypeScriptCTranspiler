@@ -69,17 +69,27 @@ describe("Test262 metadata and scenarios", () => {
         expect(scenarioSource("value;", "raw")).toBe("value;");
     });
 
-    test("maps legacy specification sections by metadata prefix rather than fixture names", () => {
+    test("maps exact or semantic-boundary legacy metadata independently of fixture names", () => {
         const rules: LegacyIdRule[] = [{
             field: "es5id",
-            prefix: "9.3.1_",
+            match: "prefix",
+            value: "9.3.1_",
             clauses: ["sec-tonumber-applied-to-the-string-type"],
             reason: "self-test",
             reviewedBy: "self-test",
+        }, {
+            field: "es6id",
+            match: "exact",
+            value: "21.1.2.1",
+            clauses: ["sec-string.fromcharcode"],
+            reason: "self-test",
+            reviewedBy: "self-test",
         }];
-        expect(matchingLegacyIdRules({ es5id: "9.3.1_arbitrary-semantic-suffix" }, rules)).toEqual(rules);
+        expect(matchingLegacyIdRules({ es5id: "9.3.1_arbitrary-semantic-suffix" }, rules)).toEqual([rules[0]]);
         expect(matchingLegacyIdRules({ es5id: "9.3.10_sibling" }, rules)).toEqual([]);
         expect(matchingLegacyIdRules({ es6id: "9.3.1_arbitrary-semantic-suffix" }, rules)).toEqual([]);
+        expect(matchingLegacyIdRules({ es6id: "21.1.2.1" }, rules)).toEqual([rules[1]]);
+        expect(matchingLegacyIdRules({ es6id: "21.1.2.10" }, rules)).toEqual([]);
     });
 
     test("orders harness scripts and leaves raw tests unmodified", () => {

@@ -1114,27 +1114,38 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
         }
         aliasIds.add(mapping.esid);
     }
-    const legacyPrefixes = new Map<string, string[]>();
+    const legacyRules = new Map<string, Array<{ match: "exact" | "prefix"; value: string }>>();
     for (const mapping of overrides.legacyIdRules) {
         validateMappingBase(mapping, "legacy id rule");
         const field = mapping.field;
-        const prefix = mapping.prefix;
+        const match = mapping.match;
+        const value = mapping.value;
         if (
             (field !== "es5id" && field !== "es6id") ||
-            typeof prefix !== "string" ||
-            prefix.trim() !== prefix ||
-            prefix.length === 0 ||
-            /[\s*?\[\]]/.test(prefix) ||
-            /[A-Za-z0-9]$/.test(prefix)
+            (match !== "exact" && match !== "prefix") ||
+            typeof value !== "string" ||
+            value.trim() !== value ||
+            value.length === 0 ||
+            /[\s*?\[\]]/.test(value) ||
+            (match === "prefix" && /[A-Za-z0-9]$/.test(value))
         ) {
-            throw new Error("legacy id rules must name es5id/es6id and use a non-empty exact prefix ending at a semantic boundary");
+            throw new Error("legacy id rules must name es5id/es6id and use one non-empty exact id or semantic-boundary prefix");
         }
-        const existing = legacyPrefixes.get(field) ?? [];
-        if (existing.some((candidate) => candidate.startsWith(prefix) || prefix.startsWith(candidate))) {
-            throw new Error("legacy id rule prefixes must be unique and non-overlapping within each metadata field");
+        const existing = legacyRules.get(field) ?? [];
+        const overlaps = existing.some((candidate) => {
+            if (candidate.match === "exact" && match === "exact") return candidate.value === value;
+            if (candidate.match === "prefix" && match === "prefix") {
+                return candidate.value.startsWith(value) || value.startsWith(candidate.value);
+            }
+            return candidate.match === "prefix"
+                ? value.startsWith(candidate.value)
+                : candidate.value.startsWith(value);
+        });
+        if (overlaps) {
+            throw new Error("legacy id rules must be unique and non-overlapping within each metadata field");
         }
-        existing.push(prefix);
-        legacyPrefixes.set(field, existing);
+        existing.push({ match, value });
+        legacyRules.set(field, existing);
     }
     const prefixes = new Set<string>();
     for (const mapping of overrides.pathRules) {
