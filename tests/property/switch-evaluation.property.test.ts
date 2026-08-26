@@ -96,6 +96,49 @@ function subjectSource(): string {
         }
         check(clauseOne() === "shared" && clauseTwo() === "shared", "clause sharing");
 
+        var patternBefore, patternAfter, patternImmutable = false;
+        var patternEvents = [];
+        function patternKey() { patternEvents.push("key"); return "selected"; }
+        function patternDefault() { patternEvents.push("default"); return 7; }
+        function patternSource() {
+            patternEvents.push("source");
+            return { selected: undefined, nested: [10, 11, 12, 13], retained: "rest" };
+        }
+        switch (0) {
+            case (patternBefore = function() { return patternLeaf; }, 0):
+                const {
+                    [patternKey()]: patternLeaf = patternDefault(),
+                    nested: [patternFirst, , ...patternTail],
+                    ...patternRest
+                } = patternSource();
+                patternAfter = function() {
+                    return [patternLeaf, patternFirst, patternTail, patternRest];
+                };
+                try { patternLeaf = 9; }
+                catch (error) { patternImmutable = error instanceof TypeError; }
+                break;
+        }
+        const patternValues = patternAfter();
+        check(patternBefore() === 7, "pattern closure before initialization");
+        check(patternValues[0] === 7 && patternValues[1] === 10,
+            "object/array pattern leaves");
+        check(patternValues[2].length === 2 && patternValues[2][0] === 12 &&
+            patternValues[2][1] === 13, "array pattern elision/rest");
+        check(patternValues[3].retained === "rest" &&
+            !("selected" in patternValues[3]) && !("nested" in patternValues[3]),
+            "object pattern rest exclusions");
+        check(patternEvents.join("|") === "source|key|default", "pattern evaluation order");
+        check(patternImmutable && patternBefore() === 7, "pattern const leaf");
+
+        var patternLeafTdz = false;
+        try {
+            switch (0) {
+                case 0:
+                    let { missing: patternEarly = patternLater, later: patternLater } = { later: 3 };
+            }
+        } catch (error) { patternLeafTdz = error instanceof ReferenceError; }
+        check(patternLeafTdz, "pattern leaves preallocated in TDZ");
+
         ${nestedSwitchFixture(3)}
 
         async function asyncCaseBlock() {
@@ -132,6 +175,20 @@ function subjectSource(): string {
                     break;
             }
             check(asyncConstRhs && asyncConstError, "async const write order");
+
+            var asyncPatternBefore;
+            switch (await Promise.resolve(0)) {
+                case (asyncPatternBefore = function() { return asyncPatternLeaf; }, await Promise.resolve(0)):
+                    const {
+                        value: asyncPatternLeaf,
+                        nested: [asyncPatternFirst, asyncPatternSecond]
+                    } = await Promise.resolve({ value: 21, nested: [22, 23, 24] });
+                    await Promise.resolve();
+                    check(asyncPatternBefore() === 21 && asyncPatternFirst === 22 &&
+                        asyncPatternSecond === 23,
+                        "async CaseBlock BindingInitialization");
+                    break;
+            }
             return "switch-evaluation-ok";
         }
 

@@ -43,6 +43,11 @@ export interface SwitchCaseBlockEnvironmentDepthSpec {
     depth: number;
 }
 
+export interface SwitchCaseBlockBindingDepthSpec {
+    generator: "switch-caseblock-binding-depth";
+    depth: number;
+}
+
 export type GeneratedCaseSpec =
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -52,7 +57,8 @@ export type GeneratedCaseSpec =
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
     | SwitchClauseWorklistWidthSpec
-    | SwitchCaseBlockEnvironmentDepthSpec;
+    | SwitchCaseBlockEnvironmentDepthSpec
+    | SwitchCaseBlockBindingDepthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -146,6 +152,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "switch-caseblock-environment-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+        };
+    }
+    if (spec.generator === "switch-caseblock-binding-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -432,6 +448,35 @@ function switchCaseBlockEnvironmentDepthSource(depth: number): string {
     return lines.join("\n");
 }
 
+function switchCaseBlockBindingDepthSource(depth: number): string {
+    let binding = "deepBinding";
+    let value = "197";
+    for (let index = 0; index < depth; index++) {
+        if (index % 2 === 0) {
+            binding = `{ value: ${binding} }`;
+            value = `{ value: ${value} }`;
+        } else {
+            binding = `[${binding}]`;
+            value = `[${value}]`;
+        }
+    }
+    return [
+        "function verifyCaseBlockBindingTree(): boolean {",
+        "    let before: (() => any) | undefined;",
+        "    let after: (() => any) | undefined;",
+        "    switch (0 as any) {",
+        "        case (before = function() { return deepBinding; }, 0):",
+        `            const ${binding} = (${value}) as any;`,
+        "            after = function() { return deepBinding; };",
+        "            break;",
+        "    }",
+        "    return !!before && !!after && before() === 197 && after() === 197;",
+        "}",
+        'console.log("switch CaseBlock binding tree:", verifyCaseBlockBindingTree());',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -453,5 +498,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return switchClauseWorklistWidthSource(spec.width);
         case "switch-caseblock-environment-depth":
             return switchCaseBlockEnvironmentDepthSource(spec.depth);
+        case "switch-caseblock-binding-depth":
+            return switchCaseBlockBindingDepthSource(spec.depth);
     }
 }

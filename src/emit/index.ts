@@ -431,6 +431,12 @@ interface LocalLexicalReference {
     readonly gcRoot: string | null;
 }
 
+type BindingInitializationLeafEmitter = (
+    buf: CBuf,
+    identifier: ts.Identifier,
+    sourceValue: string,
+) => void;
+
 interface DescriptorAccessor {
     adapter: string;
     env: EmitResult | null;
@@ -23840,24 +23846,40 @@ class Emitter {
 
     private localLexicalMetadataForSymbol(
         symbol: ts.Symbol | undefined,
-    ): { readonly name: string; readonly immutable: boolean; readonly declaration: ts.VariableDeclaration } | null {
+    ): {
+        readonly name: string;
+        readonly immutable: boolean;
+        readonly declaration: ts.VariableDeclaration;
+        readonly identifier: ts.Identifier;
+    } | null {
         if (!symbol) return null;
-        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-        if (!declaration || !ts.isVariableDeclaration(declaration) ||
-            !ts.isIdentifier(declaration.name)) return null;
+        const symbolDeclaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (!symbolDeclaration) return null;
+        const identifier = ts.isVariableDeclaration(symbolDeclaration) &&
+            ts.isIdentifier(symbolDeclaration.name)
+            ? symbolDeclaration.name
+            : ts.isBindingElement(symbolDeclaration) && ts.isIdentifier(symbolDeclaration.name)
+                ? symbolDeclaration.name
+                : ts.isIdentifier(symbolDeclaration)
+                    ? symbolDeclaration
+                    : null;
+        const declaration = this.test262BindingVariableDeclaration(symbolDeclaration);
+        if (!identifier || !declaration) return null;
         if (ts.isCatchClause(declaration.parent)) {
             return {
-                name: declaration.name.text,
+                name: identifier.text,
                 immutable: false,
                 declaration,
+                identifier,
             };
         }
         if (!ts.isVariableDeclarationList(declaration.parent) ||
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0) return null;
         return {
-            name: declaration.name.text,
+            name: identifier.text,
             immutable: (declaration.parent.flags & ts.NodeFlags.Const) !== 0,
             declaration,
+            identifier,
         };
     }
 
@@ -23936,7 +23958,7 @@ class Emitter {
         const asyncCell = this.asyncContinuationCellForSymbol(symbol);
         if (asyncCell) {
             const type = this.identifierScopedType(id) ??
-                this.variableStorageType(this.prepareType(mapType(metadata.declaration, this.checker)));
+                this.variableStorageType(this.prepareType(mapType(metadata.identifier, this.checker)));
             return {
                 type,
                 name: metadata.name,
@@ -25212,14 +25234,14 @@ class Emitter {
             : `tsc_global_binding_set(${key}, ${value});`);
     }
 
-    private emitTest262ScriptBindingElement(
+    private emitBindingInitializationElement(
         buf: CBuf,
         element: ts.BindingElement,
         sourceValue: string,
-        mode: "lexical" | "var",
+        initialize: BindingInitializationLeafEmitter,
     ): void {
-        const value = this.freshTemp("_global_binding_value");
-        const root = this.freshTemp("_global_binding_value_gc_root");
+        const value = this.freshTemp("_binding_value");
+        const root = this.freshTemp("_binding_value_gc_root");
         buf.line(`tsc_value_t ${value} = ${sourceValue};`);
         buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
         if (element.initializer) {
@@ -25229,25 +25251,25 @@ class Emitter {
             buf.line(`${root} = tsc_value_gc_root(${value});`);
             buf.close();
         }
-        this.emitTest262ScriptBindingName(buf, element.name, value, mode);
+        this.emitBindingInitialization(buf, element.name, value, initialize);
     }
 
     /** BindingInitialization consumes the BindingName AST as one canonical
      * recursive tree. Every object member and iterator step enters this same
      * algorithm independently of pattern width or nesting depth. */
-    private emitTest262ScriptBindingName(
+    private emitBindingInitialization(
         buf: CBuf,
         binding: ts.BindingName,
         sourceValue: string,
-        mode: "lexical" | "var",
+        initialize: BindingInitializationLeafEmitter,
     ): void {
         if (ts.isIdentifier(binding)) {
-            this.emitTest262ScriptGlobalBindingLeaf(buf, binding, sourceValue, mode);
+            initialize(buf, binding, sourceValue);
             return;
         }
 
-        const source = this.freshTemp("_global_binding_source");
-        const sourceRoot = this.freshTemp("_global_binding_source_gc_root");
+        const source = this.freshTemp("_binding_source");
+        const sourceRoot = this.freshTemp("_binding_source_gc_root");
         buf.open("");
         buf.line(`tsc_value_t const ${source} = ${sourceValue};`);
         buf.line(`void* volatile ${sourceRoot} = tsc_value_gc_root(${source});`);
@@ -25260,7 +25282,7 @@ class Emitter {
             );
             buf.close();
             const hasRest = binding.elements.some((element) => !!element.dotDotDotToken);
-            const excluded = hasRest ? this.freshTemp("_global_binding_excluded") : null;
+            const excluded = hasRest ? this.freshTemp("_binding_excluded") : null;
             if (excluded) {
                 buf.line(
                     `tsc_array_t* ${excluded} = ` +
@@ -25279,14 +25301,14 @@ class Emitter {
                     ) {
                         unsupported(element, "invalid object binding rest element");
                     }
-                    const rest = this.freshTemp("_global_binding_object_rest");
-                    const restRoot = this.freshTemp("_global_binding_object_rest_gc_root");
+                    const rest = this.freshTemp("_binding_object_rest");
+                    const restRoot = this.freshTemp("_binding_object_rest_gc_root");
                     buf.line(
                         `tsc_value_t ${rest} = ` +
                         `tsc_value_copy_data_properties(${source}, ${excluded});`,
                     );
                     buf.line(`void* volatile ${restRoot} = tsc_value_gc_root(${rest});`);
-                    this.emitTest262ScriptGlobalBindingLeaf(buf, element.name, rest, mode);
+                    initialize(buf, element.name, rest);
                     continue;
                 }
                 const propertyName = element.propertyName ??
@@ -25294,7 +25316,7 @@ class Emitter {
                 if (!propertyName) {
                     unsupported(element, "object binding element requires a property name");
                 }
-                const key = this.freshTemp("_global_binding_key");
+                const key = this.freshTemp("_binding_key");
                 if (ts.isComputedPropertyName(propertyName)) {
                     const keyExpression = this.emitExpr(propertyName.expression);
                     buf.line(
@@ -25309,25 +25331,25 @@ class Emitter {
                         `tsc_value_string(${this.test262GlobalBindingKey(name)});`,
                     );
                 }
-                const keyRoot = this.freshTemp("_global_binding_key_gc_root");
+                const keyRoot = this.freshTemp("_binding_key_gc_root");
                 buf.line(`void* volatile ${keyRoot} = tsc_value_gc_root(${key});`);
                 if (excluded) buf.line(`tsc_array_push_value(${excluded}, ${key});`);
-                this.emitTest262ScriptBindingElement(
+                this.emitBindingInitializationElement(
                     buf,
                     element,
                     `tsc_value_get_computed_prop(${source}, ${key})`,
-                    mode,
+                    initialize,
                 );
             }
             buf.close();
             return;
         }
 
-        const iterator = this.freshTemp("_global_binding_iterator");
-        const frame = this.freshTemp("_global_binding_iterator_frame");
-        const error = this.freshTemp("_global_binding_iterator_error");
-        const errorRoot = this.freshTemp("_global_binding_iterator_error_gc_root");
-        const closeFrame = this.freshTemp("_global_binding_iterator_close_frame");
+        const iterator = this.freshTemp("_binding_iterator");
+        const frame = this.freshTemp("_binding_iterator_frame");
+        const error = this.freshTemp("_binding_iterator_error");
+        const errorRoot = this.freshTemp("_binding_iterator_error_gc_root");
+        const closeFrame = this.freshTemp("_binding_iterator_close_frame");
         buf.line(
             `tsc_sync_iterator_t* const ${iterator} = ` +
             `(tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`,
@@ -25350,10 +25372,10 @@ class Emitter {
                 ) {
                     unsupported(element, "invalid array binding rest element");
                 }
-                const rest = this.freshTemp("_global_binding_array_rest");
-                const next = this.freshTemp("_global_binding_array_rest_value");
-                const boxedRest = this.freshTemp("_global_binding_array_rest_boxed");
-                const boxedRestRoot = this.freshTemp("_global_binding_array_rest_gc_root");
+                const rest = this.freshTemp("_binding_array_rest");
+                const next = this.freshTemp("_binding_array_rest_value");
+                const boxedRest = this.freshTemp("_binding_array_rest_boxed");
+                const boxedRestRoot = this.freshTemp("_binding_array_rest_gc_root");
                 buf.line(`tsc_array_t* ${rest} = tsc_array_new(sizeof(tsc_value_t), 1);`);
                 buf.line(`tsc_value_t ${next};`);
                 buf.open(`while (tsc_sync_iterator_step(${iterator}, &${next}))`);
@@ -25361,13 +25383,13 @@ class Emitter {
                 buf.close();
                 buf.line(`tsc_value_t ${boxedRest} = tsc_value_array(${rest});`);
                 buf.line(`void* volatile ${boxedRestRoot} = tsc_value_gc_root(${boxedRest});`);
-                this.emitTest262ScriptBindingName(buf, element.name, boxedRest, mode);
+                this.emitBindingInitialization(buf, element.name, boxedRest, initialize);
                 continue;
             }
-            const next = this.freshTemp("_global_binding_iterator_value");
+            const next = this.freshTemp("_binding_iterator_value");
             buf.line(`tsc_value_t ${next} = tsc_value_undefined();`);
             buf.line(`(void)tsc_sync_iterator_step(${iterator}, &${next});`);
-            this.emitTest262ScriptBindingElement(buf, element, next, mode);
+            this.emitBindingInitializationElement(buf, element, next, initialize);
         }
         buf.line(`tsc_sync_iterator_close(${iterator});`);
         buf.line("tsc_try_pop();");
@@ -25388,6 +25410,21 @@ class Emitter {
         buf.line(`tsc_throw_value(${error});`);
         buf.close();
         buf.close();
+    }
+
+    private emitTest262ScriptBindingName(
+        buf: CBuf,
+        binding: ts.BindingName,
+        sourceValue: string,
+        mode: "lexical" | "var",
+    ): void {
+        this.emitBindingInitialization(
+            buf,
+            binding,
+            sourceValue,
+            (target, identifier, value) =>
+                this.emitTest262ScriptGlobalBindingLeaf(target, identifier, value, mode),
+        );
     }
 
     private emitTest262ScriptGlobalPatternInitializer(
@@ -29225,7 +29262,9 @@ class Emitter {
             return used;
         };
         for (const declaration of graph.declarations) {
-            if (!ts.isIdentifier(declaration.name)) return false;
+            /* Pattern leaves are represented once in bindingIdentifiers and
+             * enter the same recursive CFG BindingInitialization tree. */
+            if (!ts.isIdentifier(declaration.name)) continue;
             const symbol = this.symbolForIdentifier(declaration.name);
             if (!symbol) return false;
             // Repeated `var` declarations and a `var` redeclaration of a
@@ -42519,22 +42558,33 @@ class Emitter {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
-            if (ts.isIdentifier(d.name)) {
-                const switchBinding = this.switchLexicalBindingForSymbol(
-                    this.symbolForIdentifier(d.name),
-                );
-                if (switchBinding) {
-                    const value = d.initializer
-                        ? this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer)
-                        : "tsc_value_undefined()";
-                    buf.line(`${switchBinding.value} = ${value};`);
-                    buf.line(
-                        `${switchBinding.gcRoot} = ` +
-                        `tsc_value_gc_root(${switchBinding.value});`,
-                    );
-                    buf.line(`${switchBinding.initialized} = true;`);
-                    continue;
+            if (this.isDirectSwitchLexicalDeclaration(d) && this.switchLexicalScopes.length > 0) {
+                if (!d.initializer && !ts.isIdentifier(d.name)) {
+                    unsupported(d, "switch lexical binding pattern requires an initializer");
                 }
+                const sourceValue = d.initializer
+                    ? this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer)
+                    : "tsc_value_undefined()";
+                this.emitBindingInitialization(
+                    buf,
+                    d.name,
+                    sourceValue,
+                    (target, identifier, value) => {
+                        const binding = this.switchLexicalBindingForSymbol(
+                            this.symbolForIdentifier(identifier),
+                        );
+                        if (!binding || binding.declaration !== d) {
+                            unsupported(identifier, "direct switch lexical binding is missing its CaseBlock cell");
+                        }
+                        target.line(`${binding.value} = ${value};`);
+                        target.line(
+                            `${binding.gcRoot} = ` +
+                            `tsc_value_gc_root(${binding.value});`,
+                        );
+                        target.line(`${binding.initialized} = true;`);
+                    },
+                );
+                continue;
             }
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
@@ -47495,12 +47545,6 @@ class Emitter {
                 if (!ts.isVariableStatement(statement) ||
                     (statement.declarationList.flags & ts.NodeFlags.BlockScoped) === 0) continue;
                 for (const declaration of statement.declarationList.declarations) {
-                    if (!ts.isIdentifier(declaration.name)) {
-                        unsupported(
-                            declaration.name,
-                            "direct switch lexical binding patterns require canonical binding initialization",
-                        );
-                    }
                     declarations.push(declaration);
                 }
             }
@@ -47552,51 +47596,53 @@ class Emitter {
 
         const lexicalScope = new Map<ts.Symbol, SwitchLexicalBindingPlan>();
         for (const declaration of this.directSwitchLexicalVariableDeclarations(sw)) {
-            const symbol = this.symbolForIdentifier(declaration.name as ts.Identifier);
-            if (!symbol) unsupported(declaration.name, "unresolved direct switch lexical binding");
-            if (lexicalScope.has(symbol)) continue;
-            const metadata = this.localLexicalMetadataForSymbol(symbol);
-            if (!metadata) unsupported(declaration, "invalid direct switch lexical binding metadata");
-            const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell) {
-                if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
-                    unsupported(
-                        declaration,
-                        "captured direct switch lexical binding requires a canonical value/TDZ cell",
+            for (const identifier of this.test262BindingNames(declaration.name)) {
+                const symbol = this.symbolForIdentifier(identifier);
+                if (!symbol) unsupported(identifier, "unresolved direct switch lexical binding");
+                if (lexicalScope.has(symbol)) continue;
+                const metadata = this.localLexicalMetadataForSymbol(symbol);
+                if (!metadata) unsupported(identifier, "invalid direct switch lexical binding metadata");
+                const cell = this.currentFunctionCellForSymbol(symbol);
+                if (cell) {
+                    if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
+                        unsupported(
+                            identifier,
+                            "captured direct switch lexical binding requires a canonical value/TDZ cell",
+                        );
+                    }
+                    this.emitCaptureCellInitialization(
+                        buf,
+                        cell,
+                        "tsc_value_undefined()",
+                        false,
                     );
+                    lexicalScope.set(symbol, {
+                        symbol,
+                        declaration,
+                        name: metadata.name,
+                        immutable: metadata.immutable,
+                        value: `(*${cell.cellName})`,
+                        initialized: `(*${cell.initializedCellName})`,
+                        gcRoot: `(*${cell.rootCellName})`,
+                    });
+                    continue;
                 }
-                this.emitCaptureCellInitialization(
-                    buf,
-                    cell,
-                    "tsc_value_undefined()",
-                    false,
-                );
+                const value = this.freshTemp(`_switch_lex_${metadata.name}`);
+                const initialized = this.freshTemp(`_switch_lex_${metadata.name}_initialized`);
+                const gcRoot = this.freshTemp(`_switch_lex_${metadata.name}_gc_root`);
+                buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
+                buf.line(`bool ${initialized} = false;`);
+                buf.line(`void* volatile ${gcRoot} = NULL;`);
                 lexicalScope.set(symbol, {
                     symbol,
                     declaration,
                     name: metadata.name,
                     immutable: metadata.immutable,
-                    value: `(*${cell.cellName})`,
-                    initialized: `(*${cell.initializedCellName})`,
-                    gcRoot: `(*${cell.rootCellName})`,
+                    value,
+                    initialized,
+                    gcRoot,
                 });
-                continue;
             }
-            const value = this.freshTemp(`_switch_lex_${metadata.name}`);
-            const initialized = this.freshTemp(`_switch_lex_${metadata.name}_initialized`);
-            const gcRoot = this.freshTemp(`_switch_lex_${metadata.name}_gc_root`);
-            buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
-            buf.line(`bool ${initialized} = false;`);
-            buf.line(`void* volatile ${gcRoot} = NULL;`);
-            lexicalScope.set(symbol, {
-                symbol,
-                declaration,
-                name: metadata.name,
-                immutable: metadata.immutable,
-                value,
-                initialized,
-                gcRoot,
-            });
         }
         buf.line(`int ${start} = -1;`);
         const buildCond = (caseExpr: ts.Expression): string => {
