@@ -524,7 +524,6 @@ typedef struct json_parser {
 } json_parser_t;
 
 // --- Missing Declarations ---
-void replace_append_string_expanded(char** out, size_t* pos, size_t* cap, const tsc_str_t* source, const tsc_str_t* repl, size_t start, size_t end);
 bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 
 // --- Function Declarations ---

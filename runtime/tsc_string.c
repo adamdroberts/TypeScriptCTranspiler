@@ -1347,51 +1347,185 @@ tsc_str_t* tsc_str_pad_end(const tsc_str_t* s, double target, const tsc_str_t* p
     return string_from_utf16_range(output, 0, target_length);
 }
 
-tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl) {
-    if (search->len == 0 || search->len > s->len) return (tsc_str_t*)s;
-    for (size_t i = 0; i + search->len <= s->len; i++) {
-        if (memcmp(s->data + i, search->data, search->len) == 0) {
-            size_t cap = s->len + repl->len + 64;
-            char* out = (char*)malloc(cap);
-            size_t pos = 0;
-            replace_append(&out, &pos, &cap, s->data, i);
-            replace_append_string_expanded(&out, &pos, &cap, s, repl, i, i + search->len);
-            replace_append(&out, &pos, &cap, s->data + i + search->len, s->len - i - search->len);
-            tsc_str_t* r = str_alloc(pos);
-            memcpy((char*)r->data, out, pos);
-            free(out);
-            return r;
+typedef struct {
+    uint16_t* data;
+    size_t len;
+    size_t cap;
+} tsc_utf16_builder_t;
+
+static void utf16_builder_init(tsc_utf16_builder_t* output, size_t initial_cap) {
+    if (initial_cap < 8) initial_cap = 8;
+    if (initial_cap > SIZE_MAX / sizeof(uint16_t)) {
+        tsc_panic("replacement String is too large");
+    }
+    output->data = (uint16_t*)malloc(initial_cap * sizeof(uint16_t));
+    if (!output->data) tsc_panic("replacement String allocation failed");
+    output->len = 0;
+    output->cap = initial_cap;
+}
+
+static void utf16_builder_reserve(tsc_utf16_builder_t* output, size_t needed) {
+    if (needed <= output->cap) return;
+    if (needed > SIZE_MAX / sizeof(uint16_t)) {
+        tsc_panic("replacement String is too large");
+    }
+    size_t cap = output->cap;
+    while (cap < needed) {
+        if (cap > (SIZE_MAX / sizeof(uint16_t)) / 2) {
+            cap = needed;
+            break;
+        }
+        cap *= 2;
+    }
+    uint16_t* data = (uint16_t*)realloc(output->data, cap * sizeof(uint16_t));
+    if (!data) tsc_panic("replacement String allocation failed");
+    output->data = data;
+    output->cap = cap;
+}
+
+static void utf16_builder_append(
+    tsc_utf16_builder_t* output,
+    const uint16_t* units,
+    size_t count
+) {
+    if (count == 0) return;
+    if (output->len > SIZE_MAX - count) {
+        tsc_panic("replacement String is too large");
+    }
+    size_t next_length = output->len + count;
+    utf16_builder_reserve(output, next_length);
+    memcpy(
+        output->data + output->len,
+        units,
+        count * sizeof(uint16_t)
+    );
+    output->len = next_length;
+}
+
+static void utf16_builder_append_unit(tsc_utf16_builder_t* output, uint16_t unit) {
+    if (output->len == SIZE_MAX) tsc_panic("replacement String is too large");
+    utf16_builder_reserve(output, output->len + 1);
+    output->data[output->len++] = unit;
+}
+
+static void append_string_substitution(
+    tsc_utf16_builder_t* output,
+    const tsc_utf16_sequence_t* source,
+    const tsc_utf16_sequence_t* replacement,
+    size_t match_start,
+    size_t match_end
+) {
+    for (size_t index = 0; index < replacement->len; index++) {
+        uint16_t unit = replacement->data[index];
+        if (unit != '$' || index + 1 >= replacement->len) {
+            utf16_builder_append_unit(output, unit);
+            continue;
+        }
+        uint16_t next = replacement->data[++index];
+        if (next == '$') {
+            utf16_builder_append_unit(output, '$');
+        } else if (next == '&') {
+            utf16_builder_append(
+                output,
+                source->data + match_start,
+                match_end - match_start
+            );
+        } else if (next == '`') {
+            utf16_builder_append(output, source->data, match_start);
+        } else if (next == '\'') {
+            utf16_builder_append(
+                output,
+                source->data + match_end,
+                source->len - match_end
+            );
+        } else {
+            utf16_builder_append_unit(output, '$');
+            utf16_builder_append_unit(output, next);
         }
     }
-    return (tsc_str_t*)s;
+}
+
+static bool find_utf16_sequence(
+    const tsc_utf16_sequence_t* source,
+    const tsc_utf16_sequence_t* search,
+    size_t from,
+    size_t* found
+) {
+    if (search->len > source->len || from > source->len - search->len) return false;
+    for (size_t index = from; index <= source->len - search->len; index++) {
+        if (utf16_sequence_matches(source, index, search)) {
+            *found = index;
+            return true;
+        }
+    }
+    return false;
+}
+
+static tsc_str_t* string_replace_sequence(
+    const tsc_str_t* string,
+    const tsc_str_t* search_string,
+    const tsc_str_t* replacement_string,
+    bool replace_all
+) {
+    tsc_utf16_sequence_t source = string_utf16_sequence(string);
+    tsc_utf16_sequence_t search = string_utf16_sequence(search_string);
+    tsc_utf16_sequence_t replacement = string_utf16_sequence(replacement_string);
+    size_t first_match = 0;
+    if (search.len != 0 && !find_utf16_sequence(&source, &search, 0, &first_match)) {
+        return (tsc_str_t*)string;
+    }
+    tsc_utf16_builder_t output;
+    utf16_builder_init(&output, source.len);
+    bool matched = false;
+    size_t copy_from = 0;
+
+    if (search.len == 0) {
+        for (size_t boundary = 0; boundary <= source.len; boundary++) {
+            utf16_builder_append(&output, source.data + copy_from, boundary - copy_from);
+            append_string_substitution(&output, &source, &replacement, boundary, boundary);
+            copy_from = boundary;
+            matched = true;
+            if (!replace_all) break;
+        }
+    } else {
+        size_t match_start = first_match;
+        while (true) {
+            utf16_builder_append(
+                &output,
+                source.data + copy_from,
+                match_start - copy_from
+            );
+            size_t match_end = match_start + search.len;
+            append_string_substitution(
+                &output,
+                &source,
+                &replacement,
+                match_start,
+                match_end
+            );
+            copy_from = match_end;
+            matched = true;
+            if (!replace_all) break;
+            if (!find_utf16_sequence(&source, &search, match_end, &match_start)) break;
+        }
+    }
+
+    if (!matched) {
+        free(output.data);
+        return (tsc_str_t*)string;
+    }
+    utf16_builder_append(&output, source.data + copy_from, source.len - copy_from);
+    tsc_str_t* result = string_from_utf16_range(output.data, 0, output.len);
+    free(output.data);
+    return result;
+}
+
+tsc_str_t* tsc_str_replace(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl) {
+    return string_replace_sequence(s, search, repl, false);
 }
 
 tsc_str_t* tsc_str_replace_all(const tsc_str_t* s, const tsc_str_t* search, const tsc_str_t* repl) {
-    if (search->len == 0) return (tsc_str_t*)s;
-    size_t cap = s->len + 64;
-    char* out = (char*)malloc(cap);
-    size_t src = 0;
-    size_t pos = 0;
-    bool changed = false;
-    while (src < s->len) {
-        if (src + search->len <= s->len &&
-            memcmp(s->data + src, search->data, search->len) == 0) {
-            changed = true;
-            replace_append_string_expanded(&out, &pos, &cap, s, repl, src, src + search->len);
-            src += search->len;
-        } else {
-            replace_append(&out, &pos, &cap, s->data + src, 1);
-            src++;
-        }
-    }
-    if (!changed) {
-        free(out);
-        return (tsc_str_t*)s;
-    }
-    tsc_str_t* r = str_alloc(pos);
-    memcpy((char*)r->data, out, pos);
-    free(out);
-    return r;
+    return string_replace_sequence(s, search, repl, true);
 }
 
 uint32_t split_limit_from_num(double limit) {
@@ -1406,28 +1540,28 @@ uint32_t split_limit_from_num(double limit) {
 tsc_array_t* tsc_str_split_limit(const tsc_str_t* s, const tsc_str_t* sep, uint32_t limit) {
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 4);
     if (limit == 0) return a;
-    if (sep->len == 0) {
-        for (size_t i = 0; i < s->len && a->len < limit; i++) {
-            tsc_str_t* c = str_alloc(1);
-            ((char*)c->data)[0] = s->data[i];
+    tsc_utf16_sequence_t source = string_utf16_sequence(s);
+    tsc_utf16_sequence_t separator = string_utf16_sequence(sep);
+    if (separator.len == 0) {
+        for (size_t index = 0; index < source.len && a->len < limit; index++) {
+            tsc_str_t* c = string_from_utf16_range(source.data, index, 1);
             tsc_array_push_raw(a, &c);
         }
         return a;
     }
-    size_t i = 0;
-    while (i <= s->len && a->len < limit) {
-        size_t found = s->len;
-        for (size_t j = i; j + sep->len <= s->len; j++) {
-            if (memcmp(s->data + j, sep->data, sep->len) == 0) {
-                found = j;
-                break;
-            }
-        }
-        tsc_str_t* part = str_alloc(found - i);
-        memcpy((char*)part->data, s->data + i, found - i);
+    size_t start = 0;
+    while (start <= source.len && a->len < limit) {
+        size_t found = 0;
+        bool matched = find_utf16_sequence(&source, &separator, start, &found);
+        if (!matched) found = source.len;
+        tsc_str_t* part = string_from_utf16_range(
+            source.data,
+            start,
+            found - start
+        );
         tsc_array_push_raw(a, &part);
-        if (found == s->len) break;
-        i = found + sep->len;
+        if (!matched) break;
+        start = found + separator.len;
     }
     return a;
 }

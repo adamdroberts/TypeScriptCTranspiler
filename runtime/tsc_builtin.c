@@ -1153,37 +1153,6 @@ void replace_append(char** out, size_t* pos, size_t* cap, const char* data, size
     *pos += len;
 }
 
-void replace_append_string_expanded(
-    char** out,
-    size_t* pos,
-    size_t* cap,
-    const tsc_str_t* source,
-    const tsc_str_t* repl,
-    size_t start,
-    size_t end
-) {
-    for (size_t i = 0; i < repl->len; i++) {
-        char ch = repl->data[i];
-        if (ch != '$' || i + 1 >= repl->len) {
-            replace_append(out, pos, cap, &ch, 1);
-            continue;
-        }
-        char next = repl->data[++i];
-        if (next == '$') {
-            replace_append(out, pos, cap, "$", 1);
-        } else if (next == '&') {
-            replace_append(out, pos, cap, source->data + start, end - start);
-        } else if (next == '`') {
-            replace_append(out, pos, cap, source->data, start);
-        } else if (next == '\'') {
-            replace_append(out, pos, cap, source->data + end, source->len - end);
-        } else {
-            replace_append(out, pos, cap, "$", 1);
-            replace_append(out, pos, cap, &next, 1);
-        }
-    }
-}
-
 static void replace_append_expanded(
     char** out,
     size_t* pos,

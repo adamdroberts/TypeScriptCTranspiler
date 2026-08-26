@@ -347,7 +347,7 @@
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, ranges, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, ranges, literal replace/split, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
