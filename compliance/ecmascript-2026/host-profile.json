@@ -25,6 +25,7 @@
     "src/cli.ts",
     "src/commonjs-resolve.ts",
     "src/compile.ts",
+    "src/control-static-semantics.ts",
     "src/diagnostics.ts",
     "src/dynamic-require.ts",
     "src/ecmascript-source.ts",

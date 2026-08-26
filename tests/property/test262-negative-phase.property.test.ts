@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import ts from "typescript";
+import { earlyControlFlowFailure } from "../../src/control-static-semantics";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import { earlyModuleStaticSemanticsFailure } from "../../src/module-static-semantics";
-import { earlyControlFlowFailure } from "../test262/native-host";
 
 interface ControlFlowPartition {
     readonly source: string;
@@ -126,6 +126,14 @@ const moduleStaticSemanticsPartitions: readonly ModuleStaticSemanticsPartition[]
     },
     {
         source: "const object = { public: 1, eval: 2, arguments: 3 }; export { object };\n",
+        diagnostic: null,
+    },
+    {
+        source: "const local = 1; export { local as \"\\uD800\" };\n",
+        diagnostic: "ModuleExportName StringLiteral is not well-formed Unicode",
+    },
+    {
+        source: "const local = 1; export { local as \"\\uD83D\\uDE00\" };\n",
         diagnostic: null,
     },
 ];

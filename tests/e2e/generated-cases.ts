@@ -23,6 +23,16 @@ export interface ModuleStaticSemanticsWidthSpec {
     width: number;
 }
 
+export interface ModuleStaticSemanticsDepthSpec {
+    generator: "module-static-semantics-depth";
+    depth: number;
+}
+
+export interface ClassExpressionMethodWidthSpec {
+    generator: "class-expression-method-width";
+    width: number;
+}
+
 export interface GlobalNumberParseLengthSpec {
     generator: "global-number-parse-length";
     length: number;
@@ -84,6 +94,8 @@ export type GeneratedCaseSpec =
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleStaticSemanticsWidthSpec
+    | ModuleStaticSemanticsDepthSpec
+    | ClassExpressionMethodWidthSpec
     | GlobalNumberParseLengthSpec
     | UriPercentCodecLengthSpec
     | StringCodeUnitListWidthSpec
@@ -148,6 +160,26 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "module-static-semantics-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "module-static-semantics-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+        };
+    }
+    if (spec.generator === "class-expression-method-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -725,6 +757,53 @@ function moduleStaticSemanticsWidthSource(width: number): string {
     ].join("\n");
 }
 
+function moduleStaticSemanticsDepthSource(depth: number): string {
+    let nested = "observed = nestedVar;";
+    for (let index = 0; index < depth; index++) nested = `{ ${nested} }`;
+    return [
+        "export const lexical: number = 1;",
+        "var nestedVar: number = 41;",
+        "let observed: number = 0;",
+        nested,
+        "class OuterPrivateEnvironment {",
+        "    #value = 42;",
+        "    make(this: any): any {",
+        "        const receiver: any = this;",
+        "        return class InnerPrivateEnvironment {",
+        "            read(this: any): any { return receiver.#value; }",
+        "        };",
+        "    }",
+        "}",
+        "const Inner: any = new OuterPrivateEnvironment().make();",
+        'console.log("module static semantics depth:", observed === 41 && new Inner().read() === 42);',
+        "",
+    ].join("\n");
+}
+
+function classExpressionMethodWidthSource(width: number): string {
+    const methods = Array.from(
+        { length: width },
+        (_, index) => `        method_${index}(this: any): any { return captured + ${index}; }`,
+    );
+    const observations = Array.from(
+        { length: width },
+        (_, index) => `if (instance.method_${index}() !== ${1000 + index}) valid = false;`,
+    );
+    return [
+        "function makeMethodWorklistClass(captured: any): any {",
+        "    return class MethodWorklistClass {",
+        ...methods,
+        "    };",
+        "}",
+        "const Constructor: any = makeMethodWorklistClass(1000);",
+        "const instance: any = new Constructor();",
+        "let valid = true;",
+        ...observations,
+        'console.log("class expression method worklist:", valid);',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
@@ -738,6 +817,10 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return moduleNamespaceExportWidthSource(spec.width);
         case "module-static-semantics-width":
             return moduleStaticSemanticsWidthSource(spec.width);
+        case "module-static-semantics-depth":
+            return moduleStaticSemanticsDepthSource(spec.depth);
+        case "class-expression-method-width":
+            return classExpressionMethodWidthSource(spec.width);
         case "global-number-parse-length":
             return globalNumberParseLengthSource(spec.length);
         case "uri-percent-codec-length":

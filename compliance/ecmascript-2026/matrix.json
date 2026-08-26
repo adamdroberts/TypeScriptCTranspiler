@@ -45,6 +45,48 @@
       "rationale": "One direct terminal partition binds the pinned IsStrictlyEqual scenarios to independent semantic, cardinality, and implementation evidence."
     },
     {
+      "clause": "sec-module-semantics-static-semantics-early-errors",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "module-body-name-control-containment-and-private-environment-rules",
+          "title": "Every ModuleBody early-error rule over canonical name collections, control/containment trees, lexical private environments, and well-formed export names",
+          "surface": "module",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-module-semantics-static-semantics-early-errors" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/test262-negative-phase.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["module_static_semantics_width", "module_static_semantics_depth"],
+            "e2e": ["class_expression_closure"],
+            "negativeDiagnostics": ["control_static_semantics_top_level_return"],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-static-semantics.ts#earlyModuleStaticSemanticsFailure",
+              "src/compile.ts#moduleStaticSemanticsDiagnostics",
+              "src/control-static-semantics.ts#earlyControlFlowStaticSemanticsFailure",
+              "src/emit/index.ts#emitClassExpression",
+              "runtime/tsc_value.c#tsc_function_own_prototype"
+            ]
+          },
+          "rationale": "The independent property crosses duplicate lexical names, lexical/var intersections, duplicate exports, unresolved exported bindings, super/NewTarget containment boundaries, duplicate/undefined control targets, nested lexical private environments, and ill-formed versus paired-surrogate ModuleExportName strings. The compiler and native host consume the same source-derived Module name/private worklists, and both consume the shared frontend-owned control-flow worklist for label/target rules. Separate generated native inputs stress ModuleItemList width and statement/private-environment depth; the positive private-name scenario executes through the canonical dynamic class member worklist. The exact pinned clause query remains authoritative, and report/host eligibility is still required before this evidence can contribute to a full claim."
+        }
+      ],
+      "rationale": "The complete normative rule list is bound as one terminal Module static-semantics partition with reciprocal property, independent width/depth stress, native positive execution, implementation, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-array.from",
       "disposition": "evidence",
       "partitions": [

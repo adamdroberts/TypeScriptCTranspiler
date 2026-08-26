@@ -988,7 +988,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-globaldeclarationinstantiation` — GlobalDeclarationInstantiation ( _script_: a |Script| Parse Node, _env_: a Global Environment Record, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-modules` — Modules: exact disposition and partitions missing.
   - [ ] `sec-module-semantics` — Module Semantics: exact disposition and partitions missing.
-  - [ ] `sec-module-semantics-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
+  - [ ] `sec-module-semantics-static-semantics-early-errors` — Static Semantics: Early Errors
+    - [ ] `module-body-name-control-containment-and-private-environment-rules` (module, unbounded): Every ModuleBody early-error rule over canonical name collections, control/containment trees, lexical private environments, and well-formed export names.
   - [ ] `sec-importedlocalnames` — Static Semantics: ImportedLocalNames ( _importEntries_: a List of ImportEntry Records, ): a List of Strings: exact disposition and partitions missing.
   - [ ] `sec-modulerequest-record` — ModuleRequest Records: exact disposition and partitions missing.
   - [ ] `sec-ModuleRequestsEqual` — ModuleRequestsEqual ( _left_: a ModuleRequest Record or a LoadedModuleRequest Record, _right_: a ModuleRequest Record or a LoadedModuleRequest Record, ): a Boolean: exact disposition and partitions missing.

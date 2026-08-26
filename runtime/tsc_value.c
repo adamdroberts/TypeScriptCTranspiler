@@ -2444,7 +2444,14 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
     if (!ident) return tsc_value_undefined();
     if (!ident->func_prototype_initialized) {
         tsc_object_t* proto = tsc_object_new();
-        tsc_object_set(proto, tsc_str_from_lit("constructor", 11), fn);
+        tsc_object_define(
+            proto,
+            tsc_str_from_lit("constructor", 11),
+            fn,
+            true,
+            false,
+            true
+        );
         tsc_function_identity_set_own_prototype(ident, tsc_value_object(proto));
     }
     return ident->func_prototype;

@@ -38,6 +38,90 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/test262-negative-phase.property.test.ts",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_static_semantics_width",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ],
+      "stressReview": {
+        "dimension": "ModuleItemList lexical/export name-collection width",
+        "parameter": "width",
+        "representativeHighDepth": 257,
+        "rationale": "One generated native Module independently stresses the canonical source-derived name collections without turning declaration or export counts into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "stress",
+      "id": "module_static_semantics_depth",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ],
+      "stressReview": {
+        "dimension": "Module statement/private-environment tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 257,
+        "rationale": "One generated native Module independently stresses the explicit statement and lexical private-environment worklists without treating successive nesting depths as tasks or evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "class_expression_closure",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "negativeDiagnostics",
+      "id": "control_static_semantics_top_level_return",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-static-semantics.ts#earlyModuleStaticSemanticsFailure",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/compile.ts#moduleStaticSemanticsDiagnostics",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/control-static-semantics.ts#earlyControlFlowStaticSemanticsFailure",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitClassExpression",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_function_own_prototype",
+      "targets": [
+        "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/module-namespace-exotic.property.test.ts",
       "targets": [
         "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",

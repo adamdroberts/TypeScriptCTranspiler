@@ -99,6 +99,44 @@ function moduleExportName(name: ts.ModuleExportName): string {
     return name.text;
 }
 
+function isWellFormedUnicode(value: string): boolean {
+    for (let index = 0; index < value.length; index++) {
+        const unit = value.charCodeAt(index);
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+            if (index + 1 >= value.length) return false;
+            const trailing = value.charCodeAt(index + 1);
+            if (trailing < 0xdc00 || trailing > 0xdfff) return false;
+            index++;
+            continue;
+        }
+        if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+    }
+    return true;
+}
+
+function moduleExportNameFailure(sourceFile: ts.SourceFile): ModuleStaticSemanticsFailure | null {
+    const worklist: ts.Node[] = [sourceFile];
+    while (worklist.length > 0) {
+        const node = worklist.pop()!;
+        if (ts.isStringLiteralLike(node)) {
+            const parent = node.parent;
+            const isModuleExportName =
+                ts.isImportSpecifier(parent) && parent.propertyName === node ||
+                ts.isExportSpecifier(parent) &&
+                    (parent.propertyName === node || parent.name === node) ||
+                ts.isNamespaceExport(parent) && parent.name === node;
+            if (isModuleExportName && !isWellFormedUnicode(node.text)) {
+                return {
+                    node,
+                    message: "ModuleExportName StringLiteral is not well-formed Unicode",
+                };
+            }
+        }
+        pushChildren(worklist, node);
+    }
+    return null;
+}
+
 function duplicateName(entries: readonly NameEntry[]): NameEntry | null {
     const seen = new Set<string>();
     for (const entry of entries) {
@@ -408,7 +446,8 @@ export function earlyModuleStaticSemanticsFailure(
         }
     }
 
-    return strictModuleFailure(sourceFile) ??
+    return moduleExportNameFailure(sourceFile) ??
+        strictModuleFailure(sourceFile) ??
         moduleContainsFailure(sourceFile) ??
         modulePrivateIdentifierFailure(sourceFile);
 }

@@ -1,4 +1,8 @@
 import ts from "typescript";
+import {
+    earlyControlFlowStaticSemanticsFailure,
+    type ControlStaticSemanticsFailure,
+} from "./control-static-semantics";
 import { execFile } from "node:child_process";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
@@ -212,6 +216,18 @@ function moduleStaticSemanticsDiagnostics(
         if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
         if (!hasModuleSyntax(sourceFile) && !explicitModuleRoots.has(path.resolve(sourceFile.fileName))) continue;
         const failure = earlyModuleStaticSemanticsFailure(sourceFile);
+        if (failure) failures.push(failure);
+    }
+    return failures;
+}
+
+function controlStaticSemanticsDiagnostics(
+    program: ts.Program,
+): ControlStaticSemanticsFailure[] {
+    const failures: ControlStaticSemanticsFailure[] = [];
+    for (const sourceFile of program.getSourceFiles()) {
+        if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
+        const failure = earlyControlFlowStaticSemanticsFailure(sourceFile);
         if (failure) failures.push(failure);
     }
     return failures;
@@ -833,9 +849,12 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         customConditions: opts.customConditions,
     });
-    const moduleFailures = moduleStaticSemanticsDiagnostics(program, opts.moduleRoots);
-    if (moduleFailures.length > 0) {
-        for (const failure of moduleFailures) {
+    const staticSemanticsFailures = [
+        ...controlStaticSemanticsDiagnostics(program),
+        ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),
+    ];
+    if (staticSemanticsFailures.length > 0) {
+        for (const failure of staticSemanticsFailures) {
             const sourceFile = failure.node.getSourceFile();
             const location = sourceFile.getLineAndCharacterOfPosition(
                 Math.max(0, failure.node.getStart(sourceFile)),

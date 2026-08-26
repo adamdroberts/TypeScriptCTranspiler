@@ -715,7 +715,7 @@ class Emitter {
     private valueFunctionAdapters = new Map<string, string>();
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
-    private directEmptyClassConstructAdapter: string | null = null;
+    private defaultClassConstructAdapter: string | null = null;
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -815,6 +815,21 @@ class Emitter {
 
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
+    }
+
+    /** A non-export-wrapper ClassExpression is a runtime constructor value,
+     * not a statically named C instance struct. Keep that identity attached to
+     * the checker type so every caller/return adapter shares the same boxed
+     * representation. Direct CommonJS class exports retain their older
+     * source-owned struct lowering until they join the dynamic class plan. */
+    private mapRuntimeType(node: ts.Node, type: ts.Type): CType {
+        const declarations = type.getSymbol()?.getDeclarations() ?? [];
+        if (declarations.some((declaration) =>
+            ts.isClassExpression(declaration) &&
+            !this.isDirectCommonJsClassExpression(declaration))) {
+            return T_VALUE;
+        }
+        return mapTsType(node, type, this.checker);
     }
 
     private prepareType(type: CType): CType {
@@ -20460,7 +20475,7 @@ class Emitter {
             if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
             return this.prepareType(mapType(p, this.checker));
         });
-        const ret = this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(fn, sig.getReturnType()));
         const thisType = this.signatureThisType(sig, fn);
         return this.prepareType(functionType(params, ret, thisType ?? undefined));
     }
@@ -25794,19 +25809,34 @@ class Emitter {
             return captures;
         }
 
+        const addClosureCaptures = (closure: ClosureLikeDeclaration): void => {
+            for (const cap of this.collectClosureCaptures(closure)) {
+                const cellName = this.cellNameForCapture(cap.symbol, cap.field);
+                captures.set(cap.symbol, {
+                    type: cap.type,
+                    cellName,
+                    ...(cap.type.kind === "value" ? { rootCellName: `${cellName}__gc_root` } : {}),
+                    ...(cap.lexical ? { initializedCellName: `${cellName}__initialized` } : {}),
+                });
+            }
+        };
         const visit = (node: ts.Node): void => {
             if (
                 node !== owner &&
                 (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
             ) {
-                for (const cap of this.collectClosureCaptures(node)) {
-                    const cellName = this.cellNameForCapture(cap.symbol, cap.field);
-                    captures.set(cap.symbol, {
-                        type: cap.type,
-                        cellName,
-                        ...(cap.type.kind === "value" ? { rootCellName: `${cellName}__gc_root` } : {}),
-                        ...(cap.lexical ? { initializedCellName: `${cellName}__initialized` } : {}),
-                    });
+                addClosureCaptures(node);
+                return;
+            }
+            if (node !== owner && ts.isClassExpression(node)) {
+                /* ClassDefinitionEvaluation creates each method closure while
+                 * the class expression is evaluated.  Feed every supported
+                 * method through the same enclosing capture-cell collection;
+                 * member cardinality never changes the lowering shape. */
+                for (const member of node.members) {
+                    if (ts.isMethodDeclaration(member) && member.body) {
+                        addClosureCaptures(member);
+                    }
                 }
                 return;
             }
@@ -25815,15 +25845,7 @@ class Emitter {
                 ts.isFunctionDeclaration(node) &&
                 this.isSupportedDirectSwitchFunctionDeclaration(node)
             ) {
-                for (const cap of this.collectClosureCaptures(node)) {
-                    const cellName = this.cellNameForCapture(cap.symbol, cap.field);
-                    captures.set(cap.symbol, {
-                        type: cap.type,
-                        cellName,
-                        ...(cap.type.kind === "value" ? { rootCellName: `${cellName}__gc_root` } : {}),
-                        ...(cap.lexical ? { initializedCellName: `${cellName}__initialized` } : {}),
-                    });
-                }
+                addClosureCaptures(node);
                 return;
             }
             if (node !== owner && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
@@ -26264,7 +26286,7 @@ class Emitter {
                 if (!methodName) unsupported(m, "computed method names");
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve method signature");
-                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const ret = this.mapRuntimeType(m, sig.getReturnType());
                 const params = isStatic(m)
                     ? this.collectParams(m.parameters)
                     : [`${name}_t* self`, ...this.collectParams(m.parameters)];
@@ -26276,7 +26298,7 @@ class Emitter {
                 if (!accessorName) unsupported(m, "computed accessor names");
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve getter signature");
-                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const ret = this.mapRuntimeType(m, sig.getReturnType());
                 const params = isStatic(m) ? [] : [`${name}_t* self`];
                 this.protos.line(
                     `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
@@ -27649,7 +27671,7 @@ class Emitter {
                 if (!methodName) unsupported(m, "computed method names");
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve method signature");
-                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const ret = this.mapRuntimeType(m, sig.getReturnType());
                 const params = isStatic(m)
                     ? this.collectParams(m.parameters)
                     : [`${name}_t* self`, ...this.collectParams(m.parameters)];
@@ -27720,7 +27742,7 @@ class Emitter {
                 if (!accessorName) unsupported(m, "computed accessor names");
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve getter signature");
-                const ret = mapTsType(m, sig.getReturnType(), this.checker);
+                const ret = this.mapRuntimeType(m, sig.getReturnType());
                 const params = isStatic(m) ? [] : [`${name}_t* self`];
                 this.defs.open(
                     `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
@@ -28135,7 +28157,7 @@ class Emitter {
                 this.checker,
             ));
         });
-        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
@@ -28199,7 +28221,7 @@ class Emitter {
                 this.checker,
             ));
         });
-        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
@@ -28254,7 +28276,7 @@ class Emitter {
                 this.checker,
             ));
         });
-        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
@@ -28507,7 +28529,7 @@ class Emitter {
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
         if (!sig) unsupported(member, "could not resolve static getter signature");
-        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
@@ -28554,7 +28576,7 @@ class Emitter {
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
         if (!sig) unsupported(member, "could not resolve instance getter signature");
-        const ret = this.prepareType(mapTsType(member, sig.getReturnType(), this.checker));
+        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
@@ -43868,7 +43890,7 @@ class Emitter {
         const { owner, method } = found;
         const sig = this.checker.getSignatureFromDeclaration(method);
         if (!sig) unsupported(method, "could not resolve iterator method signature");
-        const ret = mapTsType(method, sig.getReturnType(), this.checker);
+        const ret = this.mapRuntimeType(method, sig.getReturnType());
         if (ret.kind !== "array" || !ret.elem) {
             if (ret.kind === "class") return null;
             unsupported(
@@ -47877,12 +47899,12 @@ class Emitter {
                 member.kind === ts.SyntaxKind.SemicolonClassElement);
     }
 
-    private ensureDirectEmptyClassConstructAdapter(): string {
-        if (this.directEmptyClassConstructAdapter) {
-            return this.directEmptyClassConstructAdapter;
+    private ensureDefaultClassConstructAdapter(): string {
+        if (this.defaultClassConstructAdapter) {
+            return this.defaultClassConstructAdapter;
         }
-        const name = "tsc_direct_empty_class_construct";
-        this.directEmptyClassConstructAdapter = name;
+        const name = "tsc_default_class_construct";
+        this.defaultClassConstructAdapter = name;
         const signature =
             `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(`${signature};`);
@@ -47905,7 +47927,7 @@ class Emitter {
     private directEmptyClassConstructorValue(
         declaration: ts.ClassDeclaration & { readonly name: ts.Identifier },
     ): EmitResult {
-        const adapter = this.ensureDirectEmptyClassConstructAdapter();
+        const adapter = this.ensureDefaultClassConstructAdapter();
         const identity = this.freshTemp("_switch_class_identity");
         const runtimeName = declaration.name.text;
         return {
@@ -47914,6 +47936,75 @@ class Emitter {
                 `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})); })`,
             ty: T_VALUE,
         };
+    }
+
+    /** ClassDefinitionEvaluation for the dynamic base/default-constructor
+     * partition.  Every supported method enters one source-ordered member
+     * collection and is materialized as a closure on the constructor or its
+     * prototype.  Other element families remain one stable fail-closed
+     * boundary until they join this same definition plan. */
+    private emitClassExpression(expression: ts.ClassExpression): EmitResult {
+        if (expression.typeParameters?.length) {
+            unsupported(expression, "class expression type parameters are not supported by dynamic class definition");
+        }
+        if (expression.heritageClauses?.length) {
+            unsupported(expression, "class expression heritage is not supported by dynamic class definition");
+        }
+        if (this.classHasDecorators(expression)) {
+            unsupported(expression, "class expression decorators are not supported by dynamic class definition");
+        }
+
+        const methods: ts.MethodDeclaration[] = [];
+        for (const member of expression.members) {
+            if (member.kind === ts.SyntaxKind.SemicolonClassElement) continue;
+            if (!ts.isMethodDeclaration(member) || !member.body) {
+                unsupported(member, "class expression element is not supported by dynamic class definition");
+            }
+            if (ts.isPrivateIdentifier(member.name)) {
+                unsupported(member.name, "private class expression methods are not supported by dynamic class definition");
+            }
+            if (ts.isComputedPropertyName(member.name)) {
+                unsupported(member.name, "computed class expression methods are not supported by dynamic class definition");
+            }
+            methods.push(member);
+        }
+
+        const adapter = this.ensureDefaultClassConstructAdapter();
+        const identity = this.freshTemp("_class_expression_identity");
+        const constructor = this.freshTemp("_class_expression_constructor");
+        const constructorRoot = this.freshTemp("_class_expression_constructor_root");
+        const prototype = this.freshTemp("_class_expression_prototype");
+        const prototypeRoot = this.freshTemp("_class_expression_prototype_root");
+        const pieces: string[] = [
+            `void* const ${identity} = TSC_GC_MALLOC(sizeof(char))`,
+            `tsc_value_t ${constructor} = tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${this.functionValueNameLiteral(expression)})`,
+            `void* volatile ${constructorRoot} = tsc_value_gc_root(${constructor})`,
+            `(void)${constructorRoot}`,
+            `tsc_value_t ${prototype} = tsc_value_get_prop(${constructor}, tsc_str_from_lit("prototype", 9))`,
+            `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
+            `(void)${prototypeRoot}`,
+        ];
+        for (const method of methods) {
+            const propertyName = this.staticPropertyName(method.name);
+            if (propertyName === null) {
+                unsupported(method.name, "class expression method name is not representable");
+            }
+            const closure = this.emitClosureExpression(method);
+            const methodValue = this.freshTemp("_class_expression_method");
+            const methodRoot = this.freshTemp("_class_expression_method_root");
+            const target = isStatic(method) ? constructor : prototype;
+            pieces.push(
+                `tsc_value_t ${methodValue} = ${this.coerce(closure, T_VALUE, method)}`,
+                `void* volatile ${methodRoot} = tsc_value_gc_root(${methodValue})`,
+                `(void)${methodRoot}`,
+                `if (!tsc_value_define_property_desc(${target}, ` +
+                    `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}), ` +
+                    `${methodValue}, true, true, true, false, true, true, true)) ` +
+                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`,
+            );
+        }
+        pieces.push(constructor);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
     private emitDirectSwitchClassDeclaration(
@@ -48909,6 +49000,7 @@ class Emitter {
         if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
             return this.emitClosureExpression(expr);
         }
+        if (ts.isClassExpression(expr)) return this.emitClassExpression(expr);
         if (ts.isNewExpression(expr)) return this.emitNew(expr);
         if (ts.isPropertyAccessExpression(expr)) return this.emitPropertyAccess(expr);
         if (ts.isElementAccessExpression(expr)) return this.emitElementAccess(expr);
@@ -50608,7 +50700,7 @@ class Emitter {
         if (!name) unsupported(accessor.decl, "computed accessor names");
         const sig = this.checker.getSignatureFromDeclaration(accessor.decl);
         if (!sig) unsupported(accessor.decl, "could not resolve getter signature");
-        const ret = mapTsType(accessor.decl, sig.getReturnType(), this.checker);
+        const ret = this.mapRuntimeType(accessor.decl, sig.getReturnType());
         const callee = `${accessor.owner}_${name}`;
         if (isStatic(accessor.decl)) {
             if (this.classMemberHasDecorators(accessor.decl)) {
@@ -50798,7 +50890,7 @@ class Emitter {
         const getterSig = getter ? this.checker.getSignatureFromDeclaration(getter.decl) : null;
         if (getter && !getterSig) unsupported(getter.decl, "could not resolve getter signature");
         const getterType = getter && getterSig
-            ? mapTsType(getter.decl, getterSig.getReturnType(), this.checker)
+            ? this.mapRuntimeType(getter.decl, getterSig.getReturnType())
             : null;
         if (isStatic(accessor.decl)) {
             const setCall = (assigned: string): string =>
@@ -52753,7 +52845,7 @@ class Emitter {
         if (genericDecl) {
             return this.emitGenericFunctionCall(call, genericDecl, sig);
         }
-        const retType = this.prepareType(mapTsType(call, sig.getReturnType(), this.checker));
+        const retType = this.prepareType(this.mapRuntimeType(call, sig.getReturnType()));
         const params = sig.getParameters();
         const thisType = ts.isIdentifier(call.expression)
             ? this.directCallableThisType(call.expression)
@@ -54678,7 +54770,7 @@ class Emitter {
     ): EmitResult {
         const bindings = this.genericBindingsForCall(call, fd, sig);
         const name = this.ensureGenericSpecialization(fd, bindings);
-        const retType = mapTsType(call, sig.getReturnType(), this.checker);
+        const retType = this.mapRuntimeType(call, sig.getReturnType());
         const params = sig.getParameters();
         if (
             call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
@@ -54964,7 +55056,7 @@ class Emitter {
         withTypeBindings(bindings, () => {
             const sig = this.checker.getSignatureFromDeclaration(md);
             if (!sig) unsupported(md, "could not resolve method signature");
-            const returnType = mapTsType(md, sig.getReturnType(), this.checker);
+            const returnType = this.mapRuntimeType(md, sig.getReturnType());
             const params = isStatic(md)
                 ? this.collectParams(md.parameters)
                 : [`${owningCls}_t* self`, ...this.collectParams(md.parameters)];
@@ -79099,9 +79191,12 @@ class Emitter {
                 case "function": {
                     const sourceFunction = ts.isExpression(node)
                         ? this.javaScriptFunctionLikeForExpression(node)
-                        : ts.isFunctionDeclaration(node)
-                        ? node
-                        : null;
+                        : ts.isFunctionDeclaration(node) ||
+                            ts.isMethodDeclaration(node) ||
+                            ts.isGetAccessorDeclaration(node) ||
+                            ts.isSetAccessorDeclaration(node)
+                            ? node
+                            : null;
                     const length = sourceFunction
                         ? this.javaScriptFunctionLength(sourceFunction)
                         : (r.ty.params ?? []).length;
@@ -79203,9 +79298,18 @@ class Emitter {
             name = current.name?.text ?? (this.isDefaultExportDeclaration(current) ? "default" : "");
         } else if (ts.isFunctionExpression(current) && current.name) {
             name = current.name.text;
+        } else if (ts.isClassExpression(current) && current.name) {
+            name = current.name.text;
+        } else if (
+            ts.isMethodDeclaration(current) ||
+            ts.isGetAccessorDeclaration(current) ||
+            ts.isSetAccessorDeclaration(current)
+        ) {
+            name = this.staticPropertyName(current.name) ?? "";
         } else if (
             ts.isFunctionExpression(current) ||
-            ts.isArrowFunction(current)
+            ts.isArrowFunction(current) ||
+            ts.isClassExpression(current)
         ) {
             let parent: ts.Node = current.parent;
             while (
@@ -79267,9 +79371,12 @@ class Emitter {
         this.prepareType(type);
         const sourceFunction = ts.isExpression(node)
             ? this.javaScriptFunctionLikeForExpression(node)
-            : ts.isFunctionDeclaration(node)
-            ? node
-            : null;
+            : ts.isFunctionDeclaration(node) ||
+                ts.isMethodDeclaration(node) ||
+                ts.isGetAccessorDeclaration(node) ||
+                ts.isSetAccessorDeclaration(node)
+                ? node
+                : null;
         const createsActivation = !!sourceFunction && !ts.isArrowFunction(sourceFunction);
         const normalizesSloppyThis = createsActivation &&
             !!sourceFunction &&
