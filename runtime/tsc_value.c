@@ -866,10 +866,26 @@ static tsc_value_t string_substring_from_values(
     return tsc_value_string(tsc_str_substring(string, start_index, end_index));
 }
 
+static tsc_value_t string_substr_from_values(
+    tsc_value_t receiver,
+    tsc_value_t start,
+    tsc_value_t length
+) {
+    string_require_object_coercible(receiver, "String.prototype.substr");
+    /* Preserve the specified receiver -> start -> length coercion sequence. */
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double start_index = tsc_value_to_number(start);
+    double result_length = tsc_value_is_undefined(length)
+        ? INFINITY
+        : tsc_value_to_number(length);
+    return tsc_value_string(tsc_str_substr(string, start_index, result_length));
+}
+
 typedef enum {
     TSC_STRING_PROTOTYPE_AT,
     TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_SUBSTRING,
+    TSC_STRING_PROTOTYPE_SUBSTR,
     TSC_STRING_PROTOTYPE_REPLACE,
     TSC_STRING_PROTOTYPE_REPLACE_ALL,
     TSC_STRING_PROTOTYPE_SPLIT,
@@ -886,6 +902,7 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "at", 2, 1.0, TSC_STRING_PROTOTYPE_AT },
     { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "substring", 9, 2.0, TSC_STRING_PROTOTYPE_SUBSTRING },
+    { "substr", 6, 2.0, TSC_STRING_PROTOTYPE_SUBSTR },
     { "replace", 7, 2.0, TSC_STRING_PROTOTYPE_REPLACE },
     { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
     { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
@@ -911,6 +928,8 @@ static tsc_value_t string_prototype_method_apply(
             return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SUBSTRING:
             return string_substring_from_values(this_arg, first, second);
+        case TSC_STRING_PROTOTYPE_SUBSTR:
+            return string_substr_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_REPLACE:
             return tsc_value_method_replace(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_REPLACE_ALL:
@@ -7500,13 +7519,7 @@ tsc_value_t tsc_value_method_substring(tsc_value_t recv, tsc_value_t start, tsc_
 }
 
 tsc_value_t tsc_value_method_substr(tsc_value_t recv, tsc_value_t start, tsc_value_t length) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        const tsc_str_t* str = (const tsc_str_t*)value_ptr(recv);
-        double s = value_slice_arg(start, 0.0);
-        double n = value_slice_arg(length, INFINITY);
-        return tsc_value_string(tsc_str_substr(str, s, n));
-    }
-    return tsc_value_undefined();
+    return string_substr_from_values(recv, start, length);
 }
 
 static bool string_protocol_call(

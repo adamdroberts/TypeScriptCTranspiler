@@ -95,6 +95,7 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "replaceAll",
     "slice",
     "split",
+    "substr",
     "substring",
 ]);
 
@@ -57977,16 +57978,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_entries(${target})`,
                 );
-            case "substr": {
-                const start = args[0] ? this.emitExpr(args[0]) : missing;
-                const length = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: start, target: T_VALUE, node: args[0] ?? call.expression },
-                    { value: length, target: T_VALUE, node: args[1] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ], ([target, startArg, lengthArg]) => `tsc_value_method_substr(${target}, ${startArg}, ${lengthArg})`);
-            }
             case "match": {
                 if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
@@ -66966,19 +66957,6 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "substr": {
-                const start = optionalNumberArg(0, "0.0");
-                const length = optionalNumberArg(1, "INFINITY");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: start, target: T_NUMBER, node: args[0] },
-                    { value: length, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
-                    `tsc_str_substr(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "concat": {

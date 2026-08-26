@@ -2368,7 +2368,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-escape-string` — escape ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-unescape-string` — unescape ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-additional-properties-of-the-string.prototype-object` — Additional Properties of the String.prototype Object: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.substr` — String.prototype.substr ( _start_, _length_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.substr` — String.prototype.substr ( _start_, _length_ )
+    - [ ] `generic-tostring-relative-start-length-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered relative-start and bounded-length conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.anchor` — String.prototype.anchor ( _name_ ): exact disposition and partitions missing.
   - [ ] `sec-createhtml` — CreateHTML ( _string_: an ECMAScript language value, _tag_: a String, _attribute_: a String, _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.big` — String.prototype.big ( ): exact disposition and partitions missing.

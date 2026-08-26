@@ -115,6 +115,12 @@
   ],
   "pathRules": [
     {
+      "prefix": "test/annexB/built-ins/String/prototype/substr/",
+      "clauses": ["sec-string.prototype.substr"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned Annex B String.prototype.substr semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "prefix": "test/built-ins/String/prototype/substring/",
       "clauses": ["sec-string.prototype.substring"],
       "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.substring semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
@@ -162,6 +168,14 @@
     }
   ],
   "testOverrides": [
+    {
+      "test": "test/annexB/built-ins/String/prototype/substr/not-a-constructor.js",
+      "sourceSha256": "6d0cc0542ed0593f750d3c5b6825ca98387c5ab86c221dc134b8df39a2d6bf9c",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.substr"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.substr intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
     {
       "test": "test/built-ins/String/fromCharCode/not-a-constructor.js",
       "sourceSha256": "e6fe8169bf16fb310b078e021e8acc6059b3d464f34dfca3e1301da2b009846d",

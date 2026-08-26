@@ -343,13 +343,14 @@
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring ranges, literal replace/split, the generic functional-replacement match-position worklist, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, literal replace/split, the generic functional-replacement match-position worklist, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -391,7 +392,8 @@
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -435,7 +437,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -444,7 +447,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -453,7 +457,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -462,7 +467,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -471,7 +477,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -522,7 +529,8 @@
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {
@@ -586,6 +594,48 @@
       "id": "runtime/tsc_string.c#tsc_str_substring",
       "targets": [
         "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/string-substr.property.test.ts",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "string_substr",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_string_substr",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_substr_from_values",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_substr",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_substr",
+      "targets": [
+        "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence"
       ]
     },
     {

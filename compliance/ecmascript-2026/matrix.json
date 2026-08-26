@@ -403,6 +403,52 @@
       "rationale": "The complete String.prototype.substring intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.substr",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "generic-tostring-relative-start-length-and-code-unit-sequence",
+          "title": "Generic receiver ToString, ordered relative-start and bounded-length conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-string.prototype.substr" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-substr.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["string_utf16_exotic_width"],
+            "e2e": ["string_substr", "dynamic_string_substr"],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+            "implementation": [
+              "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+              "src/emit/index.ts#emitStringMethod",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
+              "runtime/tsc_value.c#string_prototype_install_intrinsics",
+              "runtime/tsc_value.c#string_prototype_method_apply",
+              "runtime/tsc_value.c#string_substr_from_values",
+              "runtime/tsc_value.c#tsc_value_get_prop",
+              "runtime/tsc_value.c#tsc_value_method_substr",
+              "runtime/tsc_string.c#tsc_str_substr"
+            ]
+          },
+          "rationale": "The independent property derives the intrinsic metadata, non-construction, and mutable descriptor surface; primitive, boxed, ordinary-object, array, BigInt, Symbol, and nullish receiver partitions; omitted, undefined, Boolean, null, String, object, BigInt, Symbol, NaN, fractional, infinite, negative-relative, over-length, zero, and negative-length partitions; exact receiver/start/length abrupt identity and order; ordinary lookup before argument evaluation; borrowed Number/Boolean prototype lookup; and UTF-16 scalar, surrogate-half, and lone-surrogate ranges in both memory modes. One shared emitter method set routes typed and dynamic receivers through the ordinary receiver/property/argument worklist. The generic intrinsic performs RequireObjectCoercible and receiver ToString before ordered start/length ToNumber conversion, then one tsc_str_substr projection derives a clamped start and bounded count over the canonical arbitrary-length UTF-16 sequence. The existing distinct mixed-code-point native stress independently derives every expected code unit and exercises representative substr extraction without treating fixture or range counts as proof. The exact pinned Annex B semantic directory executes natively in both Script variants; host eligibility and exhaustive signed reporting remain separate global obligations."
+        }
+      ],
+      "rationale": "The complete Annex B String.prototype.substr intrinsic is represented as one terminal canonical-collection partition with reciprocal property, shared UTF-16 stress, native regressions, declaration, implementation, semantic-directory mapping, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-reflect-object",
       "disposition": "evidence",
       "partitions": [
