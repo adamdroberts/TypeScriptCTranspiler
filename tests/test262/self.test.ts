@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { harnessIncludeNames, resourceDirectoriesForTests } from "./inventory";
+import {
+    harnessIncludeNames,
+    matchingLegacyIdRules,
+    resourceDirectoriesForTests,
+    type LegacyIdRule,
+} from "./inventory";
 import { expandModes, parseTest262Metadata, scenarioSource } from "./metadata";
 import {
     hostProtocolVersion,
@@ -62,6 +67,19 @@ describe("Test262 metadata and scenarios", () => {
         expect(() => expandModes({ ...base, flags: ["raw", "async"] }, "invalid.js")).toThrow("forbids harness injection");
         expect(scenarioSource("value;", "strict")).toBe('"use strict";\nvalue;');
         expect(scenarioSource("value;", "raw")).toBe("value;");
+    });
+
+    test("maps legacy specification sections by metadata prefix rather than fixture names", () => {
+        const rules: LegacyIdRule[] = [{
+            field: "es5id",
+            prefix: "9.3.1_",
+            clauses: ["sec-tonumber-applied-to-the-string-type"],
+            reason: "self-test",
+            reviewedBy: "self-test",
+        }];
+        expect(matchingLegacyIdRules({ es5id: "9.3.1_arbitrary-semantic-suffix" }, rules)).toEqual(rules);
+        expect(matchingLegacyIdRules({ es5id: "9.3.10_sibling" }, rules)).toEqual([]);
+        expect(matchingLegacyIdRules({ es6id: "9.3.1_arbitrary-semantic-suffix" }, rules)).toEqual([]);
     });
 
     test("orders harness scripts and leaves raw tests unmodified", () => {

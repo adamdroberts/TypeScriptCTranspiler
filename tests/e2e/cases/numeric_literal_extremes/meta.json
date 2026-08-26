@@ -1,0 +1,3 @@
+{
+  "description": "canonical numeric-literal lowering preserves binary64 overflow, underflow, and large non-decimal values"
+}

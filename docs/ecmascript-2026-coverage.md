@@ -223,7 +223,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-toboolean` — ToBoolean ( _argument_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-tonumeric` — ToNumeric ( _value_: an ECMAScript language value, ): either a normal completion containing either a Number or a BigInt, or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-tonumber` — ToNumber ( _argument_: an ECMAScript language value, ): either a normal completion containing a Number or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-tonumber-applied-to-the-string-type` — ToNumber Applied to the String Type: exact disposition and partitions missing.
+  - [ ] `sec-tonumber-applied-to-the-string-type` — ToNumber Applied to the String Type
+    - [ ] `complete-input-string-numeric-literal-and-rounding` (algorithm, unbounded): Complete-input StringNumericLiteral recognition, whitespace, radix integer forms, decimal Infinity, and binary64 rounding.
   - [ ] `sec-stringtonumber` — StringToNumber ( _str_: a String, ): a Number: exact disposition and partitions missing.
   - [ ] `sec-runtime-semantics-stringnumericvalue` — Runtime Semantics: StringNumericValue ( ): a Number: exact disposition and partitions missing.
   - [ ] `sec-roundmvresult` — RoundMVResult ( _n_: a mathematical value, ): a Number: exact disposition and partitions missing.
@@ -2745,7 +2746,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `tail-call-optimization` — standard, tracking: `todo`; no clause mapping.
 - [ ] `template` — standard, tracking: `todo`; no clause mapping.
 - [ ] `top-level-await` — standard, tracking: `todo`; no clause mapping.
-- [ ] `u180e` — standard, tracking: `todo`; no clause mapping.
+- [ ] `u180e` — standard, tracking: `ready-for-verification`; `sec-unicode-format-control-characters`, `sec-white-space`.
 - [ ] `uint8array-base64` — standard, tracking: `todo`; no clause mapping.
 - [ ] `upsert` — standard, tracking: `todo`; no clause mapping.
 - [ ] `well-formed-json-stringify` — standard, tracking: `todo`; no clause mapping.

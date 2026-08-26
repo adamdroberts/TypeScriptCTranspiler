@@ -87,6 +87,49 @@
       "rationale": "The complete normative rule list is bound as one terminal Module static-semantics partition with reciprocal property, independent width/depth stress, native positive execution, implementation, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-tonumber-applied-to-the-string-type",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "complete-input-string-numeric-literal-and-rounding",
+          "title": "Complete-input StringNumericLiteral recognition, whitespace, radix integer forms, decimal Infinity, and binary64 rounding",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                { "field": "clause", "equals": "sec-tonumber-applied-to-the-string-type" }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": ["tests/property/string-to-number.property.test.ts"],
+            "generatedRegression": [],
+            "stress": ["global_number_parse_length"],
+            "e2e": ["numeric_literal_extremes"],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_builtin.c#tsc_string_to_number",
+              "runtime/tsc_builtin.c#validated_ascii_decimal_to_number",
+              "runtime/tsc_builtin.c#accumulate_integer_digits",
+              "runtime/tsc_string.c#tsc_str_trim",
+              "runtime/tsc_value.c#tsc_value_to_number",
+              "src/emit/index.ts#formatNumericLiteral"
+            ]
+          },
+          "rationale": "The independent property derives the complete-input grammar partitions for empty and whitespace-only input, signed decimal and Infinity, decimal point/exponent forms, binary/octal/hex integers, invalid prefixes/digits/suffixes/separators, signed zero, Unicode whitespace, exact non-decimal rounding, overflow, underflow, ordinary object conversion, BigInt, Symbol, and abrupt completion. The runtime consumes one arbitrary-length string through shared trim, prefix-scan, digit-accumulation, and binary64-rounding paths; one distinct generated native input stresses that scanner at representative length. The numeric-literal E2E keeps the pinned tests' overflowing source operands on the same portable literal formatter. The exact pinned clause query remains authoritative, and exhaustive signed report eligibility is still required for a global claim."
+        }
+      ],
+      "rationale": "The String-input ToNumber algorithm is represented as one terminal complete-input scanner partition with reciprocal property, independent length stress, native regression, implementation, and pinned Test262 evidence."
+    },
+    {
       "clause": "sec-array.from",
       "disposition": "evidence",
       "partitions": [

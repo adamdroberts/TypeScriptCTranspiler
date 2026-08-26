@@ -122,6 +122,76 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-to-number.property.test.ts",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "global_number_parse_length",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ],
+      "stressReview": {
+        "dimension": "complete-input numeric source code-unit scan length",
+        "parameter": "length",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native input independently stresses the shared arbitrary-length trim and numeric scanner without treating successive source lengths as tasks or evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "numeric_literal_extremes",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_builtin.c#tsc_string_to_number",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_builtin.c#validated_ascii_decimal_to_number",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_builtin.c#accumulate_integer_digits",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_trim",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_to_number",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#formatNumericLiteral",
+      "targets": [
+        "sec-tonumber-applied-to-the-string-type#complete-input-string-numeric-literal-and-rounding"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/module-namespace-exotic.property.test.ts",
       "targets": [
         "sec-module-namespace-exotic-objects#namespace-exotic-slot-invariants",

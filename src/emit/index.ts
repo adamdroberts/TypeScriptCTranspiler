@@ -79603,8 +79603,18 @@ function bitwiseOp(k: ts.SyntaxKind): string {
 
 function formatNumericLiteral(text: string): string {
     const s = text.replace(/_/g, "");
+    /* TypeScript canonicalizes a source literal whose mathematical value
+     * overflows binary64 (for example, 10e10000) to the text `Infinity`.
+     * `Infinity` is not a C identifier supplied by <math.h>; keep every
+     * numeric literal on this one formatter and emit the portable macro. */
+    const value = Number(s);
+    if (value === Infinity) return "INFINITY";
+    if (value === -Infinity) return "(-INFINITY)";
+    if (Number.isNaN(value)) {
+        throw new Error(`invalid canonical numeric literal ${JSON.stringify(text)}`);
+    }
     if (/^0x/i.test(s) || /^0o/i.test(s) || /^0b/i.test(s)) {
-        return Number(s).toString() + ".0";
+        return value.toString() + ".0";
     }
     if (!/[.eE]/.test(s)) return s + ".0";
     return s;

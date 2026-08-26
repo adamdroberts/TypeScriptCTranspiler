@@ -142,6 +142,7 @@ interface HostProfile {
 interface OverridesFile {
     schemaVersion: number;
     esidAliases: Array<Record<string, unknown>>;
+    legacyIdRules: Array<Record<string, unknown>>;
     pathRules: Array<Record<string, unknown>>;
     testOverrides: Array<Record<string, unknown>>;
 }
@@ -1081,6 +1082,7 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
     if (
         overrides.schemaVersion !== 1 ||
         !Array.isArray(overrides.esidAliases) ||
+        !Array.isArray(overrides.legacyIdRules) ||
         !Array.isArray(overrides.pathRules) ||
         !Array.isArray(overrides.testOverrides)
     ) {
@@ -1111,6 +1113,28 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
             throw new Error(`esid alias ${mapping.esid} duplicates a current pinned specification anchor`);
         }
         aliasIds.add(mapping.esid);
+    }
+    const legacyPrefixes = new Map<string, string[]>();
+    for (const mapping of overrides.legacyIdRules) {
+        validateMappingBase(mapping, "legacy id rule");
+        const field = mapping.field;
+        const prefix = mapping.prefix;
+        if (
+            (field !== "es5id" && field !== "es6id") ||
+            typeof prefix !== "string" ||
+            prefix.trim() !== prefix ||
+            prefix.length === 0 ||
+            /[\s*?\[\]]/.test(prefix) ||
+            /[A-Za-z0-9]$/.test(prefix)
+        ) {
+            throw new Error("legacy id rules must name es5id/es6id and use a non-empty exact prefix ending at a semantic boundary");
+        }
+        const existing = legacyPrefixes.get(field) ?? [];
+        if (existing.some((candidate) => candidate.startsWith(prefix) || prefix.startsWith(candidate))) {
+            throw new Error("legacy id rule prefixes must be unique and non-overlapping within each metadata field");
+        }
+        existing.push(prefix);
+        legacyPrefixes.set(field, existing);
     }
     const prefixes = new Set<string>();
     for (const mapping of overrides.pathRules) {

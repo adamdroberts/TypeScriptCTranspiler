@@ -1370,9 +1370,12 @@
     {
       "tag": "u180e",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-unicode-format-control-characters",
+        "sec-white-space"
+      ],
+      "rationale": "U+180E is a Unicode Cf format-control character rather than ECMAScript WhiteSpace. Operation-specific tests retain their exact esid mappings; this feature tag binds the shared lexical classification and source-text allowance used across those operations."
     },
     {
       "tag": "uint8array-base64",

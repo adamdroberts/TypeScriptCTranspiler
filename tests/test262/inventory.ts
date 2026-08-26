@@ -55,6 +55,11 @@ interface PathRule extends ReviewedMapping {
     esid?: string;
 }
 
+export interface LegacyIdRule extends ReviewedMapping {
+    field: "es5id" | "es6id";
+    prefix: string;
+}
+
 interface TestOverride extends ReviewedMapping {
     test: string;
     sourceSha256: string;
@@ -64,6 +69,7 @@ interface TestOverride extends ReviewedMapping {
 interface MappingOverrides {
     schemaVersion: number;
     esidAliases: EsidAlias[];
+    legacyIdRules: LegacyIdRule[];
     pathRules: PathRule[];
     testOverrides: TestOverride[];
 }
@@ -222,6 +228,20 @@ function belongsToShard(id: string, shard: { index: number; total: number } | nu
     return bucket === shard.index;
 }
 
+/** Resolve reviewed legacy-section metadata independently of filenames.
+ * Rule prefixes end at a non-alphanumeric boundary (for example `9.3.1_`),
+ * preventing a section from accidentally absorbing a sibling such as
+ * `9.3.10`. */
+export function matchingLegacyIdRules(
+    metadata: { readonly es5id?: string; readonly es6id?: string },
+    rules: readonly LegacyIdRule[],
+): LegacyIdRule[] {
+    return rules.filter((rule) => {
+        const value = rule.field === "es5id" ? metadata.es5id : metadata.es6id;
+        return value?.startsWith(rule.prefix) === true;
+    });
+}
+
 function scopeFor(
     test: string,
     features: readonly string[],
@@ -246,10 +266,12 @@ function normalizeMappings(
     issues: InventoryIssue[],
 ): {
     aliases: Map<string, EsidAlias>;
+    legacyIdRules: LegacyIdRule[];
     pathRules: PathRule[];
     tests: Map<string, TestOverride>;
 } {
     const aliases = new Map<string, EsidAlias>();
+    const legacyIdRules = new Map<string, LegacyIdRule>();
     const rules = new Map<string, PathRule>();
     const tests = new Map<string, TestOverride>();
     const validBase = (mapping: ReviewedMapping): boolean =>
@@ -268,6 +290,30 @@ function normalizeMappings(
         if (!validBase(alias) || typeof alias.esid !== "string" || alias.esid.trim() === "" || aliases.has(alias.esid)) {
             invalid(String(alias.esid), "esid alias must be unique, reviewed, reasoned, and map to pinned clauses");
         } else aliases.set(alias.esid, alias);
+    }
+    for (const rule of overrides.legacyIdRules ?? []) {
+        const field = rule.field;
+        const prefix = rule.prefix;
+        const key = `${field}\0${prefix}`;
+        const overlaps = typeof prefix === "string" && [...legacyIdRules.values()].some((existing) =>
+            existing.field === field &&
+            (existing.prefix.startsWith(prefix) || prefix.startsWith(existing.prefix)));
+        if (
+            !validBase(rule) ||
+            (field !== "es5id" && field !== "es6id") ||
+            typeof prefix !== "string" ||
+            prefix.trim() !== prefix ||
+            prefix.length === 0 ||
+            /[\s*?\[\]]/.test(prefix) ||
+            /[A-Za-z0-9]$/.test(prefix) ||
+            legacyIdRules.has(key) ||
+            overlaps
+        ) {
+            invalid(
+                `${String(field)}:${String(prefix)}`,
+                "legacy id rule must be one unique non-overlapping reviewed metadata prefix ending at a semantic boundary",
+            );
+        } else legacyIdRules.set(key, rule);
     }
     for (const rule of overrides.pathRules ?? []) {
         const key = `${rule.esid ?? "<missing-esid>"}\0${rule.prefix}`;
@@ -302,7 +348,13 @@ function normalizeMappings(
             });
         } else tests.set(override.test, override);
     }
-    return { aliases, pathRules: [...rules.values()].sort((a, b) => b.prefix.length - a.prefix.length), tests };
+    return {
+        aliases,
+        legacyIdRules: [...legacyIdRules.values()].sort((a, b) =>
+            a.field.localeCompare(b.field) || b.prefix.length - a.prefix.length),
+        pathRules: [...rules.values()].sort((a, b) => b.prefix.length - a.prefix.length),
+        tests,
+    };
 }
 
 export function harnessIncludeNames(flags: readonly string[], includes: readonly string[]): string[] {
@@ -405,6 +457,7 @@ export async function buildInventory(options: {
     const issues: InventoryIssue[] = [];
     const mappings = normalizeMappings(overrides, normativeClauseIds, issues);
     const usedAliases = new Set<string>();
+    const usedLegacyIdRules = new Set<string>();
     const usedPathRules = new Set<string>();
     const usedTestOverrides = new Set<string>();
     const corpus = await verifyTest262Corpus(options.test262, baseline.test262.discoveryRoots);
@@ -473,10 +526,22 @@ export async function buildInventory(options: {
                 ? mappings.pathRules.find((rule) => rule.esid === metadata.esid && test.startsWith(rule.prefix))
                 : undefined;
             const alias = metadata.esid && !exactAnchor ? mappings.aliases.get(metadata.esid) : undefined;
+            const legacyIdRules = metadata.esid === undefined
+                ? matchingLegacyIdRules(metadata, mappings.legacyIdRules)
+                : [];
+            const legacyIdRule = legacyIdRules.length === 1 ? legacyIdRules[0] : undefined;
             const pathRule = metadata.esid === undefined
                 ? mappings.pathRules.find((rule) => rule.esid === undefined && test.startsWith(rule.prefix))
                 : undefined;
             const override = mappings.tests.get(test);
+            if (legacyIdRules.length > 1) {
+                issues.push({
+                    code: "invalid-override",
+                    test,
+                    detail: "multiple reviewed legacy metadata prefixes match one scenario",
+                    claimBlocking: true,
+                });
+            }
             if (informativeRule) {
                 mappedClauses = [...new Set([...mappedClauses, ...informativeRule.clauses])].sort();
                 mappingSources.push(`informative-esid-path:${informativeRule.esid}:${informativeRule.prefix}`);
@@ -485,6 +550,10 @@ export async function buildInventory(options: {
                 mappedClauses = [...new Set([...mappedClauses, ...alias.clauses])].sort();
                 mappingSources.push(`esid-alias:${alias.esid}`);
                 usedAliases.add(alias.esid);
+            } else if (legacyIdRule) {
+                mappedClauses = [...new Set([...mappedClauses, ...legacyIdRule.clauses])].sort();
+                mappingSources.push(`legacy-id-rule:${legacyIdRule.field}:${legacyIdRule.prefix}`);
+                usedLegacyIdRules.add(`${legacyIdRule.field}\0${legacyIdRule.prefix}`);
             } else if (pathRule) {
                 mappedClauses = [...new Set([...mappedClauses, ...pathRule.clauses])].sort();
                 mappingSources.push(`path-rule:${pathRule.prefix}`);
@@ -571,6 +640,15 @@ export async function buildInventory(options: {
     if (options.filter === null && options.shard === null) {
         for (const esid of mappings.aliases.keys()) {
             if (!usedAliases.has(esid)) issues.push({ code: "invalid-override", test: esid, detail: "esid alias is unused by the pinned eligible corpus", claimBlocking: true });
+        }
+        for (const rule of mappings.legacyIdRules) {
+            const key = `${rule.field}\0${rule.prefix}`;
+            if (!usedLegacyIdRules.has(key)) issues.push({
+                code: "invalid-override",
+                test: `${rule.field}:${rule.prefix}`,
+                detail: "legacy id rule is unused by the pinned eligible corpus",
+                claimBlocking: true,
+            });
         }
         for (const rule of mappings.pathRules) {
             const key = `${rule.esid ?? "<missing-esid>"}\0${rule.prefix}`;

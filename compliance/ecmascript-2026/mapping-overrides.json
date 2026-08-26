@@ -1,7 +1,16 @@
 {
   "schemaVersion": 1,
-  "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias or semantic-directory rule; an esid-qualified directory rule may redirect pinned informative metadata to its exact normative requirement. Exact source-hashed test overrides are only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
+  "description": "Reviewed structural mappings for legacy Test262 metadata. Prefer one esid alias, legacy metadata-section prefix, or semantic-directory rule; an esid-qualified directory rule may redirect pinned informative metadata to its exact normative requirement. Exact source-hashed test overrides are only for genuine ambiguity. Globs and fixture-family enumeration are forbidden.",
   "esidAliases": [],
+  "legacyIdRules": [
+    {
+      "field": "es5id",
+      "prefix": "9.3.1_",
+      "clauses": ["sec-tonumber-applied-to-the-string-type"],
+      "reason": "The pinned legacy ES5 9.3.1 metadata family denotes String-input ToNumber grammar and rounding; the metadata prefix maps the semantic section independently of filenames and test inventory size.",
+      "reviewedBy": "tsc2c compliance review"
+    }
+  ],
   "pathRules": [
     {
       "prefix": "test/language/expressions/async-generator/",

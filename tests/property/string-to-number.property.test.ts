@@ -93,6 +93,9 @@ function subjectSource(): string {
         "  try { callback(); check(false, label + ':missing'); }",
         "  catch (error) { check(error instanceof TypeError, label + ':type'); }",
         "}",
+        'checkNumber("source-literal:positive-overflow", 10e10000, Infinity);',
+        'checkNumber("source-literal:underflow", 1e-10000, 0);',
+        'checkNumber("source-literal:large-hex", 0xffffffffffffffffffffffffffffffff, 3.402823669209385e38);',
     ];
     for (const probe of probes) {
         const input = JSON.stringify(probe.input);
