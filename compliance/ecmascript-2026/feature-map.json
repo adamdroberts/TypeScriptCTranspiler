@@ -545,9 +545,12 @@
     {
       "tag": "Symbol",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-ecmascript-language-types-symbol-type",
+        "sec-symbol-objects"
+      ],
+      "rationale": "The broad standard Symbol tag denotes the shared Symbol language type plus the Symbol Objects parent contract used to create and expose Symbol values. Exact esid metadata and the operation-specific well-known-Symbol feature tags remain authoritative for conversions, constructor/prototype children, and consumers; this dependency mapping does not mark those terminal partitions supported."
     },
     {
       "tag": "Symbol.asyncIterator",

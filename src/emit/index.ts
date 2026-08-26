@@ -57403,7 +57403,7 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
-        if (method === "replace" || method === "replaceAll" || method === "split") {
+        if (method === "replace" || method === "replaceAll" || method === "split" || method === "slice") {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -57940,20 +57940,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
-            case "slice": {
-                const start = args[0] ? this.emitExpr(args[0]) : missing;
-                const end = args[1] ? this.emitExpr(args[1]) : missing;
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: start, target: T_VALUE, node: args[0] ?? call.expression },
-                        { value: end, target: T_VALUE, node: args[1] ?? call.expression },
-                        ...this.ignoredArgumentSpecs(args, 2),
-                    ],
-                    ([target, startArg, endArg]) => `tsc_value_method_slice(${target}, ${startArg}, ${endArg})`,
-                );
-            }
             case "keys":
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -66851,7 +66837,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
-        if (method === "replace" || method === "replaceAll" || method === "split") {
+        if (method === "replace" || method === "replaceAll" || method === "split" || method === "slice") {
             return this.emitDynamicNamedPropertyCall(call, recv, method, false);
         }
         const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
@@ -66992,19 +66978,6 @@ class Emitter {
                 specs.push(...this.ignoredArgumentSpecs(args, 2));
                 return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) =>
                     `tsc_str_ends_with(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "slice": {
-                const start = optionalNumberArg(0, "0.0");
-                const end = optionalNumberArg(1, "INFINITY");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: start, target: T_NUMBER, node: args[0] },
-                    { value: end, target: T_NUMBER, node: args[1] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
-                    `tsc_str_slice(${vals[0]}, ${vals[1]}, ${vals[2]})`,
                 );
             }
             case "substring": {

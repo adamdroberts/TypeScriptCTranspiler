@@ -1532,7 +1532,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-getsubstitution` — GetSubstitution ( _matched_: a String, _str_: a String, _position_: a non-negative integer, _captures_: a List of either Strings or undefined, _namedCaptures_: an Object or undefined, _replacementTemplate_: a String, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.replaceall` — String.prototype.replaceAll ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.search` — String.prototype.search ( _regexp_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.slice` — String.prototype.slice ( _start_, _end_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.slice` — String.prototype.slice ( _start_, _end_ )
+    - [ ] `generic-tostring-relative-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered relative start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.split` — String.prototype.split ( _separator_, _limit_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.startswith` — String.prototype.startsWith ( _searchString_ [ , _position_ ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ ): exact disposition and partitions missing.
@@ -2635,7 +2636,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `String.prototype.toWellFormed` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.trimEnd` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.trimStart` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Symbol` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Symbol` — standard, tracking: `ready-for-verification`; `sec-ecmascript-language-types-symbol-type`, `sec-symbol-objects`.
 - [ ] `Symbol.asyncIterator` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.hasInstance` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.isConcatSpreadable` — standard, tracking: `todo`; no clause mapping.

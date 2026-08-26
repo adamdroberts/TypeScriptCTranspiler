@@ -341,7 +341,8 @@
       "id": "string_utf16_exotic_width",
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
@@ -356,7 +357,8 @@
       "id": "runtime/tsc_string.c#tsc_str_utf16_length",
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
@@ -385,7 +387,8 @@
       "id": "runtime/tsc_value.c#tsc_value_get_prop",
       "targets": [
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
@@ -427,28 +430,32 @@
       "kind": "declarationSurface",
       "id": "stdlib/lib.core.d.ts#String",
       "targets": [
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#emitStringMethod",
       "targets": [
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_prototype_install_intrinsics",
       "targets": [
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_prototype_method_apply",
       "targets": [
-        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+        "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {
@@ -470,6 +477,55 @@
       "id": "runtime/tsc_string.c#tsc_str_at",
       "targets": [
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/string-slice.property.test.ts",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "strings",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_methods",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitDynamicNamedPropertyCall",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_slice_from_values",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_slice",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_slice",
+      "targets": [
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
       ]
     },
     {

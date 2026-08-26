@@ -816,13 +816,19 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
 
 static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor);
 
+static void string_require_object_coercible(tsc_value_t receiver, const char* method) {
+    if (!tsc_value_is_nullish(receiver)) return;
+    tsc_throw_error(
+        TSC_ERROR_TYPE,
+        tsc_str_concat(
+            tsc_str_from_cstr(method),
+            tsc_str_from_lit(" called on null or undefined", 28)
+        )
+    );
+}
+
 static tsc_value_t string_at_from_values(tsc_value_t receiver, tsc_value_t index) {
-    if (tsc_value_is_nullish(receiver)) {
-        tsc_throw_error(
-            TSC_ERROR_TYPE,
-            tsc_str_from_lit("String.prototype.at called on null or undefined", 47)
-        );
-    }
+    string_require_object_coercible(receiver, "String.prototype.at");
     /* RequireObjectCoercible/ToString must complete before index conversion. */
     const tsc_str_t* string = tsc_value_to_string(receiver);
     double relative_index = tsc_value_to_number(index);
@@ -830,8 +836,24 @@ static tsc_value_t string_at_from_values(tsc_value_t receiver, tsc_value_t index
     return result ? tsc_value_string(result) : tsc_value_undefined();
 }
 
+static tsc_value_t string_slice_from_values(
+    tsc_value_t receiver,
+    tsc_value_t start,
+    tsc_value_t end
+) {
+    string_require_object_coercible(receiver, "String.prototype.slice");
+    /* Preserve the specified receiver -> start -> end coercion sequence. */
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    double start_index = tsc_value_to_number(start);
+    double end_index = tsc_value_is_undefined(end)
+        ? (double)tsc_str_utf16_length(string)
+        : tsc_value_to_number(end);
+    return tsc_value_string(tsc_str_slice(string, start_index, end_index));
+}
+
 typedef enum {
     TSC_STRING_PROTOTYPE_AT,
+    TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_REPLACE,
     TSC_STRING_PROTOTYPE_REPLACE_ALL,
     TSC_STRING_PROTOTYPE_SPLIT,
@@ -846,6 +868,7 @@ typedef struct {
 
 static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "at", 2, 1.0, TSC_STRING_PROTOTYPE_AT },
+    { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "replace", 7, 2.0, TSC_STRING_PROTOTYPE_REPLACE },
     { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
     { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
@@ -867,6 +890,8 @@ static tsc_value_t string_prototype_method_apply(
     switch (method->operation) {
         case TSC_STRING_PROTOTYPE_AT:
             return string_at_from_values(this_arg, first);
+        case TSC_STRING_PROTOTYPE_SLICE:
+            return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_REPLACE:
             return tsc_value_method_replace(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_REPLACE_ALL:
@@ -2581,7 +2606,9 @@ static bool tsc_function_metadata_key(const tsc_function_identity_t* fn, const t
 
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
-    if (!value_is_box(v)) return tsc_value_undefined();
+    if (!value_is_box(v)) {
+        return tsc_value_get_prop_receiver(primitive_prototype(&primitive_number), key, v);
+    }
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
         if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER && str_lit_eq(key, "listener")) {
@@ -2634,6 +2661,9 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
             return tsc_value_string(tsc_str_char_at(s, (double)idx));
         }
         return tsc_value_get_prop_receiver(tsc_value_string_prototype(), key, v);
+    }
+    if (value_tag(v) == TSC_VALUE_TAG_FALSE || value_tag(v) == TSC_VALUE_TAG_TRUE) {
+        return tsc_value_get_prop_receiver(primitive_prototype(&primitive_boolean), key, v);
     }
     if (value_tag(v) == TSC_VALUE_TAG_BIGINT) {
         return tsc_value_get_prop_receiver(tsc_value_bigint_prototype(), key, v);
@@ -7375,12 +7405,12 @@ tsc_value_t tsc_value_method_to_reversed(tsc_value_t recv) {
 }
 
 tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_value_t end) {
+    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
+        return string_slice_from_values(recv, start, end);
+    }
     double len = tsc_value_length(recv);
     double s = value_slice_arg(start, 0.0);
     double e = value_slice_arg(end, len);
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_slice((const tsc_str_t*)value_ptr(recv), s, e));
-    }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         return tsc_value_array(value_array_like_sparse_slice(recv, s, e));
     }
@@ -7464,17 +7494,6 @@ tsc_value_t tsc_value_method_substr(tsc_value_t recv, tsc_value_t start, tsc_val
         return tsc_value_string(tsc_str_substr(str, s, n));
     }
     return tsc_value_undefined();
-}
-
-static void string_require_object_coercible(tsc_value_t receiver, const char* method) {
-    if (!tsc_value_is_nullish(receiver)) return;
-    tsc_throw_error(
-        TSC_ERROR_TYPE,
-        tsc_str_concat(
-            tsc_str_from_cstr(method),
-            tsc_str_from_lit(" called on null or undefined", 28)
-        )
-    );
 }
 
 static bool string_protocol_call(
