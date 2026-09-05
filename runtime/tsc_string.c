@@ -68,23 +68,29 @@ tsc_str_t* tsc_str_concat_parts(const tsc_array_t* parts) {
 
 tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substitutions) {
     if (tsc_value_is_nullish(template_value)) {
-        tsc_throw_str(tsc_str_from_cstr("String.raw template must not be null or undefined"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String.raw called on null or undefined"));
     }
     tsc_value_t raw = tsc_value_get_prop(template_value, tsc_str_from_lit("raw", 3));
+    if (tsc_value_is_nullish(raw)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String.raw template raw is null or undefined"));
+    }
     tsc_value_t length_value = tsc_value_get_prop(raw, tsc_str_from_lit("length", 6));
-    double length_number = tsc_value_as_num(length_value);
-    size_t length = (isfinite(length_number) && length_number > 0.0)
-        ? (size_t)floor(length_number)
-        : 0;
+    double length_num = tsc_value_to_number(length_value);
+    if (isnan(length_num) || length_num <= 0.0) length_num = 0.0;
+    else if (isinf(length_num) || length_num >= 9007199254740991.0) {
+        length_num = 9007199254740991.0;
+    } else length_num = floor(length_num);
+    size_t length = (size_t)length_num;
     tsc_str_t* result = tsc_str_from_lit("", 0);
     for (size_t index = 0; index < length; index++) {
         tsc_value_t segment = tsc_value_get_prop(raw, tsc_str_from_num((double)index));
         result = tsc_str_concat(result, tsc_value_to_string(segment));
+        if (index + 1 >= length) {
+            break;
+        }
         if (substitutions && index < substitutions->len) {
             tsc_value_t substitution = TSC_ARR(tsc_value_t, substitutions, index);
             result = tsc_str_concat(result, tsc_value_to_string(substitution));
-        } else if (index + 1 < length) {
-            result = tsc_str_concat(result, tsc_str_from_lit("undefined", 9));
         }
     }
     return result;

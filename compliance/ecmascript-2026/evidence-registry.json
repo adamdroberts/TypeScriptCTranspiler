@@ -254,7 +254,8 @@
       "id": "stdlib/lib.core.d.ts#StringConstructor",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
-        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {
@@ -262,7 +263,8 @@
       "id": "src/emit/index.ts#emitStringStatic",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
-        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {
@@ -285,7 +287,8 @@
       "id": "runtime/tsc_value.c#string_constructor_install_static_methods",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
-        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {
@@ -1134,6 +1137,38 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-raw.property.test.ts",
+      "targets": ["sec-string.raw#generic-template-raw-worklist"]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_static_raw_apply",
+      "targets": ["sec-string.raw#generic-template-raw-worklist"]
+    },
+    {
+      "kind": "stress",
+      "id": "string_raw_template_width",
+      "targets": ["sec-string.raw#generic-template-raw-worklist"],
+      "stressReview": {
+        "dimension": "String.raw runtime template-segment worklist width",
+        "parameter": "width",
+        "representativeHighDepth": 512,
+        "rationale": "One generated native call independently stresses the canonical runtime template-segment and substitution worklists without treating successive segment counts as completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_raw",
+      "targets": ["sec-string.raw#generic-template-raw-worklist"]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitStringRawTaggedTemplate",
+      "targets": ["sec-string.raw#generic-template-raw-worklist"]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -1159,7 +1194,8 @@
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
-        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {
@@ -1182,7 +1218,8 @@
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
-        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {

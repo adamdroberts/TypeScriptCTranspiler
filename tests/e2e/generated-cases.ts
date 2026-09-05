@@ -78,6 +78,11 @@ export interface StringConcatArgumentWidthSpec {
     width: number;
 }
 
+export interface StringRawTemplateWidthSpec {
+    generator: "string-raw-template-width";
+    width: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -146,6 +151,7 @@ export type GeneratedCaseSpec =
     | StringCodePointListWidthSpec
     | StringUtf16ExoticWidthSpec
     | StringConcatArgumentWidthSpec
+    | StringRawTemplateWidthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -319,6 +325,16 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         };
     }
     if (spec.generator === "string-concat-argument-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            width,
+        };
+    }
+    if (spec.generator === "string-raw-template-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -729,6 +745,36 @@ function stringCodeUnitListWidthSource(width: number): string {
         "    chars.charCodeAt(0) === 65 &&",
         "    chars.charCodeAt(width - 1) === units[width - 1];",
         'console.log("string code-unit list width:", valid);',
+        "",
+    ].join("\n");
+}
+
+function stringRawTemplateWidthSource(width: number): string {
+    return [
+        `const width = ${width};`,
+        "const segments: string[] = [];",
+        "const substitutions: number[] = [];",
+        "const expectedParts: string[] = [];",
+        "for (let index = 0; index < width; index++) {",
+        "    const segment = \"s\" + (index % 97);",
+        "    segments.push(segment);",
+        "    expectedParts.push(segment);",
+        "    if (index + 1 < width) {",
+        "        substitutions.push(index);",
+        "        expectedParts.push(String(index));",
+        "    }",
+        "}",
+        "const expected = expectedParts.join(\"\");",
+        "const template: any = { raw: segments };",
+        "const direct = String.raw(template, ...substitutions);",
+        "const extra = String.raw(template, ...substitutions, width * 3);",
+        "const tagged = String.raw`static${0}parts`;",
+        "const valid =",
+        "    direct === expected &&",
+        "    direct.length === expected.length &&",
+        "    extra === expected &&",
+        "    tagged === \"static0parts\";",
+        "console.log(\"string raw template width:\", valid);",
         "",
     ].join("\n");
 }
@@ -1398,6 +1444,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return stringUtf16ExoticWidthSource(spec.width);
         case "string-concat-argument-width":
             return stringConcatArgumentWidthSource(spec.width);
+        case "string-raw-template-width":
+            return stringRawTemplateWidthSource(spec.width);
         case "reflect-construct-argument-width":
             return reflectConstructArgumentWidthSource(spec.width);
         case "arrow-formal-binding-tree-depth":

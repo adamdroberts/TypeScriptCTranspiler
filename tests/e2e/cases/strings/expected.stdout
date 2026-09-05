@@ -5,6 +5,7 @@ unicode case: SS FI ssﬁ 2 fi
 wellformed: true true false 65533
 string value: Hello, World! Hello, World! true true
 iterator: function H true
+raw: a1b x7y
 iterated: H|e|l|l|o|,| |W|o|r|l 13
 slice: World
 slice undefined: Hello, World!

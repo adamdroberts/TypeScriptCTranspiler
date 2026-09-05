@@ -1267,6 +1267,40 @@
       "rationale": "The complete String.prototype [Symbol.iterator] intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.raw",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-template-raw-worklist",
+        "title": "Generic template ToObject, raw ToObject, LengthOfArrayLike, ordered segment and substitution conversion, and ordinary constructor lookup",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "worklist",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.raw" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-raw.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_raw_template_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#StringConstructor"],
+          "implementation": [
+            "src/emit/index.ts#emitStringStatic",
+            "src/emit/index.ts#emitStringRawTaggedTemplate",
+            "runtime/tsc_value.c#string_constructor_install_static_methods",
+            "runtime/tsc_value.c#string_static_raw_apply",
+            "runtime/tsc_string.c#tsc_str_raw"
+          ]
+        },
+        "rationale": "The independent shared raw property derives the constructor surface, non-constructability, segment-only/interleaved/skipped/ignored partitions, fractional/string/negative lengths, coerced segments, nullish template/raw TypeError partitions, Symbol rejection, abrupt raw/length/segment/substitution identity with segment-before-substitution order, tagged-vs-direct equivalence with raw-backslash preservation, extra-argument evaluation, mutable lookup with surface restore, and results in both memory modes. One constructor descriptor and generic operation performs template and raw ToObject, LengthOfArrayLike via ToNumber, and ordered conversion with missing substitutions skipped; the compile-time tag fold consumes the same raw parts with engine line-terminator normalization. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.raw intrinsic is represented as one terminal worklist partition with reciprocal semantic, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

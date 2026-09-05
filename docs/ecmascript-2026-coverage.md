@@ -1504,7 +1504,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.fromcodepoint` — String.fromCodePoint ( ..._codePoints_ )
     - [ ] `ordered-tonumber-code-point-worklist` (intrinsic, unbounded): Arbitrary rest-argument worklist, ordered ToNumber and range validation, UTF-16 encoding, abrupt completion, and intrinsic surface.
   - [ ] `sec-string.prototype` — String.prototype: exact disposition and partitions missing.
-  - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.raw` — String.raw ( _template_, ..._substitutions_ )
+    - [ ] `generic-template-raw-worklist` (intrinsic, unbounded): Generic template ToObject, raw ToObject, LengthOfArrayLike, ordered segment and substitution conversion, and ordinary constructor lookup.
   - [ ] `sec-properties-of-the-string-prototype-object` — Properties of the String Prototype Object: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.at` — String.prototype.at ( _index_ )
     - [ ] `generic-tostring-relative-index-and-code-unit` (intrinsic, unbounded): Generic receiver ToString, ordered ToIntegerOrInfinity relative indexing, UTF-16 code-unit result, undefined range, abrupt completion, and intrinsic surface.

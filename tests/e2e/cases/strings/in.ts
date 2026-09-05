@@ -7,6 +7,7 @@ console.log("wellformed:", s.isWellFormed(), s.toWellFormed() === s, String.from
 console.log("string value:", s.toString(), s.valueOf(), s.toString() === s, Object(s).valueOf() === s);
 const sit: any = (s as any)[Symbol.iterator]();
 console.log("iterator:", typeof sit.next, sit.next().value, sit[Symbol.iterator]() === sit);
+console.log("raw:", String.raw`a${1}b`, String.raw({ raw: ["x", "y"] } as any, 7));
 console.log("iterated:", Array.from(s).join("|").slice(0, 21), Array.from(s).length);
 console.log("slice:", s.slice(7, 12));
 console.log("slice undefined:", s.slice(undefined, undefined));

@@ -3,6 +3,7 @@ lower: ada lovelace
 cases: [ADA LOVELACE] [ada lovelace] 2
 wellformed: true false 65533 true
 string value: Ada Lovelace Ada Lovelace Ada Lovelace
+raw: [Ada Lovelace] pq
 iterator: Ada Lovelace 32
 ignored string: tulr
 char: L

@@ -50080,10 +50080,16 @@ class Emitter {
     private templateRawStringParts(
         template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
     ): string[] {
-        if (ts.isNoSubstitutionTemplateLiteral(template)) return [this.templateRawText(template)];
+        // Engines normalize CR and CRLF line terminators to LF in raw template
+        // text (the pinned String.raw special-characters directory requires it);
+        // TypeScript preserves the source bytes verbatim in rawText.
+        const normalized = (part: string): string => part.replace(/\r\n?/g, "\n");
+        if (ts.isNoSubstitutionTemplateLiteral(template)) {
+            return [normalized(this.templateRawText(template))];
+        }
         return [
-            this.templateRawText(template.head),
-            ...template.templateSpans.map((span) => this.templateRawText(span.literal)),
+            normalized(this.templateRawText(template.head)),
+            ...template.templateSpans.map((span) => normalized(this.templateRawText(span.literal))),
         ];
     }
 
