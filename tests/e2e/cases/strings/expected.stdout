@@ -1,6 +1,7 @@
 len: 13
 upper: HELLO, WORLD!
 lower: hello, world!
+locale case: HELLO, WORLD! hello, world! SS 2
 unicode case: SS FI ssﬁ 2 fi
 wellformed: true true false 65533
 string value: Hello, World! Hello, World! true true
@@ -27,3 +28,4 @@ undefined pad: [  go] [go  ]
 undefined pad ignored: [  go] [go  ] ultrpqPQ
 ignored split: 2 ultrpqPQs
 ignored replace: xba xbx ultrpqPQsRA
+locale ignored: HELLO, WORLD! hello, world! ultrpqPQsRAUVL

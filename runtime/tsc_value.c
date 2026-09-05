@@ -1080,6 +1080,8 @@ typedef enum {
     TSC_STRING_PROTOTYPE_TRIM_END,
     TSC_STRING_PROTOTYPE_TO_LOWER_CASE,
     TSC_STRING_PROTOTYPE_TO_UPPER_CASE,
+    TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE,
+    TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE,
     TSC_STRING_PROTOTYPE_NORMALIZE,
     TSC_STRING_PROTOTYPE_IS_WELL_FORMED,
     TSC_STRING_PROTOTYPE_TO_WELL_FORMED,
@@ -1119,6 +1121,8 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "trimEnd", 7, 0.0, TSC_STRING_PROTOTYPE_TRIM_END },
     { "toLowerCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_LOWER_CASE },
     { "toUpperCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_UPPER_CASE },
+    { "toLocaleLowerCase", 17, 0.0, TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE },
+    { "toLocaleUpperCase", 17, 0.0, TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE },
     { "normalize", 9, 0.0, TSC_STRING_PROTOTYPE_NORMALIZE },
     { "isWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_IS_WELL_FORMED },
     { "toWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_TO_WELL_FORMED },
@@ -1133,10 +1137,12 @@ static tsc_value_t string_case_from_values(
 ) {
     string_require_object_coercible(receiver, "String case receiver");
     const tsc_str_t* string = tsc_value_to_string(receiver);
-    if (operation == TSC_STRING_PROTOTYPE_TO_LOWER_CASE) {
+    if (operation == TSC_STRING_PROTOTYPE_TO_LOWER_CASE ||
+        operation == TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE) {
         return tsc_value_string(tsc_str_to_lower(string));
     }
-    if (operation == TSC_STRING_PROTOTYPE_TO_UPPER_CASE) {
+    if (operation == TSC_STRING_PROTOTYPE_TO_UPPER_CASE ||
+        operation == TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE) {
         return tsc_value_string(tsc_str_to_upper(string));
     }
     const tsc_str_t* form_string = tsc_value_is_undefined(form)
@@ -1227,6 +1233,10 @@ static tsc_value_t string_prototype_method_apply(
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOWER_CASE);
         case TSC_STRING_PROTOTYPE_TO_UPPER_CASE:
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_UPPER_CASE);
+        case TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE:
+            return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE);
+        case TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE:
+            return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE);
         case TSC_STRING_PROTOTYPE_NORMALIZE:
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_NORMALIZE);
         case TSC_STRING_PROTOTYPE_IS_WELL_FORMED:

@@ -34,3 +34,5 @@ console.log("slice arr:", values.slice(1).join("/"));
 values.reverse(mark("a"));
 console.log("reverse:", values.join("-"));
 console.log("ignored array:", seen);
+console.log("locale:", text.toLocaleUpperCase().trim(), text.toLocaleLowerCase().trim());
+console.log("locale ignored:", text.toLocaleUpperCase(mark("U")).trim(), seen);

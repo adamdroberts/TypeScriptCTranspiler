@@ -152,6 +152,8 @@ interface String extends Iterable<string> {
     toString(...ignored: any[]): string;
     toUpperCase(...ignored: any[]): string;
     toLowerCase(...ignored: any[]): string;
+    toLocaleUpperCase(...reserved: any[]): string;
+    toLocaleLowerCase(...reserved: any[]): string;
     valueOf(...ignored: any[]): string;
     normalize(form?: "NFC" | "NFD" | "NFKC" | "NFKD", ...ignored: any[]): string;
     trim(...ignored: any[]): string;

@@ -24,3 +24,5 @@ after: 1,two,3
 slice arr: two/3
 reverse: 3-two-1
 ignored array: tulra
+locale: ADA LOVELACE ada lovelace
+locale ignored: ADA LOVELACE tulraU

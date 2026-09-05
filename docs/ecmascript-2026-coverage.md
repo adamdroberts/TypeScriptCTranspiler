@@ -1553,8 +1553,10 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-regexp-rejection-position-and-utf16-prefix` (intrinsic, unbounded): Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and UTF-16 code-unit prefix matching.
   - [ ] `sec-string.prototype.substring` — String.prototype.substring ( _start_, _end_ )
     - [ ] `generic-tostring-clamped-swapped-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered clamped and swapped start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
-  - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] )
+    - [ ] `generic-tostring-and-locale-insensitive-lowercase-mapping` (intrinsic, unbounded): Generic receiver ToString, reserved-argument ignoring with evaluation, ordinary method lookup, and full Unicode lowercase mapping.
+  - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] )
+    - [ ] `generic-tostring-and-locale-insensitive-uppercase-mapping` (intrinsic, unbounded): Generic receiver ToString, reserved-argument ignoring with evaluation, ordinary method lookup, and full Unicode uppercase mapping.
   - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( )
     - [ ] `generic-tostring-and-unicode-lowercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode lowercase mapping.
   - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( )

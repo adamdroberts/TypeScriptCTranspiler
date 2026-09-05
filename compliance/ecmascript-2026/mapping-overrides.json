@@ -223,6 +223,18 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
+      "prefix": "test/built-ins/String/prototype/toLocaleLowerCase/",
+      "clauses": ["sec-string.prototype.tolocalelowercase"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.toLocaleLowerCase semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/String/prototype/toLocaleUpperCase/",
+      "clauses": ["sec-string.prototype.tolocaleuppercase"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.toLocaleUpperCase semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "prefix": "test/built-ins/String/prototype/normalize/",
       "clauses": ["sec-string.prototype.normalize"],
       "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.normalize semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
@@ -402,6 +414,22 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.touppercase"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toUpperCase intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/toLocaleLowerCase/not-a-constructor.js",
+      "sourceSha256": "9d6d7d127c24d09f5f80f47116f9716da927076e4ecb3a9f567005dd7f4ca0df",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.tolocalelowercase"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toLocaleLowerCase intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/toLocaleUpperCase/not-a-constructor.js",
+      "sourceSha256": "c6c539c5156b0c3b779925354789462954cd40c167b9f2b4083d3e238bbafa76",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.tolocaleuppercase"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toLocaleUpperCase intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
       "reviewedBy": "tsc2c compliance review"
     },
     {

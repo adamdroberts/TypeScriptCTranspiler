@@ -2,6 +2,7 @@ const s = "Hello, World!";
 console.log("len:", s.length);
 console.log("upper:", s.toUpperCase());
 console.log("lower:", s.toLowerCase());
+console.log("locale case:", "Hello, WoRlD!".toLocaleUpperCase(), "Hello, WoRlD!".toLocaleLowerCase(), "\u00df".toLocaleUpperCase(), "\u0130".toLocaleLowerCase().length);
 console.log("unicode case:", "\u00df".toUpperCase(), "\uFB01".toUpperCase(), "SS\uFB01".toLowerCase(), "\u00e9".normalize("NFD").length, "\uFB01".normalize("NFKC"));
 console.log("wellformed:", s.isWellFormed(), s.toWellFormed() === s, String.fromCharCode(0xd800).isWellFormed(), String.fromCharCode(0xd800).toWellFormed().charCodeAt(0));
 console.log("string value:", s.toString(), s.valueOf(), s.toString() === s, Object(s).valueOf() === s);
@@ -35,3 +36,4 @@ console.log("undefined pad ignored:", "[" + "go".padStart(4, undefined, mark("P"
 const limited = "a,b,c".split(",", 2, mark("s"));
 console.log("ignored split:", limited.length, seen);
 console.log("ignored replace:", "aba".replace("a", "x", mark("R")), "aba".replaceAll("a", "x", mark("A")), seen);
+console.log("locale ignored:", s.toLocaleUpperCase(mark("U"), mark("V")), s.toLocaleLowerCase(mark("L")), seen);

@@ -111,6 +111,8 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "startsWith",
     "toLowerCase",
     "toUpperCase",
+    "toLocaleLowerCase",
+    "toLocaleUpperCase",
     "normalize",
     "isWellFormed",
     "toWellFormed",
@@ -3452,6 +3454,8 @@ class Emitter {
             case "valueOf":
             case "toUpperCase":
             case "toLowerCase":
+            case "toLocaleUpperCase":
+            case "toLocaleLowerCase":
             case "trim":
             case "trimLeft":
             case "trimRight":
@@ -7342,6 +7346,8 @@ class Emitter {
             case "valueOf":
             case "toUpperCase":
             case "toLowerCase":
+            case "toLocaleUpperCase":
+            case "toLocaleLowerCase":
             case "trim":
             case "trimLeft":
             case "trimRight":
@@ -13574,6 +13580,8 @@ class Emitter {
             method === "valueOf" ||
             method === "toUpperCase" ||
             method === "toLowerCase" ||
+            method === "toLocaleUpperCase" ||
+            method === "toLocaleLowerCase" ||
             method === "trim" ||
             method === "trimLeft" ||
             method === "trimRight" ||
@@ -13886,7 +13894,8 @@ class Emitter {
             return null;
         }
         const method = expr.expression.name.text;
-        const isCaseFolding = method === "toUpperCase" || method === "toLowerCase";
+        const isCaseFolding = method === "toUpperCase" || method === "toLowerCase" ||
+            method === "toLocaleUpperCase" || method === "toLocaleLowerCase";
         const isTrim = method === "trim" || method === "trimStart" || method === "trimEnd" || method === "trimLeft" || method === "trimRight";
         const isCopy =
             method === "charAt" ||
@@ -13900,8 +13909,12 @@ class Emitter {
         if (recvText === null) return null;
         if ((isCaseFolding || isTrim) && !/^[\x00-\x7F]*$/.test(recvText)) return null;
         if (isCaseFolding) {
-            if (expr.arguments.length !== 0) return null;
-            return method === "toUpperCase" ? recvText.toUpperCase() : recvText.toLowerCase();
+            if (method === "toLocaleUpperCase" || method === "toLocaleLowerCase") {
+                if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 0, seenConsts)) return null;
+            } else if (expr.arguments.length !== 0) return null;
+            return method === "toUpperCase" || method === "toLocaleUpperCase"
+                ? recvText.toUpperCase()
+                : recvText.toLowerCase();
         }
         if (isTrim) {
             if (expr.arguments.length !== 0) return null;
