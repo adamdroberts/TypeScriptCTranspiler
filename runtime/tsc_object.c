@@ -1132,6 +1132,11 @@ bool tsc_object_is_prototype_of(const tsc_object_t* prototype, const tsc_object_
 }
 
 bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
+    /* Boxed words are invisible to the conservative collector: keep the
+     * stored value (and thus any fresh allocation it references) marked
+     * across reserve/shape allocations below. */
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
     ssize_t found = object_find(o, key);
     if (found >= 0) {
         tsc_object_prop_t* prop = &o->props[(size_t)found];
@@ -1161,6 +1166,10 @@ bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
 }
 
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* ro = (tsc_object_t*)value_ptr(receiver);
         if (ro->is_proxy) {
@@ -1194,6 +1203,10 @@ bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value
 }
 
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
@@ -1256,11 +1269,15 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
 
 
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
     return tsc_object_set_receiver(o, key, value, tsc_value_object((tsc_object_t*)o));
 }
 
 
 bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
@@ -1369,6 +1386,8 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 
 
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
     return tsc_object_define_desc(o, key, value, true, writable, true, enumerable, true, configurable, true);
 }
 
@@ -2593,6 +2612,8 @@ static void jp_consume_value(
     if (c == '[') {
         parser->pos++;
         tsc_value_t value = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 4));
+        void* volatile value_gc_root = tsc_value_gc_root(value);
+        (void)value_gc_root;
         jp_accept_value(frame, value, root);
         jp_push_container_frame(frames, JP_FRAME_ARRAY, value);
         return;
@@ -2600,6 +2621,8 @@ static void jp_consume_value(
     if (c == '{') {
         parser->pos++;
         tsc_value_t value = tsc_value_object(tsc_object_new());
+        void* volatile value_gc_root = tsc_value_gc_root(value);
+        (void)value_gc_root;
         jp_accept_value(frame, value, root);
         jp_push_container_frame(frames, JP_FRAME_OBJECT, value);
         return;

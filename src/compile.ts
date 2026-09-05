@@ -983,8 +983,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         return { exitCode: 3, buildDir, mainC };
     }
     const baseLibs = opts.noGc
-        ? ["m", "resolv", "ssl", "crypto", "icuuc", "icudata", "gmp"]
-        : ["gc", "m", "resolv", "ssl", "crypto", "icuuc", "icudata", "gmp"];
+        ? ["m", "resolv", "ssl", "crypto", "icui18n", "icuuc", "icudata", "gmp"]
+        : ["gc", "m", "resolv", "ssl", "crypto", "icui18n", "icuuc", "icudata", "gmp"];
     const libs = pcFlags.useDefaultLib ? [...baseLibs, "pcre2-8"] : baseLibs;
     const cc = await invokeCc({
         sources: [mainPath, ...runtimeSources.map((f) => path.join(buildDir, f))],

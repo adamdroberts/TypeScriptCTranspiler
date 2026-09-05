@@ -41,6 +41,7 @@
 #include <sys/utsname.h>
 #include <time.h>
 #include <unicode/unorm2.h>
+#include <unicode/ucol.h>
 #include <unicode/ustring.h>
 #include <unistd.h>
 

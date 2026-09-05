@@ -880,8 +880,30 @@ uint64_t tsc_str_semantic_hash(const tsc_str_t* string) {
 }
 
 double tsc_str_locale_compare(const tsc_str_t* a, const tsc_str_t* b) {
-    int c = tsc_str_cmp(a, b);
-    return c < 0 ? -1.0 : c > 0 ? 1.0 : 0.0;
+    tsc_utf16_sequence_t a_sequence = string_utf16_sequence(a);
+    tsc_utf16_sequence_t b_sequence = string_utf16_sequence(b);
+    if (a_sequence.len > (size_t)INT32_MAX || b_sequence.len > (size_t)INT32_MAX) {
+        tsc_panic("String localeCompare: input too large");
+    }
+    UErrorCode status = U_ZERO_ERROR;
+    UCollator* collator = ucol_open("", &status);
+    if (U_FAILURE(status) || !collator) {
+        tsc_panic("String localeCompare: root collator unavailable");
+    }
+    /* Canonical equivalence (including non-FCD mark order) must compare
+     * equal, so collate with incremental FCD normalization like V8. */
+    ucol_setAttribute(collator, UCOL_NORMALIZATION_MODE, UCOL_ON, &status);
+    if (U_FAILURE(status)) {
+        ucol_close(collator);
+        tsc_panic("String localeCompare: collator normalization unavailable");
+    }
+    UCollationResult result = ucol_strcoll(
+        collator,
+        (const UChar*)a_sequence.data, (int32_t)a_sequence.len,
+        (const UChar*)b_sequence.data, (int32_t)b_sequence.len
+    );
+    ucol_close(collator);
+    return result == UCOL_LESS ? -1.0 : result == UCOL_GREATER ? 1.0 : 0.0;
 }
 
 size_t tsc_str_utf16_length(const tsc_str_t* s) {

@@ -113,6 +113,7 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "toUpperCase",
     "toLocaleLowerCase",
     "toLocaleUpperCase",
+    "localeCompare",
     "normalize",
     "isWellFormed",
     "toWellFormed",
@@ -25559,8 +25560,10 @@ class Emitter {
                 return this.coerce(closure, T_VALUE, declaration.name);
             })();
         buf.open(`if (${enabled})`);
+        const annexKeyTmp = this.freshTemp("_store_key");
+        buf.line(`tsc_str_t* ${annexKeyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
         buf.line(
-            `tsc_global_reference_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `tsc_global_reference_set(${annexKeyTmp}, ` +
             `${value}, false);`,
         );
         buf.close();
@@ -25574,9 +25577,13 @@ class Emitter {
         mode: "lexical" | "var",
     ): void {
         const key = this.test262GlobalBindingKey(identifier.text);
+        // Sequence the key first: its interning allocations must run before
+        // the value exists, so no boxed value floats across them.
+        const keyTmp = this.freshTemp("_store_key");
+        buf.line(`tsc_str_t* ${keyTmp} = ${key};`);
         buf.line(mode === "lexical"
-            ? `tsc_global_lexical_initialize(${key}, ${value});`
-            : `tsc_global_binding_set(${key}, ${value});`);
+            ? `tsc_global_lexical_initialize(${keyTmp}, ${value});`
+            : `tsc_global_binding_set(${keyTmp}, ${value});`);
     }
 
     private emitBindingInitializationElement(
@@ -25856,8 +25863,10 @@ class Emitter {
         }
         if (declaration.initializer) {
             const value = this.emitExpr(declaration.initializer);
+            const keyTmp = this.freshTemp("_store_key");
+            buf.line(`tsc_str_t* ${keyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
             buf.line(
-                `tsc_global_binding_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+                `tsc_global_binding_set(${keyTmp}, ` +
                 `${this.coerce(value, T_VALUE, declaration.initializer)});`,
             );
         }
@@ -44144,8 +44153,10 @@ class Emitter {
             }
             const symbol = this.symbolForIdentifier(declaration.name);
             if (this.isTest262ScriptGlobalVarDeclaration(declaration)) {
+                const keyTmp = this.freshTemp("_store_key");
+                buf.line(`tsc_str_t* ${keyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
                 buf.line(
-                    `tsc_global_binding_set(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+                    `tsc_global_binding_set(${keyTmp}, ` +
                     `${this.coerce(value, T_VALUE, declaration.name)});`,
                 );
                 return;
@@ -50746,11 +50757,15 @@ class Emitter {
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const cur = this.freshTemp("_dynupd");
             const next = this.freshTemp("_dynupd_next");
+            const curRoot = this.freshTemp("_dynupd_gc_root");
+            const nextRoot = this.freshTemp("_dynupd_next_gc_root");
+            const pinCur = `void* volatile ${curRoot} = tsc_value_gc_root(${cur}); (void)${curRoot};`;
+            const pinNext = `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot};`;
             if (!indexUpdate && !symbolUpdate && !computedUpdate) {
                 const cache = this.freshTemp("_prop_cache");
                 const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
                 const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
-                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); tsc_value_t ${next} = ${fn}(${cur}); ${set}; ${prefix ? next : cur}; })`;
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${set}; ${prefix ? next : cur}; })`;
             }
             const existing = indexUpdate
                 ? `tsc_value_get_index(${obj}, ${keyC})`
@@ -50762,7 +50777,7 @@ class Emitter {
                 : symbolUpdate
                     ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${next})`
                     : `tsc_value_set_computed_prop(${obj}, ${keyC}, ${next})`;
-            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); tsc_value_t ${next} = ${fn}(${cur}); ${set}; ${prefix ? next : cur}; })`;
+            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${set}; ${prefix ? next : cur}; })`;
         });
     }
 
@@ -52254,6 +52269,8 @@ class Emitter {
                 ? values[1]!
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const out = this.freshTemp("_dynassign");
+            const outRoot = this.freshTemp("_dynassign_gc_root");
+            const pinOut = `void* volatile ${outRoot} = tsc_value_gc_root(${out}); (void)${outRoot};`;
             const symbolAssignment = key?.ty.kind === "symbol";
             const cache = !indexAssignment && !symbolAssignment && !computedAssignment
                 ? this.freshTemp("_prop_cache")
@@ -52285,19 +52302,19 @@ class Emitter {
                         : op === ts.SyntaxKind.BarBarEqualsToken
                             ? `!tsc_value_is_truthy(${out})`
                             : `tsc_value_is_nullish(${out})`;
-                return `({ ${prefix}tsc_value_t ${out} = ${existing}; if (${cond}) { ${out} = ${rhsValue}; ${setStatement(out)}; } ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${existing}; ${pinOut} if (${cond}) { ${out} = ${rhsValue}; ${outRoot} = tsc_value_gc_root(${out}); ${setStatement(out)}; } ${out}; })`;
             }
             const value = values[keyExpr ? 2 : 1]!;
             if (indexAssignment) {
                 if (op === ts.SyntaxKind.EqualsToken) {
-                    return `({ tsc_value_t ${out} = ${value}; ${setStatement(out)}; ${out}; })`;
+                    return `({ tsc_value_t ${out} = ${value}; ${pinOut} ${setStatement(out)}; ${out}; })`;
                 }
-                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${setStatement(out)}; ${out}; })`;
+                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${pinOut} ${setStatement(out)}; ${out}; })`;
             }
             if (op === ts.SyntaxKind.EqualsToken) {
-                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${setStatement(out)}; ${out}; })`;
+                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${pinOut} ${setStatement(out)}; ${out}; })`;
             }
-            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${setStatement(out)}; ${out}; })`;
+            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${pinOut} ${setStatement(out)}; ${out}; })`;
         });
     }
 
@@ -52822,6 +52839,14 @@ class Emitter {
                 }
                 const tmp = this.freshTemp("_arg");
                 pieces.push(`${target.c} ${tmp} = ${init}`);
+                if (target.kind === "value") {
+                    // Boxed words are invisible to the conservative collector:
+                    // pin each sequenced value temp so later argument
+                    // allocations cannot collect its referent first.
+                    const tmpRoot = this.freshTemp("_arg_gc_root");
+                    pieces.push(`void* volatile ${tmpRoot} = tsc_value_gc_root(${tmp})`);
+                    pieces.push(`(void)${tmpRoot}`);
+                }
                 args.push(spec.pass ? spec.pass(tmp) : tmp);
                 if (spec.paramSymbol) argumentValueScope.set(spec.paramSymbol, tmp);
             }
@@ -57667,9 +57692,6 @@ class Emitter {
                     ],
                     ([value, key]) => `tsc_value_property_is_enumerable(${value}, ${key})`,
                 );
-            case "localeCompare":
-                if (args.length < 1) unsupported(call, "localeCompare expects at least 1 arg");
-                return oneArg("tsc_value_method_locale_compare");
             case "join":
                 return oneArg("tsc_value_method_join");
             case "pop":
@@ -66754,18 +66776,6 @@ class Emitter {
             ...this.ignoredArgumentSpecs(args, consumed),
         ];
         switch (method) {
-            case "localeCompare": {
-                if (args.length < 1) unsupported(call, "localeCompare expects at least 1 arg");
-                const other = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: other, target: T_STRING, node: args[0]! },
-                    ]),
-                    ([s, otherStr]) => `tsc_str_locale_compare(${s}, ${otherStr})`,
-                );
-            }
             case "toLocaleString":
                 return this.emitSequencedExpr(
                     T_STRING,

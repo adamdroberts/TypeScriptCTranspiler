@@ -1082,6 +1082,7 @@ typedef enum {
     TSC_STRING_PROTOTYPE_TO_UPPER_CASE,
     TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE,
     TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE,
+    TSC_STRING_PROTOTYPE_LOCALE_COMPARE,
     TSC_STRING_PROTOTYPE_NORMALIZE,
     TSC_STRING_PROTOTYPE_IS_WELL_FORMED,
     TSC_STRING_PROTOTYPE_TO_WELL_FORMED,
@@ -1123,6 +1124,7 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "toUpperCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_UPPER_CASE },
     { "toLocaleLowerCase", 17, 0.0, TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE },
     { "toLocaleUpperCase", 17, 0.0, TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE },
+    { "localeCompare", 13, 1.0, TSC_STRING_PROTOTYPE_LOCALE_COMPARE },
     { "normalize", 9, 0.0, TSC_STRING_PROTOTYPE_NORMALIZE },
     { "isWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_IS_WELL_FORMED },
     { "toWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_TO_WELL_FORMED },
@@ -1149,6 +1151,13 @@ static tsc_value_t string_case_from_values(
         ? tsc_str_from_lit("NFC", 3)
         : tsc_value_to_string(form);
     return tsc_value_string(tsc_str_normalize(string, form_string));
+}
+
+static tsc_value_t string_compare_from_values(tsc_value_t receiver, tsc_value_t other) {
+    string_require_object_coercible(receiver, "String localeCompare receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    const tsc_str_t* that = tsc_value_to_string(other);
+    return tsc_value_num(tsc_str_locale_compare(string, that));
 }
 
 static tsc_value_t string_well_formed_from_values(
@@ -1237,6 +1246,8 @@ static tsc_value_t string_prototype_method_apply(
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOCALE_LOWER_CASE);
         case TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE:
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOCALE_UPPER_CASE);
+        case TSC_STRING_PROTOTYPE_LOCALE_COMPARE:
+            return string_compare_from_values(this_arg, first);
         case TSC_STRING_PROTOTYPE_NORMALIZE:
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_NORMALIZE);
         case TSC_STRING_PROTOTYPE_IS_WELL_FORMED:
@@ -1325,6 +1336,8 @@ static void string_prototype_install_intrinsics(tsc_value_t prototype) {
             method->arity,
             tsc_str_from_lit(method->name, method->name_len)
         );
+        void* volatile function_gc_root = tsc_value_gc_root(function);
+        (void)function_gc_root;
         tsc_object_define(
             (tsc_object_t*)value_ptr(prototype),
             tsc_str_from_lit(method->name, method->name_len),
@@ -1850,6 +1863,10 @@ static tsc_value_t object_constructor_box_primitive(
     tsc_value_t value
 ) {
     tsc_value_t receiver = tsc_value_object(tsc_object_new());
+    /* The fresh wrapper is referenced only by this boxed word until it is
+     * returned: pin it across the allocating calls below. */
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
     (void)tsc_value_set_prototype_of(
         receiver,
         primitive_prototype((tsc_primitive_descriptor_t*)descriptor)
@@ -4337,6 +4354,8 @@ tsc_value_t tsc_reflect_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t*
 }
 
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
@@ -4394,6 +4413,8 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
         return tsc_object_set(o, key, value);
     }
+    void* volatile set_value_gc_root = tsc_value_gc_root(value);
+    (void)set_value_gc_root;
     tsc_object_prop_t* cached = prop_cache_lookup(cache, o, key);
     if (cached) {
         tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_HIT);
@@ -4401,6 +4422,7 @@ bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value,
         if (prop->accessor) return prop->setter ? prop->setter(prop->setter_env, v, value) : false;
         if (!prop->writable) return false;
         prop->value = value;
+        prop->value_gc_root = tsc_value_gc_root(value);
         return true;
     }
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_PROP_CACHE_MISS);
@@ -4422,6 +4444,10 @@ static bool tsc_value_define_receiver_data(tsc_value_t receiver, tsc_str_t* key,
 }
 
 bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP_RECEIVER);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set_receiver((tsc_object_t*)value_ptr(v), key, value, receiver);
@@ -4452,6 +4478,10 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
 }
 
 bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver, tsc_prop_cache_t* cache) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
         return tsc_value_set_prop_receiver(v, key, value, receiver);
     }
@@ -6885,6 +6915,8 @@ static void date_intrinsic_initialize(void) {
                 descriptor->arity,
                 tsc_str_from_lit(descriptor->name, descriptor->name_len)
             );
+            void* volatile method_gc_root = tsc_value_gc_root(method);
+            (void)method_gc_root;
             (void)tsc_value_define_property_desc(
                 date_constructor,
                 tsc_str_from_lit(descriptor->name, descriptor->name_len),
@@ -7267,10 +7299,6 @@ tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index) {
         return tsc_value_get_index(recv, floor(n));
     }
     return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_locale_compare(tsc_value_t recv, tsc_value_t other) {
-    return tsc_value_num(tsc_str_locale_compare(tsc_value_to_string(recv), tsc_value_to_string(other)));
 }
 
 tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {

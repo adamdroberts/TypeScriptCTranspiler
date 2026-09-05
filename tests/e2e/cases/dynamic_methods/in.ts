@@ -36,3 +36,5 @@ console.log("reverse:", values.join("-"));
 console.log("ignored array:", seen);
 console.log("locale:", text.toLocaleUpperCase().trim(), text.toLocaleLowerCase().trim());
 console.log("locale ignored:", text.toLocaleUpperCase(mark("U")).trim(), seen);
+console.log("compare:", text.trim().localeCompare("Ada Lovelace"), text.localeCompare("Ada Lovelace"));
+console.log("compare ignored:", text.trim().localeCompare("Ada Lovelace", mark("C")), seen);

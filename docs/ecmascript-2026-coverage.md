@@ -1528,7 +1528,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-and-lone-surrogate-scan` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and lone-surrogate scan.
   - [ ] `sec-string.prototype.lastindexof` — String.prototype.lastIndexOf ( _searchString_ [ , _position_ ] )
     - [ ] `generic-tostring-position-and-reverse-utf16-search` (intrinsic, unbounded): Generic receiver/search ToString, ordered NaN/default position coercion, and last reverse UTF-16 code-unit match.
-  - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] )
+    - [ ] `generic-tostring-and-uca-root-collation` (intrinsic, unbounded): Generic receiver ToString, ordered that conversion, ordinary method lookup, and UCA root collation.
   - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] )

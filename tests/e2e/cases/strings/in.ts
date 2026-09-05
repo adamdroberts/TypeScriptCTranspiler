@@ -36,4 +36,6 @@ console.log("undefined pad ignored:", "[" + "go".padStart(4, undefined, mark("P"
 const limited = "a,b,c".split(",", 2, mark("s"));
 console.log("ignored split:", limited.length, seen);
 console.log("ignored replace:", "aba".replace("a", "x", mark("R")), "aba".replaceAll("a", "x", mark("A")), seen);
+console.log("locale compare:", "a".localeCompare("b"), "b".localeCompare("a"), "a".localeCompare("a"), "o\u0308".localeCompare("\u00f6"));
 console.log("locale ignored:", s.toLocaleUpperCase(mark("U"), mark("V")), s.toLocaleLowerCase(mark("L")), seen);
+console.log("locale compare ignored:", s.localeCompare("Hello, World!", mark("c"), mark("d")), seen);

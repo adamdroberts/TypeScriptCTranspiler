@@ -6004,6 +6004,8 @@ static void tsc_http_server_process_input(tsc_http_connection_state_t* connectio
     size_t body_len = content_length;
     size_t request_consumed = body_offset + content_length;
     tsc_value_t trailers = tsc_value_object(tsc_object_new());
+    void* volatile trailers_gc_root = tsc_value_gc_root(trailers);
+    (void)trailers_gc_root;
     char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
     if (chunked) {
         bool complete = false;
@@ -6785,11 +6787,25 @@ static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* clien
     client->response_event.emitter = tsc_event_emitter_new();
     tsc_child_add_event_methods(response_object, &client->response_event);
     tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num((double)status));
-    tsc_object_set(response_object, tsc_str_from_lit("statusMessage", 13), tsc_value_string(tsc_str_from_cstr(scanned >= 3 ? status_message : "")));
-    tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
+    /* Fresh boxed values must be pinned: the key interning beside them can
+     * allocate (and therefore collect) before the callee roots its params. */
+    tsc_value_t status_message_value = tsc_value_string(tsc_str_from_cstr(scanned >= 3 ? status_message : ""));
+    void* volatile status_message_gc_root = tsc_value_gc_root(status_message_value);
+    (void)status_message_gc_root;
+    tsc_object_set(response_object, tsc_str_from_lit("statusMessage", 13), status_message_value);
+    tsc_value_t http_version_value = tsc_value_string(tsc_str_from_cstr(version));
+    void* volatile http_version_gc_root = tsc_value_gc_root(http_version_value);
+    (void)http_version_gc_root;
+    tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), http_version_value);
     tsc_object_set(response_object, tsc_str_from_lit("headers", 7), tsc_value_object(headers_object));
-    tsc_object_set(response_object, tsc_str_from_lit("trailers", 8), tsc_value_object(tsc_object_new()));
-    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit("", 0)));
+    tsc_value_t trailers_value = tsc_value_object(tsc_object_new());
+    void* volatile trailers_gc_root = tsc_value_gc_root(trailers_value);
+    (void)trailers_gc_root;
+    tsc_object_set(response_object, tsc_str_from_lit("trailers", 8), trailers_value);
+    tsc_value_t body_value = tsc_value_string(tsc_str_from_lit("", 0));
+    void* volatile body_gc_root = tsc_value_gc_root(body_value);
+    (void)body_gc_root;
+    tsc_object_set(response_object, tsc_str_from_lit("body", 4), body_value);
     client->response_body_len = 0;
     client->response_cursor = header_end + 4;
     client->response_chunk_size = 0;

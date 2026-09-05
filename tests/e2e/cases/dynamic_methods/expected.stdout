@@ -26,3 +26,5 @@ reverse: 3-two-1
 ignored array: tulra
 locale: ADA LOVELACE ada lovelace
 locale ignored: ADA LOVELACE tulraU
+compare: 0 -1
+compare ignored: 0 tulraUC

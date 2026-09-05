@@ -28,4 +28,6 @@ undefined pad: [  go] [go  ]
 undefined pad ignored: [  go] [go  ] ultrpqPQ
 ignored split: 2 ultrpqPQs
 ignored replace: xba xbx ultrpqPQsRA
+locale compare: -1 1 0 0
 locale ignored: HELLO, WORLD! hello, world! ultrpqPQsRAUVL
+locale compare ignored: 0 ultrpqPQsRAUVLcd

@@ -1185,7 +1185,11 @@ async function main(): Promise<void> {
         });
     } finally {
         await makeTemporaryTreeRemovable(requestRoot);
-        await fs.rm(requestRoot, { recursive: true, force: true });
+        if (!process.env.TSC2C_KEEP_REQUESTS) {
+            await fs.rm(requestRoot, { recursive: true, force: true });
+        } else {
+            process.stdout.write(`[debug] kept ${requestRoot}\n`);
+        }
     }
     const finishedAt = new Date().toISOString();
     await verifyPinnedCheckout("Test262", test262, baseline.test262);
