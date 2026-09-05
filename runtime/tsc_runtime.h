@@ -1274,9 +1274,6 @@ tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision
 tsc_value_t tsc_value_method_to_lower(tsc_value_t recv);
 tsc_value_t tsc_value_method_to_upper(tsc_value_t recv);
 tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form);
-tsc_value_t tsc_value_method_trim(tsc_value_t recv);
-tsc_value_t tsc_value_method_trim_start(tsc_value_t recv);
-tsc_value_t tsc_value_method_trim_end(tsc_value_t recv);
 
 tsc_object_t* tsc_object_new(void);
 tsc_object_t* tsc_object_new_class(void* ptr);

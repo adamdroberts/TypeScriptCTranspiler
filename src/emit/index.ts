@@ -109,6 +109,11 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "substr",
     "substring",
     "startsWith",
+    "trim",
+    "trimEnd",
+    "trimLeft",
+    "trimRight",
+    "trimStart",
 ]);
 
 const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
@@ -58061,35 +58066,6 @@ class Emitter {
                     ],
                     ([target, form]) => `tsc_value_method_normalize(${target}, ${form})`,
                 );
-            case "trim":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_trim(${target})`,
-                );
-            case "trimLeft":
-            case "trimStart":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_trim_start(${target})`,
-                );
-            case "trimRight":
-            case "trimEnd":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_trim_end(${target})`,
-                );
             case "toString":
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -66842,26 +66818,6 @@ class Emitter {
                     `tsc_str_normalize(${vals[0]}, ${vals[1]})`,
                 );
             }
-            case "trim":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_trim(${s!})`,
-                );
-            case "trimLeft":
-            case "trimStart":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_trim_start(${s!})`,
-                );
-            case "trimRight":
-            case "trimEnd":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_trim_end(${s!})`,
-                );
             case "isWellFormed":
                 return this.emitSequencedExpr(
                     T_BOOLEAN,

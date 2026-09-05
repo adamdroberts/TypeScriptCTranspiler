@@ -10,6 +10,7 @@ console.log("endsWith !:", s.endsWith("!"));
 console.log("indexOf o:", s.indexOf("o"));
 console.log("repeat 3:", "ab".repeat(3));
 console.log("trim:", "  hi  ".trim());
+console.log("trims:", "[" + "  hi  ".trimStart() + "]", "[" + "  hi  ".trimEnd() + "]", "[" + "  hi  ".trimLeft() + "]", "[" + "  hi  ".trimRight() + "]");
 const parts: string[] = "a,b,c,d".split(",");
 console.log("parts len:", parts.length);
 for (const p of parts) console.log("  ", p);

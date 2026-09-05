@@ -1556,10 +1556,15 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.trim` — String.prototype.trim ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.trim` — String.prototype.trim ( )
+    - [ ] `generic-tostring-and-code-unit-boundary-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit boundary trim.
   - [ ] `sec-trimstring` — TrimString ( _string_: an ECMAScript language value, _where_: ~start~, ~end~, or ~start+end~, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.trimend` — String.prototype.trimEnd ( ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.trimstart` — String.prototype.trimStart ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.trimend` — String.prototype.trimEnd ( )
+    - [ ] `generic-tostring-and-code-unit-suffix-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit suffix trim.
+    - [ ] `annex-b-trimend-alias-identity` (intrinsic, finite): Annex B trimRight alias sharing the trimEnd function identity, name, length, and suffix-trim behavior.
+  - [ ] `sec-string.prototype.trimstart` — String.prototype.trimStart ( )
+    - [ ] `generic-tostring-and-code-unit-prefix-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit prefix trim.
+    - [ ] `annex-b-trimstart-alias-identity` (intrinsic, finite): Annex B trimLeft alias sharing the trimStart function identity, name, length, and prefix-trim behavior.
   - [ ] `sec-string.prototype.valueof` — String.prototype.valueOf ( ): exact disposition and partitions missing.
   - [ ] `sec-thisstringvalue` — ThisStringValue ( _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string.prototype-%symbol.iterator%` — String.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
@@ -2648,8 +2653,8 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `String.prototype.matchAll` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.replaceAll` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.toWellFormed` — standard, tracking: `todo`; no clause mapping.
-- [ ] `String.prototype.trimEnd` — standard, tracking: `todo`; no clause mapping.
-- [ ] `String.prototype.trimStart` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.trimEnd` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trimend`.
+- [ ] `String.prototype.trimStart` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trimstart`.
 - [ ] `Symbol` — standard, tracking: `ready-for-verification`; `sec-ecmascript-language-types-symbol-type`, `sec-symbol-objects`.
 - [ ] `Symbol.asyncIterator` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.hasInstance` — standard, tracking: `todo`; no clause mapping.
@@ -2763,7 +2768,7 @@ The claim profile implements all normative-optional material, including inline a
 - `source-phase-imports-module-source` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `stable-array-sort` — standard, tracking: `todo`; no clause mapping.
 - [ ] `stable-typedarray-sort` — standard, tracking: `todo`; no clause mapping.
-- [ ] `string-trimming` — standard, tracking: `todo`; no clause mapping.
+- [ ] `string-trimming` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trim`, `sec-string.prototype.trimstart`, `sec-string.prototype.trimend`, `String.prototype.trimleft`, `String.prototype.trimright`.
 - [ ] `super` — standard, tracking: `todo`; no clause mapping.
 - [ ] `symbols-as-weakmap-keys` — standard, tracking: `todo`; no clause mapping.
 - [ ] `tail-call-optimization` — standard, tracking: `todo`; no clause mapping.

@@ -1249,71 +1249,45 @@ tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
     return out;
 }
 
-static bool is_ecmascript_whitespace(uint32_t code_point) {
-    return code_point == 0x0009 ||
-        code_point == 0x000a ||
-        code_point == 0x000b ||
-        code_point == 0x000c ||
-        code_point == 0x000d ||
-        code_point == 0x0020 ||
-        code_point == 0x00a0 ||
-        code_point == 0x1680 ||
-        (code_point >= 0x2000 && code_point <= 0x200a) ||
-        code_point == 0x2028 ||
-        code_point == 0x2029 ||
-        code_point == 0x202f ||
-        code_point == 0x205f ||
-        code_point == 0x3000 ||
-        code_point == 0xfeff;
-}
-
-static size_t trim_start_offset(const tsc_str_t* s) {
-    size_t offset = 0;
-    while (offset < s->len) {
-        uint32_t code_point = 0;
-        size_t width = 0;
-        if (!decode_utf8_at(s, offset, &code_point, &width) ||
-            !is_ecmascript_whitespace(code_point)) {
-            break;
-        }
-        offset += width;
-    }
-    return offset;
-}
-
-static size_t trim_end_offset(const tsc_str_t* s, size_t start) {
-    size_t offset = start;
-    size_t end = start;
-    while (offset < s->len) {
-        uint32_t code_point = 0;
-        size_t width = 0;
-        if (!decode_utf8_at(s, offset, &code_point, &width)) break;
-        offset += width;
-        if (!is_ecmascript_whitespace(code_point)) end = offset;
-    }
-    return end;
+static bool is_trim_whitespace_unit(uint16_t unit) {
+    return unit == 0x0009 ||
+        unit == 0x000a ||
+        unit == 0x000b ||
+        unit == 0x000c ||
+        unit == 0x000d ||
+        unit == 0x0020 ||
+        unit == 0x00a0 ||
+        unit == 0x1680 ||
+        (unit >= 0x2000 && unit <= 0x200a) ||
+        unit == 0x2028 ||
+        unit == 0x2029 ||
+        unit == 0x202f ||
+        unit == 0x205f ||
+        unit == 0x3000 ||
+        unit == 0xfeff;
 }
 
 tsc_str_t* tsc_str_trim(const tsc_str_t* s) {
-    size_t i = trim_start_offset(s);
-    size_t j = trim_end_offset(s, i);
-    tsc_str_t* r = str_alloc(j - i);
-    memcpy((char*)r->data, s->data + i, j - i);
-    return r;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    size_t start = 0;
+    while (start < sequence.len && is_trim_whitespace_unit(sequence.data[start])) start++;
+    size_t end = sequence.len;
+    while (end > start && is_trim_whitespace_unit(sequence.data[end - 1])) end--;
+    return string_from_utf16_range(sequence.data, start, end - start);
 }
 
 tsc_str_t* tsc_str_trim_start(const tsc_str_t* s) {
-    size_t i = trim_start_offset(s);
-    tsc_str_t* r = str_alloc(s->len - i);
-    memcpy((char*)r->data, s->data + i, s->len - i);
-    return r;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    size_t start = 0;
+    while (start < sequence.len && is_trim_whitespace_unit(sequence.data[start])) start++;
+    return string_from_utf16_range(sequence.data, start, sequence.len - start);
 }
 
 tsc_str_t* tsc_str_trim_end(const tsc_str_t* s) {
-    size_t j = trim_end_offset(s, 0);
-    tsc_str_t* r = str_alloc(j);
-    memcpy((char*)r->data, s->data, j);
-    return r;
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    size_t end = sequence.len;
+    while (end > 0 && is_trim_whitespace_unit(sequence.data[end - 1])) end--;
+    return string_from_utf16_range(sequence.data, 0, end);
 }
 
 typedef enum {

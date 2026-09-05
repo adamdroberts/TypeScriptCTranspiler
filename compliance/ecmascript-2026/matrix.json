@@ -745,7 +745,7 @@
         },
         "rationale": "The independent shared fill property derives the intrinsic surface, generic receiver/target/filler conversion, omitted/undefined/NaN/negative/fractional/array targets, default-space and null/Boolean/BigInt fillers, empty-filler and long-enough early returns with skipped filler conversion, BigInt/Symbol target and Symbol filler rejection, exact receiver/target/filler abrupt identity and order, ordinary lookup before argument evaluation, and truncated UTF-16 code-unit prefix fill in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before ToLength conversion and conditional filler ToString, then one canonical fill worklist truncates the filler sequence by code units. The distinct mixed-code-point stress derives expected code units independently and exercises prefix padding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
       }],
-      "rationale": "The complete String.prototype.padStart intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+      "rationale": "The complete String.prototype.padStart intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
     },
     {
       "clause": "sec-string.prototype.padend",
@@ -785,7 +785,189 @@
         },
         "rationale": "The independent shared fill property derives the intrinsic surface, generic receiver/target/filler conversion, omitted/undefined/NaN/negative/fractional/array targets, default-space and null/Boolean/BigInt fillers, empty-filler and long-enough early returns with skipped filler conversion, BigInt/Symbol target and Symbol filler rejection, exact receiver/target/filler abrupt identity and order, ordinary lookup before argument evaluation, and truncated UTF-16 code-unit suffix fill in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before ToLength conversion and conditional filler ToString, then one canonical fill worklist truncates the filler sequence by code units. The distinct mixed-code-point stress derives expected code units independently and exercises suffix padding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
       }],
-      "rationale": "The complete String.prototype.padEnd intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+      "rationale": "The complete String.prototype.padEnd intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.trim",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-code-unit-boundary-trim",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit boundary trim",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.trim" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-trim.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_trim_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_trim"
+          ]
+        },
+        "rationale": "The independent shared trim property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, every WhiteSpace and LineTerminator code unit, kept non-whitespace controls, empty and all-whitespace inputs, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and scalar/explicit-pair/lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical boundary worklist strips the code-unit sequence from both ends. The distinct mixed-code-point stress derives expected code units independently and exercises boundary trimming across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.trim intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.trimstart",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-code-unit-prefix-trim",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit prefix trim",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.trimstart" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-trim.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_trim_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_trim_start"
+          ]
+        },
+        "rationale": "The independent shared trim property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, every WhiteSpace and LineTerminator code unit, kept non-whitespace controls, empty and all-whitespace inputs, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and scalar/explicit-pair/lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical boundary worklist strips the code-unit sequence from the start. The distinct mixed-code-point stress derives expected code units independently and exercises prefix trimming across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      },
+      {
+        "id": "annex-b-trimstart-alias-identity",
+        "title": "Annex B trimLeft alias sharing the trimStart function identity, name, length, and prefix-trim behavior",
+        "surface": "intrinsic",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "String.prototype.trimleft" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-trim.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_trim_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_trim_start"
+          ]
+        },
+        "rationale": "The independent shared trim property derives the alias identity with trimStart, the trimStart name and zero length, the writable non-enumerable configurable alias descriptor, and equivalent prefix-trim behavior in both memory modes. One Realm-owned install step defines the same function value under both keys, so the alias observes the same generic receiver conversion and canonical boundary worklist. The distinct mixed-code-point stress derives expected code units independently and exercises prefix trimming across representative sequence width. The exact pinned Annex B directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }
+      ],
+      "rationale": "The complete String.prototype.trimStart intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.trimend",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-code-unit-suffix-trim",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit suffix trim",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.trimend" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-trim.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_trim_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_trim_end"
+          ]
+        },
+        "rationale": "The independent shared trim property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, every WhiteSpace and LineTerminator code unit, kept non-whitespace controls, empty and all-whitespace inputs, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and scalar/explicit-pair/lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical boundary worklist strips the code-unit sequence from the end. The distinct mixed-code-point stress derives expected code units independently and exercises suffix trimming across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      },
+      {
+        "id": "annex-b-trimend-alias-identity",
+        "title": "Annex B trimRight alias sharing the trimEnd function identity, name, length, and suffix-trim behavior",
+        "surface": "intrinsic",
+        "cardinality": "finite",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "String.prototype.trimright" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-trim.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_trim_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_trim_end"
+          ]
+        },
+        "rationale": "The independent shared trim property derives the alias identity with trimEnd, the trimEnd name and zero length, the writable non-enumerable configurable alias descriptor, and equivalent suffix-trim behavior in both memory modes. One Realm-owned install step defines the same function value under both keys, so the alias observes the same generic receiver conversion and canonical boundary worklist. The distinct mixed-code-point stress derives expected code units independently and exercises suffix trimming across representative sequence width. The exact pinned Annex B directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }
+      ],
+      "rationale": "The complete String.prototype.trimEnd intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
     },
     {
       "clause": "sec-string.prototype.slice",

@@ -538,16 +538,20 @@
     {
       "tag": "String.prototype.trimEnd",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.trimend"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.trimEnd intrinsic clause, whose terminal generic UTF-16 boundary partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.trimStart",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.trimstart"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.trimStart intrinsic clause, whose terminal generic UTF-16 boundary partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "Symbol",
@@ -1354,9 +1358,15 @@
     {
       "tag": "string-trimming",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.trim",
+        "sec-string.prototype.trimstart",
+        "sec-string.prototype.trimend",
+        "String.prototype.trimleft",
+        "String.prototype.trimright"
+      ],
+      "rationale": "The pinned standard feature tag denotes the shared String trimming contract exercised by the trim, trimStart, trimEnd, and Annex B trimLeft/trimRight terminal generic UTF-16 boundary partitions, each with reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "super",

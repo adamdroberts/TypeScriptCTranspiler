@@ -1032,6 +1032,29 @@ static tsc_value_t string_fill_from_values(
 }
 
 typedef enum {
+    TSC_STRING_TRIM_BOTH,
+    TSC_STRING_TRIM_START,
+    TSC_STRING_TRIM_END,
+} tsc_string_trim_operation_t;
+
+static tsc_value_t string_trim_from_values(
+    tsc_value_t receiver,
+    tsc_string_trim_operation_t operation
+) {
+    string_require_object_coercible(receiver, "String trim receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    switch (operation) {
+        case TSC_STRING_TRIM_BOTH:
+            return tsc_value_string(tsc_str_trim(string));
+        case TSC_STRING_TRIM_START:
+            return tsc_value_string(tsc_str_trim_start(string));
+        case TSC_STRING_TRIM_END:
+            return tsc_value_string(tsc_str_trim_end(string));
+    }
+    tsc_panic("unknown String trim operation");
+}
+
+typedef enum {
     TSC_STRING_PROTOTYPE_AT,
     TSC_STRING_PROTOTYPE_CHAR_AT,
     TSC_STRING_PROTOTYPE_CHAR_CODE_AT,
@@ -1051,6 +1074,9 @@ typedef enum {
     TSC_STRING_PROTOTYPE_REPLACE,
     TSC_STRING_PROTOTYPE_REPLACE_ALL,
     TSC_STRING_PROTOTYPE_SPLIT,
+    TSC_STRING_PROTOTYPE_TRIM,
+    TSC_STRING_PROTOTYPE_TRIM_START,
+    TSC_STRING_PROTOTYPE_TRIM_END,
 } tsc_string_prototype_operation_t;
 
 typedef struct {
@@ -1080,6 +1106,9 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "replace", 7, 2.0, TSC_STRING_PROTOTYPE_REPLACE },
     { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
     { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
+    { "trim", 4, 0.0, TSC_STRING_PROTOTYPE_TRIM },
+    { "trimStart", 9, 0.0, TSC_STRING_PROTOTYPE_TRIM_START },
+    { "trimEnd", 7, 0.0, TSC_STRING_PROTOTYPE_TRIM_END },
 };
 
 static tsc_value_t string_prototype_method_apply(
@@ -1134,31 +1163,59 @@ static tsc_value_t string_prototype_method_apply(
             return tsc_value_method_replace_all(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SPLIT:
             return tsc_value_method_split(this_arg, first, second);
+        case TSC_STRING_PROTOTYPE_TRIM:
+            return string_trim_from_values(this_arg, TSC_STRING_TRIM_BOTH);
+        case TSC_STRING_PROTOTYPE_TRIM_START:
+            return string_trim_from_values(this_arg, TSC_STRING_TRIM_START);
+        case TSC_STRING_PROTOTYPE_TRIM_END:
+            return string_trim_from_values(this_arg, TSC_STRING_TRIM_END);
     }
     tsc_panic("unknown String prototype operation");
 }
 
 static void string_prototype_install_intrinsics(tsc_value_t prototype) {
+    tsc_value_t trim_start = tsc_value_undefined();
+    tsc_value_t trim_end = tsc_value_undefined();
     for (
         size_t index = 0;
         index < sizeof(string_prototype_methods) / sizeof(string_prototype_methods[0]);
         index++
     ) {
         const tsc_string_prototype_method_t* method = &string_prototype_methods[index];
+        tsc_value_t function = tsc_value_function_builtin_named(
+            string_prototype_method_apply,
+            (void*)method,
+            method->arity,
+            tsc_str_from_lit(method->name, method->name_len)
+        );
         tsc_object_define(
             (tsc_object_t*)value_ptr(prototype),
             tsc_str_from_lit(method->name, method->name_len),
-            tsc_value_function_builtin_named(
-                string_prototype_method_apply,
-                (void*)method,
-                method->arity,
-                tsc_str_from_lit(method->name, method->name_len)
-            ),
+            function,
             true,
             false,
             true
         );
+        if (method->operation == TSC_STRING_PROTOTYPE_TRIM_START) trim_start = function;
+        if (method->operation == TSC_STRING_PROTOTYPE_TRIM_END) trim_end = function;
     }
+    /* Annex B aliases share the trimStart/trimEnd function identities. */
+    tsc_object_define(
+        (tsc_object_t*)value_ptr(prototype),
+        tsc_str_from_lit("trimLeft", 8),
+        trim_start,
+        true,
+        false,
+        true
+    );
+    tsc_object_define(
+        (tsc_object_t*)value_ptr(prototype),
+        tsc_str_from_lit("trimRight", 9),
+        trim_end,
+        true,
+        false,
+        true
+    );
 }
 
 static tsc_value_t symbol_prototype_to_primitive_apply(
@@ -8095,27 +8152,6 @@ tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
         tsc_str_t* f = tsc_value_is_undefined(form) ? tsc_str_from_lit("NFC", 3) : tsc_value_to_string(form);
         return tsc_value_string(tsc_str_normalize((const tsc_str_t*)value_ptr(recv), f));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_trim(tsc_value_t recv) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_trim((const tsc_str_t*)value_ptr(recv)));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_trim_start(tsc_value_t recv) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_trim_start((const tsc_str_t*)value_ptr(recv)));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_trim_end(tsc_value_t recv) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_trim_end((const tsc_str_t*)value_ptr(recv)));
     }
     return tsc_value_undefined();
 }

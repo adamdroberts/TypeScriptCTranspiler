@@ -12,6 +12,7 @@ console.log("char:", text.charAt(5));
 console.log("includes:", text.includes("Love"));
 console.log("starts:", text.trim().startsWith("Ada"));
 console.log("ends:", text.trim().endsWith("lace"));
+console.log("trims:", "[" + text.trimStart() + "]", "[" + text.trimEnd() + "]", "[" + text.trimLeft() + "]", "[" + text.trimRight() + "]");
 console.log("index:", text.indexOf("Love"));
 console.log("slice:", text.slice(5, 9));
 console.log("repeat:", text.repeat(2).length, text.repeat(2).startsWith(" Ada"));

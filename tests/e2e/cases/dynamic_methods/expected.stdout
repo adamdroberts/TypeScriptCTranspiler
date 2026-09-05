@@ -5,6 +5,7 @@ char: L
 includes: true
 starts: true
 ends: true
+trims: [Ada Lovelace ] [ Ada Lovelace] [Ada Lovelace ] [ Ada Lovelace]
 index: 5
 slice: Love
 repeat: 28 true

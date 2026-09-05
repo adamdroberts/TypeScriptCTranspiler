@@ -7,6 +7,18 @@
       "clauses": ["sec-arrow-function-definitions-runtime-semantics-evaluation"],
       "reason": "The pinned forbidden-extension scenarios use the historical shortened arrow-definitions anchor for the current ArrowFunction Evaluation clause.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "esid": "sec-string.prototype.trimLeft",
+      "clauses": ["String.prototype.trimleft"],
+      "reason": "The pinned Annex B scenarios use the camel-case trimLeft anchor for the current String.prototype.trimleft clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "esid": "sec-string.prototype.trimRight",
+      "clauses": ["String.prototype.trimright"],
+      "reason": "The pinned Annex B scenarios use the camel-case trimRight anchor for the current String.prototype.trimright clause.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "legacyIdRules": [
@@ -181,15 +193,9 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
-      "prefix": "test/built-ins/String/prototype/padStart/",
-      "clauses": ["sec-string.prototype.padstart"],
-      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.padStart semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
-      "reviewedBy": "tsc2c compliance review"
-    },
-    {
-      "prefix": "test/built-ins/String/prototype/padEnd/",
-      "clauses": ["sec-string.prototype.padend"],
-      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.padEnd semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "prefix": "test/built-ins/String/prototype/trim/",
+      "clauses": ["sec-string.prototype.trim"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.trim semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
       "reviewedBy": "tsc2c compliance review"
     },
     {
@@ -326,6 +332,30 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.repeat"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.repeat intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/trim/not-a-constructor.js",
+      "sourceSha256": "1abdc3a6409a7c8d24253fa3914d29e8c1594da9dc6502f904ce821d8a464ad4",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.trim"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.trim intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/trimStart/not-a-constructor.js",
+      "sourceSha256": "baf72462d348dc1842ec2c4528e3b6f7e423e4c4d7dd4bd518c65be831586bc5",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.trimstart"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.trimStart intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/trimEnd/not-a-constructor.js",
+      "sourceSha256": "190cff39f1cac6e3828aca43e872d001b60cc4b0d40e9471e3c05a4138b7712d",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.trimend"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.trimEnd intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
       "reviewedBy": "tsc2c compliance review"
     },
     {

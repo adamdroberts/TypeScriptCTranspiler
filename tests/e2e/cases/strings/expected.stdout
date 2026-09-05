@@ -9,6 +9,7 @@ endsWith !: true
 indexOf o: 4
 repeat 3: ababab
 trim: hi
+trims: [hi  ] [  hi] [hi  ] [  hi]
 parts len: 4
    a
    b
