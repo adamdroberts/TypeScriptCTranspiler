@@ -109,6 +109,9 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "substr",
     "substring",
     "startsWith",
+    "toLowerCase",
+    "toUpperCase",
+    "normalize",
     "trim",
     "trimEnd",
     "trimLeft",
@@ -58038,34 +58041,6 @@ class Emitter {
                     ...ignored,
                 ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
             }
-            case "toLowerCase":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_to_lower(${target})`,
-                );
-            case "toUpperCase":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_to_upper(${target})`,
-                );
-            case "normalize":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([target, form]) => `tsc_value_method_normalize(${target}, ${form})`,
-                );
             case "toString":
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -66793,31 +66768,7 @@ class Emitter {
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
-            case "toUpperCase":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_to_upper(${s!})`,
-                );
-            case "toLowerCase":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_to_lower(${s!})`,
-                );
-            case "normalize": {
-                const form = args[0] && !this.isUndefinedExpression(args[0])
-                    ? this.emitExpr(args[0])
-                    : { c: `tsc_str_from_lit("NFC", 3)`, ty: T_STRING };
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: form, target: T_STRING, node: args[0] },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) =>
-                    `tsc_str_normalize(${vals[0]}, ${vals[1]})`,
-                );
-            }
+            case "isWellFormed":
             case "isWellFormed":
                 return this.emitSequencedExpr(
                     T_BOOLEAN,

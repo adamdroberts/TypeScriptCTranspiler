@@ -199,6 +199,24 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
+      "prefix": "test/built-ins/String/prototype/toLowerCase/",
+      "clauses": ["sec-string.prototype.tolowercase"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.toLowerCase semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/String/prototype/toUpperCase/",
+      "clauses": ["sec-string.prototype.touppercase"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.toUpperCase semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/String/prototype/normalize/",
+      "clauses": ["sec-string.prototype.normalize"],
+      "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.normalize semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "prefix": "test/built-ins/String/prototype/substring/",
       "clauses": ["sec-string.prototype.substring"],
       "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.substring semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
@@ -356,6 +374,30 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.trimend"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.trimEnd intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/toLowerCase/not-a-constructor.js",
+      "sourceSha256": "8b559a4b7fead85437dc6a1ed58d4cc523bed6fd93698d564633247d502163f7",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.tolowercase"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toLowerCase intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/toUpperCase/not-a-constructor.js",
+      "sourceSha256": "2365f9804722f0ca8e951cb49ae6f4edd71d66eb2fe26dc1f3c586ff636ee34d",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.touppercase"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toUpperCase intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/normalize/not-a-constructor.js",
+      "sourceSha256": "0dd396f511f50dbb2e0a6fa581ab702e5a0fea484444085779894c3ba35c0192",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.normalize"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.normalize intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
       "reviewedBy": "tsc2c compliance review"
     },
     {

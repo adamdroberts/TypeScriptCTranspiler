@@ -1529,7 +1529,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] )
+    - [ ] `generic-tostring-form-and-unicode-normalization` (intrinsic, unbounded): Generic receiver ToString, ordered form conversion with RangeError partitions, ordinary method lookup, and ICU normalization.
   - [ ] `sec-string.prototype.padend` — String.prototype.padEnd ( _maxLength_ [ , _fillString_ ] )
     - [ ] `generic-tostring-length-filler-and-code-unit-suffix-fill` (intrinsic, unbounded): Generic receiver ToString, ordered maxLength/fillString conversion with early-return partitions, ordinary method lookup, and UTF-16 code-unit suffix fill.
   - [ ] `sec-string.prototype.padstart` — String.prototype.padStart ( _maxLength_ [ , _fillString_ ] )
@@ -1552,9 +1553,11 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-clamped-swapped-range-and-code-unit-sequence` (intrinsic, unbounded): Generic receiver ToString, ordered clamped and swapped start/end conversion, UTF-16 range extraction, abrupt completion, ordinary method lookup, and intrinsic surface.
   - [ ] `sec-string.prototype.tolocalelowercase` — String.prototype.toLocaleLowerCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( )
+    - [ ] `generic-tostring-and-unicode-lowercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode lowercase mapping.
   - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( )
+    - [ ] `generic-tostring-and-unicode-uppercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode uppercase mapping.
   - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.trim` — String.prototype.trim ( )
     - [ ] `generic-tostring-and-code-unit-boundary-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit boundary trim.

@@ -1077,6 +1077,9 @@ typedef enum {
     TSC_STRING_PROTOTYPE_TRIM,
     TSC_STRING_PROTOTYPE_TRIM_START,
     TSC_STRING_PROTOTYPE_TRIM_END,
+    TSC_STRING_PROTOTYPE_TO_LOWER_CASE,
+    TSC_STRING_PROTOTYPE_TO_UPPER_CASE,
+    TSC_STRING_PROTOTYPE_NORMALIZE,
 } tsc_string_prototype_operation_t;
 
 typedef struct {
@@ -1109,7 +1112,29 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "trim", 4, 0.0, TSC_STRING_PROTOTYPE_TRIM },
     { "trimStart", 9, 0.0, TSC_STRING_PROTOTYPE_TRIM_START },
     { "trimEnd", 7, 0.0, TSC_STRING_PROTOTYPE_TRIM_END },
+    { "toLowerCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_LOWER_CASE },
+    { "toUpperCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_UPPER_CASE },
+    { "normalize", 9, 0.0, TSC_STRING_PROTOTYPE_NORMALIZE },
 };
+
+static tsc_value_t string_case_from_values(
+    tsc_value_t receiver,
+    tsc_value_t form,
+    tsc_string_prototype_operation_t operation
+) {
+    string_require_object_coercible(receiver, "String case receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    if (operation == TSC_STRING_PROTOTYPE_TO_LOWER_CASE) {
+        return tsc_value_string(tsc_str_to_lower(string));
+    }
+    if (operation == TSC_STRING_PROTOTYPE_TO_UPPER_CASE) {
+        return tsc_value_string(tsc_str_to_upper(string));
+    }
+    const tsc_str_t* form_string = tsc_value_is_undefined(form)
+        ? tsc_str_from_lit("NFC", 3)
+        : tsc_value_to_string(form);
+    return tsc_value_string(tsc_str_normalize(string, form_string));
+}
 
 static tsc_value_t string_prototype_method_apply(
     void* env,
@@ -1169,6 +1194,12 @@ static tsc_value_t string_prototype_method_apply(
             return string_trim_from_values(this_arg, TSC_STRING_TRIM_START);
         case TSC_STRING_PROTOTYPE_TRIM_END:
             return string_trim_from_values(this_arg, TSC_STRING_TRIM_END);
+        case TSC_STRING_PROTOTYPE_TO_LOWER_CASE:
+            return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_LOWER_CASE);
+        case TSC_STRING_PROTOTYPE_TO_UPPER_CASE:
+            return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_UPPER_CASE);
+        case TSC_STRING_PROTOTYPE_NORMALIZE:
+            return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_NORMALIZE);
     }
     tsc_panic("unknown String prototype operation");
 }
@@ -8132,28 +8163,6 @@ tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision
     bool omitted = value_is_box(precision) && value_tag(precision) == TSC_VALUE_TAG_UNDEFINED;
     double digits = omitted ? 0.0 : tsc_value_as_num(precision);
     return tsc_str_from_num_precision(value_as_num(recv), digits, !omitted);
-}
-
-tsc_value_t tsc_value_method_to_lower(tsc_value_t recv) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_to_lower((const tsc_str_t*)value_ptr(recv)));
-    }
-    return tsc_value_to_string(recv) ? tsc_value_string(tsc_value_to_string(recv)) : tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_to_upper(tsc_value_t recv) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_to_upper((const tsc_str_t*)value_ptr(recv)));
-    }
-    return tsc_value_to_string(recv) ? tsc_value_string(tsc_value_to_string(recv)) : tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* f = tsc_value_is_undefined(form) ? tsc_str_from_lit("NFC", 3) : tsc_value_to_string(form);
-        return tsc_value_string(tsc_str_normalize((const tsc_str_t*)value_ptr(recv), f));
-    }
-    return tsc_value_undefined();
 }
 
 static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen) {

@@ -1166,22 +1166,51 @@ tsc_str_t* tsc_str_substr(const tsc_str_t* s, double start, double length) {
     return string_from_utf16_range(sequence.data, (size_t)i0, (size_t)n);
 }
 
-tsc_str_t* tsc_str_to_upper(const tsc_str_t* s) {
-    tsc_str_t* r = str_alloc(s->len);
-    for (size_t i = 0; i < s->len; i++) {
-        unsigned char c = (unsigned char)s->data[i];
-        ((char*)r->data)[i] = (c < 0x80) ? (char)toupper(c) : (char)c;
+static tsc_str_t* string_change_case(const tsc_str_t* s, bool to_upper) {
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    if (sequence.len > (size_t)INT32_MAX) {
+        tsc_panic("String case conversion: input too large");
     }
-    return r;
+    UErrorCode status = U_ZERO_ERROR;
+    int32_t mapped_len = 0;
+    if (to_upper) {
+        mapped_len = u_strToUpper(
+            NULL, 0, (const UChar*)sequence.data, (int32_t)sequence.len, "", &status
+        );
+    } else {
+        mapped_len = u_strToLower(
+            NULL, 0, (const UChar*)sequence.data, (int32_t)sequence.len, "", &status
+        );
+    }
+    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
+        tsc_panic("String case conversion: mapping sizing failed");
+    }
+    UChar* mapped =
+        (UChar*)TSC_GC_MALLOC_ATOMIC(sizeof(UChar) * ((size_t)mapped_len + 1));
+    status = U_ZERO_ERROR;
+    if (to_upper) {
+        mapped_len = u_strToUpper(
+            mapped, mapped_len + 1, (const UChar*)sequence.data,
+            (int32_t)sequence.len, "", &status
+        );
+    } else {
+        mapped_len = u_strToLower(
+            mapped, mapped_len + 1, (const UChar*)sequence.data,
+            (int32_t)sequence.len, "", &status
+        );
+    }
+    if (U_FAILURE(status)) {
+        tsc_panic("String case conversion: mapping failed");
+    }
+    return string_from_utf16_range((const uint16_t*)mapped, 0, (size_t)mapped_len);
+}
+
+tsc_str_t* tsc_str_to_upper(const tsc_str_t* s) {
+    return string_change_case(s, true);
 }
 
 tsc_str_t* tsc_str_to_lower(const tsc_str_t* s) {
-    tsc_str_t* r = str_alloc(s->len);
-    for (size_t i = 0; i < s->len; i++) {
-        unsigned char c = (unsigned char)s->data[i];
-        ((char*)r->data)[i] = (c < 0x80) ? (char)tolower(c) : (char)c;
-    }
-    return r;
+    return string_change_case(s, false);
 }
 
 tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
@@ -1196,57 +1225,39 @@ tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
     } else if (str_lit_eq(form, "NFKD")) {
         normalizer = unorm2_getNFKDInstance(&status);
     } else {
-        tsc_throw_str(tsc_str_from_cstr("String.normalize: form must be NFC, NFD, NFKC, or NFKD"));
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_cstr("String.normalize: form must be NFC, NFD, NFKC, or NFKD")
+        );
     }
     if (U_FAILURE(status) || !normalizer) {
         tsc_panic("String.normalize: ICU normalizer unavailable");
     }
-    if (s->len > INT32_MAX) {
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    if (sequence.len > (size_t)INT32_MAX) {
         tsc_panic("String.normalize: input too large");
-    }
-
-    int32_t ulen = 0;
-    status = U_ZERO_ERROR;
-    u_strFromUTF8(NULL, 0, &ulen, s->data, (int32_t)s->len, &status);
-    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
-        tsc_panic("String.normalize: invalid UTF-8 input");
-    }
-
-    UChar* ubuf = (UChar*)TSC_GC_MALLOC_ATOMIC(sizeof(UChar) * ((size_t)ulen + 1));
-    status = U_ZERO_ERROR;
-    u_strFromUTF8(ubuf, ulen + 1, NULL, s->data, (int32_t)s->len, &status);
-    if (U_FAILURE(status)) {
-        tsc_panic("String.normalize: UTF-8 conversion failed");
     }
 
     int32_t norm_len = 0;
     status = U_ZERO_ERROR;
-    norm_len = unorm2_normalize(normalizer, ubuf, ulen, NULL, 0, &status);
+    norm_len = unorm2_normalize(
+        normalizer, (const UChar*)sequence.data, (int32_t)sequence.len,
+        NULL, 0, &status
+    );
     if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
         tsc_panic("String.normalize: normalization sizing failed");
     }
 
     UChar* nbuf = (UChar*)TSC_GC_MALLOC_ATOMIC(sizeof(UChar) * ((size_t)norm_len + 1));
     status = U_ZERO_ERROR;
-    norm_len = unorm2_normalize(normalizer, ubuf, ulen, nbuf, norm_len + 1, &status);
+    norm_len = unorm2_normalize(
+        normalizer, (const UChar*)sequence.data, (int32_t)sequence.len,
+        nbuf, norm_len + 1, &status
+    );
     if (U_FAILURE(status)) {
         tsc_panic("String.normalize: normalization failed");
     }
-
-    int32_t out_len = 0;
-    status = U_ZERO_ERROR;
-    u_strToUTF8(NULL, 0, &out_len, nbuf, norm_len, &status);
-    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
-        tsc_panic("String.normalize: UTF-8 output sizing failed");
-    }
-
-    tsc_str_t* out = str_alloc((size_t)out_len);
-    status = U_ZERO_ERROR;
-    u_strToUTF8((char*)out->data, out_len + 1, NULL, nbuf, norm_len, &status);
-    if (U_FAILURE(status)) {
-        tsc_panic("String.normalize: UTF-8 output conversion failed");
-    }
-    return out;
+    return string_from_utf16_range((const uint16_t*)nbuf, 0, (size_t)norm_len);
 }
 
 static bool is_trim_whitespace_unit(uint16_t unit) {

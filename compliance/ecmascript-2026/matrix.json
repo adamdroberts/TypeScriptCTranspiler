@@ -970,6 +970,120 @@
       "rationale": "The complete String.prototype.trimEnd intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.tolowercase",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-unicode-lowercase-mapping",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode lowercase mapping",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.tolowercase" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-case.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_case_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_to_lower"
+          ]
+        },
+        "rationale": "The independent shared case property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, ASCII folding, multi-unit expansions, context-sensitive final sigma, astral pairs, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical ICU root-locale mapping worklist folds the code-unit sequence. The distinct mixed-code-point stress derives expected code units independently and exercises case folding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode except the RegExp-borrowed T14 scenarios (generic RegExp method-dispatch gap) and the Number-prototype T6-T8 scenarios (emitter Number-method path gap), which are pre-existing neighboring-family gaps outside this intrinsic; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.toLowerCase intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.touppercase",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-unicode-uppercase-mapping",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode uppercase mapping",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.touppercase" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-case.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_case_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_to_upper"
+          ]
+        },
+        "rationale": "The independent shared case property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, ASCII folding, sharp-s and ligature expansions, astral pairs, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical ICU root-locale mapping worklist folds the code-unit sequence. The distinct mixed-code-point stress derives expected code units independently and exercises case folding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode except the RegExp-borrowed T14 scenarios (generic RegExp method-dispatch gap) and the Number-prototype T6-T8 scenarios (emitter Number-method path gap), which are pre-existing neighboring-family gaps outside this intrinsic; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.toUpperCase intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.normalize",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-form-and-unicode-normalization",
+        "title": "Generic receiver ToString, ordered form conversion with RangeError partitions, ordinary method lookup, and ICU normalization",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.normalize" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-case.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_case_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_normalize"
+          ]
+        },
+        "rationale": "The independent shared case property derives the intrinsic surface, generic receiver conversion, default and undefined forms, all four normalization forms, object-form conversion, invalid-form RangeError partitions, exact receiver/form abrupt identity and order, ordinary lookup before argument evaluation, and lone-surrogate preservation in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before conditional form ToString, then one canonical ICU worklist normalizes the code-unit sequence. The distinct mixed-code-point stress derives expected code units independently and exercises normalization across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.normalize intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

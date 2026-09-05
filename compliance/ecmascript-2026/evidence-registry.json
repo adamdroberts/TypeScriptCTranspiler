@@ -362,13 +362,16 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, repeat/padStart/padEnd fill, trim/trimStart/trimEnd boundary trim, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, repeat/padStart/padEnd fill, trim/trimStart/trimEnd boundary trim, case/normalize mapping, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -431,7 +434,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -493,7 +499,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -520,7 +529,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -547,7 +559,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -566,7 +581,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -593,7 +611,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -620,7 +641,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -962,6 +986,45 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-case.property.test.ts",
+      "targets": [
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_case_from_values",
+      "targets": [
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_to_lower",
+      "targets": [
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_to_upper",
+      "targets": [
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_normalize",
+      "targets": [
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -979,7 +1042,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -994,7 +1060,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {
@@ -1021,7 +1090,10 @@
         "sec-string.prototype.trimstart#generic-tostring-and-code-unit-prefix-trim",
         "sec-string.prototype.trimend#generic-tostring-and-code-unit-suffix-trim",
         "sec-string.prototype.trimstart#annex-b-trimstart-alias-identity",
-        "sec-string.prototype.trimend#annex-b-trimend-alias-identity"
+        "sec-string.prototype.trimend#annex-b-trimend-alias-identity",
+        "sec-string.prototype.tolowercase#generic-tostring-and-unicode-lowercase-mapping",
+        "sec-string.prototype.touppercase#generic-tostring-and-unicode-uppercase-mapping",
+        "sec-string.prototype.normalize#generic-tostring-form-and-unicode-normalization"
       ]
     },
     {

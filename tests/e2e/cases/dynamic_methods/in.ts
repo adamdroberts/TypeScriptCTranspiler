@@ -7,6 +7,7 @@ function mark(label: string): string {
 
 console.log("upper:", text.trim(mark("t")).toUpperCase(mark("u")));
 console.log("lower:", text.toLowerCase(mark("l")).trim(mark("r")));
+console.log("cases:", "[" + text.toUpperCase().trim() + "]", "[" + text.toLowerCase().trim() + "]", "\u00e9".normalize("NFD").length);
 console.log("ignored string:", seen);
 console.log("char:", text.charAt(5));
 console.log("includes:", text.includes("Love"));
