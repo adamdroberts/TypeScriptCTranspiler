@@ -670,6 +670,124 @@
       "rationale": "The complete String.prototype.endsWith intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, feature, semantic-directory, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.repeat",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-count-and-code-unit-fill",
+        "title": "Generic receiver ToString, ordered count conversion with RangeError partitions, ordinary method lookup, and UTF-16 code-unit repetition",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.repeat" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-fill.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_fill_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_repeat"
+          ]
+        },
+        "rationale": "The independent shared fill property derives the intrinsic surface, generic receiver/count conversion, omitted/undefined/NaN/fractional/array/object counts, negative and infinite RangeError partitions, BigInt/Symbol count rejection, exact receiver/count abrupt identity and order, ordinary lookup before argument evaluation, and UTF-16 scalar/explicit-pair/lone-surrogate repetition in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before count ToNumber conversion, then one canonical fill worklist repeats the code-unit sequence without argument-count cases. The distinct mixed-code-point stress derives expected code units independently and exercises repetition across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.repeat intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.padstart",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "title": "Generic receiver ToString, ordered maxLength/fillString conversion with early-return partitions, ordinary method lookup, and UTF-16 code-unit prefix fill",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.padstart" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-fill.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_fill_from_values",
+            "runtime/tsc_value.c#string_to_length",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_pad_start",
+            "runtime/tsc_string.c#tsc_str_utf16_length"
+          ]
+        },
+        "rationale": "The independent shared fill property derives the intrinsic surface, generic receiver/target/filler conversion, omitted/undefined/NaN/negative/fractional/array targets, default-space and null/Boolean/BigInt fillers, empty-filler and long-enough early returns with skipped filler conversion, BigInt/Symbol target and Symbol filler rejection, exact receiver/target/filler abrupt identity and order, ordinary lookup before argument evaluation, and truncated UTF-16 code-unit prefix fill in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before ToLength conversion and conditional filler ToString, then one canonical fill worklist truncates the filler sequence by code units. The distinct mixed-code-point stress derives expected code units independently and exercises prefix padding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.padStart intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.padend",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-length-filler-and-code-unit-suffix-fill",
+        "title": "Generic receiver ToString, ordered maxLength/fillString conversion with early-return partitions, ordinary method lookup, and UTF-16 code-unit suffix fill",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.padend" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-fill.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_fill_from_values",
+            "runtime/tsc_value.c#string_to_length",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_pad_end",
+            "runtime/tsc_string.c#tsc_str_utf16_length"
+          ]
+        },
+        "rationale": "The independent shared fill property derives the intrinsic surface, generic receiver/target/filler conversion, omitted/undefined/NaN/negative/fractional/array targets, default-space and null/Boolean/BigInt fillers, empty-filler and long-enough early returns with skipped filler conversion, BigInt/Symbol target and Symbol filler rejection, exact receiver/target/filler abrupt identity and order, ordinary lookup before argument evaluation, and truncated UTF-16 code-unit suffix fill in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString before ToLength conversion and conditional filler ToString, then one canonical fill worklist truncates the filler sequence by code units. The distinct mixed-code-point stress derives expected code units independently and exercises suffix padding across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.padEnd intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

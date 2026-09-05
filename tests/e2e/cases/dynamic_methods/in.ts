@@ -14,6 +14,8 @@ console.log("starts:", text.trim().startsWith("Ada"));
 console.log("ends:", text.trim().endsWith("lace"));
 console.log("index:", text.indexOf("Love"));
 console.log("slice:", text.slice(5, 9));
+console.log("repeat:", text.repeat(2).length, text.repeat(2).startsWith(" Ada"));
+console.log("pads:", "[" + text.padStart(18, ".") + "]", "[" + text.padEnd(18, ".") + "]");
 
 const values: any = [1, "two", 3];
 console.log("join:", values.join("|"));

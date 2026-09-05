@@ -7,6 +7,8 @@ starts: true
 ends: true
 index: 5
 slice: Love
+repeat: 28 true
+pads: [.... Ada Lovelace ] [ Ada Lovelace ....]
 join: 1|two|3
 has two: true
 idx three: 2

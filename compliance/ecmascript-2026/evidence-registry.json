@@ -353,13 +353,16 @@
         "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
         "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
         "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
-        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, repeat/padStart/padEnd fill, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -370,7 +373,9 @@
         "sec-string-exotic-objects-getownproperty-p#utf16-index-descriptor-and-ordinary-fallback",
         "sec-string.prototype.at#generic-tostring-relative-index-and-code-unit",
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
-        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence"
+        "sec-string.prototype.substring#generic-tostring-clamped-swapped-range-and-code-unit-sequence",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -412,7 +417,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -466,7 +474,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -485,7 +496,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -504,7 +518,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -515,7 +532,10 @@
         "sec-string.prototype.indexof#generic-tostring-position-and-forward-utf16-search",
         "sec-string.prototype.lastindexof#generic-tostring-position-and-reverse-utf16-search",
         "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
-        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -534,7 +554,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -553,7 +576,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -810,6 +836,53 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-fill.property.test.ts",
+      "targets": [
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_fill_from_values",
+      "targets": [
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_to_length",
+      "targets": [
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_repeat",
+      "targets": [
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_pad_start",
+      "targets": [
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_pad_end",
+      "targets": [
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -819,14 +892,20 @@
       "kind": "e2e",
       "id": "strings",
       "targets": [
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
       "kind": "e2e",
       "id": "dynamic_methods",
       "targets": [
-        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
+        "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {
@@ -845,7 +924,10 @@
         "sec-string.prototype.substr#generic-tostring-relative-start-length-and-code-unit-sequence",
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-string.prototype.repeat#generic-tostring-count-and-code-unit-fill",
+        "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
+        "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"
       ]
     },
     {

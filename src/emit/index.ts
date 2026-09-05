@@ -99,8 +99,11 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "includes",
     "indexOf",
     "lastIndexOf",
+    "padEnd",
+    "padStart",
     "replace",
     "replaceAll",
+    "repeat",
     "slice",
     "split",
     "substr",
@@ -58087,32 +58090,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_trim_end(${target})`,
                 );
-            case "repeat":
-                if (args.length < 1) unsupported(call, "repeat expects at least 1 arg");
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([target, count]) => `tsc_value_method_repeat(${target}, ${count})`,
-                );
-            case "padStart":
-            case "padEnd": {
-                if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
-                const fn = method === "padStart" ? "tsc_value_method_pad_start" : "tsc_value_method_pad_end";
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                        { value: args[1] ? this.emitExpr(args[1]) : missing, target: T_VALUE, node: args[1] ?? call.expression },
-                        ...this.ignoredArgumentSpecs(args, 2),
-                    ],
-                    ([target, length, fill]) => `${fn}(${target}, ${length}, ${fill})`,
-                );
-            }
             case "toString":
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -66897,43 +66874,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([s]) => `tsc_str_to_well_formed(${s!})`,
                 );
-            case "repeat": {
-                if (args.length < 1) unsupported(call, "repeat expects at least 1 arg");
-                const n = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, n.ty);
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        { value: n, target: T_NUMBER, node: args[0]! },
-                    ]),
-                    ([s, count]) => `tsc_str_repeat(${s}, ${count})`,
-                );
-            }
-            case "padStart":
-            case "padEnd": {
-                if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
-                const len = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, len.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: len, target: T_NUMBER, node: args[0]! },
-                ];
-                const hasPad = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasPad) {
-                    specs.push({
-                        value: this.emitExpr(args[1]),
-                        target: T_STRING,
-                        node: args[1],
-                    });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                const fn = method === "padStart" ? "tsc_str_pad_start" : "tsc_str_pad_end";
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const pad = hasPad ? vals[2]! : `tsc_str_from_lit(" ", 1)`;
-                    return `${fn}(${vals[0]}, ${vals[1]}, ${pad})`;
-                });
-            }
             case "match": {
                 if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);

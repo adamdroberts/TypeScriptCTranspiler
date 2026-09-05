@@ -1530,12 +1530,15 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.padend` — String.prototype.padEnd ( _maxLength_ [ , _fillString_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.padstart` — String.prototype.padStart ( _maxLength_ [ , _fillString_ ] ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.padend` — String.prototype.padEnd ( _maxLength_ [ , _fillString_ ] )
+    - [ ] `generic-tostring-length-filler-and-code-unit-suffix-fill` (intrinsic, unbounded): Generic receiver ToString, ordered maxLength/fillString conversion with early-return partitions, ordinary method lookup, and UTF-16 code-unit suffix fill.
+  - [ ] `sec-string.prototype.padstart` — String.prototype.padStart ( _maxLength_ [ , _fillString_ ] )
+    - [ ] `generic-tostring-length-filler-and-code-unit-prefix-fill` (intrinsic, unbounded): Generic receiver ToString, ordered maxLength/fillString conversion with early-return partitions, ordinary method lookup, and UTF-16 code-unit prefix fill.
   - [ ] `sec-stringpaddingbuiltinsimpl` — StringPaddingBuiltinsImpl ( _O_: an ECMAScript language value, _maxLength_: an ECMAScript language value, _fillString_: an ECMAScript language value, _placement_: ~start~ or ~end~, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-stringpad` — StringPad ( _S_: a String, _maxLength_: a non-negative integer, _fillString_: a String, _placement_: ~start~ or ~end~, ): a String: exact disposition and partitions missing.
   - [ ] `sec-tozeropaddeddecimalstring` — ToZeroPaddedDecimalString ( _n_: a non-negative integer, _minLength_: a non-negative integer, ): a String: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.repeat` — String.prototype.repeat ( _count_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.repeat` — String.prototype.repeat ( _count_ )
+    - [ ] `generic-tostring-count-and-code-unit-fill` (intrinsic, unbounded): Generic receiver ToString, ordered count conversion with RangeError partitions, ordinary method lookup, and UTF-16 code-unit repetition.
   - [ ] `sec-string.prototype.replace` — String.prototype.replace ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.
   - [ ] `sec-getsubstitution` — GetSubstitution ( _matched_: a String, _str_: a String, _position_: a non-negative integer, _captures_: a List of either Strings or undefined, _namedCaptures_: an Object or undefined, _replacementTemplate_: a String, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.replaceall` — String.prototype.replaceAll ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.

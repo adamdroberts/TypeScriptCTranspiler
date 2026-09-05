@@ -937,6 +937,12 @@ typedef enum {
     TSC_STRING_SEARCH_ENDS_WITH,
 } tsc_string_search_operation_t;
 
+typedef enum {
+    TSC_STRING_FILL_REPEAT,
+    TSC_STRING_FILL_PAD_START,
+    TSC_STRING_FILL_PAD_END,
+} tsc_string_fill_operation_t;
+
 static bool string_value_is_regexp(tsc_value_t value);
 
 static tsc_value_t string_search_from_values(
@@ -986,6 +992,45 @@ static tsc_value_t string_search_from_values(
     tsc_panic("unknown String search operation");
 }
 
+static double string_to_length(tsc_value_t value) {
+    double number = tsc_value_to_number(value);
+    if (isnan(number) || number <= 0.0) return 0.0;
+    if (number >= 9007199254740991.0) return 9007199254740991.0;
+    return floor(number);
+}
+
+static tsc_value_t string_fill_from_values(
+    tsc_value_t receiver,
+    tsc_value_t length_or_count,
+    tsc_value_t fill,
+    tsc_string_fill_operation_t operation
+) {
+    string_require_object_coercible(receiver, "String fill receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    if (operation == TSC_STRING_FILL_REPEAT) {
+        return tsc_value_string(tsc_str_repeat(
+            string,
+            tsc_value_to_number(length_or_count)
+        ));
+    }
+
+    double target_length = string_to_length(length_or_count);
+    if (target_length <= (double)tsc_str_utf16_length(string)) {
+        return tsc_value_string((tsc_str_t*)string);
+    }
+    const tsc_str_t* filler = tsc_value_is_undefined(fill)
+        ? tsc_str_from_lit(" ", 1)
+        : tsc_value_to_string(fill);
+    if (tsc_str_utf16_length(filler) == 0) {
+        return tsc_value_string((tsc_str_t*)string);
+    }
+    return tsc_value_string(
+        operation == TSC_STRING_FILL_PAD_START
+            ? tsc_str_pad_start(string, target_length, filler)
+            : tsc_str_pad_end(string, target_length, filler)
+    );
+}
+
 typedef enum {
     TSC_STRING_PROTOTYPE_AT,
     TSC_STRING_PROTOTYPE_CHAR_AT,
@@ -997,6 +1042,9 @@ typedef enum {
     TSC_STRING_PROTOTYPE_LAST_INDEX_OF,
     TSC_STRING_PROTOTYPE_STARTS_WITH,
     TSC_STRING_PROTOTYPE_ENDS_WITH,
+    TSC_STRING_PROTOTYPE_REPEAT,
+    TSC_STRING_PROTOTYPE_PAD_START,
+    TSC_STRING_PROTOTYPE_PAD_END,
     TSC_STRING_PROTOTYPE_SLICE,
     TSC_STRING_PROTOTYPE_SUBSTRING,
     TSC_STRING_PROTOTYPE_SUBSTR,
@@ -1023,6 +1071,9 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "lastIndexOf", 11, 1.0, TSC_STRING_PROTOTYPE_LAST_INDEX_OF },
     { "startsWith", 10, 1.0, TSC_STRING_PROTOTYPE_STARTS_WITH },
     { "endsWith", 8, 1.0, TSC_STRING_PROTOTYPE_ENDS_WITH },
+    { "repeat", 6, 1.0, TSC_STRING_PROTOTYPE_REPEAT },
+    { "padStart", 8, 1.0, TSC_STRING_PROTOTYPE_PAD_START },
+    { "padEnd", 6, 1.0, TSC_STRING_PROTOTYPE_PAD_END },
     { "slice", 5, 2.0, TSC_STRING_PROTOTYPE_SLICE },
     { "substring", 9, 2.0, TSC_STRING_PROTOTYPE_SUBSTRING },
     { "substr", 6, 2.0, TSC_STRING_PROTOTYPE_SUBSTR },
@@ -1065,6 +1116,12 @@ static tsc_value_t string_prototype_method_apply(
             return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_STARTS_WITH);
         case TSC_STRING_PROTOTYPE_ENDS_WITH:
             return string_search_from_values(this_arg, first, second, TSC_STRING_SEARCH_ENDS_WITH);
+        case TSC_STRING_PROTOTYPE_REPEAT:
+            return string_fill_from_values(this_arg, first, second, TSC_STRING_FILL_REPEAT);
+        case TSC_STRING_PROTOTYPE_PAD_START:
+            return string_fill_from_values(this_arg, first, second, TSC_STRING_FILL_PAD_START);
+        case TSC_STRING_PROTOTYPE_PAD_END:
+            return string_fill_from_values(this_arg, first, second, TSC_STRING_FILL_PAD_END);
         case TSC_STRING_PROTOTYPE_SLICE:
             return string_slice_from_values(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SUBSTRING:
@@ -8059,29 +8116,6 @@ tsc_value_t tsc_value_method_trim_start(tsc_value_t recv) {
 tsc_value_t tsc_value_method_trim_end(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
         return tsc_value_string(tsc_str_trim_end((const tsc_str_t*)value_ptr(recv)));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_repeat(tsc_value_t recv, tsc_value_t count) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        return tsc_value_string(tsc_str_repeat((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(count)));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_pad_start(tsc_value_t recv, tsc_value_t target, tsc_value_t pad) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* fill = tsc_value_is_undefined(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
-        return tsc_value_string(tsc_str_pad_start((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(target), fill));
-    }
-    return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_value_t pad) {
-    if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* fill = tsc_value_is_undefined(pad) ? tsc_str_from_lit(" ", 1) : tsc_value_to_string(pad);
-        return tsc_value_string(tsc_str_pad_end((const tsc_str_t*)value_ptr(recv), tsc_value_as_num(target), fill));
     }
     return tsc_value_undefined();
 }

@@ -1277,9 +1277,6 @@ tsc_value_t tsc_value_method_normalize(tsc_value_t recv, tsc_value_t form);
 tsc_value_t tsc_value_method_trim(tsc_value_t recv);
 tsc_value_t tsc_value_method_trim_start(tsc_value_t recv);
 tsc_value_t tsc_value_method_trim_end(tsc_value_t recv);
-tsc_value_t tsc_value_method_repeat(tsc_value_t recv, tsc_value_t count);
-tsc_value_t tsc_value_method_pad_start(tsc_value_t recv, tsc_value_t target, tsc_value_t pad);
-tsc_value_t tsc_value_method_pad_end(tsc_value_t recv, tsc_value_t target, tsc_value_t pad);
 
 tsc_object_t* tsc_object_new(void);
 tsc_object_t* tsc_object_new_class(void* ptr);

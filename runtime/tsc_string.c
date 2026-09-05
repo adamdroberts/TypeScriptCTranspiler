@@ -1316,14 +1316,74 @@ tsc_str_t* tsc_str_trim_end(const tsc_str_t* s) {
     return r;
 }
 
-tsc_str_t* tsc_str_repeat(const tsc_str_t* s, double n) {
-    if (n <= 0 || isnan(n) || isinf(n)) return tsc_str_from_lit("", 0);
-    size_t count = (size_t)n;
-    tsc_str_t* r = str_alloc(s->len * count);
-    for (size_t i = 0; i < count; i++) {
-        memcpy((char*)r->data + i * s->len, s->data, s->len);
+typedef enum {
+    TSC_STRING_FILL_BEFORE,
+    TSC_STRING_FILL_AFTER,
+} tsc_string_fill_placement_t;
+
+static tsc_str_t* string_fill_to_utf16_length(
+    tsc_utf16_sequence_t base,
+    tsc_utf16_sequence_t filler,
+    size_t target_length,
+    tsc_string_fill_placement_t placement
+) {
+    if (target_length < base.len || filler.len == 0) {
+        tsc_panic("invalid canonical String fill worklist");
     }
-    return r;
+    if (target_length > SIZE_MAX / sizeof(uint16_t)) {
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_lit("resulting String is too large", 29)
+        );
+    }
+
+    size_t fill_length = target_length - base.len;
+    uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
+        sizeof(uint16_t) * (target_length ? target_length : 1)
+    );
+    size_t base_offset = placement == TSC_STRING_FILL_BEFORE ? fill_length : 0;
+    size_t fill_offset = placement == TSC_STRING_FILL_BEFORE ? 0 : base.len;
+    if (base.len > 0) {
+        memcpy(
+            output + base_offset,
+            base.data,
+            base.len * sizeof(uint16_t)
+        );
+    }
+    for (size_t index = 0; index < fill_length; index++) {
+        output[fill_offset + index] = filler.data[index % filler.len];
+    }
+    return string_from_utf16_range(output, 0, target_length);
+}
+
+tsc_str_t* tsc_str_repeat(const tsc_str_t* s, double n) {
+    double count_number = isnan(n) || n == 0.0 ? 0.0 : trunc(n);
+    if (count_number < 0.0 || isinf(count_number)) {
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_lit("String repeat count is out of range", 35)
+        );
+    }
+
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
+    if (count_number == 0.0 || sequence.len == 0) {
+        return tsc_str_from_lit("", 0);
+    }
+    size_t maximum_count = (SIZE_MAX / sizeof(uint16_t)) / sequence.len;
+    if (count_number > (double)maximum_count) {
+        tsc_throw_error(
+            TSC_ERROR_RANGE,
+            tsc_str_from_lit("resulting String is too large", 29)
+        );
+    }
+    size_t target_length = sequence.len * (size_t)count_number;
+    tsc_utf16_sequence_t empty = { 0, NULL };
+    return string_fill_to_utf16_length(
+        empty,
+        sequence,
+        target_length,
+        TSC_STRING_FILL_AFTER
+    );
 }
 
 tsc_str_t* tsc_str_pad_start(const tsc_str_t* s, double target, const tsc_str_t* pad) {
@@ -1336,19 +1396,12 @@ tsc_str_t* tsc_str_pad_start(const tsc_str_t* s, double target, const tsc_str_t*
         tsc_panic("padded String is too large");
     }
     size_t target_length = (size_t)floor(target);
-    size_t fill_length = target_length - string.len;
-    uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
-        sizeof(uint16_t) * (target_length ? target_length : 1)
+    return string_fill_to_utf16_length(
+        string,
+        filler,
+        target_length,
+        TSC_STRING_FILL_BEFORE
     );
-    for (size_t index = 0; index < fill_length; index++) {
-        output[index] = filler.data[index % filler.len];
-    }
-    memcpy(
-        output + fill_length,
-        string.data,
-        string.len * sizeof(uint16_t)
-    );
-    return string_from_utf16_range(output, 0, target_length);
 }
 
 tsc_str_t* tsc_str_pad_end(const tsc_str_t* s, double target, const tsc_str_t* pad) {
@@ -1361,14 +1414,12 @@ tsc_str_t* tsc_str_pad_end(const tsc_str_t* s, double target, const tsc_str_t* p
         tsc_panic("padded String is too large");
     }
     size_t target_length = (size_t)floor(target);
-    uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
-        sizeof(uint16_t) * (target_length ? target_length : 1)
+    return string_fill_to_utf16_length(
+        string,
+        filler,
+        target_length,
+        TSC_STRING_FILL_AFTER
     );
-    memcpy(output, string.data, string.len * sizeof(uint16_t));
-    for (size_t index = string.len; index < target_length; index++) {
-        output[index] = filler.data[(index - string.len) % filler.len];
-    }
-    return string_from_utf16_range(output, 0, target_length);
 }
 
 typedef struct {
