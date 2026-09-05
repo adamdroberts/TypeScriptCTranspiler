@@ -3,6 +3,7 @@ upper: HELLO, WORLD!
 lower: hello, world!
 unicode case: SS FI ssﬁ 2 fi
 wellformed: true true false 65533
+string value: Hello, World! Hello, World! true true
 slice: World
 slice undefined: Hello, World!
 includes World: true

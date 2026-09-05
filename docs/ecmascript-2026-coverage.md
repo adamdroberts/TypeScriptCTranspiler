@@ -1556,7 +1556,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.tolocaleuppercase` — String.prototype.toLocaleUpperCase ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.tolowercase` — String.prototype.toLowerCase ( )
     - [ ] `generic-tostring-and-unicode-lowercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode lowercase mapping.
-  - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( )
+    - [ ] `generic-this-string-value-tostring` (intrinsic, unbounded): Generic thisStringValue, argument ignoring with evaluation, ordinary method lookup, and primitive return.
   - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( )
     - [ ] `generic-tostring-and-unicode-uppercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode uppercase mapping.
   - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( )
@@ -1570,7 +1571,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.trimstart` — String.prototype.trimStart ( )
     - [ ] `generic-tostring-and-code-unit-prefix-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit prefix trim.
     - [ ] `annex-b-trimstart-alias-identity` (intrinsic, finite): Annex B trimLeft alias sharing the trimStart function identity, name, length, and prefix-trim behavior.
-  - [ ] `sec-string.prototype.valueof` — String.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.valueof` — String.prototype.valueOf ( )
+    - [ ] `generic-this-string-value-valueof` (intrinsic, unbounded): Generic thisStringValue, argument ignoring with evaluation, ordinary method lookup, and primitive return.
   - [ ] `sec-thisstringvalue` — ThisStringValue ( _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-string.prototype-%symbol.iterator%` — String.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-string-instances` — Properties of String Instances: exact disposition and partitions missing.

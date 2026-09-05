@@ -902,6 +902,8 @@ function stringUtf16ExoticWidthSource(width: number): string {
         "if (fullPad !== needle + \"X\" || truncatedPad.charCodeAt(1) !== expectedUnits[probeStart] ||",
         "    truncatedPad.isWellFormed() || !alternateNeedle.isWellFormed() ||",
         "    Array.from(alternateNeedle).length !== 1) valid = false;",
+        "if (text.toString() !== text || text.valueOf() !== text ||",
+        "    boxed.valueOf() !== text || boxed.toString() !== text) valid = false;",
         "const repairedPad = truncatedPad.toWellFormed();",
         "if (!text.isWellFormed() || text.toWellFormed() !== text ||",
         "    alternateNeedle.toWellFormed() !== alternateNeedle ||",

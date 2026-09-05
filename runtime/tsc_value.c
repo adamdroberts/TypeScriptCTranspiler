@@ -1082,6 +1082,8 @@ typedef enum {
     TSC_STRING_PROTOTYPE_NORMALIZE,
     TSC_STRING_PROTOTYPE_IS_WELL_FORMED,
     TSC_STRING_PROTOTYPE_TO_WELL_FORMED,
+    TSC_STRING_PROTOTYPE_TO_STRING,
+    TSC_STRING_PROTOTYPE_VALUE_OF,
 } tsc_string_prototype_operation_t;
 
 typedef struct {
@@ -1119,6 +1121,8 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "normalize", 9, 0.0, TSC_STRING_PROTOTYPE_NORMALIZE },
     { "isWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_IS_WELL_FORMED },
     { "toWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_TO_WELL_FORMED },
+    { "toString", 8, 0.0, TSC_STRING_PROTOTYPE_TO_STRING },
+    { "valueOf", 7, 0.0, TSC_STRING_PROTOTYPE_VALUE_OF },
 };
 
 static tsc_value_t string_case_from_values(
@@ -1150,6 +1154,14 @@ static tsc_value_t string_well_formed_from_values(
         return tsc_value_bool(tsc_str_is_well_formed(string));
     }
     return tsc_value_string(tsc_str_to_well_formed(string));
+}
+
+static tsc_value_t string_this_value_from_values(tsc_value_t receiver) {
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(&primitive_string, receiver, &primitive)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String toString/valueOf called on incompatible receiver"));
+    }
+    return primitive;
 }
 
 static tsc_value_t string_prototype_method_apply(
@@ -1220,6 +1232,10 @@ static tsc_value_t string_prototype_method_apply(
             return string_well_formed_from_values(this_arg, TSC_STRING_PROTOTYPE_IS_WELL_FORMED);
         case TSC_STRING_PROTOTYPE_TO_WELL_FORMED:
             return string_well_formed_from_values(this_arg, TSC_STRING_PROTOTYPE_TO_WELL_FORMED);
+        case TSC_STRING_PROTOTYPE_TO_STRING:
+            return string_this_value_from_values(this_arg);
+        case TSC_STRING_PROTOTYPE_VALUE_OF:
+            return string_this_value_from_values(this_arg);
     }
     tsc_panic("unknown String prototype operation");
 }

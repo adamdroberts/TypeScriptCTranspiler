@@ -114,6 +114,8 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "normalize",
     "isWellFormed",
     "toWellFormed",
+    "toString",
+    "valueOf",
     "trim",
     "trimEnd",
     "trimLeft",
@@ -66746,8 +66748,6 @@ class Emitter {
                 );
             }
             case "toLocaleString":
-            case "toString":
-            case "valueOf":
                 return this.emitSequencedExpr(
                     T_STRING,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],

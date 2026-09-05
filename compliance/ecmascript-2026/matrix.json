@@ -1160,6 +1160,80 @@
       "rationale": "The complete String.prototype.toWellFormed intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.tostring",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-this-string-value-tostring",
+        "title": "Generic thisStringValue, argument ignoring with evaluation, ordinary method lookup, and primitive return",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.tostring" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-tostring-value.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_this_value_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop"
+          ]
+        },
+        "rationale": "The independent shared tostring-value property derives the intrinsic surface, non-constructability, direct method-value reads, primitive/boxed/prototype receivers, incompatible-receiver TypeError partitions, extra-argument evaluation with ignoring, lone-surrogate preservation, ordinary lookup before argument evaluation, mutable lookup with surface restore, and primitive results in both memory modes. One Realm-owned descriptor and generic operation performs thisStringValue over the canonical UTF-16 sequence without coercion. The distinct mixed-code-point stress derives expected code units independently and exercises identity across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.toString intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.valueof",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-this-string-value-valueof",
+        "title": "Generic thisStringValue, argument ignoring with evaluation, ordinary method lookup, and primitive return",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.valueof" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-tostring-value.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_this_value_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop"
+          ]
+        },
+        "rationale": "The independent shared tostring-value property derives the intrinsic surface, non-constructability, direct method-value reads, primitive/boxed/prototype receivers, incompatible-receiver TypeError partitions, extra-argument evaluation with ignoring, lone-surrogate preservation, ordinary lookup before argument evaluation, mutable lookup with surface restore, and primitive results in both memory modes. One Realm-owned descriptor and generic operation performs thisStringValue over the canonical UTF-16 sequence without coercion. The distinct mixed-code-point stress derives expected code units independently and exercises identity across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.valueOf intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [
