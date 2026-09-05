@@ -369,13 +369,14 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
       ],
       "stressReview": {
         "dimension": "shared ECMAScript String UTF-16 code-unit sequence width",
         "parameter": "width",
         "representativeHighDepth": 2048,
-        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, repeat/padStart/padEnd fill, trim/trimStart/trimEnd boundary trim, case/normalize mapping, wellformed scan/replacement, thisStringValue projection, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
+        "rationale": "One generated native input derives expected UTF-16 units and code points independently from a mixed code-point collection and sends that collection through exotic properties, representation-independent equality/hash, search, slice/substring/substr ranges, charAt/charCodeAt/codePointAt projections, literal replace/split, the generic functional-replacement match-position worklist, repeat/padStart/padEnd fill, trim/trimStart/trimEnd boundary trim, case/normalize mapping, wellformed scan/replacement, thisStringValue projection, code-point iteration, padding, iteration, and positive/relative/generic at projections without treating successive string or fixture sizes as evidence units.",
         "reviewedBy": "tsc2c compliance review"
       }
     },
@@ -514,7 +515,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
       ]
     },
     {
@@ -642,7 +644,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
       ]
     },
     {
@@ -1103,6 +1106,34 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/string-iterator.property.test.ts",
+      "targets": [
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_iterator_apply",
+      "targets": [
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_iterator_next_apply",
+      "targets": [
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_symbol_iterator",
+      "targets": [
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/string-slice.property.test.ts",
       "targets": [
         "sec-string.prototype.slice#generic-tostring-relative-range-and-code-unit-sequence"
@@ -1127,7 +1158,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
       ]
     },
     {
@@ -1149,7 +1181,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
       ]
     },
     {

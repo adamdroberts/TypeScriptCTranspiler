@@ -1234,6 +1234,39 @@
       "rationale": "The complete String.prototype.valueOf intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype-%symbol.iterator%",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-code-point-iteration",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary symbol-keyed lookup, and code-point iteration",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype-%symbol.iterator%" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-iterator.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_iterator_apply",
+            "runtime/tsc_value.c#string_iterator_next_apply",
+            "runtime/tsc_value.c#tsc_value_symbol_iterator"
+          ]
+        },
+        "rationale": "The independent shared iterator property derives the intrinsic surface, non-constructability, direct method-value reads, primitive/boxed/prototype receivers, null/undefined/Symbol rejection with exact abrupt ToString identity, extra-argument evaluation with ignoring, empty/ASCII/astral/lone-surrogate chars, fresh iterators with independent indexes, borrowed-next rejection, iterator self-reference, spread/for-of/Array.from equivalence, ordinary lookup before argument evaluation, mutable lookup with surface restore, and result objects in both memory modes. One Realm-owned symbol-keyed descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical snapshot worklist feeds a shared prototype whose next drives each fresh iterator through one index. The distinct mixed-code-point stress derives expected code units independently and exercises iteration across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype [Symbol.iterator] intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

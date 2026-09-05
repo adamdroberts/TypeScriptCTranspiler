@@ -1574,7 +1574,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.valueof` — String.prototype.valueOf ( )
     - [ ] `generic-this-string-value-valueof` (intrinsic, unbounded): Generic thisStringValue, argument ignoring with evaluation, ordinary method lookup, and primitive return.
   - [ ] `sec-thisstringvalue` — ThisStringValue ( _value_: an ECMAScript language value, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
-  - [ ] `sec-string.prototype-%symbol.iterator%` — String.prototype [ %Symbol.iterator% ] ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype-%symbol.iterator%` — String.prototype [ %Symbol.iterator% ] ( )
+    - [ ] `generic-tostring-and-code-point-iteration` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary symbol-keyed lookup, and code-point iteration.
   - [ ] `sec-properties-of-string-instances` — Properties of String Instances: exact disposition and partitions missing.
   - [ ] `sec-properties-of-string-instances-length` — length: exact disposition and partitions missing.
   - [ ] `sec-string-iterator-objects` — String Iterator Objects: exact disposition and partitions missing.

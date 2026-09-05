@@ -1,3 +1,3 @@
 {
-  "description": "Generated representative stress for the canonical UTF-16 String sequence consumed by exotic properties, equality/hash, search, ranges, literal and functional replace/split, repeat/padding fill, trim boundary trim, case/normalize mapping, wellformed scan/replacement, thisStringValue projection, at-relative-index, and iteration"
+  "description": "Generated representative stress for the canonical UTF-16 String sequence consumed by exotic properties, equality/hash, search, ranges, literal and functional replace/split, repeat/padding fill, trim boundary trim, case/normalize mapping, wellformed scan/replacement, thisStringValue projection, code-point iteration, at-relative-index, and iteration"
 }

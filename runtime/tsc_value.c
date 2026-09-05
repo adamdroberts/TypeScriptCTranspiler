@@ -44,6 +44,7 @@ static bool value_proxy_chain_is_array(tsc_value_t v) {
 }
 
 static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key);
+static tsc_array_t* value_string_iterator_values(const tsc_str_t* src);
 
 static tsc_str_t* value_object_to_string_tag_override(tsc_value_t v) {
     if (!value_is_box(v)) return NULL;
@@ -1240,6 +1241,65 @@ static tsc_value_t string_prototype_method_apply(
     tsc_panic("unknown String prototype operation");
 }
 
+/* One canonical String code-point iteration representation: the @@iterator
+ * method snapshots the canonical char sequence, and the shared iterator
+ * prototype drives each fresh iterator through one index worklist. Iterator
+ * state lives in non-enumerable own properties so collection keeps the
+ * sequence alive without extra roots. */
+typedef struct {
+    tsc_value_t iterator_prototype;
+    void* iterator_prototype_root;
+} string_iterator_method_env_t;
+
+static tsc_value_t string_iterator_result_object(tsc_value_t value, bool done) {
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    return tsc_value_object(result);
+}
+
+static tsc_value_t string_iterator_next_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    if (!value_is_box(this_arg) || value_tag(this_arg) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String iterator next called on incompatible receiver"));
+    }
+    tsc_object_t* iterator = (tsc_object_t*)value_ptr(this_arg);
+    tsc_value_t chars = tsc_object_get(iterator, tsc_str_from_lit("chars", 5));
+    tsc_value_t position = tsc_object_get(iterator, tsc_str_from_lit("index", 5));
+    if (!value_is_box(chars) || value_tag(chars) != TSC_VALUE_TAG_ARRAY || value_is_box(position)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String iterator next called on incompatible receiver"));
+    }
+    double current = value_as_num(position);
+    tsc_array_t* sequence = (tsc_array_t*)value_ptr(chars);
+    if (!(current >= 0.0) || current >= (double)sequence->len) {
+        return string_iterator_result_object(tsc_value_undefined(), true);
+    }
+    size_t next = (size_t)(current + 1.0);
+    tsc_value_t value = TSC_ARR(tsc_value_t, sequence, (size_t)current);
+    tsc_object_set(iterator, tsc_str_from_lit("index", 5), tsc_value_num((double)next));
+    return string_iterator_result_object(value, false);
+}
+
+static tsc_value_t string_iterator_self_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return this_arg;
+}
+
+static tsc_value_t string_iterator_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    const string_iterator_method_env_t* method_env = (const string_iterator_method_env_t*)env;
+    string_require_object_coercible(this_arg, "String.prototype [Symbol.iterator]");
+    const tsc_str_t* string = tsc_value_to_string(this_arg);
+    tsc_array_t* chars = value_string_iterator_values(string);
+    tsc_object_t* iterator = tsc_object_new();
+    tsc_object_set_prototype_of(iterator, method_env->iterator_prototype);
+    tsc_object_define(iterator, tsc_str_from_lit("chars", 5), tsc_value_array(chars), true, false, true);
+    tsc_object_define(iterator, tsc_str_from_lit("index", 5), tsc_value_num(0.0), true, false, true);
+    return tsc_value_object(iterator);
+}
+
 static void string_prototype_install_intrinsics(tsc_value_t prototype) {
     tsc_value_t trim_start = tsc_value_undefined();
     tsc_value_t trim_end = tsc_value_undefined();
@@ -1279,6 +1339,48 @@ static void string_prototype_install_intrinsics(tsc_value_t prototype) {
         (tsc_object_t*)value_ptr(prototype),
         tsc_str_from_lit("trimRight", 9),
         trim_end,
+        true,
+        false,
+        true
+    );
+    /* The @@iterator method lives under the well-known symbol key alongside
+     * the string-keyed intrinsics above and closes over this Realm's shared
+     * String iterator prototype. */
+    tsc_object_t* iterator_prototype = tsc_object_new();
+    tsc_object_set_prototype_of(iterator_prototype, tsc_value_object_prototype());
+    tsc_object_define(
+        iterator_prototype,
+        tsc_str_from_lit("next", 4),
+        tsc_value_function_builtin_named(
+            string_iterator_next_apply, NULL, 0.0, tsc_str_from_lit("next", 4)
+        ),
+        true,
+        false,
+        true
+    );
+    tsc_object_define(
+        iterator_prototype,
+        tsc_symbol_property_key(tsc_symbol_iterator()),
+        tsc_value_function_builtin_named(
+            string_iterator_self_apply, NULL, 0.0, tsc_str_from_lit("[Symbol.iterator]", 17)
+        ),
+        true,
+        false,
+        true
+    );
+    string_iterator_method_env_t* iterator_env =
+        (string_iterator_method_env_t*)TSC_GC_MALLOC(sizeof(string_iterator_method_env_t));
+    iterator_env->iterator_prototype = tsc_value_object(iterator_prototype);
+    iterator_env->iterator_prototype_root = tsc_value_gc_root(iterator_env->iterator_prototype);
+    tsc_object_define(
+        (tsc_object_t*)value_ptr(prototype),
+        tsc_symbol_property_key(tsc_symbol_iterator()),
+        tsc_value_function_builtin_named(
+            string_iterator_apply,
+            iterator_env,
+            0.0,
+            tsc_str_from_lit("[Symbol.iterator]", 17)
+        ),
         true,
         false,
         true
@@ -5691,9 +5793,21 @@ tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {
             return v;
         }
         if (value_tag(v) == TSC_VALUE_TAG_STRING) {
+            tsc_value_t method = tsc_value_get_symbol_prop(v, tsc_symbol_iterator());
+            if (tsc_value_is_callable(method)) {
+                tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+                return tsc_value_apply_function(method, v, tsc_value_array(args));
+            }
             tsc_str_t* s = (tsc_str_t*)value_ptr(v);
             tsc_array_t* chars = value_string_iterator_values(s);
             return tsc_value_array(chars);
+        }
+        if (value_tag(v) == TSC_VALUE_TAG_OBJECT || value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
+            tsc_value_t method = tsc_value_get_symbol_prop(v, tsc_symbol_iterator());
+            if (tsc_value_is_callable(method)) {
+                tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+                return tsc_value_apply_function(method, v, tsc_value_array(args));
+            }
         }
     }
     tsc_throw_str(tsc_str_from_cstr("[Symbol.iterator] call target is not iterable"));

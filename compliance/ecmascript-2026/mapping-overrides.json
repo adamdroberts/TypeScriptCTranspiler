@@ -199,6 +199,12 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
+      "prefix": "test/built-ins/String/prototype/Symbol.iterator/",
+      "clauses": ["sec-string.prototype-%symbol.iterator%"],
+      "reason": "Every legacy es6id scenario in the pinned String.prototype [Symbol.iterator] semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "prefix": "test/built-ins/String/prototype/toLowerCase/",
       "clauses": ["sec-string.prototype.tolowercase"],
       "reason": "Every legacy or intrinsic-specific scenario in the pinned String.prototype.toLowerCase semantic directory exercises that exact intrinsic contract; the semantic-directory mapping is independent of filenames and scenario inventory size. A source-hashed ambiguity override separately retains the generic standard-built-in metadata while adding this exact owner.",
@@ -430,6 +436,14 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.valueof"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.valueOf intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/Symbol.iterator/not-a-constructor.js",
+      "sourceSha256": "3c63d604982e02b0396cfd48f7a28a919a13ab728cca7aaf9c7cfba859ed50f2",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype-%symbol.iterator%"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype [Symbol.iterator] intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
       "reviewedBy": "tsc2c compliance review"
     },
     {
