@@ -1523,7 +1523,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `generic-tostring-regexp-rejection-position-and-utf16-search` (intrinsic, unbounded): Generic receiver ToString, IsRegExp rejection, ordered search/position coercion, and forward UTF-16 code-unit containment.
   - [ ] `sec-string.prototype.indexof` — String.prototype.indexOf ( _searchString_ [ , _position_ ] )
     - [ ] `generic-tostring-position-and-forward-utf16-search` (intrinsic, unbounded): Generic receiver/search ToString, ordered position coercion, and first forward UTF-16 code-unit match.
-  - [ ] `sec-string.prototype.iswellformed` — String.prototype.isWellFormed ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.iswellformed` — String.prototype.isWellFormed ( )
+    - [ ] `generic-tostring-and-lone-surrogate-scan` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and lone-surrogate scan.
   - [ ] `sec-string.prototype.lastindexof` — String.prototype.lastIndexOf ( _searchString_ [ , _position_ ] )
     - [ ] `generic-tostring-position-and-reverse-utf16-search` (intrinsic, unbounded): Generic receiver/search ToString, ordered NaN/default position coercion, and last reverse UTF-16 code-unit match.
   - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
@@ -1558,7 +1559,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.tostring` — String.prototype.toString ( ): exact disposition and partitions missing.
   - [ ] `sec-string.prototype.touppercase` — String.prototype.toUpperCase ( )
     - [ ] `generic-tostring-and-unicode-uppercase-mapping` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and full Unicode uppercase mapping.
-  - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.towellformed` — String.prototype.toWellFormed ( )
+    - [ ] `generic-tostring-and-lone-surrogate-replacement` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and lone-surrogate replacement.
   - [ ] `sec-string.prototype.trim` — String.prototype.trim ( )
     - [ ] `generic-tostring-and-code-unit-boundary-trim` (intrinsic, unbounded): Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and UTF-16 code-unit boundary trim.
   - [ ] `sec-trimstring` — TrimString ( _string_: an ECMAScript language value, _where_: ~start~, ~end~, or ~start+end~, ): either a normal completion containing a String or a throw completion: exact disposition and partitions missing.
@@ -2652,10 +2654,10 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `String.prototype.at` — standard, tracking: `ready-for-verification`; `sec-string.prototype.at`.
 - [ ] `String.prototype.endsWith` — standard, tracking: `ready-for-verification`; `sec-string.prototype.endswith`.
 - [ ] `String.prototype.includes` — standard, tracking: `ready-for-verification`; `sec-string.prototype.includes`.
-- [ ] `String.prototype.isWellFormed` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.isWellFormed` — standard, tracking: `ready-for-verification`; `sec-string.prototype.iswellformed`.
 - [ ] `String.prototype.matchAll` — standard, tracking: `todo`; no clause mapping.
 - [ ] `String.prototype.replaceAll` — standard, tracking: `todo`; no clause mapping.
-- [ ] `String.prototype.toWellFormed` — standard, tracking: `todo`; no clause mapping.
+- [ ] `String.prototype.toWellFormed` — standard, tracking: `ready-for-verification`; `sec-string.prototype.towellformed`.
 - [ ] `String.prototype.trimEnd` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trimend`.
 - [ ] `String.prototype.trimStart` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trimstart`.
 - [ ] `Symbol` — standard, tracking: `ready-for-verification`; `sec-ecmascript-language-types-symbol-type`, `sec-symbol-objects`.

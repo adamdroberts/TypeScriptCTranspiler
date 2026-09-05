@@ -3,6 +3,7 @@ console.log("len:", s.length);
 console.log("upper:", s.toUpperCase());
 console.log("lower:", s.toLowerCase());
 console.log("unicode case:", "\u00df".toUpperCase(), "\uFB01".toUpperCase(), "SS\uFB01".toLowerCase(), "\u00e9".normalize("NFD").length, "\uFB01".normalize("NFKC"));
+console.log("wellformed:", s.isWellFormed(), s.toWellFormed() === s, String.fromCharCode(0xd800).isWellFormed(), String.fromCharCode(0xd800).toWellFormed().charCodeAt(0));
 console.log("slice:", s.slice(7, 12));
 console.log("slice undefined:", s.slice(undefined, undefined));
 console.log("includes World:", s.includes("World"));

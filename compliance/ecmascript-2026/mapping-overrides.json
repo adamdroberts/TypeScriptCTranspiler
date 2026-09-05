@@ -401,6 +401,22 @@
       "reviewedBy": "tsc2c compliance review"
     },
     {
+      "test": "test/built-ins/String/prototype/isWellFormed/not-a-constructor.js",
+      "sourceSha256": "4a18fa8aa50401b93fe21e828b79280f55df78723b65dc94e92ae5ac4e43cbae",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.iswellformed"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.isWellFormed intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/String/prototype/toWellFormed/not-a-constructor.js",
+      "sourceSha256": "3471959606cb3dd25b7395c01e2a60d1c2fb4087e83a949aa7dd3749f05d9fba",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": ["sec-string.prototype.towellformed"],
+      "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.toWellFormed intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "test": "test/built-ins/String/prototype/padStart/not-a-constructor.js",
       "sourceSha256": "b3d2589ecea6bf060d9a44fa0f7b44b5a229d51c2c0797bfb04e0537328c5fdf",
       "reasonKind": "ambiguous-metadata",

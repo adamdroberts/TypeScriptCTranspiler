@@ -112,6 +112,8 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "toLowerCase",
     "toUpperCase",
     "normalize",
+    "isWellFormed",
+    "toWellFormed",
     "trim",
     "trimEnd",
     "trimLeft",
@@ -57528,20 +57530,6 @@ class Emitter {
                         `tsc_value_apply_function(${fn}, ${thisArgValue}, ${argListValue})`,
                 );
             }
-            case "isWellFormed":
-            case "toWellFormed": {
-                const callee = method === "isWellFormed"
-                    ? "tsc_value_method_is_well_formed"
-                    : "tsc_value_method_to_well_formed";
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `${callee}(${target})`,
-                );
-            }
             case "__defineGetter__":
             case "__defineSetter__": {
                 if (args.length < 2) unsupported(call, `${method} expects key and accessor`);
@@ -66768,19 +66756,6 @@ class Emitter {
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
-            case "isWellFormed":
-            case "isWellFormed":
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_is_well_formed(${s!})`,
-                );
-            case "toWellFormed":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => `tsc_str_to_well_formed(${s!})`,
-                );
             case "match": {
                 if (args.length < 1) unsupported(call, "match expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);

@@ -1080,6 +1080,8 @@ typedef enum {
     TSC_STRING_PROTOTYPE_TO_LOWER_CASE,
     TSC_STRING_PROTOTYPE_TO_UPPER_CASE,
     TSC_STRING_PROTOTYPE_NORMALIZE,
+    TSC_STRING_PROTOTYPE_IS_WELL_FORMED,
+    TSC_STRING_PROTOTYPE_TO_WELL_FORMED,
 } tsc_string_prototype_operation_t;
 
 typedef struct {
@@ -1115,6 +1117,8 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "toLowerCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_LOWER_CASE },
     { "toUpperCase", 11, 0.0, TSC_STRING_PROTOTYPE_TO_UPPER_CASE },
     { "normalize", 9, 0.0, TSC_STRING_PROTOTYPE_NORMALIZE },
+    { "isWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_IS_WELL_FORMED },
+    { "toWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_TO_WELL_FORMED },
 };
 
 static tsc_value_t string_case_from_values(
@@ -1134,6 +1138,18 @@ static tsc_value_t string_case_from_values(
         ? tsc_str_from_lit("NFC", 3)
         : tsc_value_to_string(form);
     return tsc_value_string(tsc_str_normalize(string, form_string));
+}
+
+static tsc_value_t string_well_formed_from_values(
+    tsc_value_t receiver,
+    tsc_string_prototype_operation_t operation
+) {
+    string_require_object_coercible(receiver, "String well-formed receiver");
+    const tsc_str_t* string = tsc_value_to_string(receiver);
+    if (operation == TSC_STRING_PROTOTYPE_IS_WELL_FORMED) {
+        return tsc_value_bool(tsc_str_is_well_formed(string));
+    }
+    return tsc_value_string(tsc_str_to_well_formed(string));
 }
 
 static tsc_value_t string_prototype_method_apply(
@@ -1200,6 +1216,10 @@ static tsc_value_t string_prototype_method_apply(
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_TO_UPPER_CASE);
         case TSC_STRING_PROTOTYPE_NORMALIZE:
             return string_case_from_values(this_arg, first, TSC_STRING_PROTOTYPE_NORMALIZE);
+        case TSC_STRING_PROTOTYPE_IS_WELL_FORMED:
+            return string_well_formed_from_values(this_arg, TSC_STRING_PROTOTYPE_IS_WELL_FORMED);
+        case TSC_STRING_PROTOTYPE_TO_WELL_FORMED:
+            return string_well_formed_from_values(this_arg, TSC_STRING_PROTOTYPE_TO_WELL_FORMED);
     }
     tsc_panic("unknown String prototype operation");
 }
@@ -7012,16 +7032,6 @@ tsc_value_t tsc_value_method_char_code_at(tsc_value_t recv, tsc_value_t index) {
 
 tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index) {
     return string_code_point_at_from_values(recv, index);
-}
-
-tsc_value_t tsc_value_method_is_well_formed(tsc_value_t recv) {
-    const tsc_str_t* string = tsc_value_to_string(recv);
-    return tsc_value_bool(tsc_str_is_well_formed(string));
-}
-
-tsc_value_t tsc_value_method_to_well_formed(tsc_value_t recv) {
-    const tsc_str_t* string = tsc_value_to_string(recv);
-    return tsc_value_string(tsc_str_to_well_formed(string));
 }
 
 tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position) {

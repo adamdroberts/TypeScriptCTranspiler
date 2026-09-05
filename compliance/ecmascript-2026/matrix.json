@@ -1084,6 +1084,82 @@
       "rationale": "The complete String.prototype.normalize intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
     },
     {
+      "clause": "sec-string.prototype.iswellformed",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-lone-surrogate-scan",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and lone-surrogate scan",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.iswellformed" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-wellformed.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_well_formed_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_is_well_formed"
+          ]
+        },
+        "rationale": "The independent shared wellformed property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, empty and ASCII inputs, astral pairs, lone high/low surrogates with split and embedded positions, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and boolean results in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical scan worklist rejects unpaired surrogates over the code-unit sequence. The distinct mixed-code-point stress derives expected code units independently and exercises well-formedness across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.isWellFormed intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
+      "clause": "sec-string.prototype.towellformed",
+      "disposition": "evidence",
+      "partitions": [{
+        "id": "generic-tostring-and-lone-surrogate-replacement",
+        "title": "Generic receiver ToString, argument ignoring with evaluation, ordinary method lookup, and lone-surrogate replacement",
+        "surface": "intrinsic",
+        "cardinality": "unbounded",
+        "cardinalityMechanism": "canonical-collection",
+        "choiceObligation": null,
+        "definition": null,
+        "normativeOptionalFamilies": [],
+        "normativeOptionalSites": [],
+        "test262Queries": [{ "allOf": [{ "field": "clause", "equals": "sec-string.prototype.towellformed" }] }],
+        "coveredBy": [],
+        "localEvidence": {
+          "property": ["tests/property/string-wellformed.property.test.ts"],
+          "generatedRegression": [],
+          "stress": ["string_utf16_exotic_width"],
+          "e2e": ["strings", "dynamic_methods"],
+          "negativeDiagnostics": [],
+          "declarationSurface": ["stdlib/lib.core.d.ts#String"],
+          "implementation": [
+            "src/emit/index.ts#ORDINARY_STRING_PROTOTYPE_METHODS",
+            "src/emit/index.ts#emitStringMethod",
+            "src/emit/index.ts#emitDynamicNamedPropertyCall",
+            "src/emit/index.ts#emitPropertyAccess",
+            "runtime/tsc_value.c#string_prototype_install_intrinsics",
+            "runtime/tsc_value.c#string_prototype_method_apply",
+            "runtime/tsc_value.c#string_well_formed_from_values",
+            "runtime/tsc_value.c#tsc_value_get_prop",
+            "runtime/tsc_string.c#tsc_str_to_well_formed"
+          ]
+        },
+        "rationale": "The independent shared wellformed property derives the intrinsic surface, generic receiver conversion, extra-argument evaluation with ignoring, empty/ASCII/astral identity, lone high/low replacement with split/embedded/leading positions, exact receiver abrupt identity and order, ordinary lookup before argument evaluation, and replacement code-unit results in both memory modes. One Realm-owned descriptor and generic operation performs RequireObjectCoercible and receiver ToString, then one canonical scan worklist replaces unpaired surrogates over the code-unit sequence. The distinct mixed-code-point stress derives expected code units independently and exercises well-formedness across representative sequence width. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+      }],
+      "rationale": "The complete String.prototype.toWellFormed intrinsic is represented as one terminal canonical-collection partition with reciprocal semantic, stress, regressions, declaration, implementation, exact-esid metadata, and exact pinned Test262 evidence."
+    },
+    {
       "clause": "sec-string.prototype.slice",
       "disposition": "evidence",
       "partitions": [

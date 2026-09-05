@@ -1,6 +1,7 @@
 upper: ADA LOVELACE
 lower: ada lovelace
 cases: [ADA LOVELACE] [ada lovelace] 2
+wellformed: true false 65533 true
 ignored string: tulr
 char: L
 includes: true

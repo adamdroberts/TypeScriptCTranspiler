@@ -1225,8 +1225,6 @@ int tsc_value_cmp(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_method_char_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_char_code_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index);
-tsc_value_t tsc_value_method_is_well_formed(tsc_value_t recv);
-tsc_value_t tsc_value_method_to_well_formed(tsc_value_t recv);
 tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
 tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
 tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);

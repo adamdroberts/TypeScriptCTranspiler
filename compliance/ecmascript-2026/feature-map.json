@@ -510,9 +510,11 @@
     {
       "tag": "String.prototype.isWellFormed",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.iswellformed"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.isWellFormed intrinsic clause, whose terminal generic UTF-16 scan partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.matchAll",
@@ -531,9 +533,11 @@
     {
       "tag": "String.prototype.toWellFormed",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-string.prototype.towellformed"
+      ],
+      "rationale": "The pinned standard feature tag denotes the complete String.prototype.toWellFormed intrinsic clause, whose terminal generic UTF-16 scan partition has reciprocal semantic, stress, declaration, implementation, and exact Test262 evidence."
     },
     {
       "tag": "String.prototype.trimEnd",
