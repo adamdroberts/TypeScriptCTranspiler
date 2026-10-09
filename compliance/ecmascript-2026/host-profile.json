@@ -45,6 +45,7 @@
     "src/module-specifiers.ts",
     "src/native-addons.ts",
     "src/program.ts",
+    "src/regexp-escape.ts",
     "src/resolve.ts",
     "src/runtime-code-aot.ts",
     "src/tools/check-emitter-method-reachability.ts",

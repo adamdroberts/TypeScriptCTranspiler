@@ -22,6 +22,7 @@ interface Symbol {
 interface SymbolConstructor {
     readonly match: unique symbol;
     readonly search: unique symbol;
+    readonly replace: unique symbol;
     (description?: string, ...ignored: any[]): symbol;
     for(key: string, ...ignored: any[]): symbol;
     keyFor(sym: symbol, ...ignored: any[]): string | undefined;
@@ -168,8 +169,10 @@ interface String extends Iterable<string> {
     repeat(count: number, ...ignored: any[]): string;
     padStart(targetLength: number, padString?: string, ...ignored: any[]): string;
     padEnd(targetLength: number, padString?: string, ...ignored: any[]): string;
-    replace(search: string | RegExp, replacement: string, ...ignored: any[]): string;
-    replaceAll(search: string | RegExp, replacement: string, ...ignored: any[]): string;
+    replace(search: string | RegExp, replacement: string | ((...args: any[]) => string), ...ignored: any[]): string;
+    replaceAll(search: string | RegExp, replacement: string | ((...args: any[]) => string), ...ignored: any[]): string;
+    replace(search: { [Symbol.replace](string: string, replacement: any): any }, replacement: any, ...ignored: any[]): any;
+    replaceAll(search: { [Symbol.replace](string: string, replacement: any): any }, replacement: any, ...ignored: any[]): any;
     match(re?: RegExp | string, ...ignored: any[]): RegExpMatchArray | null;
     match(matcher: { [Symbol.match](string: string): any }, ...ignored: any[]): any;
     matchAll(re: RegExp | string, ...ignored: any[]): string[][];
@@ -684,6 +687,7 @@ interface RegExp {
     constructor: Function;
     [Symbol.match](string?: string): RegExpMatchArray | null;
     [Symbol.search](string?: string): number;
+    [Symbol.replace](string: string, replacement: string | ((...args: any[]) => string)): string;
     exec(s?: string, ...ignored: any[]): RegExpExecArray | null;
     test(s?: string, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;

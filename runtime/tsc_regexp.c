@@ -2817,12 +2817,13 @@ tsc_value_t tsc_regexp_prototype_value(void) {
             tsc_object_define(prototype, name,
                 tsc_value_function_builtin_named(methods[i].apply, NULL, methods[i].length, name), true, false, true);
         }
-        const struct { tsc_symbol_t* key; const char* name; tsc_generic_function_t apply; } symbols[] = {
-            {tsc_symbol_match(), "[Symbol.match]", tsc_regexp_match_apply},
-            {tsc_symbol_search(), "[Symbol.search]", tsc_regexp_search_apply}
+        const struct { tsc_symbol_t* key; const char* name; tsc_generic_function_t apply; double length; } symbols[] = {
+            {tsc_symbol_match(), "[Symbol.match]", tsc_regexp_match_apply, 1},
+            {tsc_symbol_search(), "[Symbol.search]", tsc_regexp_search_apply, 1},
+            {tsc_symbol_replace(), "[Symbol.replace]", tsc_regexp_replace_apply, 2}
         };
         for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++) {
-            tsc_value_t method = tsc_value_function_builtin_named(symbols[i].apply, NULL, 1,
+            tsc_value_t method = tsc_value_function_builtin_named(symbols[i].apply, NULL, symbols[i].length,
                 tsc_str_from_cstr(symbols[i].name));
             tsc_value_define_symbol_property_desc(tsc_value_object(prototype), symbols[i].key,
                 method, true, true, true, false, true, true, true);

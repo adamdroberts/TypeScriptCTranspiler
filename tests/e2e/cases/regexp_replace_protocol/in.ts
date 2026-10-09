@@ -1,0 +1,11 @@
+const re = /(?<part>a)|(?<part>b)/g;
+re.lastIndex = 4;
+console.log("tokens:", "ab".replace(re, "$<part>:$&:$1:$2"), re.lastIndex);
+console.log("symbol:", re[Symbol.replace]("ab", "<$<part>>"));
+console.log("callback:", "ab".replace(re, (match: string, ...args: any[]) => match + ":" + args[args.length - 1].part));
+console.log("empty:", "😀".replace(/(?:)/gu, "X"));
+const generic: any = { flags: "", exec() { return { length: 3, 0: "a", 1: undefined, 2: 7, index: 1, groups: { part: "G" } }; } };
+console.log("generic:", RegExp.prototype[Symbol.replace].call(generic, "abc", "$1:$2:$<part>:$&"));
+const fallback: any = /a/g;
+fallback[Symbol.replace] = undefined;
+console.log("fallback:", "/a/g/a".replace(fallback, "X"));

@@ -1491,47 +1491,11 @@ static void utf16_builder_append(
     output->len = next_length;
 }
 
-static void utf16_builder_append_unit(tsc_utf16_builder_t* output, uint16_t unit) {
-    if (output->len == SIZE_MAX) tsc_panic("replacement String is too large");
-    utf16_builder_reserve(output, output->len + 1);
-    output->data[output->len++] = unit;
-}
-
-static void append_string_substitution(
-    tsc_utf16_builder_t* output,
-    const tsc_utf16_sequence_t* source,
-    const tsc_utf16_sequence_t* replacement,
-    size_t match_start,
-    size_t match_end
-) {
-    for (size_t index = 0; index < replacement->len; index++) {
-        uint16_t unit = replacement->data[index];
-        if (unit != '$' || index + 1 >= replacement->len) {
-            utf16_builder_append_unit(output, unit);
-            continue;
-        }
-        uint16_t next = replacement->data[++index];
-        if (next == '$') {
-            utf16_builder_append_unit(output, '$');
-        } else if (next == '&') {
-            utf16_builder_append(
-                output,
-                source->data + match_start,
-                match_end - match_start
-            );
-        } else if (next == '`') {
-            utf16_builder_append(output, source->data, match_start);
-        } else if (next == '\'') {
-            utf16_builder_append(
-                output,
-                source->data + match_end,
-                source->len - match_end
-            );
-        } else {
-            utf16_builder_append_unit(output, '$');
-            utf16_builder_append_unit(output, next);
-        }
-    }
+static void append_string_substitution(tsc_utf16_builder_t* output,
+    const tsc_str_t* matched, const tsc_str_t* string, const tsc_str_t* replacement, size_t position) {
+    tsc_str_t* substituted = tsc_string_get_substitution(matched, string, position, NULL, tsc_value_undefined(), replacement);
+    size_t len; const uint16_t* units = tsc_str_utf16_units(substituted, &len);
+    utf16_builder_append(output, units, len);
 }
 
 static bool find_utf16_sequence(
@@ -1558,7 +1522,6 @@ static tsc_str_t* string_replace_sequence(
 ) {
     tsc_utf16_sequence_t source = string_utf16_sequence(string);
     tsc_utf16_sequence_t search = string_utf16_sequence(search_string);
-    tsc_utf16_sequence_t replacement = string_utf16_sequence(replacement_string);
     size_t first_match = 0;
     if (search.len != 0 && !find_utf16_sequence(&source, &search, 0, &first_match)) {
         return (tsc_str_t*)string;
@@ -1571,7 +1534,7 @@ static tsc_str_t* string_replace_sequence(
     if (search.len == 0) {
         for (size_t boundary = 0; boundary <= source.len; boundary++) {
             utf16_builder_append(&output, source.data + copy_from, boundary - copy_from);
-            append_string_substitution(&output, &source, &replacement, boundary, boundary);
+            append_string_substitution(&output, search_string, string, replacement_string, boundary);
             copy_from = boundary;
             matched = true;
             if (!replace_all) break;
@@ -1585,13 +1548,7 @@ static tsc_str_t* string_replace_sequence(
                 match_start - copy_from
             );
             size_t match_end = match_start + search.len;
-            append_string_substitution(
-                &output,
-                &source,
-                &replacement,
-                match_start,
-                match_end
-            );
+            append_string_substitution(&output, search_string, string, replacement_string, match_start);
             copy_from = match_end;
             matched = true;
             if (!replace_all) break;

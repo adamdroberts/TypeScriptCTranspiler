@@ -1,5 +1,7 @@
 # Changelog
 
+- Added ordinary RegExp `[Symbol.replace]` with shared RegExpExec result collection, ordered generic capture processing, precomputed callback matches, Unicode empty advancement, and strict state writes. Literal and RegExp replacements share UTF-16 GetSubstitution; the direct native replacement predecessors are deleted.
+
 - Replaced byte-oriented RegExp escaping with UTF-16 scalar handling, added equivalent source serialization and named accessor metadata, and preserved ordinary mutable string coercion. Runtime trim/whitespace/escaping share one category predicate; compiler and module analysis share the complete String escape evaluator.
 
 - Added an ordinary Realm-owned RegExp constructor with shared call/construct argument Lists, cloning and IsRegExp rules, ordered reflective prototype allocation, real constructor/species/escape descriptors, and cross-Realm defaults/errors. Constructor aliases retain callable/constructable identity structurally; mixed conditional values use shared boxing.

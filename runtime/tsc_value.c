@@ -1882,17 +1882,19 @@ static tsc_value_t object_constructor_box_primitive(
     return primitive_constructor_construct((void*)descriptor, receiver, args);
 }
 
-static tsc_value_t object_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)this_arg;
-    tsc_value_t value = object_constructor_arg(args, 0);
-    if (tsc_value_is_nullish(value)) return tsc_value_object(tsc_object_new());
+tsc_value_t tsc_value_to_object(tsc_value_t value) {
+    if (tsc_value_is_nullish(value))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert null or undefined to object"));
     if (tsc_value_is_object(value)) return value;
     const tsc_primitive_descriptor_t* descriptor = object_constructor_primitive_descriptor(value);
-    if (!descriptor) {
+    if (!descriptor)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object cannot box this primitive value"));
-    }
     return object_constructor_box_primitive(descriptor, value);
+}
+static tsc_value_t object_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_value_t value = object_constructor_arg(args, 0);
+    return tsc_value_is_nullish(value) ? tsc_value_object(tsc_object_new()) : tsc_value_to_object(value);
 }
 
 static tsc_value_t object_constructor_construct(
@@ -8090,17 +8092,6 @@ static void string_require_global_regexp(tsc_value_t search) {
     if (!tsc_value_is_regexp(search)) return;
     const tsc_str_t* flags_key = tsc_str_from_lit("flags", 5);
     tsc_value_t flags = tsc_value_get_prop(search, flags_key);
-    if (
-        tsc_value_is_undefined(flags) &&
-        !tsc_value_has_own_prop(search, flags_key) &&
-        value_is_box(search) &&
-        value_tag(search) == TSC_VALUE_TAG_OBJECT
-    ) {
-        const tsc_object_t* object = (const tsc_object_t*)value_ptr(search);
-        if (object && object->is_regexp && object->class_ptr) {
-            flags = tsc_value_string(((const tsc_regexp_t*)object->class_ptr)->flags);
-        }
-    }
     string_require_object_coercible(flags, "String.prototype.replaceAll flags");
     if (!tsc_str_includes(
         tsc_value_to_string(flags),
@@ -8139,19 +8130,6 @@ static tsc_value_t string_replace_from_values(
     }
 
     const tsc_str_t* string = tsc_value_to_string(receiver);
-    const tsc_regexp_t* native_regexp = tsc_value_has_symbol_prop(
-        search,
-        tsc_symbol_replace()
-    )
-        ? NULL
-        : string_native_regexp(search);
-    if (native_regexp) {
-        return tsc_value_string(tsc_str_replace_regex_value(
-            string,
-            native_regexp,
-            replacement
-        ));
-    }
     const tsc_str_t* search_string = tsc_value_to_string(search);
     if (tsc_value_is_callable(replacement)) {
         return tsc_value_string(string_functional_replacement(

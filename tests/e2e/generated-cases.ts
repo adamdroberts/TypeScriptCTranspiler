@@ -1453,7 +1453,9 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
                 console.log("regexp-outer:", re.test("D"));
                 const escaped = RegExp.escape(pattern);
                 console.log("regexp-serialization:", new RegExp(re.source, "d").test("ABc"),
-                    new RegExp("^(?:" + escaped + ")$", "u").test(pattern));`;
+                    new RegExp("^(?:" + escaped + ")$", "u").test(pattern));
+                console.log("regexp-replacement:", "ABc".replace(re, "$<part>:$&"),
+                    "ABc".replace(re, (match: string, ...args: any[]) => match + ":" + args[args.length - 1].part));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);
         case "async-binding-default-depth":

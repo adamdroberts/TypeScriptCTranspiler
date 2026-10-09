@@ -781,6 +781,10 @@ tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* 
 tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_match_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_regexp_replace_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_value_to_object(tsc_value_t value);
+tsc_str_t* tsc_string_get_substitution(const tsc_str_t* matched, const tsc_str_t* string,
+    size_t position, const tsc_array_t* captures, tsc_value_t named, const tsc_str_t* replacement);
 /* Match the compiled pattern at exactly `start`; on success writes the
  * overall [match_start, match_end) span plus captures into cap_out. */
 bool tsc_re_match_at(
