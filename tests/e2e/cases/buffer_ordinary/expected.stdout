@@ -1,0 +1,20 @@
+identity true true true
+text ABCD 4243 value=ABCD
+local 8 number true
+local 8 number true
+view true ZC AZCD
+bytes 16730 2 feff4344 -2
+index 2 255 undefined undefined
+keys 0,1,2,3 0,1,2,3,extra 6
+reflection symbol-value true true false
+descriptor 2 true true true false
+lookup GABC true 2
+range true
+range true
+range true
+range true
+type true
+value true
+slice lookup override
+aliases true true
+iterator 2 255 4

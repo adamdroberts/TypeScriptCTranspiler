@@ -7623,9 +7623,9 @@ tsc_error_t* tsc_value_as_error(tsc_value_t v) {
 tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* object = (tsc_object_t*)value_ptr(v);
-        if (object && object->is_typed_array) return (tsc_buffer_t*)object->class_ptr;
+        if (object && object->is_buffer) return (tsc_buffer_t*)object->class_ptr;
     }
-    tsc_throw_str(tsc_str_from_cstr("value is not a Buffer"));
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not a Buffer"));
     return NULL;
 }
 
@@ -7741,7 +7741,7 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
             if (o && o->is_error) {
                 return tsc_error_to_string((const tsc_error_t*)o->class_ptr);
             }
-            if (o && o->is_typed_array) {
+            if (o && o->is_buffer) {
                 return tsc_buffer_to_string((const tsc_buffer_t*)o->class_ptr, tsc_str_from_lit("utf8", 4));
             }
             return tsc_str_from_lit("[object Object]", 15);

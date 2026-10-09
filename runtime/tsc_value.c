@@ -5756,6 +5756,14 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
         tsc_proxy_validate_get_own_property_descriptor_result(o, key, result);
         return result;
     }
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) {
+        if (!byte_valid) return tsc_value_undefined();
+        tsc_object_prop_t property = {0};
+        property.value = tsc_value_num(((const tsc_buffer_t*)o->class_ptr)->data[byte_index]);
+        property.writable = property.enumerable = property.configurable = true;
+        return value_descriptor_from_prop(&property);
+    }
     for (size_t i = 0; i < o->len; i++) {
         if (!tsc_str_eq(o->props[i].key, key)) continue;
         if (o->is_module_namespace && o->props[i].accessor) {
@@ -5831,21 +5839,15 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v) {
         }
         return tsc_value_object(tsc_object_new());
     }
-    tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-    tsc_object_t* out = tsc_object_new();
-    if (o->is_proxy) {
-        tsc_array_t* keys = tsc_value_raw_own_keys(v);
-        for (size_t i = 0; i < keys->len; i++) {
-            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-            tsc_value_t desc = tsc_value_get_own_property_descriptor(v, key);
-            if (tsc_value_is_undefined(desc)) continue;
-            tsc_object_set(out, key, desc);
-        }
-        return tsc_value_object(out);
-    }
-    for (size_t i = 0; i < o->len; i++) {
-        tsc_value_t desc = value_descriptor_from_prop(&o->props[i]);
-        tsc_object_set(out, o->props[i].key, desc);
+    void* volatile source_root = tsc_value_gc_root(v);
+    (void)source_root;
+    tsc_object_t* volatile out = tsc_object_new();
+    tsc_array_t* volatile keys = tsc_value_raw_own_keys(v);
+    for (size_t index = 0; index < keys->len; ++index) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, index);
+        tsc_value_t descriptor = tsc_value_get_own_property_descriptor(v, key);
+        if (tsc_value_is_undefined(descriptor)) continue;
+        tsc_object_define(out, key, descriptor, true, true, true);
     }
     return tsc_value_object(out);
 }
@@ -8508,10 +8510,337 @@ tsc_value_t tsc_value_error(tsc_error_t* e) {
     return tsc_value_object(o);
 }
 
+typedef enum {
+    BUFFER_NUMBER, BUFFER_TEXT, BUFFER_JSON, BUFFER_SLICE, BUFFER_SUBARRAY,
+    BUFFER_FILL, BUFFER_WRITE, BUFFER_SWAP, BUFFER_COPY, BUFFER_SEARCH,
+    BUFFER_EQUALS, BUFFER_COMPARE, BUFFER_KEYS, BUFFER_VALUES, BUFFER_ENTRIES
+} buffer_operation_t;
+typedef struct {
+    const char* name;
+    const char* function_name;
+    double arity;
+    buffer_operation_t operation;
+    size_t width;
+    tsc_buffer_number_kind_t number_kind;
+    bool little_endian;
+    bool write;
+} buffer_method_t;
+#define BUFFER_METHOD(name, arity, operation, option) \
+    { name, name, arity, operation, option, TSC_BUFFER_UNSIGNED, false, false }
+#define BUFFER_IO(name, function_name, arity, width, kind, little, write) \
+    { name, function_name, arity, BUFFER_NUMBER, width, kind, little, write }
+static const buffer_method_t buffer_methods[] = {
+    BUFFER_METHOD("toString", 3, BUFFER_TEXT, 0),
+    BUFFER_METHOD("toJSON", 0, BUFFER_JSON, 0),
+    BUFFER_METHOD("slice", 2, BUFFER_SLICE, 0),
+    BUFFER_METHOD("subarray", 2, BUFFER_SUBARRAY, 0),
+    BUFFER_METHOD("fill", 4, BUFFER_FILL, 0),
+    BUFFER_METHOD("write", 4, BUFFER_WRITE, 0),
+    BUFFER_METHOD("swap16", 0, BUFFER_SWAP, 2),
+    BUFFER_METHOD("swap32", 0, BUFFER_SWAP, 4),
+    BUFFER_METHOD("swap64", 0, BUFFER_SWAP, 8),
+    BUFFER_METHOD("copy", 4, BUFFER_COPY, 0),
+    BUFFER_METHOD("indexOf", 4, BUFFER_SEARCH, 0),
+    BUFFER_METHOD("lastIndexOf", 4, BUFFER_SEARCH, 1),
+    BUFFER_METHOD("includes", 4, BUFFER_SEARCH, 2),
+    BUFFER_METHOD("equals", 1, BUFFER_EQUALS, 0),
+    BUFFER_METHOD("compare", 5, BUFFER_COMPARE, 0),
+    BUFFER_METHOD("keys", 0, BUFFER_KEYS, 0),
+    BUFFER_METHOD("values", 0, BUFFER_VALUES, 0),
+    BUFFER_METHOD("entries", 0, BUFFER_ENTRIES, 0),
+    BUFFER_IO("readUInt8", "", 1, 1, TSC_BUFFER_UNSIGNED, true, false),
+    BUFFER_IO("writeUInt8", "writeUInt8", 1, 1, TSC_BUFFER_UNSIGNED, true, true),
+    BUFFER_IO("readUInt16LE", "", 1, 2, TSC_BUFFER_UNSIGNED, true, false),
+    BUFFER_IO("writeUInt16LE", "writeUInt16LE", 1, 2, TSC_BUFFER_UNSIGNED, true, true),
+    BUFFER_IO("readUInt16BE", "", 1, 2, TSC_BUFFER_UNSIGNED, false, false),
+    BUFFER_IO("writeUInt16BE", "writeUInt16BE", 1, 2, TSC_BUFFER_UNSIGNED, false, true),
+    BUFFER_IO("readUInt32LE", "", 1, 4, TSC_BUFFER_UNSIGNED, true, false),
+    BUFFER_IO("writeUInt32LE", "writeUInt32LE", 1, 4, TSC_BUFFER_UNSIGNED, true, true),
+    BUFFER_IO("readUInt32BE", "", 1, 4, TSC_BUFFER_UNSIGNED, false, false),
+    BUFFER_IO("writeUInt32BE", "writeUInt32BE", 1, 4, TSC_BUFFER_UNSIGNED, false, true),
+    BUFFER_IO("readInt8", "", 1, 1, TSC_BUFFER_SIGNED, true, false),
+    BUFFER_IO("writeInt8", "writeInt8", 1, 1, TSC_BUFFER_SIGNED, true, true),
+    BUFFER_IO("readInt16LE", "", 1, 2, TSC_BUFFER_SIGNED, true, false),
+    BUFFER_IO("writeInt16LE", "writeInt16LE", 1, 2, TSC_BUFFER_SIGNED, true, true),
+    BUFFER_IO("readInt16BE", "", 1, 2, TSC_BUFFER_SIGNED, false, false),
+    BUFFER_IO("writeInt16BE", "writeInt16BE", 1, 2, TSC_BUFFER_SIGNED, false, true),
+    BUFFER_IO("readInt32LE", "", 1, 4, TSC_BUFFER_SIGNED, true, false),
+    BUFFER_IO("writeInt32LE", "writeInt32LE", 1, 4, TSC_BUFFER_SIGNED, true, true),
+    BUFFER_IO("readInt32BE", "", 1, 4, TSC_BUFFER_SIGNED, false, false),
+    BUFFER_IO("writeInt32BE", "writeInt32BE", 1, 4, TSC_BUFFER_SIGNED, false, true),
+    BUFFER_IO("readFloatLE", "readFloatForwards", 0, 4, TSC_BUFFER_FLOAT, true, false),
+    BUFFER_IO("writeFloatLE", "writeFloatForwards", 1, 4, TSC_BUFFER_FLOAT, true, true),
+    BUFFER_IO("readFloatBE", "readFloatBackwards", 0, 4, TSC_BUFFER_FLOAT, false, false),
+    BUFFER_IO("writeFloatBE", "writeFloatBackwards", 1, 4, TSC_BUFFER_FLOAT, false, true),
+    BUFFER_IO("readDoubleLE", "readDoubleForwards", 0, 8, TSC_BUFFER_FLOAT, true, false),
+    BUFFER_IO("writeDoubleLE", "writeDoubleForwards", 1, 8, TSC_BUFFER_FLOAT, true, true),
+    BUFFER_IO("readDoubleBE", "readDoubleBackwards", 0, 8, TSC_BUFFER_FLOAT, false, false),
+    BUFFER_IO("writeDoubleBE", "writeDoubleBackwards", 1, 8, TSC_BUFFER_FLOAT, false, true),
+    BUFFER_IO("readUIntLE", "readUIntLE", 2, 0, TSC_BUFFER_UNSIGNED, true, false),
+    BUFFER_IO("writeUIntLE", "writeUIntLE", 3, 0, TSC_BUFFER_UNSIGNED, true, true),
+    BUFFER_IO("readUIntBE", "readUIntBE", 2, 0, TSC_BUFFER_UNSIGNED, false, false),
+    BUFFER_IO("writeUIntBE", "writeUIntBE", 3, 0, TSC_BUFFER_UNSIGNED, false, true),
+    BUFFER_IO("readIntLE", "readIntLE", 2, 0, TSC_BUFFER_SIGNED, true, false),
+    BUFFER_IO("writeIntLE", "writeIntLE", 3, 0, TSC_BUFFER_SIGNED, true, true),
+    BUFFER_IO("readIntBE", "readIntBE", 2, 0, TSC_BUFFER_SIGNED, false, false),
+    BUFFER_IO("writeIntBE", "writeIntBE", 3, 0, TSC_BUFFER_SIGNED, false, true),
+};
+#undef BUFFER_METHOD
+#undef BUFFER_IO
+
+static tsc_value_t buffer_argument(const tsc_array_t* args, size_t index) {
+    return args && index < args->len ? TSC_ARR(tsc_value_t, args, index) : tsc_value_undefined();
+}
+static double buffer_numeric_option(tsc_value_t value, double fallback) {
+    return tsc_value_is_undefined(value) ? fallback : tsc_value_to_number(value);
+}
+static double buffer_strict_number(tsc_value_t value, double fallback, bool optional) {
+    if (optional && tsc_value_is_undefined(value)) return fallback;
+    if (!(!value_is_box(value)))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer numeric option must be a Number"));
+    return value_as_num(value);
+}
+static double buffer_range_option(tsc_value_t value, double fallback, size_t limit) {
+    double number = buffer_strict_number(value, fallback, true);
+    if (!isfinite(number) || number < 0 || number > (double)limit || floor(number) != number)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Buffer option is outside the byte range"));
+    return number;
+}
+static tsc_str_t* buffer_encoding_option(tsc_value_t value) {
+    if (tsc_value_is_undefined(value)) return tsc_str_from_lit("utf8", 4);
+    tsc_str_t* encoding = tsc_str_to_lower(tsc_value_to_string(value));
+    if (!tsc_buffer_is_encoding(encoding))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Unknown Buffer encoding"));
+    return encoding;
+}
+tsc_buffer_t* tsc_buffer_from_value(tsc_value_t input, tsc_value_t encoding) {
+    void* volatile input_root = tsc_value_gc_root(input);
+    void* volatile encoding_root = tsc_value_gc_root(encoding);
+    (void)input_root; (void)encoding_root;
+    if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_STRING) {
+        // Buffer.from defaults non-string encoding arguments rather than
+        // invoking their conversion hooks.
+        if (!value_is_box(encoding) || value_tag(encoding) != TSC_VALUE_TAG_STRING || !((tsc_str_t*)value_ptr(encoding))->len)
+            encoding = tsc_value_undefined();
+        return tsc_buffer_from_str((tsc_str_t*)value_ptr(input), buffer_encoding_option(encoding));
+    }
+    if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_OBJECT && ((tsc_object_t*)value_ptr(input))->is_buffer)
+        return tsc_buffer_from_buffer(tsc_value_as_buffer(input));
+    if (value_is_box(input) && (value_tag(input) == TSC_VALUE_TAG_ARRAY || value_tag(input) == TSC_VALUE_TAG_OBJECT)) {
+        tsc_value_t length_value = tsc_value_get_prop(input, tsc_str_from_lit("length", 6));
+        if (value_tag(input) == TSC_VALUE_TAG_OBJECT && tsc_value_is_undefined(length_value))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer.from requires bytes, a String or an array-like byte source"));
+        double length = value_is_box(length_value) ? 0 : value_as_num(length_value);
+        if (isnan(length) || length < 0) length = 0;
+        if (!isfinite(length) || length > (double)SIZE_MAX)
+            tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Buffer byte length is outside the allocation range"));
+        tsc_buffer_t* volatile result = buffer_alloc_len((size_t)length);
+        for (size_t index = 0; index < result->len; ++index) {
+            tsc_value_t element = tsc_value_get_index(input, (double)index);
+            result->data[index] = byte_from_double(tsc_value_to_number(element));
+        }
+        return result;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer.from requires bytes, a String or an array-like byte source"));
+}
+
+static void buffer_integer_value_range(double value, size_t width, tsc_buffer_number_kind_t kind) {
+    if (kind == TSC_BUFFER_FLOAT) return;
+    double modulus = ldexp(1.0, (int)(width * 8));
+    double minimum = kind == TSC_BUFFER_SIGNED ? -modulus / 2 : 0;
+    double maximum = kind == TSC_BUFFER_SIGNED ? modulus / 2 - 1 : modulus - 1;
+    if (value < minimum || value > maximum)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Buffer value is outside the numeric range"));
+}
+
+static tsc_value_t buffer_method_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    const buffer_method_t* method = env;
+    tsc_buffer_t* volatile buffer = tsc_value_as_buffer(receiver);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    (void)receiver_root;
+    tsc_value_t first = buffer_argument(args, 0);
+    switch (method->operation) {
+        case BUFFER_NUMBER: {
+            size_t width = method->width;
+            size_t offset_index = method->write ? 1 : 0;
+            tsc_value_t offset_value = buffer_argument(args, offset_index);
+            if (!width) {
+                if (!method->write && tsc_value_is_undefined(offset_value))
+                    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer offset must be a Number"));
+                double requested = buffer_strict_number(buffer_argument(args, offset_index + 1), 0, false);
+                if (!isfinite(requested) || floor(requested) != requested || requested < 1 || requested > 6)
+                    tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Buffer byteLength must be between 1 and 6"));
+                width = (size_t)requested;
+            }
+            double value = method->write ? tsc_value_to_number(first) : 0;
+            // Node's single-byte writer validates the offset type before the
+            // value range. Other integer writers validate the range first.
+            if (method->write && width > 1) buffer_integer_value_range(value, width, method->number_kind);
+            double offset = buffer_strict_number(offset_value, 0, method->width != 0);
+            return tsc_value_num(method->write
+                ? tsc_buffer_write_number(buffer, value, offset, width, method->number_kind, method->little_endian)
+                : tsc_buffer_read_number(buffer, offset, width, method->number_kind, method->little_endian));
+        }
+        case BUFFER_TEXT: {
+            double start = buffer_numeric_option(buffer_argument(args, 1), 0);
+            double end = buffer_numeric_option(buffer_argument(args, 2), (double)buffer->len);
+            start = isnan(start) || start <= 0 ? 0 : start >= (double)buffer->len ? (double)buffer->len : trunc(start);
+            end = isnan(end) || end <= 0 ? 0 : end >= (double)buffer->len ? (double)buffer->len : trunc(end);
+            if (end <= start) return tsc_value_string(tsc_str_from_lit("", 0));
+            tsc_str_t* encoding = buffer_encoding_option(first);
+            tsc_buffer_t* volatile view = tsc_buffer_slice(buffer, start, end);
+            return tsc_value_string(tsc_buffer_to_string(view, encoding));
+        }
+        case BUFFER_JSON: return tsc_buffer_to_json(buffer);
+        case BUFFER_SLICE: {
+            // slice performs ordinary lookup of subarray, so overrides are
+            // observable and may return any value.
+            tsc_array_t* volatile forwarded = tsc_array_new(sizeof(tsc_value_t), 2);
+            tsc_array_push_value(forwarded, first);
+            tsc_array_push_value(forwarded, buffer_argument(args, 1));
+            return tsc_value_invoke(receiver, tsc_str_from_lit("subarray", 8), forwarded);
+        }
+        case BUFFER_SUBARRAY: {
+            double start = buffer_numeric_option(first, 0);
+            double end = buffer_numeric_option(buffer_argument(args, 1), (double)buffer->len);
+            return tsc_value_buffer(tsc_buffer_slice(buffer, start, end));
+        }
+        case BUFFER_FILL: {
+            double start = buffer_range_option(buffer_argument(args, 1), 0, buffer->len);
+            double end = buffer_range_option(buffer_argument(args, 2), (double)buffer->len, buffer->len);
+            if (end <= start) return receiver;
+            if ((value_is_box(first) && value_tag(first) == TSC_VALUE_TAG_STRING)) {
+                tsc_buffer_t* volatile pattern = tsc_buffer_from_str(tsc_value_as_string(first), buffer_encoding_option(buffer_argument(args, 3)));
+                if (!pattern->len) { memset(buffer->data + (size_t)start, 0, (size_t)(end - start)); return receiver; }
+                for (size_t index = (size_t)start; index < (size_t)end; ++index)
+                    buffer->data[index] = pattern->data[(index - (size_t)start) % pattern->len];
+            } else if (tsc_util_types_is_typed_array(first)) {
+                tsc_buffer_t* volatile pattern = tsc_value_as_buffer(first);
+                if (!pattern->len) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer fill pattern is empty"));
+                // Snapshot permits overlapping source and target views.
+                tsc_buffer_t* volatile copy = tsc_buffer_from_buffer(pattern);
+                for (size_t index = (size_t)start; index < (size_t)end; ++index)
+                    buffer->data[index] = copy->data[(index - (size_t)start) % copy->len];
+            } else tsc_buffer_fill(buffer, tsc_value_to_number(first), start, end);
+            return receiver;
+        }
+        case BUFFER_WRITE: {
+            if (!(value_is_box(first) && value_tag(first) == TSC_VALUE_TAG_STRING))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Buffer.write requires a String"));
+            tsc_value_t offset_value = buffer_argument(args, 1), length_value = buffer_argument(args, 2);
+            tsc_value_t encoding_value = buffer_argument(args, 3);
+            double offset = 0, length = NAN;
+            if ((value_is_box(offset_value) && value_tag(offset_value) == TSC_VALUE_TAG_STRING)) encoding_value = offset_value;
+            else {
+                offset = buffer_range_option(offset_value, 0, buffer->len);
+                if ((value_is_box(length_value) && value_tag(length_value) == TSC_VALUE_TAG_STRING)) encoding_value = length_value;
+                else if (!tsc_value_is_undefined(length_value)) length = buffer_range_option(length_value, 0, UINT32_MAX);
+            }
+            tsc_str_t* encoding = buffer_encoding_option(encoding_value);
+            return tsc_value_num(tsc_buffer_write(buffer, tsc_value_as_string(first), offset, length, encoding));
+        }
+        case BUFFER_SWAP: tsc_buffer_swap(buffer, method->width); return receiver;
+        case BUFFER_COPY: {
+            tsc_buffer_t* volatile target = tsc_value_as_buffer(first);
+            double target_start = buffer_numeric_option(buffer_argument(args, 1), 0);
+            double source_start = buffer_numeric_option(buffer_argument(args, 2), 0);
+            double source_end = buffer_numeric_option(buffer_argument(args, 3), (double)buffer->len);
+            if (target_start < 0 || source_start < 0 || source_start > (double)buffer->len || source_end < 0)
+                tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Buffer copy option is outside the byte range"));
+            return tsc_value_num(tsc_buffer_copy(buffer, target, target_start, source_start, source_end));
+        }
+        case BUFFER_SEARCH: {
+            bool backwards = method->width == 1;
+            tsc_value_t offset_value = buffer_argument(args, 1), encoding_value = buffer_argument(args, 2);
+            if ((value_is_box(offset_value) && value_tag(offset_value) == TSC_VALUE_TAG_STRING)) { encoding_value = offset_value; offset_value = tsc_value_undefined(); }
+            double offset = buffer_numeric_option(offset_value, backwards ? NAN : 0);
+            if (!tsc_value_is_truthy(encoding_value)) encoding_value = tsc_value_undefined();
+            double found;
+            if ((!value_is_box(first))) found = backwards
+                ? tsc_buffer_last_index_of_byte(buffer, value_as_num(first), offset)
+                : tsc_buffer_index_of_byte(buffer, value_as_num(first), offset);
+            else {
+                tsc_buffer_t* volatile needle;
+                if ((value_is_box(first) && value_tag(first) == TSC_VALUE_TAG_STRING)) needle = tsc_buffer_from_str(tsc_value_as_string(first), buffer_encoding_option(encoding_value));
+                else needle = tsc_value_as_buffer(first);
+                found = backwards ? tsc_buffer_last_index_of_buffer(buffer, needle, offset) : tsc_buffer_index_of_buffer(buffer, needle, offset);
+            }
+            return method->width == 2 ? tsc_value_bool(found >= 0) : tsc_value_num(found);
+        }
+        case BUFFER_EQUALS: return tsc_value_bool(tsc_buffer_equals(buffer, tsc_value_as_buffer(first)));
+        case BUFFER_COMPARE: {
+            tsc_buffer_t* volatile target = tsc_value_as_buffer(first);
+            double target_start = buffer_range_option(buffer_argument(args, 1), 0, target->len);
+            double target_end = buffer_range_option(buffer_argument(args, 2), (double)target->len, target->len);
+            double source_start = buffer_range_option(buffer_argument(args, 3), 0, buffer->len);
+            double source_end = buffer_range_option(buffer_argument(args, 4), (double)buffer->len, buffer->len);
+            return tsc_value_num(tsc_buffer_compare_ranges(buffer, target, target_start, target_end, source_start, source_end));
+        }
+        case BUFFER_KEYS: return tsc_value_method_keys(receiver);
+        case BUFFER_VALUES: return tsc_value_method_values(receiver);
+        case BUFFER_ENTRIES: return tsc_value_method_entries(receiver);
+    }
+    tsc_panic("unknown Buffer method descriptor");
+}
+
+static tsc_value_t buffer_length_getter(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_num((double)tsc_value_as_buffer(receiver)->len);
+}
+
+typedef struct { tsc_object_t* prototype; tsc_object_t* uint8_prototype; tsc_object_t* typed_array_prototype; } buffer_intrinsics_t;
+static const char buffer_intrinsics_key = 0;
+
+tsc_value_t tsc_buffer_prototype_value(void) {
+    buffer_intrinsics_t* state = tsc_realm_state_get(&buffer_intrinsics_key);
+    if (state) return tsc_value_object(state->prototype);
+    tsc_runtime_lock();
+    state = tsc_realm_state_get(&buffer_intrinsics_key);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state));
+        state->typed_array_prototype = tsc_object_new();
+        state->uint8_prototype = tsc_object_new_with_prototype(tsc_value_object(state->typed_array_prototype));
+        state->prototype = tsc_object_new_with_prototype(tsc_value_object(state->uint8_prototype));
+        tsc_realm_state_set(&buffer_intrinsics_key, state);
+        tsc_object_define_accessor(state->typed_array_prototype, tsc_str_from_lit("length", 6),
+            buffer_length_getter, NULL, true, NULL, NULL, true, false, true, true, true);
+        tsc_object_define_accessor(state->typed_array_prototype, tsc_str_from_lit("byteLength", 10),
+            buffer_length_getter, NULL, true, NULL, NULL, true, false, true, true, true);
+        for (size_t index = 0; index < sizeof(buffer_methods) / sizeof(buffer_methods[0]); ++index) {
+            const buffer_method_t* method = &buffer_methods[index];
+            tsc_object_t* owner = method->operation >= BUFFER_KEYS ? state->typed_array_prototype : state->prototype;
+            tsc_value_t function = tsc_value_function_builtin_named(buffer_method_apply, (void*)method,
+                method->arity, tsc_str_from_cstr(method->function_name));
+            void* volatile function_root = tsc_value_gc_root(function);
+            (void)function_root;
+            tsc_object_define(owner, tsc_str_from_cstr(method->name), function, true, owner == state->prototype, true);
+            if (str_lit_eq(tsc_str_from_cstr(method->name), "toString"))
+                tsc_object_define(state->prototype, tsc_str_from_lit("toLocaleString", 14), function, true, true, true);
+            if (method->operation == BUFFER_VALUES)
+                tsc_object_define(owner, tsc_symbol_property_key(tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_ITERATOR)), function, true, false, true);
+            if (method->operation == BUFFER_NUMBER && method->number_kind == TSC_BUFFER_UNSIGNED) {
+                // Uint spellings are aliases of the very same callable.
+                tsc_str_t* name = tsc_str_from_cstr(method->name);
+                char* alias = TSC_GC_MALLOC_ATOMIC(name->len + 1);
+                memcpy(alias, name->data, name->len); alias[name->len] = 0;
+                char* suffix = strstr(alias, "UInt"); suffix[1] = 'i';
+                tsc_object_define(owner, tsc_str_from_cstr(alias), function, true, true, true);
+            }
+        }
+    }
+    tsc_runtime_unlock();
+    return tsc_value_object(state->prototype);
+}
+
 tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {
     if (!b) return tsc_value_null();
+    if (b->object) return tsc_value_object(b->object);
     tsc_object_t* o = tsc_object_new_class(b);
     o->is_typed_array = true;
+    o->is_buffer = true;
+    o->prototype = tsc_buffer_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
+    b->object = o;
     return tsc_value_object(o);
 }
 

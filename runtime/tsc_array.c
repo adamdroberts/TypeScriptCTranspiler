@@ -708,7 +708,13 @@ static tsc_value_t array_iterator_next(void* env, tsc_value_t receiver, tsc_arra
         void* volatile source_gc_root = tsc_value_gc_root(source);
         (void)source_gc_root;
         uint64_t index = state->index;
-        double length = tsc_value_to_length(tsc_value_get_prop(source, tsc_str_from_lit("length", 6)));
+        /* Array Iterator objects also serve integer-indexed receivers. Their
+         * private byte record supplies the length; an ordinary length shadow
+         * must not change the traversal. Other receivers use LengthOfArrayLike. */
+        double length = value_is_box(source) && value_tag(source) == TSC_VALUE_TAG_OBJECT &&
+            ((tsc_object_t*)value_ptr(source))->is_buffer
+            ? (double)tsc_value_as_buffer(source)->len
+            : tsc_value_to_length(tsc_value_get_prop(source, tsc_str_from_lit("length", 6)));
         done = (double)index >= length;
         if (done) {
             state->source = tsc_value_undefined();

@@ -1751,9 +1751,6 @@ class Emitter {
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1956,9 +1953,6 @@ class Emitter {
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -2137,9 +2131,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeBufferMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStdioMethodCall(recv, method, call.arguments, seenConsts)) {
@@ -3065,62 +3056,6 @@ class Emitter {
         return !!init && this.isSideEffectFreeFreshBufferOperand(init, seenConsts);
     }
 
-    private isSideEffectFreeBufferMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeFreshBufferOperand(recv, seenConsts)) return false;
-        const ignoredAfter = (index: number): boolean =>
-            Array.from(args).slice(index).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        switch (method) {
-            case "toLocaleString":
-            case "valueOf":
-                return ignoredAfter(0);
-            case "toString":
-                return (
-                    !args[0] ||
-                    this.isSideEffectFreeUndefinedValue(args[0], seenConsts) ||
-                    this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf8" ||
-                    this.sideEffectFreeStringLiteralText(args[0], seenConsts) === "utf-8"
-                ) &&
-                    ignoredAfter(args[0] ? 1 : 0);
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreePrimitiveBufferMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return (
-            method === "toLocaleString" ||
-            method === "toString"
-        ) &&
-            this.isSideEffectFreeBufferMethodCall(recv, method, args, seenConsts);
-    }
-
-    private isSideEffectFreeBufferStringMethodCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
-            return false;
-        }
-        const method = expr.expression.name.text;
-        return (
-            method === "toLocaleString" ||
-            method === "toString"
-        ) &&
-            this.isSideEffectFreeBufferMethodCall(expr.expression.expression, method, expr.arguments, seenConsts);
-    }
-
     private isSideEffectFreeCryptoCall(
         method: string,
         args: ts.NodeArray<ts.Expression>,
@@ -3333,7 +3268,7 @@ class Emitter {
                     this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts) ||
-                    this.isSideEffectFreePrimitiveBufferMethodCall(recv, method, call.arguments, seenConsts) ||
+
                     this.isSideEffectFreePrimitiveObjectStringMethodCall(call, seenConsts)
                 ) {
                     return true;
@@ -7355,9 +7290,6 @@ class Emitter {
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -7455,9 +7387,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeBufferStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
@@ -35329,8 +35258,8 @@ class Emitter {
             arrayExpr = `tsc_url_search_params_entries(${source.c})`;
             sourceElemType = entryType(T_STRING, T_STRING);
         } else if (source.ty.kind === "buffer") {
-            arrayExpr = `({ tsc_buffer_t* const _lazy_yield_star_buffer = ${source.c}; tsc_array_t* _lazy_yield_star_values = tsc_array_new(sizeof(double), _lazy_yield_star_buffer->len ? _lazy_yield_star_buffer->len : 1); for (size_t _lazy_yield_star_i = 0; _lazy_yield_star_i < _lazy_yield_star_buffer->len; _lazy_yield_star_i++) { double _lazy_yield_star_byte = (double)_lazy_yield_star_buffer->data[_lazy_yield_star_i]; tsc_array_push_raw(_lazy_yield_star_values, &_lazy_yield_star_byte); } _lazy_yield_star_values; })`;
-            sourceElemType = T_NUMBER;
+            arrayExpr = `tsc_value_iter_values(tsc_value_buffer(${source.c}))`;
+            sourceElemType = T_VALUE;
         } else if (source.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${source.c})`;
             sourceElemType = T_STRING;
@@ -42038,15 +41967,8 @@ class Emitter {
             }
             if (right.ty.kind === "buffer") {
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: right, node: bin.right },
-                    { value: left, target: T_STRING, node: bin.left },
-                ], ([buffer, keyC]) => {
-                    const source = this.freshTemp("_boh_src");
-                    const idx = this.freshTemp("_boh_i");
-                    const out = this.freshTemp("_boh");
-                    const idxKey = this.freshTemp("_boh_key");
-                    return `({ tsc_buffer_t* const ${source} = ${buffer}; bool ${out} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6)); for (size_t ${idx} = 0; ${idx} < ${source}->len && !${out}; ${idx}++) { tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); if (tsc_str_eq(${keyC}, ${idxKey})) { ${out} = true; break; } } ${out}; })`;
-                });
+                    { value: left, target: T_VALUE, node: bin.left }, { value: right, target: T_VALUE, node: bin.right },
+                ], ([key, owner]) => `tsc_value_has_computed_prop(${owner}, ${key})`);
             }
             if (right.ty.kind !== "value") {
                 unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
@@ -42371,8 +42293,8 @@ class Emitter {
             arrayExpr = `tsc_url_search_params_entries(${source.c})`;
             elemType = entryType(T_STRING, T_STRING);
         } else if (source.ty.kind === "buffer") {
-            arrayExpr = `({ tsc_buffer_t* const _yield_star_buffer = ${source.c}; tsc_array_t* _yield_star_values = tsc_array_new(sizeof(double), _yield_star_buffer->len ? _yield_star_buffer->len : 1); for (size_t _yield_star_i = 0; _yield_star_i < _yield_star_buffer->len; _yield_star_i++) { double _yield_star_byte = (double)_yield_star_buffer->data[_yield_star_i]; tsc_array_push_raw(_yield_star_values, &_yield_star_byte); } _yield_star_values; })`;
-            elemType = T_NUMBER;
+            arrayExpr = `tsc_value_iter_values(tsc_value_buffer(${source.c}))`;
+            elemType = T_VALUE;
         } else if (source.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${source.c})`;
             elemType = T_STRING;
@@ -43607,7 +43529,7 @@ class Emitter {
             buf.close();
             return;
         } else if (iter.ty.kind === "buffer") {
-            keysExpr = `({ tsc_buffer_t* const _for_in_buffer = ${iter.c}; tsc_array_t* _for_in_keys = tsc_array_new(sizeof(tsc_str_t*), _for_in_buffer->len ? _for_in_buffer->len : 1); for (size_t _for_in_i = 0; _for_in_i < _for_in_buffer->len; _for_in_i++) { tsc_str_t* _for_in_key = tsc_str_from_int((int64_t)_for_in_i); tsc_array_push_raw(_for_in_keys, &_for_in_key); } _for_in_keys; })`;
+            keysExpr = `tsc_value_object_keys(tsc_value_buffer(${iter.c}))`;
         } else if (iter.ty.kind === "class") {
             // Typed-object own enumerable property names — emit a static array.
             const fields = this.classOwnPropertyNames(fis.expression, iter);
@@ -43755,11 +43677,6 @@ class Emitter {
             const custom = this.emitCustomIterableArray(fos.expression, iter);
             if (!custom) unsupported(fos.expression, "synchronous iterator object representation unavailable");
             this.emitOrdinaryForOf(buf, fos, custom);
-            return;
-        }
-        if (iter.ty.kind === "buffer") {
-            const values = `({ tsc_buffer_t* const source = ${iter.c}; tsc_array_t* values = tsc_array_new(sizeof(double), source->len ? source->len : 1); for (size_t index = 0; index < source->len; index++) { double value = source->data[index]; tsc_array_push_raw(values, &value); } values; })`;
-            this.emitOrdinaryForOf(buf, fos, { c: values, ty: arrayType(T_NUMBER) });
             return;
         }
         this.emitOrdinaryForOf(buf, fos, iter);
@@ -49986,7 +49903,7 @@ class Emitter {
 
         const rawRecv = this.emitExpr(recvExpr);
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
-        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp"
+        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp" || rawRecv.ty.kind === "buffer"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
             : rawRecv.ty.kind === "array" &&
                 (rawRecv.ty.elem?.kind === "value" ||
@@ -51392,7 +51309,7 @@ class Emitter {
         const rawRecv = this.emitExpr(recvExpr);
         const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
-        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp"
+        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp" || rawRecv.ty.kind === "buffer"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
             : rawRecv.ty.kind === "array" &&
                 (rawRecv.ty.elem?.kind === "value" ||
@@ -56277,7 +56194,8 @@ class Emitter {
         if (recv.ty.kind === "error")
             return this.emitErrorMethod(call, recv, memberName);
         if (recv.ty.kind === "buffer")
-            return this.emitBufferMethod(call, recv, memberName);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName,
+                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         if (recv.ty.kind === "textencoder")
             return this.emitTextEncoderMethod(call, recv, memberName);
         if (recv.ty.kind === "textdecoder")
@@ -57499,7 +57417,7 @@ class Emitter {
         if (items.ty.kind === "string") {
             return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgValue, thisArg, ignored);
         }
-        if (!resultArrayType && (items.ty.kind === "value" || items.ty.kind === "array")) {
+        if (!resultArrayType && (items.ty.kind === "value" || items.ty.kind === "array" || items.ty.kind === "buffer")) {
             return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
         }
         if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map")
@@ -57685,7 +57603,7 @@ class Emitter {
     ): EmitResult {
         const r = this.emitExpr(itemsArg);
         const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        if (!resultArrayType && (r.ty.kind === "value" || r.ty.kind === "array")) {
+        if (!resultArrayType && (r.ty.kind === "value" || r.ty.kind === "array" || r.ty.kind === "buffer")) {
             return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
         }
         if (r.ty.kind === "string") {
@@ -63792,10 +63710,19 @@ class Emitter {
             }
             const bodyExpr = this.callbackReturnExpression(arrowFn, method);
             if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
+            const parameterTypeScope = new Map<ts.Symbol, CType>();
+            for (const binding of paramBindings) {
+                if (ts.isParameter(binding.node) && ts.isIdentifier(binding.node.name)) {
+                    const symbol = this.symbolForIdentifier(binding.node.name);
+                    if (symbol) parameterTypeScope.set(symbol, binding.type);
+                }
+            }
+            this.argumentValueTypeScopes.push(parameterTypeScope);
             let bodyR: EmitResult;
             try {
                 bodyR = this.emitExpr(bodyExpr);
             } finally {
+                this.argumentValueTypeScopes.pop();
                 if (thisType) this.functionThisStack.pop();
             }
             const bindings = paramBindings
@@ -67962,39 +67889,9 @@ class Emitter {
         const args = call.arguments;
         switch (name) {
             case "from": {
-                if (args.length < 1) unsupported(call, "Buffer.from expects input");
-                const input = this.emitExpr(args[0]!);
-                if (input.ty.kind === "string") {
-                    const specs: SequencedCallArg[] = [{ value: input, target: T_STRING, node: args[0]! }];
-                    const hasEncoding = !!args[1] && !this.isUndefinedExpression(args[1]);
-                    if (hasEncoding) {
-                        specs.push({
-                            value: this.emitExpr(args[1]),
-                            target: T_STRING,
-                            node: args[1],
-                        });
-                    }
-                    specs.push(...this.ignoredArgumentSpecs(args, 2));
-                    return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                        const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
-                        return `tsc_buffer_from_str(${vals[0]}, ${encoding})`;
-                    });
-                }
-                if (input.ty.kind === "array" && input.ty.elem?.kind === "number") {
-                    return this.emitSequencedExpr(
-                        T_BUFFER,
-                        [{ value: input }, ...this.ignoredArgumentSpecs(args, 1)],
-                        ([array]) => `tsc_buffer_from_array(${array})`,
-                    );
-                }
-                if (input.ty.kind === "buffer") {
-                    return this.emitSequencedExpr(
-                        T_BUFFER,
-                        [{ value: input }, ...this.ignoredArgumentSpecs(args, 1)],
-                        ([buffer]) => `tsc_buffer_from_buffer(${buffer})`,
-                    );
-                }
-                unsupported(args[0]!, "Buffer.from supports string, number[], or Buffer");
+                const specs: SequencedCallArg[] = args.map((node) => ({ value: this.emitExpr(node), target: T_VALUE, node }));
+                return this.emitSequencedExpr(T_BUFFER, specs, (values) =>
+                    `tsc_buffer_from_value(${values[0] ?? "tsc_value_undefined()"}, ${values[1] ?? "tsc_value_undefined()"})`);
             }
             case "alloc": {
                 if (args.length < 1) unsupported(call, "Buffer.alloc expects size");
@@ -68273,600 +68170,55 @@ class Emitter {
         unsupported(call, `TextDecoder.${method} (only decode is supported)`);
     }
 
-    private emitBufferMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "toLocaleString":
-                return this.emitSequencedExpr(T_STRING, [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)], ([buffer]) =>
-                    `tsc_buffer_to_string(${buffer}, tsc_str_from_lit("utf8", 4))`,
-                );
-            case "toJSON":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([buffer]) => `tsc_buffer_to_json(${buffer})`,
-                );
-            case "toString": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasEncoding) {
-                    specs.push({
-                        value: this.emitExpr(args[0]),
-                        target: T_STRING,
-                        node: args[0],
-                    });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
-                    return `tsc_buffer_to_string(${vals[0]}, ${encoding})`;
-                });
-            }
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([buffer]) => buffer,
-                );
-            case "slice":
-            case "subarray": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasStart = !!args[0] && !this.isUndefinedExpression(args[0]);
-                const hasEnd = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasStart) {
-                    const start = this.emitExpr(args[0]);
-                    requireNumber(args[0], start.ty);
-                    specs.push({ value: start, target: T_NUMBER, node: args[0] });
-                }
-                if (hasEnd) {
-                    const end = this.emitExpr(args[1]);
-                    requireNumber(args[1], end.ty);
-                    specs.push({ value: end, target: T_NUMBER, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                    const b = vals[0]!;
-                    let next = 1;
-                    const start = hasStart ? vals[next++]! : "0";
-                    const end = hasEnd ? vals[next++]! : `(double)${b}->len`;
-                    return `tsc_buffer_slice(${b}, ${start}, ${end})`;
-                });
-            }
-            case "fill": {
-                if (args.length < 1) unsupported(call, "Buffer.fill expects value and optional start/end");
-                const value = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, value.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value, target: T_NUMBER, node: args[0]! },
-                ];
-                const hasStart = !!args[1] && !this.isUndefinedExpression(args[1]);
-                const hasEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
-                if (hasStart) {
-                    const start = this.emitExpr(args[1]);
-                    requireNumber(args[1], start.ty);
-                    specs.push({ value: start, target: T_NUMBER, node: args[1] });
-                }
-                if (hasEnd) {
-                    const end = this.emitExpr(args[2]);
-                    requireNumber(args[2], end.ty);
-                    specs.push({ value: end, target: T_NUMBER, node: args[2] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 3));
-                return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                    const b = vals[0]!;
-                    let next = 2;
-                    const start = hasStart ? vals[next++]! : "0";
-                    const end = hasEnd ? vals[next++]! : `(double)${b}->len`;
-                    return `tsc_buffer_fill(${b}, ${vals[1]}, ${start}, ${end})`;
-                });
-            }
-            case "write": {
-                if (args.length < 1) unsupported(call, "Buffer.write expects string, optional offset, length, and encoding");
-                const input = this.emitExpr(args[0]!);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: input, target: T_STRING, node: args[0]! },
-                ];
-                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
-                const hasLength = !!args[2] && !this.isUndefinedExpression(args[2]);
-                const hasEncoding = !!args[3] && !this.isUndefinedExpression(args[3]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[1]);
-                    requireNumber(args[1], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[1] });
-                }
-                if (hasLength) {
-                    const length = this.emitExpr(args[2]);
-                    requireNumber(args[2], length.ty);
-                    specs.push({ value: length, target: T_NUMBER, node: args[2] });
-                }
-                if (hasEncoding) {
-                    specs.push({ value: this.emitExpr(args[3]), target: T_STRING, node: args[3] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 4));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    let next = 2;
-                    const offset = hasOffset ? vals[next++]! : "0";
-                    const length = hasLength ? vals[next++]! : "NAN";
-                    const encoding = hasEncoding ? vals[next++]! : `tsc_str_from_lit("utf8", 4)`;
-                    return `tsc_buffer_write(${vals[0]}, ${vals[1]}, ${offset}, ${length}, ${encoding})`;
-                });
-            }
-            case "readInt8":
-            case "readUInt8": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasOffset = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[0]);
-                    requireNumber(args[0], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                const fn = method === "readInt8" ? "tsc_buffer_read_int8" : "tsc_buffer_read_uint8";
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${hasOffset ? vals[1]! : "0"})`,
-                );
-            }
-            case "writeInt8":
-            case "writeUInt8": {
-                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional offset`);
-                const value = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, value.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value, target: T_NUMBER, node: args[0]! },
-                ];
-                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[1]);
-                    requireNumber(args[1], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                const fn = method === "writeInt8" ? "tsc_buffer_write_int8" : "tsc_buffer_write_uint8";
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
-                );
-            }
-            case "readInt16LE":
-            case "readInt16BE":
-            case "readInt32LE":
-            case "readInt32BE":
-            case "readFloatLE":
-            case "readFloatBE":
-            case "readDoubleLE":
-            case "readDoubleBE":
-            case "readUInt16LE":
-            case "readUInt16BE":
-            case "readUInt32LE":
-            case "readUInt32BE": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasOffset = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[0]);
-                    requireNumber(args[0], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                const fn = {
-                    readInt16LE: "tsc_buffer_read_int16_le",
-                    readInt16BE: "tsc_buffer_read_int16_be",
-                    readInt32LE: "tsc_buffer_read_int32_le",
-                    readInt32BE: "tsc_buffer_read_int32_be",
-                    readFloatLE: "tsc_buffer_read_float_le",
-                    readFloatBE: "tsc_buffer_read_float_be",
-                    readDoubleLE: "tsc_buffer_read_double_le",
-                    readDoubleBE: "tsc_buffer_read_double_be",
-                    readUInt16LE: "tsc_buffer_read_uint16_le",
-                    readUInt16BE: "tsc_buffer_read_uint16_be",
-                    readUInt32LE: "tsc_buffer_read_uint32_le",
-                    readUInt32BE: "tsc_buffer_read_uint32_be",
-                }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${hasOffset ? vals[1]! : "0"})`,
-                );
-            }
-            case "writeInt16LE":
-            case "writeInt16BE":
-            case "writeInt32LE":
-            case "writeInt32BE":
-            case "writeFloatLE":
-            case "writeFloatBE":
-            case "writeDoubleLE":
-            case "writeDoubleBE":
-            case "writeUInt16LE":
-            case "writeUInt16BE":
-            case "writeUInt32LE":
-            case "writeUInt32BE": {
-                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional offset`);
-                const value = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, value.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value, target: T_NUMBER, node: args[0]! },
-                ];
-                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[1]);
-                    requireNumber(args[1], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                const fn = {
-                    writeInt16LE: "tsc_buffer_write_int16_le",
-                    writeInt16BE: "tsc_buffer_write_int16_be",
-                    writeInt32LE: "tsc_buffer_write_int32_le",
-                    writeInt32BE: "tsc_buffer_write_int32_be",
-                    writeFloatLE: "tsc_buffer_write_float_le",
-                    writeFloatBE: "tsc_buffer_write_float_be",
-                    writeDoubleLE: "tsc_buffer_write_double_le",
-                    writeDoubleBE: "tsc_buffer_write_double_be",
-                    writeUInt16LE: "tsc_buffer_write_uint16_le",
-                    writeUInt16BE: "tsc_buffer_write_uint16_be",
-                    writeUInt32LE: "tsc_buffer_write_uint32_le",
-                    writeUInt32BE: "tsc_buffer_write_uint32_be",
-                }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${hasOffset ? vals[2]! : "0"})`,
-                );
-            }
-            case "readIntLE":
-            case "readUIntLE":
-            case "readIntBE":
-            case "readUIntBE": {
-                if (args.length < 2) unsupported(call, `Buffer.${method} expects offset and byteLength`);
-                const offset = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, offset.ty);
-                const byteLength = this.emitExpr(args[1]!);
-                requireNumber(args[1]!, byteLength.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: offset, target: T_NUMBER, node: args[0]! },
-                    { value: byteLength, target: T_NUMBER, node: args[1]! },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                const fn = {
-                    readIntLE: "tsc_buffer_read_int_le",
-                    readUIntLE: "tsc_buffer_read_uint_le",
-                    readIntBE: "tsc_buffer_read_int_be",
-                    readUIntBE: "tsc_buffer_read_uint_be",
-                }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]})`,
-                );
-            }
-            case "writeIntLE":
-            case "writeUIntLE":
-            case "writeIntBE":
-            case "writeUIntBE": {
-                if (args.length < 3) unsupported(call, `Buffer.${method} expects value, offset, and byteLength`);
-                const value = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, value.ty);
-                const offset = this.emitExpr(args[1]!);
-                requireNumber(args[1]!, offset.ty);
-                const byteLength = this.emitExpr(args[2]!);
-                requireNumber(args[2]!, byteLength.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value, target: T_NUMBER, node: args[0]! },
-                    { value: offset, target: T_NUMBER, node: args[1]! },
-                    { value: byteLength, target: T_NUMBER, node: args[2]! },
-                ];
-                specs.push(...this.ignoredArgumentSpecs(args, 3));
-                const fn = {
-                    writeIntLE: "tsc_buffer_write_int_le",
-                    writeUIntLE: "tsc_buffer_write_uint_le",
-                    writeIntBE: "tsc_buffer_write_int_be",
-                    writeUIntBE: "tsc_buffer_write_uint_be",
-                }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) =>
-                    `${fn}(${vals[0]}, ${vals[1]}, ${vals[2]}, ${vals[3]})`,
-                );
-            }
-            case "swap16":
-            case "swap32":
-            case "swap64": {
-                const width = method === "swap16" ? 2 : method === "swap32" ? 4 : 8;
-                return this.emitSequencedExpr(T_BUFFER, [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)], ([buffer]) =>
-                    `tsc_buffer_swap(${buffer}, ${width})`,
-                );
-            }
-            case "copy": {
-                if (args.length < 1) unsupported(call, "Buffer.copy expects target and optional target/source bounds");
-                const target = this.emitExpr(args[0]!);
-                if (target.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.copy target must be Buffer");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: target },
-                ];
-                const hasTargetStart = !!args[1] && !this.isUndefinedExpression(args[1]);
-                const hasSourceStart = !!args[2] && !this.isUndefinedExpression(args[2]);
-                const hasSourceEnd = !!args[3] && !this.isUndefinedExpression(args[3]);
-                if (hasTargetStart) {
-                    const bound = this.emitExpr(args[1]);
-                    requireNumber(args[1], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[1] });
-                }
-                if (hasSourceStart) {
-                    const bound = this.emitExpr(args[2]);
-                    requireNumber(args[2], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[2] });
-                }
-                if (hasSourceEnd) {
-                    const bound = this.emitExpr(args[3]);
-                    requireNumber(args[3], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[3] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 4));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const source = vals[0]!;
-                    const targetBuffer = vals[1]!;
-                    let next = 2;
-                    const targetStart = hasTargetStart ? vals[next++]! : "0";
-                    const sourceStart = hasSourceStart ? vals[next++]! : "0";
-                    const sourceEnd = hasSourceEnd ? vals[next++]! : `(double)${source}->len`;
-                    return `tsc_buffer_copy(${source}, ${targetBuffer}, ${targetStart}, ${sourceStart}, ${sourceEnd})`;
-                });
-            }
-            case "indexOf":
-            case "lastIndexOf":
-            case "includes": {
-                if (args.length < 1) unsupported(call, `Buffer.${method} expects value and optional byteOffset`);
-                const value = this.emitExpr(args[0]!);
-                if (!["number", "string", "buffer"].includes(value.ty.kind)) {
-                    unsupported(args[0]!, `Buffer.${method} expects number, string, or Buffer`);
-                }
-                const valueTarget = value.ty.kind === "number" ? T_NUMBER : value.ty.kind === "string" ? T_STRING : undefined;
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value, target: valueTarget, node: args[0]! },
-                ];
-                const hasOffset = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasOffset) {
-                    const offset = this.emitExpr(args[1]);
-                    requireNumber(args[1], offset.ty);
-                    specs.push({ value: offset, target: T_NUMBER, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                const ty = method === "includes" ? T_BOOLEAN : T_NUMBER;
-                return this.emitSequencedExpr(ty, specs, ([buffer, needle, offset]) => {
-                    const suffix = value.ty.kind === "number" ? "byte" : value.ty.kind === "string" ? "str" : "buffer";
-                    const fn = method === "lastIndexOf" ? `tsc_buffer_last_index_of_${suffix}` : `tsc_buffer_index_of_${suffix}`;
-                    const defaultOffset = method === "lastIndexOf" ? "NAN" : "0";
-                    const found = `${fn}(${buffer!}, ${needle!}, ${hasOffset ? offset! : defaultOffset})`;
-                    return method === "includes" ? `(${found} >= 0.0)` : found;
-                });
-            }
-            case "equals": {
-                if (args.length < 1) unsupported(call, "Buffer.equals expects other");
-                const other = this.emitExpr(args[0]!);
-                if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.equals expects Buffer");
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
-                    ([left, right]) => `tsc_buffer_equals(${left}, ${right})`,
-                );
-            }
-            case "compare": {
-                if (args.length < 1) unsupported(call, "Buffer.prototype.compare expects target");
-                const other = this.emitExpr(args[0]!);
-                if (other.ty.kind !== "buffer") unsupported(args[0]!, "Buffer.prototype.compare target must be Buffer");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: other },
-                ];
-                const hasTargetStart = !!args[1] && !this.isUndefinedExpression(args[1]);
-                const hasTargetEnd = !!args[2] && !this.isUndefinedExpression(args[2]);
-                const hasSourceStart = !!args[3] && !this.isUndefinedExpression(args[3]);
-                const hasSourceEnd = !!args[4] && !this.isUndefinedExpression(args[4]);
-                if (hasTargetStart) {
-                    const bound = this.emitExpr(args[1]);
-                    requireNumber(args[1], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[1] });
-                }
-                if (hasTargetEnd) {
-                    const bound = this.emitExpr(args[2]);
-                    requireNumber(args[2], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[2] });
-                }
-                if (hasSourceStart) {
-                    const bound = this.emitExpr(args[3]);
-                    requireNumber(args[3], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[3] });
-                }
-                if (hasSourceEnd) {
-                    const bound = this.emitExpr(args[4]);
-                    requireNumber(args[4], bound.ty);
-                    specs.push({ value: bound, target: T_NUMBER, node: args[4] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 5));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const source = vals[0]!;
-                    const target = vals[1]!;
-                    let next = 2;
-                    const targetStart = hasTargetStart ? vals[next++]! : "0.0";
-                    const targetEnd = hasTargetEnd ? vals[next++]! : `(double)${target}->len`;
-                    const sourceStart = hasSourceStart ? vals[next++]! : "0.0";
-                    const sourceEnd = hasSourceEnd ? vals[next++]! : `(double)${source}->len`;
-                    return `tsc_buffer_compare_ranges(${source}, ${target}, ${targetStart}, ${targetEnd}, ${sourceStart}, ${sourceEnd})`;
-                });
-            }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                if (args.length < 1) unsupported(call, `Buffer.${method} expects 1 arg`);
-                return this.emitBufferOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
-        }
-        unsupported(call, `Buffer method .${method}`);
-    }
-
     private emitBufferOwnKeys(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own keys on non-buffer");
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
-            const source = this.freshTemp("_bok_src");
-            const out = this.freshTemp("_bok");
-            const idx = this.freshTemp("_bok_i");
-            const key = this.freshTemp("_bok_key");
-            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } ${out}; })`;
-        });
+        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
+            ([owner]) => `tsc_value_object_keys(${owner})`);
     }
 
     private emitBufferObjectValues(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.values on non-buffer");
-        return this.emitSequencedExpr(arrayType(T_NUMBER), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
-            const source = this.freshTemp("_bov_src");
-            const out = this.freshTemp("_bov");
-            const idx = this.freshTemp("_bov_i");
-            const value = this.freshTemp("_bov_v");
-            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(double), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { double ${value} = (double)${source}->data[${idx}]; tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
-        });
+        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
+            ([owner]) => `tsc_value_object_values(${owner})`);
     }
 
     private emitBufferObjectEntries(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Object.entries on non-buffer");
-        const elemType = entryType(T_NUMBER);
-        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
-            const source = this.freshTemp("_boe_src");
-            const out = this.freshTemp("_boe");
-            const idx = this.freshTemp("_boe_i");
-            const entry = this.freshTemp("_boe_entry");
-            return `({ tsc_buffer_t* const ${source} = ${buffer}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${entry}.num = (double)${source}->data[${idx}]; ${entry}.ptr = (void*)tsc_value_num((double)${source}->data[${idx}]); tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
-        });
+        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
+            ([owner]) => `tsc_value_object_entries(${owner})`);
     }
 
-    private emitBufferOwnKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
+    private emitBufferOwnKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, ignored: SequencedCallArg[] = []): EmitResult {
         return this.emitBufferPropertyKeyCheck(objExpr, obj, keyExpr, false, ignored);
     }
 
-    private emitBufferPropertyKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        includeLength: boolean,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer own-key check on non-buffer");
+    private emitBufferPropertyKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, inherited: boolean, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
+        const operation = inherited ? "tsc_value_has_computed_prop" : "tsc_value_has_own_computed_prop";
         return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([buffer, keyC]) => {
-            const source = this.freshTemp("_boh_src");
-            const idx = this.freshTemp("_boh_i");
-            const out = this.freshTemp("_boh");
-            const idxKey = this.freshTemp("_boh_key");
-            const lengthCheck = includeLength
-                ? `bool ${out} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6));`
-                : `bool ${out} = false;`;
-            return `({ tsc_buffer_t* const ${source} = ${buffer}; ${lengthCheck} for (size_t ${idx} = 0; ${idx} < ${source}->len && !${out}; ${idx}++) { tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); if (tsc_str_eq(${keyC}, ${idxKey})) { ${out} = true; break; } } ${out}; })`;
-        });
+            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr }, ...ignored,
+        ], ([owner, property]) => `${operation}(${owner}, ${property})`);
     }
 
-    private emitBufferReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer Reflect.get on non-buffer");
+    private emitBufferReflectGet(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression,
+        receiver?: { value: EmitResult; node: ts.Expression }, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
         const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
+            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr },
         ];
         if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
         specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([buffer, keyC, receiverC]) => {
-            const source = this.freshTemp("_bget_src");
-            const out = this.freshTemp("_bget_out");
-            const found = this.freshTemp("_bget_found");
-            const idx = this.freshTemp("_bget_i");
-            const idxKey = this.freshTemp("_bget_key");
-            const pieces = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_buffer_t* const ${source} = ${buffer}`,
-                `bool ${found} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))`,
-                `tsc_value_t ${out} = ${found} ? tsc_value_num((double)${source}->len) : tsc_value_undefined()`,
-                `for (size_t ${idx} = 0; ${idx} < ${source}->len && !${found}; ${idx}++) { ` +
-                    `tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); ` +
-                    `if (tsc_str_eq(${keyC}, ${idxKey})) { ${found} = true; ${out} = tsc_value_num((double)${source}->data[${idx}]); break; } ` +
-                `}`,
-                out,
-            ].filter(Boolean);
-            return `({ ${pieces.join("; ")}; })`;
-        });
+        return this.emitSequencedExpr(T_VALUE, specs, ([owner, property, actualReceiver]) =>
+            `tsc_reflect_get_computed_prop_receiver(${owner}, ${property}, ${receiver ? actualReceiver : owner})`);
     }
 
-    private emitBufferGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptor on non-buffer");
+    private emitBufferGetOwnPropertyDescriptor(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
         return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([buffer, keyC]) => {
-            const source = this.freshTemp("_bdesc_src");
-            const out = this.freshTemp("_bdesc_out");
-            const idx = this.freshTemp("_bdesc_i");
-            const idxKey = this.freshTemp("_bdesc_key");
-            const desc = this.freshTemp("_bdesc");
-            const pieces = [
-                `tsc_buffer_t* const ${source} = ${buffer}`,
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-                `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
-                    `tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); ` +
-                    `if (tsc_str_eq(${keyC}, ${idxKey})) { ` +
-                        `${this.typedArrayDescriptorInit(desc, `tsc_value_num((double)${source}->data[${idx}])`, "true", "true", "true")}; ` +
-                        `${out} = tsc_value_object(${desc}); ` +
-                        `break; ` +
-                    `} ` +
-                `}`,
-                out,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
+            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr }, ...ignored,
+        ], ([owner, property]) => `tsc_value_get_own_property_computed_descriptor(${owner}, ${property})`);
     }
 
-    private emitBufferGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "buffer") unsupported(objExpr, "Buffer descriptors on non-buffer");
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([buffer]) => {
-            const source = this.freshTemp("_bdescs_src");
-            const out = this.freshTemp("_bdescs");
-            const idx = this.freshTemp("_bdescs_i");
-            const key = this.freshTemp("_bdescs_key");
-            const desc = this.freshTemp("_bdescs_desc");
-            const pieces = [
-                `tsc_buffer_t* const ${source} = ${buffer}`,
-                `tsc_object_t* ${out} = tsc_object_new()`,
-                `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
-                    `tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); ` +
-                    `${this.typedArrayDescriptorInit(desc, `tsc_value_num((double)${source}->data[${idx}])`, "true", "true", "true")}; ` +
-                    `tsc_object_set(${out}, ${key}, tsc_value_object(${desc})); ` +
-                `}`,
-                `tsc_value_object(${out})`,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
+    private emitBufferGetOwnPropertyDescriptors(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
+        return this.emitSequencedExpr(T_VALUE, [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
+            ([owner]) => `tsc_value_get_own_property_descriptors(${owner})`);
     }
 
     private emitJsonCall(call: ts.CallExpression, name: string): EmitResult {
@@ -70535,7 +69887,8 @@ class Emitter {
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
-                return this.emitBufferOwnKeys(arg, obj, ignored);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: T_VALUE, node: arg }, ...ignored],
+                    ([owner]) => `tsc_value_own_keys(${owner})`);
             }
             if (mapped.kind === "error") {
                 const obj = this.emitExpr(arg);
@@ -70880,7 +70233,7 @@ class Emitter {
                     ...ignored,
                 ], ([o]) => `({ (void)${o}; ${primitivePrototypeFn}(); })`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "promise") {
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "promise" && mapped.kind !== "buffer") {
                 unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
@@ -73062,7 +72415,8 @@ class Emitter {
                 }
                 if (mapped.kind === "buffer") {
                     const target = this.emitExpr(args[0]!);
-                    return this.emitBufferOwnKeys(args[0]!, target, ignored);
+                    return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: target, target: T_VALUE, node: args[0]! }, ...ignored],
+                        ([owner]) => `tsc_reflect_own_keys(${owner})`);
                 }
                 if (mapped.kind === "error") {
                     const target = this.emitExpr(args[0]!);
@@ -74596,8 +73950,9 @@ class Emitter {
                     return { c: `tsc_event_cancelable(${recv.c})`, ty: T_BOOLEAN };
             }
         }
-        if (recv.ty.kind === "buffer" && pa.name.text === "length") {
-            return { c: `tsc_buffer_length(${recv.c})`, ty: T_NUMBER };
+        if (recv.ty.kind === "buffer") {
+            return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
+                ([owner]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
         if (recv.ty.kind === "arraybuffer" && pa.name.text === "byteLength") {
             return { c: `tsc_array_buffer_byte_length(${recv.c})`, ty: T_NUMBER };
@@ -74996,16 +74351,13 @@ class Emitter {
             return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "buffer") {
-            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            requireNumber(ea.argumentExpression, idx.ty);
-            if (isOpt) {
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    [{ value: recv }, { value: idx }],
-                    ([obj, index]) => `${obj} != NULL ? tsc_buffer_get(${obj}, ${index}) : ${this.zeroValue(T_NUMBER)}`,
-                );
-            }
-            return { c: `tsc_buffer_get(${recv.c}, ${idx.c})`, ty: T_NUMBER };
+            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: recv, target: T_VALUE, node: ea.expression },
+                { value: key, target: T_VALUE, node: ea.argumentExpression },
+            ], ([owner, property]) => isOpt
+                ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : tsc_value_get_computed_prop(${owner}, ${property})`
+                : `tsc_value_get_computed_prop(${owner}, ${property})`);
         }
         if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);

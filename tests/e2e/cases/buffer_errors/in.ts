@@ -31,7 +31,7 @@ function badFromEncoding(): string {
     try {
         return Buffer.from("data", badEncoding).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof TypeError);
     }
 }
 
@@ -55,7 +55,7 @@ function badToString(): string {
     try {
         return one.toString(badEncoding);
     } catch (err) {
-        return String(err);
+        return String(err instanceof TypeError);
     }
 }
 
@@ -71,7 +71,7 @@ function badRead8(): string {
     try {
         return String(one.readUInt8(1));
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -79,7 +79,7 @@ function badWrite8(): string {
     try {
         return String(one.writeInt8(1, 1));
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -87,7 +87,7 @@ function badReadWide(): string {
     try {
         return String(two.readUInt16LE(1));
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -95,7 +95,7 @@ function badSwap(): string {
     try {
         return three.swap16().toString("hex");
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 

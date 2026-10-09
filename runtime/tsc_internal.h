@@ -270,6 +270,7 @@ struct tsc_object {
     bool is_regexp_string_iterator;
     bool is_module_namespace;
     bool is_typed_array;
+    bool is_buffer;
     bool is_url;
     bool is_url_search_params;
     bool is_array_buffer;
@@ -679,13 +680,6 @@ tsc_buffer_t* buffer_from_base64(const tsc_str_t* input);
 tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len);
 double buffer_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
 double buffer_last_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
-size_t buffer_checked_offset(const tsc_buffer_t* b, double offset, size_t width, const char* label);
-uint32_t uint_from_double(double value);
-uint64_t uint64_from_double(double value);
-double double_from_float_bits(uint32_t bits);
-uint32_t float_bits_from_double(double value);
-double double_from_bits(uint64_t bits);
-uint64_t double_bits_from_double(double value);
 void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len);
 double child_now_millis(void);
 void child_apply_env(const tsc_array_t* env);
@@ -818,5 +812,7 @@ bool tsc_re_match_at(
     size_t* match_start,
     size_t* match_end
 );
+
+bool tsc_buffer_integer_index(const tsc_object_t* object, const tsc_str_t* key, size_t* index, bool* valid);
 
 #endif

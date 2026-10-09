@@ -521,6 +521,8 @@ _Noreturn void tsc_throw_error(tsc_error_kind_t kind, tsc_str_t* message);
 typedef struct tsc_buffer {
     size_t len;
     uint8_t* data;
+    struct tsc_object* object;
+    uint8_t* data_owner;
 } tsc_buffer_t;
 typedef struct tsc_array_buffer {
     size_t byte_length;
@@ -542,6 +544,7 @@ tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v);
 double tsc_data_view_byte_offset(const tsc_data_view_t* v);
 double tsc_data_view_byte_length(const tsc_data_view_t* v);
 tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encoding);
+tsc_buffer_t* tsc_buffer_from_value(tsc_value_t input, tsc_value_t encoding);
 tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* from_enc, const tsc_str_t* to_enc);
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);
 tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input);
@@ -570,6 +573,10 @@ double tsc_buffer_compare_ranges(const tsc_buffer_t* source, const tsc_buffer_t*
 double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding);
 bool tsc_buffer_is_encoding(const tsc_str_t* encoding);
 double tsc_buffer_length(const tsc_buffer_t* b);
+typedef enum { TSC_BUFFER_UNSIGNED, TSC_BUFFER_SIGNED, TSC_BUFFER_FLOAT } tsc_buffer_number_kind_t;
+double tsc_buffer_read_number(const tsc_buffer_t* b, double offset, size_t width, tsc_buffer_number_kind_t kind, bool little_endian);
+double tsc_buffer_write_number(tsc_buffer_t* b, double value, double offset, size_t width, tsc_buffer_number_kind_t kind, bool little_endian);
+tsc_value_t tsc_buffer_prototype_value(void);
 double tsc_buffer_get(const tsc_buffer_t* b, double idx);
 double tsc_buffer_read_uint8(const tsc_buffer_t* b, double offset);
 double tsc_buffer_write_uint8(tsc_buffer_t* b, double value, double offset);

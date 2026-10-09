@@ -71,6 +71,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_regexp_string_iterator = false;
     o->is_module_namespace = false;
     o->is_typed_array = false;
+    o->is_buffer = false;
     o->is_url = false;
     o->is_url_search_params = false;
     o->is_array_buffer = false;
@@ -1212,6 +1213,17 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
     (void)value_gc_root;
     void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
     (void)receiver_gc_root;
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid) && receiver == tsc_value_object(o)) {
+        // IntegerIndexedElementSet converts before checking validity.
+        tsc_buffer_t* volatile buffer = o->class_ptr;
+        void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
+        double number = tsc_value_to_number(value);
+        if (byte_valid) buffer->data[byte_index] = byte_from_double(number);
+        return true;
+    }
+
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
@@ -1283,6 +1295,16 @@ bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
 bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     void* volatile value_gc_root = tsc_value_gc_root(value);
     (void)value_gc_root;
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) {
+        if (!byte_valid || (has_writable && !writable) || (has_enumerable && !enumerable) || (has_configurable && !configurable)) return false;
+        tsc_buffer_t* volatile buffer = o->class_ptr;
+        void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
+        if (has_value) buffer->data[byte_index] = byte_from_double(tsc_value_to_number(value));
+        return true;
+    }
+
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
@@ -1397,6 +1419,9 @@ bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool 
 }
 
 bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return false;
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
@@ -1550,7 +1575,24 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
 }
 
 
+/* CanonicalNumericIndexString is shared by Buffer's integer-indexed
+ * object hooks. Noncanonical strings and Symbols remain ordinary properties. */
+bool tsc_buffer_integer_index(const tsc_object_t* object, const tsc_str_t* key, size_t* index, bool* valid) {
+    if (!object || !object->is_buffer || tsc_property_key_symbol(key)) return false;
+    if (str_lit_eq(key, "-0")) { *valid = false; return true; }
+    double numeric = tsc_value_to_number(tsc_value_string((tsc_str_t*)key));
+    if (!tsc_str_eq(key, tsc_str_from_num(numeric))) return false;
+    const tsc_buffer_t* buffer = object->class_ptr;
+    *valid = isfinite(numeric) && numeric >= 0 && floor(numeric) == numeric && numeric < (double)buffer->len;
+    if (*valid) *index = (size_t)numeric;
+    return true;
+}
+
 tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key, tsc_value_t receiver) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid))
+        return byte_valid ? tsc_value_num(((const tsc_buffer_t*)o->class_ptr)->data[byte_index]) : tsc_value_undefined();
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("get", 3));
@@ -1624,6 +1666,9 @@ tsc_value_t tsc_object_get(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
@@ -1653,6 +1698,9 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* key) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("getOwnPropertyDescriptor", 24));
@@ -1680,6 +1728,9 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
 
 
 bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'has' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("has", 3));
@@ -1760,6 +1811,9 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
+    size_t byte_index = 0; bool byte_valid;
+    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return !byte_valid;
+
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'deleteProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("deleteProperty", 14));
@@ -1944,6 +1998,7 @@ bool tsc_object_seal(tsc_object_t* o) {
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_seal(o->proxy_target);
         return tsc_object_set_proxy_integrity(o, false);
     }
+    if (o->is_buffer) return tsc_object_set_proxy_integrity(o, false);
     o->extensible = false;
     for (size_t i = 0; i < o->len; i++) {
         o->props[i].configurable = false;
@@ -1953,6 +2008,7 @@ bool tsc_object_seal(tsc_object_t* o) {
 }
 
 bool tsc_object_freeze(tsc_object_t* o) {
+    if (o && o->is_buffer) return tsc_object_set_proxy_integrity(o, true);
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'freeze' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, true)) return tsc_value_freeze(o->proxy_target);
@@ -1972,6 +2028,7 @@ bool tsc_object_freeze(tsc_object_t* o) {
 }
 
 bool tsc_object_is_sealed(const tsc_object_t* o) {
+    if (o && o->is_buffer) return tsc_object_test_proxy_integrity((tsc_object_t*)o, false);
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'isSealed' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_sealed(o->proxy_target);
@@ -1985,6 +2042,7 @@ bool tsc_object_is_sealed(const tsc_object_t* o) {
 }
 
 bool tsc_object_is_frozen(const tsc_object_t* o) {
+    if (o && o->is_buffer) return tsc_object_test_proxy_integrity((tsc_object_t*)o, true);
     if (o && o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'isFrozen' on a proxy that has been revoked"));
         if (proxy_has_no_integrity_traps(o, false)) return tsc_value_is_frozen(o->proxy_target);
@@ -2176,6 +2234,13 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
         return enumerable;
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
+    if (o->is_buffer) {
+        const tsc_buffer_t* buffer = o->class_ptr;
+        for (size_t index = 0; index < buffer->len; ++index) {
+            tsc_str_t* key = tsc_str_from_num((double)index);
+            tsc_array_push_raw(a, &key);
+        }
+    }
     for (size_t i = 0; i < o->len; i++) {
         tsc_str_t* key = o->props[i].key;
         if (tsc_property_key_symbol(key)) continue;
@@ -2200,6 +2265,13 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
         return proxy_own_keys_result_to_list(o, res);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
+    if (o->is_buffer) {
+        const tsc_buffer_t* buffer = o->class_ptr;
+        for (size_t index = 0; index < buffer->len; ++index) {
+            tsc_str_t* key = tsc_str_from_num((double)index);
+            tsc_array_push_raw(a, &key);
+        }
+    }
     /* Ordinary [[OwnPropertyKeys]] orders String keys before Symbol keys;
      * each partition retains the object's canonical insertion order. */
     for (size_t i = 0; i < o->len; i++) {

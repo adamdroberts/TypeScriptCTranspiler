@@ -16,10 +16,10 @@ console.log(
 console.log("toString undef:", Buffer.from("hé").toString(undefined, mark("toString-undefined")));
 
 const filled = Buffer.alloc(4);
-filled.fill(65, 1, 3, mark("fill"));
+filled.fill(65, 1, 3, undefined, mark("fill"));
 console.log("fill:", filled.toString("hex"));
 const defaultFilled = Buffer.alloc(3);
-defaultFilled.fill(66, undefined, undefined, mark("fill-undefined"));
+defaultFilled.fill(66, undefined, undefined, undefined, mark("fill-undefined"));
 console.log("fill undef:", defaultFilled.toString());
 
 const written = Buffer.alloc(4);
