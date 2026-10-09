@@ -62,6 +62,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->proxy_revoked = false;
     o->is_promise = false;
     o->generator = NULL;
+    o->async_from_sync_iterator = NULL;
     o->is_date = false;
     o->is_regexp = false;
     o->is_map = false;

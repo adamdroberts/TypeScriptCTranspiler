@@ -402,7 +402,7 @@ export function planAsyncControlFlowGraph(
             // FunctionType/ConstructorType nodes are erased annotations;
             // they do not create closures or require runtime environments.
             if (ts.isTypeNode(current)) return;
-            if (current !== node && ts.isFunctionLike(current)) {
+            if (ts.isFunctionLike(current)) {
                 if (options.isSupportedNestedFunction?.(current)) return;
                 found = true;
                 return;

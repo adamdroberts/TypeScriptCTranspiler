@@ -29819,8 +29819,7 @@ class Emitter {
             this.structDecls.line(`tsc_sync_iterator_t iterator_${slot};`);
         }
         for (let slot = 0; slot < graph.asyncIteratorCount; slot++) {
-            this.structDecls.line(`tsc_value_t async_iterator_${slot};`);
-            this.structDecls.line(`void* async_iterator_${slot}_gc_root;`);
+            this.structDecls.line(`tsc_iterator_record_t async_iterator_${slot};`);
         }
         this.structDecls.line("bool awaiting;");
         for (const field of fields) this.emitAsyncAwaitContinuationParamField(field);
@@ -30018,9 +30017,11 @@ class Emitter {
             const emitPromiseSuspension = (
                 source: () => string,
                 exceptionTargetId: number | null,
+                options: { optional?: boolean; preserveRejection?: boolean } = {},
             ): void => {
                 callback.open("if (!state->awaiting)");
                 callback.line(`state->receiver = ${source()};`);
+                if (options.optional) callback.open("if (state->receiver)");
                 callback.line("state->awaiting = true;");
                 callback.line("tsc_try_pop();");
                 callback.open("if (tsc_promise_is_pending(state->receiver))");
@@ -30030,20 +30031,27 @@ class Emitter {
                 callback.line(`tsc_queue_microtask(${name}, state);`);
                 callback.close();
                 callback.line("return;");
+                if (options.optional) callback.close();
                 callback.close();
-                callback.open("if (tsc_promise_is_rejected(state->receiver))");
-                if (exceptionTargetId !== null) {
-                    emitExceptionTransition("tsc_promise_reason(state->receiver)", exceptionTargetId);
-                } else {
-                    callback.line("tsc_try_pop();");
-                    callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(state->receiver));");
-                    callback.line("return;");
+                if (options.optional) callback.open("if (state->receiver)");
+                if (!options.preserveRejection) {
+                    callback.open("if (tsc_promise_is_rejected(state->receiver))");
+                    if (exceptionTargetId !== null) {
+                        emitExceptionTransition("tsc_promise_reason(state->receiver)", exceptionTargetId);
+                    } else {
+                        callback.line("tsc_try_pop();");
+                        callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(state->receiver));");
+                        callback.line("return;");
+                    }
+                    callback.close();
                 }
-                callback.close();
-                callback.open("if (!tsc_promise_is_fulfilled(state->receiver))");
+                callback.open(options.preserveRejection
+                    ? "if (!tsc_promise_is_fulfilled(state->receiver) && !tsc_promise_is_rejected(state->receiver))"
+                    : "if (!tsc_promise_is_fulfilled(state->receiver))");
                 callback.line("tsc_try_pop();");
                 callback.line("return;");
                 callback.close();
+                if (options.optional) callback.close();
             };
             const awaitFulfilledValue = (sourceType: CType): EmitResult =>
                 this.promiseFulfilledValue(
@@ -30660,8 +30668,7 @@ class Emitter {
                             c: `state->expression_result_${stateNode.sourceResultSlot}`,
                             ty: expressionResultTypes[stateNode.sourceResultSlot]!,
                         };
-                    callback.line(`state->async_iterator_${stateNode.slot} = tsc_async_iterator_get(${this.coerce(source, T_VALUE, stateNode.statement.expression)});`);
-                    callback.line(`state->async_iterator_${stateNode.slot}_gc_root = tsc_value_gc_root(state->async_iterator_${stateNode.slot});`);
+                    callback.line(`state->async_iterator_${stateNode.slot} = tsc_async_iterator_open(${this.coerce(source, T_VALUE, stateNode.statement.expression)});`);
                     if (stateNode.sourceResultSlot !== null) {
                         const storageType = expressionResultTypes[stateNode.sourceResultSlot]!;
                         callback.line(`state->expression_result_${stateNode.sourceResultSlot} = ${this.zeroValue(storageType)};`);
@@ -30671,29 +30678,19 @@ class Emitter {
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "async-iterator-next") {
-                    const iterator = `state->async_iterator_${stateNode.slot}`;
+                    const iterator = `&state->async_iterator_${stateNode.slot}`;
                     emitPromiseSuspension(
-                        () => `tsc_async_iterator_next(${iterator})`,
+                        () => `tsc_promise_await(tsc_async_iterator_next(${iterator}))`,
                         stateNode.exceptionTarget?.target.id ?? null,
                     );
                     const step = this.freshTemp("_async_cfg_iterator_step");
                     callback.line(`tsc_value_t ${step} = tsc_promise_value(state->receiver);`);
-                    callback.open(`if (!tsc_value_is_object(${step}))`);
-                    const invalidNext = "tsc_value_string(tsc_str_from_cstr(\"async iterator next result is not an object\"))";
-                    if (stateNode.exceptionTarget) {
-                        emitExceptionTransition(invalidNext, stateNode.exceptionTarget.target.id);
-                    } else {
-                        callback.line("tsc_try_pop();");
-                        callback.line(`tsc_promise_reject_in_place(_ret, ${invalidNext});`);
-                        callback.line("return;");
-                    }
-                    callback.close();
+                    callback.line(`if (!tsc_value_is_object(${step})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async iterator next result is not an object"));`);
                     callback.line("state->awaiting = false;");
                     const done = this.freshTemp("_async_cfg_iterator_done");
                     callback.line(`bool ${done} = tsc_value_is_truthy(tsc_value_get_prop(${step}, tsc_str_from_lit("done", 4)));`);
                     callback.open(`if (${done})`);
-                    callback.line(`state->async_iterator_${stateNode.slot} = tsc_value_undefined();`);
-                    callback.line(`state->async_iterator_${stateNode.slot}_gc_root = NULL;`);
+                    callback.line(`state->async_iterator_${stateNode.slot} = (tsc_iterator_record_t){ .done = true };`);
                     emitTransition(stateNode.done.id);
                     callback.close();
                     const item = this.freshTemp("_async_cfg_iterator_value");
@@ -30702,45 +30699,20 @@ class Emitter {
                         (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
                         emitFreshCfgBindingCells(stateNode.binding);
                     }
-                    if (stateNode.bindingValueSlot === null) {
-                        emitCfgBinding(
-                            stateNode.binding,
-                            { c: item, ty: T_VALUE },
-                            "async iterator",
-                            stateNode.assignmentTargets,
-                            new Map(),
-                            ts.isVariableDeclarationList(stateNode.statement.initializer) &&
-                                (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0,
-                        );
-                    } else {
-                        emitBindingValueAssignment(
-                            stateNode.bindingValueSlot,
-                            { c: item, ty: T_VALUE },
-                            stateNode.binding,
-                        );
-                    }
+                    if (stateNode.bindingValueSlot === null) return false;
+                    emitBindingValueAssignment(stateNode.bindingValueSlot, { c: item, ty: T_VALUE }, stateNode.binding);
                     emitTransition(stateNode.body.id);
                 } else if (stateNode.kind === "async-iterator-close") {
-                    const iterator = `state->async_iterator_${stateNode.slot}`;
+                    const iterator = `&state->async_iterator_${stateNode.slot}`;
                     emitPromiseSuspension(
-                        () => `tsc_async_iterator_return(${iterator})`,
+                        () => `tsc_async_iterator_close(${iterator}, ${stateNode.completion === "throw" ? "true" : "false"})`,
                         stateNode.exceptionTarget?.target.id ?? null,
+                        { optional: true, preserveRejection: stateNode.completion === "throw" },
                     );
-                    const closeResult = this.freshTemp("_async_cfg_iterator_close_result");
-                    callback.line(`tsc_value_t ${closeResult} = tsc_promise_value(state->receiver);`);
-                    callback.open(`if (!tsc_value_is_object(${closeResult}))`);
-                    const invalidReturn = "tsc_value_string(tsc_str_from_cstr(\"async iterator return result is not an object\"))";
-                    if (stateNode.exceptionTarget) {
-                        emitExceptionTransition(invalidReturn, stateNode.exceptionTarget.target.id);
-                    } else {
-                        callback.line("tsc_try_pop();");
-                        callback.line(finish("throw", invalidReturn));
-                        callback.line("return;");
-                    }
-                    callback.close();
+                    if (stateNode.completion !== "throw")
+                        callback.line('if (state->receiver && !tsc_value_is_object(tsc_promise_value(state->receiver))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async iterator return result is not an object"));');
                     callback.line("state->awaiting = false;");
-                    callback.line(`state->async_iterator_${stateNode.slot} = tsc_value_undefined();`);
-                    callback.line(`state->async_iterator_${stateNode.slot}_gc_root = NULL;`);
+                    callback.line(`state->async_iterator_${stateNode.slot} = (tsc_iterator_record_t){ .done = true };`);
                     if (stateNode.next) {
                         emitTransition(stateNode.next.id);
                     } else if (stateNode.completion === "return") {
@@ -31312,8 +31284,7 @@ class Emitter {
             buf.line(`${env}->iterator_${slot} = (tsc_sync_iterator_t){ .done = true };`);
         }
         for (let slot = 0; slot < graph.asyncIteratorCount; slot++) {
-            buf.line(`${env}->async_iterator_${slot} = tsc_value_undefined();`);
-            buf.line(`${env}->async_iterator_${slot}_gc_root = NULL;`);
+            buf.line(`${env}->async_iterator_${slot} = (tsc_iterator_record_t){ .done = true };`);
         }
         buf.line(`${env}->awaiting = false;`);
         for (const param of params) {

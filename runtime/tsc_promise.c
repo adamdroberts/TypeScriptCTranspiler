@@ -636,207 +636,177 @@ tsc_promise_t* tsc_promise_all(tsc_value_t iterable) {
     return tsc_value_as_promise(result);
 }
 
-typedef struct {
-    tsc_value_t iterator;
-} tsc_async_from_sync_iterator_t;
-
+/* Async and sync protocols retain the same captured Iterator Record. A
+ * wrapper owns the original record; protocol methods use the actual receiver. */
 typedef struct {
     tsc_promise_t* source;
     tsc_promise_t* result;
+    tsc_iterator_record_t* iterator;
     bool done;
+    bool close_on_rejection;
 } tsc_async_from_sync_result_env_t;
 
 static tsc_value_t async_from_sync_result_object(tsc_value_t value, bool done) {
+    void* volatile value_root = tsc_value_gc_root(value);
     tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
     tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    (void)value_root;
     return tsc_value_object(result);
 }
 
-static void async_from_sync_result_callback(void* env) {
-    tsc_async_from_sync_result_env_t* state = (tsc_async_from_sync_result_env_t*)env;
-    if (!state || !state->source || !state->result) return;
-    if (tsc_promise_is_rejected(state->source)) {
-        tsc_promise_reject_in_place(state->result, tsc_promise_reason(state->source));
-        return;
-    }
-    if (!tsc_promise_is_fulfilled(state->source)) return;
-    tsc_promise_fulfill_in_place(
-        state->result,
-        async_from_sync_result_object(tsc_promise_value(state->source), state->done)
-    );
+/* IteratorClose itself does not consult or update [[Done]]. The shared sync
+ * consumer helper does, so adapt a record view without completing the wrapper. */
+static tsc_value_t async_from_sync_close_with_error(tsc_iterator_record_t* iterator, tsc_value_t error) {
+    tsc_iterator_record_t closing = *iterator;
+    closing.done = false;
+    return tsc_sync_iterator_close_with_error(&closing, error);
 }
 
-static tsc_value_t async_from_sync_result_promise(tsc_value_t result) {
+static void async_from_sync_result_callback(void* env) {
+    tsc_async_from_sync_result_env_t* state = env;
+    if (tsc_promise_is_rejected(state->source)) {
+        tsc_value_t error = tsc_promise_reason(state->source);
+        if (!state->done && state->close_on_rejection)
+            error = async_from_sync_close_with_error(state->iterator, error);
+        tsc_promise_reject_in_place(state->result, error);
+    } else if (tsc_promise_is_fulfilled(state->source)) {
+        tsc_promise_resolve_into(state->result,
+            async_from_sync_result_object(tsc_promise_value(state->source), state->done));
+    }
+}
+
+static void async_from_sync_continue(tsc_value_t result, tsc_promise_t* output,
+        tsc_iterator_record_t* iterator, bool close_on_rejection) {
+    if (!tsc_value_is_object(result))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Sync iterator result is not an object"));
+    void* volatile result_root = tsc_value_gc_root(result);
+    bool done = tsc_value_is_truthy(tsc_value_get_prop(result, tsc_str_from_lit("done", 4)));
+    tsc_value_t value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
+    void* volatile value_root = tsc_value_gc_root(value);
+    tsc_async_from_sync_result_env_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (tsc_async_from_sync_result_env_t){ .result = output, .iterator = iterator,
+        .done = done, .close_on_rejection = close_on_rejection };
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        if (!done && close_on_rejection) error = async_from_sync_close_with_error(iterator, error);
+        tsc_throw_value(error);
+    }
+    state->source = tsc_promise_await(value);
+    tsc_try_pop();
+    if (tsc_promise_is_pending(state->source))
+        tsc_promise_add_callback(state->source, async_from_sync_result_callback, state);
+    else tsc_queue_microtask(async_from_sync_result_callback, state);
+    (void)result_root; (void)value_root;
+}
+
+static tsc_value_t async_from_sync_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    const tsc_completion_kind_t kind = *(const tsc_completion_kind_t*)env;
     tsc_promise_t* output = tsc_promise_pending();
-    if (!tsc_value_is_object(result)) {
-        tsc_promise_reject_in_place(
-            output,
-            tsc_value_string(tsc_str_from_lit("sync iterator result is not an object", 37))
-        );
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        tsc_promise_reject_in_place(output, error);
         return tsc_value_promise(output);
     }
-    tsc_value_t done = tsc_value_get_prop(result, tsc_str_from_lit("done", 4));
-    tsc_value_t value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
-    tsc_promise_t* value_promise = tsc_promise_await(value);
-    tsc_async_from_sync_result_env_t* env =
-        (tsc_async_from_sync_result_env_t*)TSC_GC_MALLOC(sizeof(tsc_async_from_sync_result_env_t));
-    env->source = value_promise;
-    env->result = output;
-    env->done = tsc_value_is_truthy(done);
-    if (tsc_promise_is_pending(value_promise)) {
-        tsc_promise_add_callback(value_promise, async_from_sync_result_callback, env);
-    } else {
-        tsc_queue_microtask(async_from_sync_result_callback, env);
+    tsc_object_t* object = value_is_object_value(receiver) ? value_ptr(receiver) : NULL;
+    tsc_iterator_record_t* iterator = object ? object->async_from_sync_iterator : NULL;
+    if (!iterator)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async-from-sync iterator method called on incompatible receiver"));
+    tsc_value_t method = iterator->next_method;
+    if (kind != TSC_COMPLETION_NORMAL) {
+        method = tsc_value_get_prop(iterator->iterator,
+            tsc_str_from_cstr(kind == TSC_COMPLETION_RETURN ? "return" : "throw"));
+        if (tsc_value_is_nullish(method)) {
+            if (kind == TSC_COMPLETION_RETURN) {
+                tsc_promise_resolve_into(output, async_from_sync_result_object(promise_argument(args, 0), true));
+                tsc_try_pop();
+                return tsc_value_promise(output);
+            }
+            tsc_iterator_record_t closing = *iterator;
+            closing.done = false;
+            tsc_sync_iterator_close(&closing);
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Sync iterator has no throw method"));
+        }
+        if (!tsc_value_is_callable(method))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Sync iterator method is not callable"));
     }
+    void* volatile method_root = tsc_value_gc_root(method);
+    tsc_array_t* actual = tsc_array_new(sizeof(tsc_value_t), args && args->len ? 1 : 0);
+    if (args && args->len) tsc_array_push_value(actual, promise_argument(args, 0));
+    tsc_value_t result = tsc_value_apply_function(method, iterator->iterator, tsc_value_array(actual));
+    async_from_sync_continue(result, output, iterator, kind != TSC_COMPLETION_RETURN);
+    tsc_try_pop();
+    (void)method_root;
     return tsc_value_promise(output);
 }
 
-static tsc_value_t async_from_sync_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
-    tsc_value_t next = tsc_value_get_prop(state->iterator, tsc_str_from_lit("next", 4));
-    if (!tsc_value_is_callable(next)) {
-        tsc_throw_str(tsc_str_from_lit("sync iterator next is not callable", 34));
+static const char async_from_sync_prototype_key = 0;
+static tsc_value_t async_from_sync_iterator_wrap(tsc_iterator_record_t original) {
+    tsc_iterator_record_t* record = TSC_GC_MALLOC(sizeof(*record));
+    *record = original;
+    tsc_object_t* prototype = tsc_realm_state_get(&async_from_sync_prototype_key);
+    if (!prototype) {
+        prototype = tsc_object_new_with_prototype(tsc_async_iterator_prototype_value());
+        tsc_realm_state_set(&async_from_sync_prototype_key, prototype);
+        static const struct { const char* name; tsc_completion_kind_t kind; } methods[] = {
+            { "next", TSC_COMPLETION_NORMAL }, { "return", TSC_COMPLETION_RETURN }, { "throw", TSC_COMPLETION_THROW }
+        };
+        for (size_t index = 0; index < sizeof(methods) / sizeof(*methods); ++index) {
+            tsc_str_t* name = tsc_str_from_cstr(methods[index].name);
+            tsc_object_define(prototype, name, tsc_value_function_builtin_named(async_from_sync_apply,
+                (void*)&methods[index].kind, 1, name), true, false, true);
+        }
     }
-    return async_from_sync_result_promise(
-        tsc_value_apply_function(next, state->iterator, tsc_value_array(args))
-    );
-}
-
-static tsc_value_t async_from_sync_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
-    tsc_value_t close = tsc_value_get_prop(state->iterator, tsc_str_from_lit("return", 6));
-    if (!tsc_value_is_callable(close)) {
-        tsc_value_t value = args && args->len > 0
-            ? TSC_ARR(tsc_value_t, args, 0)
-            : tsc_value_undefined();
-        return tsc_value_promise(tsc_promise_resolve(async_from_sync_result_object(value, true)));
-    }
-    return async_from_sync_result_promise(
-        tsc_value_apply_function(close, state->iterator, tsc_value_array(args))
-    );
-}
-
-static tsc_value_t async_from_sync_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
-    tsc_value_t throw_method = tsc_value_get_prop(state->iterator, tsc_str_from_lit("throw", 5));
-    if (!tsc_value_is_callable(throw_method)) {
-        tsc_throw_str(tsc_str_from_lit("sync iterator throw is not callable", 35));
-    }
-    return async_from_sync_result_promise(
-        tsc_value_apply_function(throw_method, state->iterator, tsc_value_array(args))
-    );
-}
-
-static tsc_value_t async_from_sync_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    return this_arg;
-}
-
-static tsc_value_t async_from_sync_iterator_wrap(tsc_value_t iterator) {
-    tsc_async_from_sync_iterator_t* state =
-        (tsc_async_from_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_async_from_sync_iterator_t));
-    state->iterator = iterator;
-    tsc_object_t* wrapper = tsc_object_new();
-    tsc_object_set(
-        wrapper,
-        tsc_str_from_lit("next", 4),
-        tsc_value_function_builtin_named(async_from_sync_next, state, 1.0, tsc_str_from_lit("next", 4))
-    );
-    tsc_object_set(
-        wrapper,
-        tsc_str_from_lit("return", 6),
-        tsc_value_function_builtin_named(async_from_sync_return, state, 1.0, tsc_str_from_lit("return", 6))
-    );
-    tsc_object_set(
-        wrapper,
-        tsc_str_from_lit("throw", 5),
-        tsc_value_function_builtin_named(async_from_sync_throw, state, 1.0, tsc_str_from_lit("throw", 5))
-    );
-    tsc_object_set(
-        wrapper,
-        tsc_symbol_property_key(tsc_symbol_async_iterator()),
-        tsc_value_function_builtin_named(
-            async_from_sync_async_iterator,
-            state,
-            0.0,
-            tsc_str_from_lit("[Symbol.asyncIterator]", 22)
-        )
-    );
+    tsc_object_t* wrapper = tsc_object_new_with_prototype(tsc_value_object(prototype));
+    wrapper->async_from_sync_iterator = record;
     return tsc_value_object(wrapper);
 }
 
-tsc_value_t tsc_async_iterator_get(tsc_value_t value) {
+tsc_iterator_record_t tsc_async_iterator_open(tsc_value_t value) {
+    void* volatile value_root = tsc_value_gc_root(value);
     tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_iterator());
-    if (!tsc_value_is_undefined(method) && !tsc_value_is_nullish(method)) {
-        if (!tsc_value_is_callable(method)) {
-            tsc_throw_str(tsc_str_from_lit("async iterator method is not callable", 37));
-        }
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-        tsc_value_t iterator = tsc_value_apply_function(method, value, tsc_value_array(args));
-        if (!tsc_value_is_object(iterator)) {
-            tsc_throw_str(tsc_str_from_lit("async iterator method must return an object", 43));
-        }
-        return iterator;
-    }
-
-    tsc_value_t sync_method = tsc_value_get_symbol_prop(value, tsc_symbol_iterator());
-    tsc_value_t sync_iterator;
-    if (tsc_value_is_undefined(sync_method) && value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_STRING) {
-        sync_iterator = tsc_value_symbol_iterator(value);
-    } else {
-        if (!tsc_value_is_callable(sync_method)) {
-            if (tsc_value_is_callable(tsc_value_get_prop(value, tsc_str_from_lit("next", 4)))) {
-                return value;
-            }
-            tsc_throw_str(tsc_str_from_lit("value is not async iterable", 27));
-        }
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-        sync_iterator = tsc_value_apply_function(sync_method, value, tsc_value_array(args));
-    }
-    if (!tsc_value_is_object(sync_iterator)) {
-        tsc_throw_str(tsc_str_from_lit("sync iterator method must return an object", 42));
-    }
-    return async_from_sync_iterator_wrap(sync_iterator);
+    if (!tsc_value_is_nullish(method)) return tsc_sync_iterator_open_with_method(value, method);
+    tsc_iterator_record_t sync = tsc_sync_iterator_open(value);
+    tsc_value_t wrapper = async_from_sync_iterator_wrap(sync);
+    tsc_iterator_record_t record = tsc_sync_iterator_open_direct(wrapper);
+    record.source = value;
+    record.source_gc_root = value_root;
+    return record;
 }
 
-tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        tsc_value_t next = tsc_value_get_prop(iterator, tsc_str_from_lit("next", 4));
-        if (!tsc_value_is_callable(next)) {
-            tsc_throw_str(tsc_str_from_lit("async iterator next is not callable", 35));
-        }
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-        tsc_value_t result = tsc_value_apply_function(next, iterator, tsc_value_array(args));
-        tsc_try_pop();
-        return tsc_promise_await(result);
-    }
-    tsc_try_pop();
-    return tsc_promise_reject(tsc_current_error_value());
+tsc_value_t tsc_async_iterator_next(tsc_iterator_record_t* iterator) {
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+    return tsc_value_apply_function(iterator->next_method, iterator->iterator, tsc_value_array(args));
 }
 
-tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        tsc_value_t close = tsc_value_get_prop(iterator, tsc_str_from_lit("return", 6));
-        if (!tsc_value_is_callable(close)) {
-            tsc_try_pop();
-            return tsc_promise_resolve(tsc_value_object(tsc_object_new()));
-        }
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-        tsc_value_t result = tsc_value_apply_function(close, iterator, tsc_value_array(args));
+tsc_promise_t* tsc_async_iterator_close(tsc_iterator_record_t* iterator, bool preserve_throw) {
+    if (iterator->done) return NULL;
+    iterator->done = true;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
         tsc_try_pop();
-        return tsc_promise_await(result);
+        if (preserve_throw) return NULL;
+        tsc_throw_value(error);
     }
+    tsc_value_t method = tsc_value_get_prop(iterator->iterator, tsc_str_from_lit("return", 6));
+    if (tsc_value_is_nullish(method)) return NULL;
+    if (!tsc_value_is_callable(method))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async iterator return method is not callable"));
+    void* volatile method_root = tsc_value_gc_root(method);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+    tsc_value_t result = tsc_value_apply_function(method, iterator->iterator, tsc_value_array(args));
+    tsc_promise_t* awaited = tsc_promise_await(result);
     tsc_try_pop();
-    return tsc_promise_reject(tsc_current_error_value());
+    (void)method_root;
+    return awaited;
 }
 
 tsc_value_t tsc_value_promise(tsc_promise_t* p) {

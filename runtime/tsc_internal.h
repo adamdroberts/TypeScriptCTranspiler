@@ -263,6 +263,7 @@ struct tsc_object {
     bool proxy_revoked;
     bool is_promise;
     struct tsc_generator* generator;
+    tsc_iterator_record_t* async_from_sync_iterator;
     bool is_date;
     bool is_regexp;
     bool is_map;

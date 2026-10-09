@@ -7,7 +7,20 @@ static tsc_value_t iterator_self_apply(void* env, tsc_value_t this_arg, tsc_arra
 }
 
 static const char iterator_prototype_realm_state_key = 0;
+static const char async_iterator_prototype_realm_state_key = 0;
 static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t* args);
+
+tsc_value_t tsc_async_iterator_prototype_value(void) {
+    tsc_object_t* prototype = tsc_realm_state_get(&async_iterator_prototype_realm_state_key);
+    if (!prototype) {
+        prototype = tsc_object_new();
+        tsc_realm_state_set(&async_iterator_prototype_realm_state_key, prototype);
+        tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_async_iterator()),
+            tsc_value_function_builtin_named(iterator_self_apply, NULL, 0,
+                tsc_str_from_lit("[Symbol.asyncIterator]", 22)), true, false, true);
+    }
+    return tsc_value_object(prototype);
+}
 
 tsc_value_t tsc_iterator_prototype_value(void) {
     tsc_object_t* prototype = tsc_realm_state_get(&iterator_prototype_realm_state_key);

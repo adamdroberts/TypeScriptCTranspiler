@@ -1060,7 +1060,8 @@ typedef struct {
      * methods run after C has left the binding/body locals. */
     void* volatile completion_gc_root;
     bool done;
-} tsc_sync_iterator_t;
+} tsc_iterator_record_t;
+typedef tsc_iterator_record_t tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_sync_iterator_open_direct(tsc_value_t iterator);
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(tsc_value_t source, tsc_value_t method);
@@ -1130,9 +1131,12 @@ tsc_promise_t* tsc_promise_new_executor(tsc_array_t* arguments);
 tsc_value_t tsc_promise_constructor_value(void);
 tsc_value_t tsc_promise_prototype_value(void);
 tsc_promise_t* tsc_promise_set_value_codec(tsc_promise_t* promise, tsc_value_t (*box)(void*));
-tsc_value_t tsc_async_iterator_get(tsc_value_t value);
-tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator);
-tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator);
+tsc_value_t tsc_async_iterator_prototype_value(void);
+tsc_iterator_record_t tsc_async_iterator_open(tsc_value_t value);
+tsc_value_t tsc_async_iterator_next(tsc_iterator_record_t* iterator);
+/* NULL means no Await is required. Incoming throws retain precedence over
+ * GetMethod/Call/PromiseResolve failures and over later Await rejection. */
+tsc_promise_t* tsc_async_iterator_close(tsc_iterator_record_t* iterator, bool preserve_throw);
 tsc_promise_t* tsc_promise_all(tsc_value_t iterable);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
