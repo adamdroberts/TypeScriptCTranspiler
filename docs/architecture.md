@@ -112,7 +112,7 @@ Every user-defined module merges into one `main.c`. This keeps the flat symbol n
 
 ## Value representation (typed path)
 
-Today's emitter prefers specialized C types for each TS type and uses a NaN-boxed dynamic value only for `any` / `unknown` / heterogeneous unions. The `CType` model (in `src/emit/types.ts`) decides the C spelling based on TypeScript's inferred or annotated type:
+The typed emitter prefers specialized C types and uses a NaN-boxed dynamic value for `any` / `unknown` / heterogeneous unions. JavaScript variable declarations use the boxed representation regardless of checker inference: initializer results and mutable writes are runtime values. The shared declaration-storage selector feeds local/global storage, closure cells, namespace reads and continuation fields. A planned capture cell owns initialization's physical type, including on the typed path. Initializer-specific JavaScript function/object/array storage predecessors are deleted. The `CType` model (in `src/emit/types.ts`) otherwise decides the C spelling based on TypeScript's inferred or annotated type:
 
 | TS type | C type | Notes |
 |---------|--------|-------|

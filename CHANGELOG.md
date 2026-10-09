@@ -1,5 +1,7 @@
 # Changelog
 
+- Give JavaScript declarations, closure cells and continuation fields one boxed storage contract. Initialize typed captures using their planned cell type, remove initializer-specific JavaScript storage selection, and unblock the pinned Promise.try argument diagnostic. Verify cross-type writes and retained captures with forced collection in both memory modes.
+
 - Implement ordinary Promise.try through actual argument Lists and generic capabilities. Forward spread/rest arguments synchronously, preserve callback completion identity, and propagate capability callback failures. Share one rooted call-completion record with reaction jobs; remove the direct callback predecessor and update the variadic declaration.
 
 - Unify Promise executors, capabilities, resolving functions and reactions through actual argument Lists and rooted records. Add ordinary Realm-owned constructor/prototype and generic species/finally handling; remove fixed adapters and bound-method getters. Preserve repeated thenable jobs, actual Promise self-rejection, typed pointer codecs and boxed identity. Repair indexed-array GC roots and contextual declaration callback ABI.

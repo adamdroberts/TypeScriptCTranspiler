@@ -23405,8 +23405,10 @@ class Emitter {
             if (ts.isExportAssignment(decl)) {
                 return this.defaultExportAssignmentCType(decl);
             }
-            if (this.isUntypedJsLiteralVariableDeclaration(decl)) {
-                return T_VALUE;
+            if (ts.isVariableDeclaration(decl)) {
+                return this.variableDeclarationStorageType(
+                    decl, this.prepareType(mapType(decl, this.checker)),
+                );
             }
             if (
                 (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
@@ -24318,9 +24320,6 @@ class Emitter {
             const requireType = this.commonJsWholeModuleRequireInitializerType(decl.initializer);
             if (requireType) return this.variableStorageType(requireType);
         }
-        if (this.isUntypedJsLiteralVariableDeclaration(decl)) {
-            return T_VALUE;
-        }
         try {
             const base = this.prepareType(
                 mapTsType(
@@ -24351,14 +24350,16 @@ class Emitter {
 
     /**
      * Select one physical representation for a source variable independently
-     * of control-flow narrowing at any particular read. JavaScript permits a
-     * non-const binding initialized with a function to be reassigned to any
-     * value, so that write domain must use the canonical NaN-boxed storage.
+     * of control-flow narrowing at any particular read. JavaScript inference
+     * does not restrict an initializer's runtime result or a mutable binding's
+     * write domain. Declaration storage, capture cells, and continuation fields
+     * therefore use the same boxed representation for JavaScript bindings.
      */
     private variableDeclarationStorageType(
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
+        if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
         if (this.isForOfLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
             /* A direct CaseBlock class is a runtime constructor/object pair,
@@ -24366,19 +24367,6 @@ class Emitter {
              * Preserve that representation after the value escapes through
              * inference into another declaration. */
             return T_VALUE;
-        }
-        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) && declaration.initializer) {
-            const sourceFunction = this.javaScriptFunctionLikeForExpression(declaration.initializer);
-            if (sourceFunction) {
-                /* JavaScript syntax owns the call ABI.  The checker may infer
-                 * a narrower return type, but capture cells, local storage,
-                 * and the emitted closure must share one physical function
-                 * type.  Mutable bindings still use boxed value storage
-                 * because their write domain is not function-only. */
-                return (declaration.parent.flags & ts.NodeFlags.Const) === 0
-                    ? T_VALUE
-                    : this.javaScriptFunctionValueType(sourceFunction);
-            }
         }
         return this.variableStorageType(base);
     }
@@ -42698,24 +42686,11 @@ class Emitter {
             const requireType = d.initializer
                 ? this.commonJsWholeModuleRequireInitializerType(d.initializer)
                 : null;
-            const sourceJavaScriptFunction = d.initializer
-                ? this.javaScriptFunctionLikeForExpression(d.initializer)
-                : null;
-            const inferredCt = sourceJavaScriptFunction
-                ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
-                : requireType
+            const inferredCt = requireType
                 ? this.variableStorageType(requireType)
                 : d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
                 : this.decoratedClassConstructorAliasTarget(d)
-                ? T_VALUE
-                : d.initializer &&
-                    ts.isObjectLiteralExpression(d.initializer) &&
-                    this.isUntypedJsObjectLiteral(d.initializer)
-                ? T_VALUE
-                : d.initializer &&
-                    ts.isArrayLiteralExpression(d.initializer) &&
-                    this.isUntypedJsArrayLiteral(d.initializer)
                 ? T_VALUE
                 : this.variableStorageType(this.prepareType(mapType(d, this.checker)));
             const baseCt = this.variableDeclarationStorageType(d, inferredCt);
@@ -43506,7 +43481,9 @@ class Emitter {
             } else {
                 ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
             }
-            ct = this.variableDeclarationStorageType(d, ct);
+            // A planned cell owns the physical layout. Initializer inference
+            // must never allocate one C type and initialize it as another.
+            ct = cell?.type ?? this.variableDeclarationStorageType(d, ct);
             // Int-shape specialization: when the symbol is provably integer
             // and would otherwise be `double`, store as `int64_t`. Closures
             // (cell-allocated) keep the original double type — capture cells
