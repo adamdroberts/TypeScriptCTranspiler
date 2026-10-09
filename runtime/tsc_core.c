@@ -2215,6 +2215,10 @@ void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells) {
     g_call_activation_top->parameter_cells = parameter_cells;
 }
 
+tsc_value_t tsc_call_receiver(void) {
+    return g_call_activation_top ? g_call_activation_top->this_arg : tsc_value_undefined();
+}
+
 static tsc_value_t call_arguments_thrower(void* env, tsc_value_t receiver) {
     (void)env;
     (void)receiver;

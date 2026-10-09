@@ -679,6 +679,7 @@ void tsc_call_activation_push(
 );
 void tsc_call_activation_pop(tsc_call_activation_t* activation);
 void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
+tsc_value_t tsc_call_receiver(void);
 tsc_value_t tsc_call_arguments(void);
 tsc_value_t tsc_value_current_callee(void);
 tsc_value_t tsc_value_current_new_target(void);
@@ -863,6 +864,29 @@ bool tsc_global_annex_b_function_instantiation(tsc_str_t* key);
 tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value);
 void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
 tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value);
+/* Binding aliases retain the same scanned heap cells as closures and
+ * resumable states. Source scope projection never copies language values. */
+typedef struct {
+    tsc_str_t* name;
+    tsc_async_cell_ref_t cell;
+    bool lexical;
+    bool immutable;
+    bool outer;
+} tsc_environment_binding_ref_t;
+typedef struct {
+    tsc_environment_t* previous;
+    tsc_environment_t* record;
+} tsc_environment_scope_t;
+void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict);
+void tsc_environment_variable_enter(tsc_environment_scope_t* scope);
+tsc_value_t tsc_environment_eval_this(void);
+tsc_value_t tsc_environment_eval_new_target(void);
+void tsc_environment_require_function_context(void);
+void tsc_environment_scope_leave(tsc_environment_scope_t* scope);
+void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_binding_ref_t* reference);
+void tsc_environment_alias_variable(const tsc_environment_binding_ref_t* reference);
+void tsc_environment_alias_capture(const tsc_environment_binding_ref_t* reference);
+tsc_environment_t* tsc_environment_project(const tsc_environment_binding_ref_t* references, size_t length);
 tsc_value_t tsc_environment_reference_get(tsc_str_t* key);
 tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
 bool tsc_environment_reference_delete(tsc_str_t* key);

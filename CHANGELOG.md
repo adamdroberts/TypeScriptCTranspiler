@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Connect direct eval to retained caller binding cells and function variable records. Preserve mutation, TDZ, shadowing, deletion, parameter/body separation, escaped closures and resumable scopes; retain this/arguments/new.target and shared receiver boxing. Discover nested finite sources and per-call strictness through one worklist, remove the switch eligibility predecessor, and verify independent generated semantics and deep native ownership in both memory modes.
+
 - Retain finite eval lexical and strict variable bindings in one declarative Environment Record tree. Share declaration preflight, TDZ/mutation/deletion/global lookup and source callable/resumable context; isolate indirect eval and Function construction. Verify generated declaration/context partitions and one deep retained-parent graph through native E2E in both memory modes.
 
 - Cache tagged-template raw/cooked objects by source Parse Node, runtime parse unit and Realm. Share ordinary/resumable callable references and actual argument Lists, preserve UTF-16/invalid escapes/frozen descriptors and mutable String.raw lookup, and honor rejected strict property writes and deletion. Verify independent generated semantics, retained-owner stress and typed E2E in both memory modes.

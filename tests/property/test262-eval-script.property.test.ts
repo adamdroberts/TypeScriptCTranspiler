@@ -83,7 +83,7 @@ test("evalScript source discovery follows one transitive finite AST worklist", (
     expect(nonFiniteIndirect.error).toBeNull();
 });
 
-test("switch direct eval eligibility is proved from the complete source worklist", () => {
+test("direct eval source discovery retains lexical scope and per-call strictness", () => {
     const globalVarOnly = [
         "var switchEvalNumber = 1;",
         'var switchEvalString = "value";',
@@ -126,14 +126,24 @@ test("switch direct eval eligibility is proved from the complete source worklist
         `,
     }]);
     expect(lexicalDependency.error).toBeNull();
-    expect(lexicalDependency.directEvalSources).toEqual([]);
+    expect(lexicalDependency.directEvalSources).toEqual([{source:"var observed = lexical;",strictCaller:false,strict:false}]);
 
     const strictCaller = finiteEvalScriptSourceGraph([{
         path: "strict-switch-eval.js",
         source: `"use strict"; switch (0) { case (eval("var isolated = 1;"), 0): break; }`,
     }]);
     expect(strictCaller.error).toBeNull();
-    expect(strictCaller.directEvalSources).toEqual([]);
+    expect(strictCaller.directEvalSources).toEqual([{source:"var isolated = 1;",strictCaller:true,strict:true}]);
+    const nested=finiteEvalScriptSourceGraph([{path:"nested-eval.js",source:`
+        function sloppy(){eval("var ordinary = 1;");}
+        function strict(){"use strict";eval("var ordinary = 1;");}
+        for(let cell=0;cell<2;++cell){eval("cell;");}
+    `}]);
+    expect(nested.directEvalSources).toEqual([
+        {source:"cell;",strictCaller:false,strict:false},
+        {source:"var ordinary = 1;",strictCaller:false,strict:false},
+        {source:"var ordinary = 1;",strictCaller:true,strict:true},
+    ]);
 });
 
 test("finite AOT evalScript records parse and evaluate on every call", async () => {

@@ -10,6 +10,7 @@ typedef struct tsc_environment_binding {
     bool immutable;
     bool lexical;
     bool deletable;
+    tsc_async_cell_ref_t cell;
     struct tsc_environment_binding* next;
 } tsc_environment_binding_t;
 
@@ -17,6 +18,12 @@ struct tsc_environment {
     tsc_environment_t* parent;
     tsc_environment_binding_t* bindings;
     bool variable_scope;
+    tsc_environment_t* captured;
+    bool function_context;
+    tsc_value_t this_value;
+    void* this_root;
+    tsc_value_t new_target;
+    void* new_target_root;
 };
 
 static TSC_TLS tsc_environment_t* current_environment;
@@ -33,6 +40,12 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->parent = parent;
     environment->bindings = NULL;
     environment->variable_scope = variable_scope;
+    environment->captured = NULL;
+    environment->function_context = false;
+    environment->this_value = tsc_value_undefined();
+    environment->this_root = NULL;
+    environment->new_target = tsc_value_undefined();
+    environment->new_target_root = NULL;
     return environment;
 }
 
@@ -60,20 +73,111 @@ static tsc_environment_binding_t* environment_create_binding(tsc_environment_t* 
     binding->immutable = immutable;
     binding->lexical = lexical;
     binding->deletable = deletable;
+    binding->cell = (tsc_async_cell_ref_t){ &binding->value, &binding->value_root, &binding->initialized };
     binding->next = environment->bindings;
     environment->bindings = binding;
     return binding;
 }
 
 static void binding_store(tsc_environment_binding_t* binding, tsc_value_t value) {
-    binding->value = value;
-    binding->value_root = tsc_value_gc_root(value);
+    *(volatile tsc_value_t*)binding->cell.value_cell = value;
+    if (binding->cell.gc_root_cell) *binding->cell.gc_root_cell = tsc_value_gc_root(value);
 }
 
 static tsc_value_t binding_read(tsc_environment_binding_t* binding) {
-    if (!binding->initialized)
+    if (binding->cell.initialized_cell && !*binding->cell.initialized_cell)
         tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot access a binding before initialization"));
-    return binding->value;
+    return *(volatile tsc_value_t*)binding->cell.value_cell;
+}
+
+static tsc_environment_t* environment_variable_record(void) {
+    tsc_environment_t* variable = current_environment;
+    while (variable && !variable->variable_scope) variable = variable->parent;
+    return variable;
+}
+
+void tsc_environment_variable_enter(tsc_environment_scope_t* scope) {
+    scope->previous = current_environment;
+    tsc_environment_t* captured = tsc_environment_new(current_environment, false);
+    scope->record = tsc_environment_new(captured, true);
+    scope->record->captured = captured;
+    current_environment = scope->record;
+}
+
+void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict) {
+    tsc_environment_variable_enter(scope);
+    if (!arrow) {
+        scope->record->function_context = true;
+        tsc_value_t receiver = tsc_call_receiver();
+        scope->record->this_value = strict ? receiver : tsc_value_sloppy_this(receiver);
+        scope->record->this_root = tsc_value_gc_root(scope->record->this_value);
+        scope->record->new_target = tsc_value_current_new_target();
+        scope->record->new_target_root = tsc_value_gc_root(scope->record->new_target);
+        tsc_environment_binding_t* arguments = environment_create_binding(scope->record, tsc_str_from_cstr("arguments"), false, false, false);
+        binding_store(arguments, tsc_call_arguments());
+    }
+}
+
+static tsc_environment_t* environment_function_context(void) {
+    for (tsc_environment_t* record = current_environment; record; record = record->parent)
+        if (record->function_context) return record;
+    return NULL;
+}
+
+tsc_value_t tsc_environment_eval_this(void) {
+    tsc_environment_t* record = environment_function_context();
+    return record ? record->this_value : tsc_global_object();
+}
+
+void tsc_environment_require_function_context(void) {
+    if (!environment_function_context()) tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("new.target requires a function evaluation context"));
+}
+
+tsc_value_t tsc_environment_eval_new_target(void) {
+    tsc_environment_require_function_context();
+    return environment_function_context()->new_target;
+}
+
+void tsc_environment_scope_leave(tsc_environment_scope_t* scope) {
+    current_environment = scope->previous;
+}
+
+void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_binding_ref_t* reference) {
+    if (!record || !reference->cell.value_cell || !reference->cell.gc_root_cell)
+        tsc_panic("source binding requires a retained value/root cell");
+    tsc_environment_binding_t* binding = environment_own_binding(record, reference->name);
+    if (!binding) binding = environment_create_binding(record, reference->name,
+        reference->lexical, reference->immutable, false);
+    binding->cell = reference->cell;
+    binding->lexical = reference->lexical;
+    binding->immutable = reference->immutable;
+    binding->deletable = false;
+}
+
+void tsc_environment_alias_variable(const tsc_environment_binding_ref_t* reference) {
+    tsc_environment_alias(environment_variable_record(), reference);
+}
+
+void tsc_environment_alias_capture(const tsc_environment_binding_ref_t* reference) {
+    tsc_environment_t* variable = environment_variable_record();
+    if (!variable || !variable->captured) tsc_panic("source capture requires a function Environment Record");
+    for (tsc_environment_t* parent = variable->captured->parent; parent; parent = parent->parent)
+        if (environment_own_binding(parent, reference->name)) return;
+    tsc_environment_alias(variable->captured, reference);
+}
+
+tsc_environment_t* tsc_environment_project(const tsc_environment_binding_ref_t* references, size_t length) {
+    tsc_environment_t* volatile record = tsc_environment_new(current_environment, false);
+    for (size_t index = 0; index < length; ++index) {
+        const tsc_environment_binding_ref_t* reference = &references[index];
+        tsc_environment_t* target = record;
+        if (reference->outer) {
+            tsc_environment_alias_capture(reference);
+            continue;
+        }
+        tsc_environment_alias(target, reference);
+    }
+    return record;
 }
 
 static bool declaration_is_lexical(const tsc_global_declaration_t* declaration) {
@@ -84,8 +188,7 @@ static bool declaration_is_lexical(const tsc_global_declaration_t* declaration) 
 void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length) {
     tsc_environment_t* environment = current_environment;
     if (!environment) tsc_panic("eval declarations require a lexical Environment Record");
-    tsc_environment_t* variable = environment;
-    while (variable && !variable->variable_scope) variable = variable->parent;
+    tsc_environment_t* variable = environment_variable_record();
     /* Preflight the complete declaration collection before publishing names. */
     for (size_t index = 0; index < length; ++index) {
         tsc_global_declaration_t* declaration = &declarations[index];
@@ -138,9 +241,9 @@ void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declara
 
 tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value) {
     tsc_environment_binding_t* binding = environment_own_binding(current_environment, key);
-    if (!binding || binding->initialized) tsc_panic("invalid eval lexical initialization");
+    if (!binding || !binding->cell.initialized_cell || *binding->cell.initialized_cell) tsc_panic("invalid eval lexical initialization");
     binding_store(binding, value);
-    binding->initialized = true;
+    *binding->cell.initialized_cell = true;
     return value;
 }
 

@@ -126,92 +126,17 @@ function sourceRecordMayShadowEval(sourceFile: ts.SourceFile): boolean {
     return false;
 }
 
-function switchHasDirectLexicalDeclarations(statement: ts.SwitchStatement): boolean {
-    return statement.caseBlock.clauses.some((clause) => clause.statements.some((item) =>
-        ts.isFunctionDeclaration(item) ||
-        ts.isClassDeclaration(item) ||
-        ts.isVariableStatement(item) &&
-            (item.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0));
-}
-
-function finiteEvalInitializerIsEnvironmentIndependent(expression: ts.Expression): boolean {
-    expression = transparentExpression(expression);
-    if (
-        ts.isNumericLiteral(expression) ||
-        ts.isStringLiteralLike(expression) ||
-        expression.kind === ts.SyntaxKind.TrueKeyword ||
-        expression.kind === ts.SyntaxKind.FalseKeyword ||
-        expression.kind === ts.SyntaxKind.NullKeyword
-    ) return true;
-    return ts.isPrefixUnaryExpression(expression) &&
-        (expression.operator === ts.SyntaxKind.PlusToken ||
-            expression.operator === ts.SyntaxKind.MinusToken) &&
-        ts.isNumericLiteral(transparentExpression(expression.operand));
-}
-
-/** A switch-contained direct eval is admitted only when its complete static
- * source worklist can affect the caller's VariableEnvironment without reading
- * or declaring anything in the switch LexicalEnvironment. */
-function finiteEvalSourceUsesOnlyGlobalVarEnvironment(source: string): boolean {
-    const sourceFile = createEcmaSourceFile(
-        "__tsc2c_switch_direct_eval_probe__.js",
-        source,
-        ts.ScriptTarget.ESNext,
-        true,
-        ts.ScriptKind.JS,
-    );
-    if ((sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] })
-        .parseDiagnostics?.length) return false;
-    const worklist: readonly ts.Statement[] = sourceFile.statements;
-    for (let index = 0; index < worklist.length; index++) {
-        const statement = worklist[index]!;
-        if (ts.isEmptyStatement(statement)) continue;
-        if (!ts.isVariableStatement(statement) ||
-            (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) return false;
-        for (const declaration of statement.declarationList.declarations) {
-            if (!ts.isIdentifier(declaration.name) || declaration.name.text === "eval") return false;
-            if (declaration.initializer &&
-                !finiteEvalInitializerIsEnvironmentIndependent(declaration.initializer)) return false;
+function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
+    for (let current: ts.Node | undefined = node; current; current = current.parent) {
+        if (ts.isClassLike(current) || ts.isClassStaticBlockDeclaration(current)) return true;
+        if (ts.isFunctionLike(current) && "body" in current && current.body && ts.isBlock(current.body)) {
+            for (const statement of current.body.statements) {
+                if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
+                if (statement.expression.text === "use strict") return true;
+            }
         }
     }
-    return true;
-}
-
-function callIsInSourceEvaluation(
-    call: ts.CallExpression,
-    sourceFile: ts.SourceFile,
-    strictCaller: boolean,
-    alternatives: readonly string[],
-): boolean {
-    let containingSwitch: ts.SwitchStatement | null = null;
-    let containingSwitchBranch: ts.Node | null = null;
-    let child: ts.Node = call;
-    for (let current: ts.Node | undefined = call.parent; current && current !== sourceFile; current = current.parent) {
-        if (
-            ts.isFunctionLike(current) ||
-            ts.isClassLike(current) ||
-            ts.isBlock(current) ||
-            ts.isCatchClause(current) ||
-            ts.isWithStatement(current) ||
-            ts.isForStatement(current) ||
-            ts.isForInStatement(current) ||
-            ts.isForOfStatement(current)
-        ) return false;
-        if (ts.isSwitchStatement(current)) {
-            if (containingSwitch) return false;
-            containingSwitch = current;
-            containingSwitchBranch = child;
-        }
-        child = current;
-    }
-    /* Switch Evaluation evaluates the discriminator before creating the
-     * CaseBlock Environment Record, so it has the ordinary top-level direct
-     * eval context regardless of declarations in the later CaseBlock. */
-    if (!containingSwitch || containingSwitch.expression === containingSwitchBranch) return true;
-    return !strictCaller &&
-        alternatives.length > 0 &&
-        !switchHasDirectLexicalDeclarations(containingSwitch) &&
-        alternatives.every(finiteEvalSourceUsesOnlyGlobalVarEnvironment);
+    return inherited;
 }
 
 function transparentExpression(expression: ts.Expression): ts.Expression {
@@ -473,12 +398,13 @@ export function finiteEvalScriptSourceGraph(
                     });
                 }
             }
-            if (!evalMayBeShadowed && ts.isCallExpression(node) &&
+            if (ts.isCallExpression(node) &&
                 ts.isIdentifier(node.expression) && node.expression.text === "eval") {
                 const alternatives = node.arguments[0]
                     ? staticStringExpressionTexts(node.arguments[0]!)
                     : [];
-                if (callIsInSourceEvaluation(node, sourceFile, recordStrict, alternatives)) {
+                {
+                    const strictCaller = directEvalIsStrict(node, recordStrict);
                     if (node.arguments.length > 0 && alternatives.length === 0) {
                         const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
                         return {
@@ -496,12 +422,12 @@ export function finiteEvalScriptSourceGraph(
                             true,
                             ts.ScriptKind.JS,
                         );
-                        const strict = recordStrict || sourceFileIsStrict(evalSourceFile);
-                        const key = `${recordStrict ? "strict" : "sloppy"}\0${source}`;
+                        const strict = strictCaller || sourceFileIsStrict(evalSourceFile);
+                        const key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
                         if (directSources.has(key)) continue;
-                        directSources.set(key, { source, strictCaller: recordStrict, strict });
+                        directSources.set(key, { source, strictCaller, strict });
                         records.push({
-                            path: `__tsc2c_direct_eval__/${recordStrict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,
+                            path: `__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,
                             source,
                             strictContext: strict,
                         });

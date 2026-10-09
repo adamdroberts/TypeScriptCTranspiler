@@ -2630,11 +2630,11 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["realm and agent state", "execution contexts", "environment records", "jobs"],
-      "localEvidence": { "property": ["tests/property/eval-environment.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c",
+      "localEvidence": { "property": ["tests/property/eval-environment.property.test.ts", "tests/property/direct-eval-cell.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c",
           "runtime/tsc_environment.c",
           "runtime/tsc_core.c",
           "runtime/tsc_value.c"] },
-      "knownGaps": ["Caller lexical-cell aliases, function variable insertion, complete class/private/this/new.target eval context, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete."]
+      "knownGaps": ["Class/private/super/with environments, complete Annex B, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete."]
     },
     {
       "id": "object-semantics",
@@ -2674,7 +2674,7 @@
       "tracking": "in-progress",
       "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
       "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
-      "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete direct-eval lexical capture remain incomplete."]
+      "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete."]
     },
     {
       "id": "statements",

@@ -656,6 +656,7 @@ class Emitter {
      * CaseBlock declarations and per-iteration bindings share this collection
      * and the same identifier/capture operations. */
     private lexicalBindingScopes: Map<ts.Symbol, LocalLexicalBindingPlan>[] = [];
+    private sourceEnvironmentFiles = new WeakMap<ts.SourceFile, boolean>();
     /** Runtime parameter environments for non-simple JavaScript formal lists.
      * These are separate from CaseBlock environments but expose the same
      * value/TDZ/root contract to identifier reads, writes, and captures. */
@@ -14639,6 +14640,7 @@ class Emitter {
     }
 
     private shouldEmitLocalVariable(decl: ts.VariableDeclaration): boolean {
+        if (this.sourceEnvironmentEnabled(decl.getSourceFile())) return true;
         return !this.isPrunableLocalVariable(decl) || this.referencedVariables.has(decl);
     }
 
@@ -23566,6 +23568,7 @@ class Emitter {
     ): { id: ts.Identifier; reference: LocalLexicalReference } | null {
         const target = this.unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
+        if (this.environmentShadowReferenceName(target)) return null;
         const raw = this.checker.getSymbolAtLocation(target);
         if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
         const reference = this.localLexicalReferenceForIdentifier(target);
@@ -23726,6 +23729,8 @@ class Emitter {
     }
 
     private identifierRead(id: ts.Identifier): string {
+        const evalShadow = this.environmentShadowReferenceName(id);
+        if (evalShadow) return `tsc_environment_reference_get(${this.stringLit(evalShadow)})`;
         if (this.isTest262OutOfBandGlobalBinding(id, "globalThis")) {
             return "tsc_global_object()";
         }
@@ -24800,6 +24805,15 @@ class Emitter {
         const sloppyEval = this.isTest262SloppyEvalSourceFile(sf);
         const evalSource = this.isTest262EvalSourceFile(sf);
         if (evalSource) {
+            const worklist: ts.Node[] = [...sf.statements];
+            let needsFunctionContext = false;
+            while (worklist.length && !needsFunctionContext) {
+                const node = worklist.pop()!;
+                if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.NewKeyword) needsFunctionContext = true;
+                if (ts.isClassLike(node) || ts.isFunctionLike(node) && !ts.isArrowFunction(node)) continue;
+                ts.forEachChild(node, child => { worklist.push(child); });
+            }
+            if (needsFunctionContext) buf.line("tsc_environment_require_function_context();");
             const environment = this.freshTemp("_eval_environment");
             buf.line(`tsc_environment_t* volatile ${environment} = tsc_environment_new(tsc_environment_current(), ${sloppyEval ? "false" : "true"});`);
             buf.line(`(void)tsc_environment_swap(${environment});`);
@@ -25397,6 +25411,18 @@ class Emitter {
             return captures;
         }
 
+        const addEnvironmentBinding = (identifier: ts.Identifier): void => {
+            if (!this.sourceEnvironmentEnabled(owner.getSourceFile()) || this.test262ScriptGlobalBindingName(identifier)) return;
+            const symbol = this.symbolForIdentifier(identifier);
+            if (!symbol || captures.has(symbol)) return;
+            const lexical = this.localLexicalMetadataForSymbol(symbol);
+            const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+            const parameter = declaration ? this.javaScriptFormalParameterForDeclaration(declaration) : null;
+            const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
+            captures.set(symbol, { type: T_VALUE, cellName, rootCellName: `${cellName}__gc_root`,
+                ...(lexical || parameter && !ts.isSourceFile(owner) && !this.javaScriptParameterListIsSimple(owner)
+                    ? { initializedCellName: `${cellName}__initialized` } : {}) });
+        };
         const addClosureCaptures = (closure: ClosureLikeDeclaration): void => {
             for (const cap of this.collectClosureCaptures(closure)) {
                 if (captures.has(cap.symbol)) continue;
@@ -25410,6 +25436,7 @@ class Emitter {
             }
         };
         const visit = (node: ts.Node): void => {
+            if (ts.isVariableDeclaration(node)) for (const identifier of this.test262BindingNames(node.name)) addEnvironmentBinding(identifier);
             if (
                 node !== owner &&
                 (ts.isArrowFunction(node) || ts.isFunctionExpression(node) ||
@@ -25437,13 +25464,17 @@ class Emitter {
                 ts.isFunctionDeclaration(node) &&
                 this.isSupportedLexicalFunctionDeclaration(node)
             ) {
+                if (node.name) addEnvironmentBinding(node.name);
                 addClosureCaptures(node);
                 return;
             }
             if (node !== owner && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
             ts.forEachChild(node, visit);
         };
-        if (!ts.isSourceFile(owner)) for (const parameter of owner.parameters) ts.forEachChild(parameter, visit);
+        if (!ts.isSourceFile(owner)) for (const parameter of owner.parameters) {
+            for (const identifier of this.test262BindingNames(parameter.name)) addEnvironmentBinding(identifier);
+            ts.forEachChild(parameter, visit);
+        }
         visit(body);
         // Non-simple async formals retain their initialized state beyond the
         // entry frame. Feed every BoundName into the existing cell collection.
@@ -25503,6 +25534,7 @@ class Emitter {
 
     private functionUsesOwnArgumentsObject(fn: ts.FunctionLikeDeclaration): boolean {
         if (ts.isArrowFunction(fn)) return false;
+        if (this.sourceEnvironmentEnabled(fn.getSourceFile())) return true;
         let found = false;
         const visit = (node: ts.Node): void => {
             if (found) return;
@@ -25627,6 +25659,12 @@ class Emitter {
         if (current) return current;
         const inherited = this.activeArrowLexicalBinding(fn, kind);
         if (inherited) return inherited;
+        if (this.sourceEnvironmentEnabled(fn.getSourceFile()) ||
+            this.isTest262EvalSourceFile(fn.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(fn)) {
+            if (kind === "arguments") return { c: `tsc_environment_reference_get(${this.stringLit("arguments")})`, ty: T_VALUE };
+            if (kind === "new-target") return { c: "tsc_environment_eval_new_target()", ty: T_VALUE };
+            return { c: "tsc_environment_eval_this()", ty: T_VALUE };
+        }
         if (kind === "arguments") return { c: "tsc_call_arguments()", ty: T_VALUE };
         if (kind === "new-target") return { c: "tsc_value_current_new_target()", ty: T_VALUE };
 
@@ -25689,66 +25727,73 @@ class Emitter {
         fn: ClosureLikeDeclaration,
     ): ClosureCapture[] {
         const captures = new Map<ts.Symbol, ClosureCapture>();
+        const captureReference = (node: ts.Identifier, sym = this.symbolForIdentifier(node)): void => {
+            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            if (
+                sym &&
+                decl &&
+                !this.test262ScriptGlobalBindingName(node) &&
+                (
+                    !this.isNodeWithin(decl, fn) ||
+                    decl === fn && ts.isFunctionDeclaration(fn) &&
+                        this.isSupportedLexicalFunctionDeclaration(fn)
+                ) &&
+                (!this.isTopLevelValueDeclaration(decl) ||
+                    (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
+                this.isCapturableValueDeclaration(decl)
+            ) {
+                const lexical = this.localLexicalMetadataForSymbol(sym);
+                const declaredType = this.isJavaScriptSourceFile(decl.getSourceFile()) ||
+                    this.functionVarDeclarationOwner(decl) || lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
+                    ? T_VALUE
+                    : this.prepareType(mapTsType(decl,
+                        this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
+                const formalParameter = this.javaScriptFormalParameterForDeclaration(decl);
+                const existingStorageType = this.scopedTypeForSymbol(sym) ??
+                    this.symbolStorageTypes.get(sym);
+                /* A lexical Environment Record is a runtime language
+                 * environment. Keep each direct lexical binding in the
+                 * canonical value representation so checker narrowing
+                 * cannot change its storage or closure-capture ABI. */
+                let type = this.functionVarDeclarationOwner(decl) ? T_VALUE : existingStorageType ?? (formalParameter
+                    ? T_VALUE
+                    : lexical && (this.isDirectScopeLexicalDeclaration(lexical.declaration) ||
+                        ts.isVariableDeclaration(lexical.declaration) &&
+                        this.isForOfLexicalDeclaration(lexical.declaration))
+                    ? T_VALUE
+                    : ts.isVariableDeclaration(decl)
+                        ? this.variableDeclarationStorageType(decl, declaredType)
+                        : declaredType);
+                /* Top-level TypeScript variables are physically planned
+                 * after function bodies. Mirror the one integer-storage
+                 * decision here so dispatch capture descriptors never
+                 * reinterpret an int64_t slot as a double slot. */
+                if (!existingStorageType &&
+                    this.dispatchCaptureClone &&
+                    ts.isVariableDeclaration(decl) &&
+                    this.isTopLevelValueDeclaration(decl) &&
+                    type.c === "double" &&
+                    this.intSymbols.has(sym)) {
+                    type = T_NUMBER_INT;
+                }
+                const field = `${mangleIdent(node.text)}_${captures.size}`;
+                captures.set(sym, {
+                    symbol: sym,
+                    type,
+                    field,
+                    lexical: lexical
+                        ? { name: lexical.name, immutable: lexical.immutable }
+                        : null,
+                });
+            }
+        };
         const visit = (node: ts.Node): void => {
-            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
-                const sym = this.symbolForIdentifier(node);
-                const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-                if (
-                    sym &&
-                    decl &&
-                    !this.test262ScriptGlobalBindingName(node) &&
-                    (
-                        !this.isNodeWithin(decl, fn) ||
-                        decl === fn && ts.isFunctionDeclaration(fn) &&
-                            this.isSupportedLexicalFunctionDeclaration(fn)
-                    ) &&
-                    (!this.isTopLevelValueDeclaration(decl) ||
-                        (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
-                    this.isCapturableValueDeclaration(decl)
-                ) {
-                    const lexical = this.localLexicalMetadataForSymbol(sym);
-                    const declaredType = this.isJavaScriptSourceFile(decl.getSourceFile()) ||
-                        this.functionVarDeclarationOwner(decl) || lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
-                        ? T_VALUE
-                        : this.prepareType(mapTsType(decl,
-                            this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
-                    const formalParameter = this.javaScriptFormalParameterForDeclaration(decl);
-                    const existingStorageType = this.scopedTypeForSymbol(sym) ??
-                        this.symbolStorageTypes.get(sym);
-                    /* A lexical Environment Record is a runtime language
-                     * environment. Keep each direct lexical binding in the
-                     * canonical value representation so checker narrowing
-                     * cannot change its storage or closure-capture ABI. */
-                    let type = this.functionVarDeclarationOwner(decl) ? T_VALUE : existingStorageType ?? (formalParameter
-                        ? T_VALUE
-                        : lexical && (this.isDirectScopeLexicalDeclaration(lexical.declaration) ||
-                            ts.isVariableDeclaration(lexical.declaration) &&
-                            this.isForOfLexicalDeclaration(lexical.declaration))
-                        ? T_VALUE
-                        : ts.isVariableDeclaration(decl)
-                            ? this.variableDeclarationStorageType(decl, declaredType)
-                            : declaredType);
-                    /* Top-level TypeScript variables are physically planned
-                     * after function bodies. Mirror the one integer-storage
-                     * decision here so dispatch capture descriptors never
-                     * reinterpret an int64_t slot as a double slot. */
-                    if (!existingStorageType &&
-                        this.dispatchCaptureClone &&
-                        ts.isVariableDeclaration(decl) &&
-                        this.isTopLevelValueDeclaration(decl) &&
-                        type.c === "double" &&
-                        this.intSymbols.has(sym)) {
-                        type = T_NUMBER_INT;
-                    }
-                    const field = `${mangleIdent(node.text)}_${captures.size}`;
-                    captures.set(sym, {
-                        symbol: sym,
-                        type,
-                        field,
-                        lexical: lexical
-                            ? { name: lexical.name, immutable: lexical.immutable }
-                            : null,
-                    });
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
+            if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && ts.isCallExpression(node) &&
+                ts.isIdentifier(node.expression) && node.expression.text === "eval") {
+                for (const symbol of this.checker.getSymbolsInScope(node, ts.SymbolFlags.Value)) {
+                    const identifier = this.environmentBindingIdentifier(symbol);
+                    if (identifier) captureReference(identifier, symbol);
                 }
             }
             ts.forEachChild(node, visit);
@@ -25764,7 +25809,130 @@ class Emitter {
         return this.freshTemp(`${clean}__cell`);
     }
 
+    private sourceEnvironmentEnabled(source: ts.SourceFile): boolean {
+        if (!this.options.test262Observation || !this.isJavaScriptSourceFile(source)) return false;
+        const cached = this.sourceEnvironmentFiles.get(source);
+        if (cached !== undefined) return cached;
+        const worklist: ts.Node[] = [source];
+        let enabled = false;
+        while (worklist.length > 0 && !enabled) {
+            const node = worklist.pop()!;
+            if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "eval") enabled = true;
+            else ts.forEachChild(node, child => { worklist.push(child); });
+        }
+        this.sourceEnvironmentFiles.set(source, enabled);
+        return enabled;
+    }
+
+    private environmentShadowReferenceName(identifier: ts.Identifier): string | null {
+        if (!this.sourceEnvironmentEnabled(identifier.getSourceFile())) return null;
+        const symbol = this.symbolForIdentifier(identifier);
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (!symbol || !declaration || declaration.getSourceFile().isDeclarationFile ||
+            !this.isCapturableValueDeclaration(declaration) || this.test262ScriptGlobalBindingName(identifier)) return null;
+        for (let node: ts.Node | undefined = identifier.parent; node; node = node.parent) {
+            if (!ts.isFunctionLike(node) || !("body" in node)) continue;
+            return declaration === node || !this.isNodeWithin(declaration, node) ? identifier.text : null;
+        }
+        return null;
+    }
+
+    private nearestEnclosingNewTargetOwner(node: ts.Node): ts.FunctionLikeDeclaration | null {
+        for (let current = node.parent; current; current = current.parent)
+            if (ts.isFunctionLike(current) && !ts.isArrowFunction(current) && "body" in current)
+                return current as ts.FunctionLikeDeclaration;
+        return null;
+    }
+
+    private environmentBindingIdentifier(symbol: ts.Symbol): ts.Identifier | null {
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (!declaration || !(ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) ||
+            ts.isBindingElement(declaration) || ts.isFunctionDeclaration(declaration) ||
+            ts.isFunctionExpression(declaration) || ts.isClassDeclaration(declaration) ||
+            ts.isImportSpecifier(declaration) || ts.isImportClause(declaration))) return null;
+        const name = (declaration as ts.NamedDeclaration).name;
+        return name && ts.isIdentifier(name) ? name : null;
+    }
+
+    private environmentBindingIsLexical(symbol: ts.Symbol): boolean {
+        let declaration: ts.Node | undefined = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        while (declaration && ts.isBindingElement(declaration)) declaration = declaration.parent.parent;
+        if (!declaration) return false;
+        if (ts.isParameter(declaration)) return false;
+        if (ts.isVariableDeclaration(declaration)) return !ts.isVariableDeclarationList(declaration.parent) ||
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0;
+        if (ts.isFunctionDeclaration(declaration)) return !ts.isBlock(declaration.parent) ||
+            !ts.isFunctionLike(declaration.parent.parent) || !("body" in declaration.parent.parent) ||
+            declaration.parent.parent.body !== declaration.parent;
+        return true;
+    }
+
+    private environmentBindingReference(symbol: ts.Symbol, node: ts.Node, outer = false): string {
+        const value = this.capturePtrForSymbol(symbol);
+        const root = this.captureRootPtrForSymbol(symbol);
+        const type = this.scopedTypeForSymbol(symbol) ?? this.captureCellForSymbol(symbol)?.type ?? this.symbolStorageTypes.get(symbol);
+        if (!value || !root || type?.kind !== "value")
+            unsupported(node, `direct eval binding '${symbol.getName()}' requires the shared retained value/root cell representation`);
+        const initialized = this.captureInitializationPtrForSymbol(symbol) ?? "NULL";
+        const lexical = this.environmentBindingIsLexical(symbol);
+        const immutable = this.localLexicalMetadataForSymbol(symbol)?.immutable ?? false;
+        return `(tsc_environment_binding_ref_t){ ${this.stringLit(symbol.getName())}, ` +
+            `(tsc_async_cell_ref_t){ (void*)${value}, ${root}, ${initialized} }, ` +
+            `${lexical ? "true" : "false"}, ${immutable ? "true" : "false"}, ${outer ? "true" : "false"} }`;
+    }
+
+    private emitSourceFunctionEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration,
+        plans: ReadonlyMap<ts.Symbol, JavaScriptFormalBindingPlan>): void {
+        if (!this.sourceEnvironmentEnabled(fn.getSourceFile())) return;
+        const scope = this.freshTemp("_function_environment");
+        buffer.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
+        buffer.line(`tsc_environment_function_enter(&${scope}, ${ts.isArrowFunction(fn) ? "true" : "false"}, ` +
+            `${this.functionHasStrictThisBinding(fn) ? "true" : "false"});`);
+        for (const [symbol, plan] of plans) {
+            buffer.line(`tsc_environment_alias(${scope}.record, &(tsc_environment_binding_ref_t){ ` +
+                `${this.stringLit(symbol.getName())}, (tsc_async_cell_ref_t){ (void*)&${plan.value}, ` +
+                `(void**)&${plan.gcRoot}, ${plan.initialized ? `&${plan.initialized}` : "NULL"} }, false, false, false });`);
+        }
+    }
+
+    private parameterListContainsExpression(fn: ts.FunctionLikeDeclaration): boolean {
+        const worklist: ts.Node[] = [...fn.parameters];
+        while (worklist.length) {
+            const node = worklist.pop()!;
+            if (((ts.isParameter(node) || ts.isBindingElement(node)) && node.initializer) || ts.isComputedPropertyName(node)) return true;
+            if (ts.isParameter(node) || ts.isBindingElement(node)) worklist.push(node.name);
+            else if (ts.isArrayBindingPattern(node) || ts.isObjectBindingPattern(node)) for (const element of node.elements) {
+                if (ts.isBindingElement(element)) { worklist.push(element); if (element.propertyName) worklist.push(element.propertyName); }
+            }
+        }
+        return false;
+    }
+
+    private emitSourceBodyEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration): void {
+        if (!this.sourceEnvironmentEnabled(fn.getSourceFile()) || !this.parameterListContainsExpression(fn)) return;
+        const scope = this.freshTemp("_body_environment");
+        buffer.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
+        buffer.line(`tsc_environment_variable_enter(&${scope});`);
+    }
+
+    private functionBodyVariableBindings(body: ts.Block): Map<ts.Symbol, ts.Declaration> {
+        const bindings = new Map<ts.Symbol, ts.Declaration>();
+        const worklist: ts.Node[] = [...body.statements];
+        while (worklist.length) {
+            const node = worklist.pop()!;
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) continue;
+            if (ts.isVariableDeclaration(node) && ts.isVariableDeclarationList(node.parent) &&
+                (node.parent.flags & ts.NodeFlags.BlockScoped) === 0) for (const identifier of this.test262BindingNames(node.name)) {
+                const symbol = this.symbolForIdentifier(identifier);
+                if (symbol) bindings.set(symbol, node);
+            }
+            ts.forEachChild(node, child => { worklist.push(child); });
+        }
+        return bindings;
+    }
+
     private functionVarDeclarationOwner(declaration: ts.Declaration): ts.FunctionLikeDeclaration | null {
+        while (ts.isBindingElement(declaration)) declaration = declaration.parent.parent as ts.Declaration;
         if (!ts.isVariableDeclaration(declaration) || !ts.isVariableDeclarationList(declaration.parent) ||
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0) return null;
         for (let node: ts.Node | undefined = declaration.parent; node; node = node.parent) {
@@ -28888,6 +29056,7 @@ class Emitter {
         capturedCells: Map<ts.Symbol, CaptureCell>,
         argumentScope: Map<ts.Symbol, string>,
         argumentTypeScope: Map<ts.Symbol, CType>,
+        outerBindings: ReadonlyMap<ts.Symbol, ClosureEnvBinding> = this.closureEnvScopes.at(-1) ?? new Map(),
     ): Map<ts.Symbol, JavaScriptFormalBindingPlan> {
         const parameters = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
         if (parameters.length !== rawParameterNames.length) {
@@ -28970,6 +29139,16 @@ class Emitter {
                 argumentTypeScope.set(symbol, T_VALUE);
                 if (simple && !cell) argumentScope.set(symbol, value);
             }
+        }
+        if (this.sourceEnvironmentEnabled(fn.getSourceFile())) this.emitCallActivationConfiguration(buf, fn, capturedCells);
+        this.emitSourceFunctionEnvironment(buf, fn, plans);
+        if (this.sourceEnvironmentEnabled(fn.getSourceFile())) for (const [symbol, binding] of outerBindings) {
+            if (binding.type.kind !== "value" || !binding.rootPtr)
+                unsupported(fn, "direct eval binding requires the shared retained value/root cell representation");
+            buf.line(`tsc_environment_alias_capture(&(tsc_environment_binding_ref_t){ ` +
+                `${this.stringLit(symbol.getName())}, (tsc_async_cell_ref_t){ (void*)${binding.ptr}, ` +
+                `${binding.rootPtr}, ${binding.initializedPtr ?? "NULL"} }, ` +
+                `${this.environmentBindingIsLexical(symbol) ? "true" : "false"}, ${binding.immutable ? "true" : "false"}, true });`);
         }
         return plans;
     }
@@ -29121,6 +29300,16 @@ class Emitter {
         }
     }
 
+    private emitCaptureCellRebinding(buf: CBuf, cell: CaptureCell, value: string): void {
+        const copy: CaptureCell = {type:cell.type,cellName:this.freshTemp("_body_value_cell"),
+            ...(cell.rootCellName ? {rootCellName:this.freshTemp("_body_root_cell")} : {}),
+            ...(cell.initializedCellName ? {initializedCellName:this.freshTemp("_body_initialized_cell")} : {})};
+        this.emitCaptureCellInitialization(buf,copy,value);
+        buf.line(`${cell.cellName} = ${copy.cellName};`);
+        if (cell.rootCellName) buf.line(`${cell.rootCellName} = ${copy.rootCellName};`);
+        if (cell.initializedCellName) buf.line(`${cell.initializedCellName} = ${copy.initializedCellName};`);
+    }
+
     private beginAsyncDynamicRootScope(
         buf: CBuf,
         parameters: readonly ts.ParameterDeclaration[],
@@ -29207,7 +29396,7 @@ class Emitter {
         if (thisType) {
             this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
         }
-        const tailCtx = fd.name && capturedCells.size === 0 && !thisType &&
+        const tailCtx = fd.name && capturedCells.size === 0 && !thisType && !this.sourceEnvironmentEnabled(fd.getSourceFile()) &&
             (!javaScriptFormalPlans || this.javaScriptParameterListIsSimple(fd))
             ? {
                 name: this.declaredName(fd.name),
@@ -29863,7 +30052,7 @@ class Emitter {
                 rootCell = dynamicRootCell;
             }
             let initializedCell = "NULL";
-            if (field.lexical) {
+            if (field.lexical || field.cell.kind === "entry" && field.cell.initializedPtr) {
                 const dynamicInitializedCell = this.freshTemp("_async_cfg_initialized_cell");
                 target.line(`bool* const ${dynamicInitializedCell} = (bool*)TSC_GC_MALLOC(sizeof(bool));`);
                 target.line(`*${dynamicInitializedCell} = ${initiallyInitialized};`);
@@ -30639,6 +30828,9 @@ class Emitter {
                         const symbol = this.symbolForIdentifier(declaration.name!);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local) return false;
+                        if (this.sourceEnvironmentEnabled(body.getSourceFile()) && !this.environmentBindingIsLexical(symbol!))
+                            callback.line(`tsc_environment_alias_variable(&(tsc_environment_binding_ref_t){ ` +
+                                `${this.stringLit(symbol!.getName())}, state->${local.field}, false, false, false });`);
                         emitCfgFieldAssignment(
                             callback,
                             local,
@@ -31283,6 +31475,7 @@ class Emitter {
 
         const result = this.freshTemp("_async_cfg_result");
         const env = this.freshTemp("_async_cfg_env");
+        if (owner) this.emitSourceBodyEnvironment(buf, owner);
         if (!generator) buf.line(`tsc_promise_t* const ${result} = tsc_promise_pending();`);
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = NULL;`);
@@ -31334,9 +31527,24 @@ class Emitter {
                 buf.line(`${env}->${param.field}_gc_root = tsc_value_gc_root(${env}->${param.field});`);
             }
         }
+        const separateBody = !!owner && this.sourceEnvironmentEnabled(body.getSourceFile()) && this.parameterListContainsExpression(owner);
+        const bodyVariables = separateBody ? this.functionBodyVariableBindings(body) : new Map<ts.Symbol, ts.Declaration>();
+        for (const param of params) if (bodyVariables.has(param.symbol) && param.cell) {
+            emitCfgCellAllocation(buf,param,env,cfgFieldValue(param,env),"true");
+            buf.line(`tsc_environment_alias_variable(&(tsc_environment_binding_ref_t){ ` +
+                `${this.stringLit(param.symbol.getName())}, ${env}->${param.field}, false, false, false });`);
+        }
         for (const local of localParams) {
             if (local.cell) {
-                emitCfgCellAllocation(buf, local, env);
+                const original = separateBody && !this.environmentBindingIsLexical(local.symbol)
+                    ? params.find(param => param.symbol.getName() === local.symbol.getName()) : null;
+                const initial = original ? cfgFieldValue(original,env) :
+                    this.sourceEnvironmentEnabled(body.getSourceFile()) && local.symbol.getName() === "arguments" && !this.environmentBindingIsLexical(local.symbol)
+                        ? `tsc_environment_reference_get(${this.stringLit("arguments")})` : undefined;
+                emitCfgCellAllocation(buf, local, env, initial);
+                if (this.sourceEnvironmentEnabled(body.getSourceFile()) && !this.environmentBindingIsLexical(local.symbol))
+                    buf.line(`tsc_environment_alias_variable(&(tsc_environment_binding_ref_t){ ` +
+                        `${this.stringLit(local.symbol.getName())}, ${env}->${local.field}, false, false, false });`);
             } else {
                 buf.line(`${env}->${local.field} = ${this.zeroValue(local.type)};`);
                 if (local.type.kind === "value") buf.line(`${env}->${local.field}_gc_root = NULL;`);
@@ -34306,13 +34514,26 @@ class Emitter {
             statements === owner.statements ? owner : null;
         const preallocatedVars = new Set<CaptureCell>();
         if (functionBody) {
-            const cells = this.cellScopes[this.cellScopes.length - 1];
-            for (const [symbol, cell] of cells ?? []) {
-                const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-                if (!declaration || this.functionVarDeclarationOwner(declaration) !== functionBody.parent ||
-                    preallocatedVars.has(cell)) continue;
-                this.emitCaptureCellInitialization(buf, cell, this.zeroValue(cell.type));
+            this.emitSourceBodyEnvironment(buf, functionBody.parent as ts.FunctionLikeDeclaration);
+            const fn = functionBody.parent as ts.FunctionLikeDeclaration;
+            const cells = this.cellScopes.at(-1);
+            const formals = this.formalParameterScopes.at(-1);
+            const separate = this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.parameterListContainsExpression(fn);
+            const bindings = this.functionBodyVariableBindings(functionBody);
+            for (const [symbol, declaration] of bindings) {
+                const cell = cells?.get(symbol);
+                if (!cell || preallocatedVars.has(cell)) continue;
                 preallocatedVars.add(cell);
+                if (symbol.declarations?.some(declaration => ts.isFunctionDeclaration(declaration) && declaration.parent === functionBody)) continue;
+                const formal = formals?.get(symbol);
+                const original = formal ?? [...formals?.values() ?? []].find(plan => plan.identifier.text === symbol.getName());
+                if (formal) {
+                    if (separate) this.emitCaptureCellRebinding(buf,cell,formal.value);
+                } else this.emitCaptureCellInitialization(buf,cell,separate && original ? original.value :
+                    this.sourceEnvironmentEnabled(fn.getSourceFile()) && symbol.getName() === "arguments"
+                        ? `tsc_environment_reference_get(${this.stringLit("arguments")})` : this.zeroValue(cell.type));
+                if (this.sourceEnvironmentEnabled(functionBody.getSourceFile()))
+                    buf.line(`tsc_environment_alias_variable(&${this.environmentBindingReference(symbol, declaration)});`);
             }
         }
         this.preallocatedFunctionVarCells.push(preallocatedVars);
@@ -35518,6 +35739,10 @@ class Emitter {
                 });
             }
         }
+        if (declarations.length > 0 && this.sourceEnvironmentEnabled(declarations[0]!.getSourceFile())) {
+            for (const [symbol, binding] of lexicalScope) if (!this.environmentBindingIsLexical(symbol))
+                buf.line(`tsc_environment_alias_variable(&${this.environmentBindingReference(symbol, binding.declaration)});`);
+        }
         return lexicalScope;
     }
 
@@ -36051,8 +36276,12 @@ class Emitter {
                 symbol = this.symbolForIdentifier(declaration.name);
                 if (symbol) this.catchValueSymbols.add(symbol);
                 const name = mangleIdent(declaration.name.text);
-                buf.line(`tsc_value_t ${name} = ${error};`);
-                if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
+                const cell = this.currentFunctionCellForSymbol(symbol);
+                if (cell) this.emitCaptureCellInitialization(buf, cell, error);
+                else {
+                    buf.line(`tsc_value_t ${name} = ${error};`);
+                    if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
+                }
             }
             try { this.emitBlock(buf, clause.block); } finally {
                 if (symbol) this.catchValueSymbols.delete(symbol);
@@ -36137,7 +36366,7 @@ class Emitter {
             if (activationThis) return activationThis;
             const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
             if (this.isTest262ScriptGlobalThisExpression(expr)) {
-                return { c: "tsc_global_object()", ty: T_VALUE };
+                return { c: this.isTest262EvalSourceFile(expr.getSourceFile()) ? "tsc_environment_eval_this()" : "tsc_global_object()", ty: T_VALUE };
             }
             if (!this.currentClass && !fnThis && this.options.test262Observation)
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -36152,16 +36381,22 @@ class Emitter {
             expr.keywordToken === ts.SyntaxKind.NewKeyword &&
             expr.name.text === "target"
         ) {
+            if (this.isTest262EvalSourceFile(expr.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(expr))
+                return { c: "tsc_environment_eval_new_target()", ty: T_VALUE };
             return this.currentFunctionActivationBinding("new-target") ??
                 this.activeArrowLexicalBinding(expr, "new-target") ??
                 { c: "tsc_value_current_new_target()", ty: T_VALUE };
         }
 
         if (ts.isIdentifier(expr)) {
+            const evalShadow = this.environmentShadowReferenceName(expr);
+            if (evalShadow) return { c: `tsc_environment_reference_get(${this.stringLit(evalShadow)})`, ty: T_VALUE };
             if (this.isUnresolvedParameterScopeReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             if (this.isImplicitArgumentsIdentifier(expr)) {
+                if (this.sourceEnvironmentEnabled(expr.getSourceFile()))
+                    return { c: `tsc_environment_reference_get(${this.stringLit("arguments")})`, ty: T_VALUE };
                 return this.currentFunctionActivationBinding("arguments") ??
                     this.activeArrowLexicalBinding(expr, "arguments") ??
                     { c: "tsc_call_arguments()", ty: T_VALUE };
@@ -36915,7 +37150,8 @@ class Emitter {
         const referenceName = this.test262HostGlobalBindingName(id) ??
             (this.isTest262DynamicGlobalReference(id) ? id.text : null);
         const name = scriptGlobal ?? referenceName ??
-            (this.isUnresolvedParameterScopeReference(id) ? id.text : null);
+            (this.isUnresolvedParameterScopeReference(id) ? id.text : null) ?? this.environmentShadowReferenceName(id) ??
+            (this.sourceEnvironmentEnabled(id.getSourceFile()) && this.isImplicitArgumentsIdentifier(id) ? "arguments" : null);
         if (!name) return null;
         const key = this.test262GlobalBindingKey(name);
         const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
@@ -39848,8 +40084,7 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
-        if (name === "eval" && this.options.test262Observation &&
-            this.isTest262OutOfBandIdentifier(calleeId)) {
+        if (name === "eval" && this.options.test262Observation && !call.questionDotToken) {
             return this.emitTest262DirectEvalCall(call);
         }
         const hostGlobal = this.test262HostGlobalBindingName(calleeId);
@@ -40674,40 +40909,33 @@ class Emitter {
     }
 
     private emitTest262DirectEvalCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) {
-            unsupported(call, "finite direct eval does not yet support a spread argument list");
+        let owner: ts.FunctionLikeDeclaration | null = null;
+        for (let node: ts.Node | undefined = call.parent; node; node = node.parent) {
+            if (ts.isFunctionLike(node) && "body" in node) { owner = node as ts.FunctionLikeDeclaration; break; }
         }
-        const args = Array.from(call.arguments, (argument) => this.emitExpr(argument));
-        return this.emitSequencedExpr(
-            T_VALUE,
-            [
-                {
-                    value: {
-                        c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("eval")})`,
-                        ty: T_VALUE,
-                    },
-                    target: T_VALUE,
-                    node: call.expression,
-                },
-                ...args.map((value, index) => ({
-                    value,
-                    target: T_VALUE,
-                    node: call.arguments[index]!,
-                })),
-            ],
-            ([callee, ...values]) => {
-                const list = this.freshTemp("_direct_eval_args");
-                const pieces = [
-                    `tsc_array_t* ${list} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length)})`,
-                ];
-                for (const value of values) pieces.push(`tsc_array_push_value(${list}, ${value})`);
-                pieces.push(
-                    `tsc_test262_direct_eval_call(${callee}, tsc_value_array(${list}), ` +
-                    `${this.nodeIsInStrictMode(call) ? "true" : "false"})`,
-                );
-                return `({ ${pieces.join("; ")}; })`;
-            },
-        );
+        const references: string[] = [];
+        for (const symbol of this.checker.getSymbolsInScope(call, ts.SymbolFlags.Value)) {
+            const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+            const identifier = this.environmentBindingIdentifier(symbol);
+            if (!declaration || !identifier || declaration.getSourceFile().isDeclarationFile ||
+                this.test262ScriptGlobalBindingName(identifier)) continue;
+            const outer = !!owner && !this.isNodeWithin(declaration, owner);
+            if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
+            references.push(this.environmentBindingReference(symbol, call, outer));
+        }
+        const callee = this.emitExpr(call.expression);
+        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+        return this.emitSequencedExpr(T_VALUE,
+            [{value:callee,target:T_VALUE,node:call.expression}, {value:argumentsList,node:call}],
+            ([fn,args]) => {
+                const scope = this.freshTemp("_direct_eval_environment");
+                const projection = references.length
+                    ? `(tsc_environment_binding_ref_t[]){ ${references.join(", ")} }` : "NULL";
+                return `({ tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = ` +
+                    `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
+                    `(void)tsc_environment_swap(${scope}.record); ` +
+                    `tsc_test262_direct_eval_call(${fn}, tsc_value_array(${args}), ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
+            });
     }
 
     private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
@@ -41153,8 +41381,26 @@ class Emitter {
         const pieces = [
             `${type.c} ${tmp} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName}))`,
             `${tmp}->fn = ${implName}`,
-            `tsc_callable_owner_capture(&${tmp}->callable)`,
         ];
+        if (this.sourceEnvironmentEnabled(fn.getSourceFile())) {
+            let creator: ts.FunctionLikeDeclaration | null = null;
+            for (let node: ts.Node | undefined = fn.parent; node; node = node.parent) {
+                if (ts.isFunctionLike(node) && "body" in node) { creator = node as ts.FunctionLikeDeclaration; break; }
+            }
+            const references = captures.filter(capture => {
+                const declaration = capture.symbol.valueDeclaration ?? capture.symbol.declarations?.[0];
+                return declaration && this.environmentBindingIsLexical(capture.symbol) &&
+                    (!creator || this.isNodeWithin(declaration, creator));
+            }).map(capture => this.environmentBindingReference(capture.symbol, fn));
+            if (references.length) {
+                const scope = this.freshTemp("_closure_environment");
+                pieces.push(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = ` +
+                    `{ .previous = tsc_environment_current(), .record = tsc_environment_project(` +
+                    `(tsc_environment_binding_ref_t[]){ ${references.join(", ")} }, ${references.length}) }`);
+                pieces.push(`(void)tsc_environment_swap(${scope}.record)`);
+            }
+        }
+        pieces.push(`tsc_callable_owner_capture(&${tmp}->callable)`);
         if (envType) {
             const env = this.freshTemp("_env");
             pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`);
@@ -41312,6 +41558,7 @@ class Emitter {
                 capturedCells,
                 argumentScope,
                 argumentTypeScope,
+                envBindings,
             )
             : null;
         if (!javaScriptFormalPlans) for (let i = 0; i < runtimeParams.length; i++) {
@@ -59405,16 +59652,14 @@ class Emitter {
         buf.line(`${type.c} fn = (${type.c})env;`);
         if (!type.thisParam) buf.line("(void)this_arg;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+        if (normalizesSloppyThis) buf.line("this_arg = tsc_value_sloppy_this(this_arg);");
         if (createsActivation) {
             buf.line("tsc_call_activation_t activation;");
             buf.line("tsc_call_activation_push(&activation, args, this_arg, tsc_value_current_callee());");
         }
         const callArgs: string[] = ["fn->env"];
         if (type.thisParam) {
-            const thisValue = normalizesSloppyThis
-                ? "tsc_value_sloppy_this(this_arg)"
-                : "this_arg";
-            callArgs.push(this.coerce({ c: thisValue, ty: T_VALUE }, type.thisParam, node));
+            callArgs.push(this.coerce({ c: "this_arg", ty: T_VALUE }, type.thisParam, node));
         }
         for (let i = 0; i < params.length; i++) {
             if (i === restIndex) {

@@ -361,8 +361,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-static-semantics-propname` — Static Semantics: PropName ( ): a String or ~empty~: exact disposition and partitions missing.
 - [ ] **Executable Code and Execution Contexts** (`sec-executable-code-and-execution-contexts`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: realm and agent state; execution contexts; environment records; jobs.
-  - Linked local regression evidence: property: tests/property/eval-environment.property.test.ts; E2E: function_closures, runtime_eval.
-  - Known blockers: Caller lexical-cell aliases, function variable insertion, complete class/private/this/new.target eval context, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete.
+  - Linked local regression evidence: property: tests/property/eval-environment.property.test.ts, tests/property/direct-eval-cell.property.test.ts; E2E: function_closures, runtime_eval.
+  - Known blockers: Class/private/super/with environments, complete Annex B, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete.
   - [ ] `sec-executable-code-and-execution-contexts` — Executable Code and Execution Contexts: exact disposition and partitions missing.
   - [ ] `sec-environment-records` — Environment Records: exact disposition and partitions missing.
   - [ ] `sec-the-environment-record-type-hierarchy` — The Environment Record Type Hierarchy: exact disposition and partitions missing.
@@ -676,7 +676,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 - [ ] **ECMAScript Language: Expressions** (`sec-ecmascript-language-expressions`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: evaluation order; references and calls; operators and coercion; assignment and destructuring; spread and optional chains.
   - Linked local regression evidence: property: tests/property/tagged-template-site.property.test.ts; E2E: call_arg_order, dynamic_ops, rest_spread, tagged_template_sites.
-  - Known blockers: Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete direct-eval lexical capture remain incomplete.
+  - Known blockers: Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete.
   - [ ] `sec-ecmascript-language-expressions` — ECMAScript Language: Expressions: exact disposition and partitions missing.
   - [ ] `sec-identifiers` — Identifiers: exact disposition and partitions missing.
   - [ ] `sec-identifiers-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
