@@ -261,25 +261,67 @@ static tsc_value_t generator_result(tsc_value_t value, bool done) {
     return tsc_value_object(result);
 }
 
+static void async_generator_drain(tsc_generator_t* generator);
+static tsc_value_t async_generator_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+
+static void async_generator_complete_step(tsc_generator_t* generator,
+        tsc_completion_kind_t kind, tsc_value_t value, bool done) {
+    tsc_generator_request_t* request = generator->queue_head;
+    if (!request) tsc_panic("Async generator has no current request");
+    void* volatile value_root = tsc_value_gc_root(value);
+    generator->queue_head = request->next;
+    if (!generator->queue_head) generator->queue_tail = NULL;
+    tsc_completion_record_clear(&generator->request);
+    if (kind == TSC_COMPLETION_THROW) tsc_promise_reject_in_place(request->capability, value);
+    else {
+        tsc_realm_t* previous = tsc_realm_swap(generator->caller_realm);
+        tsc_value_t result = generator_result(value, done);
+        (void)tsc_realm_swap(previous);
+        tsc_promise_resolve_into(request->capability, result);
+    }
+    tsc_completion_record_clear(&request->completion);
+    request->next = NULL;
+    (void)value_root;
+}
+
+bool tsc_generator_resume_enter(tsc_generator_t* generator, tsc_realm_t* caller_realm) {
+    bool previous = generator->processing;
+    generator->processing = true;
+    generator->caller_realm = caller_realm;
+    return previous;
+}
+void tsc_generator_resume_leave(tsc_generator_t* generator, bool was_processing) {
+    generator->processing = was_processing;
+    if (generator->asynchronous && !was_processing) async_generator_drain(generator);
+}
+
 void tsc_generator_suspend_result(tsc_generator_t* generator, tsc_value_t result) {
+    if (generator->asynchronous) tsc_panic("Async delegation requires a canonical operation");
     tsc_completion_record_set(&generator->result, TSC_COMPLETION_NORMAL, result, -1);
     generator->state = TSC_GENERATOR_SUSPENDED_YIELD;
 }
 void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value) {
-    tsc_generator_suspend_result(generator, generator_result(value, false));
+    if (generator->asynchronous) {
+        generator->state = TSC_GENERATOR_SUSPENDED_YIELD;
+        async_generator_complete_step(generator, TSC_COMPLETION_NORMAL, value, false);
+    } else tsc_generator_suspend_result(generator, generator_result(value, false));
 }
 void tsc_generator_complete(tsc_generator_t* generator, tsc_completion_kind_t kind, tsc_value_t value) {
     tsc_completion_record_set(&generator->result, kind, value, -1);
-    generator->state = TSC_GENERATOR_COMPLETED;
+    generator->state = generator->asynchronous ? TSC_GENERATOR_DRAINING_QUEUE : TSC_GENERATOR_COMPLETED;
     generator->resume = NULL;
     generator->env = NULL;
+    if (generator->asynchronous) {
+        async_generator_complete_step(generator, kind, value, true);
+        tsc_completion_record_clear(&generator->result);
+    }
 }
 
 static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t* args) {
     tsc_completion_kind_t kind = *(const tsc_completion_kind_t*)env;
     tsc_object_t* object = value_is_object_value(receiver) ? (tsc_object_t*)value_ptr(receiver) : NULL;
     tsc_generator_t* generator = object ? object->generator : NULL;
-    if (!generator) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Generator method called on incompatible receiver"));
+    if (!generator || generator->asynchronous) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Generator method called on incompatible receiver"));
     if (generator->state == TSC_GENERATOR_EXECUTING)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Generator is already executing"));
     tsc_value_t value = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
@@ -329,31 +371,34 @@ static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t
 }
 
 static const char generator_graph_prototype_key = 0;
-static tsc_value_t generator_prototype_value(void) {
-    tsc_object_t* prototype = tsc_realm_state_get(&generator_graph_prototype_key);
+static const char async_generator_graph_prototype_key = 0;
+static tsc_value_t generator_prototype_value(bool asynchronous) {
+    const void* key = asynchronous ? &async_generator_graph_prototype_key : &generator_graph_prototype_key;
+    tsc_object_t* prototype = tsc_realm_state_get(key);
     if (!prototype) {
-        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
-        tsc_realm_state_set(&generator_graph_prototype_key, prototype);
+        prototype = tsc_object_new_with_prototype(asynchronous
+            ? tsc_async_iterator_prototype_value() : tsc_iterator_prototype_value());
+        tsc_realm_state_set(key, prototype);
         static const struct { const char* name; tsc_completion_kind_t kind; } methods[] = {
             { "next", TSC_COMPLETION_NORMAL }, { "return", TSC_COMPLETION_RETURN }, { "throw", TSC_COMPLETION_THROW }
         };
         for (size_t index = 0; index < sizeof(methods) / sizeof(*methods); ++index) {
             tsc_str_t* name = tsc_str_from_cstr(methods[index].name);
-            tsc_object_define(prototype, name, tsc_value_function_builtin_named(generator_resume,
+            tsc_object_define(prototype, name, tsc_value_function_builtin_named(asynchronous ? async_generator_apply : generator_resume,
                 (void*)&methods[index].kind, 1, name), true, false, true);
         }
         tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
-            tsc_value_string(tsc_str_from_lit("Generator", 9)), false, false, true);
+            tsc_value_string(tsc_str_from_cstr(asynchronous ? "AsyncGenerator" : "Generator")), false, false, true);
     }
     return tsc_value_object(prototype);
 }
 
-tsc_value_t tsc_generator_function_value(tsc_value_t function) {
+tsc_value_t tsc_generator_function_value(tsc_value_t function, bool asynchronous) {
     if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION) return function;
     tsc_function_identity_t* identity = value_ptr(function);
     if (!identity->is_generator) {
         void* volatile function_root = tsc_value_gc_root(function);
-        tsc_object_t* prototype = tsc_object_new_with_prototype(generator_prototype_value());
+        tsc_object_t* prototype = tsc_object_new_with_prototype(generator_prototype_value(asynchronous));
         tsc_function_identity_set_own_prototype(identity, tsc_value_object(prototype));
         identity->func_prototype_initialized = true;
         identity->has_prototype_property = true;
@@ -363,15 +408,16 @@ tsc_value_t tsc_generator_function_value(tsc_value_t function) {
     return function;
 }
 
-tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env) {
+tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env, bool asynchronous) {
     tsc_value_t callee = tsc_value_current_callee();
     tsc_value_t prototype = tsc_value_is_callable(callee)
         ? tsc_value_get_prop(callee, tsc_str_from_lit("prototype", 9)) : tsc_value_undefined();
-    if (!tsc_value_is_object(prototype)) prototype = generator_prototype_value();
+    if (!tsc_value_is_object(prototype)) prototype = generator_prototype_value(asynchronous);
     void* volatile prototype_root = tsc_value_gc_root(prototype);
     tsc_generator_t* generator = TSC_GC_MALLOC(sizeof(*generator));
     *generator = (tsc_generator_t){ .object = tsc_object_new_with_prototype(prototype),
-        .realm = tsc_realm_current(), .resume = resume, .env = env, .state = TSC_GENERATOR_SUSPENDED_START };
+        .realm = tsc_realm_current(), .caller_realm = tsc_realm_current(), .resume = resume, .env = env,
+        .asynchronous = asynchronous, .state = TSC_GENERATOR_SUSPENDED_START };
     generator->object->generator = generator;
     tsc_completion_record_clear(&generator->request);
     tsc_completion_record_clear(&generator->result);
@@ -379,6 +425,124 @@ tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env) {
     return generator;
 }
 tsc_value_t tsc_generator_value(tsc_generator_t* generator) { return tsc_value_object(generator->object); }
+
+/* Async requests are one FIFO worklist. A processing guard keeps reentrant
+ * enqueues and successive ready requests off the native call stack. */
+typedef struct {
+    tsc_generator_t* generator;
+    tsc_promise_t* source;
+    tsc_realm_t* realm;
+    bool resuming;
+} async_generator_return_t;
+
+static void async_generator_return_callback(void* env) {
+    async_generator_return_t* state = env;
+    tsc_generator_t* generator = state->generator;
+    tsc_realm_t* previous = tsc_realm_swap(state->realm);
+    bool rejected = tsc_promise_is_rejected(state->source);
+    tsc_value_t value = rejected ? tsc_promise_reason(state->source) : tsc_promise_value(state->source);
+    generator->awaiting_return = false;
+    if (state->resuming) {
+        tsc_completion_record_set(&generator->queue_head->completion,
+            rejected ? TSC_COMPLETION_THROW : TSC_COMPLETION_RETURN, value, -1);
+        generator->queue_head->unwrapped = true;
+        generator->state = TSC_GENERATOR_SUSPENDED_YIELD;
+    } else {
+        generator->caller_realm = state->realm;
+        bool processing = generator->processing;
+        generator->processing = true;
+        async_generator_complete_step(generator, rejected ? TSC_COMPLETION_THROW : TSC_COMPLETION_NORMAL, value, true);
+        generator->processing = processing;
+    }
+    async_generator_drain(generator);
+    (void)tsc_realm_swap(previous);
+}
+
+static bool async_generator_await_return(tsc_generator_t* generator, bool resuming) {
+    async_generator_return_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (async_generator_return_t){ .generator = generator, .realm = tsc_realm_current(), .resuming = resuming };
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        if (resuming) {
+            tsc_completion_record_set(&generator->queue_head->completion, TSC_COMPLETION_THROW, error, -1);
+            generator->queue_head->unwrapped = true;
+            generator->state = TSC_GENERATOR_SUSPENDED_YIELD;
+        } else async_generator_complete_step(generator, TSC_COMPLETION_THROW, error, true);
+        return false;
+    }
+    state->source = tsc_promise_await(generator->queue_head->completion.value);
+    tsc_try_pop();
+    generator->awaiting_return = true;
+    generator->state = resuming ? TSC_GENERATOR_EXECUTING : TSC_GENERATOR_DRAINING_QUEUE;
+    if (tsc_promise_is_pending(state->source))
+        tsc_promise_add_callback(state->source, async_generator_return_callback, state);
+    else tsc_queue_microtask(async_generator_return_callback, state);
+    return true;
+}
+
+static void async_generator_drain(tsc_generator_t* generator) {
+    if (generator->processing || generator->awaiting_return) return;
+    generator->processing = true;
+    while (generator->queue_head && generator->state != TSC_GENERATOR_EXECUTING) {
+        tsc_generator_request_t* request = generator->queue_head;
+        if (generator->state == TSC_GENERATOR_SUSPENDED_START && request->completion.kind != TSC_COMPLETION_NORMAL) {
+            generator->state = TSC_GENERATOR_DRAINING_QUEUE;
+            generator->resume = NULL;
+            generator->env = NULL;
+        }
+        if (generator->state == TSC_GENERATOR_DRAINING_QUEUE || generator->state == TSC_GENERATOR_COMPLETED) {
+            generator->state = TSC_GENERATOR_DRAINING_QUEUE;
+            generator->caller_realm = tsc_realm_current();
+            if (request->completion.kind == TSC_COMPLETION_RETURN) {
+                if (async_generator_await_return(generator, false)) break;
+            } else async_generator_complete_step(generator, request->completion.kind,
+                request->completion.kind == TSC_COMPLETION_THROW ? request->completion.value : tsc_value_undefined(), true);
+            continue;
+        }
+        if (generator->state == TSC_GENERATOR_SUSPENDED_YIELD &&
+                request->completion.kind == TSC_COMPLETION_RETURN && !request->unwrapped) {
+            if (async_generator_await_return(generator, true)) break;
+            continue;
+        }
+        tsc_completion_record_set(&generator->request, request->completion.kind,
+            generator->state == TSC_GENERATOR_SUSPENDED_START ? tsc_value_undefined() : request->completion.value, -1);
+        generator->state = TSC_GENERATOR_EXECUTING;
+        generator->resume(generator->env);
+    }
+    if (!generator->queue_head && generator->state == TSC_GENERATOR_DRAINING_QUEUE)
+        generator->state = TSC_GENERATOR_COMPLETED;
+    generator->processing = false;
+}
+
+static tsc_value_t async_generator_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    tsc_completion_kind_t kind = *(const tsc_completion_kind_t*)env;
+    tsc_promise_t* capability = tsc_promise_pending();
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        tsc_promise_reject_in_place(capability, error);
+        return tsc_value_promise(capability);
+    }
+    tsc_object_t* object = value_is_object_value(receiver) ? value_ptr(receiver) : NULL;
+    tsc_generator_t* generator = object ? object->generator : NULL;
+    if (!generator || !generator->asynchronous)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async generator method called on incompatible receiver"));
+    tsc_generator_request_t* request = TSC_GC_MALLOC(sizeof(*request));
+    *request = (tsc_generator_request_t){ .capability = capability };
+    tsc_completion_record_set(&request->completion, kind,
+        args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined(), -1);
+    if (generator->queue_tail) generator->queue_tail->next = request;
+    else generator->queue_head = request;
+    generator->queue_tail = request;
+    async_generator_drain(generator);
+    tsc_try_pop();
+    return tsc_value_promise(capability);
+}
 
 /* Yield delegation preserves the actual iterator result object while it is
  * incomplete. In particular it must not read value until done is true. */

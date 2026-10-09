@@ -84,7 +84,7 @@ function transparent(expression: ts.Expression): ts.Expression {
  * come exclusively from its collections; no suspension count, call arity,
  * branch depth or literal width changes the algorithm. Reference formation,
  * GetValue, ToPropertyKey and actual argument iteration are distinct states. */
-export function planResumableExpression(expression: ts.Expression): ResumableExpressionPlan {
+export function planResumableExpression(expression: ts.Expression, options: { asyncGenerator?: boolean } = {}): ResumableExpressionPlan {
     const states: Array<ResumableExpressionState | undefined> = [];
     const values: ts.Expression[] = [];
     const worklist: Array<() => void> = [];
@@ -259,8 +259,11 @@ export function planResumableExpression(expression: ts.Expression): ResumableExp
             if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
                 const operand = node.expression, slot = operand ? value(operand) : null;
                 const suspension = ts.isAwaitExpression(node) ? "await" : node.asteriskToken ? "delegate" : "yield";
-                const suspend = put({ kind: "suspend", id: reserve(), node, source: slot, output, suspension, next });
-                jump(anchor, operand ? build(operand, slot!, suspend) : suspend);
+                const awaited = options.asyncGenerator && suspension === "yield" ? value(node) : null;
+                const suspend = put({ kind: "suspend", id: reserve(), node, source: awaited ?? slot, output, suspension, next });
+                const entry = awaited === null ? suspend : put({ kind: "suspend", id: reserve(), node,
+                    source: slot, output: awaited, suspension: "await", next: suspend });
+                jump(anchor, operand ? build(operand, slot!, entry) : entry);
                 return;
             }
             if (ts.isConditionalExpression(node)) {

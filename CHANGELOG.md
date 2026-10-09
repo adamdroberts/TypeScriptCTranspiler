@@ -1,5 +1,7 @@
 # Changelog
 
+- Project async generators through the shared resumable graph and one FIFO completion/capability worklist. Preserve implicit Yield/return Await, return-request adoption, catch/finalization, reentrant enqueues, completed-queue draining and retained activation. Add ordinary async protocol brands and typed declaration surfaces; include base constructor parameter properties in native field/root storage. Verify generated semantic requests, deep finalization, native roots and typed E2E in both memory modes.
+
 - Retain captured async Iterator Records and ordinary receiver-owned async-from-sync wrappers. Preserve GetIterator and pre-Await errors, conditional close suspension, actual TypeErrors, incoming throw precedence, argument presence and value-rejection cleanup. Delete next rereads, bare-iterator admission and unconditional close Await; verify independent semantic partitions, deep unwinding and typed native E2E in both memory modes.
 
 - Replace fixed generator templates and the eager fallback with one ordinary lifecycle owner consuming the shared resumable graph. Preserve activation/formal/body cells, actual next/return/throw requests, yielding finalizers, delegation result identity, expression staging and live IteratorClose. Remove generator Array queues/brands, fake Array protocol methods and lazy conversions; share the C/C++ Array ABI and rooted bridge argument Lists. Verify independent and generated semantic partitions, deep retained finalization and typed native E2E in both memory modes.

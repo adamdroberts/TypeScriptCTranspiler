@@ -326,7 +326,7 @@ export interface AsyncControlFlowGraph {
 }
 
 export interface AsyncControlFlowPlannerOptions {
-    readonly suspensionKind?: "async" | "generator";
+    readonly suspensionKind?: "async" | "generator" | "async-generator";
     readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
     readonly isSupportedNestedClass?: (node: ts.ClassDeclaration) => boolean;
 }
@@ -393,7 +393,7 @@ export function planAsyncControlFlowGraph(
         }
         return false;
     };
-    const containsAwait = (node: ts.Node): boolean => containsSuspension(node, options.suspensionKind === "generator");
+    const containsAwait = (node: ts.Node): boolean => containsSuspension(node, options.suspensionKind === "generator" || options.suspensionKind === "async-generator");
     const containsSuspendingBindingExpression = (node: ts.Node): boolean => containsSuspension(node, true);
     const containsUnsupportedNestedFunctionOrClass = (node: ts.Node): boolean => {
         let found = false;
@@ -427,7 +427,7 @@ export function planAsyncControlFlowGraph(
                 current.label
                 ? current.label.text
                 : null;
-            if (ts.isAwaitExpression(current) || (options.suspensionKind === "generator" && ts.isYieldExpression(current)) || ts.isReturnStatement(current) ||
+            if (ts.isAwaitExpression(current) || ((options.suspensionKind === "generator" || options.suspensionKind === "async-generator") && ts.isYieldExpression(current)) || ts.isReturnStatement(current) ||
                 (labelledCompletion !== null && labelledCompletion !== localLabel)) {
                 ok = false;
                 return;
@@ -585,7 +585,7 @@ export function planAsyncControlFlowGraph(
         } | null = null,
         resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
-        const operationPlan = planResumableExpression(expression);
+        const operationPlan = planResumableExpression(expression, { asyncGenerator: options.suspensionKind === "async-generator" });
         if (operationPlan.kind === "graph") {
             const graph = operationPlan.graph;
             const slots = graph.values.map(owner => {
@@ -601,7 +601,7 @@ export function planAsyncControlFlowGraph(
             const targets = new Map(graph.states.map(operation => [operation.id, target(reserve())]));
             for (const operation of graph.states) {
                 if (operation.kind === "suspend") {
-                    if (operation.suspension !== "await" && options.suspensionKind !== "generator") return null;
+                    if (operation.suspension !== "await" && options.suspensionKind !== "generator" && options.suspensionKind !== "async-generator") return null;
                     awaitCount++;
                 }
                 const edgeIds = operation.kind === "complete" ? [] : operation.kind === "branch"
@@ -1359,6 +1359,14 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
+        if (options.suspensionKind === "async-generator" && ts.isReturnStatement(statement) && statement.expression) {
+            const awaited = ts.factory.createAwaitExpression(statement.expression);
+            const returned = ts.factory.updateReturnStatement(statement, awaited);
+            ts.setTextRange(awaited, statement.expression);
+            Object.assign(returned, { parent: statement.parent });
+            Object.assign(awaited, { parent: returned });
+            statement = returned;
+        }
         if (ts.isBlock(statement)) return buildLexicalBlock(statement, next, context);
         if (ts.isLabeledStatement(statement)) {
             if (ts.isWhileStatement(statement.statement) || ts.isDoStatement(statement.statement) ||
@@ -1848,7 +1856,7 @@ export function planAsyncControlFlowGraph(
      * protected region). In that case this zero-suspension graph is the
      * canonical proof that the syntax is unreachable; rejecting it would send
      * the original await-bearing tree to an emitter which must fail closed. */
-    if (reachableAwaitCount < 1 && awaitCount < 1 && options.suspensionKind !== "generator") return null;
+    if (reachableAwaitCount < 1 && awaitCount < 1 && options.suspensionKind !== "generator" && options.suspensionKind !== "async-generator") return null;
     return {
         kind: "async-control-flow",
         entry,

@@ -30,6 +30,7 @@ function source(): string {
             return value.text;
         }
         class Base { value: any; }
+        class ParameterOwner { constructor(public value: any) {} }
         class Owner extends Base {
             second: any = payload(2, 31);
             constructor(value: any) { super(); this.value = value; }
@@ -47,10 +48,11 @@ function source(): string {
         function shorthand(): RecordOwner { const value: any = payload(0, 20), second: any = payload(0, 21); return { value, second }; }
         function spread(): RecordOwner { const original = literal(0); return { ...original, value: payload(0, 22) }; }
         for (let kind = 0; kind < 6; kind++) {
-            const owner = create(kind), record = literal(kind);
+            const owner = create(kind), record = literal(kind), parameter = new ParameterOwner(payload(kind, 38));
             sweep();
             host.print("field:" + kind + ":" + inherited(owner) + ":" + describe(owner.second));
             host.print("literal:" + kind + ":" + describe(record.value) + ":" + describe(record.second));
+            host.print("parameter:" + kind + ":" + describe(parameter.value));
         }
         const short = shorthand(), copied = spread(); sweep();
         host.print("shorthand:" + describe(short.value) + ":" + describe(short.second));

@@ -1077,8 +1077,15 @@ typedef enum {
     TSC_GENERATOR_SUSPENDED_START,
     TSC_GENERATOR_EXECUTING,
     TSC_GENERATOR_SUSPENDED_YIELD,
+    TSC_GENERATOR_DRAINING_QUEUE,
     TSC_GENERATOR_COMPLETED
 } tsc_generator_state_t;
+typedef struct tsc_generator_request {
+    tsc_completion_record_t completion;
+    tsc_promise_t* capability;
+    struct tsc_generator_request* next;
+    bool unwrapped;
+} tsc_generator_request_t;
 typedef struct tsc_generator {
     tsc_object_t* object;
     tsc_realm_t* realm;
@@ -1087,10 +1094,17 @@ typedef struct tsc_generator {
     tsc_generator_state_t state;
     tsc_completion_record_t request;
     tsc_completion_record_t result;
+    bool asynchronous;
+    bool processing;
+    bool awaiting_return;
+    tsc_realm_t* caller_realm;
+    tsc_generator_request_t *queue_head, *queue_tail;
 } tsc_generator_t;
-tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env);
+tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env, bool asynchronous);
 tsc_value_t tsc_generator_value(tsc_generator_t* generator);
-tsc_value_t tsc_generator_function_value(tsc_value_t function);
+tsc_value_t tsc_generator_function_value(tsc_value_t function, bool asynchronous);
+bool tsc_generator_resume_enter(tsc_generator_t* generator, tsc_realm_t* caller_realm);
+void tsc_generator_resume_leave(tsc_generator_t* generator, bool was_processing);
 void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value);
 void tsc_generator_suspend_result(tsc_generator_t* generator, tsc_value_t result);
 void tsc_generator_complete(tsc_generator_t* generator, tsc_completion_kind_t kind, tsc_value_t value);

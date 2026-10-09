@@ -79,6 +79,25 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
     throw(e: any, ...ignored: any[]): IteratorResult<T, TReturn>;
     [Symbol.iterator](): Generator<T, TReturn, TNext>;
 }
+type Awaited<T> = T extends null | undefined ? T :
+    T extends object & { then(onfulfilled: infer F, ...args: infer _): any; } ?
+        F extends (value: infer V, ...args: infer _) => any ? Awaited<V> : never : T;
+interface AsyncIterator<T, TReturn = any, TNext = undefined> {
+    next(value?: TNext, ...ignored: any[]): Promise<IteratorResult<T, TReturn>>;
+    return?(value?: TReturn, ...ignored: any[]): Promise<IteratorResult<T, TReturn>>;
+    throw?(reason?: any, ...ignored: any[]): Promise<IteratorResult<T, TReturn>>;
+}
+interface AsyncIterable<T> {
+    [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+interface AsyncIterableIterator<T> extends AsyncIterator<T> {
+    [Symbol.asyncIterator](): AsyncIterableIterator<T>;
+}
+interface AsyncGenerator<T = unknown, TReturn = any, TNext = unknown> extends AsyncIterator<T, TReturn, TNext> {
+    return(value?: TReturn, ...ignored: any[]): Promise<IteratorResult<T, TReturn>>;
+    throw(reason?: any, ...ignored: any[]): Promise<IteratorResult<T, TReturn>>;
+    [Symbol.asyncIterator](): AsyncGenerator<T, TReturn, TNext>;
+}
 
 interface PromiseLike<T> {
     then<TResult1 = T, TResult2 = never>(

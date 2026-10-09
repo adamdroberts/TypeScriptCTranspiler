@@ -15571,8 +15571,7 @@ class Emitter {
         return this.isDirectScopeLexicalDeclaration(declaration) &&
             !!declaration.name &&
             !!declaration.body &&
-            !this.isGenericFunction(declaration) &&
-            !(this.isAsyncDeclaration(declaration) && declaration.asteriskToken);
+            !this.isGenericFunction(declaration);
     }
 
     private identifierName(id: ts.Identifier): string {
@@ -25979,8 +25978,8 @@ class Emitter {
         this.structDecls.line();
     }
 
-    private classOwnInstanceFields(cd: ts.ClassDeclaration): { name: string; type: CType; initializer?: ts.Expression }[] {
-        const fields: { name: string; type: CType; initializer?: ts.Expression }[] = [];
+    private classOwnInstanceFields(cd: ts.ClassDeclaration): { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }[] {
+        const fields: { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }[] = [];
         const seen = new Set<string>();
         for (const m of cd.members) {
             if (!ts.isPropertyDeclaration(m) || isStatic(m)) continue;
@@ -25990,10 +25989,19 @@ class Emitter {
             seen.add(fieldName);
             fields.push({ name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
         }
-        if (!this.isJavaScriptSourceFile(cd.getSourceFile())) return fields;
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
             | undefined;
+        for (const parameter of ctor?.parameters ?? []) {
+            if (!ts.isParameterPropertyDeclaration(parameter, ctor!)) continue;
+            if (!ts.isIdentifier(parameter.name)) unsupported(parameter, "native parameter property requires an identifier binding");
+            if (this.baseClassDecl(cd)) unsupported(parameter, "derived parameter properties require the canonical class initialization plan");
+            if (!seen.has(parameter.name.text)) {
+                seen.add(parameter.name.text);
+                fields.push({ name: parameter.name.text, type: mapType(parameter, this.checker), parameter });
+            }
+        }
+        if (!this.isJavaScriptSourceFile(cd.getSourceFile())) return fields;
         if (!ctor?.body) return fields;
         const visit = (n: ts.Node): void => {
             if (n !== ctor.body && ts.isFunctionLike(n)) return;
@@ -27436,6 +27444,11 @@ class Emitter {
                 );
             }
         }
+        for (const field of this.classOwnInstanceFields(cd)) {
+            if (field.parameter && ts.isIdentifier(field.parameter.name)) this.defs.line(
+                `${this.nativeFieldStore("self", name, field.name, field.type, mangleIdent(field.parameter.name.text))};`,
+            );
+        }
         if (ctor && ctor.body) {
             this.currentClass = name;
             this.currentBaseClass = baseName;
@@ -27491,10 +27504,7 @@ class Emitter {
                 const isAsync = this.isAsyncDeclaration(m);
                 const isGenerator = this.isGeneratorDeclaration(m);
                 const mappedRet = this.prepareType(ret);
-                if (isAsync && isGenerator) {
-                    unsupported(m, "async generator methods require Phase 6 async lowering");
-                }
-                if (isAsync) {
+                if (isAsync && !isGenerator) {
                     this.validateImmediateAsyncFunction(m);
                     if (mappedRet.kind !== "promise") {
                         unsupported(m, "async methods must return Promise<T>");
@@ -29270,10 +29280,11 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
-        generator = false,
+        protocol: "async" | "generator" | "async-generator" = "async",
     ): boolean {
+        const generator = protocol !== "async", asyncGenerator = protocol === "async-generator";
         const graph = planAsyncControlFlowGraph(body, {
-            suspensionKind: generator ? "generator" : "async",
+            suspensionKind: protocol,
             isSupportedNestedFunction: (node) => {
                 if (ts.isFunctionDeclaration(node)) {
                     if (this.isSupportedLexicalFunctionDeclaration(node)) return true;
@@ -29301,7 +29312,7 @@ class Emitter {
             isSupportedNestedClass: (node) =>
                 this.isSupportedDirectSwitchClassDeclaration(node),
         });
-        if (!graph || (generator && graph.asyncIteratorCount > 0)) return false;
+        if (!graph || (protocol === "generator" && graph.asyncIteratorCount > 0)) return false;
         const owner = ts.isFunctionLike(body.parent) && "body" in body.parent
             ? body.parent as ts.FunctionLikeDeclaration : null;
         const requested = owner ? this.requestedFunctionActivationBindings(owner) : new Set<ArrowLexicalCaptureKind>();
@@ -30040,7 +30051,7 @@ class Emitter {
                         emitExceptionTransition("tsc_promise_reason(state->receiver)", exceptionTargetId);
                     } else {
                         callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(state->receiver));");
+                        callback.line(finish("throw", "tsc_promise_reason(state->receiver)"));
                         callback.line("return;");
                     }
                     callback.close();
@@ -30410,10 +30421,10 @@ class Emitter {
                         transition(operation.no);
                     } else if (operation.kind === "suspend") {
                         callback.line(`state->pc = ${stateNode.id};`);
-                        if (generator) {
-                            if (operation.suspension === "await") return false;
+                        if (generator && operation.suspension !== "await") {
                             const source = operation.source === null ? "tsc_value_undefined()" : read(operation.source);
                             if (operation.suspension === "delegate") {
+                                if (asyncGenerator) return false;
                                 callback.open("if (!state->awaiting)");
                                 callback.line("state->delegation = TSC_GC_MALLOC(sizeof(*state->delegation));");
                                 callback.line(`*state->delegation = tsc_sync_iterator_open(${source});`);
@@ -31237,8 +31248,10 @@ class Emitter {
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_realm_t* previous = tsc_realm_swap(state->realm);");
+        if (generator) callback.line("bool was_processing = tsc_generator_resume_enter(state->generator, previous);");
         callback.line(`${name}_resume(env);`);
         callback.line("(void)tsc_realm_swap(previous);");
+        if (generator) callback.line("tsc_generator_resume_leave(state->generator, was_processing);");
         callback.close();
         callback.line();
         this.closureDefs.write(callback.toString());
@@ -31249,7 +31262,7 @@ class Emitter {
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = NULL;`);
         if (generator) {
-            buf.line(`${env}->generator = tsc_generator_new(${name}, ${env});`);
+            buf.line(`${env}->generator = tsc_generator_new(${name}, ${env}, ${asyncGenerator ? "true" : "false"});`);
             buf.line(`${env}->delegation = NULL;`);
             buf.line(`tsc_completion_record_clear(&${env}->delegation_result);`);
         } else buf.line(`${env}->result_promise = ${result};`);
@@ -31514,9 +31527,6 @@ class Emitter {
     }
 
     private emitGeneratorFunctionBody(fd: ts.FunctionDeclaration): void {
-        if (this.isAsyncDeclaration(fd)) {
-            unsupported(fd, "async generator functions require Phase 6 async lowering");
-        }
         const { signature, returnType, thisType } = this.fnSignature(fd);
         const capturedCells = this.capturedCellsFor(fd);
         this.defs.open(signature);
@@ -31541,7 +31551,6 @@ class Emitter {
         thisParam: EmitResult | null,
     ): void {
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "generator function requires a block body");
-        if (this.isAsyncDeclaration(fn)) unsupported(fn, "async generator requires the canonical async generator protocol");
         const parameterValues = new Map<ts.Symbol, string>();
         const parameterTypes = new Map<ts.Symbol, CType>();
         const rawNames = this.collectParamInfos(runtimeParams).map(parameter => parameter.name);
@@ -31558,7 +31567,7 @@ class Emitter {
             if (formalPlans) this.emitJavaScriptFormalParameterInitialization(buf, fn, rawNames, formalPlans);
             else this.emitCapturedParameterCells(buf, runtimeParams, capturedCells);
             this.emitCallActivationConfiguration(buf, fn, capturedCells);
-            if (!this.emitAsyncControlFlowGraphContinuation(buf, fn.body, runtimeParams, thisParam, true))
+            if (!this.emitAsyncControlFlowGraphContinuation(buf, fn.body, runtimeParams, thisParam, this.isAsyncDeclaration(fn) ? "async-generator" : "generator"))
                 unsupported(fn.body, "generator suspension graph requires a canonical operation");
         } finally {
             this.endAsyncDynamicRootScope(previousDynamicRoots);
@@ -41548,10 +41557,7 @@ class Emitter {
 
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
-        if (isAsync && isGenerator) {
-            unsupported(fn, "async generator function values require Phase 6 async lowering");
-        }
-        if (isAsync) {
+        if (isAsync && !isGenerator) {
             this.validateImmediateAsyncFunction(fn);
             if (ret.kind !== "promise") {
                 unsupported(fn, "async function values must return Promise<T>");
@@ -50875,10 +50881,7 @@ class Emitter {
         const isAsync = this.isAsyncDeclaration(info.fn);
         const isGenerator = this.isGeneratorDeclaration(info.fn);
         const mappedRet = this.prepareType(ret);
-        if (isAsync && isGenerator) {
-            unsupported(info.fn, "async generator lifted function values require Phase 6 async lowering");
-        }
-        if (isAsync) {
+        if (isAsync && !isGenerator) {
             this.validateImmediateAsyncFunction(info.fn);
             if (mappedRet.kind !== "promise") {
                 unsupported(info.fn, "async lifted function values must return Promise<T>");
@@ -59222,7 +59225,7 @@ class Emitter {
                     : (r.ty.params ?? []).length;
                 const owner = this.freshTemp("_callable_owner");
                 const value = `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;
-                return sourceFunction && this.isGeneratorDeclaration(sourceFunction) ? `tsc_generator_function_value(${value})` : value;
+                return sourceFunction && this.isGeneratorDeclaration(sourceFunction) ? `tsc_generator_function_value(${value}, ${this.isAsyncDeclaration(sourceFunction) ? "true" : "false"})` : value;
             }
             case "class":
                 return this.classValueBoxExpression(r, node);
@@ -59316,7 +59319,7 @@ class Emitter {
     private withCallableSourceText(value: string, node: ts.Node): string {
         const source = this.callableSourceTextLiteral(node);
         const definition = ts.isExpression(node) ? this.functionLikeForExpression(node) : node;
-        if (definition && this.isGeneratorDeclaration(definition)) value = `tsc_generator_function_value(${value})`;
+        if (definition && this.isGeneratorDeclaration(definition)) value = `tsc_generator_function_value(${value}, ${this.isAsyncDeclaration(definition) ? "true" : "false"})`;
         if (source === "NULL") return value;
         return this.emitSequencedExpr(T_VALUE, [{ value: { c: value, ty: T_VALUE } }],
             ([rooted]) => `tsc_value_function_with_source(${rooted}, ${source})`).c;

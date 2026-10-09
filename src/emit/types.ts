@@ -484,7 +484,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "Event") return T_EVENT;
         if (sym?.getName() === "EventTarget") return T_EVENT_TARGET;
         if (["IteratorObject", "ArrayIterator", "RegExpStringIterator", "MapIterator", "SetIterator"].includes(sym?.getName() ?? "")) return T_VALUE;
-        if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
+        if (["IterableIterator", "Iterator", "Generator", "AsyncIterator", "AsyncIterableIterator", "AsyncGenerator"].includes(sym?.getName() ?? "")) {
             return T_VALUE;
         }
         if (sym?.getName() === "RegExp") return T_REGEXP;
