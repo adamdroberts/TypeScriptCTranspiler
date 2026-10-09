@@ -1074,6 +1074,7 @@ typedef enum {
     TSC_STRING_PROTOTYPE_REPLACE_ALL,
     TSC_STRING_PROTOTYPE_SPLIT,
     TSC_STRING_PROTOTYPE_MATCH,
+    TSC_STRING_PROTOTYPE_MATCH_ALL,
     TSC_STRING_PROTOTYPE_SEARCH,
     TSC_STRING_PROTOTYPE_TRIM,
     TSC_STRING_PROTOTYPE_TRIM_START,
@@ -1118,6 +1119,7 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
     { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
     { "match", 5, 1.0, TSC_STRING_PROTOTYPE_MATCH },
+    { "matchAll", 8, 1.0, TSC_STRING_PROTOTYPE_MATCH_ALL },
     { "search", 6, 1.0, TSC_STRING_PROTOTYPE_SEARCH },
     { "trim", 4, 0.0, TSC_STRING_PROTOTYPE_TRIM },
     { "trimStart", 9, 0.0, TSC_STRING_PROTOTYPE_TRIM_START },
@@ -1236,6 +1238,8 @@ static tsc_value_t string_prototype_method_apply(
             return tsc_value_method_split(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_MATCH:
             return tsc_value_method_match(this_arg, first);
+        case TSC_STRING_PROTOTYPE_MATCH_ALL:
+            return tsc_value_method_match_all(this_arg, first);
         case TSC_STRING_PROTOTYPE_SEARCH:
             return tsc_value_method_search(this_arg, first);
         case TSC_STRING_PROTOTYPE_TRIM:
@@ -1278,8 +1282,10 @@ typedef struct {
     void* iterator_prototype_root;
 } string_iterator_method_env_t;
 
-static tsc_value_t string_iterator_result_object(tsc_value_t value, bool done) {
-    tsc_object_t* result = tsc_object_new();
+tsc_value_t tsc_iterator_result(tsc_value_t value, bool done) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    tsc_object_t* volatile result = tsc_object_new();
     tsc_object_set(result, tsc_str_from_lit("value", 5), value);
     tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
     return tsc_value_object(result);
@@ -1300,12 +1306,12 @@ static tsc_value_t string_iterator_next_apply(void* env, tsc_value_t this_arg, t
     double current = value_as_num(position);
     tsc_array_t* sequence = (tsc_array_t*)value_ptr(chars);
     if (!(current >= 0.0) || current >= (double)sequence->len) {
-        return string_iterator_result_object(tsc_value_undefined(), true);
+        return tsc_iterator_result(tsc_value_undefined(), true);
     }
     size_t next = (size_t)(current + 1.0);
     tsc_value_t value = TSC_ARR(tsc_value_t, sequence, (size_t)current);
     tsc_object_set(iterator, tsc_str_from_lit("index", 5), tsc_value_num((double)next));
-    return string_iterator_result_object(value, false);
+    return tsc_iterator_result(value, false);
 }
 
 static tsc_value_t string_iterator_self_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -2928,6 +2934,20 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     ident->code.setter(ident->env, this_arg, value);
     (void)tsc_realm_swap(previous_realm);
     return tsc_value_undefined();
+}
+
+tsc_value_t tsc_value_species_constructor(tsc_value_t object, tsc_value_t default_constructor) {
+    tsc_value_t constructor = tsc_value_get_prop(object, tsc_str_from_lit("constructor", 11));
+    if (tsc_value_is_undefined(constructor)) return default_constructor;
+    if (!tsc_value_is_object(constructor))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Species constructor property must be an object"));
+    void* volatile constructor_gc_root = tsc_value_gc_root(constructor);
+    (void)constructor_gc_root;
+    tsc_value_t species = tsc_value_get_symbol_prop(constructor, tsc_symbol_species());
+    if (tsc_value_is_nullish(species)) return default_constructor;
+    if (!tsc_value_is_constructable(species))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Species must be a constructor"));
+    return species;
 }
 
 static tsc_value_t construct_from_argument_list(
@@ -5742,15 +5762,12 @@ double tsc_value_length(tsc_value_t v) {
     return 0.0;
 }
 
-tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_iter_values((const tsc_array_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return value_string_iterator_values((const tsc_str_t*)value_ptr(v));
-    }
-    tsc_throw_str(tsc_str_from_cstr("for-of value is not iterable"));
-    return tsc_array_new(sizeof(tsc_value_t), 1);
+tsc_array_t* tsc_value_iter_values(tsc_value_t value) {
+    tsc_sync_iterator_t record = tsc_sync_iterator_open(value);
+    tsc_array_t* result = tsc_array_new(sizeof(tsc_value_t), 4);
+    tsc_value_t current;
+    while (tsc_sync_iterator_step(&record, &current)) tsc_array_push_value(result, current);
+    return result;
 }
 
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
@@ -8195,18 +8212,34 @@ tsc_value_t tsc_value_method_search(tsc_value_t receiver, tsc_value_t pattern) {
     return string_regexp_protocol_from_values(receiver, pattern, tsc_symbol_search());
 }
 
-tsc_value_t tsc_value_method_match_all_regex(tsc_value_t recv, const tsc_regexp_t* re) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) {
-        return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
+tsc_value_t tsc_value_method_match_all(tsc_value_t receiver, tsc_value_t pattern) {
+    string_require_object_coercible(receiver, "String matchAll receiver");
+    if (tsc_value_is_object(pattern)) {
+        if (tsc_value_is_regexp(pattern)) {
+            tsc_value_t flags = tsc_value_get_prop(pattern, tsc_str_from_lit("flags", 5));
+            string_require_object_coercible(flags, "String matchAll flags");
+            tsc_str_t* text = tsc_value_to_string(flags);
+            if (!tsc_str_includes(text, tsc_str_from_lit("g", 1), 0))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String matchAll requires a global RegExp"));
+        }
+        tsc_value_t arguments[] = {receiver}, result;
+        if (string_protocol_call(pattern, tsc_symbol_match_all(), arguments, 1, &result)) return result;
     }
-    tsc_array_t* groups = tsc_str_match_all_regex((const tsc_str_t*)value_ptr(recv), re);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), groups && groups->len ? groups->len : 1);
-    if (!groups) return tsc_value_array(out);
-    for (size_t i = 0; i < groups->len; i++) {
-        tsc_value_t group = tsc_value_array(value_array_from_string_array(TSC_ARR(tsc_array_t*, groups, i)));
-        tsc_array_push_raw(out, &group);
-    }
-    return tsc_value_array(out);
+    tsc_str_t* string = tsc_value_to_string(receiver);
+    tsc_str_t* volatile string_gc_root = string;
+    (void)string_gc_root;
+    tsc_array_t* create_args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(create_args, pattern);
+    tsc_array_push_value(create_args, tsc_value_string(tsc_str_from_lit("g", 1)));
+    tsc_value_t regexp = tsc_value_construct(tsc_regexp_constructor_value(), tsc_value_array(create_args));
+    void* volatile regexp_gc_root = tsc_value_gc_root(regexp);
+    (void)regexp_gc_root;
+    tsc_value_t method = tsc_value_get_symbol_prop(regexp, tsc_symbol_match_all());
+    void* volatile method_gc_root = tsc_value_gc_root(method);
+    (void)method_gc_root;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, tsc_value_string(string));
+    return tsc_value_apply_function(method, regexp, tsc_value_array(args));
 }
 
 tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {

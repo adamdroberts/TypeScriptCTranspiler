@@ -1,0 +1,8 @@
+first: false b 1 true 1|2
+second: a 2 a true
+done: true true 1
+spread: b 1 ab
+alias: 0 1
+custom: input:custom
+global: TypeError
+unused-effect: 1

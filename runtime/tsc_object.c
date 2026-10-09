@@ -68,6 +68,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_error = false;
     o->is_arguments = false;
     o->is_array_iterator = false;
+    o->is_regexp_string_iterator = false;
     o->is_module_namespace = false;
     o->is_typed_array = false;
     o->is_url = false;

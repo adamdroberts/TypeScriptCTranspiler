@@ -2820,7 +2820,8 @@ tsc_value_t tsc_regexp_prototype_value(void) {
         const struct { tsc_symbol_t* key; const char* name; tsc_generic_function_t apply; double length; } symbols[] = {
             {tsc_symbol_match(), "[Symbol.match]", tsc_regexp_match_apply, 1},
             {tsc_symbol_search(), "[Symbol.search]", tsc_regexp_search_apply, 1},
-            {tsc_symbol_replace(), "[Symbol.replace]", tsc_regexp_replace_apply, 2}
+            {tsc_symbol_replace(), "[Symbol.replace]", tsc_regexp_replace_apply, 2},
+            {tsc_symbol_match_all(), "[Symbol.matchAll]", tsc_regexp_match_all_apply, 1}
         };
         for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++) {
             tsc_value_t method = tsc_value_function_builtin_named(symbols[i].apply, NULL, symbols[i].length,

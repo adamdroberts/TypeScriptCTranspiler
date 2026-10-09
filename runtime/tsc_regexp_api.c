@@ -280,6 +280,8 @@ tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* 
 static tsc_value_t regexp_exec_value(tsc_value_t receiver, const tsc_str_t* string) {
     tsc_value_t exec = tsc_value_get_prop(receiver, tsc_str_from_lit("exec", 4));
     if (tsc_value_is_callable(exec)) {
+        void* volatile exec_gc_root = tsc_value_gc_root(exec);
+        (void)exec_gc_root;
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, tsc_value_string((tsc_str_t*)string));
         tsc_value_t result = tsc_value_apply_function(exec, receiver, tsc_value_array(args));
@@ -338,19 +340,96 @@ tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t
     return result == tsc_value_null() ? tsc_value_num(-1) :
         tsc_value_get_prop(result, tsc_str_from_lit("index", 5));
 }
-tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
-    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
-    size_t* captures = regexp_captures(re);
-    tsc_array_t* result = tsc_array_new(sizeof(tsc_array_t*), 4);
-    size_t offset = 0;
-    while (regexp_find(re, units, len, offset, re->sticky, captures)) {
-        tsc_array_t* part = regexp_capture_array(re, units, captures);
-        tsc_array_push_raw(result, &part);
-        if (!re->global) break;
-        offset = captures[1];
-        if (captures[0] == offset) offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets);
+/* Every matchAll invocation owns one matcher/string/state record. The next
+ * operation performs precisely one ordinary RegExpExec, without a result
+ * count, capture count, pattern shape or native/custom matcher path. */
+typedef struct {
+    tsc_value_t matcher;
+    void* matcher_gc_root;
+    tsc_str_t* string;
+    bool global, unicode, done;
+} regexp_string_iterator_t;
+
+static const char regexp_string_iterator_prototype_key = 0;
+
+static tsc_value_t regexp_string_iterator_next(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT ||
+        !((tsc_object_t*)value_ptr(receiver))->is_regexp_string_iterator)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp String Iterator next called on incompatible receiver"));
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    (void)receiver_gc_root;
+    regexp_string_iterator_t* state = ((tsc_object_t*)value_ptr(receiver))->class_ptr;
+    if (state->done) return tsc_iterator_result(tsc_value_undefined(), true);
+    tsc_value_t matcher = state->matcher;
+    tsc_str_t* string = state->string;
+    tsc_value_t match = regexp_exec_value(matcher, string);
+    void* volatile match_gc_root = tsc_value_gc_root(match);
+    (void)match_gc_root;
+    if (match == tsc_value_null()) {
+        state->done = true;
+        return tsc_iterator_result(tsc_value_undefined(), true);
     }
-    return result;
+    if (!state->global) state->done = true;
+    else {
+        tsc_str_t* matched = tsc_value_to_string(tsc_value_get_index(match, 0));
+        if (!tsc_str_length(matched)) {
+            double index = tsc_value_to_length(tsc_value_get_prop(matcher, tsc_str_from_lit("lastIndex", 9)));
+            size_t length; const uint16_t* units = tsc_str_utf16_units(string, &length);
+            regexp_set_last_index_value(matcher, tsc_value_num(regexp_advance(units, length, index, state->unicode)));
+        }
+    }
+    return tsc_iterator_result(match, false);
+}
+
+static tsc_value_t regexp_string_iterator_prototype(void) {
+    tsc_object_t* prototype = tsc_realm_state_get(&regexp_string_iterator_prototype_key);
+    if (!prototype) {
+        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
+        tsc_realm_state_set(&regexp_string_iterator_prototype_key, prototype);
+        tsc_object_define(prototype, tsc_str_from_lit("next", 4),
+            tsc_value_function_builtin_named(regexp_string_iterator_next, NULL, 0,
+                tsc_str_from_lit("next", 4)), true, false, true);
+        tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
+            tsc_value_string(tsc_str_from_lit("RegExp String Iterator", 22)), false, false, true);
+    }
+    return tsc_value_object(prototype);
+}
+
+tsc_value_t tsc_regexp_match_all_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp matchAll called on non-object"));
+    tsc_str_t* string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    tsc_str_t* volatile string_gc_root = string;
+    (void)string_gc_root;
+    tsc_value_t constructor = tsc_value_species_constructor(receiver, tsc_regexp_constructor_value());
+    void* volatile constructor_gc_root = tsc_value_gc_root(constructor);
+    (void)constructor_gc_root;
+    tsc_str_t* flags = tsc_value_to_string(tsc_value_get_prop(receiver, tsc_str_from_lit("flags", 5)));
+    tsc_str_t* volatile flags_gc_root = flags;
+    (void)flags_gc_root;
+    tsc_array_t* constructor_args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(constructor_args, receiver);
+    tsc_array_push_value(constructor_args, tsc_value_string(flags));
+    tsc_value_t matcher = tsc_value_construct(constructor, tsc_value_array(constructor_args));
+    void* volatile matcher_gc_root = tsc_value_gc_root(matcher);
+    (void)matcher_gc_root;
+    double last_index = tsc_value_to_length(tsc_value_get_prop(receiver, tsc_str_from_lit("lastIndex", 9)));
+    regexp_set_last_index_value(matcher, tsc_value_num(last_index));
+    bool global = tsc_str_includes(flags, tsc_str_from_lit("g", 1), 0);
+    bool unicode = tsc_str_includes(flags, tsc_str_from_lit("u", 1), 0) || tsc_str_includes(flags, tsc_str_from_lit("v", 1), 0);
+    regexp_string_iterator_t* state = TSC_GC_MALLOC(sizeof(*state));
+    state->matcher = matcher;
+    state->matcher_gc_root = tsc_value_gc_root(matcher);
+    state->string = string;
+    state->global = global;
+    state->unicode = unicode;
+    state->done = false;
+    tsc_object_t* iterator = tsc_object_new_with_prototype(regexp_string_iterator_prototype());
+    iterator->is_regexp_string_iterator = true;
+    iterator->class_ptr = state;
+    return tsc_value_object(iterator);
 }
 /* GetSubstitution consumes captures as an ordered List of String/undefined
  * values, independent of native match storage or the number of captures. */

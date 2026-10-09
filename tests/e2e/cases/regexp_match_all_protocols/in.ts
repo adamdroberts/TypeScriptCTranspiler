@@ -1,0 +1,22 @@
+const regexp = new RegExp("(?<letter>a)|(b)", "dg");
+regexp.lastIndex = 1;
+const iterator = "aba".matchAll(regexp);
+const first: any = iterator.next();
+console.log("first:", first.done, first.value[0], first.value.index, first.value.groups.letter === undefined, first.value.indices[0].join("|"));
+const second: any = iterator.next();
+console.log("second:", second.value[0], second.value.index, second.value.groups.letter, second.value.indices.groups.letter === second.value.indices[1]);
+console.log("done:", iterator.next().done, iterator.next().done, regexp.lastIndex);
+const matches = [..."ab".matchAll(/(.)/dg)];
+console.log("spread:", matches[1][0], matches[1].index, matches[1].input);
+const alias = String.prototype.matchAll;
+const borrowed: any = alias.call("aa", /a/g);
+console.log("alias:", borrowed.next().value.index, borrowed.next().value.index);
+const custom: any = { [Symbol.matchAll](this: any, value: string) { return value + ":custom"; } };
+console.log("custom:", "input".matchAll(custom));
+try { "a".matchAll(/a/); } catch (error) { console.log("global:", (error as Error).name); }
+let constructorReads = 0;
+const savedConstructor = Object.getOwnPropertyDescriptor(RegExp.prototype, "constructor")!;
+Object.defineProperty(RegExp.prototype, "constructor", { get() { constructorReads++; return RegExp; }, configurable: true });
+const unused = "b".matchAll(/b/g);
+Object.defineProperty(RegExp.prototype, "constructor", savedConstructor);
+console.log("unused-effect:", constructorReads);

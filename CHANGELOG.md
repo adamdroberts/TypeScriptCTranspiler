@@ -1,5 +1,7 @@
 # Changelog
 
+- Replaced eager RegExp matchAll collections with ordinary String/RegExp symbol protocols, ordered species construction and a Realm-owned lazy iterator through shared RegExpExec. Preserve match metadata, Unicode empty advancement, original state, abrupt retries and reentrancy. Array.from and literal spread consume actual iterator methods; typed spreads share element codecs, and boxed list growth retains decoded roots.
+
 - Retain decoded object targets throughout ordinary, CommonJS and resumable literal construction, and root accessor targets/callbacks before conversion and allocation. Repairs a native GC lifetime defect exposed by generic replacement; properties now force collection during construction and exercise frequent collection.
 
 - Replaced eager Array keys/values/entries snapshots with ordinary live iterators over shared source/index/kind state. Array.from observes iterator and next overrides for dynamic and typed Array sources, including arguments. Typed entry codecs preserve numeric keys, iterator receivers escape stack allocation, and legacy generators expose an ordinary iterator prototype.

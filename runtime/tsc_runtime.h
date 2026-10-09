@@ -372,7 +372,6 @@ tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);
 tsc_value_t tsc_regexp_prototype_value(void);
-struct tsc_array* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 struct tsc_array* tsc_str_split_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 struct tsc_array* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp_t* re, uint32_t limit);
 struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_t* re, double limit);
@@ -1034,9 +1033,9 @@ typedef struct {
     tsc_value_t source;
     tsc_value_t iterator;
     tsc_value_t next_method;
-    void* source_gc_root;
-    void* iterator_gc_root;
-    void* next_method_gc_root;
+    void* volatile source_gc_root;
+    void* volatile iterator_gc_root;
+    void* volatile next_method_gc_root;
     bool done;
 } tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
@@ -1248,7 +1247,7 @@ tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_
 tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* re, tsc_value_t limit);
 tsc_value_t tsc_value_method_match(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_search(tsc_value_t recv, tsc_value_t pattern);
-tsc_value_t tsc_value_method_match_all_regex(tsc_value_t recv, const tsc_regexp_t* re);
+tsc_value_t tsc_value_method_match_all(tsc_value_t recv, tsc_value_t pattern);
 tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix);
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv);
 tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args);
@@ -1719,6 +1718,8 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler);
 tsc_value_t tsc_proxy_revocable(tsc_value_t target, tsc_value_t handler);
 
 static inline void tsc_array_push_value(tsc_array_t* a, tsc_value_t v) {
+    void* volatile value_gc_root = tsc_value_gc_root(v);
+    (void)value_gc_root;
     tsc_array_push_raw(a, &v);
 }
 

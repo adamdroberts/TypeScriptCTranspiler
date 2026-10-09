@@ -254,6 +254,7 @@ struct tsc_object {
     bool is_error;
     bool is_arguments;
     bool is_array_iterator;
+    bool is_regexp_string_iterator;
     bool is_module_namespace;
     bool is_typed_array;
     bool is_url;
@@ -286,6 +287,8 @@ struct tsc_object {
 };
 
 tsc_value_t tsc_iterator_prototype_value(void);
+tsc_value_t tsc_iterator_result(tsc_value_t value, bool done);
+tsc_value_t tsc_value_species_constructor(tsc_value_t object, tsc_value_t default_constructor);
 
 volatile tsc_value_t* tsc_object_arguments_mapped_cell(const tsc_object_t* object, const tsc_str_t* key);
 void tsc_object_arguments_disconnect(tsc_object_t* object, const tsc_str_t* key);
@@ -786,6 +789,7 @@ tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* 
 tsc_value_t tsc_regexp_match_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_replace_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_regexp_match_all_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_value_to_object(tsc_value_t value);
 tsc_str_t* tsc_string_get_substitution(const tsc_str_t* matched, const tsc_str_t* string,
     size_t position, const tsc_array_t* captures, tsc_value_t named, const tsc_str_t* replacement);

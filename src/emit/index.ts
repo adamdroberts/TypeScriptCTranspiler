@@ -101,6 +101,7 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "indexOf",
     "lastIndexOf",
     "match",
+    "matchAll",
     "search",
     "padEnd",
     "padStart",
@@ -7371,7 +7372,6 @@ class Emitter {
                     ) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
             case "match":
-            case "matchAll":
             case "search":
                 return args.length >= 1 &&
                     (
@@ -57729,58 +57729,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
-            case "keys":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_keys(${target})`,
-                );
-            case "values":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_values(${target})`,
-                );
-            case "entries":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_entries(${target})`,
-                );
-            case "matchAll": {
-                if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: re },
-                        ...ignored,
-                    ], ([target, pattern]) => `tsc_value_method_match_all_regex(${target}, ${pattern})`);
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
-                    unsupported(args[0]!, "matchAll requires a RegExp or string pattern");
-                }
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    {
-                        value: {
-                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("g", 1))`,
-                            ty: T_REGEXP,
-                        },
-                    },
-                    ...ignored,
-                ], ([target, pattern]) => `tsc_value_method_match_all_regex(${target}, ${pattern})`);
-            }
             case "toString":
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -66322,18 +66270,6 @@ class Emitter {
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method, false);
         }
-        const defaultNumber = (c: string): EmitResult => ({ c, ty: T_NUMBER });
-        const optionalNumberArg = (index: number, fallback: string): EmitResult => {
-            const arg = args[index];
-            if (!arg || this.isUndefinedExpression(arg)) return defaultNumber(fallback);
-            const value = this.emitExpr(arg);
-            requireNumber(arg, value.ty);
-            return value;
-        };
-        const optionalStringSpecs = (consumed: number, specs: SequencedCallArg[]): SequencedCallArg[] => [
-            ...specs,
-            ...this.ignoredArgumentSpecs(args, consumed),
-        ];
         switch (method) {
             case "toLocaleString":
                 return this.emitSequencedExpr(
@@ -66344,32 +66280,7 @@ class Emitter {
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
-            case "matchAll": {
-                if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(
-                        arrayType(arrayType(T_STRING)),
-                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
-                        ([target, regex]) => `tsc_str_match_all_regex(${target}, ${regex})`,
-                    );
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value")
-                    unsupported(args[0]!, "matchAll requires a RegExp or string pattern");
-                return this.emitSequencedExpr(
-                    arrayType(arrayType(T_STRING)),
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        {
-                            value: {
-                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("g", 1))`,
-                                ty: T_REGEXP,
-                            },
-                        },
-                    ]),
-                    ([target, regex]) => `tsc_str_match_all_regex(${target}, ${regex})`,
-                );
-            }
+
         }
         unsupported(call, `string method .${method} (Phase 2)`);
     }
@@ -77679,6 +77590,15 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
     }
 
+    private emitArraySpreadCollection(source: EmitResult, elementType: CType, node: ts.Node): string {
+        if (source.ty.kind !== "array" && source.ty.kind !== "string" && source.ty.kind !== "value") {
+            unsupported(node, "array spread source is not represented by the ordinary iterator protocol");
+        }
+        const boxed = this.boxObjectIdentity(source.c, source.ty, node);
+        return this.coerce({ c: `tsc_value_array(tsc_value_iter_values(${boxed}))`, ty: T_VALUE },
+            arrayType(elementType), node);
+    }
+
     private emitArrayLiteral(al: ts.ArrayLiteralExpression): EmitResult {
         const litType =
             this.asyncAwaitReturnContextTypes.get(al) ??
@@ -77699,30 +77619,11 @@ class Emitter {
                     continue;
                 }
                 if (ts.isSpreadElement(e)) {
-                    const r = this.emitExpr(e.expression);
-                    if (r.ty.kind === "array") {
-                        const src = this.freshTemp("_dynspread_src");
-                        const idx = this.freshTemp("_dynspread_i");
-                        const value = this.freshTemp("_dynspread_v");
-                        const sourceValue = this.freshTemp("_dynspread_source_value");
-                        const boxedSource = this.coerce(
-                            { c: src, ty: r.ty },
-                            T_VALUE,
-                            e.expression,
-                        );
-                        pieces.push(
-                            `{ tsc_array_t* const ${src} = ${r.c}; tsc_value_t ${sourceValue} = ${boxedSource}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = tsc_value_get_index(${sourceValue}, (double)${idx}); tsc_array_push_raw(${av}, &${value}); } }`,
-                        );
-                        continue;
-                    }
-                    if (r.ty.kind === "value" || r.ty.kind === "string") {
-                        const spread = this.freshTemp("_dynspread");
-                        pieces.push(`tsc_array_t* ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, e.expression)})`);
-                        pieces.push(`tsc_array_append(${av}, ${spread})`);
-                        continue;
-                    }
-                    unsupported(e, "dynamic array literal spread expects an array or string");
+                    const source = this.emitExpr(e.expression);
+                    pieces.push(`tsc_array_append(${av}, ${this.emitArraySpreadCollection(source, T_VALUE, e.expression)})`);
+                    continue;
                 }
+
                 const r = this.emitExpr(e as ts.Expression);
                 const tmp = this.freshTemp("_dynv");
                 pieces.push(`${T_VALUE.c} ${tmp} = ${this.coerce(r, T_VALUE, e as ts.Expression)}`);
@@ -77755,20 +77656,11 @@ class Emitter {
                 continue;
             }
             if (ts.isSpreadElement(e)) {
-                const r = this.emitExpr(e.expression);
-                if (r.ty.kind === "value") {
-                    if (et.kind !== "value") unsupported(e, "dynamic spread into a typed array requires an any[] result");
-                    pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(${this.coerce(r, T_VALUE, e.expression)}))`);
-                    continue;
-                }
-                if (r.ty.kind !== "array") unsupported(e, "spread must be an array");
-                if (r.ty.elem?.kind === "value") {
-                    pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(tsc_value_array(${r.c})))`);
-                } else {
-                    pieces.push(`tsc_array_append(${av}, ${r.c})`);
-                }
+                const source = this.emitExpr(e.expression);
+                pieces.push(`tsc_array_append(${av}, ${this.emitArraySpreadCollection(source, et, e.expression)})`);
                 continue;
             }
+
             const r = this.emitExpr(e as ts.Expression);
             const coerced = this.coerce(r, et, e as ts.Expression);
             const tv = this.freshTemp("_el");

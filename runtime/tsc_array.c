@@ -737,12 +737,7 @@ static tsc_value_t array_iterator_next(void* env, tsc_value_t receiver, tsc_arra
             }
         }
     }
-    void* volatile value_gc_root = tsc_value_gc_root(value);
-    (void)value_gc_root;
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    return tsc_value_object(result);
+    return tsc_iterator_result(value, done);
 }
 
 static tsc_value_t array_iterator_prototype(void) {
