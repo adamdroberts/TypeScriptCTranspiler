@@ -1,5 +1,7 @@
 # Changelog
 
+- Remove the separate mutable string-buffer binding representation and unsafe concat-tree flattening. Retain ordinary binding storage, stage native string compound references and old values before RHS evaluation, and share actual value addition. Preserve grouping, default conversion hints, immutable snapshots and unchanged bindings after abrupt completion; verify typed semantic properties with forced collection in both memory modes.
+
 - Retain actual function values in native callable owners across boxing and signature adaptation. Carry rest positions in the canonical parameter List, preserve creation metadata through returns/getters, and expand outgoing rest Lists with decoded roots. Route callable operators through retained values and throw TypeError after argument evaluation for uninitialized calls. Verify semantic properties and a retained-owner graph in both memory modes.
 
 - Preserve selected &&/||/?? operand values through one logical-expression worklist and shared lazy selector. Delete typed Boolean/pointer predecessors, box nullable unions across storage/call boundaries and preserve native nullish producers in shared boxing. Verify single evaluation, actual values, abrupt payloads and deep trees against independent hosts in both memory modes; correct the optional-property/nullish expectation against Node.

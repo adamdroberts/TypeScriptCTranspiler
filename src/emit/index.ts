@@ -813,16 +813,6 @@ class Emitter {
      * the generic tsc_num_mod helper.
      */
     private intSymbols = new Set<ts.Symbol>();
-    /**
-     * String-typed `let` locals that are only ever modified via `X = X + ...`
-     * self-append. Lifted from `tsc_str_t*` to a per-scope `tsc_jsonbuf_t`
-     * (used as a strbuf), turning O(N²) byte copy across N concats into
-     * amortized O(N) append.
-     */
-    private strbufSymbols = new Set<ts.Symbol>();
-    /** C variable name suffix appended to identify the strbuf storage. */
-    private readonly strbufSuffix = "_sb";
-
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
@@ -15483,7 +15473,6 @@ class Emitter {
                 stmt ? this.commonJsClassExpressionsForStatement(stmt) : [],
             );
             this.analyzeIntegerSymbols(sf);
-            this.analyzeStrbufSymbols(sf);
             this.emitModuleVarDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleLexicalDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
@@ -24106,12 +24095,6 @@ class Emitter {
         }
         const cell = this.captureCellForSymbol(sym);
         if (cell) return `(*${cell.cellName})`;
-        // Lifted strbuf: a non-write read returns a fresh tsc_str_t* snapshot
-        // of the current strbuf contents (jsonbuf_finish copies, so the
-        // strbuf can keep growing without invalidating prior reads).
-        if (sym && this.strbufSymbols.has(sym)) {
-            return `tsc_jsonbuf_finish(&${this.identifierName(id)}${this.strbufSuffix})`;
-        }
         return this.identifierName(id);
     }
 
@@ -42941,147 +42924,6 @@ class Emitter {
     }
 
     /**
-     * Identify `let X: string = ""` locals where every assignment is
-     * `X = X + ...` (self-append) and X never escapes — populates
-     * `this.strbufSymbols`. The emitter lifts these to a `tsc_jsonbuf_t`
-     * strbuf, so a tight loop of N concats becomes amortized O(N) bytes
-     * copied instead of O(N²).
-     *
-     * Conservative pass: any read in a context that takes the value
-     * (object literal, function call passing X as a string, return value,
-     * stored in another variable) disqualifies. A bare `X.length` or
-     * `X` inside a string-typed concat after the loop is fine because we
-     * materialize via tsc_jsonbuf_finish() at each read.
-     */
-    private analyzeStrbufSymbols(sf: ts.SourceFile): void {
-        this.strbufSymbols = new Set();
-
-        interface Cand {
-            sym: ts.Symbol;
-            decl: ts.VariableDeclaration;
-        }
-        const candidates: Cand[] = [];
-
-        // Pass 1: collect declarations of `let X: string = ""`.
-        const collect = (n: ts.Node) => {
-            if (
-                ts.isVariableDeclarationList(n) &&
-                (n.flags & ts.NodeFlags.Const) === 0
-            ) {
-                for (const d of n.declarations) {
-                    if (!ts.isIdentifier(d.name)) continue;
-                    if (!d.initializer) continue;
-                    if (!ts.isStringLiteral(d.initializer)) continue;
-                    if (d.initializer.text !== "") continue;
-                    const sym = this.checker.getSymbolAtLocation(d.name);
-                    if (!sym) continue;
-                    candidates.push({ sym, decl: d });
-                }
-            }
-            ts.forEachChild(n, collect);
-        };
-        collect(sf);
-
-        if (candidates.length === 0) return;
-
-        // Pass 2: for each candidate, verify all writes are self-append and
-        // no read context aliases or stores the value.
-        const candSyms = new Set(candidates.map((c) => c.sym));
-        const status = new Map<ts.Symbol, boolean>();
-        for (const c of candidates) status.set(c.sym, true);
-
-        const isSelfAppendRhs = (sym: ts.Symbol, rhs: ts.Expression): boolean => {
-            // Walk the leftmost spine of `rhs`; the leftmost leaf must be
-            // an Identifier referring to `sym`. Any structure that puts the
-            // self-reference deeper than the leftmost leaf is rejected
-            // (would imply we'd need to evaluate sym before mutation).
-            let cur: ts.Expression = rhs;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            while (
-                ts.isBinaryExpression(cur) &&
-                cur.operatorToken.kind === ts.SyntaxKind.PlusToken
-            ) {
-                cur = cur.left;
-                while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            }
-            if (!ts.isIdentifier(cur)) return false;
-            return this.checker.getSymbolAtLocation(cur) === sym;
-        };
-
-        const visit = (n: ts.Node) => {
-            // Disqualify writes that aren't self-append.
-            if (ts.isBinaryExpression(n)) {
-                const op = n.operatorToken.kind;
-                if (
-                    op === ts.SyntaxKind.EqualsToken &&
-                    ts.isIdentifier(n.left)
-                ) {
-                    const sym = this.checker.getSymbolAtLocation(n.left);
-                    if (sym && candSyms.has(sym)) {
-                        if (!isSelfAppendRhs(sym, n.right)) status.set(sym, false);
-                        // Don't descend into this assignment's LHS — that's the write.
-                        visit(n.right);
-                        return;
-                    }
-                } else if (
-                    op === ts.SyntaxKind.PlusEqualsToken &&
-                    ts.isIdentifier(n.left)
-                ) {
-                    const sym = this.checker.getSymbolAtLocation(n.left);
-                    if (sym && candSyms.has(sym)) {
-                        // `X += rhs` is fine — equivalent to X = X + rhs.
-                        visit(n.right);
-                        return;
-                    }
-                } else if (
-                    (op === ts.SyntaxKind.MinusEqualsToken ||
-                        op === ts.SyntaxKind.AsteriskEqualsToken ||
-                        op === ts.SyntaxKind.SlashEqualsToken ||
-                        op === ts.SyntaxKind.PercentEqualsToken) &&
-                    ts.isIdentifier(n.left)
-                ) {
-                    const sym = this.checker.getSymbolAtLocation(n.left);
-                    if (sym && candSyms.has(sym)) status.set(sym, false);
-                }
-            }
-            // Identifier reads in escape contexts disqualify.
-            if (ts.isIdentifier(n)) {
-                const sym = this.checker.getSymbolAtLocation(n);
-                if (sym && candSyms.has(sym)) {
-                    const parent = n.parent;
-                    let escapes = false;
-                    // Stored into another variable.
-                    if (ts.isVariableDeclaration(parent) && parent.initializer === n) escapes = true;
-                    // Returned.
-                    if (ts.isReturnStatement(parent)) escapes = true;
-                    // Captured by an arrow / function (any nested function decl
-                    // shouldn't be able to see lifted strbuf).
-                    // Property of an object literal.
-                    if (ts.isPropertyAssignment(parent) && parent.initializer === n) escapes = true;
-                    if (ts.isShorthandPropertyAssignment(parent)) escapes = true;
-                    // Element of an array literal.
-                    if (ts.isArrayLiteralExpression(parent)) escapes = true;
-                    // Argument to a function/method call (we conservatively
-                    // assume all callees may retain). Allow `console.log` /
-                    // string-coercion contexts via the BinaryExpression path,
-                    // but treat all CallExpression args as escape.
-                    if (ts.isCallExpression(parent) && parent.arguments.includes(n as ts.Expression)) {
-                        escapes = true;
-                    }
-                    // The `this` of a method call reading X.length etc is fine.
-                    if (escapes) status.set(sym, false);
-                }
-            }
-            ts.forEachChild(n, visit);
-        };
-        visit(sf);
-
-        for (const c of candidates) {
-            if (status.get(c.sym)) this.strbufSymbols.add(c.sym);
-        }
-    }
-
-    /**
      * Emit `e` as a pure int64 C expression. Caller must have verified
      * isIntegerShape(e). Identifiers resolve through the active symbol-value
      * scope (which may be a heap CFG field rather than a C local); numeric literals shed their `.0`;
@@ -43401,14 +43243,6 @@ class Emitter {
                 buf.line(`${stackNew.cls}_t ${storage};`);
                 buf.line(`${stackNew.cls}_init(&${storage}${args.length ? ", " + args.join(", ") : ""});`);
                 buf.line(`${stackNew.cls}_t*${qual} ${name} = &${storage};`);
-                continue;
-            }
-            // Lifted strbuf: declare the per-scope `tsc_jsonbuf_t` instead of
-            // a tsc_str_t*. The init is empty by definition (analyzer only
-            // accepts `let X = ""`).
-            if (sym && this.strbufSymbols.has(sym)) {
-                buf.line(`tsc_jsonbuf_t ${name}${this.strbufSuffix};`);
-                buf.line(`tsc_jsonbuf_init(&${name}${this.strbufSuffix});`);
                 continue;
             }
             const cell = this.currentFunctionCellForSymbol(sym);
@@ -49230,7 +49064,7 @@ class Emitter {
                 return this.emitFunctionReferenceClosure(expr, physicalType);
             }
             // Surface int-spec storage type so downstream emitters (binary,
-            // strbuf append, JSON, etc.) can pick the int64 fast paths.
+            // JSON, etc.) can pick the int64 fast paths.
             const effectiveTy =
                 declaredTy && declaredTy.c === "int64_t" && ty.kind === "number"
                     ? declaredTy
@@ -50400,51 +50234,6 @@ class Emitter {
         });
     }
 
-    /**
-     * Detect a left-leaning chain `a + b + c + d` whose final result is
-     * string-typed and at least one operand is string. If so, emit a single
-     * `tsc_str_concat_n(N, a_str, b_str, ...)` call instead of N-1 nested
-     * `tsc_str_concat`s. Returns null if not a string-`+` chain.
-     */
-    private tryFoldStringConcatChain(bin: ts.BinaryExpression): EmitResult | null {
-        // Quick gate: the top-level result must be string-typed. Look at TS
-        // types so we don't have to emit any operand twice.
-        const topTy = mapType(bin, this.checker);
-        if (topTy.kind !== "string") return null;
-
-        // Walk the left chain, collecting leaves left-to-right.
-        const leaves: ts.Expression[] = [];
-        const walk = (e: ts.Expression): void => {
-            if (
-                ts.isBinaryExpression(e) &&
-                e.operatorToken.kind === ts.SyntaxKind.PlusToken
-            ) {
-                const childTy = mapType(e, this.checker);
-                if (childTy.kind === "string") {
-                    walk(e.left);
-                    walk(e.right);
-                    return;
-                }
-            }
-            leaves.push(e);
-        };
-        walk(bin.left);
-        walk(bin.right);
-
-        if (leaves.length < 3) return null; // 2-operand `+` already optimal
-
-        const specs = leaves.map((leaf): SequencedCallArg => ({
-            value: this.emitExpr(leaf),
-            node: leaf,
-            stringify: true,
-        }));
-        return this.emitSequencedExpr(
-            T_STRING,
-            specs,
-            (parts) => `tsc_str_concat_n(${parts.length}, ${parts.join(", ")})`,
-        );
-    }
-
     private stringLiteralInfo(expr: ts.Expression): { text: string; escaped: string; len: number } | null {
         if (
             ts.isStringLiteral(expr) ||
@@ -50597,14 +50386,11 @@ class Emitter {
             if (typeofComparison) return typeofComparison;
         }
 
-        // String-concat chain folding: `a + b + c + d` (string-typed) lowers to
-        // a single tsc_str_concat_n call with one allocation, vs N-1 nested
-        // tsc_str_concat calls each doing its own GC_MALLOC + memcpys.
+        // Primitive literal/number concatenation has no observable conversion
+        // hooks. Other additions retain their source-tree operation boundaries.
         if (op === ts.SyntaxKind.PlusToken) {
             const litNum = this.tryEmitLiteralNumberConcat(bin);
             if (litNum) return litNum;
-            const chain = this.tryFoldStringConcatChain(bin);
-            if (chain) return chain;
         }
 
         if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
@@ -51448,26 +51234,6 @@ class Emitter {
         const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
         if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
 
-        // Strbuf-lifted self-append: `X = X + a + b + ...` or `X += ...`
-        // becomes a sequence of tsc_jsonbuf_append* calls into X_sb.
-        if (
-            ts.isIdentifier(bin.left) &&
-            (op === ts.SyntaxKind.EqualsToken || op === ts.SyntaxKind.PlusEqualsToken)
-        ) {
-            const sym = this.checker.getSymbolAtLocation(bin.left);
-            // The source-level strbuf lift owns stack storage in an ordinary
-            // lexical scope. A heap async-CFG continuation instead stores the
-            // string binding in its environment, so it must use the ordinary
-            // symbol-backed assignment path across every resumed state.
-            if (this.asyncAwaitContinuationAdapterDepth === 0 &&
-                sym && this.strbufSymbols.has(sym)) {
-                return this.emitStrbufAssignment(
-                    bin.left, bin.right,
-                    op === ts.SyntaxKind.PlusEqualsToken,
-                );
-            }
-        }
-
         const lhsC = this.emitLvalue(bin.left);
         const lhsType = this.storageType(bin.left);
         const rhs = this.emitExpr(bin.right);
@@ -51542,11 +51308,12 @@ class Emitter {
         }
 
         if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
-            const rhsStr = this.coerceToString(rhs, bin.right);
-            return {
-                c: `(${lhsC} = tsc_str_concat(${lhsC}, ${rhsStr}))`,
-                ty: T_STRING,
-            };
+            const reference = this.freshTemp("_string_assignment_ref");
+            const result = this.emitSequencedExpr(T_STRING, [
+                { value: { c: `*${reference}`, ty: lhsType }, target: T_VALUE, node: bin.left },
+                { value: rhs, target: T_VALUE, node: bin.right },
+            ], ([current, value]) => `(*${reference} = tsc_value_to_string(tsc_value_add(${current}, ${value})))`);
+            return { c: `({ tsc_str_t** ${reference} = &(${lhsC}); ${result.c}; })`, ty: T_STRING };
         }
 
         requireNumber(bin.left, lhsType);
@@ -69534,104 +69301,6 @@ class Emitter {
             ];
             return `({ ${pieces.join("; ")}; })`;
         });
-    }
-
-    /**
-     * Lower a strbuf-lifted self-append assignment into a sequence of
-     * tsc_jsonbuf_append* calls into X_sb. Handles both `X = X + a + b`
-     * (skipping the leftmost X self-reference) and `X += a + b`.
-     */
-    private emitStrbufAssignment(
-        lhs: ts.Identifier,
-        rhs: ts.Expression,
-        isCompound: boolean,
-    ): EmitResult {
-        const sb = this.identifierName(lhs) + this.strbufSuffix;
-        const lhsSym = this.checker.getSymbolAtLocation(lhs);
-
-        // Walk the leftmost spine of `rhs` collecting parts left-to-right.
-        // For `X = X + a + b`, the spine flattens to [X, a, b]; we drop the
-        // leading self-reference. For `X += a + b`, the spine is [a, b]
-        // (no self-reference in the RHS).
-        const parts: ts.Expression[] = [];
-        const flatten = (e: ts.Expression): void => {
-            let cur: ts.Expression = e;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            if (
-                ts.isBinaryExpression(cur) &&
-                cur.operatorToken.kind === ts.SyntaxKind.PlusToken
-            ) {
-                flatten(cur.left);
-                flatten(cur.right);
-                return;
-            }
-            parts.push(cur);
-        };
-        flatten(rhs);
-        if (!isCompound) {
-            const first = parts[0];
-            if (
-                first && ts.isIdentifier(first) &&
-                this.checker.getSymbolAtLocation(first) === lhsSym
-            ) {
-                parts.shift();
-            }
-        }
-
-        const stmts: string[] = [];
-        for (const p of parts) {
-            // String literal short-circuit — append bytes directly without
-            // building a tsc_str_t* header per call.
-            if (
-                ts.isStringLiteral(p) ||
-                p.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral
-            ) {
-                const text = (p as ts.StringLiteral).text;
-                stmts.push(
-                    `tsc_jsonbuf_append(&${sb}, "${escapeCString(text)}", ${utf8ByteLen(text)})`
-                );
-                continue;
-            }
-            const r = this.emitExpr(p);
-            stmts.push(this.strbufAppendStmt(sb, r, p));
-        }
-        // Skip the per-iter materialize when the assignment is a statement
-        // (the JS expression value would be discarded anyway). Only finalize
-        // if the assignment expr feeds something that needs the new X value.
-        const parent = (lhs.parent as ts.BinaryExpression).parent;
-        const isStmt =
-            parent && (ts.isExpressionStatement(parent) || ts.isForStatement(parent));
-        if (isStmt) {
-            // Cast to (tsc_str_t*)NULL so the stmt-expression has a value
-            // that satisfies the T_STRING type contract without allocating.
-            stmts.push(`(tsc_str_t*)NULL`);
-        } else {
-            stmts.push(`tsc_jsonbuf_finish(&${sb})`);
-        }
-        return { c: `({ ${stmts.join("; ")}; })`, ty: T_STRING };
-    }
-
-    /** One C statement that appends `r` to the named tsc_jsonbuf strbuf. */
-    private strbufAppendStmt(sb: string, r: EmitResult, node: ts.Node): string {
-        switch (r.ty.kind) {
-            case "string": {
-                // Bind r.c once so we don't double-evaluate when reading
-                // both ->data and ->len.
-                const tmp = this.freshTemp("_sba");
-                return `({ tsc_str_t* ${tmp} = ${r.c}; tsc_jsonbuf_append(&${sb}, ${tmp}->data, ${tmp}->len); })`;
-            }
-            case "number":
-                if (r.ty.c === "int64_t") return `tsc_jsonbuf_int(&${sb}, ${r.c})`;
-                return `tsc_jsonbuf_num(&${sb}, ${r.c})`;
-            case "boolean":
-                return `tsc_jsonbuf_bool(&${sb}, ${r.c})`;
-            default: {
-                // Fall back: coerce to string, then append its bytes.
-                const sv = this.freshTemp("_sba");
-                const coerced = this.coerceToString(r, node);
-                return `({ tsc_str_t* ${sv} = ${coerced}; tsc_jsonbuf_append(&${sb}, ${sv}->data, ${sv}->len); })`;
-            }
-        }
     }
 
     private emitJsonCall(call: ts.CallExpression, name: string): EmitResult {
