@@ -2265,19 +2265,6 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            (
-                method === "all" ||
-                method === "allSettled" ||
-                method === "any" ||
-                method === "race"
-            ) &&
-            call.arguments.length === 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Promise")
-        ) {
-            return this.isSideEffectFreeEmptyPromiseCombinatorSource(call.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
             method === "try" &&
             call.arguments.length === 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Promise")
@@ -4241,17 +4228,6 @@ class Emitter {
         return (stringText !== null && stringText.length === 0) ||
             this.isSideEffectFreeEmptyMapSource(expr, seenConsts) ||
             this.isSideEffectFreeEmptySetSource(expr, seenConsts);
-    }
-
-    private isSideEffectFreeEmptyPromiseCombinatorSource(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const arrayLength = this.sideEffectFreeArrayLiteralLength(expr, seenConsts);
-        if (arrayLength === 0) return true;
-        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(expr, seenConsts);
-        if (returnedArrayLength === 0) return true;
-        return this.isSideEffectFreeEmptySetSource(expr, seenConsts);
     }
 
     private isSideEffectFreeEmptyMapSource(
@@ -9422,17 +9398,6 @@ class Emitter {
                         this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                     );
             }
-            if (
-                (
-                    method === "all" ||
-                    method === "allSettled" ||
-                    method === "any" ||
-                    method === "race"
-                ) &&
-                unwrapped.arguments.length === 1
-            ) {
-                return this.isSideEffectFreeEmptyPromiseCombinatorSource(unwrapped.arguments[0]!, seenConsts);
-            }
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePromiseTryReturnValue(init, seenConsts);
@@ -9637,9 +9602,6 @@ class Emitter {
         if (this.sideEffectFreePromiseTryState(unwrapped, seenConsts) === "fulfilled") {
             return true;
         }
-        if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "fulfilled") {
-            return true;
-        }
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "fulfilled") {
             return true;
         }
@@ -9659,9 +9621,6 @@ class Emitter {
             return true;
         }
         if (this.sideEffectFreePromiseTryState(unwrapped, seenConsts) === "rejected") {
-            return true;
-        }
-        if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "rejected") {
             return true;
         }
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "rejected") {
@@ -9700,9 +9659,6 @@ class Emitter {
         if (this.sideEffectFreePromiseTryState(unwrapped, seenConsts) === "pending") {
             return true;
         }
-        if (this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts) === "pending") {
-            return true;
-        }
         if (this.sideEffectFreePromiseResolveState(unwrapped, seenConsts) === "pending") {
             return true;
         }
@@ -9721,8 +9677,6 @@ class Emitter {
         if (state === "fulfilled" || state === "rejected") return true;
         const tryState = this.sideEffectFreePromiseTryState(expr, seenConsts);
         if (tryState === "fulfilled" || tryState === "rejected") return true;
-        const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(expr, seenConsts);
-        if (combinatorState === "fulfilled" || combinatorState === "rejected") return true;
         const resolveState = this.sideEffectFreePromiseResolveState(expr, seenConsts);
         if (resolveState === "fulfilled" || resolveState === "rejected") return true;
         const instanceState = this.sideEffectFreePromiseInstanceChainState(expr, seenConsts);
@@ -9740,8 +9694,6 @@ class Emitter {
         if (newState) return newState;
         const tryState = this.sideEffectFreePromiseTryState(unwrapped, seenConsts);
         if (tryState) return tryState;
-        const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
-        if (combinatorState) return combinatorState;
         const resolveState = this.sideEffectFreePromiseResolveState(unwrapped, seenConsts);
         if (resolveState) return resolveState;
         const rejectState = this.sideEffectFreePromiseRejectState(unwrapped, seenConsts);
@@ -9930,77 +9882,6 @@ class Emitter {
             : null;
     }
 
-    private sideEffectFreePromiseStaticCombinatorState(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): "fulfilled" | "rejected" | "pending" | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Promise") &&
-            unwrapped.arguments.length === 1
-        ) {
-            const method = unwrapped.expression.name.text;
-            if (
-                method === "all" ||
-                method === "allSettled" ||
-                method === "any" ||
-                method === "race"
-            ) {
-                const states = this.sideEffectFreePromiseCombinatorElementStates(
-                    unwrapped.arguments[0]!,
-                    seenConsts,
-                );
-                if (states === null) return null;
-                if (states.length === 0) {
-                    if (method === "any") return "rejected";
-                    if (method === "race") return "pending";
-                    return "fulfilled";
-                }
-                if (method === "all") {
-                    return states.some((state) => state === "rejected")
-                        ? "rejected"
-                        : states.some((state) => state === "pending")
-                            ? "pending"
-                            : "fulfilled";
-                }
-                if (method === "allSettled") {
-                    return states.some((state) => state === "pending")
-                        ? "pending"
-                        : "fulfilled";
-                }
-                if (method === "any") {
-                    return states.some((state) => state === "fulfilled")
-                        ? "fulfilled"
-                        : states.some((state) => state === "pending")
-                            ? "pending"
-                            : "rejected";
-                }
-                return states.find((state) => state !== "pending") ?? "pending";
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreePromiseStaticCombinatorState(init, seenConsts) : null;
-    }
-
-    private sideEffectFreePromiseCombinatorElementStates(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): Array<"fulfilled" | "rejected" | "pending"> | null {
-        if (this.isSideEffectFreeEmptyPromiseCombinatorSource(expr, seenConsts)) return [];
-        const elements = this.sideEffectFreeMapArraySourceExpressions(expr, seenConsts);
-        if (elements === null) return null;
-        const states: Array<"fulfilled" | "rejected" | "pending"> = [];
-        for (const element of elements) {
-            const state = this.sideEffectFreePromiseResolveArgumentState(element, new Set(seenConsts));
-            if (state === null) return null;
-            states.push(state);
-        }
-        return states;
-    }
-
     private sideEffectFreePromiseResolveState(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -10038,8 +9919,6 @@ class Emitter {
         if (newState) return newState;
         const tryState = this.sideEffectFreePromiseTryState(unwrapped, seenConsts);
         if (tryState) return tryState;
-        const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
-        if (combinatorState) return combinatorState;
         const instanceState = this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts);
         if (instanceState) return instanceState;
         if (
@@ -10150,8 +10029,6 @@ class Emitter {
             if ((method === "resolve" || method === "reject") && argsArePure) {
                 return method === "reject" ? "rejected" : "fulfilled";
             }
-            const combinatorState = this.sideEffectFreePromiseStaticCombinatorState(unwrapped, seenConsts);
-            if (combinatorState) return combinatorState;
         }
         const instanceState = this.sideEffectFreePromiseInstanceChainState(unwrapped, seenConsts);
         if (instanceState) return instanceState;
@@ -28454,21 +28331,27 @@ class Emitter {
 
     private classInstanceMethodsForValueBox(cd: ts.ClassDeclaration): {
         publicName: string;
+        propertyKey: string;
         owner: ts.ClassDeclaration;
         method: ts.MethodDeclaration;
     }[] {
-        const methods = new Map<string, { publicName: string; owner: ts.ClassDeclaration; method: ts.MethodDeclaration }>();
+        const methods = new Map<string, { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; method: ts.MethodDeclaration }>();
         const base = this.baseClassDecl(cd);
         if (base) {
             for (const item of this.classInstanceMethodsForValueBox(base)) {
-                methods.set(item.publicName, item);
+                methods.set(item.propertyKey, item);
             }
         }
         for (const method of cd.members) {
             if (!ts.isMethodDeclaration(method) || isStatic(method) || this.isGenericMethod(method)) continue;
-            const publicName = this.staticPropertyName(method.name);
-            if (!publicName) continue;
-            methods.set(publicName, { publicName, owner: cd, method });
+            const symbol = ts.isComputedPropertyName(method.name)
+                ? this.wellKnownSymbolName(method.name.expression) : null;
+            const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(method.name);
+            if (publicName === null) unsupported(method.name, "ordinary class method key is unavailable");
+            const propertyKey = symbol
+                ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
+                : `tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})`;
+            methods.set(propertyKey, { publicName, propertyKey, owner: cd, method });
         }
         return [...methods.values()];
     }
@@ -28550,12 +28433,12 @@ class Emitter {
         const cd = classLike as unknown as ts.ClassDeclaration;
         const obj = this.freshTemp("_class_box");
         const pieces = [`tsc_object_t* ${obj} = tsc_object_new_class(${r.c})`];
-        for (const { publicName, owner, method } of this.classInstanceMethodsForValueBox(cd)) {
+        for (const { publicName, propertyKey, owner, method } of this.classInstanceMethodsForValueBox(cd)) {
             const adapter = this.ensureClassInstanceMethodValueAdapter(owner, method);
             const sig = this.checker.getSignatureFromDeclaration(method);
             const length = sig?.getParameters().length ?? method.parameters.length;
             pieces.push(
-                `tsc_object_define(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
+                `tsc_object_define(${obj}, ${propertyKey}, ` +
                 `tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})), true, false, true)`,
             );
         }
@@ -30438,7 +30321,7 @@ class Emitter {
             const awaitFulfilledValue = (sourceType: CType): EmitResult =>
                 this.promiseFulfilledValue(
                     sourceType.kind === "promise" ? sourceType.elem : sourceType,
-                    "state->receiver",
+                    "state->receiver", body,
                 );
             const emitSwitchDispatch = (
                 discriminator: EmitResult,
@@ -58424,7 +58307,7 @@ class Emitter {
                     ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${sourceType.c}, ${src}, ${iv}) : tsc_value_undefined())`
                     : `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
                 const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
-                const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise), elem, call);
+                const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise, call), elem, call);
                 const pushMapped = body.ty.kind === "promise"
                     ? `${body.ty.c} ${promise} = ${body.c}; ` +
                         `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
@@ -58495,7 +58378,7 @@ class Emitter {
                 const i = this.freshTemp("_i");
                 const item = this.freshTemp("_from_async_item");
                 const value = this.freshTemp("_from_async_value");
-                const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
+                const pushed = this.coerce(this.promiseFulfilledValue(elem, item, call), elem, call);
                 return (
                     `({ tsc_array_t* const _src = ${srcExpr}; ` +
                     `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
@@ -59197,236 +59080,8 @@ class Emitter {
 
     private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (method === "resolve" || method === "reject" || method === "withResolvers" || method === "try") {
-            const dynamic = this.emitDynamicMethod(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE }, method);
-            return { c: this.coerce(dynamic, mapped, call), ty: mapped };
-        }
-        if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
-        switch (method) {
-            case "all": {
-                if (call.arguments.length < 1) unsupported(call, "Promise.all expects 1 arg");
-                const source = this.emitPromiseArrayArg(call, "Promise.all");
-                const resultArray = mapped.elem;
-                if (!resultArray || resultArray.kind !== "array" || !resultArray.elem) {
-                    unsupported(call, "Promise.all result must be Promise<T[]>");
-                }
-                const elem = this.prepareType(resultArray.elem);
-                const isDynamic = source.ty.elem!.kind === "value";
-                if (isDynamic) {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: source, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ], ([src]) => `tsc_promise_all_dynamic(${src})`);
-                }
-                return this.emitSequencedExpr(mapped, [
-                    { value: source, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([src]) => {
-                    const out = this.freshTemp("_promise_all");
-                    const result = this.freshTemp("_promise_result");
-                    const pending = this.freshTemp("_promise_pending");
-                    const i = this.freshTemp("_i");
-                    const item = this.freshTemp("_promise_item");
-                    const value = this.freshTemp("_promise_value");
-                    const pushed = this.coerce(this.promiseFulfilledValue(elem, item), elem, call);
-                    const itemValue = isDynamic
-                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
-                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
-                    return (
-                        `({ tsc_array_t* const _src = ${src}; ` +
-                        `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
-                        `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
-                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
-                        `if (tsc_promise_is_rejected(${item})) { ${result} = tsc_promise_reject(tsc_promise_reason(${item})); break; } ` +
-                        `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
-                        `${elem.c} ${value} = ${pushed}; tsc_array_push_raw(${out}, &${value}); } ` +
-                        `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve(tsc_value_array(${out}))); })`
-                    );
-                });
-            }
-            case "race": {
-                if (call.arguments.length < 1) unsupported(call, "Promise.race expects 1 arg");
-                const source = this.emitPromiseArrayArg(call, "Promise.race");
-                const isDynamic = source.ty.elem!.kind === "value";
-                if (isDynamic) {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: source, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ], ([src]) => `tsc_promise_race_dynamic(${src})`);
-                }
-                return this.emitSequencedExpr(mapped, [
-                    { value: source, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([src]) => {
-                    const result = this.freshTemp("_promise_result");
-                    const i = this.freshTemp("_i");
-                    const item = this.freshTemp("_promise_item");
-                    const itemValue = isDynamic
-                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
-                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
-                    return (
-                        `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result} = NULL; ` +
-                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
-                        `if (tsc_promise_is_pending(${item})) continue; ` +
-                        `${result} = tsc_promise_is_rejected(${item}) ? tsc_promise_reject(tsc_promise_reason(${item})) : ${this.promiseResolveStoredValue(mapped.elem, item)}; break; } ` +
-                        `if (!${result}) { ${result} = tsc_promise_pending(); } ` +
-                        `${result}; })`
-                    );
-                });
-            }
-            case "any": {
-                if (call.arguments.length < 1) unsupported(call, "Promise.any expects 1 arg");
-                const source = this.emitPromiseArrayArg(call, "Promise.any");
-                const isDynamic = source.ty.elem!.kind === "value";
-                if (isDynamic) {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: source, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ], ([src]) => `tsc_promise_any_dynamic(${src})`);
-                }
-                return this.emitSequencedExpr(mapped, [
-                    { value: source, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([src]) => {
-                    const result = this.freshTemp("_promise_result");
-                    const errors = this.freshTemp("_promise_errors");
-                    const pending = this.freshTemp("_promise_pending");
-                    const reason = this.freshTemp("_promise_reason");
-                    const i = this.freshTemp("_i");
-                    const item = this.freshTemp("_promise_item");
-                    const aggregate = this.freshTemp("_aggregate");
-                    const itemValue = isDynamic
-                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
-                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
-                    return (
-                        `({ tsc_array_t* const _src = ${src}; tsc_promise_t* ${result} = NULL; ` +
-                        `tsc_array_t* ${errors} = tsc_array_new(sizeof(tsc_value_t), _src->len); bool ${pending} = false; ` +
-                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
-                        `if (tsc_promise_is_fulfilled(${item})) { ${result} = ${this.promiseResolveStoredValue(mapped.elem, item)}; break; } ` +
-                        `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
-                        `tsc_value_t ${reason} = tsc_promise_reason(${item}); tsc_array_push_raw(${errors}, &${reason}); } ` +
-                        `if (!${result}) { ` +
-                        `if (${pending}) { ${result} = tsc_promise_pending(); } else { ` +
-                        `tsc_object_t* ${aggregate} = tsc_object_new(); ` +
-                        `tsc_object_set(${aggregate}, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("AggregateError", 14))); ` +
-                        `tsc_object_set(${aggregate}, tsc_str_from_lit("message", 7), tsc_value_string(tsc_str_from_lit("All promises were rejected", 26))); ` +
-                        `tsc_object_set(${aggregate}, tsc_str_from_lit("errors", 6), tsc_value_array(${errors})); ` +
-                        `${result} = tsc_promise_reject(tsc_value_object(${aggregate})); } } ` +
-                        `${result}; })`
-                    );
-                });
-            }
-            case "allSettled": {
-                if (call.arguments.length < 1) unsupported(call, "Promise.allSettled expects 1 arg");
-                const source = this.emitPromiseArrayArg(call, "Promise.allSettled");
-                const isDynamic = source.ty.elem!.kind === "value";
-                const resultArray = mapped.elem;
-                if (!resultArray || resultArray.kind !== "array") {
-                    unsupported(call, "Promise.allSettled result must be Promise<any[]>");
-                }
-                if (isDynamic) {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: source, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ], ([src]) => `tsc_promise_all_settled_dynamic(${src})`);
-                }
-                return this.emitSequencedExpr(mapped, [
-                    { value: source, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([src]) => {
-                    const out = this.freshTemp("_promise_settled");
-                    const i = this.freshTemp("_i");
-                    const item = this.freshTemp("_promise_item");
-                    const obj = this.freshTemp("_settled");
-                    const boxed = this.freshTemp("_settled_value");
-                    const pending = this.freshTemp("_promise_pending");
-                    const itemValue = isDynamic
-                        ? `tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, _src, ${i}))`
-                        : `TSC_ARR(tsc_promise_t*, _src, ${i})`;
-                    return (
-                        `({ tsc_array_t* const _src = ${src}; ` +
-                        `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), _src->len); ` +
-                        `bool ${pending} = false; ` +
-                        `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                        `tsc_promise_t* const ${item} = ${itemValue}; ` +
-                        `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
-                        `tsc_object_t* ${obj} = tsc_object_new(); ` +
-                        `if (tsc_promise_is_fulfilled(${item})) { ` +
-                        `tsc_object_set(${obj}, tsc_str_from_lit("status", 6), tsc_value_string(tsc_str_from_lit("fulfilled", 9))); ` +
-                        `tsc_object_set(${obj}, tsc_str_from_lit("value", 5), tsc_promise_value(${item})); ` +
-                        `} else { ` +
-                        `tsc_object_set(${obj}, tsc_str_from_lit("status", 6), tsc_value_string(tsc_str_from_lit("rejected", 8))); ` +
-                        `tsc_object_set(${obj}, tsc_str_from_lit("reason", 6), tsc_promise_reason(${item})); } ` +
-                        `tsc_value_t ${boxed} = tsc_value_object(${obj}); tsc_array_push_raw(${out}, &${boxed}); } ` +
-                        `${pending} ? tsc_promise_pending() : tsc_promise_resolve(tsc_value_array(${out})); })`
-                    );
-                });
-            }
-
-        }
-        unsupported(call, `Promise.${method}`);
-    }
-
-    private emitPromiseArrayArg(call: ts.CallExpression, label: string): EmitResult {
-        const arg = call.arguments[0];
-        if (!arg) unsupported(call, `${label} expects an array or Set`);
-        const source = this.emitExpr(arg);
-        const unsupportedMessage = `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, string, or a typed custom iterable`;
-        if (source.ty.kind === "value") {
-            return {
-                c: `tsc_value_iter_values(${source.c})`,
-                ty: arrayType(T_VALUE),
-            };
-        }
-        if (source.ty.kind === "map") {
-            if (!source.ty.key || !source.ty.elem || source.ty.key.kind !== "value" || source.ty.elem.kind !== "value") {
-                unsupported(arg, unsupportedMessage);
-            }
-            const entries = this.mapEntriesArrayExpr(arg, source.c, source.ty, label);
-            return {
-                c: `tsc_value_as_array(${this.coerce(entries, T_VALUE, arg)})`,
-                ty: arrayType(T_VALUE),
-            };
-        }
-        if (source.ty.kind === "string") {
-            const tmp = this.freshTemp("_promiseString");
-            return {
-                c: (
-                    `({ tsc_str_t* const ${tmp} = ${source.c}; ` +
-                    `tsc_value_iter_values(tsc_value_string(${tmp})); })`
-                ),
-                ty: arrayType(T_VALUE),
-            };
-        }
-        if (source.ty.kind === "class") {
-            const custom = this.emitCustomIteratorArray(arg, source) ??
-                this.emitCustomIterableArray(arg, source);
-            if (!custom || !custom.ty.elem || (custom.ty.elem.kind !== "promise" && custom.ty.elem.kind !== "value")) {
-                unsupported(arg, unsupportedMessage);
-            }
-            return custom;
-        }
-        if (
-            (source.ty.kind !== "array" && source.ty.kind !== "set") ||
-            !source.ty.elem ||
-            (source.ty.elem.kind !== "promise" && source.ty.elem.kind !== "value")
-        ) {
-            unsupported(arg, unsupportedMessage);
-        }
-        if (source.ty.kind === "set") {
-            return {
-                c: `tsc_set_values(${source.c})`,
-                ty: arrayType(source.ty.elem),
-            };
-        }
-        const tmp = this.freshTemp("_promiseItems");
-        return {
-            c: `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`,
-            ty: source.ty,
-        };
+        const dynamic = this.emitDynamicMethod(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE }, method);
+        return { c: this.coerce(dynamic, mapped, call), ty: mapped };
     }
 
     private emitPromiseMethod(call: ts.CallExpression, recv: EmitResult, method: string): EmitResult {
@@ -59480,32 +59135,12 @@ class Emitter {
         return `${callbackValue}->fn(${[`${callbackValue}->env`, ...(type.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
     }
 
-    private promiseFulfilledValue(elem: CType | undefined, promise: string): EmitResult {
+    private promiseFulfilledValue(elem: CType | undefined, promise: string, node: ts.Node): EmitResult {
         const stored = elem ? this.prepareType(elem) : T_VALUE;
-        if (stored.kind === "fsstats") {
-            return { c: `tsc_promise_fs_stats_value(${promise})`, ty: T_FS_STATS };
-        }
-        if (stored.kind === "buffer") {
-            return { c: `tsc_promise_buffer_value(${promise})`, ty: T_BUFFER };
-        }
-        if (stored.kind === "array") {
-            return { c: `tsc_promise_array_value(${promise})`, ty: stored };
-        }
-        return { c: `tsc_promise_value(${promise})`, ty: T_VALUE };
-    }
-
-    private promiseResolveStoredValue(elem: CType | undefined, promise: string): string {
-        const stored = elem ? this.prepareType(elem) : T_VALUE;
-        if (stored.kind === "fsstats") {
-            return `tsc_promise_resolve_fs_stats(tsc_promise_fs_stats_value(${promise}))`;
-        }
-        if (stored.kind === "buffer") {
-            return `tsc_promise_resolve_buffer(tsc_promise_buffer_value(${promise}))`;
-        }
-        if (stored.kind === "array") {
-            return `tsc_promise_resolve_array(tsc_promise_array_value(${promise}))`;
-        }
-        return `tsc_promise_resolve(tsc_promise_value(${promise}))`;
+        return {
+            c: `tsc_promise_value(${this.promiseWithValueCodec(promise, promiseType(stored), node)})`,
+            ty: T_VALUE,
+        };
     }
 
     private promiseResolveResult(result: EmitResult, node: ts.Node): string {
@@ -62187,7 +61822,7 @@ class Emitter {
                 pieces.push(`${env}->fn = ${fn}`);
                 pieces.push(`tsc_array_push_value(${promises}, tsc_value_promise(tsc_dispatch_async(${q}, ${adapter}, ${env})))`);
             });
-            pieces.push(`tsc_promise_all_dynamic(${promises})`);
+            pieces.push(`tsc_promise_all(tsc_value_array(${promises}))`);
             return `({ ${pieces.join("; ")}; })`;
         });
     }
@@ -76964,7 +76599,7 @@ class Emitter {
                         const idx = this.freshTemp("_idx");
                         const elem = this.freshTemp("_elem");
                         const unboxed = this.coerce({ c: elem, ty: T_VALUE }, target.elem, node);
-                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = NULL; if (${tmpIn}) { ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ${tmpOut}->props = ${tmpIn}->props; ${tmpOut}->prototype = ${tmpIn}->prototype; for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${tmpIn}, ${idx}); ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } } ${tmpOut}; })`;
+                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = NULL; if (${tmpIn}) { ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ${tmpOut}->props = ${tmpIn}->props; ${tmpOut}->prototype = ${tmpIn}->prototype; for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = tsc_value_get_index(tsc_value_array(${tmpIn}), (double)${idx}); void* volatile ${elem}_gc_root = tsc_value_gc_root(${elem}); (void)${elem}_gc_root; ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } } ${tmpOut}; })`;
                     }
                     return `tsc_value_as_array(${r.c})`;
                 }

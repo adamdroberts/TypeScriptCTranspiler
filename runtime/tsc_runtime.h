@@ -1053,6 +1053,7 @@ void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
  * longjmp does not execute C cleanup attributes. */
 void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** iterator);
 _Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* iterator, tsc_value_t error);
+tsc_value_t tsc_sync_iterator_close_with_error(tsc_sync_iterator_t* iterator, tsc_value_t error);
 #if defined(__GNUC__) || defined(__clang__)
 #define TSC_SYNC_ITERATOR_SCOPE(name) \
     tsc_sync_iterator_t* name __attribute__((cleanup(tsc_sync_iterator_scope_cleanup))) = NULL
@@ -1086,10 +1087,7 @@ tsc_promise_t* tsc_promise_set_value_codec(tsc_promise_t* promise, tsc_value_t (
 tsc_value_t tsc_async_iterator_get(tsc_value_t value);
 tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator);
 tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator);
-tsc_promise_t* tsc_promise_all_dynamic(tsc_array_t* src);
-tsc_promise_t* tsc_promise_race_dynamic(tsc_array_t* src);
-tsc_promise_t* tsc_promise_any_dynamic(tsc_array_t* src);
-tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src);
+tsc_promise_t* tsc_promise_all(tsc_value_t iterable);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_settle_immediate(tsc_value_t value, bool rejected);

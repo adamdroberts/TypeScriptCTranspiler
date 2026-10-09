@@ -153,7 +153,7 @@ void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** record) {
     (*record)->completion_gc_root = NULL;
 }
 
-_Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* record, tsc_value_t error) {
+tsc_value_t tsc_sync_iterator_close_with_error(tsc_sync_iterator_t* record, tsc_value_t error) {
     void* volatile error_gc_root = tsc_value_gc_root(error);
     (void)error_gc_root;
     TSC_TRY_FRAME(frame);
@@ -166,7 +166,11 @@ _Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* record, tsc_v
          * incoming throw completion. Closing still performs their effects. */
         tsc_try_pop();
     }
-    tsc_throw_value(error);
+    return error;
+}
+
+_Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* record, tsc_value_t error) {
+    tsc_throw_value(tsc_sync_iterator_close_with_error(record, error));
 }
 
 typedef struct {

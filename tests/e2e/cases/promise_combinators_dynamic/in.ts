@@ -76,7 +76,7 @@ Promise.race("bc").then((value: any) => {
 });
 
 Promise.any("").catch((err: any) => {
-    console.log("any empty string:", err.name, err.message, err.errors.length);
+    console.log("any empty string:", err.name, Object.getOwnPropertyDescriptor(err, "errors")!.enumerable, err.errors.length);
 });
 
 Promise.allSettled("de").then((items: any[]) => {

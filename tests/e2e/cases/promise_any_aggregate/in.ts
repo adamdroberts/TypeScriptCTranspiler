@@ -5,7 +5,7 @@ const failures = [
 
 Promise.any(failures)
     .catch((reason: any) => {
-        console.log("any rejected:", reason.name, reason.message);
+        console.log("any rejected:", reason.name, Object.getOwnPropertyDescriptor(reason, "errors")!.enumerable);
         console.log("errors:", reason.errors.length, reason.errors.join("|"));
         return "fallback";
     })
@@ -32,7 +32,7 @@ const setFailures = new Set([
 
 Promise.any(setFailures)
     .catch((reason: any) => {
-        console.log("set rejected:", reason.name, reason.message);
+        console.log("set rejected:", reason.name, Object.getOwnPropertyDescriptor(reason, "errors")!.enumerable);
         console.log("set errors:", reason.errors.length, reason.errors.join("|"));
         return "set fallback";
     })
