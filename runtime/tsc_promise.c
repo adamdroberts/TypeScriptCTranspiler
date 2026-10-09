@@ -18,73 +18,48 @@ void* tsc_value_gc_root(tsc_value_t value) {
     }
 }
 
-static tsc_promise_t* promise_settled(tsc_promise_state_t state, tsc_value_t value) {
-    void* volatile value_gc_root = tsc_value_gc_root(value);
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = state;
-    p->result = value;
-    p->ptr_result = value_gc_root;
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
+static tsc_promise_t* promise_allocate(tsc_promise_state_t state, tsc_value_t value, void* root) {
+    void* volatile value_gc_root = root;
+    tsc_promise_t* promise = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(*promise));
+    *promise = (tsc_promise_t){ .state = state, .result = value, .ptr_result = value_gc_root };
+    promise->object = tsc_object_new_with_prototype(tsc_promise_prototype_value());
+    promise->object->class_ptr = promise;
+    promise->object->is_promise = true;
     (void)value_gc_root;
-    return p;
+    return promise;
 }
 
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
-    return promise_settled(TSC_PROMISE_FULFILLED, value);
+    return promise_allocate(TSC_PROMISE_FULFILLED, value, tsc_value_gc_root(value));
 }
 
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value) {
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_FULFILLED;
-    p->result = tsc_value_undefined();
-    p->ptr_result = value;
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
-    return p;
+    return promise_allocate(TSC_PROMISE_FULFILLED, tsc_value_undefined(), value);
 }
 
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value) {
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_FULFILLED;
-    p->result = tsc_value_undefined();
-    p->ptr_result = value;
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
-    return p;
+    return promise_allocate(TSC_PROMISE_FULFILLED, tsc_value_undefined(), value);
 }
 
 tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value) {
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_FULFILLED;
-    p->result = tsc_value_undefined();
-    p->ptr_result = value;
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
-    return p;
+    return promise_allocate(TSC_PROMISE_FULFILLED, tsc_value_undefined(), value);
 }
+
+/** A resolving-function pair shares one AlreadyResolved cell. Each queued
+ * thenable job creates its own pair over the same target Promise. */
+typedef struct {
+    tsc_promise_t* promise;
+    bool already_resolved;
+} tsc_promise_resolution_t;
 
 typedef struct {
     tsc_promise_t* promise;
     tsc_value_t thenable;
-    tsc_value_t then_fn;
-    tsc_array_t* seen;
-    bool done;
-} tsc_promise_thenable_state_t;
-
-static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen);
-
-static bool promise_seen_contains(tsc_array_t* seen, tsc_value_t value) {
-    if (!seen) return false;
-    for (size_t i = 0; i < seen->len; i++) {
-        if (tsc_value_eq(TSC_ARR(tsc_value_t, seen, i), value)) return true;
-    }
-    return false;
-}
+    void* thenable_gc_root;
+    tsc_value_t then_method;
+    void* then_method_gc_root;
+    tsc_realm_t* realm;
+} tsc_promise_thenable_job_t;
 
 static tsc_value_t promise_dynamic_item(const tsc_array_t* src, size_t index) {
     if (!src || src->es != sizeof(tsc_value_t) || index >= src->len) {
@@ -205,6 +180,7 @@ void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
         dest->state = TSC_PROMISE_FULFILLED;
         dest->result = source->result;
         dest->ptr_result = source->ptr_result;
+        dest->box_pointer_result = source->box_pointer_result;
         tsc_promise_trigger_callbacks(dest);
     } else if (tsc_promise_is_rejected(source)) {
         dest->state = TSC_PROMISE_REJECTED;
@@ -219,119 +195,247 @@ void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
     }
 }
 
-static void promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
-    tsc_promise_adopt_into(dest, source);
+static tsc_promise_resolution_t* promise_resolution_new(tsc_promise_t* promise) {
+    tsc_promise_resolution_t* record = TSC_GC_MALLOC(sizeof(*record));
+    *record = (tsc_promise_resolution_t){ .promise = promise };
+    return record;
 }
 
-static tsc_value_t promise_thenable_resolve(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+static void promise_resolution_reject(tsc_promise_resolution_t* record, tsc_value_t reason) {
+    if (record->already_resolved) return;
+    record->already_resolved = true;
+    tsc_promise_reject_in_place(record->promise, reason);
+}
+
+static void promise_resolution_resolve(tsc_promise_resolution_t* record, tsc_value_t value);
+
+static tsc_value_t promise_resolving_resolve(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
-    tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (state && state->promise) {
-        if (state->done) return tsc_value_undefined();
-        state->done = true;
-        if (
-            tsc_value_eq(value, state->thenable) ||
-            (tsc_value_is_promise(value) && tsc_value_as_promise(value) == state->promise)
-        ) {
-            tsc_promise_reject_in_place(state->promise, tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolved with itself")));
-            return tsc_value_undefined();
-        }
-        promise_adopt_into(state->promise, tsc_promise_resolve_thenable_seen(value, state->seen));
-    }
+    promise_resolution_resolve((tsc_promise_resolution_t*)env,
+        args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
     return tsc_value_undefined();
 }
 
-static tsc_value_t promise_thenable_reject(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+static tsc_value_t promise_resolving_reject(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
-    tsc_value_t reason = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (state && state->promise) {
-        if (state->done) return tsc_value_undefined();
-        state->done = true;
-        tsc_promise_reject_in_place(state->promise, reason);
-    }
+    promise_resolution_reject((tsc_promise_resolution_t*)env,
+        args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
     return tsc_value_undefined();
 }
 
-static bool is_ecma_object(tsc_value_t v) {
-    if (!value_is_box(v)) return false;
-    tsc_value_tag_t tag = value_tag(v);
-    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
+static tsc_value_t promise_resolving_function(tsc_promise_resolution_t* record, bool reject) {
+    return tsc_value_function_builtin_named(reject ? promise_resolving_reject : promise_resolving_resolve,
+        record, 1.0, tsc_str_from_lit("", 0));
+}
+
+static tsc_array_t* promise_resolving_arguments(tsc_promise_resolution_t* record) {
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(arguments, promise_resolving_function(record, false));
+    tsc_array_push_value(arguments, promise_resolving_function(record, true));
+    return arguments;
 }
 
 static void promise_thenable_job(void* env) {
-    tsc_promise_thenable_state_t* state = (tsc_promise_thenable_state_t*)env;
-    if (!state || !state->promise) return;
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t resolve = tsc_value_function_closure_named(promise_thenable_resolve, state, 1.0, tsc_str_from_lit("", 0));
-        tsc_value_t reject = tsc_value_function_closure_named(promise_thenable_reject, state, 1.0, tsc_str_from_lit("", 0));
-        tsc_array_push_value(args, resolve);
-        tsc_array_push_value(args, reject);
-        (void)tsc_value_apply_function(state->then_fn, state->thenable, tsc_value_array(args));
+    tsc_promise_thenable_job_t* job = env;
+    tsc_realm_t* previous_realm = tsc_realm_swap(job->realm ? job->realm : tsc_realm_current());
+    tsc_promise_resolution_t* record = promise_resolution_new(job->promise);
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        (void)tsc_value_apply_function(job->then_method, job->thenable,
+            tsc_value_array(promise_resolving_arguments(record)));
         tsc_try_pop();
-        return;
+    } else {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        promise_resolution_reject(record, error);
     }
-    tsc_try_pop();
-    if (!state->done && tsc_promise_is_pending(state->promise)) {
-        state->done = true;
-        tsc_promise_reject_in_place(state->promise, tsc_current_error_value());
-    }
+    (void)tsc_realm_swap(previous_realm);
 }
 
-static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_array_t* seen) {
-    tsc_promise_t* volatile out = NULL;
-    tsc_promise_thenable_state_t* volatile state = NULL;
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        if (tsc_value_is_promise(value)) {
-            tsc_try_pop();
-            return tsc_promise_adopt(tsc_value_as_promise(value));
-        }
-        if (promise_seen_contains(seen, value)) {
-            tsc_try_pop();
-            return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("TypeError: Promise resolution cycle")));
-        }
-        if (!is_ecma_object(value)) {
-            tsc_try_pop();
-            return tsc_promise_resolve(value);
-        }
-        tsc_value_t then = tsc_value_get_prop(value, tsc_str_from_lit("then", 4));
-        if (tsc_value_is_nullish(then) || !tsc_value_is_callable(then)) {
-            tsc_try_pop();
-            return tsc_promise_resolve(value);
-        }
-        if (!seen) seen = tsc_array_new(sizeof(tsc_value_t), 4);
-        tsc_array_push_value(seen, value);
-        out = tsc_promise_pending();
-        state = (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
-        state->promise = out;
-        state->thenable = value;
-        state->then_fn = then;
-        state->seen = seen;
-        state->done = false;
-        tsc_queue_microtask(promise_thenable_job, state);
+static tsc_realm_t* promise_thenable_realm(tsc_value_t then) {
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_realm_t* realm = tsc_value_function_realm(then);
         tsc_try_pop();
-        return (tsc_promise_t*)out;
+        return realm;
     }
+    /* NewPromiseResolveThenableJob ignores GetFunctionRealm's abrupt
+     * completion, including a revoked callable Proxy. The job still calls it. */
     tsc_try_pop();
-    if (state && state->done && out) {
-        return (tsc_promise_t*)out;
+    return NULL;
+}
+
+static void promise_resolution_resolve(tsc_promise_resolution_t* record, tsc_value_t value) {
+    if (record->already_resolved) return;
+    record->already_resolved = true;
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        if (tsc_value_is_promise(value) && tsc_value_as_promise(value) == record->promise) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("Promise resolved with itself", 28));
+        }
+        if (!tsc_value_is_object(value)) {
+            tsc_promise_fulfill_in_place(record->promise, value);
+        } else {
+            tsc_value_t then = tsc_value_get_prop(value, tsc_str_from_lit("then", 4));
+            void* volatile then_gc_root = tsc_value_gc_root(then);
+            if (!tsc_value_is_callable(then)) {
+                tsc_promise_fulfill_in_place(record->promise, value);
+            } else {
+                tsc_promise_thenable_job_t* job = TSC_GC_MALLOC(sizeof(*job));
+                *job = (tsc_promise_thenable_job_t){ .promise = record->promise,
+                    .thenable = value, .thenable_gc_root = value_gc_root,
+                    .then_method = then, .then_method_gc_root = then_gc_root };
+                job->realm = promise_thenable_realm(then);
+                tsc_queue_microtask(promise_thenable_job, job);
+            }
+            (void)then_gc_root;
+        }
+        tsc_try_pop();
+    } else {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        tsc_promise_reject_in_place(record->promise, error);
     }
-    if (out && tsc_promise_is_pending((tsc_promise_t*)out)) {
-        tsc_promise_reject_in_place((tsc_promise_t*)out, tsc_current_error_value());
-        return (tsc_promise_t*)out;
-    }
-    if (out) return (tsc_promise_t*)out;
-    return tsc_promise_reject(tsc_current_error_value());
+    (void)value_gc_root;
 }
 
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
-    return tsc_promise_resolve_thenable_seen(value, NULL);
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    tsc_promise_t* promise = tsc_promise_pending();
+    promise_resolution_resolve(promise_resolution_new(promise), value);
+    (void)value_gc_root;
+    return promise;
+}
+
+static tsc_value_t promise_argument(const tsc_array_t* args, size_t index) {
+    return args && index < args->len ? TSC_ARR(tsc_value_t, args, index) : tsc_value_undefined();
+}
+
+static tsc_value_t promise_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    tsc_value_t new_target = tsc_value_current_new_target();
+    if (tsc_value_is_undefined(new_target))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise requires new"));
+    tsc_value_t executor = promise_argument(args, 0);
+    void* volatile executor_root = tsc_value_gc_root(executor);
+    if (!tsc_value_is_callable(executor))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise executor is not callable"));
+    /* Validate the executor before the observable newTarget.prototype read. */
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(new_target,
+        TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE);
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
+    tsc_promise_t* promise = tsc_promise_pending();
+    promise->object->prototype = prototype;
+    promise->object->prototype_gc_root = prototype_root;
+    tsc_promise_resolution_t* record = promise_resolution_new(promise);
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        (void)tsc_value_apply_function(executor, tsc_value_undefined(),
+            tsc_value_array(promise_resolving_arguments(record)));
+        tsc_try_pop();
+    } else {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        promise_resolution_reject(record, error);
+    }
+    (void)executor_root; (void)prototype_root;
+    return tsc_value_promise(promise);
+}
+
+tsc_promise_t* tsc_promise_new_executor(tsc_array_t* arguments) {
+    return tsc_value_as_promise(tsc_value_construct(tsc_promise_constructor_value(),
+        tsc_value_array(arguments)));
+}
+
+/* NewPromiseCapability retains actual function/object identities. A custom
+ * constructor can return an arbitrary object and provide arbitrary callbacks. */
+typedef struct {
+    tsc_value_t promise, resolve, reject;
+    void *promise_root, *resolve_root, *reject_root;
+} tsc_promise_capability_t;
+
+static tsc_value_t promise_capability_executor(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    tsc_promise_capability_t* capability = env;
+    if (!tsc_value_is_undefined(capability->resolve) || !tsc_value_is_undefined(capability->reject))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise capability executor already called"));
+    capability->resolve = promise_argument(args, 0);
+    capability->resolve_root = tsc_value_gc_root(capability->resolve);
+    capability->reject = promise_argument(args, 1);
+    capability->reject_root = tsc_value_gc_root(capability->reject);
+    return tsc_value_undefined();
+}
+
+static tsc_promise_capability_t* promise_new_capability(tsc_value_t constructor) {
+    if (!tsc_value_is_constructable(constructor))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise capability requires a constructor"));
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    tsc_promise_capability_t* capability = TSC_GC_MALLOC(sizeof(*capability));
+    *capability = (tsc_promise_capability_t){ .promise = tsc_value_undefined(),
+        .resolve = tsc_value_undefined(), .reject = tsc_value_undefined() };
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(arguments, tsc_value_function_builtin_named(promise_capability_executor,
+        capability, 2, tsc_str_from_lit("", 0)));
+    capability->promise = tsc_value_construct(constructor, tsc_value_array(arguments));
+    capability->promise_root = tsc_value_gc_root(capability->promise);
+    if (!tsc_value_is_callable(capability->resolve) || !tsc_value_is_callable(capability->reject))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise capability callbacks are not callable"));
+    (void)constructor_root;
+    return capability;
+}
+
+static tsc_array_t* promise_single_arg(tsc_value_t value) {
+    void* volatile value_root = tsc_value_gc_root(value);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, value);
+    (void)value_root;
+    return args;
+}
+
+static void promise_call_resolving(tsc_value_t function, tsc_value_t value) {
+    void* volatile function_root = tsc_value_gc_root(function);
+    (void)tsc_value_apply_function(function, tsc_value_undefined(),
+        tsc_value_array(promise_single_arg(value)));
+    (void)function_root;
+}
+
+static tsc_value_t promise_resolve_constructor(tsc_value_t constructor, tsc_value_t value) {
+    if (!tsc_value_is_object(constructor))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise.resolve receiver must be an object"));
+    void* volatile value_root = tsc_value_gc_root(value);
+    if (tsc_value_is_promise(value)) {
+        tsc_value_t value_constructor = tsc_value_get_prop(value, tsc_str_from_lit("constructor", 11));
+        if (value_constructor == constructor) { (void)value_root; return value; }
+    }
+    tsc_promise_capability_t* capability = promise_new_capability(constructor);
+    promise_call_resolving(capability->resolve, value);
+    (void)value_root;
+    return capability->promise;
+}
+
+static tsc_value_t promise_static_resolve(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    return promise_resolve_constructor(receiver, promise_argument(args, 0));
+}
+static tsc_value_t promise_static_reject(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_promise_capability_t* capability = promise_new_capability(receiver);
+    promise_call_resolving(capability->reject, promise_argument(args, 0));
+    return capability->promise;
+}
+static tsc_value_t promise_static_with_resolvers(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    tsc_promise_capability_t* capability = promise_new_capability(receiver);
+    tsc_object_t* record = tsc_object_new();
+    tsc_object_set(record, tsc_str_from_lit("promise", 7), capability->promise);
+    tsc_object_set(record, tsc_str_from_lit("resolve", 7), capability->resolve);
+    tsc_object_set(record, tsc_str_from_lit("reject", 6), capability->reject);
+    return tsc_value_object(record);
 }
 
 typedef struct {
@@ -802,184 +906,184 @@ tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src) {
 }
 
 tsc_value_t tsc_value_promise(tsc_promise_t* p) {
-    if (!p) return tsc_value_null();
-    tsc_object_t* o = tsc_object_new_class(p);
-    o->is_promise = true;
-    return tsc_value_object(o);
+    return p ? tsc_value_object(p->object) : tsc_value_null();
 }
 
 typedef struct {
     tsc_promise_t* receiver;
-    tsc_promise_t* result_promise;
-    tsc_value_t on_fulfilled;
-    tsc_value_t on_rejected;
-} tsc_dynamic_promise_then_env_t;
+    tsc_promise_capability_t* capability;
+    tsc_value_t on_fulfilled, on_rejected;
+    void *on_fulfilled_root, *on_rejected_root;
+} tsc_promise_reaction_t;
 
-static tsc_array_t* promise_single_arg(tsc_value_t value) {
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_array_push_value(args, value);
-    return args;
-}
-
-static tsc_promise_t* promise_call_dynamic_callback(tsc_value_t fn, tsc_value_t arg, bool has_arg) {
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        tsc_array_t* args = has_arg
-            ? promise_single_arg(arg)
-            : tsc_array_new(sizeof(tsc_value_t), 0);
-        tsc_value_t result = tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));
+static void promise_reaction_job(void* env) {
+    tsc_promise_reaction_t* reaction = env;
+    const bool rejected = tsc_promise_is_rejected(reaction->receiver);
+    tsc_value_t handler = rejected ? reaction->on_rejected : reaction->on_fulfilled;
+    tsc_value_t value = rejected ? tsc_promise_reason(reaction->receiver) : tsc_promise_value(reaction->receiver);
+    void* volatile value_root = tsc_value_gc_root(value);
+    if (!tsc_value_is_callable(handler)) {
+        promise_call_resolving(rejected ? reaction->capability->reject : reaction->capability->resolve, value);
+        (void)value_root;
+        return;
+    }
+    /* Catch only the handler completion. A custom capability's resolving
+     * callback throwing is a job failure, not a second handler rejection. */
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_value_t result = tsc_value_apply_function(handler, tsc_value_undefined(),
+            tsc_value_array(promise_single_arg(value)));
         tsc_try_pop();
-        return tsc_promise_resolve_thenable(result);
+        promise_call_resolving(reaction->capability->resolve, result);
+    } else {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        promise_call_resolving(reaction->capability->reject, error);
     }
-    tsc_try_pop();
-    return tsc_promise_reject(tsc_current_error_value());
+    (void)value_root;
 }
 
-static void tsc_dynamic_promise_then_callback(void* env) {
-    tsc_dynamic_promise_then_env_t* state = (tsc_dynamic_promise_then_env_t*)env;
-    if (!state || !state->receiver || !state->result_promise) return;
-    tsc_promise_t* next = NULL;
-    if (tsc_promise_is_fulfilled(state->receiver)) {
-        if (tsc_value_is_callable(state->on_fulfilled)) {
-            next = promise_call_dynamic_callback(state->on_fulfilled, tsc_promise_value(state->receiver), true);
-        } else {
-            next = tsc_promise_resolve(tsc_promise_value(state->receiver));
-        }
-    } else if (tsc_promise_is_rejected(state->receiver)) {
-        if (tsc_value_is_callable(state->on_rejected)) {
-            next = promise_call_dynamic_callback(state->on_rejected, tsc_promise_reason(state->receiver), true);
-        } else {
-            next = tsc_promise_reject(tsc_promise_reason(state->receiver));
-        }
-    } else {
-        return;
-    }
-    tsc_promise_adopt_into(state->result_promise, next);
+static tsc_value_t promise_prototype_then(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_promise(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise then called on incompatible receiver"));
+    tsc_promise_t* promise = tsc_value_as_promise(receiver);
+    tsc_value_t constructor = tsc_value_species_constructor(receiver, tsc_promise_constructor_value());
+    tsc_promise_capability_t* capability = promise_new_capability(constructor);
+    tsc_promise_reaction_t* reaction = TSC_GC_MALLOC(sizeof(*reaction));
+    *reaction = (tsc_promise_reaction_t){ .receiver = promise, .capability = capability,
+        .on_fulfilled = promise_argument(args, 0), .on_rejected = promise_argument(args, 1) };
+    reaction->on_fulfilled_root = tsc_value_gc_root(reaction->on_fulfilled);
+    reaction->on_rejected_root = tsc_value_gc_root(reaction->on_rejected);
+    if (tsc_promise_is_pending(promise)) tsc_promise_add_callback(promise, promise_reaction_job, reaction);
+    else tsc_queue_microtask(promise_reaction_job, reaction);
+    return capability->promise;
+}
+
+static tsc_value_t promise_invoke_then(tsc_value_t receiver, tsc_value_t fulfilled, tsc_value_t rejected) {
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    void* volatile fulfilled_root = tsc_value_gc_root(fulfilled);
+    void* volatile rejected_root = tsc_value_gc_root(rejected);
+    tsc_value_t then = tsc_value_get_prop(receiver, tsc_str_from_lit("then", 4));
+    void* volatile then_root = tsc_value_gc_root(then);
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(arguments, fulfilled); tsc_array_push_value(arguments, rejected);
+    tsc_value_t result = tsc_value_apply_function(then, receiver, tsc_value_array(arguments));
+    (void)receiver_root; (void)fulfilled_root; (void)rejected_root; (void)then_root;
+    return result;
+}
+static tsc_value_t promise_prototype_catch(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    return promise_invoke_then(receiver, tsc_value_undefined(), promise_argument(args, 0));
 }
 
 typedef struct {
-    tsc_promise_t* result_promise;
-    tsc_promise_t* finalizer_promise;
+    tsc_value_t constructor, finalizer, value;
+    void *constructor_root, *finalizer_root, *value_root;
     bool rejected;
-    tsc_value_t value;
-} tsc_dynamic_promise_finally_settle_env_t;
+} tsc_promise_finally_t;
 
-static void tsc_dynamic_promise_finally_settle_callback(void* env) {
-    tsc_dynamic_promise_finally_settle_env_t* state = (tsc_dynamic_promise_finally_settle_env_t*)env;
-    if (!state || !state->result_promise || !state->finalizer_promise) return;
-    if (tsc_promise_is_pending(state->finalizer_promise)) return;
-    if (tsc_promise_is_rejected(state->finalizer_promise)) {
-        tsc_promise_reject_in_place(state->result_promise, tsc_promise_reason(state->finalizer_promise));
-        return;
-    }
-    if (state->rejected) {
-        tsc_promise_reject_in_place(state->result_promise, state->value);
-    } else {
-        tsc_promise_fulfill_in_place(state->result_promise, state->value);
-    }
+static tsc_value_t promise_finally_value(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver; (void)args;
+    tsc_promise_finally_t* record = env;
+    if (record->rejected) tsc_throw_value(record->value);
+    return record->value;
+}
+static tsc_value_t promise_finally_handler(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    tsc_promise_finally_t* template = env;
+    /* Each invocation retains its own incoming value, including reentrant
+     * invocations through an overridden then method. */
+    tsc_promise_finally_t* record = TSC_GC_MALLOC(sizeof(*record));
+    *record = *template;
+    record->value = promise_argument(args, 0); record->value_root = tsc_value_gc_root(record->value);
+    tsc_value_t result = tsc_value_apply_function(record->finalizer, tsc_value_undefined(),
+        tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 0)));
+    tsc_value_t promise = promise_resolve_constructor(record->constructor, result);
+    void* volatile promise_root = tsc_value_gc_root(promise);
+    tsc_value_t handler = tsc_value_function_builtin_named(promise_finally_value, record, 0, tsc_str_from_lit("", 0));
+    tsc_value_t output = promise_invoke_then(promise, handler, tsc_value_undefined());
+    (void)promise_root;
+    return output;
+}
+static tsc_value_t promise_prototype_finally(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Promise finally receiver must be an object"));
+    tsc_value_t constructor = tsc_value_species_constructor(receiver, tsc_promise_constructor_value());
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    tsc_value_t finalizer = promise_argument(args, 0);
+    void* volatile finalizer_root = tsc_value_gc_root(finalizer);
+    if (!tsc_value_is_callable(finalizer)) return promise_invoke_then(receiver, finalizer, finalizer);
+    tsc_promise_finally_t* fulfilled = TSC_GC_MALLOC(sizeof(*fulfilled));
+    *fulfilled = (tsc_promise_finally_t){ .constructor = constructor, .constructor_root = constructor_root,
+        .finalizer = finalizer, .finalizer_root = finalizer_root, .value = tsc_value_undefined() };
+    tsc_promise_finally_t* rejected = TSC_GC_MALLOC(sizeof(*rejected));
+    *rejected = *fulfilled; rejected->rejected = true;
+    tsc_value_t then_finally = tsc_value_function_builtin_named(promise_finally_handler, fulfilled, 1, tsc_str_from_lit("", 0));
+    void* volatile then_finally_root = tsc_value_gc_root(then_finally);
+    tsc_value_t catch_finally = tsc_value_function_builtin_named(promise_finally_handler, rejected, 1, tsc_str_from_lit("", 0));
+    tsc_value_t output = promise_invoke_then(receiver, then_finally, catch_finally);
+    (void)constructor_root; (void)finalizer_root; (void)then_finally_root;
+    return output;
 }
 
+static tsc_value_t promise_species_get(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args; return receiver;
+}
+static const char promise_intrinsics_realm_key = 0;
 typedef struct {
-    tsc_promise_t* receiver;
-    tsc_promise_t* result_promise;
-    tsc_value_t on_finally;
-} tsc_dynamic_promise_finally_env_t;
+    tsc_object_t* prototype;
+    tsc_value_t constructor;
+    void* constructor_root;
+} tsc_promise_intrinsics_t;
 
-static void tsc_dynamic_promise_finally_callback(void* env) {
-    tsc_dynamic_promise_finally_env_t* state = (tsc_dynamic_promise_finally_env_t*)env;
-    if (!state || !state->receiver || !state->result_promise) return;
-    if (tsc_promise_is_pending(state->receiver)) return;
-    bool rejected = tsc_promise_is_rejected(state->receiver);
-    tsc_value_t value = rejected
-        ? tsc_promise_reason(state->receiver)
-        : tsc_promise_value(state->receiver);
-    if (!tsc_value_is_callable(state->on_finally)) {
-        if (rejected) tsc_promise_reject_in_place(state->result_promise, value);
-        else tsc_promise_fulfill_in_place(state->result_promise, value);
-        return;
+tsc_value_t tsc_promise_prototype_value(void) {
+    tsc_promise_intrinsics_t* state = tsc_realm_state_get(&promise_intrinsics_realm_key);
+    if (state) return tsc_value_object(state->prototype);
+    tsc_runtime_lock();
+    state = tsc_realm_state_get(&promise_intrinsics_realm_key);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state));
+        *state = (tsc_promise_intrinsics_t){ .prototype = tsc_object_new() };
+        tsc_realm_state_set(&promise_intrinsics_realm_key, state);
+        state->constructor = tsc_value_function_named_kind(promise_constructor_apply,
+            promise_constructor_apply, NULL, 1, tsc_str_from_lit("Promise", 7), TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->constructor_root = tsc_value_gc_root(state->constructor);
+        tsc_function_identity_t* identity = value_ptr(state->constructor);
+        identity->construct_allocates_receiver = false;
+        identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE;
+        tsc_function_identity_set_own_prototype(identity, tsc_value_object(state->prototype));
+        identity->func_prototype_writable = false;
+        tsc_object_define(state->prototype, tsc_str_from_lit("constructor", 11), state->constructor, true, false, true);
+        static const struct { const char* name; double length; tsc_generic_function_t apply; bool is_static; } methods[] = {
+            { "resolve", 1, promise_static_resolve, true }, { "reject", 1, promise_static_reject, true },
+            { "withResolvers", 0, promise_static_with_resolvers, true },
+            { "then", 2, promise_prototype_then, false }, { "catch", 1, promise_prototype_catch, false },
+            { "finally", 1, promise_prototype_finally, false }
+        };
+        for (size_t index = 0; index < sizeof(methods) / sizeof(*methods); index++) {
+            tsc_str_t* name = tsc_str_from_cstr(methods[index].name);
+            tsc_value_t function = tsc_value_function_builtin_named(methods[index].apply, NULL, methods[index].length, name);
+            tsc_value_define_property_desc(methods[index].is_static ? state->constructor : tsc_value_object(state->prototype),
+                name, function, true, true, true, false, true, true, true);
+        }
+        tsc_value_define_symbol_property_desc(tsc_value_object(state->prototype), tsc_symbol_to_string_tag(),
+            tsc_value_string(tsc_str_from_lit("Promise", 7)), true, false, true, false, true, true, true);
+        tsc_object_t* descriptor = tsc_object_new();
+        tsc_object_set(descriptor, tsc_str_from_lit("get", 3),
+            tsc_value_function_builtin_named(promise_species_get, NULL, 0, tsc_str_from_lit("get [Symbol.species]", 20)));
+        tsc_object_set(descriptor, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
+        tsc_value_define_property_descriptor(state->constructor, tsc_symbol_property_key(tsc_symbol_species()), tsc_value_object(descriptor));
     }
-    tsc_promise_t* finalizer = promise_call_dynamic_callback(state->on_finally, tsc_value_undefined(), false);
-    if (tsc_promise_is_pending(finalizer)) {
-        tsc_dynamic_promise_finally_settle_env_t* settle = (tsc_dynamic_promise_finally_settle_env_t*)TSC_GC_MALLOC(sizeof(tsc_dynamic_promise_finally_settle_env_t));
-        settle->result_promise = state->result_promise;
-        settle->finalizer_promise = finalizer;
-        settle->rejected = rejected;
-        settle->value = value;
-        tsc_promise_add_callback(finalizer, tsc_dynamic_promise_finally_settle_callback, settle);
-        return;
-    }
-    tsc_dynamic_promise_finally_settle_env_t settle = {
-        state->result_promise,
-        finalizer,
-        rejected,
-        value,
-    };
-    tsc_dynamic_promise_finally_settle_callback(&settle);
+    tsc_runtime_unlock();
+    return tsc_value_object(state->prototype);
 }
-
-static tsc_value_t tsc_dynamic_promise_then(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_promise_t* receiver = (tsc_promise_t*)env;
-    tsc_promise_t* result = tsc_promise_pending();
-    tsc_dynamic_promise_then_env_t* state = (tsc_dynamic_promise_then_env_t*)TSC_GC_MALLOC(sizeof(tsc_dynamic_promise_then_env_t));
-    state->receiver = receiver;
-    state->result_promise = result;
-    state->on_fulfilled = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    state->on_rejected = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
-    if (tsc_promise_is_pending(receiver)) {
-        tsc_promise_add_callback(receiver, tsc_dynamic_promise_then_callback, state);
-    } else {
-        tsc_queue_microtask(tsc_dynamic_promise_then_callback, state);
-    }
-    return tsc_value_promise(result);
-}
-
-static tsc_value_t tsc_dynamic_promise_catch(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_promise_t* receiver = (tsc_promise_t*)env;
-    tsc_promise_t* result = tsc_promise_pending();
-    tsc_dynamic_promise_then_env_t* state = (tsc_dynamic_promise_then_env_t*)TSC_GC_MALLOC(sizeof(tsc_dynamic_promise_then_env_t));
-    state->receiver = receiver;
-    state->result_promise = result;
-    state->on_fulfilled = tsc_value_undefined();
-    state->on_rejected = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (tsc_promise_is_pending(receiver)) {
-        tsc_promise_add_callback(receiver, tsc_dynamic_promise_then_callback, state);
-    } else {
-        tsc_queue_microtask(tsc_dynamic_promise_then_callback, state);
-    }
-    return tsc_value_promise(result);
-}
-
-static tsc_value_t tsc_dynamic_promise_finally(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_promise_t* receiver = (tsc_promise_t*)env;
-    tsc_promise_t* result = tsc_promise_pending();
-    tsc_dynamic_promise_finally_env_t* state = (tsc_dynamic_promise_finally_env_t*)TSC_GC_MALLOC(sizeof(tsc_dynamic_promise_finally_env_t));
-    state->receiver = receiver;
-    state->result_promise = result;
-    state->on_finally = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (tsc_promise_is_pending(receiver)) {
-        tsc_promise_add_callback(receiver, tsc_dynamic_promise_finally_callback, state);
-    } else {
-        tsc_queue_microtask(tsc_dynamic_promise_finally_callback, state);
-    }
-    return tsc_value_promise(result);
-}
-
-tsc_value_t tsc_promise_get_method(tsc_promise_t* promise, const tsc_str_t* key) {
-    if (!promise || !key) return tsc_value_undefined();
-    if (str_lit_eq(key, "then")) {
-        return tsc_value_function_builtin_named(tsc_dynamic_promise_then, promise, 2.0, tsc_str_from_lit("then", 4));
-    }
-    if (str_lit_eq(key, "catch")) {
-        return tsc_value_function_builtin_named(tsc_dynamic_promise_catch, promise, 1.0, tsc_str_from_lit("catch", 5));
-    }
-    if (str_lit_eq(key, "finally")) {
-        return tsc_value_function_builtin_named(tsc_dynamic_promise_finally, promise, 1.0, tsc_str_from_lit("finally", 7));
-    }
-    return tsc_value_undefined();
+tsc_value_t tsc_promise_constructor_value(void) {
+    (void)tsc_promise_prototype_value();
+    tsc_promise_intrinsics_t* state = tsc_realm_state_get(&promise_intrinsics_realm_key);
+    return state->constructor;
 }
 
 bool tsc_value_is_promise(tsc_value_t v) {
@@ -1000,18 +1104,11 @@ tsc_promise_t* tsc_value_as_promise(tsc_value_t v) {
 }
 
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
-    return promise_settled(TSC_PROMISE_REJECTED, reason);
+    return promise_allocate(TSC_PROMISE_REJECTED, reason, tsc_value_gc_root(reason));
 }
 
 tsc_promise_t* tsc_promise_pending(void) {
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_PENDING;
-    p->result = tsc_value_undefined();
-    p->ptr_result = NULL;
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
-    return p;
+    return promise_allocate(TSC_PROMISE_PENDING, tsc_value_undefined(), NULL);
 }
 
 typedef struct {
@@ -1046,22 +1143,7 @@ tsc_promise_t* tsc_promise_settle_immediate(tsc_value_t value, bool rejected) {
 }
 
 tsc_value_t tsc_promise_with_resolvers(void) {
-    tsc_promise_t* promise = tsc_promise_pending();
-    tsc_promise_thenable_state_t* state =
-        (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
-    state->promise = promise;
-    state->thenable = tsc_value_promise(promise);
-    state->then_fn = tsc_value_undefined();
-    state->seen = NULL;
-    state->done = false;
-
-    tsc_object_t* record = tsc_object_new();
-    tsc_object_set(record, tsc_str_from_lit("promise", 7), tsc_value_promise(promise));
-    tsc_object_set(record, tsc_str_from_lit("resolve", 7),
-        tsc_value_function_closure_named(promise_thenable_resolve, state, 1.0, tsc_str_from_lit("resolve", 7)));
-    tsc_object_set(record, tsc_str_from_lit("reject", 6),
-        tsc_value_function_closure_named(promise_thenable_reject, state, 1.0, tsc_str_from_lit("reject", 6)));
-    return tsc_value_object(record);
+    return promise_static_with_resolvers(NULL, tsc_promise_constructor_value(), NULL);
 }
 
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise) {
@@ -1105,14 +1187,26 @@ bool tsc_promise_is_pending(const tsc_promise_t* p) {
 }
 
 tsc_value_t tsc_promise_value(const tsc_promise_t* p) {
+    if (p && p->box_pointer_result && tsc_value_is_undefined(p->result) && p->ptr_result) {
+        tsc_promise_t* mutable = (tsc_promise_t*)p;
+        mutable->result = p->box_pointer_result(p->ptr_result);
+        mutable->ptr_result = tsc_value_gc_root(mutable->result);
+    }
     return p ? p->result : tsc_value_undefined();
 }
 
+tsc_promise_t* tsc_promise_set_value_codec(tsc_promise_t* promise, tsc_value_t (*box)(void*)) {
+    if (promise && box && !promise->box_pointer_result) promise->box_pointer_result = box;
+    return promise;
+}
+
 tsc_fs_stats_t* tsc_promise_fs_stats_value(const tsc_promise_t* p) {
+    if (p && value_is_object_value(p->result)) return (tsc_fs_stats_t*)tsc_value_as_class(p->result);
     return p ? (tsc_fs_stats_t*)p->ptr_result : NULL;
 }
 
 tsc_buffer_t* tsc_promise_buffer_value(const tsc_promise_t* p) {
+    if (p && value_is_object_value(p->result)) return tsc_value_as_buffer(p->result);
     return p ? (tsc_buffer_t*)p->ptr_result : NULL;
 }
 

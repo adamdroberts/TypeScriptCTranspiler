@@ -286,7 +286,7 @@ static tsc_value_t bound_function_apply(void* raw_env, tsc_value_t this_arg, tsc
     );
 }
 
-static tsc_realm_t* tsc_value_function_realm(tsc_value_t function) {
+tsc_realm_t* tsc_value_function_realm(tsc_value_t function) {
     /* Bound functions and callable proxies form a canonical target chain.
      * Neither can be retargeted after creation, so following that chain is
      * cardinality-independent and cannot manufacture a cycle. */
@@ -2331,6 +2331,7 @@ tsc_value_t tsc_global_object(void) {
         { "Proxy", 5, tsc_proxy_constructor_value() },
         { "Date", 4, tsc_date_constructor_value() },
         { "RegExp", 6, tsc_regexp_constructor_value() },
+        { "Promise", 7, tsc_promise_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
         { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
@@ -2851,6 +2852,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return date_prototype_value();
         case TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE:
             return tsc_regexp_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE:
+            return tsc_promise_prototype_value();
         case TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE:
@@ -3513,7 +3516,7 @@ bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value)
             return ok;
         }
         tsc_array_clear_hole(a, idx);
-        memcpy((char*)a->data + idx * a->es, stored, a->es);
+        tsc_array_store_raw(a, idx, stored);
     }
     return true;
 }

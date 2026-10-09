@@ -709,14 +709,10 @@ class Emitter {
     private closureCounter = 0;
     private functionRefAdapters = new Map<string, string>();
     private functionRefClosureStatics = new Map<string, string>();
-    private promiseResolveAdapters = new Map<string, string>();
-    private promiseRejectAdapters = new Map<string, string>();
-    private promiseThenAdapters = new Map<string, string>();
-    private promiseFinallyAdapters = new Map<string, string>();
+    private promiseValueCodecs = new Map<string, string>();
     private asyncAwaitReturnContinuationAdapters = 0;
     private asyncAwaitContinuationAdapterDepth = 0;
     private asyncAwaitContinuationReturnTargets: AsyncAwaitContinuationReturnTarget[] = [];
-    private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
     /** Exact emitted C storage chosen for a source binding. */
@@ -49093,6 +49089,9 @@ class Emitter {
                 };
             }
             // Built-in global identifiers.
+            if (this.isUnshadowedGlobalIdentifier(expr, "Promise")) {
+                return { c: "tsc_promise_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "RegExp")) {
                 return { c: "tsc_regexp_constructor_value()", ty: T_VALUE };
             }
@@ -49394,7 +49393,18 @@ class Emitter {
                 return { c: this.identifierRead(expr), ty: declaredTy };
             }
             if (ty.kind === "function" && this.isDirectFunctionReferenceValue(expr)) {
-                return this.emitFunctionReferenceClosure(expr, ty);
+                const symbol = this.symbolForIdentifier(expr);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                // A contextual callback signature cannot change a declaration's
+                // physical ABI, including its rest-parameter array storage.
+                const physicalType = symbol && declaration && ts.isFunctionDeclaration(declaration) &&
+                    !this.isGenericFunction(declaration)
+                    ? this.isJavaScriptSourceFile(declaration.getSourceFile())
+                        ? this.javaScriptFunctionValueType(declaration)
+                        : this.prepareType(mapTsType(declaration,
+                            this.checker.getTypeOfSymbolAtLocation(symbol, declaration), this.checker))
+                    : ty;
+                return this.emitFunctionReferenceClosure(expr, physicalType);
             }
             // Surface int-spec storage type so downstream emitters (binary,
             // strbuf append, JSON, etc.) can pick the int64 fast paths.
@@ -52989,6 +52999,9 @@ class Emitter {
         if (name === "Symbol") {
             return this.emitSymbolConstructor(call);
         }
+        if (name === "Promise" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
+            return this.emitDynamicValueCall(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE });
+        }
         if (name === "RegExp" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
         }
@@ -54522,39 +54535,22 @@ class Emitter {
     }
 
     private emitSpreadCallArgumentList(args: readonly ts.Expression[]): EmitResult {
-        const av = this.freshTemp("_spread_args");
-        const pieces: string[] = [
-            `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`,
-        ];
-        for (const arg of args) {
-            if (ts.isSpreadElement(arg)) {
-                const r = this.emitExpr(arg.expression);
-                if (r.ty.kind === "array") {
-                    const src = this.freshTemp("_spread_args_src");
-                    const idx = this.freshTemp("_spread_args_i");
-                    const value = this.freshTemp("_spread_args_value");
-                    const elem = r.ty.elem!;
-                    const current = elem.kind === "value"
-                        ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
-                        : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                    pieces.push(
-                        `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, arg.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
-                    );
-                    continue;
-                }
-                if (r.ty.kind === "value" || r.ty.kind === "string") {
-                    const spread = this.freshTemp("_spread_args_iter");
-                    pieces.push(`{ tsc_array_t* const ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, arg.expression)}); tsc_array_append(${av}, ${spread}); }`);
-                    continue;
-                }
-                unsupported(arg, "spread call into function value expects an array or string");
+        const argumentsArray = this.freshTemp("_call_arguments");
+        const pieces = [`tsc_array_t* ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`];
+        for (const argument of args) {
+            if (ts.isSpreadElement(argument)) {
+                const value = this.emitExpr(argument.expression);
+                const values = this.freshTemp("_spread_values");
+                pieces.push(`{ tsc_array_t* ${values} = tsc_value_iter_values(${this.boxObjectIdentity(value.c, value.ty, argument.expression)}); ` +
+                    `tsc_array_append(${argumentsArray}, ${values}); }`);
+            } else {
+                const value = this.emitExpr(argument);
+                const staged = this.freshTemp("_call_argument");
+                pieces.push(`tsc_value_t ${staged} = ${this.coerce(value, T_VALUE, argument)}`);
+                pieces.push(`tsc_array_push_value(${argumentsArray}, ${staged})`);
             }
-            const r = this.emitExpr(arg);
-            const value = this.freshTemp("_spread_arg");
-            pieces.push(`${T_VALUE.c} ${value} = ${this.coerce(r, T_VALUE, arg)}`);
-            pieces.push(`tsc_array_push_raw(${av}, &${value})`);
         }
-        pieces.push(av);
+        pieces.push(argumentsArray);
         return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
     }
 
@@ -56733,7 +56729,7 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Object") {
             return this.emitObjectCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Promise") {
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Promise")) {
             return this.emitPromiseStatic(call, memberName);
         }
         if (
@@ -59641,56 +59637,13 @@ class Emitter {
     }
 
     private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
-        if (method === "withResolvers") {
-            const resolverType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-            return this.emitSequencedExpr(
-                resolverType,
-                this.ignoredArgumentSpecs(call.arguments, 0),
-                () => "tsc_promise_with_resolvers()",
-            );
-        }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (method === "resolve" || method === "reject" || method === "withResolvers") {
+            const dynamic = this.emitDynamicMethod(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE }, method);
+            return { c: this.coerce(dynamic, mapped, call), ty: mapped };
+        }
         if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
         switch (method) {
-            case "resolve": {
-                const arg = call.arguments[0];
-                const value = arg
-                    ? this.emitExpr(arg)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
-                const specs: SequencedCallArg[] = [
-                    { value, target: value.ty.kind === "promise" ? value.ty : T_VALUE, node: arg ?? call.expression },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ];
-                if (arg && value.ty.kind === "promise") {
-                    return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_adopt(${resolved})`);
-                }
-                if (mapped.elem?.kind === "fsstats") {
-                    if (!arg) unsupported(call, "Promise.resolve<FSStats> expects a Stats value");
-                    return this.emitSequencedExpr(
-                        mapped,
-                        [
-                            { value, target: T_FS_STATS, node: arg },
-                            ...this.ignoredArgumentSpecs(call.arguments, 1),
-                        ],
-                        ([resolved]) => `tsc_promise_resolve_fs_stats(${resolved})`,
-                    );
-                }
-                return this.emitSequencedExpr(mapped, specs, ([resolved]) => `tsc_promise_resolve_thenable(${resolved})`);
-            }
-            case "reject": {
-                const arg = call.arguments[0];
-                const reason = arg
-                    ? this.emitExpr(arg)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
-                return this.emitSequencedExpr(
-                    mapped,
-                    [
-                        { value: reason, target: T_VALUE, node: arg ?? call.expression },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ],
-                    ([rejected]) => `tsc_promise_reject(${rejected})`,
-                );
-            }
             case "all": {
                 if (call.arguments.length < 1) unsupported(call, "Promise.all expects 1 arg");
                 const source = this.emitPromiseArrayArg(call, "Promise.all");
@@ -59926,486 +59879,32 @@ class Emitter {
         };
     }
 
-    private ensurePromiseExecutorEnv(): string {
-        const name = "tsc_promise_executor_env_t";
-        if (!this.promiseExecutorEnvDeclared) {
-            this.globalDecls.open(`typedef struct ${name}`);
-            this.globalDecls.line("tsc_promise_t* promise;");
-            this.globalDecls.close(` ${name};`);
-            this.promiseExecutorEnvDeclared = true;
-        }
-        return name;
-    }
-
-    private ensurePromiseResolveAdapter(valueType: CType, node: ts.Node): string {
-        const type = this.prepareType(valueType);
-        const key = this.typeKey(type);
-        const existing = this.promiseResolveAdapters.get(key);
-        if (existing) return existing;
-        const envType = this.ensurePromiseExecutorEnv();
-        const name = `tsc_promise_resolve_executor_${this.promiseResolveAdapters.size}`;
-        this.promiseResolveAdapters.set(key, name);
-        this.protos.line(`void ${name}(void* env, ${type.c} value);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env, ${type.c} value)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        if (type.kind === "fsstats") {
-            buf.line("tsc_promise_adopt_into(state->promise, tsc_promise_resolve_fs_stats(value));");
-        } else {
-            const boxed = this.coerce({ c: "value", ty: type }, T_VALUE, node);
-            buf.line(`tsc_promise_adopt_into(state->promise, tsc_promise_resolve_thenable(${boxed}));`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensurePromiseRejectAdapter(reasonType: CType, node: ts.Node): string {
-        const type = this.prepareType(reasonType);
-        const key = this.typeKey(type);
-        const existing = this.promiseRejectAdapters.get(key);
-        if (existing) return existing;
-        const envType = this.ensurePromiseExecutorEnv();
-        const name = `tsc_promise_reject_executor_${this.promiseRejectAdapters.size}`;
-        this.promiseRejectAdapters.set(key, name);
-        this.protos.line(`void ${name}(void* env, ${type.c} reason);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env, ${type.c} reason)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        const boxed = this.coerce({ c: "reason", ty: type }, T_VALUE, node);
-        buf.line(`tsc_promise_reject_in_place(state->promise, ${boxed});`);
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensurePromiseThenAdapter(
-        call: ts.CallExpression,
-        recvType: CType,
-        fulfilledType: CType | null,
-        rejectedType: CType | null,
-        mappedType: CType,
-        node: ts.Expression,
-    ): string {
-        const key = `then:${this.typeKey(recvType)}:${fulfilledType ? this.typeKey(fulfilledType) : "null"}:${rejectedType ? this.typeKey(rejectedType) : "null"}:${this.typeKey(mappedType)}`;
-        const existing = this.promiseThenAdapters.get(key);
-        if (existing) return existing;
-
-        const name = `tsc_promise_then_callback_${this.promiseThenAdapters.size}`;
-        this.promiseThenAdapters.set(key, name);
-
-        const envType = `${name}_env_t`;
-        const preparedFulfilled = fulfilledType ? this.prepareType(fulfilledType) : null;
-        const preparedRejected = rejectedType ? this.prepareType(rejectedType) : null;
-
-        // Emit Struct Definition
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line("tsc_promise_t* receiver;");
-        this.structDecls.line("tsc_promise_t* result_promise;");
-        if (preparedFulfilled) {
-            this.structDecls.line(`${preparedFulfilled.c} onFulfilled;`);
-        }
-        if (preparedRejected) {
-            this.structDecls.line(`${preparedRejected.c} onRejected;`);
-        }
-        this.structDecls.close(` ${envType};`);
-        this.structDecls.line();
-
-        // Emit Prototype
-        this.protos.line(`void ${name}(void* env);`);
-
-        // Emit Function Body
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line("tsc_promise_t* _p = state->receiver;");
-        buf.line("tsc_promise_t* _ret = state->result_promise;");
-
-        buf.open("if (tsc_promise_is_fulfilled(_p))");
-        if (preparedFulfilled && fulfilledType) {
-            const dynamicCallback = preparedFulfilled.kind === "value";
-            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->onFulfilled))");
-            const callResult = this.promiseCallbackCall(call, fulfilledType, "state->onFulfilled", [this.promiseFulfilledValue(recvType.elem, "_p")], node);
-            const ret = this.promiseCallbackReturnType(fulfilledType, node);
-            const resPromise = this.freshTemp("_res_p");
-            const eh = this.freshTemp("_eh");
-            buf.line(`tsc_promise_t* ${resPromise};`);
-            buf.line(`TSC_TRY_FRAME(${eh});`);
-            buf.line(`tsc_try_push(&${eh});`);
-            buf.open(`if (setjmp(${eh}.jb) == 0)`);
-            if (ret.kind === "void" || ret.kind === "never") {
-                buf.line(`${callResult};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-            } else {
-                const valueTmp = this.freshTemp("_val");
-                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
-            }
-            buf.close();
-            buf.open("else");
-            buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
-            buf.close();
-            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
-            if (dynamicCallback) {
-                buf.close();
-                buf.open("else");
-                buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
-                buf.close();
-            }
-        } else {
-            buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
-        }
-        buf.close(); // end of if fulfilled
-
-        buf.open("else if (tsc_promise_is_rejected(_p))");
-        if (preparedRejected && rejectedType) {
-            const dynamicCallback = preparedRejected.kind === "value";
-            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->onRejected))");
-            const callResult = this.promiseCallbackCall(call, rejectedType, "state->onRejected", [{ c: "tsc_promise_reason(_p)", ty: T_VALUE }], node);
-            const ret = this.promiseCallbackReturnType(rejectedType, node);
-            const resPromise = this.freshTemp("_res_p");
-            const eh = this.freshTemp("_eh");
-            buf.line(`tsc_promise_t* ${resPromise};`);
-            buf.line(`TSC_TRY_FRAME(${eh});`);
-            buf.line(`tsc_try_push(&${eh});`);
-            buf.open(`if (setjmp(${eh}.jb) == 0)`);
-            if (ret.kind === "void" || ret.kind === "never") {
-                buf.line(`${callResult};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = tsc_promise_resolve(tsc_value_undefined());`);
-            } else {
-                const valueTmp = this.freshTemp("_val");
-                buf.line(`${ret.c} ${valueTmp} = ${callResult};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)};`);
-            }
-            buf.close();
-            buf.open("else");
-            buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
-            buf.close();
-            buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
-            if (dynamicCallback) {
-                buf.close();
-                buf.open("else");
-                buf.line("tsc_promise_adopt_into(_ret, _p);");
-                buf.close();
-            }
-        } else {
-            buf.line("tsc_promise_adopt_into(_ret, _p);");
-        }
-        buf.close(); // end of else if rejected
-
-        buf.close(); // end of function
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensurePromiseFinallyAdapter(
-        call: ts.CallExpression,
-        recvType: CType,
-        cbType: CType | null,
-        mappedType: CType,
-        node: ts.Expression,
-    ): string {
-        const key = `finally:${this.typeKey(recvType)}:${cbType ? this.typeKey(cbType) : "null"}:${this.typeKey(mappedType)}`;
-        const existing = this.promiseFinallyAdapters.get(key);
-        if (existing) return existing;
-
-        const name = `tsc_promise_finally_callback_${this.promiseFinallyAdapters.size}`;
-        this.promiseFinallyAdapters.set(key, name);
-
-        const envType = `${name}_env_t`;
-        const settleEnvType = `${name}_settle_env_t`;
-        const settleName = `${name}_settle`;
-        const preparedCb = cbType ? this.prepareType(cbType) : null;
-
-        // Struct
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line("tsc_promise_t* receiver;");
-        this.structDecls.line("tsc_promise_t* result_promise;");
-        if (preparedCb) {
-            this.structDecls.line(`${preparedCb.c} cb;`);
-        }
-        this.structDecls.close(` ${envType};`);
-        this.structDecls.line();
-        this.structDecls.open(`typedef struct ${settleEnvType}`);
-        this.structDecls.line("tsc_promise_t* receiver;");
-        this.structDecls.line("tsc_promise_t* finalizer;");
-        this.structDecls.line("tsc_promise_t* result_promise;");
-        this.structDecls.close(` ${settleEnvType};`);
-        this.structDecls.line();
-
-        // Proto
-        this.protos.line(`void ${settleName}(void* env);`);
-        this.protos.line(`void ${name}(void* env);`);
-
-        const settleBuf = new CBuf();
-        settleBuf.open(`void ${settleName}(void* env)`);
-        settleBuf.line(`${settleEnvType}* state = (${settleEnvType}*)env;`);
-        settleBuf.line("tsc_promise_t* _p = state->receiver;");
-        settleBuf.line("tsc_promise_t* _fin = state->finalizer;");
-        settleBuf.line("tsc_promise_t* _ret = state->result_promise;");
-        settleBuf.open("if (tsc_promise_is_rejected(_fin))");
-        settleBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_reject(tsc_promise_reason(_fin)));");
-        settleBuf.close();
-        settleBuf.open("else if (tsc_promise_is_rejected(_p))");
-        settleBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_reject(tsc_promise_reason(_p)));");
-        settleBuf.close();
-        settleBuf.open("else");
-        settleBuf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
-        settleBuf.close();
-        settleBuf.close();
-        settleBuf.line();
-        this.closureDefs.write(settleBuf.toString());
-
-        // Function
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line("tsc_promise_t* _p = state->receiver;");
-        buf.line("tsc_promise_t* _ret = state->result_promise;");
-
-        const resPromise = this.freshTemp("_res_p");
-        buf.line(`tsc_promise_t* ${resPromise};`);
-        const adoptFinallyResult = (promiseExpr: string): void => {
-            const settleEnv = this.freshTemp("_finally_settle_env");
-            const finalPromise = this.freshTemp("_finally_result");
-            buf.line(`tsc_promise_t* const ${finalPromise} = ${promiseExpr};`);
-            buf.line(`${settleEnvType}* const ${settleEnv} = (${settleEnvType}*)TSC_GC_MALLOC(sizeof(${settleEnvType}));`);
-            buf.line(`${settleEnv}->receiver = _p;`);
-            buf.line(`${settleEnv}->finalizer = ${finalPromise};`);
-            buf.line(`${settleEnv}->result_promise = _ret;`);
-            buf.open(`if (tsc_promise_is_pending(${finalPromise}))`);
-            buf.line(`tsc_promise_add_callback(${finalPromise}, ${settleName}, ${settleEnv});`);
-            buf.close();
-            buf.open("else");
-            buf.line(`tsc_queue_microtask(${settleName}, ${settleEnv});`);
-            buf.close();
-        };
-
-        if (preparedCb && cbType) {
-            const dynamicCallback = preparedCb.kind === "value";
-            if (dynamicCallback) buf.open("if (tsc_value_is_callable(state->cb))");
-            const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
-            const cbRet = this.promiseCallbackReturnType(cbType, node);
-            const eh = this.freshTemp("_eh");
-            buf.line(`TSC_TRY_FRAME(${eh});`);
-            buf.line(`tsc_try_push(&${eh});`);
-            buf.open(`if (setjmp(${eh}.jb) == 0)`);
-            if (cbRet?.kind === "void" || cbRet?.kind === "never" || !cbRet) {
-                buf.line(`${callStmt};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
-            } else {
-                const valueTmp = this.freshTemp("_promise_finally_value");
-                buf.line(`${cbRet.c} ${valueTmp} = ${callStmt};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resPromise} = tsc_promise_pending();`);
-                adoptFinallyResult(this.promiseResolveResult({ c: valueTmp, ty: cbRet }, node));
-            }
-            buf.close();
-            buf.open("else");
-            buf.line("tsc_try_pop();");
-            buf.line(`${resPromise} = tsc_promise_reject(tsc_current_error_value());`);
-            buf.close();
-            if (dynamicCallback) {
-                buf.close();
-                buf.open("else");
-                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
-                buf.close();
-            }
-        } else {
-            buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
-        }
-        buf.line(`tsc_promise_adopt_into(_ret, ${resPromise});`);
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-
-        return name;
-    }
-
-    private emitPromiseMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Promise");
-        }
+    private emitPromiseMethod(call: ts.CallExpression, recv: EmitResult, method: string): EmitResult {
+        const dynamic = this.emitDynamicMethod(call, {
+            c: this.coerce(recv, T_VALUE, call.expression), ty: T_VALUE,
+        }, method);
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
-        switch (method) {
-            case "then": {
-                const args = call.arguments;
-                const hasFulfilledHandler = !!args[0] && !this.isPromiseEmptyHandlerExpression(args[0]);
-                const fulfilled = hasFulfilledHandler ? this.emitExpr(args[0]!) : null;
-                if (fulfilled) {
-                    this.validatePromiseCallback(args[0]!, fulfilled, 1, "Promise.then onfulfilled");
-                }
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                ];
-                if (fulfilled) specs.push({ value: fulfilled, target: fulfilled.ty, node: args[0]! });
-                let rejected: EmitResult | null = null;
-                if (args[1] && !this.isPromiseEmptyHandlerExpression(args[1])) {
-                    rejected = this.emitExpr(args[1]);
-                    this.validatePromiseCallback(args[1], rejected, 1, "Promise.then onrejected");
-                    specs.push({ value: rejected, target: rejected.ty, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : args[0] ? 1 : 0));
-                return this.emitSequencedExpr(mapped, specs, (vals) => {
-                    const promise = vals[0]!;
-                    const onFulfilled = fulfilled ? vals[1]! : null;
-                    const onRejected = rejected ? vals[fulfilled ? 2 : 1] : undefined;
-
-                    const adapter = this.ensurePromiseThenAdapter(
-                        call,
-                        recv.ty,
-                        fulfilled ? fulfilled.ty : null,
-                        rejected ? rejected.ty : null,
-                        mapped,
-                        call,
-                    );
-                    const envType = `${adapter}_env_t`;
-                    const env = this.freshTemp("_then_env");
-                    const retPromise = this.freshTemp("_then_ret");
-
-                    const assignments: string[] = [];
-                    assignments.push(`${env}->receiver = _p;`);
-                    assignments.push(`${env}->result_promise = ${retPromise};`);
-                    if (fulfilled && onFulfilled) {
-                        assignments.push(`${env}->onFulfilled = ${onFulfilled};`);
-                    }
-                    if (rejected && onRejected) {
-                        assignments.push(`${env}->onRejected = ${onRejected};`);
-                    }
-
-                    return `({ tsc_promise_t* const _p = ${promise}; ` +
-                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
-                        `if (tsc_promise_is_pending(_p)) { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
-                        `} else { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_queue_microtask(${adapter}, ${env}); ` +
-                        `} ` +
-                        `${retPromise}; })`;
-                });
-            }
-            case "catch": {
-                const handler = call.arguments[0];
-                const hasRejectedHandler = !!handler && !this.isPromiseEmptyHandlerExpression(handler);
-                const rejected = hasRejectedHandler ? this.emitExpr(handler!) : null;
-                if (rejected) {
-                    this.validatePromiseCallback(handler!, rejected, 1, "Promise.catch onrejected");
-                }
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                if (rejected) specs.push({ value: rejected, target: rejected.ty, node: handler! });
-                specs.push(...this.ignoredArgumentSpecs(call.arguments, handler ? 1 : 0));
-                return this.emitSequencedExpr(mapped, specs, (vals) => {
-                    const promise = vals[0]!;
-                    const onRejected = rejected ? vals[1]! : null;
-
-                    const adapter = this.ensurePromiseThenAdapter(
-                        call,
-                        recv.ty,
-                        null,
-                        rejected ? rejected.ty : null,
-                        mapped,
-                        call,
-                    );
-                    const envType = `${adapter}_env_t`;
-                    const env = this.freshTemp("_catch_env");
-                    const retPromise = this.freshTemp("_catch_ret");
-
-                    const assignments: string[] = [];
-                    assignments.push(`${env}->receiver = _p;`);
-                    assignments.push(`${env}->result_promise = ${retPromise};`);
-                    if (rejected && onRejected) {
-                        assignments.push(`${env}->onRejected = ${onRejected};`);
-                    }
-
-                    return `({ tsc_promise_t* const _p = ${promise}; ` +
-                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
-                        `if (tsc_promise_is_pending(_p)) { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
-                        `} else { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_queue_microtask(${adapter}, ${env}); ` +
-                        `} ` +
-                        `${retPromise}; })`;
-                });
-            }
-            case "finally": {
-                const handler = call.arguments[0];
-                const hasFinallyHandler = !!handler && !this.isPromiseEmptyHandlerExpression(handler);
-                const cb = hasFinallyHandler ? this.emitExpr(handler!) : null;
-                if (cb) {
-                    this.validatePromiseCallback(handler!, cb, 0, "Promise.finally callback");
-                }
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                if (cb) specs.push({ value: cb, target: cb.ty, node: handler! });
-                specs.push(...this.ignoredArgumentSpecs(call.arguments, handler ? 1 : 0));
-                return this.emitSequencedExpr(mapped, specs, (vals) => {
-                    const promise = vals[0]!;
-                    const fn = cb ? vals[1]! : null;
-
-                    const adapter = this.ensurePromiseFinallyAdapter(
-                        call,
-                        recv.ty,
-                        cb ? cb.ty : null,
-                        mapped,
-                        call,
-                    );
-                    const envType = `${adapter}_env_t`;
-                    const env = this.freshTemp("_finally_env");
-                    const retPromise = this.freshTemp("_finally_ret");
-
-                    const assignments: string[] = [];
-                    assignments.push(`${env}->receiver = _p;`);
-                    assignments.push(`${env}->result_promise = ${retPromise};`);
-                    if (cb && fn) {
-                        assignments.push(`${env}->cb = ${fn};`);
-                    }
-
-                    return `({ tsc_promise_t* const _p = ${promise}; ` +
-                        `tsc_promise_t* const ${retPromise} = tsc_promise_pending(); ` +
-                        `if (tsc_promise_is_pending(_p)) { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_promise_add_callback(_p, ${adapter}, ${env}); ` +
-                        `} else { ` +
-                            `${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-                            `${assignments.join(" ")} ` +
-                            `tsc_queue_microtask(${adapter}, ${env}); ` +
-                        `} ` +
-                        `${retPromise}; })`;
-                });
-            }
-        }
-        unsupported(call, `Promise method .${method}`);
+        return { c: this.coerce(dynamic, mapped, call), ty: mapped };
     }
 
-    private isPromiseEmptyHandlerExpression(expr: ts.Expression): boolean {
-        return expr.kind === ts.SyntaxKind.NullKeyword || this.isUndefinedExpression(expr);
+    /** Native APIs may deliver physical pointer payloads. One per-value codec
+     * crosses that ABI before the shared ordinary Promise reaction observes it. */
+    private promiseWithValueCodec(value: string, type: CType, node: ts.Node): string {
+        const element = type.elem && this.prepareType(type.elem);
+        if (!element || !isPointerKind(element)) return value;
+        const key = this.typeKey(element);
+        let codec = this.promiseValueCodecs.get(key);
+        if (!codec) {
+            codec = `tsc_promise_value_codec_${this.promiseValueCodecs.size}`;
+            this.promiseValueCodecs.set(key, codec);
+            this.protos.line(`static tsc_value_t ${codec}(void* pointer);`);
+            const boxed = this.boxObjectIdentity(`((${element.c})pointer)`, element, node);
+            const buf = new CBuf();
+            buf.open(`static tsc_value_t ${codec}(void* pointer)`);
+            buf.line(`return ${boxed};`);
+            buf.close(); buf.line(); this.closureDefs.write(buf.toString());
+        }
+        return `tsc_promise_set_value_codec(${value}, ${codec})`;
     }
 
     private validatePromiseCallback(
@@ -72948,7 +72447,7 @@ class Emitter {
                     ...ignored,
                 ], ([o]) => `({ (void)${o}; ${primitivePrototypeFn}(); })`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "promise") {
                 unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
@@ -76099,55 +75598,12 @@ class Emitter {
                 ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
             );
         }
-        if (cls === "Promise") {
-            const args = n.arguments ?? [];
-            if (args.length < 1) unsupported(n, "new Promise() expects an executor");
+        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Promise")) {
             const mapped = this.prepareType(mapTsType(n, this.checker.getTypeAtLocation(n), this.checker));
             if (mapped.kind !== "promise") unsupported(n, "new Promise<T>() result must be Promise<T>");
-            const executorArg = args[0]!;
-            const executor = this.emitExpr(executorArg);
-            const executorType = this.prepareType(executor.ty);
-            if (executorType.kind !== "function" || !executorType.ret) {
-                unsupported(executorArg, "Promise executor must be a function");
-            }
-            const executorParams = executorType.params ?? [];
-            if (executorParams.length > 2) unsupported(executorArg, "Promise executor expects resolve and optional reject parameters");
-            const envType = this.ensurePromiseExecutorEnv();
-            return this.emitSequencedExpr(mapped, [
-                { value: executor, target: executorType, node: executorArg },
-                ...this.ignoredArgumentSpecs(args, 1),
-            ], ([exec]) => {
-                const result = this.freshTemp("_promise_executor_result");
-                const state = this.freshTemp("_promise_executor_env");
-                const pieces: string[] = [
-                    `tsc_promise_t* ${result} = tsc_promise_pending()`,
-                    `${envType}* ${state} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                    `${state}->promise = ${result}`,
-                ];
-                const callArgs = [`${exec}->env`];
-                if (executorType.thisParam) callArgs.push("tsc_value_undefined()");
-                for (let i = 0; i < executorParams.length; i++) {
-                    const param = this.prepareType(executorParams[i]!);
-                    if (param.kind !== "function" || !param.ret) {
-                        unsupported(executorArg, "Promise executor parameters must be resolve/reject functions");
-                    }
-                    const fn = this.freshTemp(i === 0 ? "_resolve" : "_reject");
-                    const valueParam = param.params?.[0] ?? T_VALUE;
-                    const adapter = i === 0
-                        ? this.ensurePromiseResolveAdapter(valueParam, executorArg)
-                        : this.ensurePromiseRejectAdapter(valueParam, executorArg);
-                    pieces.push(`${param.c} ${fn} = (${param.c})TSC_GC_MALLOC(sizeof(${param.closureName}))`);
-                    pieces.push(`${fn}->fn = ${adapter}`);
-                    pieces.push(`${fn}->env = ${state}`);
-                    callArgs.push(fn);
-                }
-                const eh = this.freshTemp("_promise_executor_eh");
-                pieces.push(`TSC_TRY_FRAME(${eh})`);
-                pieces.push(`tsc_try_push(&${eh})`);
-                pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else { tsc_promise_reject_in_place(${result}, tsc_current_error_value()); }`);
-                pieces.push(result);
-                return `({ ${pieces.join("; ")}; })`;
-            });
+            return this.emitSequencedCall("tsc_promise_new_executor", mapped, [
+                { value: this.emitSpreadCallArgumentList(n.arguments ?? []), node: n },
+            ]);
         }
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
@@ -78003,8 +77459,10 @@ class Emitter {
                     return `tsc_value_as_text_decoder(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
+                case "fsstats":
+                    return `((tsc_fs_stats_t*)tsc_value_as_class(${r.c}))`;
                 case "promise":
-                    return `tsc_promise_resolve_thenable(${r.c})`;
+                    return `tsc_value_as_promise(${r.c})`;
                 case "function": {
                     return this.emitValueFunctionAdapter(r, target, node);
                 }
@@ -78091,6 +77549,8 @@ class Emitter {
                 }
                 case "class":
                     return this.classValueBoxExpression(r, node);
+                case "fsstats":
+                    return `tsc_value_class(${r.c})`;
                 case "date":
                     return `tsc_value_date(${r.c})`;
                 case "regexp":
@@ -78116,7 +77576,7 @@ class Emitter {
                 case "textdecoder":
                     return `tsc_value_text_decoder(${r.c})`;
                 case "promise":
-                    return `tsc_value_promise(${r.c})`;
+                    return `tsc_value_promise(${this.promiseWithValueCodec(r.c, r.ty, node)})`;
                 case "void":
                 case "never":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;

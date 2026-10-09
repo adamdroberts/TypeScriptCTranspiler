@@ -87,7 +87,9 @@ interface PromiseWithResolvers<T> {
     reject(reason?: any): void;
 }
 interface PromiseConstructor {
-    new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void, ...ignored: any[]): Promise<T>;
+    readonly prototype: Promise<any>;
+    readonly [Symbol.species]: PromiseConstructor;
+    new<T>(executor: (resolve: (value: T | PromiseLike<T>) => void, reject: (reason?: any) => void) => void, ...ignored: any[]): Promise<T>;
     resolve<T>(value: Promise<T>, ...ignored: any[]): Promise<T>;
     resolve<T>(value: T, ...ignored: any[]): Promise<T>;
     resolve(): Promise<void>;

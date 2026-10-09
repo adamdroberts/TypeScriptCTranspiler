@@ -1,5 +1,7 @@
 # Changelog
 
+- Unify Promise executors, capabilities, resolving functions and reactions through actual argument Lists and rooted records. Add ordinary Realm-owned constructor/prototype and generic species/finally handling; remove fixed adapters and bound-method getters. Preserve repeated thenable jobs, actual Promise self-rejection, typed pointer codecs and boxed identity. Repair indexed-array GC roots and contextual declaration callback ABI.
+
 - Transport throws through one rooted value completion without user coercion. Separate intrinsic host diagnostics, preserve payloads through promise rejection bridges, and add one async call rejection boundary shared by function emitters. Promise settlement roots values before allocation; ordinary catch string predecessors are removed, and Symbol.toPrimitive is declared.
 
 - Unify synchronous return, break and continue through one lexical completion scope worklist. Run finally and IteratorClose in scope order, preserve overrides and exited-handler boundaries, retain pending values, and project finalizer bindings before inner shadowing. Replace duplicated try emitters; Script try/catch/finally completion values now apply UpdateEmpty with undefined.

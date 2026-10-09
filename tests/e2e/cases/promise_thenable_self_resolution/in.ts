@@ -1,66 +1,24 @@
 const events: string[] = [];
-
-const self: any = {};
-self.then = function(resolve: any, reject: any): void {
-    events.push("self");
-    resolve(self);
-    reject("late");
+let repeat = true;
+const thenable: any = {
+    then(resolve: any, reject: any): void {
+        events.push("job");
+        if (repeat) {
+            repeat = false;
+            resolve(thenable);
+        } else {
+            resolve("settled");
+        }
+        reject("late");
+    }
 };
-
-Promise.resolve(self)
-    .catch((reason: any) => {
-        console.log("self:", reason);
-        return "handled";
-    });
-
-const outer: any = {};
-outer.then = function(resolve: any): void {
-    events.push("outer");
-    resolve(outer);
-};
-
-Promise.resolve(outer)
-    .then((value: any) => {
-        console.log("outer fulfilled:", value);
-        return value;
-    })
-    .catch((reason: any) => {
-        console.log("outer:", reason);
-        return "handled";
-    });
-
-const first: any = {};
-const second: any = {};
-first.then = function(resolve: any): void {
-    events.push("first");
-    resolve(second);
-};
-second.then = function(resolve: any): void {
-    events.push("second");
-    resolve(first);
-};
-
-Promise.resolve(first)
-    .catch((reason: any) => {
-        console.log("cycle:", reason);
-        return "handled";
-    });
-
-const saved: any = {};
-let pendingSelfPromise: Promise<any> = Promise.resolve("placeholder");
-const pendingSelf: any = {};
-pendingSelf.then = function(resolve: any): void {
-    events.push("pending-self");
-    saved.resolve = resolve;
-};
-
-pendingSelfPromise = Promise.resolve(pendingSelf);
-queueMicrotask(() => {
-    saved.resolve(pendingSelfPromise);
+Promise.resolve(thenable).then((value: any) => {
+    console.log("repeated:", value);
+    console.log("events:", events.join("|"));
 });
-pendingSelfPromise.catch((reason: any) => {
-    console.log("pending-self:", reason);
-    return "handled";
+const record = Promise.withResolvers<any>();
+record.resolve(record.promise);
+record.promise.catch((error: any) => {
+    console.log("self:", error instanceof TypeError);
 });
-
-console.log("events:" + (events.length ? " " + events.join("|") : ""));
+console.log("start");

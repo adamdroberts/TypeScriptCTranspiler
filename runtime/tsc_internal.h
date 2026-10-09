@@ -137,6 +137,7 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE,
@@ -152,6 +153,7 @@ tsc_value_t tsc_value_get_prototype_from_constructor(
     tsc_value_t constructor, tsc_intrinsic_default_prototype_kind_t kind
 );
 bool tsc_value_is_regexp(tsc_value_t value);
+tsc_realm_t* tsc_value_function_realm(tsc_value_t function);
 tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 
 typedef struct {
@@ -314,9 +316,12 @@ struct tsc_promise {
     tsc_value_t result;
     /* Typed pointer payload, or the decoded GC root for a NaN-boxed result. */
     void* ptr_result;
+    tsc_value_t (*box_pointer_result)(void*);
     tsc_promise_callback_t* callbacks;
     size_t callbacks_len;
     size_t callbacks_cap;
+    /* One ordinary wrapper retains identity across typed/boxed transitions. */
+    tsc_object_t* object;
 };
 
 typedef struct tsc_event_listener {
