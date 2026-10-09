@@ -39,7 +39,7 @@ bool tsc_value_is_constructable(tsc_value_t value);
 double tsc_value_as_num(tsc_value_t value);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
-tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body);
+tsc_value_t tsc_node_function_source(int kind, tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_array_t* args);
 }
@@ -51,7 +51,7 @@ extern "C" tsc_value_t tsc_node_eval(tsc_str_t*) {
     return tsc_value_undefined();
 }
 
-extern "C" tsc_value_t tsc_node_function_source(tsc_str_t*, tsc_str_t*) {
+extern "C" tsc_value_t tsc_node_function_source(int, tsc_str_t*, tsc_str_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -391,10 +391,11 @@ extern "C" tsc_value_t tsc_node_eval(tsc_str_t* source) {
 #endif
 }
 
-extern "C" tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body) {
+extern "C" tsc_value_t tsc_node_function_source(int kind, tsc_str_t* parameters, tsc_str_t* body) {
 #ifndef TSC_UNSAFE_EVAL
     (void)parameters;
     (void)body;
+    (void)kind;
     tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
     return tsc_value_undefined();
 #else
@@ -409,8 +410,13 @@ extern "C" tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t
     // joined FormalParameters and body through V8's constructor, which parses
     // both inputs independently, without repeating user conversion hooks.
     v8::Local<v8::Value> constructor;
-    if (!context->Global()->Get(context, v8::String::NewFromUtf8Literal(isolate, "Function"))
-        .ToLocal(&constructor) || !constructor->IsFunction()) {
+    // Fixed source expressions select intrinsic kinds; the actual source
+    // inputs remain separate arguments to the corresponding constructor.
+    const char* expressions[] = { "Function", "(function*(){}).constructor", "(async function(){}).constructor", "(async function*(){}).constructor" };
+    if (kind < 0 || static_cast<size_t>(kind) >= sizeof(expressions) / sizeof(*expressions)) tsc_panic("unknown dynamic function kind");
+    v8::Local<v8::String> selection = v8::String::NewFromUtf8(isolate, expressions[kind]).ToLocalChecked();
+    v8::Local<v8::Script> script;
+    if (!v8::Script::Compile(context, selection).ToLocal(&script) || !script->Run(context).ToLocal(&constructor) || !constructor->IsFunction()) {
         tsc_panic("embedded Node bridge: Function constructor unavailable");
     }
     v8::Local<v8::Value> inputs[] = {

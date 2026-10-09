@@ -81,6 +81,7 @@ import {
     type RuntimeCodeManifest,
 } from "../runtime-code-aot";
 import type { FunctionConstructorEntry } from "../function-constructor-source";
+import { functionConstructorRuntimeKind, functionKindForDeclaration } from "../function-constructor-source";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 import { validateJsonSyntax } from "../json-syntax";
 import {
@@ -14935,16 +14936,16 @@ class Emitter {
         }
         const functionEntries = this.options.functionEntries ?? [];
         if (functionEntries.length) {
-            out.line("static tsc_value_t function_source_dispatch(tsc_str_t* parameters, tsc_str_t* body) {");
+            out.line("static tsc_value_t function_source_dispatch(tsc_dynamic_function_kind_t kind, tsc_str_t* parameters, tsc_str_t* body) {");
             for (const entry of functionEntries) {
-                out.line(`    if (tsc_str_eq(parameters, ${this.cStringLiteral(entry.parameters)}) && ` +
+                out.line(`    if (kind == ${functionConstructorRuntimeKind(entry.kind)} && tsc_str_eq(parameters, ${this.cStringLiteral(entry.parameters)}) && ` +
                     `tsc_str_eq(body, ${this.cStringLiteral(entry.body)})) {`);
                 if (entry.entry === null) {
                     out.line('        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("invalid Function constructor source"));');
                 } else {
                     const moduleId = this.graph.fileToModuleId.get(path.resolve(entry.entry));
                     if (!moduleId) throw new Error(`Function source is absent from the AOT graph: ${entry.entry}`);
-                    out.line(`        return tsc_function_create_from_source(mod_evaluate_${moduleId}, parameters, body);`);
+                    out.line(`        return tsc_function_create_from_source(kind, mod_evaluate_${moduleId}, parameters, body);`);
                 }
                 out.line("    }");
             }
@@ -59272,7 +59273,7 @@ class Emitter {
                     : (r.ty.params ?? []).length;
                 const owner = this.freshTemp("_callable_owner");
                 const value = `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;
-                return sourceFunction && this.isGeneratorDeclaration(sourceFunction) ? `tsc_generator_function_value(${value}, ${this.isAsyncDeclaration(sourceFunction) ? "true" : "false"})` : value;
+                return sourceFunction ? `tsc_dynamic_function_value(${value}, ${functionConstructorRuntimeKind(functionKindForDeclaration(sourceFunction))})` : value;
             }
             case "class":
                 return this.classValueBoxExpression(r, node);
@@ -59366,7 +59367,7 @@ class Emitter {
     private withCallableSourceText(value: string, node: ts.Node): string {
         const source = this.callableSourceTextLiteral(node);
         const definition = ts.isExpression(node) ? this.functionLikeForExpression(node) : node;
-        if (definition && this.isGeneratorDeclaration(definition)) value = `tsc_generator_function_value(${value}, ${this.isAsyncDeclaration(definition) ? "true" : "false"})`;
+        if (definition) value = `tsc_dynamic_function_value(${value}, ${functionConstructorRuntimeKind(functionKindForDeclaration(definition))})`;
         if (source === "NULL") return value;
         return this.emitSequencedExpr(T_VALUE, [{ value: { c: value, ty: T_VALUE } }],
             ([rooted]) => `tsc_value_function_with_source(${rooted}, ${source})`).c;

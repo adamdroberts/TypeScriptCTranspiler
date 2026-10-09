@@ -223,6 +223,10 @@ tsc_value_t tsc_value_object_prototype(void) {
         object_prototype_define_method(prototype, "__defineSetter__", 16, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_SETTER);
         object_prototype_define_method(prototype, "__lookupGetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_GETTER);
         object_prototype_define_method(prototype, "__lookupSetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_SETTER);
+        /* Complete the reciprocal intrinsic link before user code can read
+         * an inherited constructor, even when no global Object read has
+         * occurred. Reentry sees the already published prototype. */
+        (void)tsc_object_constructor_value();
     }
     tsc_runtime_unlock();
     return tsc_value_object(prototype);

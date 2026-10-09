@@ -112,7 +112,7 @@ tsc_str_t* tsc_str_from_cstr(const char* s);
 
 /* ------------- embedded Node bridge ------------- */
 tsc_value_t tsc_node_eval(tsc_str_t* source);
-tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body);
+tsc_value_t tsc_node_function_source(int kind, tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, struct tsc_array* args);
 tsc_value_t tsc_builtin_math(void);
@@ -787,9 +787,18 @@ tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, voi
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_function_constructor_value(void);
-typedef tsc_value_t (*tsc_function_source_callback_t)(tsc_str_t* parameters, tsc_str_t* body);
+typedef enum {
+    TSC_DYNAMIC_FUNCTION_ORDINARY,
+    TSC_DYNAMIC_FUNCTION_GENERATOR,
+    TSC_DYNAMIC_FUNCTION_ASYNC,
+    TSC_DYNAMIC_FUNCTION_ASYNC_GENERATOR
+} tsc_dynamic_function_kind_t;
+tsc_value_t tsc_dynamic_function_prototype(tsc_dynamic_function_kind_t kind);
+tsc_value_t tsc_dynamic_function_constructor_value(tsc_dynamic_function_kind_t kind);
+tsc_value_t tsc_dynamic_function_value(tsc_value_t function, tsc_dynamic_function_kind_t kind);
+typedef tsc_value_t (*tsc_function_source_callback_t)(tsc_dynamic_function_kind_t kind, tsc_str_t* parameters, tsc_str_t* body);
 void tsc_function_set_source_callback(tsc_function_source_callback_t callback);
-tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body);
+tsc_value_t tsc_function_create_from_source(tsc_dynamic_function_kind_t kind, tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);
@@ -1102,7 +1111,7 @@ typedef struct tsc_generator {
 } tsc_generator_t;
 tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env, bool asynchronous);
 tsc_value_t tsc_generator_value(tsc_generator_t* generator);
-tsc_value_t tsc_generator_function_value(tsc_value_t function, bool asynchronous);
+tsc_value_t tsc_generator_prototype_value(bool asynchronous);
 bool tsc_generator_resume_enter(tsc_generator_t* generator, tsc_realm_t* caller_realm);
 void tsc_generator_resume_leave(tsc_generator_t* generator, bool was_processing);
 void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value);

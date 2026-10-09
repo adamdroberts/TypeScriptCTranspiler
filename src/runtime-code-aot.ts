@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import ts from "typescript";
 import { createEcmaSourceFile } from "./ecmascript-source";
-import type { FunctionConstructorSource } from "./function-constructor-source";
+import type { DynamicFunctionKind, FunctionConstructorSource } from "./function-constructor-source";
 
 export type AotRuntimeConstant =
     | { kind: "number"; value: number }
@@ -189,10 +189,12 @@ function parseFunctionManifest(raw: unknown): FunctionConstructorSource[] {
     return entries.map(entry => {
         if (typeof entry === "string") return { parameters: "", body: entry };
         if (entry && typeof entry === "object" && "body" in entry && "parameters" in entry) {
-            const { body, parameters } = entry as { body: unknown; parameters: unknown };
+            const { body, parameters, kind } = entry as { body: unknown; parameters: unknown; kind: unknown };
             if (typeof body === "string" && (typeof parameters === "string" ||
                 Array.isArray(parameters) && parameters.every(value => typeof value === "string"))) {
-                return { parameters: typeof parameters === "string" ? parameters : parameters.join(","), body };
+                if (kind !== undefined && (typeof kind !== "string" || !["ordinary", "generator", "async", "async-generator"].includes(kind)))
+                    throw new Error("invalid Function source kind in runtime-code manifest");
+                return { kind: kind as DynamicFunctionKind | undefined, parameters: typeof parameters === "string" ? parameters : parameters.join(","), body };
             }
         }
         throw new Error("runtime code manifest function entries require a body string and parameter strings");

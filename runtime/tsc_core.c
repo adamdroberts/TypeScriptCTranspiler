@@ -228,25 +228,46 @@ static tsc_value_t function_prototype_call_body(void* env, tsc_value_t this_arg,
 
 static tsc_function_source_callback_t function_source_callback;
 
+typedef struct {
+    tsc_dynamic_function_kind_t kind;
+    const char* name;
+    const char* source_prefix;
+    tsc_intrinsic_default_prototype_kind_t default_prototype;
+    bool generator;
+    bool asynchronous;
+} dynamic_function_descriptor_t;
+static const dynamic_function_descriptor_t dynamic_function_descriptors[] = {
+    { TSC_DYNAMIC_FUNCTION_ORDINARY, "Function", "function", TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE, false, false },
+    { TSC_DYNAMIC_FUNCTION_GENERATOR, "GeneratorFunction", "function*", TSC_INTRINSIC_DEFAULT_GENERATOR_FUNCTION_PROTOTYPE, true, false },
+    { TSC_DYNAMIC_FUNCTION_ASYNC, "AsyncFunction", "async function", TSC_INTRINSIC_DEFAULT_ASYNC_FUNCTION_PROTOTYPE, false, true },
+    { TSC_DYNAMIC_FUNCTION_ASYNC_GENERATOR, "AsyncGeneratorFunction", "async function*", TSC_INTRINSIC_DEFAULT_ASYNC_GENERATOR_FUNCTION_PROTOTYPE, true, true },
+};
+static const dynamic_function_descriptor_t* dynamic_function_descriptor(tsc_dynamic_function_kind_t kind) {
+    for (size_t index = 0; index < sizeof(dynamic_function_descriptors) / sizeof(*dynamic_function_descriptors); ++index)
+        if (dynamic_function_descriptors[index].kind == kind) return &dynamic_function_descriptors[index];
+    tsc_panic("unknown dynamic function kind");
+}
+
 void tsc_function_set_source_callback(tsc_function_source_callback_t callback) {
     function_source_callback = callback;
 }
 
-tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body) {
+tsc_value_t tsc_function_create_from_source(tsc_dynamic_function_kind_t kind, tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body) {
+    const dynamic_function_descriptor_t* descriptor = dynamic_function_descriptor(kind);
     tsc_value_t new_target = tsc_value_current_new_target();
     if (tsc_value_is_undefined(new_target)) new_target = tsc_value_current_callee();
     tsc_value_t prototype = tsc_value_get_prototype_from_constructor(
-        new_target, TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE
+        new_target, descriptor->default_prototype
     );
     void* volatile prototype_root = tsc_value_gc_root(prototype);
-    tsc_value_t result = factory();
+    tsc_value_t result = tsc_dynamic_function_value(factory(), kind);
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
     tsc_function_identity_set_prototype(identity, prototype);
     identity->name = tsc_str_from_lit("anonymous", 9);
     tsc_object_define(identity->props, tsc_str_from_lit("name", 4),
         tsc_value_string(identity->name), false, false, true);
     tsc_array_t* source_parts = tsc_array_new(sizeof(tsc_str_t*), 5);
-    tsc_str_t* prefix = tsc_str_from_lit("function anonymous(", 19);
+    tsc_str_t* prefix = tsc_str_concat(tsc_str_from_cstr(descriptor->source_prefix), tsc_str_from_lit(" anonymous(", 11));
     tsc_str_t* middle = tsc_str_from_lit("\n) {\n", 5);
     tsc_str_t* suffix = tsc_str_from_lit("\n}", 2);
     tsc_array_push_raw(source_parts, &prefix);
@@ -260,8 +281,8 @@ tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void), tsc_st
 }
 
 static tsc_value_t function_constructor_body(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
     (void)this_arg;
+    const dynamic_function_descriptor_t* descriptor = env ? env : dynamic_function_descriptor(TSC_DYNAMIC_FUNCTION_ORDINARY);
     const size_t count = args ? args->len : 0;
     /* Actual argument values have already been evaluated by the call boundary.
      * Convert each parameter and then the body in source order. Decoded string
@@ -284,12 +305,12 @@ static tsc_value_t function_constructor_body(void* env, tsc_value_t this_arg, ts
     }
     tsc_str_t* volatile body = count ? TSC_ARR(tsc_str_t*, strings, count - 1) : tsc_str_from_lit("", 0);
     tsc_value_t result = function_source_callback
-        ? function_source_callback(parameters, body) : tsc_value_undefined();
+        ? function_source_callback(descriptor->kind, parameters, body) : tsc_value_undefined();
     if (!tsc_value_is_undefined(result)) {
         return result;
     }
 #ifdef TSC_UNSAFE_EVAL
-    return tsc_node_function_source(parameters, body);
+    return tsc_node_function_source(descriptor->kind, parameters, body);
 #else
     (void)args;
     tsc_throw_error(
@@ -514,6 +535,75 @@ tsc_value_t tsc_function_default_prototype(void) {
 tsc_value_t tsc_function_constructor_value(void) {
     tsc_function_intrinsics_t* intrinsics = ensure_function_intrinsics();
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)intrinsics->constructor_identity);
+}
+
+typedef struct {
+    tsc_object_t* prototype;
+    tsc_value_t constructor;
+    void* constructor_root;
+    unsigned initialization_state;
+} dynamic_function_intrinsic_t;
+
+static dynamic_function_intrinsic_t* ensure_dynamic_function_intrinsic(tsc_dynamic_function_kind_t kind) {
+    const dynamic_function_descriptor_t* descriptor = dynamic_function_descriptor(kind);
+    dynamic_function_intrinsic_t* state = tsc_realm_state_get(descriptor);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state));
+        *state = (dynamic_function_intrinsic_t){ .constructor = tsc_value_undefined() };
+        tsc_realm_state_set(descriptor, state);
+    }
+    tsc_runtime_lock();
+    if (state->initialization_state == 0) {
+        state->initialization_state = 1;
+        // Publish the ordinary prototype before linking generator prototypes,
+        // whose constructor property points back to this same object.
+        state->prototype = tsc_object_new_with_prototype(tsc_function_default_prototype());
+        state->constructor = tsc_value_function_named_kind(function_constructor_body, function_constructor_body,
+            (void*)descriptor, 1, tsc_str_from_cstr(descriptor->name), TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->constructor_root = tsc_value_gc_root(state->constructor);
+        tsc_function_identity_t* identity = value_ptr(state->constructor);
+        tsc_function_identity_set_prototype(identity, tsc_function_constructor_value());
+        tsc_function_identity_set_own_prototype(identity, tsc_value_object(state->prototype));
+        identity->func_prototype_initialized = true;
+        identity->func_prototype_writable = false;
+        identity->construct_allocates_receiver = false;
+        identity->construct_default_prototype = descriptor->default_prototype;
+        tsc_object_define(state->prototype, tsc_str_from_lit("constructor", 11), state->constructor, false, false, true);
+        tsc_object_define(state->prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
+            tsc_value_string(tsc_str_from_cstr(descriptor->name)), false, false, true);
+        if (descriptor->generator) tsc_object_define(state->prototype, tsc_str_from_lit("prototype", 9),
+            tsc_generator_prototype_value(descriptor->asynchronous), false, false, true);
+        state->initialization_state = 2;
+    }
+    tsc_runtime_unlock();
+    return state;
+}
+
+tsc_value_t tsc_dynamic_function_prototype(tsc_dynamic_function_kind_t kind) {
+    if (kind == TSC_DYNAMIC_FUNCTION_ORDINARY) return tsc_function_default_prototype();
+    return tsc_value_object(ensure_dynamic_function_intrinsic(kind)->prototype);
+}
+tsc_value_t tsc_dynamic_function_constructor_value(tsc_dynamic_function_kind_t kind) {
+    if (kind == TSC_DYNAMIC_FUNCTION_ORDINARY) return tsc_function_constructor_value();
+    return ensure_dynamic_function_intrinsic(kind)->constructor;
+}
+tsc_value_t tsc_dynamic_function_value(tsc_value_t function, tsc_dynamic_function_kind_t kind) {
+    if (kind == TSC_DYNAMIC_FUNCTION_ORDINARY || !value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION) return function;
+    tsc_function_identity_t* identity = value_ptr(function);
+    if (!identity->function_kind_initialized) {
+        const dynamic_function_descriptor_t* descriptor = dynamic_function_descriptor(kind);
+        void* volatile function_root = tsc_value_gc_root(function);
+        tsc_function_identity_set_prototype(identity, tsc_dynamic_function_prototype(kind));
+        if (descriptor->generator) {
+            tsc_object_t* prototype = tsc_object_new_with_prototype(tsc_generator_prototype_value(descriptor->asynchronous));
+            tsc_function_identity_set_own_prototype(identity, tsc_value_object(prototype));
+            identity->func_prototype_initialized = true;
+            identity->has_prototype_property = true;
+        }
+        identity->function_kind_initialized = true;
+        (void)function_root;
+    }
+    return function;
 }
 
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity) {

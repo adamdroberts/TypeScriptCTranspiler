@@ -372,7 +372,7 @@ static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t
 
 static const char generator_graph_prototype_key = 0;
 static const char async_generator_graph_prototype_key = 0;
-static tsc_value_t generator_prototype_value(bool asynchronous) {
+tsc_value_t tsc_generator_prototype_value(bool asynchronous) {
     const void* key = asynchronous ? &async_generator_graph_prototype_key : &generator_graph_prototype_key;
     tsc_object_t* prototype = tsc_realm_state_get(key);
     if (!prototype) {
@@ -389,30 +389,18 @@ static tsc_value_t generator_prototype_value(bool asynchronous) {
         }
         tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
             tsc_value_string(tsc_str_from_cstr(asynchronous ? "AsyncGenerator" : "Generator")), false, false, true);
+        tsc_object_define(prototype, tsc_str_from_lit("constructor", 11),
+            tsc_dynamic_function_prototype(asynchronous ? TSC_DYNAMIC_FUNCTION_ASYNC_GENERATOR : TSC_DYNAMIC_FUNCTION_GENERATOR),
+            false, false, true);
     }
     return tsc_value_object(prototype);
-}
-
-tsc_value_t tsc_generator_function_value(tsc_value_t function, bool asynchronous) {
-    if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION) return function;
-    tsc_function_identity_t* identity = value_ptr(function);
-    if (!identity->is_generator) {
-        void* volatile function_root = tsc_value_gc_root(function);
-        tsc_object_t* prototype = tsc_object_new_with_prototype(generator_prototype_value(asynchronous));
-        tsc_function_identity_set_own_prototype(identity, tsc_value_object(prototype));
-        identity->func_prototype_initialized = true;
-        identity->has_prototype_property = true;
-        identity->is_generator = true;
-        (void)function_root;
-    }
-    return function;
 }
 
 tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env, bool asynchronous) {
     tsc_value_t callee = tsc_value_current_callee();
     tsc_value_t prototype = tsc_value_is_callable(callee)
         ? tsc_value_get_prop(callee, tsc_str_from_lit("prototype", 9)) : tsc_value_undefined();
-    if (!tsc_value_is_object(prototype)) prototype = generator_prototype_value(asynchronous);
+    if (!tsc_value_is_object(prototype)) prototype = tsc_generator_prototype_value(asynchronous);
     void* volatile prototype_root = tsc_value_gc_root(prototype);
     tsc_generator_t* generator = TSC_GC_MALLOC(sizeof(*generator));
     *generator = (tsc_generator_t){ .object = tsc_object_new_with_prototype(prototype),

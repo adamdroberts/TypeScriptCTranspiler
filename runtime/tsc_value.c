@@ -212,7 +212,7 @@ tsc_value_t tsc_value_function_named_kind(
     }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     id->kind = kind;
-    id->is_generator = false;
+    id->function_kind_initialized = false;
     id->realm = realm;
     id->construct_default_prototype = TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE;
     id->extensible = true;
@@ -3076,6 +3076,12 @@ static tsc_value_t value_intrinsic_default_prototype(
             return tsc_value_object_prototype();
         case TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE:
             return tsc_function_default_prototype();
+        case TSC_INTRINSIC_DEFAULT_GENERATOR_FUNCTION_PROTOTYPE:
+            return tsc_dynamic_function_prototype(TSC_DYNAMIC_FUNCTION_GENERATOR);
+        case TSC_INTRINSIC_DEFAULT_ASYNC_FUNCTION_PROTOTYPE:
+            return tsc_dynamic_function_prototype(TSC_DYNAMIC_FUNCTION_ASYNC);
+        case TSC_INTRINSIC_DEFAULT_ASYNC_GENERATOR_FUNCTION_PROTOTYPE:
+            return tsc_dynamic_function_prototype(TSC_DYNAMIC_FUNCTION_ASYNC_GENERATOR);
         case TSC_INTRINSIC_DEFAULT_ARRAY_PROTOTYPE:
             return tsc_value_array(tsc_array_prototype());
         case TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE:

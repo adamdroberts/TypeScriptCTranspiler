@@ -137,6 +137,9 @@ tsc_value_t tsc_value_function_named_kind(
 typedef enum {
     TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_GENERATOR_FUNCTION_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_ASYNC_FUNCTION_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_ASYNC_GENERATOR_FUNCTION_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ARRAY_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE,
@@ -177,7 +180,7 @@ typedef struct {
 
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
-    bool is_generator;
+    bool function_kind_initialized;
     /* ECMAScript functions retain the Realm in which they were created.
      * Calls and construction enter this context; bound functions retain the
      * Realm of their target through GetFunctionRealm. */

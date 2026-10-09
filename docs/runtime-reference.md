@@ -112,16 +112,8 @@ typedef struct tsc_str {
 
 Type-erased dynamic vector. Element size + kind known only to the emitter — the emitter generates the right access via the `TSC_ARR(T, arr, i)` macro.
 
-```c
-typedef struct tsc_array {
-    size_t len, cap, es;  // element size in bytes
-    bool extensible, sealed, frozen;  // dynamic Object/Reflect state
-    size_t iter_pos;  // materialized generator .next() cursor
-    bool iter_has_return, iter_return_consumed;
-    tsc_value_t iter_return;  // explicit generator return value, exposed once
-    void* data;
-} tsc_array_t;
-```
+The canonical C/C++ layout is declared once in `runtime/tsc_array_abi.h`. It retains length/capacity/element width, integrity and length-writability flags, prototype/property/hole owners, element codecs, data and decoded value roots. Generator lifecycle and protocol state belong to ordinary generator owners, outside this Array ABI.
+
 
 | Symbol | Signature | Notes |
 |--------|-----------|-------|
@@ -186,9 +178,9 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_promise_after_async_dispose_many(resources, count, result)` | `tsc_promise_t*` | Disposes dynamic resources sequentially in reverse order, continues after cleanup rejection, and settles with the first cleanup rejection or the body result |
 | `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
 | `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
-| `tsc_async_iterator_get(value)` | `tsc_value_t` | Resolves a dynamic async iterator through `[Symbol.asyncIterator]()` when present |
-| `tsc_async_iterator_next(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.next()` and assimilates its result into a Promise |
-| `tsc_async_iterator_return(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.return()` and assimilates its result for bounded iterator close |
+| `tsc_async_iterator_open(value)` | `tsc_iterator_record_t` | GetIterator with async lookup or a receiver-owned async-from-sync fallback; captures next and decoded roots |
+| `tsc_async_iterator_next(record)` | `tsc_value_t` | Calls the captured next with an empty actual List before the consumer performs Await |
+| `tsc_async_iterator_close(record, preserve_throw)` | `tsc_promise_t*` | Conditional return invocation/Await; NULL skips suspension when absent, with incoming-throw precedence |
 | `tsc_sync_iterator_open/step/close(...)` | `tsc_sync_iterator_t` / `bool` / `void` | Owns one rooted synchronous iterator record for array, string, and dynamic `@@iterator` binding initialization; validates iterator results and invokes `return` on early normal or abrupt completion |
 | `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
 | `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
@@ -373,7 +365,7 @@ The complete RegExp object-model and clause-level contract remains open: replace
 
 ## Exceptions (`tsc_try_frame_t`)
 
-Thin `setjmp`/`longjmp` wrapper with a current `tsc_value_t` plus a compatibility string view. No stack traces yet; deferred async/lazy continuation bridges still consume the string view.
+Thin `setjmp`/`longjmp` wrapper with a current `tsc_value_t` plus a compatibility string view. No stack traces yet; canonical resumable completions retain raw values and decoded roots.
 
 ```c
 typedef struct tsc_try_frame {
@@ -697,16 +689,16 @@ The `-DTSC_NO_GC` define in `src/link/cc.ts` switches all of these to `calloc`/`
 
 ## Embedded Node Bridge
 
-The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed native addons require it. First-class Function values use the ordinary constructor and its finite AOT source registry. Only registry misses route already-converted parameter/body strings to the embedded bridge when `--unsafe-eval` is enabled. First-class eval bridge admission remains separately gated.
+The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed native addons require it. First-class Function constructors share one finite AOT registry keyed by ordinary/generator/async/async-generator kind and joined parameter/body strings. Manifest entries accept `kind` alongside `parameters` and `body`, defaulting to ordinary. Only registry misses route already-converted parameter/body strings to the embedded bridge when `--unsafe-eval` is enabled. First-class eval bridge admission remains separately gated.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_node_eval` | `(tsc_str_t*) -> tsc_value_t` | Dynamic `eval(...)` execution through V8, gated by `TSC_UNSAFE_EVAL`. |
-| `tsc_node_function_source` | `(tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Joined parameters/body compilation through the V8 Function constructor, gated by `TSC_UNSAFE_EVAL`. |
+| `tsc_node_function_source` | `(int kind, tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Kind-selected joined parameters/body compilation through the corresponding V8 constructor, gated by `TSC_UNSAFE_EVAL`. |
 | `tsc_node_native_addon` | `(tsc_str_t*) -> tsc_value_t` | Manifest-backed native addon load through the embedded Node `require` hook. Does not require `TSC_UNSAFE_EVAL`. |
 | `tsc_builtin_eval` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `eval` references. |
 | `tsc_function_set_source_callback` | `(tsc_function_source_callback_t) -> void` | Register the compilation-wide finite source dispatcher used in every Realm. |
-| `tsc_function_create_from_source` | `(tsc_value_t (*)(void), tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Resolve the actual newTarget prototype, allocate a fresh ordinary function and retain its anonymous parameter/body SourceText. |
+| `tsc_function_create_from_source` | `(tsc_dynamic_function_kind_t, tsc_value_t (*)(void), tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Resolve actual newTarget/fallback in its Realm, allocate a fresh kind-specific function and retain anonymous SourceText. |
 | `tsc_value_function_with_source` | `(tsc_value_t, tsc_str_t*) -> tsc_value_t` | Retain available definition text in the canonical callable owner without changing ordinary properties or identity. |
 
 ## Adding a new runtime function

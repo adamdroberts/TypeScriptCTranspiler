@@ -254,9 +254,11 @@ export function earlyFunctionStaticSemanticsFailure(
         }
         if (ts.isIdentifier(node) && node.text === "await" &&
             (module || ((node.flags & ts.NodeFlags.AwaitContext) &&
-                !(ts.isFunctionExpression(node.parent) && node.parent.name === node))) && isAwaitGrammarIdentifier(node)) {
+                !(ts.isFunctionExpression(node.parent) && node.parent.name === node))) && isContextualGrammarIdentifier(node)) {
             return { node, message: "identifier 'await' is not permitted in this grammar context" };
         }
+        if (ts.isIdentifier(node) && node.text === "yield" && (node.flags & ts.NodeFlags.YieldContext) && isContextualGrammarIdentifier(node))
+            return { node, message: "identifier 'yield' is not permitted in this grammar context" };
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
         if (ts.isYieldExpression(node) && !allowYield)
@@ -287,7 +289,7 @@ export function earlyFunctionStaticSemanticsFailure(
 
 /** IdentifierName property positions do not consume the contextual
  * BindingIdentifier/IdentifierReference grammar parameters. */
-function isAwaitGrammarIdentifier(node: ts.Identifier): boolean {
+function isContextualGrammarIdentifier(node: ts.Identifier): boolean {
     const parent = node.parent;
     if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
     if ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) ||
