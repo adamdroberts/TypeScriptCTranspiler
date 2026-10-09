@@ -1,5 +1,7 @@
 # Changelog
 
+- Normalize native NaN encodings at the shared Number boxing boundary to prevent object-tag collisions. Install ordinary Realm-owned Number predicates, exact immutable constants and canonical global parser aliases; preserve mutable lookup, actual results and argument Lists in typed calls and method values. Normalize shared primitive-constructor prototype descriptors, retain constructor roots during initialization, and delete static call/predicate/purity-fold predecessors. Verify independent binary64 partitions and the shared argument-width stress in both memory modes.
+
 - Bind Number prototype text/value methods to reciprocal exact-clause evidence, independent rounding and protocol properties, a generated iterator-driven argument-List stress, declarations and implementation anchors. Record the selected non-402 locale specification choice and reviewed historical/path/source-hashed metadata owners; regenerate the coverage view while retaining broad group and signed host/report gaps.
 
 - Share rooted ordinary locale invocation across Object, Array and numeric primitives. Preserve actual results/receivers, single ordered length conversion, live indexed access, empty element argument Lists and exact exceptions. Document the non-402 decimal/comma fallback, install Realm-owned Number/BigInt methods, expose BigInt/Symbol prototype declarations and remove their false instance data. Replace native primitive/Array locale shortcuts and unsafe purity admission; delete coercion/join and Object-call predecessors.

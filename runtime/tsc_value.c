@@ -24,6 +24,12 @@ tsc_value_t* tsc_value_native_field_slot(void* owner, size_t field_offset) {
 tsc_value_t tsc_value_num(double n) {
     tsc_value_t v;
     memcpy(&v, &n, sizeof v);
+    // Every IEEE NaN denotes the same ECMAScript Number value. Normalize at
+    // ingress so a native payload cannot enter the reserved object-tag space.
+    if ((v & UINT64_C(0x7ff0000000000000)) == UINT64_C(0x7ff0000000000000) &&
+        (v & UINT64_C(0x000fffffffffffff)) != 0) {
+        v = UINT64_C(0x7ff8000000000000);
+    }
     return v;
 }
 
@@ -1761,6 +1767,8 @@ static void string_constructor_install_static_methods(tsc_value_t constructor) {
     }
 }
 
+static void number_constructor_install_static_methods(tsc_value_t constructor);
+
 static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descriptor) {
     if (descriptor->constructor_initialized) return descriptor->constructor;
     tsc_value_t constructor = tsc_value_function_named_kind(
@@ -1771,6 +1779,8 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
         tsc_str_from_lit(descriptor->name, descriptor->name_len),
         TSC_FUNCTION_IDENTITY_BUILTIN
     );
+    void* volatile constructor_gc_root = tsc_value_gc_root(constructor);
+    (void)constructor_gc_root;
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
     switch (descriptor->kind) {
         case TSC_PRIMITIVE_BOOLEAN:
@@ -1791,6 +1801,7 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
     }
     if (!identity->func_prototype_initialized) {
         tsc_function_identity_set_own_prototype(identity, primitive_prototype(descriptor));
+        identity->func_prototype_writable = false;
         tsc_object_define(
             descriptor->prototype,
             tsc_str_from_lit("constructor", 11),
@@ -1802,6 +1813,9 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
     }
     if (descriptor->kind == TSC_PRIMITIVE_STRING) {
         string_constructor_install_static_methods(constructor);
+    }
+    if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
+        number_constructor_install_static_methods(constructor);
     }
     descriptor->constructor = constructor;
     descriptor->constructor_initialized = true;
@@ -2388,6 +2402,78 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
     return tsc_value_undefined();
 }
 
+static tsc_value_t global_function_intrinsic_value(const tsc_global_function_descriptor_t* descriptor) {
+    return tsc_value_function_builtin_named(
+        global_function_apply,
+        (void*)descriptor,
+        descriptor->function_length,
+        tsc_str_from_lit(descriptor->name, descriptor->name_length)
+    );
+}
+
+typedef struct {
+    const char* name;
+    size_t name_length;
+    bool (*predicate)(tsc_value_t);
+} tsc_number_predicate_descriptor_t;
+
+static const tsc_number_predicate_descriptor_t number_predicates[] = {
+    { "isFinite", 8, tsc_value_number_is_finite },
+    { "isInteger", 9, tsc_value_number_is_integer },
+    { "isNaN", 5, tsc_value_number_is_nan },
+    { "isSafeInteger", 13, tsc_value_number_is_safe_integer }
+};
+
+static tsc_value_t number_static_predicate_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    const tsc_number_predicate_descriptor_t* descriptor = (const tsc_number_predicate_descriptor_t*)env;
+    return tsc_value_bool(descriptor->predicate(global_function_argument(args, 0)));
+}
+
+typedef struct {
+    const char* name;
+    size_t name_length;
+    double value;
+} tsc_number_constant_descriptor_t;
+
+static const tsc_number_constant_descriptor_t number_constants[] = {
+    { "EPSILON", 7, 0x1p-52 },
+    { "MAX_SAFE_INTEGER", 16, 0x1fffffffffffffp0 },
+    { "MAX_VALUE", 9, 0x1.fffffffffffffp1023 },
+    { "MIN_SAFE_INTEGER", 16, -0x1fffffffffffffp0 },
+    { "MIN_VALUE", 9, 0x1p-1074 },
+    { "NaN", 3, NAN },
+    { "NEGATIVE_INFINITY", 17, -INFINITY },
+    { "POSITIVE_INFINITY", 17, INFINITY }
+};
+
+static void number_constructor_install_static_methods(tsc_value_t constructor) {
+    void* volatile constructor_gc_root = tsc_value_gc_root(constructor);
+    (void)constructor_gc_root;
+    for (size_t index = 0; index < sizeof(number_predicates) / sizeof(number_predicates[0]); ++index) {
+        const tsc_number_predicate_descriptor_t* descriptor = &number_predicates[index];
+        tsc_str_t* name = tsc_str_from_lit(descriptor->name, descriptor->name_length);
+        (void)tsc_value_define_property_desc(constructor, name,
+            tsc_value_function_builtin_named(number_static_predicate_apply, (void*)descriptor, 1.0, name),
+            true, true, true, false, true, true, true);
+    }
+    for (size_t index = 0; index < sizeof(number_constants) / sizeof(number_constants[0]); ++index) {
+        const tsc_number_constant_descriptor_t* descriptor = &number_constants[index];
+        (void)tsc_value_define_property_desc(constructor,
+            tsc_str_from_lit(descriptor->name, descriptor->name_length), tsc_value_num(descriptor->value),
+            true, false, true, false, true, false, true);
+    }
+    // These properties hold the actual global parser intrinsics. The shared
+    // callable registry retains their identity within each creation Realm.
+    for (size_t index = 0; index < sizeof(global_function_descriptors) / sizeof(global_function_descriptors[0]); ++index) {
+        const tsc_global_function_descriptor_t* descriptor = &global_function_descriptors[index];
+        if (descriptor->kind != TSC_GLOBAL_FUNCTION_PARSE_FLOAT && descriptor->kind != TSC_GLOBAL_FUNCTION_PARSE_INT) continue;
+        (void)tsc_value_define_property_desc(constructor,
+            tsc_str_from_lit(descriptor->name, descriptor->name_length), global_function_intrinsic_value(descriptor),
+            true, true, true, false, true, true, true);
+    }
+}
+
 static void global_define_intrinsic(tsc_object_t* global, const tsc_global_intrinsic_t* intrinsic) {
     (void)tsc_object_define(
         global,
@@ -2457,12 +2543,7 @@ tsc_value_t tsc_global_object(void) {
         (void)tsc_object_define(
             built,
             tsc_str_from_lit(descriptor->name, descriptor->name_length),
-            tsc_value_function_builtin_named(
-                global_function_apply,
-                (void*)descriptor,
-                descriptor->function_length,
-                tsc_str_from_lit(descriptor->name, descriptor->name_length)
-            ),
+            global_function_intrinsic_value(descriptor),
             true,
             false,
             true

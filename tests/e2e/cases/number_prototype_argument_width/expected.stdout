@@ -4,3 +4,9 @@ toExponential true true true
 toPrecision true true true
 valueOf true true true
 toLocaleString true true true
+isFinite true true true
+isInteger true true true
+isNaN true true true
+isSafeInteger true true true
+parseFloat true true true
+parseInt true true true

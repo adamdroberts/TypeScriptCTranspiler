@@ -1363,17 +1363,24 @@ function numberPrototypeArgumentWidthSource(width: number): string {
     return `
 const width = ${width};
 const methods: any[] = [
-    { name: "toString", expected: "1.001", converts: true },
-    { name: "toFixed", expected: "1.13", converts: true },
-    { name: "toExponential", expected: "1.13e+0", converts: true },
-    { name: "toPrecision", expected: "1.1", converts: true },
-    { name: "valueOf", expected: "1.125", converts: false },
-    { name: "toLocaleString", expected: "1.125", converts: false },
+    { receiver: 1.125, hint: "number", name: "toString", expected: "1.001", converts: true },
+    { receiver: 1.125, hint: "number", name: "toFixed", expected: "1.13", converts: true },
+    { receiver: 1.125, hint: "number", name: "toExponential", expected: "1.13e+0", converts: true },
+    { receiver: 1.125, hint: "number", name: "toPrecision", expected: "1.1", converts: true },
+    { receiver: 1.125, hint: "number", name: "valueOf", expected: "1.125", converts: false },
+    { receiver: 1.125, hint: "number", name: "toLocaleString", expected: "1.125", converts: false },
+    { receiver: Number, name: "isFinite", expected: "false", converts: false },
+    { receiver: Number, name: "isInteger", expected: "false", converts: false },
+    { receiver: Number, name: "isNaN", expected: "false", converts: false },
+    { receiver: Number, name: "isSafeInteger", expected: "false", converts: false },
+    { receiver: Number, hint: "string", name: "parseFloat", expected: "2", converts: true },
+    { receiver: Number, hint: "string", name: "parseInt", expected: "2", converts: true },
 ];
 let visits = 0, conversions = 0;
+let expectedHint = "";
 const marker: any = { tag: "unexpected conversion or order" };
 const first: any = { [Symbol.toPrimitive]: function(hint: string): number {
-    if (hint !== "number" || visits !== width) throw marker;
+    if (hint !== expectedHint || visits !== width) throw marker;
     conversions++;
     return 2;
 } };
@@ -1383,16 +1390,15 @@ const iterable: any = { [Symbol.iterator]: function(): any {
         if (cursor === width) return { done: true };
         const index = cursor++;
         visits++;
-        return { value: index === 0 ? first : {
+        return { value: index === 0 ? first : index === 1 ? undefined : {
             ordinal: index,
             [Symbol.toPrimitive]: function(): any { throw marker; },
         }, done: false };
     } };
 } };
-const value: number = 1.125;
 for (const method of methods) {
-    visits = 0; conversions = 0;
-    const result: any = (value as any)[method.name](...iterable);
+    visits = 0; conversions = 0; expectedHint = method.hint;
+    const result: any = method.receiver[method.name](...iterable);
     console.log(method.name, String(result) === method.expected, visits === width,
         conversions === (method.converts ? 1 : 0));
 }

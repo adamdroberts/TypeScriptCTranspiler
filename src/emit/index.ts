@@ -2218,24 +2218,8 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
                 (!call.arguments[2] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2], seenConsts));
         }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "parseInt" ||
-                method === "parseFloat" ||
-                method === "isFinite" ||
-                method === "isInteger" ||
-                method === "isNaN" ||
-                method === "isSafeInteger"
-            ) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Number")
-        ) {
-            if (method === "parseInt" || method === "parseFloat") {
-                return this.isSideEffectFreeNumericParserArgs(method, call.arguments, seenConsts);
-            }
-            return call.arguments.length === 1 &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
-        }
+        // Every Number static call observes a mutable ordinary property.
+        if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Number")) return false;
         if (
             ts.isIdentifier(recv) &&
             this.isUnshadowedGlobalIdentifier(recv, "Date") &&
@@ -4648,17 +4632,6 @@ class Emitter {
                 if ((name === "parseInt" || name === "parseFloat") && this.isUnshadowedGlobalIdentifier(unwrapped.expression, name)) {
                     isParseCall = true;
                     which = name;
-                }
-            } else if (ts.isPropertyAccessExpression(unwrapped.expression)) {
-                const recv = unwrapped.expression.expression;
-                const method = unwrapped.expression.name.text;
-                if (
-                    ts.isIdentifier(recv) &&
-                    this.isUnshadowedGlobalIdentifier(recv, "Number") &&
-                    (method === "parseInt" || method === "parseFloat")
-                ) {
-                    isParseCall = true;
-                    which = method;
                 }
             }
             if (isParseCall && which && unwrapped.arguments.length >= 1) {
@@ -14198,65 +14171,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePrimitiveNumberValue(init, seenConsts) : null;
-    }
-
-    private sideEffectFreeNumberPredicateCallValue(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean | null {
-        if (
-            !ts.isCallExpression(expr) ||
-            !ts.isPropertyAccessExpression(expr.expression) ||
-            !ts.isIdentifier(expr.expression.expression)
-        ) {
-            return null;
-        }
-        const method = expr.expression.name.text;
-        if (
-            method !== "isFinite" &&
-            method !== "isInteger" &&
-            method !== "isNaN" &&
-            method !== "isSafeInteger"
-        ) {
-            return null;
-        }
-        if (
-            !this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Number") ||
-            expr.arguments.length < 1 ||
-            !this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)
-        ) {
-            return null;
-        }
-
-        const arg = expr.arguments[0]!;
-        const unwrappedArg = this.unwrapSideEffectFreeStaticExpression(arg);
-        const numericValue = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts);
-        if (numericValue !== null) {
-            switch (method) {
-                case "isFinite":
-                    return Number.isFinite(numericValue);
-                case "isInteger":
-                    return Number.isInteger(numericValue);
-                case "isNaN":
-                    return Number.isNaN(numericValue);
-                case "isSafeInteger":
-                    return Number.isSafeInteger(numericValue);
-            }
-        }
-
-        if (
-            this.sideEffectFreeStringLiteralText(unwrappedArg, seenConsts) !== null ||
-            this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
-            this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
-            this.staticNullishState(unwrappedArg, seenConsts) === "nullish" ||
-            this.isSideEffectFreeUndefinedValue(unwrappedArg, seenConsts) ||
-            this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts) ||
-            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrappedArg, seenConsts)
-        ) {
-            return false;
-        }
-
-        return null;
     }
 
     private sideEffectFreeGlobalNumberPredicateCallValue(
@@ -47232,8 +47146,6 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         const stringBool = this.sideEffectFreeStringBooleanCallValue(unwrapped, seenConsts);
         if (stringBool !== null) return stringBool;
-        const numberBool = this.sideEffectFreeNumberPredicateCallValue(unwrapped, seenConsts);
-        if (numberBool !== null) return numberBool;
         const globalNumberBool = this.sideEffectFreeGlobalNumberPredicateCallValue(unwrapped, seenConsts);
         if (globalNumberBool !== null) return globalNumberBool;
         if (
@@ -48676,6 +48588,10 @@ class Emitter {
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Number")) {
                 return { c: "tsc_number_constructor_value()", ty: T_VALUE };
+            }
+            if ((expr.text === "parseInt" || expr.text === "parseFloat") &&
+                this.isUnshadowedGlobalIdentifier(expr, expr.text)) {
+                return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
@@ -56154,8 +56070,9 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "RegExp")) {
             return this.emitDynamicNamedPropertyCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE }, memberName, false);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Number") {
-            return this.emitNumberStatic(call, memberName);
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Number")) {
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName,
+                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -73388,76 +73305,6 @@ class Emitter {
         });
     }
 
-    private emitNumberStatic(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        if (name === "parseFloat") {
-            if (args.length < 1) unsupported(call, "Number.parseFloat expects at least 1 arg");
-            return this.emitParseNumber(call, "parseFloat");
-        }
-        if (name === "parseInt") {
-            if (args.length < 1) unsupported(call, "Number.parseInt expects at least 1 arg");
-            return this.emitParseNumber(call, "parseInt");
-        }
-        if (args.length < 1) unsupported(call, `Number.${name} expects at least 1 arg`);
-        const r = this.emitExpr(args[0]!);
-        const ignored = this.ignoredArgumentSpecs(args, 1);
-        switch (name) {
-            case "isInteger": {
-                if (r.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: r, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([value]) => `tsc_value_number_is_integer(${value})`);
-                }
-                if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
-                    `(!isnan(${value}) && !isinf(${value}) && (${value}) == floor(${value}))`,
-                );
-            }
-            case "isFinite": {
-                if (r.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: r, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([value]) => `tsc_value_number_is_finite(${value})`);
-                }
-                if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) => `(isfinite(${value}))`);
-            }
-            case "isNaN": {
-                if (r.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: r, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([value]) => `tsc_value_number_is_nan(${value})`);
-                }
-                if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) => `(isnan(${value}))`);
-            }
-            case "isSafeInteger": {
-                if (r.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: r, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([value]) => `tsc_value_number_is_safe_integer(${value})`);
-                }
-                if (r.ty.kind !== "number") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], () => "false");
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
-                    `(!isnan(${value}) && !isinf(${value}) && (${value}) == floor(${value}) && fabs(${value}) <= 9007199254740991.0)`,
-                );
-            }
-        }
-        unsupported(call, `Number.${name}`);
-    }
-
     private ignoredArgumentSpecs(
         args: readonly ts.Expression[],
         start: number,
@@ -74540,19 +74387,6 @@ class Emitter {
                     case "LOG10E": return { c: `((double)M_LOG10E)`, ty: T_NUMBER };
                     case "SQRT2": return { c: `((double)M_SQRT2)`, ty: T_NUMBER };
                     case "SQRT1_2": return { c: `((double)M_SQRT1_2)`, ty: T_NUMBER };
-                }
-            }
-            if (pa.expression.text === "Number") {
-                const name = pa.name.text;
-                switch (name) {
-                    case "EPSILON": return { c: "2.220446049250313e-16", ty: T_NUMBER };
-                    case "MAX_SAFE_INTEGER": return { c: "9007199254740991.0", ty: T_NUMBER };
-                    case "MAX_VALUE": return { c: "1.7976931348623157e308", ty: T_NUMBER };
-                    case "MIN_SAFE_INTEGER": return { c: "-9007199254740991.0", ty: T_NUMBER };
-                    case "MIN_VALUE": return { c: "5e-324", ty: T_NUMBER };
-                    case "NaN": return { c: "NAN", ty: T_NUMBER };
-                    case "NEGATIVE_INFINITY": return { c: "(-INFINITY)", ty: T_NUMBER };
-                    case "POSITIVE_INFINITY": return { c: "INFINITY", ty: T_NUMBER };
                 }
             }
             if (

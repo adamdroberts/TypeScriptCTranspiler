@@ -1421,12 +1421,12 @@ interface NumberConstructor {
     readonly NaN: number;
     readonly NEGATIVE_INFINITY: number;
     readonly POSITIVE_INFINITY: number;
-    isInteger(value: any, ...ignored: any[]): boolean;
-    isFinite(value: any, ...ignored: any[]): boolean;
-    isNaN(value: any, ...ignored: any[]): boolean;
-    isSafeInteger(value: any, ...ignored: any[]): boolean;
-    parseFloat(value: any, ...ignored: any[]): number;
-    parseInt(value: any, radix?: number, ...ignored: any[]): number;
+    isInteger(value?: any, ...ignored: any[]): boolean;
+    isFinite(value?: any, ...ignored: any[]): boolean;
+    isNaN(value?: any, ...ignored: any[]): boolean;
+    isSafeInteger(value?: any, ...ignored: any[]): boolean;
+    parseFloat(value?: any, ...ignored: any[]): number;
+    parseInt(value?: any, radix?: any, ...ignored: any[]): number;
 }
 declare var Number: NumberConstructor;
 

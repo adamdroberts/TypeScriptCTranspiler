@@ -1,0 +1,12 @@
+ordinary: true isFinite 1 true
+missing: false false false false true true
+aliases: true true
+constants: 9007199254740991 -9007199254740991 true true
+descriptors: false false false false false false
+no conversion: false false false false
+parse: 255 ABSnumber
+lookup: GABC true 2
+unused: GC
+optional: true true
+shadow: true
+native NaN: number true false true
