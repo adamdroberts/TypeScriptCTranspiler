@@ -6,6 +6,16 @@ export function ecmaParseGoal(sourceFile: ts.SourceFile): EcmaParseGoal {
         (ts.isExternalModule(sourceFile) ? "module" : "script");
 }
 
+/** Use Strict is a raw directive token, not the cooked String value. */
+export function ecmaDirectivePrologueHasUseStrict(statements: readonly ts.Statement[]): boolean {
+    for (const statement of statements) {
+        if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
+        const token = statement.expression.getText();
+        if (token === '"use strict"' || token === "'use strict'") return true;
+    }
+    return false;
+}
+
 /**
  * TypeScript 5.9 treats a LineTerminator before the `with` token of an import
  * attributes clause as the end of the declaration. ECMA-262 permits trivia in

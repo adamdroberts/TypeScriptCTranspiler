@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
@@ -25327,14 +25328,6 @@ class Emitter {
             : null;
     }
 
-    private directivePrologueHasUseStrict(statements: readonly ts.Statement[]): boolean {
-        for (const statement of statements) {
-            if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
-            if (statement.expression.text === "use strict") return true;
-        }
-        return false;
-    }
-
     private nodeIsInStrictMode(node: ts.Node): boolean {
         for (let current: ts.Node | undefined = node; current; current = current.parent) {
             if (ts.isClassLike(current)) return true;
@@ -25342,13 +25335,13 @@ class Emitter {
                 ? current.body
                 : undefined;
             if (body && ts.isBlock(body) &&
-                this.directivePrologueHasUseStrict(body.statements)) {
+                ecmaDirectivePrologueHasUseStrict(body.statements)) {
                 return true;
             }
             if (ts.isSourceFile(current)) {
                 return this.test262EvalEntryModes.get(path.resolve(current.fileName)) === true ||
                     (ts.isExternalModule(current) && !this.isTest262ScriptSourceFile(current)) ||
-                    this.directivePrologueHasUseStrict(current.statements);
+                    ecmaDirectivePrologueHasUseStrict(current.statements);
             }
         }
         return false;
@@ -35800,11 +35793,6 @@ class Emitter {
     }
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
-        const declarations = this.directResourceDeclarations(sw.caseBlock.clauses.flatMap(clause => [...clause.statements]));
-        this.emitResourceScope(buf, sw.caseBlock, declarations, () => this.emitSwitchWithResourceScope(buf, sw));
-    }
-
-    private emitSwitchWithResourceScope(buf: CBuf, sw: ts.SwitchStatement): void {
         this.assertExhaustiveSwitch(sw);
         const scriptCompletion = this.isTest262ScriptEvaluationNode(sw)
             ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]

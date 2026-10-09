@@ -5,7 +5,7 @@ import ts from "typescript";
 import { compile } from "../../src/compile";
 import { earlyControlFlowFailure } from "../../src/control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "../../src/function-static-semantics";
-import { createEcmaSourceFile, ecmaParseGoal, type EcmaParseGoal } from "../../src/ecmascript-source";
+import { createEcmaSourceFile, ecmaParseGoal, ecmaDirectivePrologueHasUseStrict, type EcmaParseGoal } from "../../src/ecmascript-source";
 import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
     type ModuleRequest,
@@ -86,22 +86,14 @@ export interface FiniteEvalScriptSourceGraph {
 }
 
 function sourceFileIsStrict(sourceFile: ts.SourceFile): boolean {
-    if (ecmaParseGoal(sourceFile) === "module") return true;
-    for (const statement of sourceFile.statements) {
-        if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
-        if (statement.expression.text === "use strict") return true;
-    }
-    return false;
+    return ecmaParseGoal(sourceFile) === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements);
 }
 
 function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
     for (let current: ts.Node | undefined = node; current; current = current.parent) {
         if (ts.isClassLike(current) || ts.isClassStaticBlockDeclaration(current)) return true;
         if (ts.isFunctionLike(current) && "body" in current && current.body && ts.isBlock(current.body)) {
-            for (const statement of current.body.statements) {
-                if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
-                if (statement.expression.text === "use strict") return true;
-            }
+            if (ecmaDirectivePrologueHasUseStrict(current.body.statements)) return true;
         }
     }
     return inherited;

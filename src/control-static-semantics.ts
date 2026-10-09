@@ -1,5 +1,7 @@
 import ts from "typescript";
-import { bindingNameEntries } from "./module-static-semantics";
+import { bindingNameEntries, strictModeBindingIdentifierNames } from "./module-static-semantics";
+import { ecmaParseGoal } from "./ecmascript-source";
+import { isStrictCodeContext } from "./function-static-semantics";
 
 export interface ControlStaticSemanticsFailure {
     readonly node: ts.Node;
@@ -8,6 +10,7 @@ export interface ControlStaticSemanticsFailure {
 
 interface ControlContext {
     readonly allowReturn: boolean;
+    readonly allowAwait: boolean;
     readonly breakableDepth: number;
     readonly iterationDepth: number;
     readonly labels: ReadonlyMap<string, boolean>;
@@ -78,13 +81,14 @@ export function earlyControlFlowStaticSemanticsFailure(
     };
     const rootContext: ControlContext = {
         allowReturn: false,
+        allowAwait: false,
         breakableDepth: 0,
         iterationDepth: 0,
         labels: new Map(),
         lexicalIterationNames: new Set(),
     };
     const worklist: Array<{ readonly node: ts.Node; readonly context: ControlContext }> = [
-        { node: sourceFile, context: rootContext },
+        { node: sourceFile, context: { ...rootContext, allowAwait: ecmaParseGoal(sourceFile) === "module" } },
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
@@ -95,6 +99,8 @@ export function earlyControlFlowStaticSemanticsFailure(
                     node: body,
                     context: {
                         allowReturn: true,
+                        allowAwait: ts.canHaveModifiers(node) &&
+                            (ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false),
                         breakableDepth: 0,
                         iterationDepth: 0,
                         labels: new Map(),
@@ -104,11 +110,56 @@ export function earlyControlFlowStaticSemanticsFailure(
             }
             for (const parameter of (node as ts.SignatureDeclaration).parameters)
                 worklist.push({ node: parameter, context: rootContext });
+            const name = (node as ts.SignatureDeclaration & { name?: ts.PropertyName }).name;
+            if (name && ts.isComputedPropertyName(name)) worklist.push({ node: name.expression, context });
             continue;
         }
         if (ts.isClassStaticBlockDeclaration(node)) {
             worklist.push({ node: node.body, context: rootContext });
             continue;
+        }
+        if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Using) !== 0) {
+            const asynchronous = (node.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing;
+            const owner = node.parent;
+            const statement = ts.isVariableStatement(owner) ? owner : null;
+            const container = statement?.parent;
+            const iteration = ts.isForOfStatement(owner);
+            if (asynchronous && !context.allowAwait ||
+                ts.isForInStatement(owner) ||
+                statement && (
+                    ts.canHaveModifiers(statement) && (ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false) ||
+                    !container || !(ts.isBlock(container) || ts.isSourceFile(container)) ||
+                    ts.isSourceFile(container) && ecmaParseGoal(sourceFile) === "script"
+                ) || !statement && !iteration && !ts.isForStatement(owner)) {
+                return { node, message: "resource declaration is not valid in this grammar context" };
+            }
+            // Literal grammar terminals forbid Unicode escapes, and both
+            // boundaries in AwaitUsingDeclaration forbid LineTerminators.
+            const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard,
+                sourceFile.text, undefined, node.getStart(sourceFile));
+            let previousEnd = node.getStart(sourceFile);
+            for (const keyword of asynchronous ? ["await", "using"] : ["using"]) {
+                scanner.scan();
+                if (scanner.getTokenText() !== keyword || /[\r\n\u2028\u2029]/u.test(sourceFile.text.slice(previousEnd, scanner.getTokenPos())))
+                    return { node, message: "resource declaration is not valid in this grammar context" };
+                previousEnd = scanner.getTextPos();
+            }
+            scanner.scan();
+            if (/[\r\n\u2028\u2029]/u.test(sourceFile.text.slice(previousEnd, scanner.getTokenPos())))
+                return { node, message: "resource declaration is not valid in this grammar context" };
+            if (iteration && (node.declarations.length !== 1 || !asynchronous &&
+                ts.isIdentifier(node.declarations[0]!.name) && node.declarations[0]!.name.text === "of"))
+                return { node, message: "resource declaration is not valid in this grammar context" };
+            const names = new Set<string>();
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) || (iteration ? !!declaration.initializer : !declaration.initializer))
+                    return { node: declaration, message: "resource declaration requires an initialized identifier binding" };
+                const name = declaration.name.text;
+                if (name === "let" || names.has(name) ||
+                    strictModeBindingIdentifierNames.has(name) && isStrictCodeContext(declaration))
+                    return { node: declaration.name, message: "resource declaration has invalid or duplicate BoundNames" };
+                names.add(name);
+            }
         }
         if (ts.isVariableDeclarationList(node) &&
             (node.flags & ts.NodeFlags.BlockScoped) === 0) {

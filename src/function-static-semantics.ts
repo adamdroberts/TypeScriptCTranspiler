@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { ecmaParseGoal } from "./ecmascript-source";
+import { ecmaParseGoal, ecmaDirectivePrologueHasUseStrict } from "./ecmascript-source";
 import {
     bindingNameEntries,
     strictModeBindingIdentifierNames,
@@ -41,29 +41,15 @@ function isSimpleParameterList(node: ts.FunctionLikeDeclaration): boolean {
 }
 
 function containsUseStrict(body: ts.ConciseBody | undefined): boolean {
-    if (!body || !ts.isBlock(body)) return false;
-    for (const statement of body.statements) {
-        if (!ts.isExpressionStatement(statement) ||
-            !ts.isStringLiteral(statement.expression)) return false;
-        if (statement.expression.text === "use strict") return true;
-    }
-    return false;
+    return !!body && ts.isBlock(body) && ecmaDirectivePrologueHasUseStrict(body.statements);
 }
 
-function sourceContainsUseStrict(sourceFile: ts.SourceFile): boolean {
-    for (const statement of sourceFile.statements) {
-        if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
-        if (statement.expression.text === "use strict") return true;
-    }
-    return false;
-}
-
-function isStrictFunctionContext(node: ts.FunctionLikeDeclaration): boolean {
+export function isStrictCodeContext(node: ts.Node): boolean {
     for (let current: ts.Node | undefined = node; current; current = current.parent) {
         if (ts.isClassLike(current)) return true;
         if (isFunctionDefinition(current) && containsUseStrict(current.body)) return true;
         if (ts.isSourceFile(current)) {
-            return ecmaParseGoal(current) === "module" || sourceContainsUseStrict(current);
+            return ecmaParseGoal(current) === "module" || ecmaDirectivePrologueHasUseStrict(current.statements);
         }
     }
     return false;
@@ -170,7 +156,7 @@ function functionLikeFailure(
 
 
     const entries = parameterEntries(node);
-    const strict = isStrictFunctionContext(node);
+    const strict = isStrictCodeContext(node);
     if (strict) {
         const restricted = entries.find((entry) => strictModeBindingIdentifierNames.has(entry.name));
         if (restricted) {
