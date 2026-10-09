@@ -212,6 +212,7 @@ tsc_value_t tsc_value_function_named_kind(
     }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     id->kind = kind;
+    id->is_generator = false;
     id->realm = realm;
     id->construct_default_prototype = TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE;
     id->extensible = true;
@@ -3342,99 +3343,6 @@ tsc_value_t tsc_value_construct_with_new_target(
 }
 
 
-static tsc_array_t* generator_receiver(void* env, tsc_value_t receiver) {
-    if (env) return (tsc_array_t*)env;
-    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* array = (tsc_array_t*)value_ptr(receiver);
-        if (array->lazy_next) return array;
-    }
-    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Generator method called on incompatible receiver"));
-    return NULL;
-}
-
-static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = generator_receiver(env, this_arg);
-    if (av->is_lazy_generator && av->iter_pos >= av->len && av->lazy_next) {
-        bool done = false;
-        tsc_value_t next_arg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-        av->lazy_next(av, &av->state, av->env, next_arg, &done);
-        if (done) {
-            av->is_lazy_generator = false;
-        }
-    }
-    tsc_object_t* out = tsc_object_new();
-    if (av->iter_pos < av->len) {
-        size_t current_index = av->iter_pos++;
-        tsc_value_t current = av->box_element
-            ? av->box_element((const char*)av->data + current_index * av->es)
-            : TSC_ARR(tsc_value_t, av, current_index);
-        tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(false));
-        tsc_object_set(out, tsc_str_from_lit("value", 5), current);
-    } else {
-        tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(true));
-        if (av->iter_has_return && !av->iter_return_consumed) {
-            tsc_object_set(out, tsc_str_from_lit("value", 5), av->iter_return);
-            av->iter_return_consumed = true;
-        } else {
-            tsc_object_set(out, tsc_str_from_lit("value", 5), tsc_value_undefined());
-        }
-    }
-    return tsc_value_object(out);
-}
-
-static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = generator_receiver(env, this_arg);
-    tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (av->is_lazy_generator && av->lazy_close) {
-        (void)av->lazy_close(av, av->env, valueArg, false);
-    }
-    av->iter_pos = av->len;
-    av->is_lazy_generator = false;
-    av->state = -1;
-    av->iter_return_consumed = true;
-    tsc_object_t* out = tsc_object_new();
-    tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(true));
-    tsc_object_set(out, tsc_str_from_lit("value", 5), valueArg);
-    return tsc_value_object(out);
-}
-
-static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = generator_receiver(env, this_arg);
-    tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (av->is_lazy_generator && av->lazy_close) {
-        (void)av->lazy_close(av, av->env, err, true);
-    }
-    av->iter_pos = av->len;
-    av->is_lazy_generator = false;
-    av->state = -1;
-    av->iter_return_consumed = true;
-    tsc_str_t* errStr = tsc_value_to_string(err);
-    tsc_throw_str(errStr);
-    return tsc_value_undefined();
-}
-
-static const char generator_prototype_realm_state_key = 0;
-
-void tsc_array_initialize_generator(tsc_array_t* array) {
-    tsc_object_t* prototype = tsc_realm_state_get(&generator_prototype_realm_state_key);
-    if (!prototype) {
-        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
-        tsc_realm_state_set(&generator_prototype_realm_state_key, prototype);
-        const struct { const char* name; size_t length; tsc_generic_function_t apply; } methods[] = {
-            {"next", 4, tsc_value_generator_next},
-            {"return", 6, tsc_value_generator_return},
-            {"throw", 5, tsc_value_generator_throw},
-        };
-        for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i) {
-            tsc_str_t* name = tsc_str_from_lit(methods[i].name, methods[i].length);
-            tsc_object_define(prototype, name,
-                tsc_value_function_builtin_named(methods[i].apply, NULL, 1.0, name),
-                true, false, true);
-        }
-    }
-    array->prototype = tsc_value_object(prototype);
-}
-
 static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, tsc_value_t fn) {
     if (!ident) return tsc_value_undefined();
     if (!ident->func_prototype_initialized) {
@@ -3483,15 +3391,6 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
-        if (!a->lazy_next && str_lit_eq(key, "next")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
-        }
-        if (!a->lazy_next && str_lit_eq(key, "return")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
-        }
-        if (!a->lazy_next && str_lit_eq(key, "throw")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
-        }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
             if (a->props && tsc_object_has_own(a->props, key)) {
@@ -3599,15 +3498,6 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
-        if (!a->lazy_next && str_lit_eq(key, "next")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
-        }
-        if (!a->lazy_next && str_lit_eq(key, "return")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
-        }
-        if (!a->lazy_next && str_lit_eq(key, "throw")) {
-            return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
-        }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
             if (a->props && tsc_object_has_own(a->props, key)) {
@@ -5277,7 +5167,6 @@ bool tsc_value_is_frozen(tsc_value_t v) {
 }
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
-    tsc_array_materialize_all((tsc_array_t*)src);
     size_t side_len = src && src->props ? src->props->len : 0;
     size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0) + side_len;
     tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), cap ? cap : 1);
@@ -5304,7 +5193,6 @@ tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
 }
 
 tsc_array_t* value_array_values(const tsc_array_t* src) {
-    tsc_array_materialize_all((tsc_array_t*)src);
     size_t side_len = src && src->props ? src->props->len : 0;
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len + side_len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
@@ -5329,7 +5217,6 @@ tsc_array_t* value_array_values(const tsc_array_t* src) {
 }
 
 static tsc_array_t* value_array_iter_values(const tsc_array_t* src) {
-    tsc_array_materialize_all((tsc_array_t*)src);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
     if (!src || src->es != sizeof(tsc_value_t)) return out;
     tsc_value_t recv = tsc_value_array((tsc_array_t*)src);

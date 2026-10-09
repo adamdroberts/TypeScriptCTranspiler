@@ -124,7 +124,7 @@ const RUNTIME_SOURCES = [
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const DISPATCH_RUNTIME_SOURCES = ["tsc_dispatch.c"];
 const TEST262_RUNTIME_SOURCES = ["tsc_test262.c"];
-const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
+const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h", "tsc_array_abi.h"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";

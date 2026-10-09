@@ -177,6 +177,7 @@ typedef struct {
 
 typedef struct tsc_function_identity {
     tsc_function_identity_kind_t kind;
+    bool is_generator;
     /* ECMAScript functions retain the Realm in which they were created.
      * Calls and construction enter this context; bound functions retain the
      * Realm of their target through GetFunctionRealm. */
@@ -261,6 +262,7 @@ struct tsc_object {
     bool is_proxy;
     bool proxy_revoked;
     bool is_promise;
+    struct tsc_generator* generator;
     bool is_date;
     bool is_regexp;
     bool is_map;

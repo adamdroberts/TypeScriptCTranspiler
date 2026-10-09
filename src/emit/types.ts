@@ -485,11 +485,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "EventTarget") return T_EVENT_TARGET;
         if (["IteratorObject", "ArrayIterator", "RegExpStringIterator", "MapIterator", "SetIterator"].includes(sym?.getName() ?? "")) return T_VALUE;
         if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
-            const tr = t as ts.TypeReference;
-            const ta = tr.typeArguments;
-            if (ta && ta.length >= 1) {
-                return arrayType(mapTsType(node, ta[0]!, checker));
-            }
+            return T_VALUE;
         }
         if (sym?.getName() === "RegExp") return T_REGEXP;
         if (sym?.getName() === "CryptoHash") return T_HASH;

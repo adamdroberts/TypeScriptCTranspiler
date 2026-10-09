@@ -1771,7 +1771,7 @@
               "src/emit/index.ts#emitComputedObjectLiteralDefinition",
               "runtime/tsc_array.c#array_static_from",
               "runtime/tsc_value.c#tsc_value_create_data_property",
-              "runtime/tsc_value.c#tsc_value_generator_next",
+              "runtime/tsc_iterator.c#generator_resume",
               "runtime/tsc_iterator.c#tsc_sync_iterator_open_with_method",
               "runtime/tsc_value.c#tsc_value_construct_with_new_target"
             ]

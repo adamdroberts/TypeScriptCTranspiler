@@ -639,51 +639,7 @@ tsc_str_t* tsc_json_num(double n);  /* JSON-safe number formatting */
 typedef struct tsc_object tsc_object_t;
 
 /* ------------- arrays ------------- */
-typedef tsc_value_t (*tsc_array_box_element_fn)(const void* element);
-typedef bool (*tsc_array_unbox_element_fn)(tsc_value_t value, void* element);
-typedef enum {
-    TSC_NATIVE_ELEMENT_NUMBER,
-    TSC_NATIVE_ELEMENT_BOOLEAN,
-    TSC_NATIVE_ELEMENT_STRING,
-    TSC_NATIVE_ELEMENT_BIGINT,
-    TSC_NATIVE_ELEMENT_SYMBOL,
-    TSC_NATIVE_ELEMENT_ARRAY,
-    TSC_NATIVE_ELEMENT_OBJECT,
-    TSC_NATIVE_ELEMENT_FUNCTION,
-    TSC_NATIVE_ELEMENT_UNDEFINED,
-    TSC_NATIVE_ELEMENT_UNSUPPORTED
-} tsc_native_element_kind_t;
-
-typedef struct tsc_array {
-    size_t len;
-    size_t cap;
-    size_t es;
-    bool extensible;
-    bool sealed;
-    bool frozen;
-    bool length_writable;
-    tsc_value_t prototype;
-    size_t iter_pos;
-    bool iter_has_return;
-    bool iter_return_consumed;
-    tsc_value_t iter_return;
-    bool is_lazy_generator;
-    int state;
-    void* env;
-    void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
-    bool (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
-    bool lazy_close_yielded;
-    tsc_value_t lazy_close_value;
-    tsc_object_t* props;
-    tsc_object_t* holes;
-    tsc_array_box_element_fn box_element;
-    tsc_array_unbox_element_fn unbox_element;
-    void* data;
-    /* NaN-boxed pointer payloads are invisible to conservative GC.  Arrays
-     * whose element width can hold tsc_value_t mirror decoded roots here; all
-     * canonical array mutations update this vector with the data. */
-    void** value_roots;
-} tsc_array_t;
+#include "tsc_array_abi.h"
 
 /* One ordinary-call activation owns one canonical, dynamically sized
  * argument collection.  Generated adapters push this record before entering
@@ -731,7 +687,6 @@ tsc_array_t* tsc_array_require_native_representation(
     tsc_native_element_kind_t kind, bool fresh_literal
 );
 tsc_array_t* tsc_array_prototype(void);
-void tsc_array_initialize_generator(tsc_array_t* array);
 tsc_value_t tsc_array_constructor_value(void);
 tsc_value_t tsc_array_unscopables_value(void);
 tsc_array_t* tsc_array_prototype_own_property_names(void);
@@ -745,7 +700,6 @@ tsc_value_t tsc_array_prototype_symbol_value(tsc_symbol_t* key);
 bool tsc_array_prototype_define_symbol_desc(tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_array_symbol_iterator_descriptor(void);
 tsc_value_t tsc_array_symbol_unscopables_descriptor(void);
-void tsc_array_materialize_all(tsc_array_t* a);
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);
 void tsc_array_push_raw(tsc_array_t* a, const void* elem);
@@ -1118,6 +1072,29 @@ void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
 void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** iterator);
 _Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* iterator, tsc_value_t error);
 tsc_value_t tsc_sync_iterator_close_with_error(tsc_sync_iterator_t* iterator, tsc_value_t error);
+typedef enum {
+    TSC_GENERATOR_SUSPENDED_START,
+    TSC_GENERATOR_EXECUTING,
+    TSC_GENERATOR_SUSPENDED_YIELD,
+    TSC_GENERATOR_COMPLETED
+} tsc_generator_state_t;
+typedef struct tsc_generator {
+    tsc_object_t* object;
+    tsc_realm_t* realm;
+    void (*resume)(void*);
+    void* env;
+    tsc_generator_state_t state;
+    tsc_completion_record_t request;
+    tsc_completion_record_t result;
+} tsc_generator_t;
+tsc_generator_t* tsc_generator_new(void (*resume)(void*), void* env);
+tsc_value_t tsc_generator_value(tsc_generator_t* generator);
+tsc_value_t tsc_generator_function_value(tsc_value_t function);
+void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value);
+void tsc_generator_suspend_result(tsc_generator_t* generator, tsc_value_t result);
+void tsc_generator_complete(tsc_generator_t* generator, tsc_completion_kind_t kind, tsc_value_t value);
+bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
+    const tsc_completion_record_t* request, tsc_completion_record_t* result);
 #if defined(__GNUC__) || defined(__clang__)
 #define TSC_SYNC_ITERATOR_SCOPE(name) \
     tsc_sync_iterator_t* name __attribute__((cleanup(tsc_sync_iterator_scope_cleanup))) = NULL

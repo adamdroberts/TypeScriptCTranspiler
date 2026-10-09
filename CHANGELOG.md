@@ -1,5 +1,7 @@
 # Changelog
 
+- Replace fixed generator templates and the eager fallback with one ordinary lifecycle owner consuming the shared resumable graph. Preserve activation/formal/body cells, actual next/return/throw requests, yielding finalizers, delegation result identity, expression staging and live IteratorClose. Remove generator Array queues/brands, fake Array protocol methods and lazy conversions; share the C/C++ Array ABI and rooted bridge argument Lists. Verify independent and generated semantic partitions, deep retained finalization and typed native E2E in both memory modes.
+
 - Retain actual rooted async completions per finalization region and resolve the result capability after cleanup. Preserve overridden/nested returns, actual then lookup, raw thrown identity and self-resolution; delete Promise-valued pending returns and parallel finalization arrays. Verify semantic partitions and a deep finalizer tree with typed native E2E in both memory modes. Reject unrepresented ambient host values with a stable admission diagnostic.
 
 - Lower suspending expressions through one explicit operation graph with rooted actual values, saved references/callee/receiver/argument Lists, branch/optional routing and literal/template staging. Replace direct-await and logical/conditional/prefix expression planners, share CopyDataProperties and cache referenced names per the pinned edition. Include accessors in the shared native class member projection, declare mutable Array.length writable, and verify independent semantic partitions plus a deep native expression.

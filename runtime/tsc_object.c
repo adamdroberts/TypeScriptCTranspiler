@@ -61,6 +61,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_proxy = false;
     o->proxy_revoked = false;
     o->is_promise = false;
+    o->generator = NULL;
     o->is_date = false;
     o->is_regexp = false;
     o->is_map = false;

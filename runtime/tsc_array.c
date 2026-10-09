@@ -1359,17 +1359,6 @@ static tsc_value_t tsc_array_default_prototype(void) {
         /* Array.prototype is itself an Array exotic object with writable length. */
         proto->length_writable = true;
         proto->prototype = tsc_value_object_prototype();
-        proto->iter_pos = 0;
-        proto->iter_has_return = false;
-        proto->iter_return_consumed = false;
-        proto->iter_return = tsc_value_undefined();
-        proto->is_lazy_generator = false;
-        proto->state = 0;
-        proto->env = NULL;
-        proto->lazy_next = NULL;
-        proto->lazy_close = NULL;
-        proto->lazy_close_yielded = false;
-        proto->lazy_close_value = tsc_value_undefined();
         proto->props = tsc_object_new();
         proto->holes = NULL;
         proto->box_element = NULL;
@@ -1467,17 +1456,6 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->frozen = false;
     a->length_writable = true;
     a->prototype = tsc_array_default_prototype();
-    a->iter_pos = 0;
-    a->iter_has_return = false;
-    a->iter_return_consumed = false;
-    a->iter_return = tsc_value_undefined();
-    a->is_lazy_generator = false;
-    a->state = 0;
-    a->env = NULL;
-    a->lazy_next = NULL;
-    a->lazy_close = NULL;
-    a->lazy_close_yielded = false;
-    a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
     a->box_element = NULL;
@@ -1500,17 +1478,6 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->frozen = false;
     a->length_writable = true;
     a->prototype = tsc_array_default_prototype();
-    a->iter_pos = 0;
-    a->iter_has_return = false;
-    a->iter_return_consumed = false;
-    a->iter_return = tsc_value_undefined();
-    a->is_lazy_generator = false;
-    a->state = 0;
-    a->env = NULL;
-    a->lazy_next = NULL;
-    a->lazy_close = NULL;
-    a->lazy_close_yielded = false;
-    a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
     a->box_element = NULL;
@@ -1604,8 +1571,7 @@ tsc_array_t* tsc_array_require_native_representation(
     if (!box_element && !unbox_element) return array;
     if (!box_element || !unbox_element || !element_size) array_native_representation_failure();
     if (array->es == element_size && array->box_element == box_element && array->unbox_element == unbox_element) return array;
-    if (array->is_lazy_generator ||
-        (!fresh_literal && (array->box_element || array->unbox_element)) ||
+    if ((!fresh_literal && (array->box_element || array->unbox_element)) ||
         (!array->box_element && array->es != sizeof(tsc_value_t))) {
         array_native_representation_failure();
     }
@@ -2134,19 +2100,7 @@ tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
 }
 
 double tsc_array_length(const tsc_array_t* a) {
-    tsc_array_materialize_all((tsc_array_t*)a);
     return (double)a->len;
 }
 
 void tsc_array_oob(const tsc_array_t* a, double i) { (void)a; (void)i; }
-
-void tsc_array_materialize_all(tsc_array_t* a) {
-    if (a && a->is_lazy_generator && a->lazy_next) {
-        while (true) {
-            bool done = false;
-            a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &done);
-            if (done) break;
-        }
-        a->is_lazy_generator = false;
-    }
-}

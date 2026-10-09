@@ -12,30 +12,7 @@ typedef struct tsc_str {
     uint64_t hash;
 } tsc_str_t;
 typedef struct tsc_object tsc_object_t;
-typedef struct tsc_array {
-    size_t len;
-    size_t cap;
-    size_t es;
-    bool extensible;
-    bool sealed;
-    bool frozen;
-    bool length_writable;
-    tsc_value_t prototype;
-    size_t iter_pos;
-    bool iter_has_return;
-    bool iter_return_consumed;
-    tsc_value_t iter_return;
-    bool is_lazy_generator;
-    int state;
-    void* env;
-    void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
-    bool (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
-    bool lazy_close_yielded;
-    tsc_value_t lazy_close_value;
-    tsc_object_t* props;
-    tsc_object_t* holes;
-    void* data;
-} tsc_array_t;
+#include "tsc_array_abi.h"
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 [[noreturn]] void tsc_panic(const char* msg);
@@ -50,6 +27,8 @@ tsc_value_t tsc_value_bool(bool b);
 tsc_value_t tsc_value_string(tsc_str_t* s);
 tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_array(tsc_array_t* a);
+tsc_array_t* tsc_array_new(size_t element_size, size_t initial_capacity);
+void tsc_array_push_raw(tsc_array_t* array, const void* value);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
@@ -287,34 +266,15 @@ void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
     AotFunctionEnv* env = static_cast<AotFunctionEnv*>(v8::Local<v8::External>::Cast(info.Data())->Value());
     size_t argc = static_cast<size_t>(info.Length());
-    std::vector<tsc_value_t> argsData(argc);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), argc);
     for (size_t i = 0; i < argc; i++) {
-        argsData[i] = fromV8(isolate, info[static_cast<int>(i)]);
+        tsc_value_t value = fromV8(isolate, info[static_cast<int>(i)]);
+        tsc_array_push_raw(args, &value);
     }
 
-    tsc_array_t args = {};
-    args.len = argc;
-    args.cap = argc;
-    args.es = sizeof(tsc_value_t);
-    args.extensible = true;
-    args.sealed = false;
-    args.frozen = false;
-    args.length_writable = true;
-    args.prototype = tsc_value_undefined();
-    args.iter_pos = 0;
-    args.iter_has_return = false;
-    args.iter_return_consumed = false;
-    args.iter_return = tsc_value_undefined();
-    args.is_lazy_generator = false;
-    args.state = -1;
-    args.env = nullptr;
-    args.lazy_next = nullptr;
-    args.lazy_close = nullptr;
-    args.data = argc > 0 ? argsData.data() : nullptr;
-
     tsc_value_t result = info.IsConstructCall()
-        ? tsc_value_construct(env->fn, tsc_value_array(&args))
-        : tsc_value_apply_function(env->fn, fromV8(isolate, info.This()), tsc_value_array(&args));
+        ? tsc_value_construct(env->fn, tsc_value_array(args))
+        : tsc_value_apply_function(env->fn, fromV8(isolate, info.This()), tsc_value_array(args));
     info.GetReturnValue().Set(toV8(isolate, context, result));
 }
 

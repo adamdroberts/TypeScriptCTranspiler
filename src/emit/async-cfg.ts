@@ -174,7 +174,7 @@ type AsyncControlFlowStateCore =
         readonly done: AsyncControlFlowTarget;
     }
     | {
-        readonly kind: "async-iterator-close";
+        readonly kind: "async-iterator-close" | "iterator-close";
         readonly id: number;
         readonly slot: number;
         readonly completion: "normal" | "return" | "throw";
@@ -427,7 +427,7 @@ export function planAsyncControlFlowGraph(
                 current.label
                 ? current.label.text
                 : null;
-            if (ts.isAwaitExpression(current) || ts.isReturnStatement(current) ||
+            if (ts.isAwaitExpression(current) || (options.suspensionKind === "generator" && ts.isYieldExpression(current)) || ts.isReturnStatement(current) ||
                 (labelledCompletion !== null && labelledCompletion !== localLabel)) {
                 ok = false;
                 return;
@@ -1203,12 +1203,13 @@ export function planAsyncControlFlowGraph(
         return entry;
     };
 
-    const buildAsyncIteratorLoop = (
-        statement: ts.ForOfStatement,
+    const buildIteratorLoop = (
+        statement: ts.ForInStatement | ts.ForOfStatement,
         next: AsyncControlFlowTarget,
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
+        const asynchronous = ts.isForOfStatement(statement) && !!statement.awaitModifier;
         let binding: ts.BindingName;
         const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
         if (ts.isVariableDeclarationList(statement.initializer)) {
@@ -1243,7 +1244,7 @@ export function planAsyncControlFlowGraph(
         // is allocated per syntactic loop and every body completion returns to
         // the same next-state back edge. Runtime iteration count never enters
         // graph construction.
-        const slot = asyncIteratorCount++;
+        const slot = asynchronous ? asyncIteratorCount++ : iteratorCount++;
         const initId = reserve();
         const nextId = reserve();
         const nextTarget = target(nextId);
@@ -1256,7 +1257,7 @@ export function planAsyncControlFlowGraph(
             if (existing) return existing;
             const id = reserve();
             const close = setState({
-                kind: "async-iterator-close",
+                kind: asynchronous ? "async-iterator-close" : "iterator-close",
                 id,
                 slot,
                 completion: "normal",
@@ -1267,7 +1268,7 @@ export function planAsyncControlFlowGraph(
         };
         const closeReturnId = reserve();
         const closeReturn = setState({
-            kind: "async-iterator-close",
+            kind: asynchronous ? "async-iterator-close" : "iterator-close",
             id: closeReturnId,
             slot,
             completion: "return",
@@ -1275,7 +1276,7 @@ export function planAsyncControlFlowGraph(
         }, context.exceptionTarget);
         const closeThrowId = reserve();
         const closeThrow = setState({
-            kind: "async-iterator-close",
+            kind: asynchronous ? "async-iterator-close" : "iterator-close",
             id: closeThrowId,
             slot,
             completion: "throw",
@@ -1303,27 +1304,16 @@ export function planAsyncControlFlowGraph(
         const bodyEntry = ts.isBlock(statement.statement)
             ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
             : buildSequence([statement.statement], nextTarget, bodyContext);
-        let bindingEntry = bodyEntry;
-        let bindingValueSlot: number | null = null;
-        if (containsSuspendingBindingExpression(binding) ||
-            [...assignmentTargets.values()].some(containsSuspendingBindingExpression)) {
-            const bound = buildBindingFromValueSlot(
-                binding,
-                bodyEntry,
-                bodyContext,
-                assignmentTargets,
-            );
-            if (!bound) {
-                currentLoopDepth--;
-                supported = false;
-                return next;
-            }
-            bindingEntry = bound.entry;
-            bindingValueSlot = bound.valueSlot;
+        const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext, assignmentTargets);
+        if (!bound) {
+            currentLoopDepth--;
+            supported = false;
+            return next;
         }
+        const bindingEntry = bound.entry;
+        const bindingValueSlot = bound.valueSlot;
         currentLoopDepth--;
-        setState({
-            kind: "async-iterator-next",
+        const nextState = {
             id: nextId,
             statement,
             binding,
@@ -1332,122 +1322,10 @@ export function planAsyncControlFlowGraph(
             bindingValueSlot,
             body: bindingEntry,
             done: next,
-        }, context.exceptionTarget);
-        const init = setState({
-            kind: "async-iterator-init",
-            id: initId,
-            statement,
-            binding,
-            assignmentTargets,
-            slot,
-            sourceResultSlot,
-            next: nextTarget,
-        }, context.exceptionTarget);
-        if (sourceResultSlot === null) return init;
-        const sourceEntry = buildExpressionResult(
-            statement.expression,
-            sourceResultSlot,
-            init,
-            context,
-        );
-        if (!sourceEntry) {
-            supported = false;
-            return next;
-        }
-        return sourceEntry;
-    };
-
-    const buildIteratorLoop = (
-        statement: ts.ForInStatement | ts.ForOfStatement,
-        next: AsyncControlFlowTarget,
-        context: BuildContext,
-        label: string | null,
-    ): AsyncControlFlowTarget => {
-        if (ts.isForOfStatement(statement) && statement.awaitModifier) {
-            return buildAsyncIteratorLoop(statement, next, context, label);
-        }
-        let binding: ts.BindingName;
-        const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
-        if (ts.isVariableDeclarationList(statement.initializer)) {
-            if (statement.initializer.declarations.length !== 1) {
-                supported = false;
-                return next;
-            }
-            const declaration = statement.initializer.declarations[0]!;
-            if (declaration.initializer) {
-                supported = false;
-                return next;
-            }
-            if (ts.isIdentifier(declaration.name)) {
-                declarations.push(declaration);
-            } else {
-                bindingIdentifiers.push(...collectBindingIdentifiers(declaration.name));
-            }
-            binding = declaration.name;
-        } else {
-            const assignmentBinding = normalizeIteratorAssignmentTarget(
-                statement.initializer,
-                assignmentTargets,
-            );
-            if (!assignmentBinding) {
-                supported = false;
-                return next;
-            }
-            binding = assignmentBinding;
-        }
-        const slot = iteratorCount++;
-        const initId = reserve();
-        const nextId = reserve();
-        const nextTarget = target(nextId);
-        const sourceResultSlot = containsAwait(statement.expression)
-            ? expressionResults.push(statement.expression) - 1
-            : null;
-        const loopTargets = { breakTarget: next, continueTarget: nextTarget };
-        const labels = new Map(context.labels);
-        if (label) labels.set(label, loopTargets);
-        currentLoopDepth++;
-        const bodyContext: BuildContext = {
-            loop: loopTargets,
-            breakTarget: loopTargets.breakTarget,
-            labels,
-            exceptionTarget: context.exceptionTarget,
-            returnTarget: context.returnTarget,
         };
-        const bodyEntry = ts.isBlock(statement.statement)
-            ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
-            : buildSequence([statement.statement], nextTarget, bodyContext);
-        let bindingEntry = bodyEntry;
-        let bindingValueSlot: number | null = null;
-        if (containsSuspendingBindingExpression(binding) ||
-            [...assignmentTargets.values()].some(containsSuspendingBindingExpression)) {
-            const bound = buildBindingFromValueSlot(
-                binding,
-                bodyEntry,
-                bodyContext,
-                assignmentTargets,
-            );
-            if (!bound) {
-                currentLoopDepth--;
-                supported = false;
-                return next;
-            }
-            bindingEntry = bound.entry;
-            bindingValueSlot = bound.valueSlot;
-        }
-        currentLoopDepth--;
-        setState({
-            kind: "iterator-next",
-            id: nextId,
-            statement,
-            binding,
-            assignmentTargets,
-            slot,
-            bindingValueSlot,
-            body: bindingEntry,
-            done: next,
-        }, context.exceptionTarget);
-        const init = setState({
-            kind: "iterator-init",
+        if (asynchronous && ts.isForOfStatement(statement)) setState({ ...nextState, kind: "async-iterator-next", statement }, context.exceptionTarget);
+        else setState({ ...nextState, kind: "iterator-next", statement }, context.exceptionTarget);
+        const initState = {
             id: initId,
             statement,
             binding,
@@ -1455,9 +1333,11 @@ export function planAsyncControlFlowGraph(
             slot,
             sourceResultSlot,
             next: nextTarget,
-        }, context.exceptionTarget);
-        if (sourceResultSlot === null) return init;
-        const sourceEntry = buildExpressionResult(
+        };
+        const init = asynchronous && ts.isForOfStatement(statement)
+            ? setState({ ...initState, kind: "async-iterator-init", statement }, context.exceptionTarget)
+            : setState({ ...initState, kind: "iterator-init", statement }, context.exceptionTarget);
+        const sourceEntry = sourceResultSlot === null ? init : buildExpressionResult(
             statement.expression,
             sourceResultSlot,
             init,
@@ -1466,6 +1346,10 @@ export function planAsyncControlFlowGraph(
         if (!sourceEntry) {
             supported = false;
             return next;
+        }
+        if (ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+            return setState({ kind: "scope-enter", id: reserve(), bindings: [binding], functions: [], next: sourceEntry }, context.exceptionTarget);
         }
         return sourceEntry;
     };
@@ -1898,6 +1782,7 @@ export function planAsyncControlFlowGraph(
             case "async-iterator-next":
                 targets.push(state.body, state.done);
                 break;
+            case "iterator-close":
             case "async-iterator-close":
                 if (state.next) targets.push(state.next);
                 break;
