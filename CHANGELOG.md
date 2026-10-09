@@ -1,5 +1,7 @@
 # Changelog
 
+- Implement ordinary Promise.try through actual argument Lists and generic capabilities. Forward spread/rest arguments synchronously, preserve callback completion identity, and propagate capability callback failures. Share one rooted call-completion record with reaction jobs; remove the direct callback predecessor and update the variadic declaration.
+
 - Unify Promise executors, capabilities, resolving functions and reactions through actual argument Lists and rooted records. Add ordinary Realm-owned constructor/prototype and generic species/finally handling; remove fixed adapters and bound-method getters. Preserve repeated thenable jobs, actual Promise self-rejection, typed pointer codecs and boxed identity. Repair indexed-array GC roots and contextual declaration callback ABI.
 
 - Transport throws through one rooted value completion without user coercion. Separate intrinsic host diagnostics, preserve payloads through promise rejection bridges, and add one async call rejection boundary shared by function emitters. Promise settlement roots values before allocation; ordinary catch string predecessors are removed, and Symbol.toPrimitive is declared.

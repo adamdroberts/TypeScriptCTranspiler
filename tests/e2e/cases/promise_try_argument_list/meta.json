@@ -1,0 +1,3 @@
+{
+  "description": "Promise.try forwards actual spread/rest arguments synchronously and preserves abrupt identity and method aliases"
+}

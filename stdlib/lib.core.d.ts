@@ -111,7 +111,7 @@ interface PromiseConstructor {
     any<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<T>;
     any(values: Map<any, any>, ...ignored: any[]): Promise<any>;
     any<T>(values: Iterable<T | PromiseLike<T>>, ...ignored: any[]): Promise<T>;
-    try<T>(callback: () => T | Promise<T>, ...ignored: any[]): Promise<T>;
+    try<T, A extends any[] = any[]>(callback: (...args: A) => T | PromiseLike<T>, ...args: A): Promise<T>;
 }
 declare var Promise: PromiseConstructor;
 

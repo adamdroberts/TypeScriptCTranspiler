@@ -59638,7 +59638,7 @@ class Emitter {
 
     private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (method === "resolve" || method === "reject" || method === "withResolvers") {
+        if (method === "resolve" || method === "reject" || method === "withResolvers" || method === "try") {
             const dynamic = this.emitDynamicMethod(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE }, method);
             return { c: this.coerce(dynamic, mapped, call), ty: mapped };
         }
@@ -59806,16 +59806,7 @@ class Emitter {
                     );
                 });
             }
-            case "try": {
-                if (call.arguments.length < 1) unsupported(call, "Promise.try expects 1 callback");
-                const callbackNode = call.arguments[0]!;
-                const callback = this.emitExpr(callbackNode);
-                this.validatePromiseCallback(callbackNode, callback, 0, "Promise.try callback");
-                return this.emitSequencedExpr(mapped, [
-                    { value: callback, target: callback.ty, node: callbackNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([fn]) => this.promiseCallbackResolve(call, callback.ty, fn, { c: "tsc_value_undefined()", ty: T_VALUE }, callbackNode));
-            }
+
         }
         unsupported(call, `Promise.${method}`);
     }
@@ -59905,43 +59896,6 @@ class Emitter {
             buf.close(); buf.line(); this.closureDefs.write(buf.toString());
         }
         return `tsc_promise_set_value_codec(${value}, ${codec})`;
-    }
-
-    private validatePromiseCallback(
-        node: ts.Expression,
-        callback: EmitResult,
-        arity: number,
-        label: string,
-    ): void {
-        void arity;
-        const type = this.prepareType(callback.ty);
-        if (type.kind === "value") return;
-        if (type.kind !== "function" || !type.ret) unsupported(node, `${label} must be a function`);
-    }
-
-    private promiseCallbackReturnType(callbackType: CType, node: ts.Node): CType {
-        const type = this.prepareType(callbackType);
-        if (type.kind === "value") return T_VALUE;
-        if (type.kind !== "function" || !type.ret) unsupported(node, "Promise callback must be a function");
-        return this.prepareType(type.ret);
-    }
-
-    private promiseCallbackResolve(
-        call: ts.CallExpression,
-        callbackType: CType,
-        callbackValue: string,
-        value: EmitResult,
-        node: ts.Expression,
-    ): string {
-        const ret = this.promiseCallbackReturnType(callbackType, node);
-        const callResult = this.promiseCallbackCall(call, callbackType, callbackValue, [value], node);
-        const out = this.freshTemp("_promise_cb");
-        const eh = this.freshTemp("_promise_cb_eh");
-        if (ret.kind === "void" || ret.kind === "never") {
-            return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${callResult}; tsc_try_pop(); ${out} = tsc_promise_resolve(tsc_value_undefined()); } else { ${out} = tsc_promise_reject(tsc_current_error_value()); } ${out}; })`;
-        }
-        const valueTmp = this.freshTemp("_promise_cb_value");
-        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${ret.c} ${valueTmp} = ${callResult}; tsc_try_pop(); ${out} = ${this.promiseResolveResult({ c: valueTmp, ty: ret }, node)}; } else { ${out} = tsc_promise_reject(tsc_current_error_value()); } ${out}; })`;
     }
 
     private promiseCallbackCall(

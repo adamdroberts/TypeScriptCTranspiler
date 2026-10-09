@@ -439,6 +439,46 @@ static tsc_value_t promise_static_with_resolvers(void* env, tsc_value_t receiver
 }
 
 typedef struct {
+    tsc_value_t value;
+    void* value_root;
+    bool abrupt;
+} tsc_promise_call_completion_t;
+
+/* Call completion is rooted before returning to the capability invocation.
+ * Catch the source callback only; a capability callback failure propagates. */
+static tsc_promise_call_completion_t* promise_call_completion(tsc_value_t callback, tsc_array_t* args) {
+    void* volatile callback_root = tsc_value_gc_root(callback);
+    tsc_array_t* volatile arguments_root = args;
+    tsc_promise_call_completion_t* completion = TSC_GC_MALLOC(sizeof(*completion));
+    *completion = (tsc_promise_call_completion_t){ .value = tsc_value_undefined() };
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        completion->value = tsc_value_apply_function(callback, tsc_value_undefined(), tsc_value_array(args));
+    } else {
+        completion->abrupt = true;
+        completion->value = tsc_current_error_value();
+    }
+    completion->value_root = tsc_value_gc_root(completion->value);
+    tsc_try_pop();
+    (void)callback_root; (void)arguments_root;
+    return completion;
+}
+
+static tsc_value_t promise_static_try(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_value_t callback = promise_argument(args, 0);
+    void* volatile callback_root = tsc_value_gc_root(callback);
+    tsc_array_t* volatile arguments_root = args;
+    tsc_promise_capability_t* capability = promise_new_capability(receiver);
+    tsc_promise_call_completion_t* completion = promise_call_completion(callback,
+        tsc_array_slice(args, 1, args ? (double)args->len : 0));
+    promise_call_resolving(completion->abrupt ? capability->reject : capability->resolve, completion->value);
+    (void)callback_root; (void)arguments_root;
+    return capability->promise;
+}
+
+typedef struct {
     tsc_value_t iterator;
 } tsc_async_from_sync_iterator_t;
 
@@ -927,20 +967,9 @@ static void promise_reaction_job(void* env) {
         (void)value_root;
         return;
     }
-    /* Catch only the handler completion. A custom capability's resolving
-     * callback throwing is a job failure, not a second handler rejection. */
-    TSC_TRY_FRAME(frame);
-    tsc_try_push(&frame);
-    if (setjmp(frame.jb) == 0) {
-        tsc_value_t result = tsc_value_apply_function(handler, tsc_value_undefined(),
-            tsc_value_array(promise_single_arg(value)));
-        tsc_try_pop();
-        promise_call_resolving(reaction->capability->resolve, result);
-    } else {
-        tsc_value_t error = tsc_current_error_value();
-        tsc_try_pop();
-        promise_call_resolving(reaction->capability->reject, error);
-    }
+    tsc_promise_call_completion_t* completion = promise_call_completion(handler, promise_single_arg(value));
+    promise_call_resolving(completion->abrupt ? reaction->capability->reject : reaction->capability->resolve,
+        completion->value);
     (void)value_root;
 }
 
@@ -1060,6 +1089,7 @@ tsc_value_t tsc_promise_prototype_value(void) {
         static const struct { const char* name; double length; tsc_generic_function_t apply; bool is_static; } methods[] = {
             { "resolve", 1, promise_static_resolve, true }, { "reject", 1, promise_static_reject, true },
             { "withResolvers", 0, promise_static_with_resolvers, true },
+            { "try", 1, promise_static_try, true },
             { "then", 2, promise_prototype_then, false }, { "catch", 1, promise_prototype_catch, false },
             { "finally", 1, promise_prototype_finally, false }
         };
