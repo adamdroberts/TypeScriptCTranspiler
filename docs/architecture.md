@@ -42,6 +42,8 @@ flowchart TD
     D --> E[Pass E: top-level statements<br/>split into file-scope decls<br/>+ mod_init_mX assignments]
 ```
 
+Native aggregate field layout follows one ordered field collection. Every boxed field carries a decoded pointer beside its NaN-boxed value; both belong to the same heap or stack owner, so unreachable cycles remain collectible. An ancestor worklist emits inherited value/root pairs with an identical base prefix. Field writers use one runtime store and an offsetof projection from the field address, while static cells carry a file-scope decoded root. Ordinary assignment references stage the owner before the right side and perform GetValue/PutValue at their respective evaluation points. Reads use physical declaration storage independently of flow narrowing, and boxing a native interface installs the shared field adapters. Inherited physical type changes and internal layout collisions fail closed rather than producing incompatible C layouts. Legacy generator field references need a continuation-held owner/key record before they can use this path across suspension.
+
 Pass A and B handle **both** class declarations and interface declarations — interfaces become C structs with fields, no methods. The emission is ordered A..E so every name is declared by the time it's used.
 
 Pass E is the only place where module-scope `const`/`let` are special-cased: they're split into a file-scope declaration (`static T name;`) and an assignment inside `mod_init_mX()`. This promotion is what makes top-level names visible to functions + lifted arrows.

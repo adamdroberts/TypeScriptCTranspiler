@@ -5,6 +5,22 @@ tsc_value_t tsc_value_undefined(void) { return value_box(TSC_VALUE_TAG_UNDEFINED
 tsc_value_t tsc_value_null(void) { return value_box(TSC_VALUE_TAG_NULL, 0); }
 tsc_value_t tsc_value_bool(bool b) { return value_box(b ? TSC_VALUE_TAG_TRUE : TSC_VALUE_TAG_FALSE, 0); }
 
+tsc_value_t tsc_value_store_rooted(tsc_value_t* slot, void* volatile* root, tsc_value_t value) {
+    *root = tsc_value_gc_root(value);
+    *slot = value;
+    return value;
+}
+
+tsc_value_t tsc_value_native_field_store(tsc_value_t* slot, ptrdiff_t root_offset, tsc_value_t value) {
+    void* volatile* root = (void* volatile*)((char*)slot + root_offset);
+    return tsc_value_store_rooted(slot, root, value);
+}
+
+tsc_value_t* tsc_value_native_field_slot(void* owner, size_t field_offset) {
+    if (!owner) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a field of null or undefined"));
+    return (tsc_value_t*)((char*)owner + field_offset);
+}
+
 tsc_value_t tsc_value_num(double n) {
     tsc_value_t v;
     memcpy(&v, &n, sizeof v);

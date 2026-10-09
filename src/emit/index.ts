@@ -26109,11 +26109,43 @@ class Emitter {
     private emitInterfaceStruct(id: ts.InterfaceDeclaration): void {
         if (!id.name) return;
         this.structDecls.open(`struct ${id.name.text}_t`);
-        for (const field of this.interfaceFields(id)) {
-            this.structDecls.line(`${field.type.c} ${mangleIdent(field.name)};`);
-        }
+        this.emitNativeAggregateFields(this.interfaceFields(id), id);
         this.structDecls.close(";");
         this.structDecls.line();
+    }
+
+    private nativeFieldRootName(name: string): string {
+        return `__tsc_root_${mangleIdent(name)}`;
+    }
+
+    private emitNativeAggregateFields(fields: readonly { name: string; type: CType }[], node: ts.Node): void {
+        for (const field of fields) {
+            const name = mangleIdent(field.name);
+            if (name === "__tsc_type" || name.startsWith("__tsc_root_")) {
+                unsupported(node, "native aggregate field collides with internal storage");
+            }
+            this.structDecls.line(`${field.type.c} ${name};`);
+            if (field.type.kind === "value") {
+                this.structDecls.line(`void* volatile ${this.nativeFieldRootName(field.name)};`);
+            }
+        }
+    }
+
+    /** Every boxed native field has an adjacent decoded root in the same owner.
+     * The offset projection uses one evaluated field address, including writes
+     * through base-class prefixes. It never evaluates a receiver twice. */
+    private nativeFieldStore(receiver: string, aggregate: string, field: string, type: CType, value: string): string {
+        const slot = `${receiver}->${mangleIdent(field)}`;
+        if (type.kind !== "value") return `(${slot} = ${value})`;
+        const offset = `(ptrdiff_t)offsetof(${aggregate}_t, ${this.nativeFieldRootName(field)}) - ` +
+            `(ptrdiff_t)offsetof(${aggregate}_t, ${mangleIdent(field)})`;
+        return `tsc_value_native_field_store(&(${slot}), ${offset}, ${value})`;
+    }
+
+    private nativeStaticFieldStore(owner: string, field: string, type: CType, value: string): string {
+        const slot = `${owner}_${mangleIdent(field)}`;
+        if (type.kind !== "value") return `(${slot} = ${value})`;
+        return `tsc_value_store_rooted(&${slot}, &${owner}_${this.nativeFieldRootName(field)}, ${value})`;
     }
 
     private interfaceFields(id: ts.InterfaceDeclaration): {
@@ -26161,7 +26193,20 @@ class Emitter {
         for (const m of id.members) {
             if (!ts.isPropertySignature(m) || !m.name || !ts.isIdentifier(m.name)) continue;
             const prop = this.checker.getSymbolAtLocation(m.name);
-            if (!prop || seen.has(prop.getName())) continue;
+            if (!prop) continue;
+            if (seen.has(prop.getName())) {
+                const previous = props.find(base => base.getName() === prop.getName());
+                if (previous) {
+                    const prior = previous.valueDeclaration ?? previous.getDeclarations()?.[0] ?? id;
+                    const current = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? m;
+                    const priorType = mapTsType(prior, this.checker.getTypeOfSymbolAtLocation(previous, prior), this.checker);
+                    const currentType = mapTsType(current, this.checker.getTypeOfSymbolAtLocation(prop, current), this.checker);
+                    if (!sameCType(priorType, currentType)) {
+                        unsupported(m, "native inherited field redeclaration changes physical storage");
+                    }
+                }
+                continue;
+            }
             seen.add(prop.getName());
             props.push(prop);
         }
@@ -26180,15 +26225,18 @@ class Emitter {
         const baseFields = this.collectInheritedFields(cd);
         this.structDecls.open(`struct ${name}_t`);
         this.structDecls.line(`const char* __tsc_type;`);
-        // Inherited fields first (allows *Base casts to work via identical prefix).
-        for (const { name: fn, type: ft } of baseFields) {
-            this.structDecls.line(`${ft.c} ${mangleIdent(fn)};`);
-        }
-        const inheritedFieldNames = new Set(baseFields.map(({ name: fn }) => fn));
+        // Each inherited value/root pair retains the same prefix in subclasses.
+        const inheritedFields = new Map(baseFields.map(field => [field.name, field]));
         for (const field of this.classOwnInstanceFields(cd)) {
-            if (inheritedFieldNames.has(field.name)) continue;
-            this.structDecls.line(`${field.type.c} ${mangleIdent(field.name)};`);
+            const previous = inheritedFields.get(field.name);
+            if (previous && !sameCType(previous.type, field.type)) {
+                unsupported(cd, "native inherited field redeclaration changes physical storage");
+            }
         }
+        this.emitNativeAggregateFields([
+            ...baseFields,
+            ...this.classOwnInstanceFields(cd).filter(field => !inheritedFields.has(field.name)),
+        ], cd);
         this.structDecls.close(";");
         this.structDecls.line();
     }
@@ -26258,43 +26306,25 @@ class Emitter {
         return `|${names.join("|")}|`;
     }
 
-    private collectInheritedFields(cd: ts.ClassDeclaration): {
-        name: string;
-        type: CType;
-    }[] {
-        const fields: { name: string; type: CType }[] = [];
-        const seen = new Set<string>();
-        const append = (field: { name: string; type: CType }): void => {
-            if (seen.has(field.name)) return;
-            seen.add(field.name);
-            fields.push(field);
-        };
-        const collect = (base: ts.ClassDeclaration): void => {
-            if (!base.heritageClauses) return;
-            for (const h of base.heritageClauses) {
-                if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-                for (const t of h.types) {
-                    const sym = this.checker.getSymbolAtLocation(t.expression);
-                    const parent = sym?.getDeclarations()?.find(ts.isClassDeclaration);
-                    if (!parent) continue;
-                    collect(parent);
-                    for (const field of this.classOwnInstanceFields(parent)) append(field);
+    private collectInheritedFields(cd: ts.ClassDeclaration): { name: string; type: CType }[] {
+        const ancestry: ts.ClassDeclaration[] = [];
+        const visited = new Set<ts.ClassDeclaration>();
+        for (let base = this.baseClassDecl(cd); base; base = this.baseClassDecl(base)) {
+            if (visited.has(base)) unsupported(cd, "cyclic native class inheritance");
+            visited.add(base);
+            ancestry.push(base);
+        }
+        const fields = new Map<string, { name: string; type: CType }>();
+        for (const ancestor of ancestry.reverse()) {
+            for (const field of this.classOwnInstanceFields(ancestor)) {
+                const previous = fields.get(field.name);
+                if (previous && !sameCType(previous.type, field.type)) {
+                    unsupported(ancestor, "native inherited field redeclaration changes physical storage");
                 }
-            }
-        };
-        if (!cd.heritageClauses) return fields;
-        for (const h of cd.heritageClauses) {
-            if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-            for (const t of h.types) {
-                // Resolve base class declaration via checker.
-                const sym = this.checker.getSymbolAtLocation(t.expression);
-                if (!sym) continue;
-                const base = sym.getDeclarations()?.find(ts.isClassDeclaration);
-                if (!base) continue;
-                collect(base);
+                if (!previous) fields.set(field.name, field);
             }
         }
-        return fields;
+        return [...fields.values()];
     }
 
     private emitClassPrototypes(cd: ts.ClassDeclaration): void {
@@ -26319,6 +26349,7 @@ class Emitter {
                     unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
                 this.protos.line(`extern ${ft.c} ${name}_${mangleIdent(fieldName)};`);
+                if (ft.kind === "value") this.protos.line(`static void* volatile ${name}_${this.nativeFieldRootName(fieldName)};`);
             }
         }
         for (const m of cd.members) {
@@ -27591,6 +27622,9 @@ class Emitter {
                 if (!fieldName)
                     unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
+                if (mangleIdent(fieldName).startsWith("__tsc_root_")) {
+                    unsupported(m, "native aggregate field collides with internal storage");
+                }
                 this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }
@@ -27634,6 +27668,11 @@ class Emitter {
         this.defs.open(`static inline void ${name}_init(${initParams.join(", ")})`);
         const typeChain = this.classTypeChain(cd);
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
+        for (const field of this.classOwnInstanceFields(cd)) {
+            if (field.type.kind === "value") this.defs.line(
+                `${this.nativeFieldStore("self", name, field.name, field.type, "tsc_value_undefined()")};`,
+            );
+        }
         // Instance field initializers (only emitted if base hasn't run them; for
         // subclasses, super(...) call triggers base's own init which would run
         // base's field initializers — here we emit own-fields.).
@@ -27658,7 +27697,7 @@ class Emitter {
                     this.ensureDecoratorApplyFieldInitializersHelper();
                 }
                 this.defs.line(
-                    `self->${mangleIdent(fieldName)} = ${value};`,
+                    `${this.nativeFieldStore("self", name, fieldName, pt, value)};`,
                 );
             }
         }
@@ -27824,15 +27863,15 @@ class Emitter {
         const name = cd.name.text;
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m)) {
-                if (!isStatic(m) || !m.initializer) continue;
+                if (!isStatic(m)) continue;
                 const fieldName = this.staticPropertyName(m.name);
                 if (!fieldName)
                     unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
-                const init = this.emitExpr(m.initializer);
-                buf.line(
-                    `${name}_${mangleIdent(fieldName)} = ${this.coerce(init, ft, m.initializer)};`,
-                );
+                const value = m.initializer
+                    ? this.coerce(this.emitExpr(m.initializer), ft, m.initializer)
+                    : this.zeroValue(ft);
+                buf.line(`${this.nativeStaticFieldStore(name, fieldName, ft, value)};`);
                 continue;
             }
             if (ts.isClassStaticBlockDeclaration(m)) {
@@ -28388,7 +28427,7 @@ class Emitter {
     }
 
     private ensureClassInstanceFieldGetterAdapter(
-        owner: ts.ClassDeclaration,
+        owner: ts.ClassDeclaration | ts.InterfaceDeclaration,
         publicName: string,
         type: CType,
     ): string {
@@ -28414,7 +28453,7 @@ class Emitter {
     }
 
     private ensureClassInstanceFieldSetterAdapter(
-        owner: ts.ClassDeclaration,
+        owner: ts.ClassDeclaration | ts.InterfaceDeclaration,
         publicName: string,
         type: CType,
     ): string {
@@ -28431,7 +28470,7 @@ class Emitter {
         buf.open(signature);
         buf.line("(void)env;");
         buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(owner.name.text), owner)};`);
-        buf.line(`self->${fieldName} = ${this.coerce({ c: "value", ty: T_VALUE }, type, owner)};`);
+        buf.line(`${this.nativeFieldStore("self", owner.name.text, publicName, type, this.coerce({ c: "value", ty: T_VALUE }, type, owner))};`);
         buf.line("return true;");
         buf.close();
         buf.line();
@@ -28442,11 +28481,21 @@ class Emitter {
     private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
         const classLike = this.findClassLikeDecl(r.ty.className);
-        if (!classLike) return `tsc_value_class(${r.c})`;
+        const interfaces: ts.Node[] = classLike ? [] : [...this.graph.modules.values()].map(info => info.sf);
+        let nativeInterface: ts.InterfaceDeclaration | undefined;
+        while (interfaces.length > 0) {
+            const declaration = interfaces.pop()!;
+            if (ts.isInterfaceDeclaration(declaration) && declaration.name.text === r.ty.className) {
+                nativeInterface = declaration;
+                break;
+            }
+            ts.forEachChild(declaration, child => { interfaces.push(child); });
+        }
+        if (!classLike && !nativeInterface) return `tsc_value_class(${r.c})`;
         const cd = classLike as unknown as ts.ClassDeclaration;
         const obj = this.freshTemp("_class_box");
         const pieces = [`tsc_object_t* ${obj} = tsc_object_new_class(${r.c})`];
-        for (const { publicName, propertyKey, owner, method } of this.classInstanceMethodsForValueBox(cd)) {
+        for (const { publicName, propertyKey, owner, method } of classLike ? this.classInstanceMethodsForValueBox(cd) : []) {
             const adapter = this.ensureClassInstanceMethodValueAdapter(owner, method);
             const sig = this.checker.getSignatureFromDeclaration(method);
             const length = sig?.getParameters().length ?? method.parameters.length;
@@ -28455,7 +28504,10 @@ class Emitter {
                 `tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})), true, false, true)`,
             );
         }
-        for (const { publicName, owner, type } of this.classInstanceFieldsForValueBox(cd)) {
+        const fields = nativeInterface
+            ? this.interfaceFields(nativeInterface).map(field => ({ publicName: field.name, owner: nativeInterface!, type: field.type }))
+            : this.classInstanceFieldsForValueBox(cd);
+        for (const { publicName, owner, type } of fields) {
             const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, type);
             const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, type);
             pieces.push(
@@ -30426,8 +30478,8 @@ class Emitter {
                                 }
                                 const targetType = this.storageType(assignmentTarget);
                                 callback.line(
-                                    `${receiverTemp}->${mangleIdent(assignmentTarget.name.text)} = ` +
-                                    `${this.coerce(stagedValue, targetType, assignmentTarget)};`,
+                                    `${this.nativeFieldStore(receiverTemp, receiverType.className!, assignmentTarget.name.text, targetType,
+                                        this.coerce(stagedValue, targetType, assignmentTarget))};`,
                                 );
                                 return;
                             }
@@ -39403,17 +39455,17 @@ class Emitter {
                     unsupported(property.name, "lazy multi-yield object keys must be static");
                 const value = build(property.initializer);
                 const fieldType = this.objectFieldType(ol, targetType, name, property.name);
-                pieces.push(`${object}->${mangleIdent(name)} = ${this.coerce(value, fieldType, property.initializer)}`);
+                pieces.push(`${this.nativeFieldStore(object, cls, name, fieldType, this.coerce(value, fieldType, property.initializer))}`);
             } else if (ts.isShorthandPropertyAssignment(property)) {
                 const value = build(property.name);
                 const fieldType = this.objectFieldType(ol, targetType, property.name.text, property.name);
-                pieces.push(`${object}->${mangleIdent(property.name.text)} = ${this.coerce(value, fieldType, property.name)}`);
+                pieces.push(`${this.nativeFieldStore(object, cls, property.name.text, fieldType, this.coerce(value, fieldType, property.name))}`);
             } else if (ts.isMethodDeclaration(property)) {
                 const name = this.staticPropertyName(property.name) ??
                     unsupported(property.name, "lazy multi-yield typed object method keys must be static");
                 const value = this.emitClosureExpression(property);
                 const fieldType = this.objectFieldType(ol, targetType, name, property.name);
-                pieces.push(`${object}->${mangleIdent(name)} = ${this.coerce(value, fieldType, property)}`);
+                pieces.push(`${this.nativeFieldStore(object, cls, name, fieldType, this.coerce(value, fieldType, property))}`);
             } else if (ts.isSpreadAssignment(property)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(property.expression);
                 const source = build(property.expression);
@@ -39430,14 +39482,14 @@ class Emitter {
                             this.checker,
                         ));
                         const raw = { c: `${sourceTmp}->${mangleIdent(sourceProp.getName())}`, ty: sourceType };
-                        pieces.push(`${object}->${targetField.field} = ${this.coerce(raw, targetField.type, property.expression)}`);
+                        pieces.push(`${this.nativeFieldStore(object, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, property.expression))}`);
                     }
                 } else if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string") {
                     const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, property.expression);
                     for (const targetField of targetFields) {
                         const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
                         const raw = { c: `tsc_value_get_prop(${boxed}, ${key})`, ty: T_VALUE };
-                        pieces.push(`if (tsc_value_has_own_prop(${boxed}, ${key})) ${object}->${targetField.field} = ${this.coerce(raw, targetField.type, property.expression)}`);
+                        pieces.push(`if (tsc_value_has_own_prop(${boxed}, ${key})) ${this.nativeFieldStore(object, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, property.expression))}`);
                     }
                 }
             } else {
@@ -41862,7 +41914,7 @@ class Emitter {
                     : this.emitExpr(prop.initializer);
                 const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop.initializer)}`,
+                    `${this.nativeFieldStore(tmp, cls, fieldName, fieldType, this.coerce(val, fieldType, prop.initializer))}`,
                 );
             } else if (ts.isShorthandPropertyAssignment(prop)) {
                 const val = this.singleYieldExpressionInExpression(prop.name)
@@ -41870,7 +41922,7 @@ class Emitter {
                     : this.emitExpr(prop.name);
                 const fieldType = this.objectFieldType(ol, targetType, prop.name.text, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)}`,
+                    `${this.nativeFieldStore(tmp, cls, prop.name.text, fieldType, this.coerce(val, fieldType, prop.name))}`,
                 );
             } else if (ts.isMethodDeclaration(prop)) {
                 const fieldName = this.staticPropertyName(prop.name);
@@ -41883,7 +41935,7 @@ class Emitter {
                 const val = this.emitClosureExpression(prop);
                 const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop)}`,
+                    `${this.nativeFieldStore(tmp, cls, fieldName, fieldType, this.coerce(val, fieldType, prop))}`,
                 );
             } else if (ts.isSpreadAssignment(prop)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
@@ -41912,7 +41964,7 @@ class Emitter {
                             ty: sourceType,
                         };
                         pieces.push(
-                            `${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                            `${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
                         );
                     }
                     continue;
@@ -41926,7 +41978,7 @@ class Emitter {
                             ty: T_VALUE,
                         };
                         pieces.push(
-                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
                         );
                     }
                     continue;
@@ -43244,7 +43296,7 @@ class Emitter {
             if (stackObject) {
                 const storage = this.freshTemp(`_${name}_stack`);
                 const qual = isConst ? " const" : "";
-                buf.line(`${stackObject.cls}_t ${storage};`);
+                buf.line(`${stackObject.cls}_t ${storage} = {0};`);
                 for (const prop of stackObject.init.properties) {
                     if (ts.isPropertyAssignment(prop)) {
                         const fieldName = this.staticPropertyName(prop.name);
@@ -43256,11 +43308,11 @@ class Emitter {
                         }
                         const val = this.emitExpr(prop.initializer);
                         const fieldType = this.objectFieldType(stackObject.init, stackObject.targetType, fieldName, prop.name);
-                        buf.line(`${storage}.${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop.initializer)};`);
+                        buf.line(`${this.nativeFieldStore(`(&${storage})`, stackObject.cls, fieldName, fieldType, this.coerce(val, fieldType, prop.initializer))};`);
                     } else if (ts.isShorthandPropertyAssignment(prop)) {
                         const val = this.emitExpr(prop.name);
                         const fieldType = this.objectFieldType(stackObject.init, stackObject.targetType, prop.name.text, prop.name);
-                        buf.line(`${storage}.${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)};`);
+                        buf.line(`${this.nativeFieldStore(`(&${storage})`, stackObject.cls, prop.name.text, fieldType, this.coerce(val, fieldType, prop.name))};`);
                     } else {
                         unsupported(
                             prop,
@@ -49986,6 +50038,8 @@ class Emitter {
             if (moduleLexicalUpdate) return moduleLexicalUpdate;
             const globalUpdate = this.emitTest262GlobalUpdate(pu.operand, op, true);
             if (globalUpdate) return globalUpdate;
+            const nativeUpdate = this.emitRootedNativeFieldUpdate(pu.operand, op, true);
+            if (nativeUpdate) return nativeUpdate;
             const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
             if (dynamicUpdate) return dynamicUpdate;
         }
@@ -50175,6 +50229,8 @@ class Emitter {
                 false,
             );
             if (globalUpdate) return globalUpdate;
+            const nativeUpdate = this.emitRootedNativeFieldUpdate(pu.operand, pu.operator, false);
+            if (nativeUpdate) return nativeUpdate;
             const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, pu.operator, false);
             if (dynamicUpdate) return dynamicUpdate;
         }
@@ -51268,6 +51324,86 @@ class Emitter {
         ], ([left, right]) => reference.set(`${operation}(${left}, ${right})`));
     }
 
+    private rootedNativeFieldReference(expression: ts.Expression): {
+        setup: string[]; get: string; set: (value: string) => string;
+    } | null {
+        const expr = this.unwrapTransparentExpression(expression);
+        if (!ts.isPropertyAccessExpression(expr) && !ts.isElementAccessExpression(expr)) return null;
+        const field = ts.isPropertyAccessExpression(expr) ? expr.name.text
+            : this.staticPropertyName(ts.factory.createComputedPropertyName(expr.argumentExpression));
+        if (field === null) return null;
+        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return null;
+        if (ts.isIdentifier(expr.expression)) {
+            const symbol = this.checker.getSymbolAtLocation(expr.expression);
+            const owner = symbol?.getDeclarations()?.find(ts.isClassDeclaration);
+            const declaration = owner?.members.find(member => ts.isPropertyDeclaration(member) &&
+                isStatic(member) && this.staticPropertyName(member.name) === field);
+            if (owner?.name && declaration) {
+                const type = mapType(declaration, this.checker);
+                if (type.kind !== "value") return null;
+                const name = owner.name.text;
+                return { setup: [], get: `${name}_${mangleIdent(field)}`,
+                    set: value => this.nativeStaticFieldStore(name, field, type, value) };
+            }
+        }
+        const receiver = this.emitExpr(expr.expression);
+        if (receiver.ty.kind !== "class") return null;
+        const receiverType = this.expressionDeclaredOrCurrentType(expr.expression);
+        const symbol = receiverType.getProperty(field);
+        if (symbol?.getDeclarations()?.some(decl => ts.isAccessor(decl) || ts.isMethodDeclaration(decl))) return null;
+        const type = this.objectFieldType(expr, receiverType, field, expr);
+        if (type.kind !== "value") return null;
+        const aggregate = receiver.ty.className!;
+        const object = this.freshTemp("_native_field_owner");
+        const slot = `tsc_value_native_field_slot(${object}, offsetof(${aggregate}_t, ${mangleIdent(field)}))`;
+        const offset = `(ptrdiff_t)offsetof(${aggregate}_t, ${this.nativeFieldRootName(field)}) - ` +
+            `(ptrdiff_t)offsetof(${aggregate}_t, ${mangleIdent(field)})`;
+        return {
+            setup: [`${receiver.ty.c} ${object} = ${receiver.c}`],
+            get: `*${slot}`,
+            set: value => `tsc_value_native_field_store(${slot}, ${offset}, ${value})`,
+        };
+    }
+
+    private emitRootedNativeFieldAssignment(bin: ts.BinaryExpression, op: ts.SyntaxKind): EmitResult | null {
+        const reference = this.rootedNativeFieldReference(bin.left);
+        if (!reference) return null;
+        const right = this.emitExpr(bin.right);
+        let result: EmitResult;
+        if (op === ts.SyntaxKind.EqualsToken) {
+            result = this.emitSequencedExpr(T_VALUE, [{ value: right, target: T_VALUE, node: bin.right }],
+                ([value]) => reference.set(value!));
+        } else if (this.isLogicalAssignmentOperator(op)) {
+            const assign = reference.set(this.coerce(right, T_VALUE, bin.right));
+            result = this.emitSequencedExpr(T_VALUE, [{ value: { c: reference.get, ty: T_VALUE }, node: bin.left }],
+                ([current]) => {
+                    const condition = op === ts.SyntaxKind.QuestionQuestionEqualsToken ? `tsc_value_is_nullish(${current})`
+                        : op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ? `tsc_value_is_truthy(${current})`
+                        : `!tsc_value_is_truthy(${current})`;
+                    return `(${condition} ? ${assign} : ${current})`;
+                });
+        } else {
+            const operation = this.dynamicCompoundAssignmentOperation(op);
+            if (!operation) unsupported(bin, "boxed native field compound assignment has no ordinary operation");
+            result = this.emitSequencedExpr(T_VALUE, [
+                { value: { c: reference.get, ty: T_VALUE }, node: bin.left },
+                { value: right, target: T_VALUE, node: bin.right },
+            ], ([current, value]) => reference.set(`${operation}(${current}, ${value})`));
+        }
+        return { c: `({ ${reference.setup.map(line => line + "; ").join("")}${result.c}; })`, ty: T_VALUE };
+    }
+
+    private emitRootedNativeFieldUpdate(operand: ts.Expression, op: ts.SyntaxKind, prefix: boolean): EmitResult | null {
+        const reference = this.rootedNativeFieldReference(operand);
+        if (!reference) return null;
+        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        const result = this.emitSequencedExpr(T_VALUE, [
+            { value: { c: `tsc_value_to_numeric(${reference.get})`, ty: T_VALUE }, node: operand },
+        ], ([current]) => prefix ? reference.set(`${operation}(${current})`)
+            : `({ ${reference.set(`${operation}(${current})`)}; ${current}; })`);
+        return { c: `({ ${reference.setup.map(line => line + "; ").join("")}${result.c}; })`, ty: T_VALUE };
+    }
+
     private emitAssignment(
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
@@ -51292,6 +51428,9 @@ class Emitter {
 
         const classAccessorAssignment = this.emitClassAccessorAssignment(bin, op);
         if (classAccessorAssignment) return classAccessorAssignment;
+
+        const nativeFieldAssignment = this.emitRootedNativeFieldAssignment(bin, op);
+        if (nativeFieldAssignment) return nativeFieldAssignment;
 
         const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
         if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
@@ -51830,12 +51969,17 @@ class Emitter {
                             isStatic(m),
                     );
                     if (field) {
+                        if (mapType(field, this.checker).kind === "value") unsupported(expr,
+                            "boxed native field writes require a rooted reference across suspension");
                         return `${cd.name.text}_${mangleIdent(expr.name.text)}`;
                     }
                 }
             }
             const recv = this.emitExpr(expr.expression);
             if (recv.ty.kind === "class") {
+                if (this.objectFieldType(expr, this.expressionDeclaredOrCurrentType(expr.expression), expr.name.text, expr).kind === "value") {
+                    unsupported(expr, "boxed native field writes require a rooted reference across suspension");
+                }
                 return `${recv.c}->${mangleIdent(expr.name.text)}`;
             }
             unsupported(expr, `lvalue on ${recv.ty.c}`);
@@ -70577,16 +70721,6 @@ class Emitter {
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
     }
 
-    private defaultValueForType(ty: CType): string {
-        switch (ty.kind) {
-            case "number": return "0.0";
-            case "boolean": return "false";
-            case "string": return `tsc_str_from_lit("", 0)`;
-            case "void": return "NULL";
-            default: return `((${ty.c})NULL)`;
-        }
-    }
-
     private emitObjectEntries(
         call: ts.CallExpression,
         arg: ts.Expression,
@@ -70683,13 +70817,13 @@ class Emitter {
         for (const p of props) {
             const name = p.getName();
             pieces.push(
-                `${obj}->${mangleIdent(name)} = ${this.defaultValueForType(valueType)}`,
+                this.nativeFieldStore(obj, target.className!, name, valueType, this.zeroValue(valueType)),
             );
         }
         const assigns = props
             .map((p) => {
                 const name = p.getName();
-                return `if (tsc_str_eq(${entry}.key, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${obj}->${mangleIdent(name)} = ${this.objectEntryValue(entry, valueType)}`;
+                return `if (tsc_str_eq(${entry}.key, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${this.nativeFieldStore(obj, target.className!, name, valueType, this.objectEntryValue(entry, valueType))}`;
             })
             .join("; ");
         pieces.push(
@@ -71901,7 +72035,7 @@ class Emitter {
                             ty: sourceType,
                         };
                         assignments.push(
-                            `${targetC}->${targetField.field} = ${this.coerce(raw, targetField.type, source.node)}`,
+                            `${this.nativeFieldStore(targetC, target.ty.className!, targetField.name, targetField.type, this.coerce(raw, targetField.type, source.node))}`,
                         );
                     }
                     pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
@@ -71916,7 +72050,7 @@ class Emitter {
                             ty: T_VALUE,
                         };
                         assignments.push(
-                            `if (tsc_value_has_own_prop(${sourceC}, ${key})) ${targetC}->${targetField.field} = ${this.coerce(raw, targetField.type, source.node)}`,
+                            `if (tsc_value_has_own_prop(${sourceC}, ${key})) ${this.nativeFieldStore(targetC, target.ty.className!, targetField.name, targetField.type, this.coerce(raw, targetField.type, source.node))}`,
                         );
                     }
                     pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
@@ -73075,7 +73209,7 @@ class Emitter {
                 const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
                 const assignment = this.coerce({ c: valueC, ty: T_VALUE }, fieldType, valueExpr);
                 checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${objC}->${mangleIdent(name)} = ${assignment}; ${ok} = true; }`,
+                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${this.nativeFieldStore(objC, obj.ty.className!, name, fieldType, assignment)}; ${ok} = true; }`,
                 );
             }
             checks.push(ok);
@@ -75202,7 +75336,7 @@ class Emitter {
                         isStatic(m),
                 );
                 if (field) {
-                    const ft = mapType(pa, this.checker);
+                    const ft = mapType(field, this.checker);
                     return {
                         c: `${classDecl.name.text}_${mangleIdent(pa.name.text)}`,
                         ty: ft,
@@ -75483,54 +75617,20 @@ class Emitter {
             }
         }
         if (recv.ty.kind === "class") {
-            const ty = mapType(pa, this.checker);
-            const storageTy = this.expressionStorageType(pa.expression);
-            if (storageTy?.kind === "value") {
-                const key = pa.name.text;
-                const cache = this.freshTemp("_prop_cache");
-                const value: EmitResult = {
-                    c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
-                    ty: T_VALUE,
-                };
-                const narrowed = this.prepareType(ty);
-                if (
-                    narrowed.kind === "number" ||
-                    narrowed.kind === "boolean" ||
-                    narrowed.kind === "string" ||
-                    narrowed.kind === "array"
-                ) {
-                    return { c: this.coerce(value, narrowed, pa), ty: narrowed };
-                }
-                return value;
-            }
             const getter = this.classAccessorForPropertyAccess(pa, "get");
             if (getter && !isStatic(getter.decl)) {
                 return this.emitClassAccessorGet(pa, getter, recv);
             }
+            const type = this.propertyDeclaredType(pa) ?? mapType(pa, this.checker);
             if (isOpt) {
-                const tv = this.freshTemp("_oc");
-                if (ty.kind === "value") {
-                    const fieldTy = this.propertyDeclaredType(pa);
-                    if (!fieldTy) unsupported(pa, "optional dynamic class property requires a declared field type");
-                    const present = this.coerce(
-                        { c: `${tv}->${mangleIdent(pa.name.text)}`, ty: fieldTy },
-                        T_VALUE,
-                        pa,
-                    );
-                    const missing = fieldTy.kind === "number" || fieldTy.kind === "boolean"
-                        ? this.coerce({ c: this.zeroValue(fieldTy), ty: fieldTy }, T_VALUE, pa)
-                        : "tsc_value_undefined()";
-                    return {
-                        c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${present} : ${missing}; })`,
-                        ty,
-                    };
-                }
+                const object = this.freshTemp("_optional_native_owner");
+                const value = this.coerce({ c: `${object}->${mangleIdent(pa.name.text)}`, ty: type }, T_VALUE, pa);
                 return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${tv}->${mangleIdent(pa.name.text)} : ${this.zeroValue(ty)}; })`,
-                    ty,
+                    c: `({ ${recv.ty.c} ${object} = ${recv.c}; ${object} != NULL ? ${value} : tsc_value_undefined(); })`,
+                    ty: T_VALUE,
                 };
             }
-            return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty };
+            return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty: type };
         }
         unsupported(pa, `property .${pa.name.text} on ${recv.ty.c}`);
     }
@@ -75540,30 +75640,6 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!sym || !decl) return null;
         return this.prepareType(mapTsType(pa.name, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
-    }
-
-    private expressionStorageType(expr: ts.Expression): CType | null {
-        if (ts.isIdentifier(expr)) {
-            const sym = this.checker.getSymbolAtLocation(expr);
-            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-            if (!sym || !decl) return null;
-            try {
-                return this.prepareType(mapTsType(expr, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
-            } catch {
-                return null;
-            }
-        }
-        if (ts.isPropertyAccessExpression(expr)) {
-            const sym = this.checker.getSymbolAtLocation(expr.name);
-            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-            if (!sym || !decl) return null;
-            try {
-                return this.prepareType(mapTsType(expr, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
-            } catch {
-                return null;
-            }
-        }
-        return null;
     }
 
     private enumConstantValue(pa: ts.PropertyAccessExpression): number | string | undefined {
@@ -76007,13 +76083,13 @@ class Emitter {
                 const val = this.emitExpr(prop.initializer);
                 const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop.initializer)}`,
+                    `${this.nativeFieldStore(tmp, cls, fieldName, fieldType, this.coerce(val, fieldType, prop.initializer))}`,
                 );
             } else if (ts.isShorthandPropertyAssignment(prop)) {
                 const val = this.emitExpr(prop.name);
                 const fieldType = this.objectFieldType(ol, targetType, prop.name.text, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(prop.name.text)} = ${this.coerce(val, fieldType, prop.name)}`,
+                    `${this.nativeFieldStore(tmp, cls, prop.name.text, fieldType, this.coerce(val, fieldType, prop.name))}`,
                 );
             } else if (ts.isMethodDeclaration(prop)) {
                 const fieldName = this.staticPropertyName(prop.name);
@@ -76026,7 +76102,7 @@ class Emitter {
                 const val = this.emitClosureExpression(prop);
                 const fieldType = this.objectFieldType(ol, targetType, fieldName, prop.name);
                 pieces.push(
-                    `${tmp}->${mangleIdent(fieldName)} = ${this.coerce(val, fieldType, prop)}`,
+                    `${this.nativeFieldStore(tmp, cls, fieldName, fieldType, this.coerce(val, fieldType, prop))}`,
                 );
             } else if (ts.isSpreadAssignment(prop)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
@@ -76053,7 +76129,7 @@ class Emitter {
                             ty: sourceType,
                         };
                         pieces.push(
-                            `${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                            `${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
                         );
                     }
                     continue;
@@ -76067,7 +76143,7 @@ class Emitter {
                             ty: T_VALUE,
                         };
                         pieces.push(
-                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${tmp}->${targetField.field} = ${this.coerce(raw, targetField.type, prop.expression)}`,
+                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
                         );
                     }
                     continue;

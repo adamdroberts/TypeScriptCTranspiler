@@ -877,6 +877,11 @@ bool tsc_value_is_promise(tsc_value_t v);
  * for an immediate value.  Long-lived state that stores tsc_value_t must
  * retain this companion pointer so a conservative collector can see it. */
 void* tsc_value_gc_root(tsc_value_t v);
+/* Native aggregate fields and static cells keep decoded roots in their owner.
+ * Stores return the actual assigned value and release the prior referent. */
+tsc_value_t tsc_value_store_rooted(tsc_value_t* slot, void* volatile* root, tsc_value_t value);
+tsc_value_t tsc_value_native_field_store(tsc_value_t* slot, ptrdiff_t root_offset, tsc_value_t value);
+tsc_value_t* tsc_value_native_field_slot(void* owner, size_t field_offset);
 tsc_promise_t* tsc_value_as_promise(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 /* Host diagnostics inspect intrinsic storage without invoking user coercion. */
