@@ -1,7 +1,7 @@
 const proto: any = Array.prototype;
 const item: any = {
-    toLocaleString: function (locale: any, options: any, extra: any): string {
-        return String(locale) + ":" + String(options.style) + ":" + String(extra);
+    toLocaleString: function (...args: any[]): string {
+        return "arguments:" + args.length;
     },
 };
 const like: any = { 0: item, length: 1 };

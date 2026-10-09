@@ -20,6 +20,7 @@ interface Symbol {
     valueOf(...ignored: any[]): symbol;
 }
 interface SymbolConstructor {
+    readonly prototype: Symbol;
     readonly match: unique symbol;
     readonly matchAll: unique symbol;
     readonly search: unique symbol;
@@ -226,6 +227,7 @@ interface BigInt {
 }
 interface BigIntConstructor {
     (value: string | number | boolean, ...ignored: any[]): bigint;
+    readonly prototype: BigInt;
 }
 declare var BigInt: BigIntConstructor;
 interface IArguments {

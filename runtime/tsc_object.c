@@ -153,8 +153,10 @@ static tsc_value_t object_prototype_to_string(void* env, tsc_value_t this_arg, t
 static tsc_value_t object_prototype_to_locale_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    object_prototype_require_receiver(this_arg, "toLocaleString");
-    return tsc_value_string(tsc_value_to_string(this_arg));
+    void* volatile receiver_gc_root = tsc_value_gc_root(this_arg);
+    (void)receiver_gc_root;
+    tsc_array_t* volatile empty_args = tsc_array_new(sizeof(tsc_value_t), 0);
+    return tsc_value_invoke(this_arg, tsc_str_from_lit("toString", 8), empty_args);
 }
 
 static tsc_value_t object_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {

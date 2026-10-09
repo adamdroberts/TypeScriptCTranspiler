@@ -15,12 +15,12 @@ obj.toLocaleString = 7;
 try {
     console.log(obj.toLocaleString());
 } catch (e) {
-    console.log("bad object:", e);
+    console.log("bad object:", e instanceof TypeError);
 }
 
 const bare: any = Object.create(null);
 try {
     console.log(bare.toLocaleString());
 } catch (e) {
-    console.log("bare object:", e);
+    console.log("bare object:", e instanceof TypeError);
 }

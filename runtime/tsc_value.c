@@ -868,6 +868,21 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
     return tsc_value_string(tsc_value_to_string(primitive));
 }
 
+/* The documented ECMA-262 fallback excludes ECMA-402, ignores reserved
+ * options, and formats Number/BigInt through their intrinsic decimal text. */
+static tsc_value_t primitive_prototype_to_locale_string(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)args;
+    const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(descriptor, receiver, &primitive))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("numeric toLocaleString called on incompatible receiver"));
+    void* volatile primitive_gc_root = tsc_value_gc_root(primitive);
+    (void)primitive_gc_root;
+    return tsc_value_string(descriptor->kind == TSC_PRIMITIVE_NUMBER
+        ? tsc_str_from_num(value_as_num(primitive))
+        : tsc_bigint_to_string((const tsc_bigint_t*)value_ptr(primitive), 10.0));
+}
+
 typedef enum {
     TSC_NUMBER_FORMAT_FIXED,
     TSC_NUMBER_FORMAT_EXPONENTIAL,
@@ -1607,9 +1622,11 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
         tsc_runtime_lock();
         if (!descriptor->prototype) {
             tsc_object_t* prototype = tsc_object_new();
-            prototype->has_primitive_value = true;
+            prototype->has_primitive_value = descriptor->kind == TSC_PRIMITIVE_NUMBER ||
+                descriptor->kind == TSC_PRIMITIVE_BOOLEAN || descriptor->kind == TSC_PRIMITIVE_STRING;
             prototype->primitive_kind = (uint8_t)descriptor->kind;
-            prototype->primitive_value = primitive_default(descriptor);
+            prototype->primitive_value = prototype->has_primitive_value
+                ? primitive_default(descriptor) : tsc_value_undefined();
             prototype->primitive_value_root = tsc_value_gc_root(prototype->primitive_value);
             if (descriptor->kind == TSC_PRIMITIVE_STRING) {
                 tsc_object_define(
@@ -1647,6 +1664,14 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
             }
             if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
                 number_prototype_install_intrinsics(prototype);
+            }
+            if (descriptor->kind == TSC_PRIMITIVE_SYMBOL) {
+                symbol_prototype_install_intrinsics(tsc_value_object(prototype));
+            }
+            if (descriptor->kind == TSC_PRIMITIVE_NUMBER || descriptor->kind == TSC_PRIMITIVE_BIGINT) {
+                tsc_object_define(prototype, tsc_str_from_lit("toLocaleString", 14),
+                    tsc_value_function_builtin_named(primitive_prototype_to_locale_string, descriptor,
+                        0.0, tsc_str_from_lit("toLocaleString", 14)), true, false, true);
             }
             descriptor->prototype = prototype;
         }
@@ -1914,7 +1939,6 @@ tsc_value_t tsc_symbol_constructor_value(void) {
         tsc_str_from_lit("Symbol", 6)
     );
     primitive_link_nonconstructable_constructor(&primitive_symbol, constructor);
-    symbol_prototype_install_intrinsics(primitive_prototype(&primitive_symbol));
     symbol_constructor_define_value(
         constructor,
         "for",
@@ -8236,19 +8260,17 @@ tsc_value_t tsc_value_method_match_all(tsc_value_t receiver, tsc_value_t pattern
     return tsc_value_apply_function(method, regexp, tsc_value_array(args));
 }
 
-tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args) {
-    if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION)) {
-        tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toLocaleString", 14));
-        if (tsc_value_is_callable(fn)) {
-            return tsc_value_to_string(tsc_value_apply_function(fn, recv, tsc_value_array(args)));
-        }
-        tsc_throw_str(tsc_str_from_cstr("toLocaleString is not a function"));
-    }
-    return tsc_value_to_string(recv);
-}
-
-tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
-    return tsc_value_method_to_locale_string_args(recv, tsc_array_new(sizeof(tsc_value_t), 0));
+tsc_value_t tsc_value_invoke(tsc_value_t receiver, const tsc_str_t* name, tsc_array_t* args) {
+    void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
+    const tsc_str_t* volatile name_gc_root = name;
+    tsc_array_t* volatile arguments_gc_root = args;
+    (void)receiver_gc_root; (void)name_gc_root; (void)arguments_gc_root;
+    if (tsc_value_is_nullish(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot invoke a method on null or undefined"));
+    const tsc_value_t method = tsc_value_get_prop(receiver, name);
+    void* volatile method_gc_root = tsc_value_gc_root(method);
+    (void)method_gc_root;
+    return tsc_value_apply_function(method, receiver, tsc_value_array(args));
 }
 
 static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen) {

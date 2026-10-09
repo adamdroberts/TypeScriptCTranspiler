@@ -123,12 +123,19 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "isWellFormed",
     "toWellFormed",
     "toString",
+    "toLocaleString",
     "valueOf",
     "trim",
     "trimEnd",
     "trimLeft",
     "trimRight",
     "trimStart",
+]);
+
+const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
+    ...ORDINARY_STRING_PROTOTYPE_METHODS,
+    "toFixed", "toExponential", "toPrecision",
+    "keys", "values", "entries", "forEach", "reduce", "reduceRight",
 ]);
 
 const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
@@ -1488,9 +1495,10 @@ class Emitter {
             return this.isSideEffectFreeDeleteExpression(expr, seenConsts);
         }
         if (ts.isCallExpression(expr)) {
+            if (ts.isPropertyAccessExpression(expr.expression) &&
+                ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text)) return false;
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
-                this.isSideEffectFreeObjectPrototypeToLocaleStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveObjectValueOfCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveMethodCall(expr, seenConsts) ||
@@ -1734,9 +1742,6 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1943,9 +1948,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -3661,45 +3663,6 @@ class Emitter {
         );
     }
 
-    private isSideEffectFreeObjectPrototypeToLocaleStringCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isCallExpression(unwrapped)) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-            return !!init && this.isSideEffectFreeObjectPrototypeToLocaleStringCall(init, seenConsts);
-        }
-        if (!ts.isPropertyAccessExpression(unwrapped.expression) || unwrapped.expression.name.text !== "call") {
-            return false;
-        }
-        const methodAccess = unwrapped.expression.expression;
-        if (
-            !ts.isPropertyAccessExpression(methodAccess) ||
-            methodAccess.name.text !== "toLocaleString"
-        ) {
-            return false;
-        }
-        const prototypeAccess = methodAccess.expression;
-        if (
-            !ts.isPropertyAccessExpression(prototypeAccess) ||
-            prototypeAccess.name.text !== "prototype" ||
-            !ts.isIdentifier(prototypeAccess.expression) ||
-            !this.isUnshadowedGlobalIdentifier(prototypeAccess.expression, "Object") ||
-            unwrapped.arguments.length < 1
-        ) {
-            return false;
-        }
-        const receiver = unwrapped.arguments[0]!;
-        return (
-            this.isSideEffectFreeStringCoercion(receiver, seenConsts) ||
-            this.isSideEffectFreeNonStringPrimitiveObjectOperand(receiver, seenConsts) ||
-            this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(receiver, seenConsts)
-        ) &&
-            Array.from(unwrapped.arguments).slice(1).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-    }
 
     private isSideEffectFreeObjectPrototypeReadonlyCall(
         expr: ts.Expression,
@@ -7413,9 +7376,6 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -7516,9 +7476,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
@@ -9111,9 +9068,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeObjectPrototypeToLocaleStringCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
@@ -53289,7 +53243,6 @@ class Emitter {
             method !== "__defineSetter__" &&
             method !== "__lookupGetter__" &&
             method !== "__lookupSetter__" &&
-            method !== "toLocaleString" &&
             method !== "toString" &&
             method !== "valueOf"
         ) return null;
@@ -53347,7 +53300,7 @@ class Emitter {
                 ([t, k]) => `${fn}(${t}, ${k})`,
             );
         }
-        const isTargetOnlyCall = method === "toString" || method === "toLocaleString" || method === "valueOf";
+        const isTargetOnlyCall = method === "toString" || method === "valueOf";
         const minArgs = isTargetOnlyCall ? 1 : 2;
         if (call.arguments.length < minArgs) {
             if (isTargetOnlyCall) unsupported(call, `Object.prototype.${method}.call expects target`);
@@ -53370,34 +53323,6 @@ class Emitter {
                 { value: target, node: targetNode },
                 ...this.ignoredArgumentSpecs(call.arguments, 1),
             ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
-        }
-        if (method === "toLocaleString") {
-            if (target.ty.kind === "array") {
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: target, node: targetNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([arr]) => this.emitArrayJoinStringExpr(arr!, target.ty.elem ?? T_VALUE, `tsc_str_from_lit(",", 1)`));
-            }
-            if (mapped.kind === "class") {
-                const text = "[object Object]";
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: target, node: targetNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
-            }
-            if (mapped.kind === "value") {
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([value]) => this.objectPrototypeRequireObjectCoercible(method, value!, `tsc_value_to_string(${value})`));
-            }
-            return this.emitSequencedExpr(T_STRING, [
-                { value: target, node: targetNode },
-                ...this.ignoredArgumentSpecs(call.arguments, 1),
-            ], ([value]) => {
-                const stringified = this.coerceToString({ c: value!, ty: target.ty }, targetNode);
-                return stringified;
-            });
         }
         if (method === "valueOf") {
             if (mapped.kind === "value") {
@@ -53593,26 +53518,7 @@ class Emitter {
         }
     }
 
-    private emitArrayJoinStringExpr(arr: string, elemType: CType, sep: string): string {
-        const av = this.freshTemp("_arr");
-        const iv = this.freshTemp("_i");
-        const stringify = (exprC: string): string => {
-            if (elemType.kind === "string") return exprC;
-            if (elemType.kind === "number") return `tsc_str_from_num(${exprC})`;
-            if (elemType.kind === "boolean") return `tsc_str_from_bool(${exprC})`;
-            if (elemType.kind === "value") return `tsc_value_to_string(${exprC})`;
-            return `tsc_str_from_lit("[obj]", 5)`;
-        };
-        return (
-            `({ tsc_array_t* const ${av} = ${arr}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
-            `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-            `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${elemType.c}, ${av}, ${iv})`)}); } _r; })`
-        );
-    }
 
-    /** One actual argument List and lazy application boundary serves ordinary
-     * value calls and named property calls, including optional and spread
-     * syntax. The caller stages/root-resolves its callee and receiver first. */
     private emitOrdinaryCallApplication(
         call: ts.CallExpression,
         fn: string,
@@ -56728,10 +56634,7 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
-        if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method) ||
-            method === "toFixed" || method === "toExponential" || method === "toPrecision" ||
-            method === "keys" || method === "values" || method === "entries" ||
-            method === "forEach" || method === "reduce" || method === "reduceRight") {
+        if (ORDINARY_VALUE_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -57203,27 +57106,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
-            case "toLocaleString":
-                {
-                    const localeArgs = Array.from(args.slice(0, 2), (arg) => this.emitExpr(arg));
-                    return this.emitSequencedExpr(
-                        T_STRING,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            ...localeArgs.map((value, index) => ({ value, target: T_VALUE, node: args[index]! })),
-                            ...this.ignoredArgumentSpecs(args, 2),
-                        ],
-                        ([v, ...vals]) => {
-                            const av = this.freshTemp("_locale_args");
-                            const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
-                            for (const value of vals) {
-                                pieces.push(`tsc_array_push_value(${av}, ${value})`);
-                            }
-                            pieces.push(`tsc_value_method_to_locale_string_args(${v}, ${av})`);
-                            return `({ ${pieces.join("; ")}; })`;
-                        },
-                    );
-                }
         }
         return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
     }
@@ -63613,26 +63495,9 @@ class Emitter {
                     ([array, prop]) => `${fn}(${array}, ${prop})`,
                 );
             }
-            case "toLocaleString": {
-                if (et.kind === "value") {
-                    const specs: SequencedCallArg[] = [{ value: recv }];
-                    for (const arg of args) {
-                        specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
-                    }
-                    return this.emitSequencedExpr(T_STRING, specs, ([arr, ...values]) => {
-                        const localeArgs = this.freshTemp("_locale_args");
-                        const pieces = [`tsc_array_t* ${localeArgs} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`];
-                        for (const value of values) pieces.push(`tsc_array_push_value(${localeArgs}, ${value})`);
-                        pieces.push(`tsc_value_method_to_locale_string_args(tsc_value_array(${arr}), ${localeArgs})`);
-                        return `({ ${pieces.join("; ")}; })`;
-                    });
-                }
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) => emitJoinStringExpr(arr!, `tsc_str_from_lit(",", 1)`),
-                );
-            }
+            case "toLocaleString":
+                return this.emitDynamicNamedPropertyCall(call, recv, method,
+                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
             case "toString":
                 return this.emitSequencedExpr(
                     T_STRING,
@@ -64575,17 +64440,11 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
-        const args = call.arguments;
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
-            return this.emitDynamicNamedPropertyCall(call, recv, method, false);
+            return this.emitDynamicNamedPropertyCall(call, recv, method,
+                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         }
         switch (method) {
-            case "toLocaleString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([s]) => s!,
-                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
@@ -64647,24 +64506,15 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
-        const args = call.arguments;
         switch (method) {
             case "toString":
             case "toFixed":
             case "toExponential":
             case "toPrecision":
+            case "toLocaleString":
             case "valueOf":
                 return this.emitDynamicNamedPropertyCall(call, recv, method,
                     ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-            case "toLocaleString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [
-                        { value: recv, target: T_NUMBER, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([value]) => `tsc_str_from_num(${value})`,
-                );
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Number");
@@ -64745,6 +64595,8 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toLocaleString":
+                return this.emitDynamicNamedPropertyCall(call, recv, method,
+                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
             case "toString":
                 return this.emitSequencedExpr(
                     T_STRING,
@@ -64848,6 +64700,8 @@ class Emitter {
     ): EmitResult {
         switch (method) {
             case "toLocaleString":
+                return this.emitDynamicNamedPropertyCall(call, recv, method,
+                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
             case "toString": {
                 return this.emitSequencedExpr(
                     T_STRING,
@@ -64907,11 +64761,8 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toLocaleString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([value]) => `tsc_bigint_to_string(${value}, 10.0)`,
-                );
+                return this.emitDynamicNamedPropertyCall(call, recv, method,
+                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
             case "toString": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 const hasRadix = !!args[0] && !this.isUndefinedExpression(args[0]);
@@ -74841,8 +74692,8 @@ class Emitter {
             ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
             : rawRecv;
         const isOpt = !!pa.questionDotToken;
-        if (recv.ty.kind === "number") {
-            const cache = this.freshTemp("_number_prop_cache");
+        if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
+            const cache = this.freshTemp("_primitive_prop_cache");
             return {
                 c: `({ static tsc_prop_cache_t ${cache}; ` +
                     `tsc_value_get_prop_cached(${this.coerce(recv, T_VALUE, pa.expression)}, ${this.stringLit(pa.name.text)}, &${cache}); })`,
@@ -74893,13 +74744,6 @@ class Emitter {
                 };
             }
             return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
-        }
-        if (recv.ty.kind === "symbol" && pa.name.text === "description") {
-            const description = this.freshTemp("_symbol_description");
-            return {
-                c: `({ tsc_str_t* ${description} = tsc_symbol_description(${recv.c}); ${description} ? tsc_value_string(${description}) : tsc_value_undefined(); })`,
-                ty: T_VALUE,
-            };
         }
         if (recv.ty.kind === "regexp") {
             return { c: `tsc_value_get_prop(tsc_value_regexp(${recv.c}), ${this.stringLit(pa.name.text)})`, ty: T_VALUE };
@@ -75329,7 +75173,7 @@ class Emitter {
             }
             return { c: `tsc_buffer_get(${recv.c}, ${idx.c})`, ty: T_NUMBER };
         }
-        if (recv.ty.kind === "number") {
+        if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: ea.expression },

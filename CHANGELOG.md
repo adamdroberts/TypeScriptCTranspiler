@@ -1,5 +1,7 @@
 # Changelog
 
+- Share rooted ordinary locale invocation across Object, Array and numeric primitives. Preserve actual results/receivers, single ordered length conversion, live indexed access, empty element argument Lists and exact exceptions. Document the non-402 decimal/comma fallback, install Realm-owned Number/BigInt methods, expose BigInt/Symbol prototype declarations and remove their false instance data. Replace native primitive/Array locale shortcuts and unsafe purity admission; delete coercion/join and Object-call predecessors.
+
 - Round requested Number decimal precision exactly through one rational coefficient/digit/point representation shared with shortest text. Preserve halfway selection, decimal carries, zero/significant widths and specified range/non-finite order. Install ordinary Realm-owned toFixed/toExponential/toPrecision methods, share actual receiver/ToNumber intake and route typed valueOf through ordinary lookup. Delete capped snprintf formatters, manual decimal rounding and direct dynamic/native formatting predecessors; verify independent rational rounding cells and typed Node observations in both memory modes.
 
 - Resolve typed Number toString and method values through ordinary prototype lookup and shared ToNumber radix coercion. Unify named/value calls around one rooted actual-argument List with lazy optional application; preserve lookup order, spread effects, actual return values and exact coercion exceptions. Delete the direct formatter call and unreachable dynamic/runtime toString predecessor.

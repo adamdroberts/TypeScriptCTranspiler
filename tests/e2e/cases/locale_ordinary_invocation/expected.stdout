@@ -1,0 +1,10 @@
+symbol first: before-prototype
+fallback: 1234.5 1234
+methods: true true
+brand: true
+brand: true
+object: true GC
+noncallable: true
+array: first:0,middle, LVIGCstring
+lookup: GABDC true 3
+unused: GC

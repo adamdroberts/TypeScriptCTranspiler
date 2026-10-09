@@ -294,7 +294,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     // Primitive wrapper interfaces describe ordinary objects, whose shared
     // runtime representation retains [[PrimitiveData]] and object identity.
     const wrapperSymbol = t.getSymbol();
-    if (wrapperSymbol && ["Number", "String", "Boolean"].includes(wrapperSymbol.getName()) &&
+    if (wrapperSymbol && ["Number", "String", "Boolean", "BigInt", "Symbol"].includes(wrapperSymbol.getName()) &&
         (wrapperSymbol.getDeclarations() ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile)) {
         return T_VALUE;
     }

@@ -1,8 +1,8 @@
 function localeItem(label: string): any {
     return {
         label,
-        toLocaleString: function (this: any, locale: any, options: any): string {
-            return String(this.label) + ":" + String(locale) + ":" + String(options.style);
+        toLocaleString: function (this: any, ...args: any[]): string {
+            return String(this.label) + ":" + args.length;
         },
     };
 }
