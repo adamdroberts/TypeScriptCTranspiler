@@ -2450,7 +2450,7 @@ export function planAsyncControlFlowGraph(
     const terminalId = reserve();
     const terminal = planAsyncFunctionCompletionEdge(unreachableCompletion, (expression) => expression)!;
     states[terminalId] = { kind: "completion", id: terminalId, completion: terminal, exceptionTarget: null };
-    const entry = buildSequence(body.statements, target(terminalId), {
+    const entry = buildLexicalBlock(body, target(terminalId), {
         loop: null,
         breakTarget: null,
         labels: new Map(),

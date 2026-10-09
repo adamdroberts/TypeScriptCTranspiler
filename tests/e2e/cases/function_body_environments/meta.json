@@ -1,0 +1,1 @@
+{"description":"Function body declaration environments retain hoisted closures and captures across invocations and async suspension."}

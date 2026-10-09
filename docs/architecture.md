@@ -78,6 +78,8 @@ Pass A and B handle **both** class declarations and interface declarations — i
 
 Pass E is the only place where module-scope `const`/`let` are special-cased: they're split into a file-scope declaration (`static T name;`) and an assignment inside `mod_init_mX()`. This promotion is what makes top-level names visible to functions + lifted arrows.
 
+Function body declarations project the same lexical declaration collection and retained value/root/initialization cells as Block scope entry. A cached source-name map selects the last body function and normalizes checker symbol splits across function, `var`, and parameter declarations. Capture planning aliases simple formal parameters to that cell; parameter expressions preserve their separate environment, with references resolved outside the body. Captured body `var` cells are allocated as undefined at entry before function creation; statement initializers update the same retained cells and bare redeclarations preserve them. Scope entry allocates all bindings before creating function objects, so recursion and forward captures use one graph independently of declaration cardinality. Async CFG entry now projects that collection into its existing scope-enter state. Suspended arguments activation and lazy generator body environments fail with stable diagnostics until their retained state represents the binding partition; the eager generator fallback cannot silently process body functions.
+
 ## Module graph + init ordering
 
 ```mermaid
