@@ -1,0 +1,13 @@
+zero 0 number N
+word selected string NS
+negative-zero true N
+nan true N
+fallback fallback NS
+non-nullish 0 N
+optional undefined undefined U
+nullable null object Z
+optional-fallback optional-fallback US
+field field-fallback S
+array true 7
+matching 0 -4
+native-nullable undefined undefined native-fallback

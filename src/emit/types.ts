@@ -210,8 +210,8 @@ export function keyKindOf(t: CType): number {
 export function mapType(node: ts.Node, checker: ts.TypeChecker): CType {
     // For identifier references, prefer the DECLARED type over the narrowed
     // one so code like `const s: string | null = null; s ?? "x"` compiles
-    // (the declared storage type is `string | null`, mapped to string; the
-    // narrowed type at that point would be just `null`, which we'd reject).
+    // (the declared nullable domain has boxed storage, even when a reference
+    // narrows to a concrete string or to Null).
     // Exception: if storage is the dynamic value type and TS has narrowed the
     // current reference to a concrete primitive/pointer type, use the narrowed
     // type. The emitter will insert the unbox bridge at that identifier read.
@@ -316,34 +316,12 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             (p) => p.flags & (ts.TypeFlags.NumberLiteral | ts.TypeFlags.Number),
         );
         if (allNumber) return T_NUMBER;
-        // Treat pointer-like `T | undefined` (and `T | null`) as just `T`
-        // for typed contexts. Numeric/boolean nullish unions need boxed
-        // storage so the nullish arm does not collapse to NaN/false.
-        const concrete = parts.filter(
-            (p) => !(p.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)),
-        );
-        if (concrete.length === 1) {
-            const concreteType = mapTsType(node, concrete[0]!, checker);
-            const hasNullish = concrete.length !== parts.length;
-            const hasNull = parts.some((p) => !!(p.flags & ts.TypeFlags.Null));
-            const hasUndefined = parts.some((p) =>
-                !!(p.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void))
-            );
-            // A single NULL pointer can represent one statically known
-            // nullish arm, but it cannot preserve the distinct ECMAScript
-            // Null and Undefined Types when both occur in the union.
-            if (hasNull && hasUndefined) return T_VALUE;
-            if (
-                hasNullish &&
-                (concreteType.kind === "number" || concreteType.kind === "boolean")
-            ) {
-                return T_VALUE;
-            }
-            return concreteType;
-        }
-        if (concrete.length > 1) {
-            return T_VALUE;
-        }
+        // A nullable union is an ECMAScript value domain, not a pointer
+        // sentinel. Preserve Null/Undefined through calls, fields, captures
+        // and returns using the same boxed representation as other unions.
+        if (parts.some(part => (part.flags &
+            (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)) !== 0)) return T_VALUE;
+        if (parts.length > 1) return T_VALUE;
     }
 
     const tupleElems = getTupleElementTypes(t, checker);

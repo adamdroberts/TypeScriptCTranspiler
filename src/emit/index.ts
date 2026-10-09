@@ -31249,7 +31249,7 @@ class Emitter {
                         }
                         const storedResult = storageType.kind === "value" &&
                             sourceExpressionResultSlots.has(stateNode.resultSlot)
-                            ? this.boxAsyncCfgLogicalSource(result, stateNode.expression)
+                            ? this.boxSourceValue(result, stateNode.expression)
                             : this.coerce(result, storageType, stateNode.expression);
                         callback.line(`state->expression_result_${stateNode.resultSlot} = ${storedResult};`);
                         if (storageType.kind === "value") {
@@ -41197,13 +41197,13 @@ class Emitter {
         return "false";
     }
 
-    /** Box one evaluate-once logical source without losing a typed pointer's
-     * nullish identity. A typed pointer is the compact representation for a
-     * nullable static value, whereas the CFG result slot is the canonical
-     * dynamic representation used by all logical operators. */
-    private boxAsyncCfgLogicalSource(value: EmitResult, node: ts.Expression): string {
-        if (value.ty.kind === "value" || !isPointerKind(value.ty)) {
-            return this.coerce(value, T_VALUE, node);
+    /** Preserve the source value at the shared boxing boundary. Nullable
+     * declarations use boxed slots; legacy native producers may still encode
+     * one statically known nullish arm with a NULL pointer. Evaluate that
+     * producer once before selecting its actual Null/Undefined value. */
+    private boxSourceValue(value: EmitResult, node: ts.Node): string {
+        if (!isPointerKind(value.ty) || !ts.isExpression(node)) {
+            return this.boxPhysicalValue(value, node);
         }
         const type = this.checker.getTypeAtLocation(node);
         const members = type.isUnion() ? type.types : [type];
@@ -41211,15 +41211,15 @@ class Emitter {
         const hasUndefined = members.some((member) =>
             (member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) !== 0,
         );
-        if (!hasNull && !hasUndefined) return this.coerce(value, T_VALUE, node);
+        if (!hasNull && !hasUndefined) return this.boxPhysicalValue(value, node);
         if (hasNull && hasUndefined) {
             unsupported(
                 node,
-                "async logical value staging cannot distinguish null from undefined in a typed pointer",
+                "value boxing cannot distinguish null from undefined in a typed pointer",
             );
         }
-        const materialized = this.freshTemp("_async_cfg_logical_source");
-        const boxed = this.coerce({ c: materialized, ty: value.ty }, T_VALUE, node);
+        const materialized = this.freshTemp("_boxed_source");
+        const boxed = this.boxPhysicalValue({ c: materialized, ty: value.ty }, node);
         const nullish = hasNull ? "tsc_value_null()" : "tsc_value_undefined()";
         return `({ ${value.ty.c} ${materialized} = ${value.c}; ${materialized} == NULL ? ${nullish} : ${boxed}; })`;
     }
@@ -41981,76 +41981,7 @@ class Emitter {
         if (op === ts.SyntaxKind.CommaToken) {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
-        if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-            if ((left.ty.kind === "number" || left.ty.kind === "boolean" || isPointerKind(left.ty)) &&
-                sameCType(left.ty, right.ty)) {
-                if (left.ty.kind !== right.ty.kind) {
-                    unsupported(bin, "lazy logical operands must have matching primitive types");
-                }
-                return this.emitSequencedExpr(
-                    left.ty,
-                    [{ value: left }],
-                    ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${right.c} : ${lv})`,
-                );
-            }
-            if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                left.ty.kind === "void" || right.ty.kind === "void") {
-                const rc = this.coerce(right, T_VALUE, bin.right);
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: left, target: T_VALUE, node: bin.left }],
-                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${rc} : ${lv})`,
-                );
-            }
-            const lb = this.truthyExprFromEmitResult(left, bin.left);
-            const rb = this.truthyExprFromEmitResult(right, bin.right);
-            return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
-        }
-        if (op === ts.SyntaxKind.BarBarToken) {
-            if ((left.ty.kind === "number" || left.ty.kind === "boolean" || isPointerKind(left.ty)) &&
-                sameCType(left.ty, right.ty)) {
-                if (left.ty.kind !== right.ty.kind) {
-                    unsupported(bin, "lazy logical operands must have matching primitive types");
-                }
-                return this.emitSequencedExpr(
-                    left.ty,
-                    [{ value: left }],
-                    ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${lv} : ${right.c})`,
-                );
-            }
-            if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                left.ty.kind === "void" || right.ty.kind === "void") {
-                const rc = this.coerce(right, T_VALUE, bin.right);
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: left, target: T_VALUE, node: bin.left }],
-                    ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${lv} : ${rc})`,
-                );
-            }
-            const lb = this.truthyExprFromEmitResult(left, bin.left);
-            const rb = this.truthyExprFromEmitResult(right, bin.right);
-            return { c: `(${lb} || ${rb})`, ty: T_BOOLEAN };
-        }
-        if (op === ts.SyntaxKind.QuestionQuestionToken) {
-            if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                left.ty.kind === "void" || right.ty.kind === "void") {
-                const rc = this.coerce(right, T_VALUE, bin.right);
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: left, target: T_VALUE, node: bin.left }],
-                    ([lv]) => `(tsc_value_is_nullish(${lv}) ? ${rc} : ${lv})`,
-                );
-            }
-            if (isPointerKind(left.ty)) {
-                const tv = this.freshTemp("_nc");
-                const rc = this.coerce(right, left.ty, bin.right);
-                return {
-                    c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
-                    ty: left.ty,
-                };
-            }
-            return left;
-        }
+        if (this.isLogicalValueOperator(op)) return this.emitLogicalValue(bin, left, right);
         if (op === ts.SyntaxKind.PlusToken) {
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
@@ -48796,7 +48727,7 @@ class Emitter {
 
     // ---------------- expressions ----------------
 
-    private emitExpr(expr: ts.Expression): EmitResult {
+    private expressionOverride(expr: ts.Expression): EmitResult | undefined {
         const multiYieldResumeValue = ts.isYieldExpression(expr)
             ? this.lazyGeneratorMultiYieldResumeValues?.get(expr)
             : undefined;
@@ -48811,6 +48742,12 @@ class Emitter {
             const value = this.conditionValueScopes[i]!.get(expr);
             if (value) return value;
         }
+        return undefined;
+    }
+
+    private emitExpr(expr: ts.Expression): EmitResult {
+        const override = this.expressionOverride(expr);
+        if (override) return override;
         if (ts.isNumericLiteral(expr)) {
             return { c: formatNumericLiteral(expr.text), ty: T_NUMBER };
         }
@@ -50482,6 +50419,73 @@ class Emitter {
         return null;
     }
 
+    private isLogicalValueOperator(operator: ts.SyntaxKind): boolean {
+        return operator === ts.SyntaxKind.AmpersandAmpersandToken ||
+            operator === ts.SyntaxKind.BarBarToken || operator === ts.SyntaxKind.QuestionQuestionToken;
+    }
+
+    /** Every logical subtree contributes one postorder worklist entry. Leaves
+     * keep the normal expression/override lowering; result representation and
+     * short-circuit selection do not depend on tree width or nesting depth. */
+    private emitLogicalExpression(root: ts.BinaryExpression): EmitResult {
+        const results = new Map<ts.Expression, EmitResult>();
+        const pending: { expression: ts.Expression; exit: boolean; skipRight?: boolean }[] =
+            [{ expression: root, exit: false }];
+        while (pending.length > 0) {
+            const work = pending.pop()!, expression = this.unwrapTransparentExpression(work.expression);
+            if (work.exit) {
+                if (!ts.isBinaryExpression(expression)) throw new Error("logical worklist node is not a binary expression");
+                const left = results.get(expression.left)!;
+                results.set(work.expression, work.skipRight ? left : this.emitLogicalValue(
+                    expression, left, results.get(expression.right)!,
+                ));
+                continue;
+            }
+            const override = this.expressionOverride(work.expression) ?? this.expressionOverride(expression);
+            if (override) { results.set(work.expression, override); continue; }
+            if (!ts.isBinaryExpression(expression) || !this.isLogicalValueOperator(expression.operatorToken.kind)) {
+                results.set(work.expression, this.emitExpr(work.expression));
+                continue;
+            }
+            const operator = expression.operatorToken.kind;
+            const skipRight = operator === ts.SyntaxKind.QuestionQuestionToken
+                ? this.staticNullishState(expression.left) === "nonNullish"
+                : this.staticBooleanValue(expression.left) === (operator === ts.SyntaxKind.BarBarToken);
+            pending.push({ expression: work.expression, exit: true, skipRight });
+            if (!skipRight) pending.push({ expression: expression.right, exit: false });
+            pending.push({ expression: expression.left, exit: false });
+        }
+        return results.get(root)!;
+    }
+
+    /** One evaluate-once source and one lazy conditional preserve the actual
+     * selected operand. Matching non-nullish physical types may stay native;
+     * all other transitions use the shared boxed value/root boundary. */
+    private emitLogicalValue(bin: ts.BinaryExpression, left: EmitResult, right: EmitResult): EmitResult {
+        const compatible = sameCType(left.ty, right.ty) && left.ty.c === right.ty.c &&
+            left.ty.kind !== "void" && left.ty.kind !== "never" &&
+            (!isPointerKind(left.ty) ||
+                (!this.nullishTypeofName(bin.left) && !this.nullishTypeofName(bin.right)));
+        const type = left.ty.kind === "number" && right.ty.kind === "number" ? T_NUMBER
+            : compatible ? left.ty : T_VALUE;
+        const source = type.kind === "value"
+            ? { c: this.boxSourceValue(left, bin.left), ty: T_VALUE }
+            : left;
+        const selectedRight = type.kind === "value"
+            ? this.boxSourceValue(right, bin.right) : this.coerce(right, type, bin.right);
+        const operator = bin.operatorToken.kind;
+        const result = this.emitSequencedExpr(type, [{ value: source, target: type, node: bin.left }], ([value]) => {
+            const staged = { c: value!, ty: type };
+            const selectsRight = operator === ts.SyntaxKind.QuestionQuestionToken
+                ? this.nullishExprFromEmitResult(staged, bin.left)
+                : operator === ts.SyntaxKind.AmpersandAmpersandToken
+                    ? this.truthyExprFromEmitResult(staged, bin.left)
+                    : `!(${this.truthyExprFromEmitResult(staged, bin.left)})`;
+            return `((${selectsRight}) ? ${selectedRight} : ${value})`;
+        });
+        return { ...result, ...(type.kind === "array" ? { lazyGenerator: left.lazyGenerator || right.lazyGenerator } : {}) };
+    }
+
     private emitBinary(bin: ts.BinaryExpression): EmitResult {
         const op = bin.operatorToken.kind;
 
@@ -50534,31 +50538,7 @@ class Emitter {
             if (chain) return chain;
         }
 
-        if (
-            (op === ts.SyntaxKind.AmpersandAmpersandToken ||
-                op === ts.SyntaxKind.BarBarToken) &&
-            this.prepareType(mapType(bin, this.checker)).kind === "boolean" &&
-            this.prepareType(mapType(bin.left, this.checker)).kind === "boolean" &&
-            this.prepareType(mapType(bin.right, this.checker)).kind === "boolean"
-        ) {
-            const leftBoolean = this.staticBooleanValue(bin.left);
-            if (leftBoolean !== null) {
-                if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-                    return leftBoolean
-                        ? { c: this.emitBoolExpr(bin.right), ty: T_BOOLEAN }
-                        : { c: "false", ty: T_BOOLEAN };
-                }
-                return leftBoolean
-                    ? { c: "true", ty: T_BOOLEAN }
-                    : { c: this.emitBoolExpr(bin.right), ty: T_BOOLEAN };
-            }
-        }
-
-        if (op === ts.SyntaxKind.QuestionQuestionToken) {
-            const leftNullish = this.staticNullishState(bin.left);
-            if (leftNullish === "nullish") return this.emitExpr(bin.right);
-            if (leftNullish === "nonNullish") return this.emitExpr(bin.left);
-        }
+        if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
 
         const left = this.emitExpr(bin.left);
         const right = this.emitExpr(bin.right);
@@ -50731,86 +50711,6 @@ class Emitter {
             case ts.SyntaxKind.GreaterThanToken:
             case ts.SyntaxKind.GreaterThanEqualsToken:
                 return this.emitRelational(bin, left, right, op);
-            case ts.SyntaxKind.AmpersandAmpersandToken: {
-                if (left.ty.kind === "string" && right.ty.kind === "string") {
-                    const tmp = this.freshTemp("_andstr");
-                    return {
-                        c: `({ tsc_str_t* ${tmp} = ${left.c}; (${tmp} && ${tmp}->len > 0) ? ${right.c} : ${tmp}; })`,
-                        ty: T_STRING,
-                    };
-                }
-                if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                    left.ty.kind === "void" || right.ty.kind === "void" ||
-                    left.ty.kind === "never" || right.ty.kind === "never") {
-                    const rc = this.coerce(right, T_VALUE, bin.right);
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: left, target: T_VALUE, node: bin.left }],
-                        ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${rc} : ${lv})`,
-                    );
-                }
-                const lb = this.emitBoolExpr(bin.left);
-                const rb = this.emitBoolExpr(bin.right);
-                return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
-            }
-            case ts.SyntaxKind.BarBarToken: {
-                if (left.ty.kind === "array" && right.ty.kind === "array" && sameCType(left.ty, right.ty)) {
-                    const tv = this.freshTemp("_orarr");
-                    const rc = this.coerce(right, left.ty, bin.right);
-                    return {
-                        c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
-                        ty: left.ty,
-                        lazyGenerator: left.lazyGenerator || right.lazyGenerator,
-                    };
-                }
-                if (left.ty.kind === "string" && right.ty.kind === "string") {
-                    const tmp = this.freshTemp("_orstr");
-                    return {
-                        c: `({ tsc_str_t* ${tmp} = ${left.c}; (${tmp} && ${tmp}->len > 0) ? ${tmp} : ${right.c}; })`,
-                        ty: T_STRING,
-                    };
-                }
-                if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                    left.ty.kind === "void" || right.ty.kind === "void" ||
-                    left.ty.kind === "never" || right.ty.kind === "never") {
-                    const rc = this.coerce(right, T_VALUE, bin.right);
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: left, target: T_VALUE, node: bin.left }],
-                        ([lv]) => `(tsc_value_is_truthy(${lv}) ? ${lv} : ${rc})`,
-                    );
-                }
-                const lb = this.emitBoolExpr(bin.left);
-                const rb = this.emitBoolExpr(bin.right);
-                return { c: `(${lb} || ${rb})`, ty: T_BOOLEAN };
-            }
-            case ts.SyntaxKind.QuestionQuestionToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value" ||
-                    left.ty.kind === "void" || right.ty.kind === "void" ||
-                    left.ty.kind === "never" || right.ty.kind === "never") {
-                    const rc = this.coerce(right, T_VALUE, bin.right);
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: left, target: T_VALUE, node: bin.left }],
-                        ([lv]) => `(tsc_value_is_nullish(${lv}) ? ${rc} : ${lv})`,
-                    );
-                }
-                const pointerKinds: readonly CType["kind"][] = [
-                    "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
-                ];
-                if (pointerKinds.includes(left.ty.kind)) {
-                    const tv = this.freshTemp("_nc");
-                    const rc = this.coerce(right, left.ty, bin.right);
-                    return {
-                        c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
-                        ty: left.ty,
-                        lazyGenerator: left.ty.kind === "array" &&
-                            (left.lazyGenerator || right.lazyGenerator),
-                    };
-                }
-                // Primitive left: never nullish in typed code — just use left.
-                return left;
-            }
             case ts.SyntaxKind.AmpersandToken:
             case ts.SyntaxKind.BarToken:
             case ts.SyntaxKind.CaretToken:
@@ -76643,135 +76543,137 @@ class Emitter {
         if (target.kind === "promise") {
             return `tsc_promise_resolve_thenable(${this.coerce(r, T_VALUE, node)})`;
         }
-        if (target.kind === "value") {
-            switch (r.ty.kind) {
-                case "number":
-                    return `tsc_value_num(${r.c})`;
-                case "boolean":
-                    return `tsc_value_bool(${r.c})`;
-                case "string":
-                    return `tsc_value_string(${r.c})`;
-                case "bigint":
-                    return `tsc_value_bigint(${r.c})`;
-                case "symbol":
-                    return `tsc_value_symbol(${r.c})`;
-                case "array": {
-                    const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
-                    if (aliased && r.ty.elem?.kind !== "value") {
-                        return `tsc_value_array(${aliased})`;
-                    }
-                    if (r.ty.elem && r.ty.elem.kind !== "value") {
-                        if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
-                            const tmpIn = this.freshTemp("_arrIn");
-                            const tmpOut = this.freshTemp("_arrOut");
-                            const idx = this.freshTemp("_idx");
-                            return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed = tsc_value_undefined(); tsc_array_push_raw(${tmpOut}, &_boxed); if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
-                        }
-                        const tmpIn = this.freshTemp("_arrIn");
-                        const tmpOut = this.freshTemp("_arrOut");
-                        const idx = this.freshTemp("_idx");
-                        const elem = this.freshTemp("_elem");
-                        const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
-                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed; if (tsc_array_index_present(${tmpIn}, ${idx})) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); _boxed = ${boxed}; } else { _boxed = tsc_value_undefined(); } tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
-                    }
-                    return `tsc_value_array(${r.c})`;
-                }
-                case "entry": {
-                    const keyType = r.ty.key ?? T_STRING;
-                    const valueType = r.ty.elem ?? T_VOID;
-                    const tmpEntry = this.freshTemp("_entryBox");
-                    const tmpOut = this.freshTemp("_entryArr");
-                    const tmpKey = this.freshTemp("_entryKey");
-                    const tmpValue = this.freshTemp("_entryValue");
-                    const tmpKeyBox = this.freshTemp("_entryKeyBox");
-                    const tmpValueBox = this.freshTemp("_entryValueBox");
-                    const boxedKey = this.coerce({ c: tmpKey, ty: keyType }, T_VALUE, node);
-                    const valueDecl = valueType.kind === "void"
-                        ? ""
-                        : `${valueType.c} ${tmpValue} = ${this.objectEntryValue(tmpEntry, valueType)}; `;
-                    const valueSource: EmitResult = valueType.kind === "void"
-                        ? { c: "NULL", ty: T_VOID }
-                        : { c: tmpValue, ty: valueType };
-                    const boxedValue = this.coerce(valueSource, T_VALUE, node);
-                    return (
-                        `({ ${r.ty.c} ${tmpEntry} = ${r.c}; ` +
-                        `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), 2); ` +
-                        `${keyType.c} ${tmpKey} = ${this.objectEntryKeyValue(tmpEntry, keyType)}; ` +
-                        `tsc_value_t ${tmpKeyBox} = ${boxedKey}; ` +
-                        `tsc_array_push_raw(${tmpOut}, &${tmpKeyBox}); ` +
-                        `${valueDecl}` +
-                        `tsc_value_t ${tmpValueBox} = ${boxedValue}; ` +
-                        `tsc_array_push_raw(${tmpOut}, &${tmpValueBox}); ` +
-                        `tsc_value_array(${tmpOut}); })`
-                    );
-                }
-                case "function": {
-                    const sourceFunction = ts.isExpression(node)
-                        ? this.functionLikeForExpression(node)
-                        : ts.isFunctionDeclaration(node) ||
-                            ts.isMethodDeclaration(node) ||
-                            ts.isGetAccessorDeclaration(node) ||
-                            ts.isSetAccessorDeclaration(node)
-                            ? node
-                            : null;
-                    const length = sourceFunction
-                        ? this.javaScriptFunctionLength(sourceFunction)
-                        : (r.ty.params ?? []).length;
-                    return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${length}.0, ${this.functionValueNameLiteral(node)})`;
-                }
-                case "class":
-                    return this.classValueBoxExpression(r, node);
-                case "fsstats":
-                    return `tsc_value_class(${r.c})`;
-                case "date":
-                    return `tsc_value_date(${r.c})`;
-                case "regexp":
-                    return `tsc_value_regexp(${r.c})`;
-                case "map":
-                    return `tsc_value_map(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
-                case "set":
-                    return `tsc_value_set(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
-                case "error":
-                    return `tsc_value_error(${r.c})`;
-                case "buffer":
-                    return `tsc_value_buffer(${r.c})`;
-                case "url":
-                    return `tsc_value_url(${r.c})`;
-                case "urlsearchparams":
-                    return `tsc_value_url_search_params(${r.c})`;
-                case "arraybuffer":
-                    return `tsc_value_array_buffer(${r.c})`;
-                case "dataview":
-                    return `tsc_value_data_view(${r.c})`;
-                case "textencoder":
-                    return `tsc_value_text_encoder(${r.c})`;
-                case "textdecoder":
-                    return `tsc_value_text_decoder(${r.c})`;
-                case "promise":
-                    return `tsc_value_promise(${this.promiseWithValueCodec(r.c, r.ty, node)})`;
-                case "void":
-                case "never":
-                    if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
-                    if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) {
-                        const unwrapped = this.unwrapTransparentExpression(node);
-                        if (ts.isVoidExpression(unwrapped)) {
-                            return `({ (void)(${r.c}); tsc_value_undefined(); })`;
-                        }
-                        return `tsc_value_undefined()`;
-                    }
-                    if (r.c !== "NULL" && r.c !== "(void)0") {
-                        return `({ (void)(${r.c}); tsc_value_undefined(); })`;
-                    }
-                    return `tsc_value_undefined()`;
-                case "value":
-                    return r.c;
-                default:
-                    unsupported(node, `cannot box ${r.ty.c} as tsc_value_t`);
-            }
-        }
+        if (target.kind === "value") return this.boxSourceValue(r, node);
         if (target.kind === "string") return this.coerceToString(r, node);
         if (target.kind === "void") return r.c;
         unsupported(node, `cannot coerce ${r.ty.c} to ${target.c}`);
+    }
+
+    private boxPhysicalValue(r: EmitResult, node: ts.Node): string {
+        switch (r.ty.kind) {
+            case "number":
+                return `tsc_value_num(${r.c})`;
+            case "boolean":
+                return `tsc_value_bool(${r.c})`;
+            case "string":
+                return `tsc_value_string(${r.c})`;
+            case "bigint":
+                return `tsc_value_bigint(${r.c})`;
+            case "symbol":
+                return `tsc_value_symbol(${r.c})`;
+            case "array": {
+                const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
+                if (aliased && r.ty.elem?.kind !== "value") {
+                    return `tsc_value_array(${aliased})`;
+                }
+                if (r.ty.elem && r.ty.elem.kind !== "value") {
+                    if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
+                        const tmpIn = this.freshTemp("_arrIn");
+                        const tmpOut = this.freshTemp("_arrOut");
+                        const idx = this.freshTemp("_idx");
+                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed = tsc_value_undefined(); tsc_array_push_raw(${tmpOut}, &_boxed); if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
+                    }
+                    const tmpIn = this.freshTemp("_arrIn");
+                    const tmpOut = this.freshTemp("_arrOut");
+                    const idx = this.freshTemp("_idx");
+                    const elem = this.freshTemp("_elem");
+                    const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
+                    return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed; if (tsc_array_index_present(${tmpIn}, ${idx})) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); _boxed = ${boxed}; } else { _boxed = tsc_value_undefined(); } tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
+                }
+                return `tsc_value_array(${r.c})`;
+            }
+            case "entry": {
+                const keyType = r.ty.key ?? T_STRING;
+                const valueType = r.ty.elem ?? T_VOID;
+                const tmpEntry = this.freshTemp("_entryBox");
+                const tmpOut = this.freshTemp("_entryArr");
+                const tmpKey = this.freshTemp("_entryKey");
+                const tmpValue = this.freshTemp("_entryValue");
+                const tmpKeyBox = this.freshTemp("_entryKeyBox");
+                const tmpValueBox = this.freshTemp("_entryValueBox");
+                const boxedKey = this.coerce({ c: tmpKey, ty: keyType }, T_VALUE, node);
+                const valueDecl = valueType.kind === "void"
+                    ? ""
+                    : `${valueType.c} ${tmpValue} = ${this.objectEntryValue(tmpEntry, valueType)}; `;
+                const valueSource: EmitResult = valueType.kind === "void"
+                    ? { c: "NULL", ty: T_VOID }
+                    : { c: tmpValue, ty: valueType };
+                const boxedValue = this.coerce(valueSource, T_VALUE, node);
+                return (
+                    `({ ${r.ty.c} ${tmpEntry} = ${r.c}; ` +
+                    `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), 2); ` +
+                    `${keyType.c} ${tmpKey} = ${this.objectEntryKeyValue(tmpEntry, keyType)}; ` +
+                    `tsc_value_t ${tmpKeyBox} = ${boxedKey}; ` +
+                    `tsc_array_push_raw(${tmpOut}, &${tmpKeyBox}); ` +
+                    `${valueDecl}` +
+                    `tsc_value_t ${tmpValueBox} = ${boxedValue}; ` +
+                    `tsc_array_push_raw(${tmpOut}, &${tmpValueBox}); ` +
+                    `tsc_value_array(${tmpOut}); })`
+                );
+            }
+            case "function": {
+                const sourceFunction = ts.isExpression(node)
+                    ? this.functionLikeForExpression(node)
+                    : ts.isFunctionDeclaration(node) ||
+                        ts.isMethodDeclaration(node) ||
+                        ts.isGetAccessorDeclaration(node) ||
+                        ts.isSetAccessorDeclaration(node)
+                        ? node
+                        : null;
+                const length = sourceFunction
+                    ? this.javaScriptFunctionLength(sourceFunction)
+                    : (r.ty.params ?? []).length;
+                return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${length}.0, ${this.functionValueNameLiteral(node)})`;
+            }
+            case "class":
+                return this.classValueBoxExpression(r, node);
+            case "fsstats":
+                return `tsc_value_class(${r.c})`;
+            case "date":
+                return `tsc_value_date(${r.c})`;
+            case "regexp":
+                return `tsc_value_regexp(${r.c})`;
+            case "map":
+                return `tsc_value_map(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
+            case "set":
+                return `tsc_value_set(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
+            case "error":
+                return `tsc_value_error(${r.c})`;
+            case "buffer":
+                return `tsc_value_buffer(${r.c})`;
+            case "url":
+                return `tsc_value_url(${r.c})`;
+            case "urlsearchparams":
+                return `tsc_value_url_search_params(${r.c})`;
+            case "arraybuffer":
+                return `tsc_value_array_buffer(${r.c})`;
+            case "dataview":
+                return `tsc_value_data_view(${r.c})`;
+            case "textencoder":
+                return `tsc_value_text_encoder(${r.c})`;
+            case "textdecoder":
+                return `tsc_value_text_decoder(${r.c})`;
+            case "promise":
+                return `tsc_value_promise(${this.promiseWithValueCodec(r.c, r.ty, node)})`;
+            case "void":
+            case "never":
+                if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
+                if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) {
+                    const unwrapped = this.unwrapTransparentExpression(node);
+                    if (ts.isVoidExpression(unwrapped)) {
+                        return `({ (void)(${r.c}); tsc_value_undefined(); })`;
+                    }
+                    return `tsc_value_undefined()`;
+                }
+                if (r.c !== "NULL" && r.c !== "(void)0") {
+                    return `({ (void)(${r.c}); tsc_value_undefined(); })`;
+                }
+                return `tsc_value_undefined()`;
+            case "value":
+                return r.c;
+            default:
+                unsupported(node, `cannot box ${r.ty.c} as tsc_value_t`);
+        }
     }
 
     private functionValueNameLiteral(node: ts.Node): string {

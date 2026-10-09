@@ -214,6 +214,12 @@ For readers planning to modify the emitter:
 - `runtime/tsc_runtime.h` — the authoritative list of runtime capabilities.
 - `stdlib/lib.core.d.ts` — the authoritative list of what TS the checker will accept.
 
+### Ordinary logical values and nullable storage
+
+Logical &&/||/?? expression trees lower through one postorder worklist. Existing staged source overrides remain leaves; each logical node stores its left operand once and embeds its right operand only in the selected conditional arm. One value-selector primitive is also used by non-suspending generator-resume expressions. Identical non-nullish physical types can remain native, while mixed representations cross the shared boxed value/root boundary. There are no separate String, Array, pointer or Boolean expression algorithms. Pure static short-circuit facts may omit unreachable right subtrees while retaining the left read.
+
+Every nullable union uses canonical boxed storage across declarations, parameters, fields, returns and captured/resumable cells. Legacy native producers that return NULL for one known nullish arm cross the same evaluate-once boxing operation before ordinary consumers observe them; an ambiguous native sentinel fails closed. Generality follows from expression-worklist traversal and the shared union/boxing rule, independent of tree width or depth. Boxed-to-native Array/function identity conversion remains separate work.
+
 ### Lexical block declaration instantiation
 
 `src/emit/lexical-declarations.ts` collects the direct variable binding trees and named function/class declarations of a statement list. Ordinary Blocks and flattened CaseBlocks allocate their value/TDZ/root collection through the same scope-entry emitter, then initialize every supported function closure before executing statements. Captures retain fresh heap cells, while uncaptured bindings use rooted locals. Source block boundaries remain C scopes on conditional and loop paths; they are never flattened. The async CFG uses the same collection in scope-enter records and initializes function closures after replacing the complete binding-cell collection. Generality follows from declaration-list traversal and graph re-entry, independent of declaration or execution counts. Function-body instantiation and local Annex B companion bindings remain separate work; unsupported class and async-generator definitions fail closed.

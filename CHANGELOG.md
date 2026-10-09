@@ -1,5 +1,7 @@
 # Changelog
 
+- Preserve selected &&/||/?? operand values through one logical-expression worklist and shared lazy selector. Delete typed Boolean/pointer predecessors, box nullable unions across storage/call boundaries and preserve native nullish producers in shared boxing. Verify single evaluation, actual values, abrupt payloads and deep trees against independent hosts in both memory modes; correct the optional-property/nullish expectation against Node.
+
 - Unify Block/CaseBlock declaration instantiation through one lexical declaration collection and fresh scope-entry cells, including async CFG function closures. Preserve escaped function identity, hoisting, TDZ and mutable recursion; delete flattened block emission. Replace recursive generator classification with a graph worklist, retain boxed JavaScript initializers and preserve native Promise result codecs through adoption.
 
 - Replace eager Promise combinator loops with one ordinary iterator/capability consumer. Preserve actual resolve/then calls, shared element gates, closing order and intrinsic AggregateError descriptors. Route awaited typed payloads through shared Promise/Array codecs, retain typed class Symbol methods and remove combinator purity shortcuts.
