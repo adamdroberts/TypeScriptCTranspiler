@@ -42,6 +42,31 @@ function probes(): Probe[] {
         "[[\\q{ab|a}]]b", "([\\q{abc|ab|a}])(c|bc)", "[\\q{ab|a}--\\q{a}]", "(?<=[\\q{ab|b}])c", "[A-z]", "[^\\q{ab}]"]) {
         for (const subject of ["a", "b", "ab", "abc", "c", "_", ""]) result.push({ pattern, flags: "v", subject });
     }
+    // Modifier lists vary independently of the body and ambient record.
+    // Nested scopes force restoration after success, backtracking and assertions.
+    for (const added of ["", "i", "m", "s", "im", "is", "ms", "ims"]) {
+        for (const removed of ["", "i", "m", "s", "im", "is", "ms", "ims"]) {
+            for (const flags of ["", "ims"]) {
+                const pattern = `(?${added}-${removed}:^a.$)`;
+                for (const subject of ["ab", "A\n", "\naB\n"])
+                    result.push({ pattern, flags, subject });
+            }
+        }
+    }
+    for (const flags of ["", "i", "u", "iu", "v", "iv", "ims"]) {
+        for (const pattern of ["(?i:a)b", "(?-i:a)b", "(?i:A(?-i:B)c)d", "(?i:a)|b",
+            "(?i:(a|ab))c", "(?i:(a))(?-i:\\1)", "(?i:(a))\\1",
+            "(?i:(?<=a)b)c", "(?i:(?=a)a)b", "(?s:.(?-s:.).).",
+            "(?m:^a$)^b$", "(?i:[a-z])(?-i:[A-Z])", "(?i:\\w)(?-i:\\w)",
+            "(?i:\\P{Lowercase_Letter})(?-i:\\P{Lowercase_Letter})"]) {
+            for (const subject of ["Ab", "AB", "AbCd", "ABCd", "ABc", "Aa", "AA", "KA", "\nA\n", "\na\nb"])
+                result.push({ pattern, flags, subject });
+        }
+    }
+    for (const pattern of ["(?i:[[^a]&&\\w])(?-i:[[a-z]&&\\w])", "(?i:[\\q{ab|a}])b"])
+        for (const subject of ["Ba", "BA", "AB", "Ab", "AbB", ""]) result.push({ pattern, flags: "v", subject });
+    for (const header of ["ii", "i-i", "-ii", "ims-ms", "g", "u", "v", "y", "I", "\u0131", "i--m", "-", "i\\u006d"])
+        result.push({ pattern: `(?${header}:a)`, flags: "", subject: "a" });
     return result;
 }
 

@@ -1,5 +1,7 @@
 # Changelog
 
+- Added scoped RegExp `i`, `m`, and `s` modifiers through immutable lexical records on the shared pattern tree, including nested restoration and Unicode sets.
+
 - Fixed numeric truthiness for integral loop indices and unified resumed-value conditions with the single-evaluation Boolean conversion path.
 - Fixed native Test262 artifact ordering to follow the preparation protocol when filenames contain punctuation.
 

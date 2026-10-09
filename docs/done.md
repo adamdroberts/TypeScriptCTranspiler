@@ -1,5 +1,7 @@
 # Implemented features
 
+- Scoped RegExp `i`, `m`, and `s` modifiers now snapshot the lexical RegExp Record on the canonical pattern nodes. Group frames restore the enclosing record, the continuation matcher consumes each node's record, and the Unicode-set worklist folds and complements against its local record. Duplicate, overlapping, unknown, and empty add/remove syntax fails with `SyntaxError`. The independent engine/dual-memory consumer properties cross scope, backtracking, assertions, backreferences, character/string sets, and ambient flags; `regexp_modifier_scopes` is the native regression and `regexp_pattern_depth` now stresses alternating modifier scopes on the same group tree. The pinned modifier diagnostic reaches the separate pending ordinary RegExp method surface; exact clause evidence remains open.
+
 - Numeric conditions now stage one ECMAScript Number as a C `double` before the shared truthiness check, so integral loop-index storage cannot reach C `isnan` with an invalid operand. Resumed generator conditions use the same single-evaluation operation instead of a duplicate emitter. `numeric_condition_conversion` covers integral conditions, zero/NaN/infinity, side effects, and resumed values.
 - Native Test262 artifact enumeration now emits the protocol's code-unit path order rather than locale collation; punctuation in runtime filenames cannot invalidate a successful native preparation.
 

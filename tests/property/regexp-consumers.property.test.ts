@@ -25,6 +25,13 @@ function plans(): Plan[] {
             }
         }
     }
+    for (const source of ["Ab AB ab", "\naB\nAB", "AbB ABb"]) {
+        for (const [pattern, flags] of [["(?i:(a))b", "g"], ["(?-i:(a))b", "gi"],
+            ["(?im:^a.$)", "g"], ["(?i:[\\q{ab|a}])b", "gv"]]) {
+            for (const operation of ["replace", "split", "match", "search"] as const)
+                result.push({ operation, source, pattern: pattern!, flags: flags!, replacement: "[$&:$1]" });
+        }
+    }
     return result;
 }
 function observe(plan: Plan): unknown {

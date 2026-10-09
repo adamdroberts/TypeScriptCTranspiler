@@ -61,6 +61,7 @@ typedef struct {
 
 typedef struct tsc_re_node {
     tsc_re_kind_t kind;
+    tsc_re_flags_t flags; /* immutable lexical RegExp Record at this node */
     USet* compile_set; /* temporary, closed before compiled representation escapes */
     bool may_strings;
     union {
@@ -296,8 +297,7 @@ static void re_qstr_push(tsc_re_parser_t* p, tsc_re_node_t* cls, const uint16_t*
     cls->u.cls.nstrs++;
 }
 
-/* Reads one astral pair in Unicode mode; otherwise one unit. Folds when
- * the pattern is case-insensitive. */
+/* Reads one astral pair in Unicode mode; otherwise one raw unit. */
 static uint32_t re_parse_single_cp(tsc_re_parser_t* p) {
     uint16_t u = p->units[p->pos++];
     if (re_is_unicode(p) && re_is_high_surrogate(u) && p->pos < p->len &&
@@ -655,6 +655,27 @@ static tsc_re_node_t* re_parse_class_dispatch(tsc_re_parser_t* p) {
         size_t start = p->pos - (negated ? 2 : 1);
         tsc_re_node_t* result = p->classes[start];
         if (!result) { re_fail(p, start); return NULL; }
+        /* v classes are parsed bottom-up before group headers. Assign their
+         * lexical record through the same set tree when its atom is reached. */
+        size_t length = 1, capacity = 16;
+        tsc_re_node_t** work = malloc(capacity * sizeof(*work));
+        if (!work) abort();
+        work[0] = result;
+        while (length) {
+            tsc_re_node_t* node = work[--length];
+            node->flags = p->flags;
+            if (node->kind != RE_N_CLASS) continue;
+            for (size_t i = 0; i < node->u.cls.nitems; i++) {
+                if (length == capacity) {
+                    capacity *= 2;
+                    void* grown = realloc(work, capacity * sizeof(*work));
+                    if (!grown) abort();
+                    work = grown;
+                }
+                work[length++] = node->u.cls.items[i];
+            }
+        }
+        free(work);
         p->pos = p->class_ends[start];
         return result;
     }
@@ -765,8 +786,7 @@ static tsc_re_node_t* re_parse_atom(tsc_re_parser_t* p) {
         return ref;
     }
     default: {
-        /* re_parse_single_cp combines astral pairs in Unicode mode and
-         * folds when case-insensitive. */
+        /* re_parse_single_cp combines astral pairs in Unicode mode. */
         uint32_t cp = re_parse_single_cp(p);
         if (strict && cp > 0xffff) {
             uint32_t shifted = cp - 0x10000u;
@@ -874,7 +894,40 @@ typedef struct {
     tsc_re_node_t* alternatives;
     tsc_re_node_t* sequence;
     tsc_re_node_t* wrapper;
+    tsc_re_flags_t outer_flags;
 } re_parse_frame_t;
+
+static unsigned re_modifier_bit(uint16_t unit) {
+    switch (unit) {
+    case 'i': return 1;
+    case 'm': return 2;
+    case 's': return 4;
+    default: return 0;
+    }
+}
+static bool re_group_modifiers(tsc_re_parser_t* p) {
+    unsigned added = 0, removed = 0;
+    bool removing = false;
+    while (!re_at_end(p)) {
+        uint16_t unit = p->units[p->pos++];
+        if (unit == ':') {
+            if (removing && !(added | removed)) break;
+            if (added & 1) p->flags.ignore_case = true;
+            if (added & 2) p->flags.multiline = true;
+            if (added & 4) p->flags.dot_all = true;
+            if (removed & 1) p->flags.ignore_case = false;
+            if (removed & 2) p->flags.multiline = false;
+            if (removed & 4) p->flags.dot_all = false;
+            return true;
+        }
+        if (unit == '-' && !removing) { removing = true; continue; }
+        unsigned bit = re_modifier_bit(unit);
+        if (!bit || ((added | removed) & bit)) break;
+        if (removing) removed |= bit; else added |= bit;
+    }
+    re_fail(p, p->pos);
+    return false;
+}
 
 static tsc_re_node_t* re_group_header(tsc_re_parser_t* p) {
     tsc_re_node_t* wrapper = NULL;
@@ -887,6 +940,11 @@ static tsc_re_node_t* re_group_header(tsc_re_parser_t* p) {
     if (re_at_end(p)) { re_fail(p, p->pos); return NULL; }
     uint16_t prefix = p->units[p->pos++];
     if (prefix == ':') return NULL;
+    if (prefix == '-' || re_modifier_bit(prefix)) {
+        p->pos--;
+        re_group_modifiers(p);
+        return NULL;
+    }
     bool backward = false;
     if (prefix == '<' && !re_at_end(p) &&
         (p->units[p->pos] == '=' || p->units[p->pos] == '!')) {
@@ -913,6 +971,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
     size_t len = 0, capacity = 16;
     re_parse_frame_t* frames = TSC_GC_MALLOC(capacity * sizeof(*frames));
     tsc_re_node_t* wrapper = NULL;
+    tsc_re_flags_t outer_flags = p->flags;
     bool push = true;
     for (;;) {
         if (push) {
@@ -921,7 +980,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
                 frames = TSC_GC_REALLOC(frames, capacity * sizeof(*frames));
             }
             re_parse_frame_t frame = {
-                re_new_node(p, RE_N_ALT), re_new_node(p, RE_N_SEQ), wrapper
+                re_new_node(p, RE_N_ALT), re_new_node(p, RE_N_SEQ), wrapper, outer_flags
             };
             re_node_list_push(p, frame.alternatives, frame.sequence);
             frames[len++] = frame;
@@ -930,6 +989,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
         re_parse_frame_t* frame = &frames[len - 1];
         if (!re_at_end(p) && p->units[p->pos] == '(') {
             p->pos++;
+            outer_flags = p->flags;
             wrapper = re_group_header(p);
             if (p->failed) return NULL;
             push = true;
@@ -954,6 +1014,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
                 else frame->wrapper->u.lookaround.child = term;
                 term = frame->wrapper;
             }
+            p->flags = frame->outer_flags;
             len--;
             term = re_quantify(p, term);
             if (!term || p->failed) return NULL;
@@ -1041,8 +1102,10 @@ static size_t re_lookup_named(tsc_re_parser_t* p, const char* name, size_t name_
  * octal rewrites otherwise (Unicode mode fails instead). */
 static bool re_resolve_decimal(tsc_re_parser_t* p) {
     bool strict = re_is_unicode(p);
+    tsc_re_flags_t outer_flags = p->flags;
     for (size_t i = 0; i < p->ndec; i++) {
         re_dec_fixup_t* fix = &p->dec[i];
+        p->flags = fix->node->flags;
         size_t n = 0;
         for (size_t k = 0; k < fix->ndigits; k++) {
             uint16_t d = p->units[fix->digits_at + k];
@@ -1072,6 +1135,7 @@ static bool re_resolve_decimal(tsc_re_parser_t* p) {
             *re_fixup_slot(fix->holder, fix->index) = seq;
         }
     }
+    p->flags = outer_flags;
     return true;
 }
 
@@ -1079,8 +1143,10 @@ static bool re_resolve_decimal(tsc_re_parser_t* p) {
  * names fail in Unicode mode and spell literals per Annex B otherwise. */
 static bool re_resolve_named(tsc_re_parser_t* p) {
     bool strict = re_is_unicode(p);
+    tsc_re_flags_t outer_flags = p->flags;
     for (size_t i = 0; i < p->nnamed_ref; i++) {
         re_named_fixup_t* fix = &p->named_ref[i];
+        p->flags = fix->node->flags;
         size_t index = re_lookup_named(p, fix->name, fix->name_len);
         bool in_class = fix->holder->kind == RE_N_CLASS;
         if (index != RE_UNSET) {
@@ -1102,6 +1168,7 @@ static bool re_resolve_named(tsc_re_parser_t* p) {
         re_push_literal_unit(p, seq, '>');
         *re_fixup_slot(fix->holder, fix->index) = seq;
     }
+    p->flags = outer_flags;
     return true;
 }
 
@@ -1451,6 +1518,9 @@ static void re_push_children(re_ctx_t* ctx, const tsc_re_node_t* node, int kind)
 }
 static bool re_step(re_ctx_t* ctx, re_task_t task) {
     const tsc_re_node_t* node = task.node;
+    ctx->ignore_case = node->flags.ignore_case;
+    ctx->multiline = node->flags.multiline;
+    ctx->dot_all = node->flags.dot_all;
     ctx->head = task.next;
     if (task.kind == RE_T_CLEAR) {
         if (node->kind == RE_N_GROUP) {
@@ -1691,6 +1761,7 @@ static tsc_re_node_t* re_new_node(tsc_re_parser_t* p, tsc_re_kind_t kind) {
     }
     p->nodes[p->nnodes++] = node;
     node->kind = kind;
+    node->flags = p->flags;
     memset(&node->u, 0, sizeof(node->u));
     return node;
 }
@@ -2682,7 +2753,7 @@ static USet* re_escape_set(tsc_re_class_escape_t escape) {
     return set;
 }
 static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet* universe) {
-    bool v = p->flags.unicode_sets, unicode = re_is_unicode(p);
+    bool v = node->flags.unicode_sets, unicode = re_is_unicode(p);
     USet* raw = uset_openEmpty();
     USet* result;
     bool negate_after = false;
@@ -2691,12 +2762,12 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
         node->may_strings = node->u.prop.property >= UCHAR_BASIC_EMOJI &&
             node->u.prop.property <= UCHAR_RGI_EMOJI;
         negate_after = v && node->u.prop.negated;
-        result = re_fold_set(raw, p->flags.ignore_case, unicode);
+        result = re_fold_set(raw, node->flags.ignore_case, unicode);
     } else if (node->kind == RE_N_CLASS_ESCAPE) {
         uset_close(raw); raw = re_escape_set(node->u.class_escape.escape);
         negate_after = node->u.class_escape.escape == RE_CE_DIGIT_NEG ||
             node->u.class_escape.escape == RE_CE_SPACE_NEG || node->u.class_escape.escape == RE_CE_WORD_NEG;
-        result = re_fold_set(raw, p->flags.ignore_case, unicode);
+        result = re_fold_set(raw, node->flags.ignore_case, unicode);
     } else {
         for (size_t i = 0; i < node->u.cls.nranges; i++)
             uset_addRange(raw, node->u.cls.ranges[i].lo, node->u.cls.ranges[i].hi);
@@ -2706,7 +2777,7 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
             for (size_t at = 0; at < text.len;) { size_t w; re_read_cp(text.units, text.len, at, true, &w); at += w; cps++; }
             if (cps != 1) node->may_strings = true;
         }
-        result = re_fold_set(raw, p->flags.ignore_case, unicode);
+        result = re_fold_set(raw, node->flags.ignore_case, unicode);
         for (size_t i = 0; i < node->u.cls.nitems; i++) {
             tsc_re_node_t* child = node->u.cls.items[i];
             if (node->u.cls.op == RE_CLS_UNION) {
@@ -2752,7 +2823,7 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
 }
 static bool re_compile_sets(tsc_re_parser_t* p) {
     USet* all = uset_open(0, re_is_unicode(p) ? 0x10ffff : 0xffff);
-    USet* universe = re_fold_set(all, p->flags.ignore_case, re_is_unicode(p)); uset_close(all);
+    USet* folded_universe = NULL;
     typedef struct { tsc_re_node_t* node; size_t index; } frame_t;
     frame_t* frames = TSC_GC_MALLOC((p->nnodes ? p->nnodes : 1) * sizeof(*frames));
     bool ok = true;
@@ -2767,14 +2838,17 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
                 tsc_re_node_t* child = node->u.cls.items[frame->index++];
                 if (!child->compile_set) frames[depth++] = (frame_t){child, 0};
             } else {
-                ok = re_normalize_set(p, node, universe); depth--;
+                if (node->flags.ignore_case && !folded_universe)
+                    folded_universe = re_fold_set(all, true, re_is_unicode(p));
+                ok = re_normalize_set(p, node, node->flags.ignore_case ? folded_universe : all); depth--;
             }
         }
     }
     for (size_t i = 0; i < p->nnodes; i++) {
         if (p->nodes[i]->compile_set) { uset_close(p->nodes[i]->compile_set); p->nodes[i]->compile_set = NULL; }
     }
-    uset_close(universe);
+    if (folded_universe) uset_close(folded_universe);
+    uset_close(all);
     return ok;
 }
 

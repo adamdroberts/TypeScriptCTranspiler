@@ -1434,9 +1434,13 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
         case "regexp-pattern-depth":
-            return `const pattern = "(?:".repeat(${spec.depth}) + "(a|ab)c" + ")".repeat(${spec.depth});
-                const hit = new RegExp(pattern).exec("abc");
-                console.log("regexp-depth:", hit === null ? "missing" : hit.join("|"));`;
+            return `const openings: string[] = [];
+                for (let index = 0; index < ${spec.depth}; index++) openings.push(index % 2 ? "(?-i:" : "(?i:");
+                const pattern = openings.join("") + "(?i:(a|ab))c" + ")".repeat(${spec.depth}) + "|d";
+                const re = new RegExp(pattern);
+                const hit = re.exec("ABc");
+                console.log("regexp-depth:", hit === null ? "missing" : hit.join("|"));
+                console.log("regexp-outer:", re.test("D"));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);
         case "async-binding-default-depth":

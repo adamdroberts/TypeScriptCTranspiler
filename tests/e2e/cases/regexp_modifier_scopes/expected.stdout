@@ -1,0 +1,15 @@
+scope: true false
+nested: true false
+remove: true false
+add-empty: true
+backtrack: ABc|AB
+reference: false true
+assert: true false
+line: true false
+dot: true false
+sets: true false
+strings: ABb
+properties: false ims
+replace: [A] AB [a]
+split: |A| AB |a|
+errors: SSSSSSS
