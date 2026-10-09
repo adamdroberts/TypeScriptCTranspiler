@@ -37,6 +37,7 @@
     "src/emit/async-ir.ts",
     "src/emit/cbuf.ts",
     "src/emit/index.ts",
+    "src/emit/lexical-declarations.ts",
     "src/emit/mangle.ts",
     "src/emit/types.ts",
     "src/json-syntax.ts",

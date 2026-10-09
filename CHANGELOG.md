@@ -1,5 +1,7 @@
 # Changelog
 
+- Unify Block/CaseBlock declaration instantiation through one lexical declaration collection and fresh scope-entry cells, including async CFG function closures. Preserve escaped function identity, hoisting, TDZ and mutable recursion; delete flattened block emission. Replace recursive generator classification with a graph worklist, retain boxed JavaScript initializers and preserve native Promise result codecs through adoption.
+
 - Replace eager Promise combinator loops with one ordinary iterator/capability consumer. Preserve actual resolve/then calls, shared element gates, closing order and intrinsic AggregateError descriptors. Route awaited typed payloads through shared Promise/Array codecs, retain typed class Symbol methods and remove combinator purity shortcuts.
 
 - Implement ordinary live Map/Set protocols through stable insertion links, shared element codecs and rooted cursor records. Replace typed loop/callback adapters, preserve constructor/closing order and expose common iterator forEach/reduce consumers. Require explicit materialization for static module projections and correct collection iterator declarations.

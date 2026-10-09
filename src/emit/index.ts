@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { directLexicalDeclarations, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
@@ -476,17 +477,9 @@ interface SyncCompletionScope {
     readonly controlDepths: readonly [number, number, number, number];
 }
 
-type NamedSwitchLexicalDeclaration =
-    | (ts.FunctionDeclaration & { readonly name: ts.Identifier })
-    | (ts.ClassDeclaration & { readonly name: ts.Identifier });
-
-type SwitchLexicalDeclaration =
-    | ts.VariableDeclaration
-    | NamedSwitchLexicalDeclaration;
-
 interface LocalLexicalBindingPlan {
     readonly symbol: ts.Symbol;
-    readonly declaration: SwitchLexicalDeclaration;
+    readonly declaration: ScopeLexicalDeclaration;
     readonly name: string;
     readonly immutable: boolean;
     readonly value: string;
@@ -1000,7 +993,7 @@ class Emitter {
             if (
                 ts.isFunctionDeclaration(node) &&
                 this.isPrunableLocalFunction(node) &&
-                !this.isDirectSwitchLexicalDeclaration(node) &&
+                !this.isDirectScopeLexicalDeclaration(node) &&
                 !this.referencedLocalFunctions.has(node)
             ) {
                 return;
@@ -1047,6 +1040,13 @@ class Emitter {
                 return;
             }
             if (ts.isSourceFile(node) || ts.isBlock(node)) {
+                if (ts.isBlock(node)) {
+                    for (const declaration of directLexicalDeclarations(node.statements)) {
+                        if (ts.isFunctionDeclaration(declaration) && this.isDirectScopeLexicalDeclaration(declaration)) {
+                            visit(declaration);
+                        }
+                    }
+                }
                 visitStatementList(node.statements);
                 return;
             }
@@ -15934,15 +15934,15 @@ class Emitter {
     /**
      * A function-scoped declaration can be lifted without changing observable
      * scope only when it has no outer captures or dynamic lexical dependencies.
-     * Block-level declarations remain fail-closed until their lexical
-     * environment is represented explicitly by the shared IR.
+     * Lexical block declarations use the shared environment and closure path;
+     * this predicate covers only the remaining function-body lifting path.
      */
     private isSupportedLocalFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
         if (!fd.name || !fd.body || this.isTopLevelValueDeclaration(fd) ||
             !this.isPrunableLocalFunction(fd) || this.isGenericFunction(fd)) {
             return false;
         }
-        if (this.isDirectSwitchLexicalDeclaration(fd)) return false;
+        if (this.isDirectScopeLexicalDeclaration(fd)) return false;
         if (this.isTest262AnnexBGlobalFunctionDeclaration(fd)) {
             return this.collectClosureCaptures(fd).length === 0;
         }
@@ -15973,10 +15973,10 @@ class Emitter {
         return safe;
     }
 
-    private isSupportedDirectSwitchFunctionDeclaration(
+    private isSupportedLexicalFunctionDeclaration(
         declaration: ts.FunctionDeclaration,
     ): declaration is ts.FunctionDeclaration & { name: ts.Identifier; body: ts.Block } {
-        return this.isDirectSwitchLexicalDeclaration(declaration) &&
+        return this.isDirectScopeLexicalDeclaration(declaration) &&
             !!declaration.name &&
             !!declaration.body &&
             !this.isGenericFunction(declaration) &&
@@ -23691,8 +23691,8 @@ class Emitter {
         const directNamedDeclaration =
             (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration)) &&
             symbolDeclaration.name &&
-            this.isDirectSwitchLexicalDeclaration(symbolDeclaration)
-                ? symbolDeclaration as NamedSwitchLexicalDeclaration
+            this.isDirectScopeLexicalDeclaration(symbolDeclaration)
+                ? symbolDeclaration as NamedScopeLexicalDeclaration
                 : null;
         const formalParameter = this.javaScriptFormalParameterForDeclaration(symbolDeclaration);
         const formalOwner = formalParameter && ts.isFunctionLike(formalParameter.parent)
@@ -23750,7 +23750,7 @@ class Emitter {
 
     private isDirectSwitchLexicalDeclaration(
         declaration: ts.Declaration,
-    ): declaration is SwitchLexicalDeclaration {
+    ): declaration is ScopeLexicalDeclaration {
         if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
             return !!declaration.name &&
                 (ts.isCaseClause(declaration.parent) || ts.isDefaultClause(declaration.parent));
@@ -23761,6 +23761,22 @@ class Emitter {
             !ts.isVariableStatement(declaration.parent.parent)) return false;
         const owner = declaration.parent.parent.parent;
         return ts.isCaseClause(owner) || ts.isDefaultClause(owner);
+    }
+
+    private isDirectScopeLexicalDeclaration(
+        declaration: ts.Declaration,
+    ): declaration is ScopeLexicalDeclaration {
+        if (this.isDirectSwitchLexicalDeclaration(declaration)) return true;
+        const owner = ts.isVariableDeclaration(declaration) &&
+            ts.isVariableDeclarationList(declaration.parent) &&
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+            ts.isVariableStatement(declaration.parent.parent)
+            ? declaration.parent.parent.parent
+            : (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) && declaration.name
+                ? declaration.parent
+                : null;
+        return !!owner && ts.isBlock(owner) &&
+            !(ts.isFunctionLike(owner.parent) && "body" in owner.parent && owner.parent.body === owner);
     }
 
     private lexicalBindingForSymbol(
@@ -25185,7 +25201,7 @@ class Emitter {
         }
         for (const declaration of declarations.annexBFunctions) {
             if (!this.isSupportedLocalFunctionDeclaration(declaration) &&
-                !this.isSupportedDirectSwitchFunctionDeclaration(declaration)) {
+                !this.isSupportedLexicalFunctionDeclaration(declaration)) {
                 unsupported(
                     declaration,
                     "Annex B global block function requires the canonical closure-capable function lowering",
@@ -25770,7 +25786,7 @@ class Emitter {
             if (
                 node !== owner &&
                 ts.isFunctionDeclaration(node) &&
-                this.isSupportedDirectSwitchFunctionDeclaration(node)
+                this.isSupportedLexicalFunctionDeclaration(node)
             ) {
                 addClosureCaptures(node);
                 return;
@@ -25984,30 +26000,27 @@ class Emitter {
                     (
                         !this.isNodeWithin(decl, fn) ||
                         decl === fn && ts.isFunctionDeclaration(fn) &&
-                            this.isSupportedDirectSwitchFunctionDeclaration(fn)
+                            this.isSupportedLexicalFunctionDeclaration(fn)
                     ) &&
                     (!this.isTopLevelValueDeclaration(decl) ||
                         (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
                     this.isCapturableValueDeclaration(decl)
                 ) {
-                    const declaredType = this.prepareType(
-                        mapTsType(
-                            decl,
-                            this.checker.getTypeOfSymbolAtLocation(sym, decl),
-                            this.checker,
-                        ),
-                    );
                     const lexical = this.localLexicalMetadataForSymbol(sym);
+                    const declaredType = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
+                        ? T_VALUE
+                        : this.prepareType(mapTsType(decl,
+                            this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
                     const formalParameter = this.javaScriptFormalParameterForDeclaration(decl);
                     const existingStorageType = this.scopedTypeForSymbol(sym) ??
                         this.symbolStorageTypes.get(sym);
-                    /* A CaseBlock Environment Record is a runtime language
+                    /* A lexical Environment Record is a runtime language
                      * environment. Keep each direct lexical binding in the
                      * canonical value representation so checker narrowing
                      * cannot change its storage or closure-capture ABI. */
                     let type = existingStorageType ?? (formalParameter
                         ? T_VALUE
-                        : lexical && (this.isDirectSwitchLexicalDeclaration(lexical.declaration) ||
+                        : lexical && (this.isDirectScopeLexicalDeclaration(lexical.declaration) ||
                             ts.isVariableDeclaration(lexical.declaration) &&
                             this.isForOfLexicalDeclaration(lexical.declaration))
                         ? T_VALUE
@@ -26056,7 +26069,7 @@ class Emitter {
             ts.isParameter(decl) ||
             ts.isBindingElement(decl) ||
             ts.isFunctionDeclaration(decl) &&
-                this.isSupportedDirectSwitchFunctionDeclaration(decl) ||
+                this.isSupportedLexicalFunctionDeclaration(decl) ||
             ts.isClassDeclaration(decl) &&
                 this.isSupportedDirectSwitchClassDeclaration(decl)
         );
@@ -29501,7 +29514,7 @@ class Emitter {
             },
             isSupportedNestedFunction: (node) => {
                 if (ts.isFunctionDeclaration(node)) {
-                    if (this.isSupportedDirectSwitchFunctionDeclaration(node)) return true;
+                    if (this.isSupportedLexicalFunctionDeclaration(node)) return true;
                     return this.isSupportedLocalFunctionDeclaration(node);
                 }
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
@@ -29621,7 +29634,7 @@ class Emitter {
             const inferred = this.variableStorageType(
                 this.prepareType(mapType(declaration, this.checker)),
             );
-            const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+            const type = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
                 ? T_VALUE
                 : cell?.type ?? this.variableDeclarationStorageType(declaration, inferred);
             if (type.kind === "void" &&
@@ -29649,7 +29662,7 @@ class Emitter {
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(identifier, symbol)) return false;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
-            const type = lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+            const type = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
                 ? T_VALUE
                 : cell?.type ??
                     this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
@@ -29873,7 +29886,7 @@ class Emitter {
             if (stateNode.kind === "scope-enter" || stateNode.kind === "scope-clone") {
                 if (!stateNode.bindings.every((binding) => validateCfgBinding(binding))) return false;
                 if (stateNode.kind === "scope-enter" && !stateNode.functions.every((declaration) => {
-                    if (!this.isSupportedDirectSwitchFunctionDeclaration(declaration)) return false;
+                    if (!this.isSupportedLexicalFunctionDeclaration(declaration)) return false;
                     const symbol = this.symbolForIdentifier(declaration.name);
                     return !!symbol && fieldBySymbol.has(symbol);
                 })) return false;
@@ -31905,45 +31918,104 @@ class Emitter {
         return !!(node as { asteriskToken?: ts.AsteriskToken }).asteriskToken;
     }
 
-    private isLazyGeneratorPassthroughFunction(node: ts.Node): boolean {
-        if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node) &&
-            !ts.isArrowFunction(node) && !ts.isMethodDeclaration(node)) return false;
-        const rawExpression = node.body && !ts.isBlock(node.body)
-            ? node.body
-            : node.body && ts.isBlock(node.body) && node.body.statements.length === 1 &&
-                ts.isReturnStatement(node.body.statements[0])
-                ? node.body.statements[0].expression
-                : undefined;
-        const expression = rawExpression ? this.unwrapTransparentExpression(rawExpression) : undefined;
-        if (!expression) return false;
-        if (ts.isIdentifier(expression)) {
-            const returnedSymbol = this.symbolForIdentifier(expression);
-            return !!returnedSymbol && node.parameters.some((parameter) =>
-                ts.isIdentifier(parameter.name) && this.symbolForIdentifier(parameter.name) === returnedSymbol);
+    /** Representation classification is a monotone graph, including aliases,
+     * function returns and expression alternatives. Cycles without a seed stay
+     * false; one reverse worklist propagates seeds without recursive probes. */
+    private lazyGeneratorRepresentation(root: ts.Node, role: "function" | "expression" | "passthrough" | "generator"): boolean {
+        type Role = typeof role;
+        type State = { node: ts.Node; role: Role; mode: "seed" | "never" | "any" | "all";
+            dependencies: Set<State>; dependents: Set<State>; value: boolean; trueCount: number };
+        const byRole = new Map<Role, Map<ts.Node, State>>();
+        const pending: State[] = [];
+        const get = (node: ts.Node, kind: Role): State => {
+            let states = byRole.get(kind);
+            if (!states) { states = new Map(); byRole.set(kind, states); }
+            let state = states.get(node);
+            if (!state) {
+                state = { node, role: kind, mode: "never", dependencies: new Set(),
+                    dependents: new Set(), value: false, trueCount: 0 };
+                states.set(node, state); pending.push(state);
+            }
+            return state;
+        };
+        const connect = (state: State, node: ts.Node, kind: Role): void => {
+            const dependency = get(node, kind);
+            state.dependencies.add(dependency);
+            dependency.dependents.add(state);
+        };
+        const result = get(root, role);
+        for (let index = 0; index < pending.length; index++) {
+            const state = pending[index]!, node = state.node;
+            if (state.role === "passthrough" || state.role === "generator") {
+                if (!ts.isIdentifier(node)) continue;
+                const symbol = this.symbolForIdentifier(node);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (!declaration) continue;
+                if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration) ||
+                    ts.isArrowFunction(declaration) || ts.isMethodDeclaration(declaration)) {
+                    if (state.role === "generator") state.mode = this.isGeneratorDeclaration(declaration) ? "seed" : "never";
+                    else { state.mode = "any"; connect(state, declaration, "function"); }
+                } else if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+                    const initializer = this.unwrapTransparentExpression(declaration.initializer);
+                    if (ts.isIdentifier(initializer)) {
+                        state.mode = "any"; connect(state, initializer, state.role);
+                    } else if (ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer)) {
+                        if (state.role === "generator") state.mode = this.isGeneratorDeclaration(initializer) ? "seed" : "never";
+                        else { state.mode = "any"; connect(state, initializer, "function"); }
+                    }
+                }
+                continue;
+            }
+            if (state.role === "function") {
+                if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node) &&
+                    !ts.isArrowFunction(node) && !ts.isMethodDeclaration(node)) continue;
+                const expression = node.body && !ts.isBlock(node.body) ? node.body
+                    : node.body && ts.isBlock(node.body) && node.body.statements.length === 1 &&
+                        ts.isReturnStatement(node.body.statements[0]) ? node.body.statements[0].expression : undefined;
+                if (!expression) continue;
+                const unwrapped = this.unwrapTransparentExpression(expression);
+                if (ts.isIdentifier(unwrapped)) {
+                    const returned = this.symbolForIdentifier(unwrapped);
+                    state.mode = returned && node.parameters.some(parameter =>
+                        this.test262BindingNames(parameter.name).some(name => this.symbolForIdentifier(name) === returned))
+                        ? "seed" : "never";
+                } else { state.mode = "any"; connect(state, unwrapped, "expression"); }
+                continue;
+            }
+            if (!ts.isExpression(node)) continue;
+            const expression = this.unwrapTransparentExpression(node);
+            if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
+                state.mode = "any";
+                connect(state, expression.expression, "generator");
+                connect(state, expression.expression, "passthrough");
+            } else if (ts.isBinaryExpression(expression) &&
+                (expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+                    expression.operatorToken.kind === ts.SyntaxKind.BarBarToken)) {
+                state.mode = "any";
+                connect(state, expression.left, "expression"); connect(state, expression.right, "expression");
+            } else if (ts.isConditionalExpression(expression)) {
+                state.mode = "all";
+                connect(state, expression.whenTrue, "expression"); connect(state, expression.whenFalse, "expression");
+            }
         }
-        if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
-            return this.isLazyGeneratorFunctionValue(expression.expression) ||
-                this.isLazyGeneratorPassthroughFunctionValue(expression.expression);
+        const ready = pending.filter(state => state.mode === "seed");
+        for (const state of ready) state.value = true;
+        for (let index = 0; index < ready.length; index++) {
+            for (const dependent of ready[index]!.dependents) {
+                dependent.trueCount++;
+                if (!dependent.value && (dependent.mode === "any" ||
+                    dependent.mode === "all" && dependent.trueCount === dependent.dependencies.size)) {
+                    dependent.value = true; ready.push(dependent);
+                }
+            }
         }
-        return this.isLazyGeneratorPassthroughExpression(expression);
+        return result.value;
     }
 
-    private isLazyGeneratorPassthroughExpression(expression: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expression);
-        if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
-            return this.isLazyGeneratorFunctionValue(unwrapped.expression) ||
-                this.isLazyGeneratorPassthroughFunctionValue(unwrapped.expression);
-        }
-        if (ts.isBinaryExpression(unwrapped) &&
-            (unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
-                unwrapped.operatorToken.kind === ts.SyntaxKind.BarBarToken)) {
-            return this.isLazyGeneratorPassthroughExpression(unwrapped.left) ||
-                this.isLazyGeneratorPassthroughExpression(unwrapped.right);
-        }
-        return ts.isConditionalExpression(unwrapped) &&
-            this.isLazyGeneratorPassthroughExpression(unwrapped.whenTrue) &&
-            this.isLazyGeneratorPassthroughExpression(unwrapped.whenFalse);
+    private isLazyGeneratorPassthroughFunction(node: ts.Node): boolean {
+        return this.lazyGeneratorRepresentation(node, "function");
     }
+
 
     private isLazyGeneratorPassthroughParameter(node: ts.Node): boolean {
         if (!ts.isIdentifier(node)) return false;
@@ -42318,7 +42390,7 @@ class Emitter {
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
             if (this.emitTest262AnnexBGlobalFunctionUpdate(buf, stmt)) return;
-            if (this.isSupportedDirectSwitchFunctionDeclaration(stmt)) return;
+            if (this.isSupportedLexicalFunctionDeclaration(stmt)) return;
             if (!this.shouldEmitLocalFunctionDeclaration(stmt)) return;
             if (!this.isSupportedLocalFunctionDeclaration(stmt)) {
                 unsupported(stmt, "referenced local function declaration is not supported by the canonical lowering");
@@ -43152,9 +43224,9 @@ class Emitter {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
-            if (this.isDirectSwitchLexicalDeclaration(d) && this.lexicalBindingScopes.length > 0) {
+            if (this.isDirectScopeLexicalDeclaration(d) && this.lexicalBindingScopes.length > 0) {
                 if (!d.initializer && !ts.isIdentifier(d.name)) {
-                    unsupported(d, "switch lexical binding pattern requires an initializer");
+                    unsupported(d, "lexical binding pattern requires an initializer");
                 }
                 const sourceValue = d.initializer
                     ? this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer)
@@ -43168,7 +43240,7 @@ class Emitter {
                             this.symbolForIdentifier(identifier),
                         );
                         if (!binding || binding.declaration !== d) {
-                            unsupported(identifier, "direct switch lexical binding is missing its CaseBlock cell");
+                            unsupported(identifier, "lexical binding is missing its environment cell");
                         }
                         target.line(`${binding.value} = ${value};`);
                         target.line(
@@ -43622,32 +43694,8 @@ class Emitter {
         }
     }
 
-    private emitStmtInBlock(buf: CBuf, s: ts.Statement): void {
-        if (ts.isBlock(s)) {
-            if (s.statements.some(
-                (statement) => ts.isVariableStatement(statement) &&
-                    (statement.declarationList.flags & (ts.NodeFlags.Using | ts.NodeFlags.AwaitUsing)) !== 0,
-            )) {
-                this.emitStmtList(buf, s.statements);
-                return;
-            }
-            for (let i = 0; i < s.statements.length; i++) {
-                const child = s.statements[i]!;
-                if (
-                    i + 1 < s.statements.length &&
-                    this.isDuplicateSimpleSetAdd(child, s.statements[i + 1]!)
-                ) {
-                    this.emitStmt(buf, child);
-                    i++;
-                    if (this.statementAlwaysExits(child)) break;
-                    continue;
-                }
-                this.emitStmt(buf, child);
-                if (this.statementAlwaysExits(child)) break;
-            }
-        } else {
-            this.emitStmt(buf, s);
-        }
+    private emitStmtInBlock(buf: CBuf, statement: ts.Statement): void {
+        this.emitStmt(buf, statement);
     }
 
     private emitLoopStmtInBlock(
@@ -43673,26 +43721,6 @@ class Emitter {
         buf.line(`${breakTarget}: break;`);
         if (!continueTarget) buf.line(`${nativeContinue}: continue;`);
         buf.line(`${normalTarget}:;`);
-    }
-
-    private isDuplicateSimpleSetAdd(a: ts.Statement, b: ts.Statement): boolean {
-        const parse = (stmt: ts.Statement): { recv: string; arg: string } | null => {
-            if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
-            const call = stmt.expression;
-            if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== "add") {
-                return null;
-            }
-            if (call.arguments.length !== 1) return null;
-            const recv = call.expression.expression;
-            const arg = call.arguments[0]!;
-            if (!ts.isIdentifier(recv) || !ts.isIdentifier(arg)) return null;
-            const recvType = mapType(recv, this.checker);
-            if (recvType.kind !== "set") return null;
-            return { recv: recv.text, arg: arg.text };
-        };
-        const left = parse(a);
-        const right = parse(b);
-        return !!left && !!right && left.recv === right.recv && left.arg === right.arg;
     }
 
     private emitWhile(buf: CBuf, ws: ts.WhileStatement): void {
@@ -47014,7 +47042,16 @@ class Emitter {
 
     private emitBlock(buf: CBuf, b: ts.Block): void {
         buf.open("");
-        this.emitStmtList(buf, b.statements);
+        const declarations = directLexicalDeclarations(b.statements)
+            .filter((declaration) => this.isDirectScopeLexicalDeclaration(declaration));
+        const scope = this.createScopeLexicalBindings(buf, declarations);
+        this.lexicalBindingScopes.push(scope);
+        try {
+            this.initializeScopeFunctions(buf, declarations);
+            this.emitStmtList(buf, b.statements);
+        } finally {
+            if (this.lexicalBindingScopes.pop() !== scope) throw new Error("lexical scope stack corruption");
+        }
         buf.close();
     }
 
@@ -48008,27 +48045,8 @@ class Emitter {
         return true;
     }
 
-    private directSwitchLexicalDeclarations(
-        sw: ts.SwitchStatement,
-    ): SwitchLexicalDeclaration[] {
-        const declarations: SwitchLexicalDeclaration[] = [];
-        for (const clause of sw.caseBlock.clauses) {
-            for (const statement of clause.statements) {
-                if (ts.isVariableStatement(statement) &&
-                    (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) {
-                    declarations.push(...statement.declarationList.declarations);
-                    continue;
-                }
-                if (ts.isFunctionDeclaration(statement) && statement.name) {
-                    declarations.push(statement as typeof statement & { name: ts.Identifier });
-                    continue;
-                }
-                if (ts.isClassDeclaration(statement) && statement.name) {
-                    declarations.push(statement as typeof statement & { name: ts.Identifier });
-                }
-            }
-        }
-        return declarations;
+    private directSwitchLexicalDeclarations(sw: ts.SwitchStatement): ScopeLexicalDeclaration[] {
+        return directLexicalDeclarations(sw.caseBlock.clauses.flatMap((clause) => [...clause.statements]));
     }
 
     private isSupportedDirectSwitchClassDeclaration(
@@ -48176,8 +48194,8 @@ class Emitter {
         return true;
     }
 
-    private switchLexicalDeclarationNames(
-        declaration: SwitchLexicalDeclaration,
+    private scopeLexicalDeclarationNames(
+        declaration: ScopeLexicalDeclaration,
     ): readonly ts.Identifier[] {
         return ts.isVariableDeclaration(declaration)
             ? this.test262BindingNames(declaration.name)
@@ -48186,6 +48204,84 @@ class Emitter {
 
     private switchHasDirectLexicalDeclarations(sw: ts.SwitchStatement): boolean {
         return this.directSwitchLexicalDeclarations(sw).length > 0;
+    }
+
+    private createScopeLexicalBindings(
+        buf: CBuf,
+        declarations: readonly ScopeLexicalDeclaration[],
+    ): Map<ts.Symbol, LocalLexicalBindingPlan> {
+        const lexicalScope = new Map<ts.Symbol, LocalLexicalBindingPlan>();
+        for (const declaration of declarations) {
+            for (const identifier of this.scopeLexicalDeclarationNames(declaration)) {
+                const symbol = this.symbolForIdentifier(identifier);
+                if (!symbol) unsupported(identifier, "unresolved lexical binding");
+                if (lexicalScope.has(symbol)) continue;
+                const metadata = this.localLexicalMetadataForSymbol(symbol);
+                if (!metadata) unsupported(identifier, "invalid lexical binding metadata");
+                const cell = this.currentFunctionCellForSymbol(symbol);
+                if (cell) {
+                    if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
+                        unsupported(
+                            identifier,
+                            "captured lexical binding requires a canonical value/TDZ cell",
+                        );
+                    }
+                    this.emitCaptureCellInitialization(
+                        buf,
+                        cell,
+                        "tsc_value_undefined()",
+                        false,
+                    );
+                    lexicalScope.set(symbol, {
+                        symbol,
+                        declaration,
+                        name: metadata.name,
+                        immutable: metadata.immutable,
+                        value: `(*${cell.cellName})`,
+                        initialized: `(*${cell.initializedCellName})`,
+                        gcRoot: `(*${cell.rootCellName})`,
+                    });
+                    continue;
+                }
+                const value = this.freshTemp(`_scope_lex_${metadata.name}`);
+                const initialized = this.freshTemp(`_scope_lex_${metadata.name}_initialized`);
+                const gcRoot = this.freshTemp(`_scope_lex_${metadata.name}_gc_root`);
+                buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
+                buf.line(`bool ${initialized} = false;`);
+                buf.line(`void* volatile ${gcRoot} = NULL;`);
+                lexicalScope.set(symbol, {
+                    symbol,
+                    declaration,
+                    name: metadata.name,
+                    immutable: metadata.immutable,
+                    value,
+                    initialized,
+                    gcRoot,
+                });
+            }
+        }
+        return lexicalScope;
+    }
+
+    private initializeScopeFunctions(buf: CBuf, declarations: readonly ScopeLexicalDeclaration[]): void {
+        for (const declaration of declarations) {
+            if (!ts.isFunctionDeclaration(declaration)) continue;
+            if (!this.isSupportedLexicalFunctionDeclaration(declaration)) {
+                unsupported(
+                    declaration,
+                    "lexical function declaration is not supported by the canonical closure lowering",
+                );
+            }
+            const symbol = this.symbolForIdentifier(declaration.name);
+            const binding = this.lexicalBindingForSymbol(symbol);
+            if (!binding) {
+                unsupported(declaration.name, "lexical function is missing its environment cell");
+            }
+            const closure = this.emitClosureExpression(declaration);
+            buf.line(`${binding.value} = ${this.coerce(closure, T_VALUE, declaration)};`);
+            buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
+            buf.line(`${binding.initialized} = true;`);
+        }
     }
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
@@ -48222,81 +48318,15 @@ class Emitter {
             buf.line(`${scriptCompletion.gcRoot} = NULL;`);
         }
 
-        const lexicalScope = new Map<ts.Symbol, LocalLexicalBindingPlan>();
         const lexicalDeclarations = this.directSwitchLexicalDeclarations(sw);
-        for (const declaration of lexicalDeclarations) {
-            for (const identifier of this.switchLexicalDeclarationNames(declaration)) {
-                const symbol = this.symbolForIdentifier(identifier);
-                if (!symbol) unsupported(identifier, "unresolved direct switch lexical binding");
-                if (lexicalScope.has(symbol)) continue;
-                const metadata = this.localLexicalMetadataForSymbol(symbol);
-                if (!metadata) unsupported(identifier, "invalid direct switch lexical binding metadata");
-                const cell = this.currentFunctionCellForSymbol(symbol);
-                if (cell) {
-                    if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
-                        unsupported(
-                            identifier,
-                            "captured direct switch lexical binding requires a canonical value/TDZ cell",
-                        );
-                    }
-                    this.emitCaptureCellInitialization(
-                        buf,
-                        cell,
-                        "tsc_value_undefined()",
-                        false,
-                    );
-                    lexicalScope.set(symbol, {
-                        symbol,
-                        declaration,
-                        name: metadata.name,
-                        immutable: metadata.immutable,
-                        value: `(*${cell.cellName})`,
-                        initialized: `(*${cell.initializedCellName})`,
-                        gcRoot: `(*${cell.rootCellName})`,
-                    });
-                    continue;
-                }
-                const value = this.freshTemp(`_switch_lex_${metadata.name}`);
-                const initialized = this.freshTemp(`_switch_lex_${metadata.name}_initialized`);
-                const gcRoot = this.freshTemp(`_switch_lex_${metadata.name}_gc_root`);
-                buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
-                buf.line(`bool ${initialized} = false;`);
-                buf.line(`void* volatile ${gcRoot} = NULL;`);
-                lexicalScope.set(symbol, {
-                    symbol,
-                    declaration,
-                    name: metadata.name,
-                    immutable: metadata.immutable,
-                    value,
-                    initialized,
-                    gcRoot,
-                });
-            }
-        }
+        const lexicalScope = this.createScopeLexicalBindings(buf, lexicalDeclarations);
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
             return this.switchStrictEqualityCondition(dv, caseVal, caseExpr);
         };
         this.lexicalBindingScopes.push(lexicalScope);
         try {
-            for (const declaration of lexicalDeclarations) {
-                if (!ts.isFunctionDeclaration(declaration)) continue;
-                if (!this.isSupportedDirectSwitchFunctionDeclaration(declaration)) {
-                    unsupported(
-                        declaration,
-                        "direct switch function declaration is not supported by the canonical closure lowering",
-                    );
-                }
-                const symbol = this.symbolForIdentifier(declaration.name);
-                const binding = this.lexicalBindingForSymbol(symbol);
-                if (!binding) {
-                    unsupported(declaration.name, "direct switch function is missing its CaseBlock cell");
-                }
-                const closure = this.emitClosureExpression(declaration);
-                buf.line(`${binding.value} = ${this.coerce(closure, T_VALUE, declaration)};`);
-                buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
-                buf.line(`${binding.initialized} = true;`);
-            }
+            this.initializeScopeFunctions(buf, lexicalDeclarations);
             buf.line(`int ${start} = -1;`);
             this.activeBreakTargets.push(endLabel);
             try {
@@ -54213,7 +54243,7 @@ class Emitter {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl)) {
-            return !this.isDirectSwitchLexicalDeclaration(decl);
+            return !this.isDirectScopeLexicalDeclaration(decl);
         }
         const commonJsValueDecl = decl ? this.commonJsObjectExportValueDeclaration(decl) : null;
         if (commonJsValueDecl && ts.isFunctionDeclaration(commonJsValueDecl)) return true;
@@ -54228,6 +54258,9 @@ class Emitter {
     }
 
     private isTopLevelLiftedArrowDeclaration(decl: ts.VariableDeclaration): boolean {
+        // Every JavaScript variable has a boxed declaration slot. Replacing
+        // an immutable initializer with a bare C function breaks that ABI.
+        if (this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (
             !decl.initializer ||
             (!ts.isArrowFunction(decl.initializer) && !ts.isFunctionExpression(decl.initializer))
@@ -54394,43 +54427,12 @@ class Emitter {
         };
     }
 
-    private isLazyGeneratorPassthroughFunctionValue(id: ts.Identifier, seen = new Set<ts.Symbol>()): boolean {
-        const symbol = this.symbolForIdentifier(id);
-        if (!symbol || seen.has(symbol)) return false;
-        seen.add(symbol);
-        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-        if (!declaration) return false;
-        if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration) ||
-            ts.isArrowFunction(declaration) || ts.isMethodDeclaration(declaration)) {
-            return this.isLazyGeneratorPassthroughFunction(declaration);
-        }
-        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-            if (ts.isFunctionExpression(declaration.initializer) || ts.isArrowFunction(declaration.initializer)) {
-                return this.isLazyGeneratorPassthroughFunction(declaration.initializer);
-            }
-            if (ts.isIdentifier(declaration.initializer)) {
-                return this.isLazyGeneratorPassthroughFunctionValue(declaration.initializer, seen);
-            }
-        }
-        return false;
+    private isLazyGeneratorPassthroughFunctionValue(id: ts.Identifier): boolean {
+        return this.lazyGeneratorRepresentation(id, "passthrough");
     }
 
-    private isLazyGeneratorFunctionValue(id: ts.Identifier, seen = new Set<ts.Symbol>()): boolean {
-        const symbol = this.symbolForIdentifier(id);
-        if (!symbol || seen.has(symbol)) return false;
-        seen.add(symbol);
-        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-        if (!declaration) return false;
-        if (ts.isFunctionLike(declaration)) return this.isGeneratorDeclaration(declaration);
-        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-            if (ts.isFunctionLike(declaration.initializer)) {
-                return this.isGeneratorDeclaration(declaration.initializer);
-            }
-            if (ts.isIdentifier(declaration.initializer)) {
-                return this.isLazyGeneratorFunctionValue(declaration.initializer, seen);
-            }
-        }
-        return false;
+    private isLazyGeneratorFunctionValue(id: ts.Identifier): boolean {
+        return this.lazyGeneratorRepresentation(id, "generator");
     }
 
     private ensureFunctionReferenceAdapter(id: ts.Identifier, type: CType): string {

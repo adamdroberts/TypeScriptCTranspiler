@@ -173,7 +173,10 @@ void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source) {
         dest->state = TSC_PROMISE_FULFILLED;
         dest->result = source->result;
         dest->ptr_result = source->ptr_result;
-        dest->box_pointer_result = source->box_pointer_result;
+        /* An async result may already carry its consumer's physical-value
+         * codec while the adopted native producer has none. Keep that ABI
+         * contract until a producer supplies its own explicit codec. */
+        if (source->box_pointer_result) dest->box_pointer_result = source->box_pointer_result;
         tsc_promise_trigger_callbacks(dest);
     } else if (tsc_promise_is_rejected(source)) {
         dest->state = TSC_PROMISE_REJECTED;

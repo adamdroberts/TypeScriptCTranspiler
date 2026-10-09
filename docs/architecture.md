@@ -214,6 +214,12 @@ For readers planning to modify the emitter:
 - `runtime/tsc_runtime.h` — the authoritative list of runtime capabilities.
 - `stdlib/lib.core.d.ts` — the authoritative list of what TS the checker will accept.
 
+### Lexical block declaration instantiation
+
+`src/emit/lexical-declarations.ts` collects the direct variable binding trees and named function/class declarations of a statement list. Ordinary Blocks and flattened CaseBlocks allocate their value/TDZ/root collection through the same scope-entry emitter, then initialize every supported function closure before executing statements. Captures retain fresh heap cells, while uncaptured bindings use rooted locals. Source block boundaries remain C scopes on conditional and loop paths; they are never flattened. The async CFG uses the same collection in scope-enter records and initializes function closures after replacing the complete binding-cell collection. Generality follows from declaration-list traversal and graph re-entry, independent of declaration or execution counts. Function-body instantiation and local Annex B companion bindings remain separate work; unsupported class and async-generator definitions fail closed.
+
+Generator representation probes intern AST-node/role states into a dependency graph. A reverse worklist computes the least fixed point of seed, alternative and conjunction edges; unseeded cycles remain false without recursive classifier calls. JavaScript variable initializers keep the boxed declaration ABI even when immutable. When a native async result is adopted, an existing destination codec remains available until a source supplies its own codec.
+
 ### Ordinary synchronous iteration
 
 Ordinary for-of lowering creates one `tsc_sync_iterator_t` through actual `@@iterator` and `next` lookup. Its lexical owner spans the complete loop and uses the same C cleanup contract as runtime exception frames, so native control-flow edges unwind arbitrary nested owners in reverse scope order. Each step precedes the binding/body exception frame: step failures complete the record; binding/body throws call the shared close operation with original-throw precedence. Fresh returned boxed values retain a decoded root while owners close. This is a cardinality-independent lowering over the source control tree, not an iterator snapshot or a control-edge fixture catalog.

@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { directLexicalDeclarations } from "./lexical-declarations";
 import {
     planAsyncExpressionSequence,
     planAsyncFunctionCompletionEdge,
@@ -636,13 +637,6 @@ export function planAsyncControlFlowGraph(
             }
         }
     };
-    const collectDirectLexicalBindings = (
-        statements: readonly ts.Statement[],
-    ): ts.BindingName[] => statements.flatMap((statement) =>
-        ts.isVariableStatement(statement) &&
-            (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0
-            ? statement.declarationList.declarations.map((declaration) => declaration.name)
-            : []);
     const buildExpressionSequence = (
         expression: ts.Expression,
         assignment: ts.Identifier | null,
@@ -1387,10 +1381,15 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
     ): AsyncControlFlowTarget => {
         const entry = buildSequence(block.statements, next, context);
-        const bindings = collectDirectLexicalBindings(block.statements);
+        const lexical = directLexicalDeclarations(block.statements);
+        const bindings = lexical.map((declaration) => declaration.name);
+        const functions = lexical.filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
+            ts.isFunctionDeclaration(declaration));
+        bindingIdentifiers.push(...lexical.filter((declaration) => !ts.isVariableDeclaration(declaration))
+            .map((declaration) => declaration.name));
         if (bindings.length === 0) return entry;
         const id = reserve();
-        return setState({ kind: "scope-enter", id, bindings, functions: [], next: entry }, context.exceptionTarget);
+        return setState({ kind: "scope-enter", id, bindings, functions, next: entry }, context.exceptionTarget);
     };
 
     const buildFinalizationRegion = (
@@ -2055,22 +2054,12 @@ export function planAsyncControlFlowGraph(
                     defaultTarget,
                 }, context.exceptionTarget);
             }
-            const switchFunctions = statement.caseBlock.clauses.flatMap((clause) =>
-                clause.statements.filter((candidate): candidate is ts.FunctionDeclaration & { name: ts.Identifier } =>
-                    ts.isFunctionDeclaration(candidate) && !!candidate.name));
-            const switchClasses = statement.caseBlock.clauses.flatMap((clause) =>
-                clause.statements.filter((candidate): candidate is ts.ClassDeclaration & { name: ts.Identifier } =>
-                    ts.isClassDeclaration(candidate) && !!candidate.name));
-            const switchBindings = [
-                ...statement.caseBlock.clauses.flatMap((clause) =>
-                    collectDirectLexicalBindings(clause.statements)),
-                ...switchFunctions.map((declaration) => declaration.name),
-                ...switchClasses.map((declaration) => declaration.name),
-            ];
-            bindingIdentifiers.push(
-                ...switchFunctions.map((declaration) => declaration.name),
-                ...switchClasses.map((declaration) => declaration.name),
-            );
+            const lexical = directLexicalDeclarations(statement.caseBlock.clauses.flatMap((clause) => [...clause.statements]));
+            const switchFunctions = lexical.filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
+                ts.isFunctionDeclaration(declaration));
+            const switchBindings = lexical.map((declaration) => declaration.name);
+            bindingIdentifiers.push(...lexical.filter((declaration) => !ts.isVariableDeclaration(declaration))
+                .map((declaration) => declaration.name));
             // The CaseBlock environment is created after the discriminator
             // and before the first case expression, even when no lexical
             // declarations contribute captured cells.
