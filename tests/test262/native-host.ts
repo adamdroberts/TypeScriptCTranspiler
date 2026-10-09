@@ -5,7 +5,7 @@ import ts from "typescript";
 import { compile } from "../../src/compile";
 import { earlyControlFlowFailure } from "../../src/control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "../../src/function-static-semantics";
-import { createEcmaSourceFile } from "../../src/ecmascript-source";
+import { createEcmaSourceFile, ecmaParseGoal, type EcmaParseGoal } from "../../src/ecmascript-source";
 import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
     type ModuleRequest,
@@ -86,6 +86,7 @@ export interface FiniteEvalScriptSourceGraph {
 }
 
 function sourceFileIsStrict(sourceFile: ts.SourceFile): boolean {
+    if (ecmaParseGoal(sourceFile) === "module") return true;
     for (const statement of sourceFile.statements) {
         if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
         if (statement.expression.text === "use strict") return true;
@@ -110,26 +111,41 @@ function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
  * value/location/List graph. Extend its exact-source records to a fixed point;
  * source bindings remain isolated exactly as in native Script compilation. */
 export function finiteEvalScriptSourceGraph(
-    roots: readonly { readonly path: string; readonly source: string }[],
+    roots: readonly { readonly path: string; readonly source: string; readonly goal?: EcmaParseGoal }[],
+    moduleSources: readonly { readonly path: string; readonly source: string; readonly goal?: EcmaParseGoal }[] = [],
 ): FiniteEvalScriptSourceGraph {
     const sources = new Set<string>();
     const directSources = new Map<string, {source:string;strictCaller:boolean;strict:boolean}>();
     const indirectSources = new Map<string, {source:string;strict:boolean}>();
-    const records: Array<{path:string;source:string;strictContext?:boolean;evaluation?:boolean}> = roots.map(root => ({...root}));
+    const records: Array<{path:string;source:string;goal?:EcmaParseGoal;root?:boolean;strictContext?:boolean;evaluation?:boolean}> = [
+        ...moduleSources.map(record => ({...record,goal:record.goal ?? "module" as const})),
+        ...roots.map(root => ({...root,root:true})),
+    ];
     for (;;) {
         const byPath = new Map(records.map(record => [path.resolve(record.path),record]));
         const options: ts.CompilerOptions = {noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext};
         const host = ts.createCompilerHost(options);
+        const directories = new Set<string>();
+        for (const filename of byPath.keys()) {
+            let directory = path.dirname(filename);
+            while (!directories.has(directory)) {
+                directories.add(directory);
+                const parent = path.dirname(directory);
+                if (parent === directory) break;
+                directory = parent;
+            }
+        }
+        host.directoryExists = directory => directories.has(path.resolve(directory));
         host.getSourceFile = filename => {
             const record = byPath.get(path.resolve(filename));
             if (!record) return undefined;
-            const file = createEcmaSourceFile(filename,record.source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS);
+            const file = createEcmaSourceFile(filename,record.source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,record.goal);
             (file as ts.SourceFile & {externalModuleIndicator?:ts.Node}).externalModuleIndicator ??= file;
             return file;
         };
         host.fileExists = filename => byPath.has(path.resolve(filename));
         host.readFile = filename => byPath.get(path.resolve(filename))?.source;
-        const program = ts.createProgram([...byPath.keys()],options,host);
+        const program = ts.createProgram([...byPath].filter(([,record])=>record.root).map(([filename])=>filename),options,host);
         const before = records.length;
         let unresolved: string | null = null;
         for (const invocation of sourceEvaluationInvocations(program,{evaluations:records.filter(record => record.evaluation)
@@ -147,20 +163,20 @@ export function finiteEvalScriptSourceGraph(
                 if (invocation.operation === "eval-script") {
                     if (sources.has(source)) continue;
                     sources.add(source);
-                    records.push({path:`__tsc2c_eval_script__/${sha256Text(source)}.js`,source,evaluation:true});
+                    records.push({path:`__tsc2c_eval_script__/${sha256Text(source)}.js`,source,goal:"script",root:true,evaluation:true});
                 } else if (invocation.direct) {
                     const strictCaller = directEvalIsStrict(invocation.node,record.strictContext ?? sourceFileIsStrict(file));
                     const strict = strictCaller || sourceFileIsStrict(parsed),key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
                     if (directSources.has(key)) continue;
                     directSources.set(key,{source,strictCaller,strict});
-                    records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,
-                        strictContext:strict,evaluation:true});
+                    records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,goal:"script",
+                        strictContext:strict,root:true,evaluation:true});
                 } else {
                     if (indirectSources.has(source)) continue;
                     const strict = sourceFileIsStrict(parsed);
                     indirectSources.set(source,{source,strict});
-                    records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,
-                        strictContext:strict,evaluation:true});
+                    records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,goal:"script",
+                        strictContext:strict,root:true,evaluation:true});
                 }
             }
         }
@@ -751,12 +767,12 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
     const dependencyFailure = moduleGraphFailure(request);
     if (dependencyFailure) return compilerErrorPreparation(request, dependencyFailure);
     const evalScriptGraph = finiteEvalScriptSourceGraph([
-        ...request.setupScripts.map((script) => ({ path: script.path, source: script.source })),
-        { path: request.testPath, source: request.testSource },
-        ...(request.goal === "module" ? request.moduleFiles : [])
+        ...request.setupScripts.map((script) => ({ path: script.path, source: script.source, goal: "script" as const })),
+        { path: request.testPath, source: request.testSource, goal: request.goal },
+    ], request.moduleFiles
             .filter((file) => /\.[cm]?js$/i.test(file.path))
-            .map((file) => ({ path: file.path, source: Buffer.from(file.data, "base64").toString("utf8") })),
-    ]);
+            .map((file) => ({ path: file.path, source: Buffer.from(file.data, "base64").toString("utf8"), goal: "module" as const })),
+    );
     if (evalScriptGraph.error) {
         return {
             protocolVersion: hostProtocolVersion,

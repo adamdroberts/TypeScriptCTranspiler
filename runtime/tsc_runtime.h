@@ -878,6 +878,7 @@ typedef struct {
     tsc_environment_t* record;
 } tsc_environment_scope_t;
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict);
+tsc_environment_t* tsc_environment_module_new(void);
 void tsc_environment_variable_enter(tsc_environment_scope_t* scope);
 tsc_value_t tsc_environment_eval_this(void);
 tsc_value_t tsc_environment_eval_new_target(void);

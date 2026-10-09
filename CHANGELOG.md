@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Retain native source Module environments with shared binding cells, immutable live imports and instantiated function owners. Preserve Module this/new.target boundaries and explicit parse-goal strictness; verify independent Node, semantic partitions and retained-owner stress in both memory modes.
+
 - Share direct-eval Reference context across ordinary and resumed call application. Preserve caller cells, actual Lists, saved callee identity, optional indirect calls and abrupt arguments; retain implicit closure captures and mutable global source locations through shared collections. Verify generated semantics and deep native ownership in both memory modes.
 
 - Share finite eval and Function discovery through the source-value and actual-List graph. Close returned and aliased source records transitively, preserve non-String eval identity and parenthesized direct calls, and replace literal-only admission and name-based alias predecessors. Verify generated call semantics and a deep dependency chain through native E2E in both memory modes.

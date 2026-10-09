@@ -19,7 +19,7 @@ struct tsc_environment {
     tsc_environment_binding_t* bindings;
     bool variable_scope;
     tsc_environment_t* captured;
-    bool function_context;
+    enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION } context;
     tsc_value_t this_value;
     void* this_root;
     tsc_value_t new_target;
@@ -41,12 +41,18 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->bindings = NULL;
     environment->variable_scope = variable_scope;
     environment->captured = NULL;
-    environment->function_context = false;
+    environment->context = ENV_CONTEXT_NONE;
     environment->this_value = tsc_value_undefined();
     environment->this_root = NULL;
     environment->new_target = tsc_value_undefined();
     environment->new_target_root = NULL;
     return environment;
+}
+
+tsc_environment_t* tsc_environment_module_new(void) {
+    tsc_environment_t* record = tsc_environment_new(NULL, true);
+    record->context = ENV_CONTEXT_MODULE;
+    return record;
 }
 
 static tsc_environment_binding_t* environment_own_binding(tsc_environment_t* environment, tsc_str_t* name) {
@@ -107,7 +113,7 @@ void tsc_environment_variable_enter(tsc_environment_scope_t* scope) {
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict) {
     tsc_environment_variable_enter(scope);
     if (!arrow) {
-        scope->record->function_context = true;
+        scope->record->context = ENV_CONTEXT_FUNCTION;
         tsc_value_t receiver = tsc_call_receiver();
         scope->record->this_value = strict ? receiver : tsc_value_sloppy_this(receiver);
         scope->record->this_root = tsc_value_gc_root(scope->record->this_value);
@@ -118,24 +124,26 @@ void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, 
     }
 }
 
-static tsc_environment_t* environment_function_context(void) {
+static tsc_environment_t* environment_context(void) {
     for (tsc_environment_t* record = current_environment; record; record = record->parent)
-        if (record->function_context) return record;
+        if (record->context != ENV_CONTEXT_NONE) return record;
     return NULL;
 }
 
 tsc_value_t tsc_environment_eval_this(void) {
-    tsc_environment_t* record = environment_function_context();
+    tsc_environment_t* record = environment_context();
     return record ? record->this_value : tsc_global_object();
 }
 
 void tsc_environment_require_function_context(void) {
-    if (!environment_function_context()) tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("new.target requires a function evaluation context"));
+    tsc_environment_t* record = environment_context();
+    if (!record || record->context != ENV_CONTEXT_FUNCTION)
+        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("new.target requires a function evaluation context"));
 }
 
 tsc_value_t tsc_environment_eval_new_target(void) {
     tsc_environment_require_function_context();
-    return environment_function_context()->new_target;
+    return environment_context()->new_target;
 }
 
 void tsc_environment_scope_leave(tsc_environment_scope_t* scope) {
