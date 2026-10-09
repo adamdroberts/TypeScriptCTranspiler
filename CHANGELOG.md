@@ -1,5 +1,7 @@
 # Changelog
 
+- Unify native class member names under the framed scope/kind/key plan across declarations, calls and adapters. Reuse erased generic specializations for method values and ordinary iterator/binding/close machinery for native classes; delete the superseded native loop and binding emitters. Verify independent member-domain and retained-owner properties with native E2E.
+
 - Retain JavaScript callable definition spans and finite Function-constructor SourceText in canonical owners. Make Function.prototype.toString read internal source/InitialName without mutable-property or Proxy observation, and route native function string coercion through ordinary ToPrimitive. Verify independent span, metadata, Realm and retained-source partitions with native E2E in both memory modes.
 
 - Replace constant Function-constructor adapters with one transitive finite source graph and fresh ordinary function factories. Preserve mutable callee lookup, actual argument conversion, formal/default/rest/closure and Realm semantics, prototype allocation and runtime SyntaxError. Generalize shared parameter early errors, remove empty-body and single-body bridge predecessors, and verify grammar/model partitions, retained-function stress and native E2E in both memory modes.

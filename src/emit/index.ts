@@ -28069,6 +28069,15 @@ class Emitter {
         };
     }
 
+    private nativeClassMethodValueCallee(owner: ts.ClassDeclaration, member: ts.MethodDeclaration): string {
+        if (!owner.name) unsupported(owner, "native method values require a named owner");
+        const memberName = this.classMethodCName(member.name);
+        if (!memberName) unsupported(member, "native class member key is outside the static key plan");
+        if (!this.isGenericMethod(member)) return `${owner.name.text}_${memberName}`;
+        const erased = new Map((member.typeParameters ?? []).map(parameter => [parameter.name.text, T_VALUE]));
+        return this.ensureGenericMethodSpecialization(member, owner.name.text, erased);
+    }
+
     private ensureClassStaticMethodDecoratorAdapter(
         cd: ts.ClassDeclaration,
         member: ts.MethodDeclaration,
@@ -28107,7 +28116,7 @@ class Emitter {
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
             callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
         }
-        const call = `${cd.name.text}_${methodName}(${callArgs.join(", ")})`;
+        const call = `${this.nativeClassMethodValueCallee(cd, member)}(${callArgs.join(", ")})`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
             buf.line("return tsc_value_undefined();");
@@ -28171,7 +28180,7 @@ class Emitter {
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
             callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
         }
-        const call = `${cd.name.text}_${methodName}(${callArgs.join(", ")})`;
+        const call = `${this.nativeClassMethodValueCallee(cd, member)}(${callArgs.join(", ")})`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
             buf.line("return tsc_value_undefined();");
@@ -28191,7 +28200,6 @@ class Emitter {
     ): string {
         if (!owner.name) unsupported(owner, "class method value adapters require a named class");
         if (isStatic(member)) unsupported(member, "class method value adapters require an instance method");
-        if (this.isGenericMethod(member)) unsupported(member, "generic class methods cannot be boxed dynamically");
         const methodName = this.classMethodCName(member.name);
         if (!methodName) unsupported(member, "computed instance method names");
         const key = `${owner.name.text}.${methodName}`;
@@ -28226,7 +28234,7 @@ class Emitter {
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
             callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
         }
-        const call = `${owner.name.text}_${methodName}(${callArgs.join(", ")})`;
+        const call = `${this.nativeClassMethodValueCallee(owner, member)}(${callArgs.join(", ")})`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
             buf.line("return tsc_value_undefined();");
@@ -28254,7 +28262,7 @@ class Emitter {
             }
         }
         for (const method of cd.members) {
-            if (!ts.isMethodDeclaration(method) || isStatic(method) || this.isGenericMethod(method)) continue;
+            if (!ts.isMethodDeclaration(method) || isStatic(method)) continue;
             const symbol = ts.isComputedPropertyName(method.name)
                 ? this.wellKnownSymbolName(method.name.expression) : null;
             const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(method.name);
@@ -43807,15 +43815,9 @@ class Emitter {
 
     private emitForOfWithEnvironment(buf: CBuf, fos: ts.ForOfStatement): void {
         const iter = this.emitExpr(fos.expression);
-        // Remaining native class backends still need ordinary object protocols.
+        // Native class boxing publishes the same ordinary method values and
+        // fields consumed by the canonical iterator record and binding cells.
         if (iter.ty.kind === "urlsearchparams") return this.emitUrlSearchParamsForOf(buf, fos, iter);
-        if (iter.ty.kind === "class") {
-            if (this.emitCustomIteratorForOf(buf, fos, iter)) return;
-            const custom = this.emitCustomIterableArray(fos.expression, iter);
-            if (!custom) unsupported(fos.expression, "synchronous iterator object representation unavailable");
-            this.emitOrdinaryForOf(buf, fos, custom);
-            return;
-        }
         this.emitOrdinaryForOf(buf, fos, iter);
     }
 
@@ -43915,7 +43917,7 @@ class Emitter {
             );
         }
         const result = this.emitSequencedCall(
-            `${owner.name!.text}___tsc_iterator`,
+            `${owner.name!.text}_${this.classMethodCName(method.name)}`,
             ret,
             [
                 {
@@ -43995,10 +43997,10 @@ class Emitter {
             : `((${nextOwnerName}_t*)${iterVar})`;
         const c = (
             `({ ${iter.ty.c} ${recv} = ${iter.c}; ` +
-            `${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ` +
+            `${iteratorType.c} const ${iterVar} = ${owner.name!.text}_${this.classMethodCName(method.name)}(${selfArg}); ` +
             `tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ` +
-            `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg}${eagerNextArg ? `, ${eagerNextArg}` : ""}); ` +
-            `if (${step}->done) break; ${valueType.c} ${value} = ${step}->value; ` +
+            `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_${this.classMethodCName(next.name)}(${nextSelfArg}${eagerNextArg ? `, ${eagerNextArg}` : ""}); ` +
+            `if (${step}->${mangleIdent("done")}) break; ${valueType.c} ${value} = ${step}->${mangleIdent("value")}; ` +
             `tsc_array_push_raw(${out}, &${value}); } ${out}; })`
         );
         if (lazy) {
@@ -44017,16 +44019,16 @@ class Emitter {
             nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
             if (!nextArg) nextBuf.line("(void)next_arg;");
             nextBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
-            nextBuf.line(`${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg.replace(iterVar, `${env}->iterator`)}${nextArg ? `, ${nextArg}` : ""});`);
-            nextBuf.open(`if (${step}->done)`);
-            nextBuf.line(`a->iter_return = ${this.coerce({ c: `${step}->value`, ty: valueType }, T_VALUE, next)};`);
+            nextBuf.line(`${stepType.c} const ${step} = ${nextOwnerName}_${this.classMethodCName(next.name)}(${nextSelfArg.replace(iterVar, `${env}->iterator`)}${nextArg ? `, ${nextArg}` : ""});`);
+            nextBuf.open(`if (${step}->${mangleIdent("done")})`);
+            nextBuf.line(`a->iter_return = ${this.coerce({ c: `${step}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, next)};`);
             nextBuf.line("a->iter_has_return = true;");
             nextBuf.line("a->iter_return_consumed = false;");
             nextBuf.line("*state = -1;");
             nextBuf.line("*done = true;");
             nextBuf.line("return;");
             nextBuf.close();
-            nextBuf.line(`${valueType.c} ${stepValue} = ${step}->value;`);
+            nextBuf.line(`${valueType.c} ${stepValue} = ${step}->${mangleIdent("value")};`);
             nextBuf.line(`tsc_array_push_raw(a, &${stepValue});`);
             nextBuf.line("*done = false;");
             nextBuf.close();
@@ -44059,8 +44061,8 @@ class Emitter {
                     const throwName = this.classMethodCName(throwMethod.method.name);
                     if (!throwName) unsupported(throwMethod.method, "could not resolve iterator throw() name");
                     closeBuf.line(`${stepType.c} const ${throwStep} = ${throwMethod.owner.name!.text}_${throwName}(${throwSelf}${throwArg ? `, ${throwArg}` : ""});`);
-                    closeBuf.open(`if (${throwStep}->done)`);
-                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${throwStep}->value`, ty: valueType }, T_VALUE, throwMethod.method)};`);
+                    closeBuf.open(`if (${throwStep}->${mangleIdent("done")})`);
+                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${throwStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, throwMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
                     closeBuf.line("a->iter_return_consumed = false;");
                     closeBuf.line("a->state = -1;");
@@ -44068,7 +44070,7 @@ class Emitter {
                     closeBuf.line("return false;");
                     closeBuf.close();
                     closeBuf.line("a->lazy_close_yielded = true;");
-                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${throwStep}->value`, ty: valueType }, T_VALUE, throwMethod.method)};`);
+                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${throwStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, throwMethod.method)};`);
                     closeBuf.line("return false;");
                 }
                 closeBuf.line("return true;");
@@ -44095,8 +44097,8 @@ class Emitter {
                     const returnName = this.classMethodCName(returnMethod.method.name);
                     if (!returnName) unsupported(returnMethod.method, "could not resolve iterator return() name");
                     closeBuf.line(`${stepType.c} const ${returnStep} = ${returnMethod.owner.name!.text}_${returnName}(${returnSelf}${returnArg ? `, ${returnArg}` : ""});`);
-                    closeBuf.open(`if (${returnStep}->done)`);
-                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${returnStep}->value`, ty: valueType }, T_VALUE, returnMethod.method)};`);
+                    closeBuf.open(`if (${returnStep}->${mangleIdent("done")})`);
+                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${returnStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, returnMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
                     closeBuf.line("a->iter_return_consumed = false;");
                     closeBuf.line("a->state = -1;");
@@ -44104,7 +44106,7 @@ class Emitter {
                     closeBuf.line("return true;");
                     closeBuf.close();
                     closeBuf.line("a->lazy_close_yielded = true;");
-                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${returnStep}->value`, ty: valueType }, T_VALUE, returnMethod.method)};`);
+                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${returnStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, returnMethod.method)};`);
                     closeBuf.line("return true;");
                 }
                 closeBuf.line("return false;");
@@ -44114,342 +44116,12 @@ class Emitter {
                 this.closureDefs.write(closeBuf.toString());
             }
             return {
-                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out});${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
+                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}_${this.classMethodCName(method.name)}(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out});${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
                 ty: arrayType(valueType),
                 lazyGenerator: true,
             };
         }
         return { c, ty: arrayType(valueType) };
-    }
-
-    private emitCustomIteratorForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        iter: EmitResult,
-    ): boolean {
-        const cd = this.classDeclForExpression(fos.expression);
-        if (!cd) return false;
-        const found = this.findSymbolIteratorMethod(cd);
-        if (!found) return false;
-        const { owner, method } = found;
-        const sig = this.checker.getSignatureFromDeclaration(method);
-        if (!sig) unsupported(method, "could not resolve iterator method signature");
-        const iteratorType = this.prepareType(mapTsType(method, sig.getReturnType(), this.checker));
-        if (iteratorType.kind !== "class" || !iteratorType.className) return false;
-        const iteratorDecl = this.findClassDecl(iteratorType.className);
-        if (!iteratorDecl) return false;
-        const foundNext = this.findNamedClassMethod(iteratorDecl, "next");
-        if (!foundNext) return false;
-        const { owner: nextOwner, method: next } = foundNext;
-        const nextSig = this.checker.getSignatureFromDeclaration(next);
-        if (!nextSig) unsupported(next, "could not resolve iterator next() signature");
-        const stepTsType = nextSig.getReturnType();
-        const stepType = this.prepareType(mapTsType(next, stepTsType, this.checker));
-        if (stepType.kind !== "class") return false;
-        const doneType = this.objectFieldType(next, stepTsType, "done", next.name);
-        if (doneType.kind !== "boolean") unsupported(next, "iterator next().done must be boolean");
-        const valueType = this.objectFieldType(next, stepTsType, "value", next.name);
-
-        const entryBindingDecl = ts.isVariableDeclarationList(fos.initializer)
-            ? fos.initializer.declarations[0]
-            : null;
-        if (entryBindingDecl && ts.isObjectBindingPattern(entryBindingDecl.name)) {
-            if (valueType.kind !== "value" && valueType.kind !== "class" && valueType.kind !== "array") {
-                unsupported(
-                    entryBindingDecl.name,
-                    "custom iterator object destructuring requires dynamically boxed or typed object or array iterator values",
-                );
-            }
-            const iterVar = this.freshTemp("_it");
-            const stepVar = this.freshTemp("_step");
-            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-            const qual = bindingIsConst ? " const" : "";
-            const recv = this.freshTemp("_recv");
-            buf.open("");
-            buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
-            const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
-            buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
-            const nextOwnerName = nextOwner.name!.text;
-            const nextSelfArg = nextOwnerName === iteratorType.className
-                ? iterVar
-                : `((${nextOwnerName}_t*)${iterVar})`;
-            buf.open("while (true)");
-            buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
-            buf.line(`if (${stepVar}->done) break;`);
-            if (valueType.kind === "value") {
-                this.emitDynamicObjectBindingsForOf(buf, entryBindingDecl.name, `${stepVar}->value`, (descriptor, value) => {
-                    buf.line(
-                        `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
-                    );
-                });
-            } else {
-                const valueTsType = this.objectFieldTsType(stepTsType, "value", next.name);
-                if (!valueTsType) {
-                    unsupported(
-                        entryBindingDecl.name,
-                        "typed custom iterator object destructuring could not resolve the value object or array type",
-                    );
-                }
-                this.emitTypedObjectBindingsForOf(
-                    buf,
-                    entryBindingDecl.name,
-                    `${stepVar}->value`,
-                    valueType,
-                    valueTsType,
-                    (descriptor, value) => {
-                        buf.line(
-                            `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
-                        );
-                    },
-                );
-            }
-            const labeledContinueTarget = this.directLabeledLoopName(fos)
-                ? this.freshTemp("_custom_object_for_of_labeled_continue")
-                : null;
-            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-            this.emitLoopStmtInBlock(buf, fos.statement);
-            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-            buf.close();
-            buf.close();
-            return true;
-        }
-        if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
-            if (valueType.kind === "array" && valueType.elem) {
-                const custom = this.emitCustomIteratorArray(fos.expression, iter);
-                if (!custom || custom.ty.kind !== "array" || !custom.ty.elem) {
-                    unsupported(
-                        fos.expression,
-                        "custom iterator typed array destructuring requires an array-backed iterator value",
-                    );
-                }
-                this.emitArrayBackedArrayBindingForOf(
-                    buf,
-                    fos,
-                    custom.c,
-                    valueType,
-                    this.freshTemp("_custom_array_a"),
-                    this.freshTemp("_custom_array_i"),
-                );
-                return true;
-            }
-            const hasNestedBinding = entryBindingDecl.name.elements.some(
-                (element) =>
-                    !!element &&
-                    ts.isBindingElement(element) &&
-                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
-            );
-            if (valueType.kind === "value" && hasNestedBinding) {
-                const custom = this.emitCustomIteratorArray(fos.expression, iter);
-                if (!custom || custom.ty.kind !== "array" || custom.ty.elem?.kind !== "value") {
-                    unsupported(
-                        fos.expression,
-                        "custom iterator dynamic nested destructuring requires boxed iterator values",
-                    );
-                }
-                this.emitDynamicArrayBindingForOf(
-                    buf,
-                    fos,
-                    custom.c,
-                    this.freshTemp("_custom_nested_array_a"),
-                    this.freshTemp("_custom_nested_array_i"),
-                );
-                return true;
-            }
-            const restIndex = entryBindingDecl.name.elements.findIndex(
-                (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
-            );
-            if (restIndex >= 0) {
-                const restElement = entryBindingDecl.name.elements[restIndex];
-                if (
-                    restIndex !== entryBindingDecl.name.elements.length - 1 ||
-                    !restElement ||
-                    !ts.isBindingElement(restElement) ||
-                    !ts.isIdentifier(restElement.name) ||
-                    restElement.propertyName ||
-                    restElement.initializer ||
-                    valueType.kind !== "value" &&
-                    !(valueType.kind === "array" && !!valueType.elem)
-                ) {
-                    unsupported(
-                        entryBindingDecl.name,
-                        "custom iterator rest destructuring supports only a trailing identifier over boxed or array-backed values",
-                    );
-                }
-                for (const element of entryBindingDecl.name.elements) {
-                    if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
-                    if (
-                        !ts.isBindingElement(element) ||
-                        !ts.isIdentifier(element.name) ||
-                        element.propertyName ||
-                        element.initializer
-                    ) {
-                        unsupported(
-                            entryBindingDecl.name,
-                            "custom iterator rest destructuring supports identifier bindings without defaults",
-                        );
-                    }
-                }
-                const custom = this.emitCustomIteratorArray(fos.expression, iter);
-                if (!custom || custom.ty.kind !== "array" || !custom.ty.elem) {
-                    unsupported(
-                        fos.expression,
-                        "custom iterator rest destructuring requires boxed or array-backed iterator values",
-                    );
-                }
-                const arrVar = this.freshTemp("_custom_rest_a");
-                const idxVar = this.freshTemp("_custom_rest_i");
-                if (valueType.kind === "value") {
-                    if (custom.ty.elem.kind !== "value") {
-                        unsupported(
-                            fos.expression,
-                            "custom iterator dynamic rest destructuring requires dynamically boxed iterator values",
-                        );
-                    }
-                    this.emitDynamicArrayBindingForOf(buf, fos, custom.c, arrVar, idxVar);
-                } else if (valueType.kind === "array" && valueType.elem) {
-                    this.emitArrayBackedArrayBindingForOf(
-                        buf,
-                        fos,
-                        custom.c,
-                        valueType,
-                        arrVar,
-                        idxVar,
-                    );
-                } else {
-                    unsupported(
-                        fos.expression,
-                        "custom iterator rest destructuring requires boxed or array-backed iterator values",
-                    );
-                }
-                return true;
-            }
-            const [keyEl, valueEl] = entryBindingDecl.name.elements;
-            if (
-                entryBindingDecl.name.elements.length !== 2 ||
-                !keyEl ||
-                !valueEl ||
-                !ts.isBindingElement(keyEl) ||
-                !ts.isBindingElement(valueEl) ||
-                !ts.isIdentifier(keyEl.name) ||
-                !ts.isIdentifier(valueEl.name) ||
-                keyEl.propertyName ||
-                valueEl.propertyName ||
-                keyEl.dotDotDotToken ||
-                valueEl.dotDotDotToken
-            ) {
-                unsupported(entryBindingDecl.name, "custom iterator destructuring must be [keyIdentifier, valueIdentifier] bindings");
-            }
-            const iterVar = this.freshTemp("_it");
-            const stepVar = this.freshTemp("_step");
-            const entryVar = this.freshTemp("_entry");
-            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-            const qual = bindingIsConst ? " const" : "";
-            const recv = this.freshTemp("_recv");
-            const keyName = mangleIdent(keyEl.name.text);
-            const valueName = mangleIdent(valueEl.name.text);
-            buf.open("");
-            buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
-            const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
-            buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
-            const nextOwnerName = nextOwner.name!.text;
-            const nextSelfArg = nextOwnerName === iteratorType.className
-                ? iterVar
-                : `((${nextOwnerName}_t*)${iterVar})`;
-            buf.open("while (true)");
-            buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
-            buf.line(`if (${stepVar}->done) break;`);
-            if (valueType.kind === "entry") {
-                const entryValueType = valueType.elem ?? T_VOID;
-                buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
-                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
-                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
-                const keyValue: EmitResult = { c: `${entryVar}.key`, ty: T_STRING };
-                const elementValue: EmitResult = {
-                    c: this.objectEntryValue(entryVar, entryValueType),
-                    ty: entryValueType,
-                };
-                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
-                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
-            } else if (valueType.kind === "value") {
-                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
-                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
-                const keyValue: EmitResult = {
-                    c: `tsc_value_get_index(${entryVar}, 0.0)`,
-                    ty: T_VALUE,
-                };
-                const elementValue: EmitResult = {
-                    c: `tsc_value_get_index(${entryVar}, 1.0)`,
-                    ty: T_VALUE,
-                };
-                buf.line(`tsc_value_t const ${entryVar} = ${stepVar}->value;`);
-                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
-                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
-            } else if (valueType.kind === "array" && valueType.elem) {
-                const elementType = valueType.elem;
-                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
-                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
-                const keyValue: EmitResult = {
-                    c: `tsc_array_index_present(${entryVar}, 0) ? TSC_ARR(${elementType.c}, ${entryVar}, 0) : ${this.zeroValue(elementType)}`,
-                    ty: elementType,
-                };
-                const elementValue: EmitResult = {
-                    c: `tsc_array_index_present(${entryVar}, 1) ? TSC_ARR(${elementType.c}, ${entryVar}, 1) : ${this.zeroValue(elementType)}`,
-                    ty: elementType,
-                };
-                buf.line(`tsc_array_t* const ${entryVar} = ${stepVar}->value;`);
-                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
-                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
-            } else {
-                unsupported(fos.initializer, "custom iterator destructuring requires ObjectEntry, dynamic, or array-backed values");
-            }
-            const labeledContinueTarget = this.directLabeledLoopName(fos)
-                ? this.freshTemp("_custom_for_of_labeled_continue")
-                : null;
-            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-            this.emitLoopStmtInBlock(buf, fos.statement);
-            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-            buf.close();
-            buf.close();
-            return true;
-        }
-
-        if (ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (fos.initializer.declarations.length !== 1 || !d || !ts.isIdentifier(d.name)) {
-                unsupported(fos.initializer, "custom iterator for-of binding must be simple identifier");
-            }
-        } else if (!ts.isIdentifier(fos.initializer)) {
-            unsupported(fos.initializer, "custom iterator for-of binding form");
-        }
-
-        const iterVar = this.freshTemp("_it");
-        const stepVar = this.freshTemp("_step");
-        buf.open("");
-        const recv = this.freshTemp("_recv");
-        buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
-        const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
-        buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
-        const nextOwnerName = nextOwner.name!.text;
-        const nextSelfArg = nextOwnerName === iteratorType.className
-            ? iterVar
-            : `((${nextOwnerName}_t*)${iterVar})`;
-        buf.open("while (true)");
-        buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
-        buf.line(`if (${stepVar}->done) break;`);
-        this.emitIterationIdentifierBinding(
-            buf,
-            fos.initializer,
-            { c: `${stepVar}->value`, ty: valueType },
-        );
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_custom_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-        return true;
     }
 
     private classDeclForExpression(expr: ts.Expression): ts.ClassDeclaration | null {
@@ -44709,6 +44381,7 @@ class Emitter {
         for (const m of cd.members) {
             if (
                 ts.isMethodDeclaration(m) &&
+                !isStatic(m) &&
                 ts.isComputedPropertyName(m.name) &&
                 this.isSymbolIteratorExpression(m.name.expression)
             ) {
@@ -44726,6 +44399,7 @@ class Emitter {
         for (const m of cd.members) {
             if (
                 ts.isMethodDeclaration(m) &&
+                !isStatic(m) &&
                 this.staticPropertyName(m.name) === name
             ) {
                 return { owner: cd, method: m };
@@ -46303,346 +45977,6 @@ class Emitter {
                 this.forOfBindingValueWithDefault(element, value),
             );
         }
-    }
-
-    private emitDynamicArrayBindingForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        arrVar: string,
-        idxVar: string,
-    ): void {
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(
-                fos.initializer,
-                "dynamic for-of destructuring needs const/let [value, ...]",
-            );
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isArrayBindingPattern(d.name)) {
-            unsupported(
-                fos.initializer,
-                "dynamic for-of binding must use an array binding pattern",
-            );
-        }
-        const hasNestedBinding = d.name.elements.some(
-            (element) =>
-                !!element &&
-                ts.isBindingElement(element) &&
-                (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
-        );
-        if (hasNestedBinding) {
-            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-            const qual = bindingIsConst ? " const" : "";
-            const entryVar = this.freshTemp("_dyn_nested_entry");
-            buf.open("");
-            buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-            buf.line(`tsc_array_materialize_all(${arrVar});`);
-            buf.open(
-                `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
-            );
-            buf.line(
-                `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
-                `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
-            );
-            this.emitDynamicArrayBindingPatternForOf(
-                buf,
-                d.name,
-                entryVar,
-                (identifier, value) => {
-                    const type = this.prepareType(mapType(identifier, this.checker));
-                    buf.line(
-                        `${type.c}${qual} ${mangleIdent(identifier.text)} = ${this.coerce(value, type, identifier)};`,
-                    );
-                },
-            );
-            const labeledContinueTarget = this.directLabeledLoopName(fos)
-                ? this.freshTemp("_dynamic_nested_for_of_labeled_continue")
-                : null;
-            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-            this.emitLoopStmtInBlock(buf, fos.statement);
-            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-            buf.close();
-            buf.close();
-            return;
-        }
-
-        const bindings: { name: string; index: number; type: CType; node: ts.Identifier }[] = [];
-        let restBinding: { name: string; index: number; type: CType; node: ts.Identifier } | null = null;
-        for (let i = 0; i < d.name.elements.length; i++) {
-            const el = d.name.elements[i];
-            if (!el || el.kind === ts.SyntaxKind.OmittedExpression) continue;
-            if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) {
-                unsupported(d.name, "dynamic for-of destructuring supports identifier bindings only");
-            }
-            if (el.dotDotDotToken) {
-                if (restBinding) {
-                    unsupported(el, "dynamic for-of destructuring supports only one rest binding");
-                }
-                const type = this.prepareType(mapType(el.name, this.checker));
-                if (type.kind !== "value" && (type.kind !== "array" || type.elem?.kind !== "value")) {
-                    unsupported(el.name, "dynamic for-of rest destructuring supports any or any[] rest bindings only");
-                }
-                restBinding = {
-                    name: mangleIdent(el.name.text),
-                    index: i,
-                    type,
-                    node: el.name,
-                };
-                continue;
-            }
-            bindings.push({
-                name: mangleIdent(el.name.text),
-                index: i,
-                type: this.prepareType(mapType(el.name, this.checker)),
-                node: el.name,
-            });
-        }
-
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_dyn_entry");
-
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
-        );
-        buf.line(
-            `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
-            `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
-        );
-        for (const binding of bindings) {
-            const value: EmitResult = {
-                c: `tsc_value_get_index(${entryVar}, ${binding.index}.0)`,
-                ty: T_VALUE,
-            };
-            buf.line(
-                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(value, binding.type, binding.node)};`,
-            );
-        }
-        if (restBinding) {
-            const restArray = this.freshTemp("_dyn_rest");
-            const restIdx = this.freshTemp("_dyn_rest_i");
-            const restValue = this.freshTemp("_dyn_rest_v");
-            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
-            buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < (size_t)tsc_value_length(${entryVar}); ${restIdx}++)`);
-            buf.line(`tsc_value_t ${restValue} = tsc_value_get_index(${entryVar}, (double)${restIdx});`);
-            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
-            buf.close();
-            const init = restBinding.type.kind === "value"
-                ? `tsc_value_array(${restArray})`
-                : restArray;
-            buf.line(`${restBinding.type.c}${qual} ${restBinding.name} = ${init};`);
-        }
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_dynamic_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
-
-    private emitTypedArrayElementArrayBindingForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        valueType: CType,
-        arrayTsType: ts.Type,
-        arrVar: string,
-        idxVar: string,
-    ): void {
-        if (!valueType.elem) {
-            unsupported(fos.expression, "typed array-element destructuring needs an element type");
-        }
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(
-                fos.initializer,
-                "typed array-element destructuring needs const/let [value, ...]",
-            );
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isArrayBindingPattern(d.name)) {
-            unsupported(
-                fos.initializer,
-                "typed array-element binding must use an array binding pattern",
-            );
-        }
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_typed_array_element");
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`);
-        buf.line(`${valueType.c} const ${entryVar} = TSC_ARR(${valueType.c}, ${arrVar}, ${idxVar});`);
-        this.emitTypedArrayBindingsForOf(
-            buf,
-            d.name,
-            entryVar,
-            valueType,
-            arrayTsType,
-            (descriptor, value) => {
-                buf.line(
-                    `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
-                );
-            },
-        );
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_typed_array_element_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
-
-    private emitArrayBackedArrayBindingForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        valueType: CType,
-        arrVar: string,
-        idxVar: string,
-    ): void {
-        if (!valueType.elem) {
-            unsupported(fos.expression, "array-backed for-of rest destructuring needs an element type");
-        }
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(
-                fos.initializer,
-                "array-backed for-of destructuring needs const/let [value, ...]",
-            );
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isArrayBindingPattern(d.name)) {
-            unsupported(
-                fos.initializer,
-                "array-backed for-of binding must use an array binding pattern",
-            );
-        }
-        const hasNestedBinding = d.name.elements.some(
-            (element) =>
-                !!element &&
-                ts.isBindingElement(element) &&
-                (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
-        );
-        if (hasNestedBinding) {
-            const arrayTsType = this.forOfElementTsType(fos.expression);
-            if (!arrayTsType) {
-                unsupported(
-                    d.name,
-                    "typed array-element destructuring could not resolve the element array type",
-                );
-            }
-            this.emitTypedArrayElementArrayBindingForOf(
-                buf,
-                fos,
-                arrayExpr,
-                valueType,
-                arrayTsType,
-                arrVar,
-                idxVar,
-            );
-            return;
-        }
-
-        const bindings: {
-            element: ts.BindingElement;
-            name: string;
-            index: number;
-            type: CType;
-            node: ts.Identifier;
-        }[] = [];
-        let restBinding: { name: string; index: number; type: CType; node: ts.Identifier } | null = null;
-        for (let i = 0; i < d.name.elements.length; i++) {
-            const el = d.name.elements[i];
-            if (!el || el.kind === ts.SyntaxKind.OmittedExpression) continue;
-            if (
-                !ts.isBindingElement(el) ||
-                !ts.isIdentifier(el.name) ||
-                el.propertyName ||
-                el.initializer && this.nodeContainsYield(el.initializer)
-            ) {
-                unsupported(
-                    d.name,
-                    "array-backed for-of destructuring supports identifier bindings with await-free defaults",
-                );
-            }
-            const type = this.prepareType(mapType(el.name, this.checker));
-            if (el.dotDotDotToken) {
-                if (restBinding || i !== d.name.elements.length - 1) {
-                    unsupported(el, "array-backed for-of destructuring supports only one trailing rest binding");
-                }
-                restBinding = {
-                    name: mangleIdent(el.name.text),
-                    index: i,
-                    type,
-                    node: el.name,
-                };
-            } else {
-                bindings.push({
-                    element: el,
-                    name: mangleIdent(el.name.text),
-                    index: i,
-                    type,
-                    node: el.name,
-                });
-            }
-        }
-
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_array_entry");
-        const entryElementType = valueType.elem;
-
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
-        );
-        buf.line(`${valueType.c} const ${entryVar} = TSC_ARR(${valueType.c}, ${arrVar}, ${idxVar});`);
-        for (const binding of bindings) {
-            const value: EmitResult = {
-                c: `tsc_array_index_present(${entryVar}, ${binding.index}) ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${binding.index}) : ${this.zeroValue(entryElementType)}`,
-                ty: entryElementType,
-            };
-            buf.line(
-                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(this.forOfBindingValueWithDefault(binding.element, value), binding.type, binding.node)};`,
-            );
-        }
-        if (restBinding) {
-            const restArray = this.freshTemp("_array_rest");
-            const restIdx = this.freshTemp("_array_rest_i");
-            const restValue = this.freshTemp("_array_rest_v");
-            const restPresent = this.freshTemp("_array_rest_present");
-            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${entryElementType.c}), 1);`);
-            buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < ${entryVar}->len; ${restIdx}++)`);
-            buf.line(`bool ${restPresent} = tsc_array_index_present(${entryVar}, ${restIdx});`);
-            buf.line(`${entryElementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${restIdx}) : ${this.zeroValue(entryElementType)};`);
-            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
-            buf.open(`if (!${restPresent})`);
-            buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
-            buf.close();
-            buf.close();
-            const restValueExpr: EmitResult = { c: restArray, ty: arrayType(entryElementType) };
-            buf.line(
-                `${restBinding.type.c}${qual} ${restBinding.name} = ${this.coerce(restValueExpr, restBinding.type, restBinding.node)};`,
-            );
-        }
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_array_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
     }
 
     private emitUrlSearchParamsForOf(
@@ -52369,7 +51703,7 @@ class Emitter {
                             if (sig) {
                                 const ret = mapTsType(method, sig.getReturnType(), this.checker);
                                 return this.emitSequencedCall(
-                                    `${owner.name!.text}___tsc_iterator`,
+                                    `${owner.name!.text}_${this.classMethodCName(method.name)}`,
                                     ret,
                                     [
                                         {
@@ -55148,7 +54482,7 @@ class Emitter {
                             classDecl.name.text,
                             genericBindings,
                         )
-                        : `${classDecl.name.text}_${mangleIdent(memberName)}`;
+                        : `${classDecl.name.text}_${this.classMethodCName(method.name)}`;
                     const params = sig.getParameters();
                     if (
                         call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
@@ -63979,9 +63313,14 @@ class Emitter {
                 mapTsType(call, sig.getReturnType(), this.checker),
             )
             : mapTsType(call, sig.getReturnType(), this.checker);
+        if (!mdecl || !ts.isMethodDeclaration(mdecl)) {
+            unsupported(call, "native class method requires a canonical member declaration");
+        }
+        const physicalMethod = this.classMethodCName(mdecl.name);
+        if (!physicalMethod) unsupported(mdecl, "native class member key is outside the static key plan");
         const callee = genericMethod && genericBindings
             ? this.ensureGenericMethodSpecialization(genericMethod, owningCls, genericBindings)
-            : `${owningCls}_${mangleIdent(method)}`;
+            : `${owningCls}_${physicalMethod}`;
         // Pass self cast to the owning-class type so the signature matches.
         const specs: SequencedCallArg[] = [
             {
@@ -68486,20 +67825,26 @@ class Emitter {
         return null;
     }
 
+    /** Physical member identity is one framed component List. Public property
+     * spellings remain separate from scope, member kind and String/Symbol key
+     * identity, so every native definition and consumer selects the same name. */
+    private nativeClassMemberCName(name: ts.PropertyName, kind: "method" | "get" | "set"): string | null {
+        const declaration = name.parent;
+        if (!ts.isMethodDeclaration(declaration) && !ts.isGetAccessorDeclaration(declaration) &&
+            !ts.isSetAccessorDeclaration(declaration)) return null;
+        const symbol = ts.isComputedPropertyName(name) ? this.wellKnownSymbolName(name.expression) : null;
+        const key = symbol ?? this.staticPropertyName(name);
+        if (key === null) return null;
+        return mangleQualifiedIdent(["native-member", isStatic(declaration) ? "static" : "instance",
+            kind, symbol === null ? "string" : "symbol", key]);
+    }
+
     private classMethodCName(name: ts.PropertyName): string | null {
-        if (
-            ts.isComputedPropertyName(name) &&
-            this.isSymbolIteratorExpression(name.expression)
-        ) {
-            return "__tsc_iterator";
-        }
-        const staticName = this.staticPropertyName(name);
-        return staticName == null ? null : mangleIdent(staticName);
+        return this.nativeClassMemberCName(name, "method");
     }
 
     private classAccessorCName(name: ts.PropertyName, kind: "get" | "set"): string | null {
-        const memberName = this.classMethodCName(name);
-        return memberName == null ? null : `${kind}_${memberName}`;
+        return this.nativeClassMemberCName(name, kind);
     }
 
     private wellKnownSymbolName(expr: ts.Expression): WellKnownSymbolName | null {

@@ -38,9 +38,9 @@ check(text.call(owner.method) === "method /* a */ (value) /* b */ { return value
     text.call(owner.computed) === '["computed"] /* a */ () { return 11; }', "method-spans");
 check(text.call(descriptor.get) === "get /* a */ field /* b */ () { return 7; }" &&
     text.call(descriptor.set) === "set /* a */ field /* b */ (value) { this.saved = value; }", "accessor-spans");
-class Plain { method /* a */ () { return 19; } static /* outside */ staticMethod /* b */ () { return 23; } }
-check(text.call(Plain) === "class Plain { method /* a */ () { return 19; } static /* outside */ staticMethod /* b */ () { return 23; } }" &&
-    text.call(Plain.staticMethod) === "staticMethod /* b */ () { return 23; }" &&
+class Plain { method /* a */ () { return 19; } static /* outside */ method /* b */ () { return 23; } }
+check(text.call(Plain) === "class Plain { method /* a */ () { return 19; } static /* outside */ method /* b */ () { return 23; } }" &&
+    text.call(Plain.method) === "method /* b */ () { return 23; }" &&
     text.call(new Plain().method) === "method /* a */ () { return 19; }", "class-declaration-spans");
 const ClassExpression = class Inner { method() { return 29; } static method() { return 31; } };
 check(text.call(ClassExpression) === "class Inner { method() { return 29; } static method() { return 31; } }" &&
