@@ -160,6 +160,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Route represented Object reflection/enumeration/prototype methods and Reflect calls through ordinary lookup and rooted actual Lists; replace native dispatch and separate enumeration loops with ordered descriptor/Get traversal. Preserve coercion/error/constructor semantics and cross-fragment UTF-16 materialization; verify independent retained-key properties and Node E2E, and remove obsolete literal-stack shape assertions.
+
 - Encode source bindings and fields through reversible UTF-16 component Lists in a separate C namespace. Preserve module/namespace ownership and import/capture references, remove lossy replacement and reserved-field rejection, and verify independent reversibility/depth, forced collection and Node E2E observations.
 
 - Share Script await reference parsing through an equal-width contextual token projection with restored names and exact source spans. Preserve explicit parse goals across compiler/host/dependency/AOT intake; validate reserved await names and general assignment-pattern targets through shared static worklists, with independent Node grammar and CommonJS/typed E2E evidence.

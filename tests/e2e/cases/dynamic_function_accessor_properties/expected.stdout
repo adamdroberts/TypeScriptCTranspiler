@@ -7,6 +7,6 @@ reflect get: next! get-fn|set-fn:next|get-fn|get-fn|get-other|
 reflect set: true via! false get-fn|set-fn:next|get-fn|get-fn|get-other|set-other:via|
 legacy: legacy-fn true true
 readonly: ro false undefined
-metadata: true true [function]
-accessor prototype before: false undefined length|name false undefined length|name
-accessor prototype after: getter-proto true true true prototype length|name|prototype setter-proto true false true  length|name|prototype
+metadata: true true true
+accessor prototype before: true [object Object] length|name|prototype true [object Object] length|name|prototype
+accessor prototype after: getter-proto true false false  length|name|prototype setter-proto true false false  length|name|prototype

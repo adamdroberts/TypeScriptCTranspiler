@@ -1,7 +1,9 @@
 function bad: TypeError: Reflect.construct newTarget is not a constructor
 proxy bad: TypeError: Reflect.construct newTarget is not a constructor
 valid: object target
-getter target: TypeError: Proxy construct target must be constructor
-setter target: TypeError: Proxy construct target must be constructor
-getter newTarget: TypeError: Reflect.construct newTarget is not a constructor
-events:
+getter target: true
+setter target: true
+getter newTarget: target
+accessor method: TypeError
+accessor method: TypeError
+events:construct trap|construct trap

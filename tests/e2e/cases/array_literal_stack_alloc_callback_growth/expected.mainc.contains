@@ -1,1 +1,0 @@
-tsc_array_new(sizeof(tsc_str_t*), 8)

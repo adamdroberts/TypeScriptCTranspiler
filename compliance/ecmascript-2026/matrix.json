@@ -1643,7 +1643,7 @@
             "implementation": [
               "src/emit/index.ts#emitCall",
               "src/emit/index.ts#emitDynamicMethod",
-              "src/emit/index.ts#emitReflectConstruct",
+              "src/emit/index.ts#emitDynamicNamedPropertyCall",
               "src/emit/index.ts#ensureDynamicFunctionAdapter",
               "runtime/tsc_value.c#reflect_construct_method",
               "runtime/tsc_value.c#value_to_argument_list",

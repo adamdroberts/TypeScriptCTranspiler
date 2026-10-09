@@ -116,33 +116,27 @@ static void proxy_fill_forwarded_array_growth_slots(tsc_value_t target, const ts
     }
 }
 
-static void object_prototype_require_receiver(tsc_value_t receiver, const char* method) {
-    if (tsc_value_is_nullish(receiver)) {
-        char buf[128];
-        snprintf(buf, sizeof buf, "Object.prototype.%s receiver is null or undefined", method);
-        tsc_throw_str(tsc_str_from_cstr(buf));
-    }
-}
-
 static tsc_value_t object_prototype_has_own_property(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    object_prototype_require_receiver(this_arg, "hasOwnProperty");
-    tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_bool(tsc_value_has_own_computed_prop(this_arg, key_value));
+    tsc_value_t key = tsc_value_to_property_key(args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    void* volatile key_root = tsc_value_gc_root(key);
+    (void)key_root;
+    return tsc_value_bool(tsc_value_has_own_computed_prop(tsc_value_to_object(this_arg), key));
 }
 
 static tsc_value_t object_prototype_property_is_enumerable(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    object_prototype_require_receiver(this_arg, "propertyIsEnumerable");
-    tsc_value_t key_value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_bool(tsc_value_computed_property_is_enumerable(this_arg, key_value));
+    tsc_value_t key = tsc_value_to_property_key(args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    void* volatile key_root = tsc_value_gc_root(key);
+    (void)key_root;
+    return tsc_value_bool(tsc_value_computed_property_is_enumerable(tsc_value_to_object(this_arg), key));
 }
 
 static tsc_value_t object_prototype_is_prototype_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    object_prototype_require_receiver(this_arg, "isPrototypeOf");
     tsc_value_t value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_bool(tsc_value_is_prototype_of(this_arg, value));
+    if (!tsc_value_is_object(value)) return tsc_value_bool(false);
+    return tsc_value_bool(tsc_value_is_prototype_of(tsc_value_to_object(this_arg), value));
 }
 
 static tsc_value_t object_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -163,15 +157,38 @@ static tsc_value_t object_prototype_to_locale_string(void* env, tsc_value_t this
 static tsc_value_t object_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    object_prototype_require_receiver(this_arg, "valueOf");
-    return this_arg;
+    return tsc_value_to_object(this_arg);
 }
 
-static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
+typedef enum { OBJECT_DEFINE_GETTER, OBJECT_DEFINE_SETTER, OBJECT_LOOKUP_GETTER, OBJECT_LOOKUP_SETTER } object_legacy_accessor_kind_t;
+
+static tsc_value_t object_prototype_legacy_accessor(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    object_legacy_accessor_kind_t kind = (object_legacy_accessor_kind_t)(uintptr_t)env;
+    tsc_value_t object = tsc_value_to_object(this_arg);
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
+    tsc_value_t accessor = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    bool define = kind == OBJECT_DEFINE_GETTER || kind == OBJECT_DEFINE_SETTER;
+    if (define && !tsc_value_is_callable(accessor))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Legacy accessor must be callable"));
+    tsc_value_t key = tsc_value_to_property_key(args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    void* volatile key_root = tsc_value_gc_root(key);
+    (void)key_root;
+    tsc_str_t* internal_key = value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL
+        ? tsc_symbol_property_key(tsc_value_as_symbol(key)) : tsc_value_to_string(key);
+    if (!define) return kind == OBJECT_LOOKUP_GETTER
+        ? tsc_value_object_lookup_getter(object, internal_key) : tsc_value_object_lookup_setter(object, internal_key);
+    bool success = kind == OBJECT_DEFINE_GETTER
+        ? tsc_value_object_define_getter(object, internal_key, accessor) : tsc_value_object_define_setter(object, internal_key, accessor);
+    if (!success) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Legacy accessor definition failed"));
+    return tsc_value_undefined();
+}
+
+static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, double arity, tsc_generic_function_t fn, void* env) {
     tsc_object_define(
         prototype,
         tsc_str_from_lit(name, len),
-        tsc_value_function_builtin_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
+        tsc_value_function_builtin_named(fn, env, arity, tsc_str_from_lit(name, len)),
         true,
         false,
         true
@@ -194,12 +211,16 @@ tsc_value_t tsc_value_object_prototype(void) {
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
         tsc_realm_state_set(&object_prototype_realm_state_key, prototype);
-        object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property);
-        object_prototype_define_method(prototype, "isPrototypeOf", 13, 1.0, object_prototype_is_prototype_of);
-        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, 1.0, object_prototype_property_is_enumerable);
-        object_prototype_define_method(prototype, "toLocaleString", 14, 0.0, object_prototype_to_locale_string);
-        object_prototype_define_method(prototype, "toString", 8, 0.0, object_prototype_to_string);
-        object_prototype_define_method(prototype, "valueOf", 7, 0.0, object_prototype_value_of);
+        object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property, NULL);
+        object_prototype_define_method(prototype, "isPrototypeOf", 13, 1.0, object_prototype_is_prototype_of, NULL);
+        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, 1.0, object_prototype_property_is_enumerable, NULL);
+        object_prototype_define_method(prototype, "toLocaleString", 14, 0.0, object_prototype_to_locale_string, NULL);
+        object_prototype_define_method(prototype, "toString", 8, 0.0, object_prototype_to_string, NULL);
+        object_prototype_define_method(prototype, "valueOf", 7, 0.0, object_prototype_value_of, NULL);
+        object_prototype_define_method(prototype, "__defineGetter__", 16, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_GETTER);
+        object_prototype_define_method(prototype, "__defineSetter__", 16, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_SETTER);
+        object_prototype_define_method(prototype, "__lookupGetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_GETTER);
+        object_prototype_define_method(prototype, "__lookupSetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_SETTER);
     }
     tsc_runtime_unlock();
     return tsc_value_object(prototype);

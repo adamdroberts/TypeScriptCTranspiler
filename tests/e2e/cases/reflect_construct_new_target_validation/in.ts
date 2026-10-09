@@ -49,22 +49,29 @@ Object.defineProperty(accessorSource, "value", {
 const descriptor: any = Object.getOwnPropertyDescriptor(accessorSource, "value");
 const getterProxy: any = new Proxy(descriptor.get, { construct: eventTrapConstruct as any });
 try {
-    console.log("getter target:", Reflect.construct(getterProxy, []));
+    console.log("getter target:", Reflect.construct(getterProxy, []).reached);
 } catch (e: any) {
     console.log("getter target:", e);
 }
 
 const setterProxy: any = new Proxy(descriptor.set, { construct: eventTrapConstruct as any });
 try {
-    console.log("setter target:", Reflect.construct(setterProxy, []));
+    console.log("setter target:", Reflect.construct(setterProxy, []).reached);
 } catch (e: any) {
     console.log("setter target:", e);
 }
 
 try {
-    console.log("getter newTarget:", Reflect.construct(target, [], getterProxy));
+    console.log("getter newTarget:", Reflect.construct(target, [], getterProxy).value);
 } catch (e: any) {
     console.log("getter newTarget:", e);
 }
 
+const accessorMethods: any = { get value(): number { return 1; }, set value(value: number) {} };
+const methods: any = Object.getOwnPropertyDescriptor(accessorMethods, "value");
+for (const method of [methods.get, methods.set]) {
+    const methodProxy: any = new Proxy(method, { construct: eventTrapConstruct as any });
+    try { Reflect.construct(methodProxy, []); }
+    catch (error: any) { console.log("accessor method:", error.name); }
+}
 console.log("events:" + events.join("|"));

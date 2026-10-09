@@ -35,35 +35,37 @@ tsc_str_t* tsc_str_from_cstr(const char* src) {
     return s;
 }
 
+static tsc_str_t* string_from_utf16_range(const uint16_t* units, size_t start, size_t count);
+
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b) {
-    tsc_str_t* s = str_alloc(a->len + b->len);
-    memcpy((char*)s->data, a->data, a->len);
-    memcpy((char*)s->data + a->len, b->data, b->len);
-    return s;
+    tsc_str_t* items[] = { (tsc_str_t*)a, (tsc_str_t*)b };
+    tsc_array_t parts = {0};
+    parts.len = sizeof(items) / sizeof(items[0]);
+    parts.data = items;
+    return tsc_str_concat_parts(&parts);
 }
 
 tsc_str_t* tsc_str_concat_parts(const tsc_array_t* parts) {
     size_t total = 0;
-    if (parts) {
-        for (size_t index = 0; index < parts->len; index++) {
-            const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
-            if (part->len > SIZE_MAX - total || part->len == SIZE_MAX - total) {
-                tsc_panic("concatenated String is too large");
-            }
-            total += part->len;
-        }
+    if (parts) for (size_t index = 0; index < parts->len; index++) {
+        const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
+        size_t length = tsc_str_utf16_length(part);
+        if (length > SIZE_MAX / sizeof(uint16_t) - total)
+            tsc_panic("concatenated String is too large");
+        total += length;
     }
-
-    tsc_str_t* result = str_alloc(total);
-    char* destination = (char*)result->data;
-    if (parts) {
-        for (size_t index = 0; index < parts->len; index++) {
-            const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
-            memcpy(destination, part->data, part->len);
-            destination += part->len;
-        }
+    uint16_t* units = (uint16_t*)TSC_GC_MALLOC_ATOMIC(total ? total * sizeof(uint16_t) : sizeof(uint16_t));
+    size_t offset = 0;
+    if (parts) for (size_t index = 0; index < parts->len; index++) {
+        const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
+        size_t length;
+        const uint16_t* source = tsc_str_utf16_units(part, &length);
+        if (length) memcpy(units + offset, source, length * sizeof(uint16_t));
+        offset += length;
     }
-    return result;
+    // Materialize the combined code-unit sequence once. Surrogate pairs may
+    // span arbitrary part boundaries, including intervening empty Strings.
+    return string_from_utf16_range(units, 0, total);
 }
 
 tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substitutions) {

@@ -2082,6 +2082,8 @@ static tsc_value_t object_static_create(void* env, tsc_value_t this_arg, tsc_arr
     (void)env;
     (void)this_arg;
     tsc_value_t object = tsc_value_object_create(object_constructor_arg(args, 0));
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
     tsc_value_t descriptors = object_constructor_arg(args, 1);
     if (!tsc_value_is_undefined(descriptors) && !tsc_value_define_properties_descriptor_map(object, descriptors)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.create defineProperties failed"));
@@ -2093,7 +2095,9 @@ static tsc_value_t object_static_get_own_property_descriptor(void* env, tsc_valu
     (void)env;
     (void)this_arg;
     tsc_value_t target = object_constructor_arg(args, 0);
-    object_static_require_target(target, "getOwnPropertyDescriptor");
+    target = tsc_value_to_object(target);
+    void* volatile target_root = tsc_value_gc_root(target);
+    (void)target_root;
     return tsc_value_get_own_property_computed_descriptor(
         target,
         object_constructor_arg(args, 1)
@@ -2112,13 +2116,51 @@ static tsc_value_t object_static_get_own_property_names(void* env, tsc_value_t t
     (void)env;
     (void)this_arg;
     tsc_value_t target = object_constructor_arg(args, 0);
-    object_static_require_target(target, "getOwnPropertyNames");
+    target = tsc_value_to_object(target);
+    void* volatile target_root = tsc_value_gc_root(target);
+    (void)target_root;
     tsc_array_t* keys = tsc_value_own_keys(target);
     tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), keys->len ? keys->len : 1);
     for (size_t index = 0; index < keys->len; index++) {
         tsc_array_push_value(values, tsc_value_string(TSC_ARR(tsc_str_t*, keys, index)));
     }
     return tsc_value_array(values);
+}
+
+static tsc_value_t object_static_get_own_property_symbols(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_array_t* keys = tsc_value_get_own_property_symbols(object_constructor_arg(args, 0));
+    tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), keys->len);
+    for (size_t index = 0; index < keys->len; index++)
+        tsc_array_push_value(values, tsc_value_symbol(TSC_ARR(tsc_symbol_t*, keys, index)));
+    return tsc_value_array(values);
+}
+
+static tsc_value_t object_static_has_own(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_value_t target = tsc_value_to_object(object_constructor_arg(args, 0));
+    void* volatile target_root = tsc_value_gc_root(target);
+    (void)target_root;
+    return tsc_value_bool(tsc_value_has_own_computed_prop(target, object_constructor_arg(args, 1)));
+}
+
+static tsc_value_t object_static_keys(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_array_t* keys = tsc_value_object_keys(object_constructor_arg(args, 0));
+    tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), keys->len);
+    for (size_t index = 0; index < keys->len; index++)
+        tsc_array_push_value(values, tsc_value_string(TSC_ARR(tsc_str_t*, keys, index)));
+    return tsc_value_array(values);
+}
+
+static tsc_value_t object_static_values(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    return tsc_value_array(tsc_value_object_values(object_constructor_arg(args, 0)));
+}
+
+static tsc_value_t object_static_entries(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    return tsc_value_array(tsc_value_object_entries(object_constructor_arg(args, 0)));
 }
 
 static tsc_value_t object_static_set_prototype_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -2144,6 +2186,11 @@ static const tsc_object_static_method_t object_static_methods[] = {
     { "getOwnPropertyDescriptor", 24, 2.0, object_static_get_own_property_descriptor },
     { "getOwnPropertyDescriptors", 25, 1.0, object_static_get_own_property_descriptors },
     { "getOwnPropertyNames", 19, 1.0, object_static_get_own_property_names },
+    { "getOwnPropertySymbols", 21, 1.0, object_static_get_own_property_symbols },
+    { "hasOwn", 6, 2.0, object_static_has_own },
+    { "keys", 4, 1.0, object_static_keys },
+    { "values", 6, 1.0, object_static_values },
+    { "entries", 7, 1.0, object_static_entries },
     { "setPrototypeOf", 14, 2.0, object_static_set_prototype_of },
 };
 
@@ -3920,46 +3967,8 @@ static tsc_symbol_t* value_known_symbol_from_internal_key(const tsc_str_t* key) 
     return tsc_property_key_symbol(key);
 }
 
-static tsc_array_t* value_object_string_keys(const tsc_object_t* o, bool enumerable_only) {
-    tsc_array_t* keys = enumerable_only ? tsc_object_keys_dyn(o) : tsc_object_own_keys_dyn(o);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), keys ? keys->len : 1);
-    if (!keys) return out;
-    for (size_t i = 0; i < keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-        if (value_is_known_symbol_internal_key(key)) continue;
-        tsc_array_push_raw(out, &key);
-    }
-    return out;
-}
 
-static tsc_array_t* value_object_string_values(const tsc_object_t* o) {
-    tsc_array_t* keys = value_object_string_keys(o, true);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), keys ? keys->len : 1);
-    if (!o || !keys) return out;
-    for (size_t i = 0; i < keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-        tsc_value_t value = tsc_object_get((tsc_object_t*)o, key);
-        tsc_array_push_raw(out, &value);
-    }
-    return out;
-}
 
-static tsc_array_t* value_object_string_entries(const tsc_object_t* o) {
-    tsc_array_t* keys = value_object_string_keys(o, true);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), keys ? keys->len : 1);
-    if (!o || !keys) return out;
-    for (size_t i = 0; i < keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key_value = tsc_value_string(key);
-        tsc_value_t value = tsc_object_get((tsc_object_t*)o, key);
-        tsc_array_push_raw(pair, &key_value);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return out;
-}
 
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
@@ -4619,7 +4628,7 @@ static bool value_is_reflect_object_target(tsc_value_t v) {
 
 static void require_reflect_object_target(tsc_value_t v, const char* message) {
     if (!value_is_reflect_object_target(v)) {
-        tsc_throw_str(tsc_str_from_cstr(message));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(message));
     }
 }
 
@@ -5322,40 +5331,6 @@ static tsc_array_t* value_array_iter_values(const tsc_array_t* src) {
     return out;
 }
 
-tsc_array_t* value_array_entries(const tsc_array_t* src) {
-    tsc_array_materialize_all((tsc_array_t*)src);
-    size_t side_len = src && src->props ? src->props->len : 0;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len + side_len : 1);
-    if (!src || src->es != sizeof(tsc_value_t)) return out;
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_str_t* key_str = tsc_str_from_int((int64_t)i);
-        if (!tsc_array_property_is_enumerable_key(src, key_str)) continue;
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key = tsc_value_string(key_str);
-        tsc_value_t value = src->props && tsc_object_has_own(src->props, key_str)
-            ? tsc_object_get_receiver(src->props, key_str, tsc_value_array((tsc_array_t*)src))
-            : TSC_ARR(tsc_value_t, src, i);
-        tsc_array_push_raw(pair, &key);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    tsc_array_t* side_keys = tsc_object_keys_dyn(src->props);
-    for (size_t i = 0; i < side_keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
-        if (value_is_known_symbol_internal_key(key)) continue;
-        size_t idx = 0;
-        if (tsc_str_array_index(key, &idx) && idx < src->len) continue;
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key_value = tsc_value_string(key);
-        tsc_value_t value = tsc_object_get_receiver(src->props, key, tsc_value_array((tsc_array_t*)src));
-        tsc_array_push_raw(pair, &key_value);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return out;
-}
 
 
 tsc_array_t* value_string_keys(const tsc_str_t* src, bool include_length) {
@@ -5374,16 +5349,6 @@ tsc_array_t* value_string_keys(const tsc_str_t* src, bool include_length) {
     return out;
 }
 
-tsc_array_t* value_string_values(const tsc_str_t* src) {
-    if (!src) return tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_array_t* code_units = tsc_str_code_units(src);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), code_units->len ? code_units->len : 1);
-    for (size_t i = 0; i < code_units->len; i++) {
-        tsc_value_t value = tsc_value_string(TSC_ARR(tsc_str_t*, code_units, i));
-        tsc_array_push_raw(out, &value);
-    }
-    return out;
-}
 
 static tsc_array_t* value_string_iterator_values(const tsc_str_t* src) {
     if (!src) return tsc_array_new(sizeof(tsc_value_t), 1);
@@ -5396,21 +5361,6 @@ static tsc_array_t* value_string_iterator_values(const tsc_str_t* src) {
     return out;
 }
 
-tsc_array_t* value_string_entries(const tsc_str_t* src) {
-    tsc_array_t* code_units = src ? tsc_str_code_units(src) : NULL;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), code_units && code_units->len ? code_units->len : 1);
-    if (!src) return out;
-    for (size_t i = 0; i < code_units->len; i++) {
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key = tsc_value_string(tsc_str_from_int((int64_t)i));
-        tsc_value_t value = tsc_value_string(TSC_ARR(tsc_str_t*, code_units, i));
-        tsc_array_push_raw(pair, &key);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return out;
-}
 
 tsc_value_t value_descriptor_from_array_index(const tsc_array_t* src, size_t idx) {
     tsc_object_t* desc = tsc_object_new();
@@ -5566,60 +5516,14 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
 }
 
 tsc_array_t* tsc_value_get_own_property_symbols(tsc_value_t v) {
-    if (tsc_value_is_nullish(v)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertySymbols target must not be null or undefined"));
-    }
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_symbol_t*), 2);
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
-            return tsc_array_prototype_symbols();
-        }
-        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
-        if (a && a->props) {
-            tsc_array_t* keys = tsc_object_own_keys_dyn(a->props);
-            for (size_t i = 0; i < keys->len; i++) {
-                tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-                tsc_symbol_t* symbol = value_known_symbol_from_internal_key(key);
-                if (symbol) tsc_array_push_raw(out, &symbol);
-            }
-        }
-        return out;
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        if (fn && fn->props) {
-            tsc_array_t* keys = tsc_object_own_keys_dyn(fn->props);
-            for (size_t i = 0; i < keys->len; i++) {
-                tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-                tsc_symbol_t* symbol = value_known_symbol_from_internal_key(key);
-                if (symbol) tsc_array_push_raw(out, &symbol);
-            }
-        }
-        return out;
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-        if (o && !o->is_proxy) {
-            tsc_array_t* keys = tsc_object_own_keys_dyn(o);
-            for (size_t i = 0; i < keys->len; i++) {
-                tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-                tsc_symbol_t* symbol = value_known_symbol_from_internal_key(key);
-                if (symbol) tsc_array_push_raw(out, &symbol);
-            }
-            return out;
-        }
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-        if (o && o->is_proxy) {
-            tsc_array_t* keys = tsc_value_raw_own_keys(v);
-            for (size_t i = 0; i < keys->len; i++) {
-                tsc_symbol_t* symbol = value_known_symbol_from_internal_key(
-                    TSC_ARR(tsc_str_t*, keys, i)
-                );
-                if (symbol) tsc_array_push_raw(out, &symbol);
-            }
-        }
+    tsc_value_t object = tsc_value_to_object(v);
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
+    tsc_array_t* keys = tsc_value_raw_own_keys(object);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_symbol_t*), keys->len);
+    for (size_t index = 0; index < keys->len; index++) {
+        tsc_symbol_t* symbol = value_known_symbol_from_internal_key(TSC_ARR(tsc_str_t*, keys, index));
+        if (symbol) tsc_array_push_raw(out, &symbol);
     }
     return out;
 }
@@ -6099,56 +6003,44 @@ tsc_set_t* tsc_value_weak_set_constructor_values(tsc_value_t values) {
     return out;
 }
 
-tsc_array_t* tsc_value_object_keys(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return value_object_string_keys((tsc_object_t*)value_ptr(v), true);
+typedef enum { VALUE_ENUM_KEYS, VALUE_ENUM_VALUES, VALUE_ENUM_ENTRIES } value_enumeration_kind_t;
+
+/* EnumerableOwnProperties: snapshot the complete key List, then perform the
+ * descriptor and optional Get for each String key in order. Getters and Proxy
+ * traps may change subsequent descriptors without changing that key snapshot. */
+static tsc_array_t* value_enumerable_own_properties(tsc_value_t input, value_enumeration_kind_t kind) {
+    tsc_value_t object = tsc_value_to_object(input);
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
+    tsc_array_t* keys = tsc_value_own_keys(object);
+    tsc_array_t* out = tsc_array_new(kind == VALUE_ENUM_KEYS ? sizeof(tsc_str_t*) : sizeof(tsc_value_t), keys->len);
+    for (size_t index = 0; index < keys->len; index++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, index);
+        tsc_value_t descriptor = tsc_value_get_own_property_descriptor(object, key);
+        void* volatile descriptor_root = tsc_value_gc_root(descriptor);
+        (void)descriptor_root;
+        if (tsc_value_is_undefined(descriptor) || !tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("enumerable", 10)))) continue;
+        if (kind == VALUE_ENUM_KEYS) {
+            tsc_array_push_raw(out, &key);
+            continue;
+        }
+        tsc_value_t value = tsc_value_get_prop(object, key);
+        void* volatile value_root = tsc_value_gc_root(value);
+        (void)value_root;
+        if (kind == VALUE_ENUM_ENTRIES) {
+            tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+            tsc_array_push_value(pair, tsc_value_string(key));
+            tsc_array_push_value(pair, value);
+            value = tsc_value_array(pair);
+        }
+        tsc_array_push_value(out, value);
     }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_keys((const tsc_array_t*)value_ptr(v), false);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return value_string_keys((const tsc_str_t*)value_ptr(v), false);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        return fn && fn->props ? value_object_string_keys(fn->props, true) : tsc_array_new(sizeof(tsc_str_t*), 1);
-    }
-    return tsc_array_new(sizeof(tsc_str_t*), 1);
+    return out;
 }
 
-tsc_array_t* tsc_value_object_values(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return value_object_string_values((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_values((const tsc_array_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return value_string_values((const tsc_str_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        return fn && fn->props ? value_object_string_values(fn->props) : tsc_array_new(sizeof(tsc_value_t), 1);
-    }
-    return tsc_array_new(sizeof(tsc_value_t), 1);
-}
-
-tsc_array_t* tsc_value_object_entries(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return value_object_string_entries((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_entries((const tsc_array_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return value_string_entries((const tsc_str_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        return fn && fn->props ? value_object_string_entries(fn->props) : tsc_array_new(sizeof(tsc_value_t), 1);
-    }
-    return tsc_array_new(sizeof(tsc_value_t), 1);
-}
+tsc_array_t* tsc_value_object_keys(tsc_value_t v) { return value_enumerable_own_properties(v, VALUE_ENUM_KEYS); }
+tsc_array_t* tsc_value_object_values(tsc_value_t v) { return value_enumerable_own_properties(v, VALUE_ENUM_VALUES); }
+tsc_array_t* tsc_value_object_entries(tsc_value_t v) { return value_enumerable_own_properties(v, VALUE_ENUM_ENTRIES); }
 
 /*
  * Collect dynamic-import attributes through the same ordinary object path as

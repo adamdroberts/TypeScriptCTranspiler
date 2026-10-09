@@ -139,6 +139,15 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
     "keys", "values", "entries", "forEach", "reduce", "reduceRight",
 ]);
 
+const ORDINARY_OBJECT_STATIC_METHODS = new Set([
+    "create", "defineProperty", "defineProperties", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors",
+    "getOwnPropertyNames", "getOwnPropertySymbols", "setPrototypeOf", "hasOwn", "keys", "values", "entries",
+]);
+const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
+    "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
+    "__lookupGetter__", "__lookupSetter__",
+]);
+
 const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
     asyncIterator: "tsc_symbol_async_iterator",
     asyncDispose: "tsc_symbol_async_dispose",
@@ -1503,7 +1512,9 @@ class Emitter {
         if (ts.isCallExpression(expr)) {
             if (ts.isPropertyAccessExpression(expr.expression) &&
                 (ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
-                    expr.expression.name.text === "getOwnPropertyDescriptors")) return false;
+                    ORDINARY_OBJECT_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
+                    ORDINARY_OBJECT_STATIC_METHODS.has(expr.expression.name.text) ||
+                    (ts.isIdentifier(expr.expression.expression) && expr.expression.expression.text === "Reflect"))) return false;
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
@@ -52277,9 +52288,6 @@ class Emitter {
             ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
         }
 
-        const objectPrototypeCall = this.emitObjectPrototypeCall(call);
-        if (objectPrototypeCall) return objectPrototypeCall;
-
         if (ts.isPropertyAccessExpression(call.expression)) {
             return this.emitMethodCall(call, call.expression);
         }
@@ -53151,296 +53159,6 @@ class Emitter {
     private emitInlineClosureCall(call: ts.CallExpression): EmitResult | null {
         const body = this.inlineClosureBody(call);
         return body ? this.emitExpr(body) : null;
-    }
-
-    private emitObjectPrototypeCall(call: ts.CallExpression): EmitResult | null {
-        if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== "call") {
-            return null;
-        }
-        const methodAccess = call.expression.expression;
-        if (!ts.isPropertyAccessExpression(methodAccess)) return null;
-        const method = methodAccess.name.text;
-        if (
-            method !== "hasOwnProperty" &&
-            method !== "isPrototypeOf" &&
-            method !== "propertyIsEnumerable" &&
-            method !== "__defineGetter__" &&
-            method !== "__defineSetter__" &&
-            method !== "__lookupGetter__" &&
-            method !== "__lookupSetter__" &&
-            method !== "toString" &&
-            method !== "valueOf"
-        ) return null;
-        const prototypeAccess = methodAccess.expression;
-        if (
-            !ts.isPropertyAccessExpression(prototypeAccess) ||
-            prototypeAccess.name.text !== "prototype" ||
-            !ts.isIdentifier(prototypeAccess.expression) ||
-            prototypeAccess.expression.text !== "Object"
-        ) {
-            return null;
-        }
-        if (method === "__defineGetter__" || method === "__defineSetter__") {
-            if (call.arguments.length < 3) {
-                unsupported(call, `Object.prototype.${method}.call expects target, key, and accessor`);
-            }
-            const targetNode = call.arguments[0]!;
-            const keyNode = call.arguments[1]!;
-            const accessorNode = call.arguments[2]!;
-            const target = this.emitExpr(targetNode);
-            const key = this.emitExpr(keyNode);
-            const accessor = this.emitExpr(accessorNode);
-            const fn = method === "__defineGetter__"
-                ? "tsc_value_object_define_getter"
-                : "tsc_value_object_define_setter";
-            return this.emitSequencedExpr(
-                T_VOID,
-                [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_STRING, node: keyNode },
-                    { value: accessor, target: T_VALUE, node: accessorNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 3),
-                ],
-                ([t, k, a]) => `({ if (!${fn}(${t}, ${k}, ${a})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method}.call failed")); })`,
-            );
-        }
-        if (method === "__lookupGetter__" || method === "__lookupSetter__") {
-            if (call.arguments.length < 2) {
-                unsupported(call, `Object.prototype.${method}.call expects target and key`);
-            }
-            const targetNode = call.arguments[0]!;
-            const keyNode = call.arguments[1]!;
-            const target = this.emitExpr(targetNode);
-            const key = this.emitExpr(keyNode);
-            const fn = method === "__lookupGetter__"
-                ? "tsc_value_object_lookup_getter"
-                : "tsc_value_object_lookup_setter";
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_STRING, node: keyNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 2),
-                ],
-                ([t, k]) => `${fn}(${t}, ${k})`,
-            );
-        }
-        const isTargetOnlyCall = method === "toString" || method === "valueOf";
-        const minArgs = isTargetOnlyCall ? 1 : 2;
-        if (call.arguments.length < minArgs) {
-            if (isTargetOnlyCall) unsupported(call, `Object.prototype.${method}.call expects target`);
-            unsupported(call, `Object.prototype.${method}.call expects target and argument`);
-        }
-        const targetNode = call.arguments[0]!;
-        const target = this.emitExpr(targetNode);
-        const targetType = this.checker.getTypeAtLocation(targetNode);
-        const mapped = this.prepareType(mapTsType(targetNode, targetType, this.checker));
-        if (method === "toString") {
-            if (mapped.kind === "value") {
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([value]) => `tsc_value_object_to_string_tag(${value})`);
-            }
-            const tag = this.objectPrototypeToStringTag(mapped);
-            const text = `[object ${tag}]`;
-            return this.emitSequencedExpr(T_STRING, [
-                { value: target, node: targetNode },
-                ...this.ignoredArgumentSpecs(call.arguments, 1),
-            ], ([value]) => `({ (void)${value}; tsc_str_from_lit("${escapeCString(text)}", ${utf8ByteLen(text)}); })`);
-        }
-        if (method === "valueOf") {
-            if (mapped.kind === "value") {
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([value]) => this.objectPrototypeRequireObjectCoercible(method, value!, value!));
-            }
-            return this.emitSequencedExpr(target.ty, [
-                { value: target, node: targetNode },
-                ...this.ignoredArgumentSpecs(call.arguments, 1),
-            ], ([value]) => value!);
-        }
-        if (method === "isPrototypeOf") {
-            const objectNode = call.arguments[1]!;
-            const objectValue = this.emitExpr(objectNode);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, target: T_VALUE, node: targetNode },
-                { value: objectValue, target: T_VALUE, node: objectNode },
-                ...this.ignoredArgumentSpecs(call.arguments, 2),
-            ], ([prototype, object]) => this.objectPrototypeRequireObjectCoercible(
-                method,
-                prototype!,
-                `tsc_value_is_prototype_of(${prototype}, ${object})`,
-            ));
-        }
-        const keyNode = call.arguments[1]!;
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
-        if (mapped.kind === "class") {
-            return this.emitTypedObjectHasOwn(
-                targetNode,
-                target,
-                keyNode,
-                targetType,
-                `Object.prototype.${method}.call`,
-                ignored,
-            );
-        }
-        if (mapped.kind === "array") {
-            const key = this.emitExpr(keyNode);
-            if (key.ty.kind === "symbol") {
-                const fn = method === "hasOwnProperty"
-                    ? "tsc_value_has_own_symbol_prop"
-                    : "tsc_value_symbol_property_is_enumerable";
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_SYMBOL, node: keyNode },
-                    ...ignored,
-                ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
-            }
-            if (key.ty.kind === "value") {
-                const fn = method === "hasOwnProperty"
-                    ? "tsc_value_has_own_computed_prop"
-                    : "tsc_value_computed_property_is_enumerable";
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_VALUE, node: keyNode },
-                    ...ignored,
-                ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
-            }
-            const fn = method === "hasOwnProperty"
-                ? "tsc_array_has_own_key"
-                : "tsc_array_property_is_enumerable_key";
-            return this.emitSequencedCall(fn, T_BOOLEAN, [
-                { value: target, node: targetNode },
-                { value: key, target: T_STRING, node: keyNode },
-                ...ignored,
-            ]);
-        }
-        if (mapped.kind === "buffer") {
-            return this.emitBufferOwnKeyCheck(targetNode, target, keyNode, ignored);
-        }
-        if (mapped.kind === "error") {
-            if (method === "hasOwnProperty") {
-                return this.emitErrorOwnKeyCheck(targetNode, target, keyNode, ignored);
-            }
-            const key = this.emitExpr(keyNode);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, node: targetNode },
-                { value: key, target: T_STRING, node: keyNode },
-                ...ignored,
-            ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
-        }
-        if (mapped.kind === "fsstats") {
-            return this.emitFsStatsOwnKeyCheck(targetNode, target, keyNode, ignored);
-        }
-        if (mapped.kind === "fsdirent") {
-            return this.emitFsDirentOwnKeyCheck(targetNode, target, keyNode, ignored);
-        }
-        if (mapped.kind === "regexp") {
-            const key = this.emitExpr(keyNode);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, target: T_VALUE, node: targetNode },
-                { value: key, target: T_STRING, node: keyNode },
-                ...ignored,
-            ], ([value, keyC]) => method === "hasOwnProperty"
-                ? `tsc_value_has_own_prop(${value}, ${keyC})`
-                : `tsc_value_property_is_enumerable(${value}, ${keyC})`);
-        }
-        if (mapped.kind === "value" || mapped.kind === "string") {
-            const key = this.emitExpr(keyNode);
-            if (key.ty.kind === "symbol") {
-                const fn = method === "hasOwnProperty"
-                    ? "tsc_value_has_own_symbol_prop"
-                    : "tsc_value_symbol_property_is_enumerable";
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_SYMBOL, node: keyNode },
-                    ...ignored,
-                ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
-            }
-            if (key.ty.kind === "value") {
-                const fn = method === "hasOwnProperty"
-                    ? "tsc_value_has_own_computed_prop"
-                    : "tsc_value_computed_property_is_enumerable";
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: targetNode },
-                    { value: key, target: T_VALUE, node: keyNode },
-                    ...ignored,
-                ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
-            }
-            const fn = method === "hasOwnProperty"
-                ? "tsc_value_has_own_prop"
-                : "tsc_value_property_is_enumerable";
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, target: T_VALUE, node: targetNode },
-                { value: key, target: T_STRING, node: keyNode },
-                ...ignored,
-            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
-        }
-        const key = this.emitExpr(keyNode);
-        if (key.ty.kind === "symbol") {
-            const fn = method === "hasOwnProperty"
-                ? "tsc_value_has_own_symbol_prop"
-                : "tsc_value_symbol_property_is_enumerable";
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, target: T_VALUE, node: targetNode },
-                { value: key, target: T_SYMBOL, node: keyNode },
-                ...ignored,
-            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
-        }
-        if (key.ty.kind === "value") {
-            const fn = method === "hasOwnProperty"
-                ? "tsc_value_has_own_computed_prop"
-                : "tsc_value_computed_property_is_enumerable";
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, target: T_VALUE, node: targetNode },
-                { value: key, target: T_VALUE, node: keyNode },
-                ...ignored,
-            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
-        }
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: target, node: targetNode },
-            { value: key, target: T_STRING, node: keyNode },
-            ...ignored,
-        ], ([value, keyC]) => `({ (void)${value}; (void)${keyC}; false; })`);
-    }
-
-    private objectPrototypeRequireObjectCoercible(method: string, receiver: string, result: string): string {
-        return `({ if (tsc_value_is_nullish(${receiver})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method}.call receiver is null or undefined")); ${result}; })`;
-    }
-
-    private objectPrototypeToStringTag(mapped: CType): string {
-        switch (mapped.kind) {
-            case "array": return "Array";
-            case "bigint": return "BigInt";
-            case "boolean": return "Boolean";
-            case "buffer": return "Uint8Array";
-            case "textencoder": return "TextEncoder";
-            case "textdecoder": return "TextDecoder";
-            case "date": return "Date";
-            case "error": return "Error";
-            case "event": return "Event";
-            case "eventemitter": return "EventEmitter";
-            case "eventtarget": return "EventTarget";
-            case "finregistry": return "FinalizationRegistry";
-            case "fsdirent": return "Dirent";
-            case "fsstats": return "Stats";
-            case "function": return "Function";
-            case "map": return "Map";
-            case "number": return "Number";
-            case "promise": return "Promise";
-            case "regexp": return "RegExp";
-            case "set": return "Set";
-            case "string": return "String";
-            case "symbol": return "Symbol";
-            case "url": return "URL";
-            case "urlsearchparams": return "URLSearchParams";
-            case "weakmap": return "WeakMap";
-            case "weakref": return "WeakRef";
-            case "weakset": return "WeakSet";
-            default: return "Object";
-        }
     }
 
 
@@ -55142,6 +54860,13 @@ class Emitter {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
 
+        if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
+            (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") ||
+            (ts.isIdentifier(recvExpr) && recvExpr.text === "Object" &&
+                ORDINARY_OBJECT_STATIC_METHODS.has(memberName))) {
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+        }
+
         // Must run before the generic namespace-receiver path: `dispatch` is a
         // declared namespace in lib.core.d.ts but lowers to the libdispatch
         // runtime, not to mangled namespace functions.
@@ -56114,9 +55839,6 @@ class Emitter {
                 ...this.ignoredArgumentSpecs(call.arguments, 2),
             ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") {
-            return this.emitReflectCall(call, memberName);
-        }
         if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
         }
@@ -56333,17 +56055,6 @@ class Emitter {
         method: string,
     ): EmitResult {
         switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                if (call.arguments.length < 1) unsupported(call, `${method} expects at least 1 arg`);
-                return this.emitTypedObjectHasOwn(
-                    recvExpr,
-                    recv,
-                    call.arguments[0]!,
-                    this.checker.getTypeAtLocation(recvExpr),
-                    method,
-                    this.ignoredArgumentSpecs(call.arguments, 1),
-                );
             case "toLocaleString":
             case "toString":
                 return this.emitSequencedExpr(
@@ -56563,7 +56274,7 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
-        if (ORDINARY_VALUE_PROTOTYPE_METHODS.has(method)) {
+        if (ORDINARY_VALUE_PROTOTYPE_METHODS.has(method) || ORDINARY_OBJECT_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -56594,122 +56305,6 @@ class Emitter {
             );
         };
         switch (method) {
-            case "__defineGetter__":
-            case "__defineSetter__": {
-                if (args.length < 2) unsupported(call, `${method} expects key and accessor`);
-                const key = this.emitExpr(args[0]!);
-                const accessor = this.emitExpr(args[1]!);
-                const fn = method === "__defineGetter__"
-                    ? "tsc_value_object_define_getter"
-                    : "tsc_value_object_define_setter";
-                return this.emitSequencedExpr(
-                    T_VOID,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: key, target: T_STRING, node: args[0]! },
-                        { value: accessor, target: T_VALUE, node: args[1]! },
-                        ...this.ignoredArgumentSpecs(args, 2),
-                    ],
-                    ([target, keyValue, accessorValue]) =>
-                        `({ if (!${fn}(${target}, ${keyValue}, ${accessorValue})) tsc_throw_str(tsc_str_from_cstr("Object.prototype.${method} failed")); })`,
-                );
-            }
-            case "__lookupGetter__":
-            case "__lookupSetter__": {
-                if (args.length < 1) unsupported(call, `${method} expects key`);
-                const key = this.emitExpr(args[0]!);
-                const fn = method === "__lookupGetter__"
-                    ? "tsc_value_object_lookup_getter"
-                    : "tsc_value_object_lookup_setter";
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: key, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([target, keyValue]) => `${fn}(${target}, ${keyValue})`,
-                );
-            }
-            case "hasOwnProperty":
-                if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
-                const hasOwnKey = this.emitExpr(args[0]!);
-                if (hasOwnKey.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: hasOwnKey, target: T_SYMBOL, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([value, key]) => `tsc_value_has_own_symbol_prop(${value}, ${key})`,
-                    );
-                }
-                if (hasOwnKey.ty.kind === "value") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: hasOwnKey, target: T_VALUE, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([value, key]) => `tsc_value_has_own_computed_prop(${value}, ${key})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: hasOwnKey, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([value, key]) => `tsc_value_has_own_prop(${value}, ${key})`,
-                );
-            case "isPrototypeOf":
-                if (args.length < 1) unsupported(call, "isPrototypeOf expects at least 1 arg");
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: this.emitExpr(args[0]!), target: T_VALUE, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([value, proto]) => `tsc_value_is_prototype_of(${value}, ${proto})`,
-                );
-            case "propertyIsEnumerable":
-                if (args.length < 1) unsupported(call, "propertyIsEnumerable expects at least 1 arg");
-                const enumerableKey = this.emitExpr(args[0]!);
-                if (enumerableKey.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: enumerableKey, target: T_SYMBOL, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([value, key]) => `tsc_value_symbol_property_is_enumerable(${value}, ${key})`,
-                    );
-                }
-                if (enumerableKey.ty.kind === "value") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: enumerableKey, target: T_VALUE, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([value, key]) => `tsc_value_computed_property_is_enumerable(${value}, ${key})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: enumerableKey, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([value, key]) => `tsc_value_property_is_enumerable(${value}, ${key})`,
-                );
             case "join":
                 return oneArg("tsc_value_method_join");
             case "pop":
@@ -58114,8 +57709,6 @@ class Emitter {
                     { c: this.coerce(recv, T_VALUE, call.expression), ty: T_VALUE }, method);
             case "size":
                 return { c: `tsc_map_size(${recv.c})`, ty: T_NUMBER };
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58230,8 +57823,6 @@ class Emitter {
                     ([a, b]) => `${fnName}(${a!}, ${b!})`,
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58309,8 +57900,6 @@ class Emitter {
             case "has":
             case "delete":
                 return this.emitMapMethod(call, recv, method);
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58370,8 +57959,6 @@ class Emitter {
             case "has":
             case "delete":
                 return this.emitSetMethod(call, recv, method);
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58397,8 +57984,6 @@ class Emitter {
                         : `((${target.c})tsc_weakref_deref(${ref!}))`,
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58510,8 +58095,6 @@ class Emitter {
                         : `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58762,8 +58345,6 @@ class Emitter {
                     ([ee]) => `tsc_event_emitter_get_max_listeners(${ee})`,
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58826,8 +58407,6 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([target, eventC]) => `tsc_event_target_dispatch(${target}, ${eventC})`);
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -58882,8 +58461,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                     ([event]) => `tsc_event_prevent_default(${event})`,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -62098,16 +61675,6 @@ class Emitter {
         tag: string,
     ): EmitResult {
         switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable": {
-                if (call.arguments.length < 1) unsupported(call, `${tag}.${method} expects at least 1 arg`);
-                const key = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: recv, node: call.expression },
-                    { value: key, target: T_STRING, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([obj, prop]) => `({ (void)${obj}; (void)${prop}; false; })`);
-            }
             case "toLocaleString":
             case "toString": {
                 const text = `[object ${tag}]`;
@@ -62147,9 +61714,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                     ([url]) => url,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URL");
         }
         unsupported(call, `URL method .${method}`);
     }
@@ -62259,9 +61823,6 @@ class Emitter {
                 );
             case "forEach":
                 return this.emitUrlSearchParamsForEach(call, recv);
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "URLSearchParams");
         }
         unsupported(call, `URLSearchParams method .${method}`);
     }
@@ -62364,71 +61925,6 @@ class Emitter {
                 `for (size_t ${iv} = 0; ${iv} < ${ut}->len; ${iv}++) ` +
                 `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
             );
-        });
-    }
-
-    private urlPropertyFields(): string[] {
-        return [
-            "href",
-            "protocol",
-            "host",
-            "hostname",
-            "port",
-            "pathname",
-            "search",
-            "hash",
-            "origin",
-        ];
-    }
-
-    private emitUrlReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.urlPropertyFields();
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([url, keyC, receiverC]) => {
-            const out = this.freshTemp("_url_get");
-            const checks: string[] = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-            ].filter(Boolean);
-            for (const field of fields) {
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field}", ${utf8ByteLen(field)}))) ${out} = tsc_value_string(${url}->${mangleIdent(field)})`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitUrlPropertyKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.urlPropertyFields();
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([url, keyC]) => {
-            const checks = fields
-                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field}", ${utf8ByteLen(field)}))`)
-                .join(" || ");
-            return `({ (void)${url}; ${checks}; })`;
         });
     }
 
@@ -62651,9 +62147,6 @@ class Emitter {
                     this.dateIgnoredArgSpecs(recv, call.arguments),
                     ([date]) => `tsc_date_to_json(${date})`,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Date");
         }
         unsupported(call, `Date method .${method}`);
     }
@@ -62695,23 +62188,6 @@ class Emitter {
                     this.errorIgnoredArgSpecs(recv, call.arguments),
                     ([error]) => error,
                 );
-            case "hasOwnProperty":
-                if (call.arguments.length < 1) unsupported(call, "Error.hasOwnProperty expects at least 1 arg");
-                return this.emitErrorOwnKeyCheck(
-                    ts.isPropertyAccessExpression(call.expression) ? call.expression.expression : call.expression,
-                    recv,
-                    call.arguments[0]!,
-                    this.ignoredArgumentSpecs(call.arguments, 1),
-                );
-            case "propertyIsEnumerable": {
-                if (call.arguments.length < 1) unsupported(call, "Error.propertyIsEnumerable expects at least 1 arg");
-                const key = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: recv, node: call.expression },
-                    { value: key, target: T_STRING, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([error, prop]) => `({ (void)${error}; (void)${prop}; false; })`);
-            }
         }
         unsupported(call, `Error method .${method}`);
     }
@@ -63328,51 +62804,6 @@ class Emitter {
                             `else { tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); } } ` +
                             `tsc_value_object(${out}); })`;
                     },
-                );
-            }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable": {
-                if (args.length < 1) unsupported(call, `${method} expects at least 1 arg`);
-                const key = this.emitExpr(args[0]!);
-                if (key.ty.kind === "symbol") {
-                    const fn = method === "hasOwnProperty"
-                        ? "tsc_value_has_own_symbol_prop"
-                        : "tsc_value_symbol_property_is_enumerable";
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: key, target: T_SYMBOL, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([array, prop]) => `${fn}(${array}, ${prop})`,
-                    );
-                }
-                if (key.ty.kind === "value") {
-                    const fn = method === "hasOwnProperty"
-                        ? "tsc_value_has_own_computed_prop"
-                        : "tsc_value_computed_property_is_enumerable";
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: recv, target: T_VALUE, node: call.expression },
-                            { value: key, target: T_VALUE, node: args[0]! },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([array, prop]) => `${fn}(${array}, ${prop})`,
-                    );
-                }
-                const fn = method === "hasOwnProperty"
-                    ? "tsc_array_has_own_key"
-                    : "tsc_array_property_is_enumerable_key";
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: key, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([array, prop]) => `${fn}(${array}, ${prop})`,
                 );
             }
             case "toLocaleString":
@@ -64339,42 +63770,9 @@ class Emitter {
                 ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         }
         switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
 
         }
         unsupported(call, `string method .${method} (Phase 2)`);
-    }
-
-    private emitPrimitiveObjectPrototypeOwnMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-        tag: string,
-    ): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, `${tag}.${method} expects at least 1 arg`);
-        const key = this.emitExpr(call.arguments[0]!);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        if (recv.ty.kind === "string") {
-            const fn = method === "hasOwnProperty"
-                ? "tsc_value_has_own_prop"
-                : "tsc_value_property_is_enumerable";
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: key, target: T_STRING, node: call.arguments[0]! },
-                    ...ignored,
-                ],
-                ([value, prop]) => `${fn}(${value}, ${prop})`,
-            );
-        }
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: recv, node: call.expression },
-            { value: key, target: T_STRING, node: call.arguments[0]! },
-            ...ignored,
-        ], ([value, prop]) => `({ (void)${value}; (void)${prop}; false; })`);
     }
 
     private emitStringStatic(call: ts.CallExpression, name: string): EmitResult {
@@ -64409,9 +63807,6 @@ class Emitter {
             case "valueOf":
                 return this.emitDynamicNamedPropertyCall(call, recv, method,
                     ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Number");
         }
         unsupported(call, `Number method .${method}`);
     }
@@ -64506,9 +63901,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([value]) => value,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Boolean");
         }
         unsupported(call, `Boolean method .${method}`);
     }
@@ -64609,9 +64001,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                     ([value]) => value,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "Symbol");
         }
         unsupported(call, `Symbol method .${method}`);
     }
@@ -64677,9 +64066,6 @@ class Emitter {
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([value]) => value,
                 );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "BigInt");
         }
         unsupported(call, `BigInt.${method}`);
     }
@@ -67861,8 +67247,6 @@ class Emitter {
                     },
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -67925,8 +67309,6 @@ class Emitter {
                     },
                 );
             }
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
             case "toLocaleString":
             case "toString":
             case "valueOf":
@@ -68082,10 +67464,6 @@ class Emitter {
             );
         }
         switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                if (args.length < 1) unsupported(call, `Stats.${method} expects at least 1 arg`);
-                return this.emitFsStatsOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
             case "toLocaleString":
             case "toString":
                 return this.emitSequencedExpr(
@@ -68129,10 +67507,6 @@ class Emitter {
             );
         }
         switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                if (args.length < 1) unsupported(call, `Dirent.${method} expects at least 1 arg`);
-                return this.emitFsDirentOwnKeyCheck(call.expression, recv, args[0]!, this.ignoredArgumentSpecs(args, 1));
             case "toLocaleString":
             case "toString":
                 return this.emitSequencedExpr(
@@ -68220,50 +67594,12 @@ class Emitter {
         unsupported(call, `TextDecoder.${method} (only decode is supported)`);
     }
 
-    private emitBufferOwnKeys(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
-            ([owner]) => `tsc_value_object_keys(${owner})`);
-    }
-
-    private emitBufferObjectValues(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
-            ([owner]) => `tsc_value_object_values(${owner})`);
-    }
-
-    private emitBufferObjectEntries(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
-            ([owner]) => `tsc_value_object_entries(${owner})`);
-    }
-
-    private emitBufferOwnKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, ignored: SequencedCallArg[] = []): EmitResult {
-        return this.emitBufferPropertyKeyCheck(objExpr, obj, keyExpr, false, ignored);
-    }
-
     private emitBufferPropertyKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, inherited: boolean, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
         const operation = inherited ? "tsc_value_has_computed_prop" : "tsc_value_has_own_computed_prop";
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr }, ...ignored,
         ], ([owner, property]) => `${operation}(${owner}, ${property})`);
-    }
-
-    private emitBufferReflectGet(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression }, ignored: SequencedCallArg[] = []): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const specs: SequencedCallArg[] = [
-            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([owner, property, actualReceiver]) =>
-            `tsc_reflect_get_computed_prop_receiver(${owner}, ${property}, ${receiver ? actualReceiver : owner})`);
-    }
-
-    private emitBufferGetOwnPropertyDescriptor(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, ignored: SequencedCallArg[] = []): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr }, ...ignored,
-        ], ([owner, property]) => `tsc_value_get_own_property_computed_descriptor(${owner}, ${property})`);
     }
 
     private emitJsonCall(call: ts.CallExpression, name: string): EmitResult {
@@ -69367,52 +68703,6 @@ class Emitter {
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
     }
 
-    private emitObjectEntries(
-        call: ts.CallExpression,
-        arg: ts.Expression,
-        mapped: CType,
-        tsType: ts.Type,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (mapped.kind !== "class")
-            unsupported(arg, "Object.entries on non-object (Phase 3)");
-        const obj = this.freshTemp("_oe_obj");
-        const arr = this.freshTemp("_oe_arr");
-        const argR = this.emitExpr(arg);
-        const props = this.objectProperties(tsType);
-        const valueType = this.homogeneousObjectPropertyType(
-            arg,
-            props,
-            "Object.entries",
-        );
-        const elemType = entryType(valueType);
-        const pieces: string[] = [
-            `tsc_array_t* ${arr} = tsc_array_new(sizeof(${elemType.c}), ${props.length || 1})`,
-        ];
-        for (const p of props) {
-            const name = p.getName();
-            const key = this.freshTemp("_oe_key");
-            const entry = this.freshTemp("_oe_entry");
-            pieces.push(
-                `tsc_str_t* ${key} = tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`,
-            );
-            pieces.push(`${elemType.c} ${entry}`);
-            pieces.push(`${entry}.key = ${key}`);
-            pieces.push(
-                this.objectEntrySet(
-                    entry,
-                    valueType,
-                    `${obj}->${mangleIdent(name)}`,
-                ),
-            );
-            pieces.push(`tsc_array_push_raw(${arr}, &${entry})`);
-        }
-        pieces.push(arr);
-        return this.emitSequencedExpr(arrayType(elemType), [{ value: argR, node: arg }, ...ignored], ([objC]) =>
-            `({ ${mapped.c} ${obj} = ${objC}; ${pieces.join("; ")}; })`,
-        );
-    }
-
     private emitObjectFromEntries(
         call: ts.CallExpression,
         arg: ts.Expression,
@@ -69482,11 +68772,6 @@ class Emitter {
     }
 
     private emitObjectCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name === "getOwnPropertyDescriptors") {
-            const callee = call.expression;
-            if (!ts.isPropertyAccessExpression(callee)) unsupported(call, "ordinary Object call requires a property reference");
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(callee.expression), name, !!callee.questionDotToken);
-        }
         const args = call.arguments;
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
@@ -69593,283 +68878,6 @@ class Emitter {
                 ...ignored,
             ], ([l, r]) => `tsc_value_object_is(${l}, ${r})`);
         }
-        if (name === "entries" && mapped.kind === "error") {
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            const value = this.emitExpr(arg);
-            const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-            const elementType = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
-            const emptyResultType = resultType.kind === "array" ? resultType : arrayType(elementType);
-            return this.emitSequencedExpr(emptyResultType, [{ value, node: arg }, ...ignored], ([v]) =>
-                `({ (void)${v}; tsc_array_new(sizeof(${elementType.c}), 1); })`
-            );
-        }
-        if (name === "keys") {
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
-                );
-            }
-            if (mapped.kind === "value") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                );
-            }
-            if (emptyEnumerableBuiltinObjectArg) {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                );
-            }
-            if (mapped.kind === "function") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                );
-            }
-            if (mapped.kind === "buffer") {
-                const value = this.emitExpr(arg);
-                return this.emitBufferOwnKeys(arg, value, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const value = this.emitExpr(arg);
-                return this.emitFsStatsOwnPropertyNames(arg, value, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const value = this.emitExpr(arg);
-                return this.emitFsDirentOwnPropertyNames(arg, value, ignored);
-            }
-            if (mapped.kind === "string") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([v]) => `tsc_value_object_keys(${v})`);
-            }
-            if (mapped.kind === "array") {
-                const value = this.emitExpr(arg);
-                if (value.ty.kind === "value") {
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
-                        `({ if (tsc_value_is_nullish(${v})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v}); })`,
-                    );
-                }
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
-                    const source = this.freshTemp("_oak_src");
-                    const out = this.freshTemp("_oak");
-                    const idx = this.freshTemp("_oak_i");
-                    const key = this.freshTemp("_oak_key");
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } } ${out}; })`;
-                });
-            }
-            if (mapped.kind !== "class")
-                unsupported(arg, "Object.keys on non-object (Phase 3)");
-            const obj = this.emitExpr(arg);
-            const props = this.objectProperties(tsType);
-            const av = this.freshTemp("_ok");
-            const pieces: string[] = [
-                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${props.length || 1})`,
-            ];
-            for (const p of props) {
-                const key = p.getName();
-                const kv = this.freshTemp("_k");
-                pieces.push(
-                    `tsc_str_t* ${kv} = tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)})`,
-                );
-                pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
-            }
-            pieces.push(av);
-            return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                `({ (void)${o}; ${pieces.join("; ")}; })`,
-            );
-        }
-        if (name === "values") {
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [
-                    { value, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
-                );
-            }
-            if (mapped.kind === "value") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const value = this.emitExpr(arg);
-                const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-                const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
-                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
-                );
-            }
-            if (emptyEnumerableBuiltinObjectArg) {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
-                );
-            }
-            if (mapped.kind === "function") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
-                );
-            }
-            if (mapped.kind === "buffer") {
-                const value = this.emitExpr(arg);
-                return this.emitBufferObjectValues(arg, value, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const value = this.emitExpr(arg);
-                return this.emitFsStatsObjectValues(arg, value, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const value = this.emitExpr(arg);
-                return this.emitFsDirentObjectValues(arg, value, ignored);
-            }
-            if (mapped.kind === "string") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    [{ value, target: T_STRING, node: arg }, ...ignored],
-                    ([str]) => `tsc_str_code_units(${str})`,
-                );
-            }
-            if (mapped.kind === "array") {
-                const value = this.emitExpr(arg);
-                const valueType = mapped.elem ?? T_VALUE;
-                return this.emitSequencedExpr(arrayType(valueType), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
-                    const source = this.freshTemp("_osv_src");
-                    const out = this.freshTemp("_osv");
-                    const idx = this.freshTemp("_osv_i");
-                    const current = this.freshTemp("_osv_value");
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { ${valueType.c} ${current} = TSC_ARR(${valueType.c}, ${source}, ${idx}); tsc_array_push_raw(${out}, &${current}); } } ${out}; })`;
-                });
-            }
-            if (mapped.kind !== "class")
-                unsupported(arg, "Object.values on non-object (Phase 3)");
-            // Evaluate arg once.
-            const ov = this.freshTemp("_ov");
-            const argR = this.emitExpr(arg);
-            const props = this.objectProperties(tsType);
-            const commonType = this.homogeneousObjectPropertyType(
-                arg,
-                props,
-                "Object.values",
-            );
-            const av = this.freshTemp("_ov2");
-            const pieces: string[] = [
-                `tsc_array_t* ${av} = tsc_array_new(sizeof(${commonType.c}), ${props.length || 1})`,
-            ];
-            for (const p of props) {
-                const name = p.getName();
-                const vv = this.freshTemp("_v");
-                pieces.push(
-                    `${commonType.c} ${vv} = ${ov}->${mangleIdent(name)}`,
-                );
-                pieces.push(`tsc_array_push_raw(${av}, &${vv})`);
-            }
-            pieces.push(av);
-            return this.emitSequencedExpr(arrayType(commonType), [{ value: argR, node: arg }, ...ignored], ([objC]) =>
-                `({ ${mapped.c} ${ov} = ${objC}; ${pieces.join("; ")}; })`,
-            );
-        }
-        if (name === "entries") {
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [
-                    { value, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const value = this.emitExpr(arg);
-                const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-                const elem = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
-                return this.emitSequencedExpr(arrayType(elem), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(${elem.c}), 1); })`,
-                );
-            }
-            if (emptyEnumerableBuiltinObjectArg) {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
-                );
-            }
-            if (mapped.kind === "function") {
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, node: arg }, ...ignored], ([v]) =>
-                    `({ (void)${v}; tsc_array_new(sizeof(tsc_value_t), 1); })`,
-                );
-            }
-            if (mapped.kind === "buffer") {
-                const value = this.emitExpr(arg);
-                return this.emitBufferObjectEntries(arg, value, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const value = this.emitExpr(arg);
-                return this.emitFsStatsObjectEntries(arg, value, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const value = this.emitExpr(arg);
-                return this.emitFsDirentObjectEntries(arg, value, ignored);
-            }
-            if (mapped.kind === "string") {
-                const value = this.emitExpr(arg);
-                const elemType = entryType(T_STRING);
-                return this.emitSequencedExpr(arrayType(elemType), [{ value, target: T_STRING, node: arg }, ...ignored], ([str]) => {
-                    const source = this.freshTemp("_ose_src");
-                    const units = this.freshTemp("_ose_units");
-                    const out = this.freshTemp("_ose");
-                    const idx = this.freshTemp("_ose_i");
-                    const entry = this.freshTemp("_ose_entry");
-                    return `({ tsc_str_t* const ${source} = ${str}; tsc_array_t* ${units} = tsc_str_code_units(${source}); tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${units}->len ? ${units}->len : 1); for (size_t ${idx} = 0; ${idx} < ${units}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, T_STRING, `TSC_ARR(tsc_str_t*, ${units}, ${idx})`)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
-                });
-            }
-            if (mapped.kind === "array") {
-                const value = this.emitExpr(arg);
-                const valueType = mapped.elem ?? T_VALUE;
-                const elemType = entryType(valueType);
-                return this.emitSequencedExpr(arrayType(elemType), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
-                    const source = this.freshTemp("_oae_src");
-                    const out = this.freshTemp("_oae");
-                    const idx = this.freshTemp("_oae_i");
-                    const entry = this.freshTemp("_oae_entry");
-                    const current = `TSC_ARR(${valueType.c}, ${source}, ${idx})`;
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, valueType, current)}; tsc_array_push_raw(${out}, &${entry}); } } ${out}; })`;
-                });
-            }
-            const value = this.emitExpr(arg);
-            const declaredDynamic = ts.isIdentifier(arg) && (
-                this.identifierDeclaredType(arg)?.kind === "value" ||
-                this.identifierHasDynamicAnnotation(arg)
-            );
-            if (value.ty.kind === "value" || declaredDynamic || mapped.kind === "value") {
-                const dynamicValue: EmitResult = declaredDynamic ? { c: value.c, ty: T_VALUE } : value;
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
-                    `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
-                );
-            }
-            return this.emitObjectEntries(call, arg, mapped, tsType, ignored);
-        }
         if (name === "fromEntries") {
             const ignored = this.ignoredArgumentSpecs(args, 1);
             const entries = this.emitExpr(arg);
@@ -69889,292 +68897,6 @@ class Emitter {
                 ], ([e]) => `tsc_value_object_from_entries(${e})`);
             }
             return this.emitObjectFromEntries(call, arg, ignored);
-        }
-        if (name === "create") {
-            if (args.length < 1) unsupported(call, "Object.create expects prototype and optional descriptor map");
-            const specs: SequencedCallArg[] = [
-                { value: this.emitExpr(arg), target: T_VALUE, node: arg },
-            ];
-            if (args[1]) specs.push({ value: this.emitOrdinaryObjectExpression(args[1]), target: T_VALUE, node: args[1] });
-            specs.push(...this.ignoredArgumentSpecs(args, 2));
-            return this.emitSequencedExpr(T_VALUE, specs, ([proto, descriptors]) => {
-                const out = this.freshTemp("_create_obj");
-                const define = descriptors
-                    ? `if (!tsc_value_is_undefined(${descriptors}) && !tsc_value_define_properties_descriptor_map(${out}, ${descriptors})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.create defineProperties failed")); `
-                    : "";
-                return `({ tsc_value_t ${out} = tsc_value_object_create(${proto}); ${define}${out}; })`;
-            });
-        }
-        if (name === "getOwnPropertyNames") {
-            if (args.length < 1) unsupported(call, "Object.getOwnPropertyNames expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (this.isStaticArrayPrototypeExpression(arg)) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_array_prototype_own_property_names(); })`,
-                );
-            }
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) =>
-                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyNames target must not be null or undefined")); tsc_value_own_keys(${o!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                );
-            }
-            if (emptyOwnBuiltinObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                );
-            }
-            if (mapped.kind === "buffer") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: T_VALUE, node: arg }, ...ignored],
-                    ([owner]) => `tsc_value_own_keys(${owner})`);
-            }
-            if (mapped.kind === "error") {
-                const obj = this.emitExpr(arg);
-                return this.emitErrorOwnPropertyNames(arg, obj, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsStatsOwnPropertyNames(arg, obj, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsDirentOwnPropertyNames(arg, obj, ignored);
-            }
-            if (mapped.kind === "string") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_own_keys(${o})`);
-            }
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, target: mapped, node: arg }, ...ignored], ([arr]) => {
-                    const source = this.freshTemp("_apn_src");
-                    const out = this.freshTemp("_apn");
-                    const idx = this.freshTemp("_apn_i");
-                    const key = this.freshTemp("_apn_key");
-                    const lenKey = this.freshTemp("_apn_len");
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len + 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } } tsc_str_t* ${lenKey} = tsc_str_from_lit("length", 6); tsc_array_push_raw(${out}, &${lenKey}); ${out}; })`;
-                });
-            }
-            if (mapped.kind === "function") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_own_keys(${o})`);
-            }
-            if (mapped.kind === "class") {
-                const obj = this.emitExpr(arg);
-                const props = this.objectProperties(tsType);
-                const av = this.freshTemp("_opn");
-                const pieces: string[] = [
-                    `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${props.length || 1})`,
-                ];
-                for (const p of props) {
-                    const key = p.getName();
-                    const kv = this.freshTemp("_k");
-                    pieces.push(
-                        `tsc_str_t* ${kv} = tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)})`,
-                    );
-                    pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
-                }
-                pieces.push(av);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; ${pieces.join("; ")}; })`,
-                );
-            }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.getOwnPropertyNames currently supports dynamic objects only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(arrayType(T_STRING), [
-                { value: obj, target: T_VALUE, node: arg },
-                ...ignored,
-            ], ([o]) =>
-                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyNames target must not be null or undefined")); tsc_value_own_keys(${o!}); })`,
-            );
-        }
-        if (name === "getOwnPropertySymbols") {
-            if (args.length < 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (this.isStaticArrayPrototypeExpression(arg)) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_SYMBOL), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_array_prototype_symbols(); })`,
-                );
-            }
-            if (mapped.kind === "void" || mapped.kind === "function") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_SYMBOL), [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_get_own_property_symbols(${o})`);
-            }
-            if (mapped.kind === "value") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_SYMBOL), [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_get_own_property_symbols(${o})`);
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(arrayType(T_SYMBOL), [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                `({ (void)${o}; tsc_array_new(sizeof(tsc_symbol_t*), 1); })`,
-            );
-        }
-        if (name === "getOwnPropertyDescriptor") {
-            if (args.length < 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            const propertyKey = this.emitExpr(args[1]!);
-            if (propertyKey.ty.kind === "symbol" || propertyKey.ty.kind === "value") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: propertyKey, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) =>
-                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_computed_descriptor(${o!}, ${k!}); })`,
-                );
-            }
-            if (this.isStaticArrayPrototypeExpression(arg) && this.isSymbolIteratorExpression(args[1]!)) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, node: arg },
-                    { value: key, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_iterator_descriptor(); })`);
-            }
-            if (this.isStaticArrayPrototypeExpression(arg) && this.isSymbolUnscopablesExpression(args[1]!)) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, node: arg },
-                    { value: key, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
-            }
-            if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_SYMBOL, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_get_own_property_symbol_descriptor(${o}, ${k})`);
-            }
-            if (this.isStaticArrayPrototypeExpression(arg)) {
-                const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
-                if (keyType.kind !== "symbol") {
-                    const obj = this.emitExpr(arg);
-                    const key = this.emitExpr(args[1]!);
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: obj, node: arg },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        ...ignored,
-                    ], ([o, k]) => `({ (void)${o}; tsc_array_prototype_own_property_descriptor(${k}); })`);
-                }
-            }
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) =>
-                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_descriptor(${o!}, ${k!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
-            }
-            if (emptyOwnBuiltinObjectArg) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
-            }
-            if (mapped.kind === "buffer") {
-                const obj = this.emitExpr(arg);
-                return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "error") {
-                const obj = this.emitExpr(arg);
-                return this.emitErrorGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsStatsGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsDirentGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "string") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_get_own_property_descriptor(${o}, ${k})`);
-            }
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                const arrayObj = obj.ty.kind === "array"
-                    ? obj
-                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
-                return this.emitTypedArrayGetOwnPropertyDescriptor(arg, arrayObj, args[1]!, ignored);
-            }
-            if (mapped.kind === "function") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_get_own_property_descriptor(${o}, ${k})`);
-            }
-            if (mapped.kind === "class") {
-                const obj = this.emitExpr(arg);
-                return this.emitTypedGetOwnPropertyDescriptor(arg, obj, args[1]!, tsType, ignored);
-            }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.getOwnPropertyDescriptor currently supports dynamic objects only");
-            }
-            const obj = this.emitExpr(arg);
-            const key = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-                { value: key, target: T_VALUE, node: args[1]! },
-                ...ignored,
-            ], ([o, k]) =>
-                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_computed_descriptor(${o!}, ${k!}); })`,
-            );
         }
         if (name === "getPrototypeOf") {
             if (args.length < 1) unsupported(call, "Object.getPrototypeOf expects object");
@@ -70209,120 +68931,6 @@ class Emitter {
                 { value: obj, target: T_VALUE, node: arg },
                 ...ignored,
             ], ([o]) => `tsc_value_object_get_prototype_of(${o})`);
-        }
-        if (name === "hasOwn") {
-            if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            const propertyKey = this.emitExpr(args[1]!);
-            if (propertyKey.ty.kind === "symbol") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: propertyKey, target: T_SYMBOL, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_has_own_symbol_prop(${o}, ${k})`);
-            }
-            if (propertyKey.ty.kind === "value") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: propertyKey, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_has_own_computed_prop(${o}, ${k})`);
-            }
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) =>
-                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined")); tsc_value_has_own_prop(${o!}, ${k!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
-            }
-            if (emptyOwnBuiltinObjectArg) {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
-            }
-            if (mapped.kind === "buffer") {
-                const obj = this.emitExpr(arg);
-                return this.emitBufferOwnKeyCheck(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "error") {
-                const obj = this.emitExpr(arg);
-                return this.emitErrorOwnKeyCheck(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsStatsOwnKeyCheck(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsDirentOwnKeyCheck(arg, obj, args[1]!, ignored);
-            }
-            if (mapped.kind === "string") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_has_own_prop(${o}, ${k})`);
-            }
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: mapped, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_array_has_own_key(${o}, ${k})`);
-            }
-            if (mapped.kind === "function") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `tsc_value_has_own_prop(${o}, ${k})`);
-            }
-            if (mapped.kind === "class") {
-                const obj = this.emitExpr(arg);
-                return this.emitTypedObjectHasOwn(
-                    arg,
-                    obj,
-                    args[1]!,
-                    tsType,
-                    "Object.hasOwn",
-                    ignored,
-                );
-            }
-            if (mapped.kind !== "value") unsupported(arg, "Object.hasOwn on non-object");
-            const obj = this.emitExpr(arg);
-            const key = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, target: T_VALUE, node: arg },
-                { value: key, target: T_STRING, node: args[1]! },
-                ...ignored,
-            ], ([o, k]) =>
-                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined")); tsc_value_has_own_prop(${o!}, ${k!}); })`,
-            );
         }
         if (name === "isExtensible") {
             if (args.length < 1) unsupported(call, "Object.isExtensible expects object");
@@ -70452,43 +69060,6 @@ class Emitter {
                 return `({ if (!tsc_value_seal(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
             });
         }
-        if (name === "setPrototypeOf") {
-            if (args.length < 2) unsupported(call, "Object.setPrototypeOf expects object and prototype");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                const proto = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    { value: proto, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([o, p]) => `({ tsc_value_object_set_prototype_of(${o}, ${p}); ${o}; })`);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                const proto = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(mapped, [
-                    { value: obj, node: arg },
-                    { value: proto, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([o, p]) => `({ tsc_value_object_require_valid_prototype(${p}); ${o}; })`);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.setPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            const proto = this.emitExpr(args[1]!);
-            const resultType = obj.ty.kind === "value" || mapped.kind === "value" ? T_VALUE : mapped;
-            return this.emitSequencedExpr(resultType, [
-                { value: obj, node: arg },
-                { value: proto, target: T_VALUE, node: args[1]! },
-                ...ignored,
-            ], ([o, p]) => {
-                const target = dynamicObjectArg(o!, obj.ty);
-                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ tsc_value_object_set_prototype_of(${target}, ${p}); ${result}; })`;
-            });
-        }
         if (name === "freeze") {
             if (args.length < 1) unsupported(call, "Object.freeze expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
@@ -70516,19 +69087,6 @@ class Emitter {
                 const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
                 return `({ if (!tsc_value_freeze(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
             });
-        }
-        if (name === "defineProperty") {
-            if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
-            return this.emitPropertyDescriptorDefinition(
-                arg, this.emitExpr(arg), args[1]!, args[2]!, false,
-                this.ignoredArgumentSpecs(args, 3),
-            );
-        }
-        if (name === "defineProperties") {
-            if (args.length < 2) unsupported(call, "Object.defineProperties expects object and descriptor map");
-            return this.emitObjectDefineProperties(
-                arg, this.emitExpr(arg), args[1]!, this.ignoredArgumentSpecs(args, 2),
-            );
         }
         if (name === "groupBy") {
             return this.emitObjectGroupBy(call);
@@ -70953,609 +69511,10 @@ class Emitter {
         });
     }
 
-    private emitTypedReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        tsType: ts.Type,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.get on non-object");
-        const key = this.emitExpr(keyExpr);
-        const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([objC, keyC, receiverC]) => {
-            const out = this.freshTemp("_rget");
-            const checks: string[] = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-            ].filter(Boolean);
-            for (const name of props) {
-                const sym = tsType.getProperty(name);
-                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
-                if (!sym || !decl) continue;
-                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
-                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
-                const field = `${objC}->${mangleIdent(name)}`;
-                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${out} = ${boxed}`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private typedArrayDescriptorInit(
-        desc: string,
-        value: string,
-        writable: string,
-        enumerable: string,
-        configurable: string,
-    ): string {
-        return (
-            `tsc_object_t* ${desc} = tsc_object_new(); ` +
-            `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${value}); ` +
-            `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(${writable})); ` +
-            `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(${enumerable})); ` +
-            `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(${configurable}))`
-        );
-    }
-
-    private errorOwnFields(includeSuppressed = false): { name: string; value: (error: string) => string }[] {
-        const fields: { name: string; value: (error: string) => string }[] = [
-            { name: "name", value: (error) => `tsc_value_string(${error}->name)` },
-            { name: "message", value: (error) => `tsc_value_string(${error}->message)` },
-            { name: "cause", value: (error) => `${error}->cause` },
-            { name: "errors", value: (error) => `tsc_value_array(${error}->errors ? ${error}->errors : tsc_array_new(sizeof(tsc_value_t), 1))` },
-        ];
-        if (includeSuppressed) {
-            fields.push(
-                { name: "error", value: (error) => `${error}->error` },
-                { name: "suppressed", value: (error) => `${error}->suppressed` },
-            );
-        }
-        return fields;
-    }
-
     private isSuppressedErrorExpression(expr: ts.Expression): boolean {
         const type = this.checker.getTypeAtLocation(this.unwrapTransparentExpression(expr));
         return type.getSymbol()?.getName() === "SuppressedError" ||
             type.aliasSymbol?.getName() === "SuppressedError";
-    }
-
-    private emitErrorOwnPropertyNames(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
-            const out = this.freshTemp("_err_keys");
-            const pieces = [
-                `(void)${error}`,
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${fields.length})`,
-            ];
-            for (const field of fields) {
-                const key = this.freshTemp("_err_key");
-                pieces.push(`tsc_str_t* ${key} = tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)})`);
-                pieces.push(`tsc_array_push_raw(${out}, &${key})`);
-            }
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitErrorGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([error, keyC]) => {
-            const out = this.freshTemp("_err_desc_out");
-            const checks = [`tsc_value_t ${out} = tsc_value_undefined()`];
-            for (const field of fields) {
-                const desc = this.freshTemp("_err_desc");
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))) { ` +
-                    `${this.typedArrayDescriptorInit(desc, field.value(error!), "true", "false", "true")}; ` +
-                    `${out} = tsc_value_object(${desc}); }`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitErrorOwnKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitErrorKeyCheck(objExpr, obj, keyExpr, ignored);
-    }
-
-    private emitErrorPropertyKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitErrorKeyCheck(objExpr, obj, keyExpr, ignored);
-    }
-
-    private emitErrorKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([error, keyC]) => {
-            const checks = fields
-                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))`)
-                .join(" || ");
-            return `({ (void)${error}; ${checks}; })`;
-        });
-    }
-
-    private emitErrorReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([error, keyC, receiverC]) => {
-            const out = this.freshTemp("_err_get");
-            const checks: string[] = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-            ].filter(Boolean);
-            for (const field of fields) {
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}))) ${out} = ${field.value(error!)}`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitBoxedOwnPropertyNames(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_STRING),
-            [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
-            ([value]) => `tsc_value_own_keys(${value})`);
-    }
-
-    private emitBoxedGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, target: T_VALUE, node: objExpr },
-            { value: this.emitExpr(keyExpr), target: T_STRING, node: keyExpr }, ...ignored,
-        ], ([value, key]) => `tsc_value_get_own_property_descriptor(${value}, ${key})`);
-    }
-
-    private fsStatsOwnFields(): { name: string; value: (stats: string) => string }[] {
-        return [
-            { name: "dev", value: (stats) => `tsc_fs_stats_dev(${stats})` },
-            { name: "ino", value: (stats) => `tsc_fs_stats_ino(${stats})` },
-            { name: "size", value: (stats) => `tsc_fs_stats_size(${stats})` },
-            { name: "mode", value: (stats) => `tsc_fs_stats_mode(${stats})` },
-            { name: "nlink", value: (stats) => `tsc_fs_stats_nlink(${stats})` },
-            { name: "uid", value: (stats) => `tsc_fs_stats_uid(${stats})` },
-            { name: "gid", value: (stats) => `tsc_fs_stats_gid(${stats})` },
-            { name: "rdev", value: (stats) => `tsc_fs_stats_rdev(${stats})` },
-            { name: "blksize", value: (stats) => `tsc_fs_stats_blksize(${stats})` },
-            { name: "blocks", value: (stats) => `tsc_fs_stats_blocks(${stats})` },
-            { name: "atimeMs", value: (stats) => `tsc_fs_stats_atime_ms(${stats})` },
-            { name: "mtimeMs", value: (stats) => `tsc_fs_stats_mtime_ms(${stats})` },
-            { name: "ctimeMs", value: (stats) => `tsc_fs_stats_ctime_ms(${stats})` },
-            { name: "birthtimeMs", value: (stats) => `tsc_fs_stats_birthtime_ms(${stats})` },
-        ];
-    }
-
-    private emitFsStatsOwnPropertyNames(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.fsStatsOwnFields();
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
-            const out = this.freshTemp("_stats_keys");
-            const pieces = [
-                `(void)${stats}`,
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${fields.length})`,
-            ];
-            for (const field of fields) {
-                const key = this.freshTemp("_stats_key");
-                pieces.push(`tsc_str_t* ${key} = tsc_str_from_lit("${field.name}", ${field.name.length})`);
-                pieces.push(`tsc_array_push_raw(${out}, &${key})`);
-            }
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitFsStatsObjectValues(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.fsStatsOwnFields();
-        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
-            const out = this.freshTemp("_stats_values");
-            const pieces = [`tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${fields.length})`];
-            for (const field of fields) {
-                const value = this.freshTemp("_stats_value");
-                pieces.push(`tsc_value_t ${value} = tsc_value_num(${field.value(stats!)})`);
-                pieces.push(`tsc_array_push_raw(${out}, &${value})`);
-            }
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitFsStatsObjectEntries(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.fsStatsOwnFields();
-        const elemType = entryType(T_VALUE);
-        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
-            const out = this.freshTemp("_stats_entries");
-            const pieces = [`tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${fields.length})`];
-            for (const field of fields) {
-                const entry = this.freshTemp("_stats_entry");
-                pieces.push(`${elemType.c} ${entry}`);
-                pieces.push(`${entry}.key = tsc_str_from_lit("${field.name}", ${field.name.length})`);
-                pieces.push(this.objectEntrySet(entry, T_VALUE, `tsc_value_num(${field.value(stats!)})`));
-                pieces.push(`tsc_array_push_raw(${out}, &${entry})`);
-            }
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitFsStatsGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.fsStatsOwnFields();
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([stats, keyC]) => {
-            const out = this.freshTemp("_stats_desc_out");
-            const checks = [`tsc_value_t ${out} = tsc_value_undefined()`];
-            for (const field of fields) {
-                const desc = this.freshTemp("_stats_desc");
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))) { ` +
-                    `${this.typedArrayDescriptorInit(desc, `tsc_value_num(${field.value(stats!)})`, "true", "true", "true")}; ` +
-                    `${out} = tsc_value_object(${desc}); }`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitFsStatsOwnKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.fsStatsOwnFields();
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([stats, keyC]) => {
-            const checks = fields
-                .map((field) => `tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))`)
-                .join(" || ");
-            return `({ (void)${stats}; ${checks}; })`;
-        });
-    }
-
-    private emitFsStatsReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const fields = this.fsStatsOwnFields();
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([stats, keyC, receiverC]) => {
-            const out = this.freshTemp("_stats_get");
-            const checks: string[] = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-            ].filter(Boolean);
-            for (const field of fields) {
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${field.name}", ${field.name.length}))) ${out} = tsc_value_num(${field.value(stats!)})`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitFsDirentOwnPropertyNames(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
-            const out = this.freshTemp("_dirent_keys");
-            const key = this.freshTemp("_dirent_key");
-            return `({ (void)${dirent}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 3); tsc_str_t* ${key} = tsc_str_from_lit("name", 4); tsc_array_push_raw(${out}, &${key}); ${key} = tsc_str_from_lit("parentPath", 10); tsc_array_push_raw(${out}, &${key}); ${key} = tsc_str_from_lit("path", 4); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
-        });
-    }
-
-    private emitFsDirentObjectValues(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
-            const out = this.freshTemp("_dirent_values");
-            const value = this.freshTemp("_dirent_value");
-            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), 3); tsc_value_t ${value} = tsc_value_string(tsc_fs_dirent_name(${dirent})); tsc_array_push_raw(${out}, &${value}); ${value} = tsc_value_string(tsc_fs_dirent_parent_path(${dirent})); tsc_array_push_raw(${out}, &${value}); ${value} = tsc_value_string(tsc_fs_dirent_parent_path(${dirent})); tsc_array_push_raw(${out}, &${value}); ${out}; })`;
-        });
-    }
-
-    private emitFsDirentObjectEntries(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const elemType = entryType(T_VALUE);
-        return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
-            const out = this.freshTemp("_dirent_entries");
-            const entry = this.freshTemp("_dirent_entry");
-            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), 3); ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_lit("name", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${entry}.key = tsc_str_from_lit("parentPath", 10); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${entry}.key = tsc_str_from_lit("path", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${out}; })`;
-        });
-    }
-
-    private emitFsDirentGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([dirent, keyC]) => {
-            const out = this.freshTemp("_dirent_desc_out");
-            const desc = this.freshTemp("_dirent_desc");
-            return `({ tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } else if (tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
-        });
-    }
-
-    private emitFsDirentOwnKeyCheck(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([dirent, keyC]) => `({ (void)${dirent}; tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) || tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4)); })`);
-    }
-
-    private emitFsDirentReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([dirent, keyC, receiverC]) => {
-            const ignoredReceiver = receiver ? `(void)${receiverC}; ` : "";
-            return `({ ${ignoredReceiver}tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) ? tsc_value_string(tsc_fs_dirent_name(${dirent})) : (tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4))) ? tsc_value_string(tsc_fs_dirent_parent_path(${dirent})) : tsc_value_undefined(); })`;
-        });
-    }
-
-    private emitTypedArrayGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptor on non-array");
-        const elem = obj.ty.elem ?? T_VALUE;
-        const key = this.emitExpr(keyExpr);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([arrC, keyC]) => {
-            const out = this.freshTemp("_adesc");
-            const idx = this.freshTemp("_adesc_i");
-            const lenDesc = this.freshTemp("_adesc_len");
-            const elemDesc = this.freshTemp("_adesc_elem");
-            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
-            const pieces = [
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                    `${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen && ${arrC}->length_writable`, "false", "false")}; ` +
-                    `${out} = tsc_value_object(${lenDesc}); ` +
-                `} else { ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key) && tsc_array_index_present(${arrC}, ${idx})) { ` +
-                            `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
-                            `${out} = tsc_value_object(${elemDesc}); ` +
-                            `break; ` +
-                        `} ` +
-                    `} ` +
-                `}`,
-                out,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedArrayReflectGet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        receiver?: { value: EmitResult; node: ts.Expression },
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.get on non-array");
-        const elem = obj.ty.elem ?? T_VALUE;
-        const key = this.emitExpr(keyExpr);
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, ([arrC, keyC, receiverC]) => {
-            const out = this.freshTemp("_aget");
-            const idx = this.freshTemp("_aget_i");
-            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
-            const pieces = [
-                receiver ? `(void)${receiverC}` : "",
-                `tsc_value_t ${out} = tsc_value_undefined()`,
-                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                    `${out} = tsc_value_num((double)${arrC}->len); ` +
-                `} else { ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key)) { ${out} = ${elemValue}; break; } ` +
-                    `} ` +
-                `}`,
-                out,
-            ].filter(Boolean);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedArrayReflectSet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        valueExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.set on non-array");
-        const elem = obj.ty.elem ?? T_VALUE;
-        const key = this.emitExpr(keyExpr);
-        const value = this.emitExpr(valueExpr);
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            { value, target: elem, node: valueExpr },
-            ...ignored,
-        ], ([arrC, keyC, valueC]) => {
-            const out = this.freshTemp("_aset");
-            const idx = this.freshTemp("_aset_i");
-            const nextKey = this.freshTemp("_aset_next_key");
-            const elemTmp = this.freshTemp("_aset_value");
-            const pieces = [
-                `bool ${out} = false`,
-                `if (!${arrC}->frozen) { ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
-                            `${elem.c} ${elemTmp} = ${valueC}; ` +
-                            `tsc_array_store_raw(${arrC}, ${idx}, &${elemTmp}); ` +
-                            `${out} = true; ` +
-                            `break; ` +
-                        `} ` +
-                    `} ` +
-                    `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && ${arrC}->length_writable) { ` +
-                        `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
-                        `if (tsc_str_eq(${keyC}, ${nextKey})) { ` +
-                            `${elem.c} ${elemTmp} = ${valueC}; ` +
-                            `tsc_array_push_raw(${arrC}, &${elemTmp}); ` +
-                            `${out} = true; ` +
-                        `} ` +
-                    `} ` +
-                `}`,
-                out,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedArrayReflectDelete(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array Reflect.deleteProperty on non-array");
-        const key = this.emitExpr(keyExpr);
-        return this.emitTypedArrayDeleteProperty(objExpr, obj, key, keyExpr, ignored);
     }
 
     private emitTypedArrayDeleteProperty(
@@ -71591,83 +69550,6 @@ class Emitter {
         });
     }
 
-    private emitTypedGetOwnPropertyDescriptor(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        tsType: ts.Type,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptor on non-object");
-        const key = this.emitExpr(keyExpr);
-        const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([objC, keyC]) => {
-            const out = this.freshTemp("_tdesc");
-            const checks: string[] = [`tsc_value_t ${out} = tsc_value_undefined()`];
-            for (const name of props) {
-                const sym = tsType.getProperty(name);
-                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
-                if (!sym || !decl) continue;
-                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
-                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
-                const field = `${objC}->${mangleIdent(name)}`;
-                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
-                const desc = this.freshTemp("_desc");
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ` +
-                    `tsc_object_t* ${desc} = tsc_object_new(); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${boxed}); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(true)); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true)); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(true)); ` +
-                    `${out} = tsc_value_object(${desc}); }`,
-                );
-            }
-            checks.push(out);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedReflectSet(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        valueExpr: ts.Expression,
-        tsType: ts.Type,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "class") unsupported(objExpr, "Reflect.set on non-object");
-        const key = this.emitExpr(keyExpr);
-        const value = this.emitExpr(valueExpr);
-        const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            { value, target: T_VALUE, node: valueExpr },
-            ...ignored,
-        ], ([objC, keyC, valueC]) => {
-            const ok = this.freshTemp("_rset");
-            const checks: string[] = [`bool ${ok} = false`];
-            for (const name of props) {
-                const sym = tsType.getProperty(name);
-                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
-                if (!sym || !decl) continue;
-                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
-                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
-                const assignment = this.coerce({ c: valueC, ty: T_VALUE }, fieldType, valueExpr);
-                checks.push(
-                    `if (tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${this.nativeFieldStore(objC, obj.ty.className!, name, fieldType, assignment)}; ${ok} = true; }`,
-                );
-            }
-            checks.push(ok);
-            return `({ ${checks.join("; ")}; })`;
-        });
-    }
-
     private typedObjectPropertyNames(tsType: ts.Type, ty: CType): string[] {
         const props = this.objectProperties(tsType).map((prop) => prop.getName());
         if (props.length > 0 || ty.kind !== "class" || !ty.className) return props;
@@ -71692,760 +69574,6 @@ class Emitter {
             }
         }
         return props;
-    }
-
-    private emitReflectApply(call: ts.CallExpression): EmitResult {
-        const args = call.arguments;
-        if (args.length < 3) unsupported(call, "Reflect.apply expects target, thisArg, and argumentsList");
-        const ignored = this.ignoredArgumentSpecs(args, 3);
-        const target = this.emitExpr(args[0]!);
-        if (target.ty.kind === "value") {
-            const list = this.emitReflectArgumentsListExpr(args[2]!);
-            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
-                unsupported(args[2]!, "Reflect.apply argumentsList must be an array literal, typed array, or dynamic array");
-            }
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: target, target: T_VALUE, node: args[0]! },
-                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-                { value: list, target: T_VALUE, node: args[2]! },
-                ...ignored,
-            ], ([fn, thisArg, listC]) => `tsc_value_apply_function(${fn}, ${thisArg}, ${listC})`);
-        }
-        if (target.ty.kind !== "function" || !target.ty.ret) {
-            unsupported(args[0]!, "Reflect.apply target must be a function value");
-        }
-        let argList: ts.Expression = args[2]!;
-        while (
-            ts.isParenthesizedExpression(argList) ||
-            ts.isAsExpression(argList) ||
-            ts.isTypeAssertionExpression(argList) ||
-            ts.isNonNullExpression(argList) ||
-            ts.isSatisfiesExpression(argList)
-        ) {
-            argList = argList.expression;
-        }
-        if (!ts.isArrayLiteralExpression(argList)) {
-            const params = target.ty.params ?? [];
-            const list = this.emitReflectArgumentsListExpr(args[2]!);
-            if (list.ty.kind !== "array" && list.ty.kind !== "value") {
-                unsupported(args[2]!, "Reflect.apply argumentsList must be an array literal, typed array, or dynamic array");
-            }
-            const ret = this.prepareType(target.ty.ret);
-            return this.emitSequencedExpr(ret, [
-                { value: target, target: target.ty, node: args[0]! },
-                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-                { value: list, node: args[2]! },
-                ...ignored,
-            ], (vals) => {
-                const fn = vals[0]!;
-                const thisArg = vals[1]!;
-                const listC = vals[2]!;
-                const callArgs: string[] = [];
-                const expected = params.length;
-                let lengthCheck: string;
-                for (let i = 0; i < expected; i++) {
-                    if (list.ty.kind === "array") {
-                        const elem = list.ty.elem ?? T_VALUE;
-                        callArgs.push(this.coerce({ c: `TSC_ARR(${elem.c}, ${listC}, ${i})`, ty: elem }, params[i]!, args[2]!));
-                    } else {
-                        callArgs.push(this.coerce({ c: `tsc_value_get_index(${listC}, ${i}.0)`, ty: T_VALUE }, params[i]!, args[2]!));
-                    }
-                }
-                if (list.ty.kind === "array") {
-                    lengthCheck = `${listC}->len != ${expected}`;
-                } else {
-                    lengthCheck = `(!tsc_value_is_array(${listC}) || (size_t)tsc_value_length(${listC}) != ${expected})`;
-                }
-                return `({ if (${lengthCheck}) tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
-            });
-        }
-        const params = target.ty.params ?? [];
-        if (argList.elements.some((element) => ts.isSpreadElement(element))) {
-            const list = this.emitReflectArgumentArrayLiteral(argList);
-            const ret = this.prepareType(target.ty.ret);
-            return this.emitSequencedExpr(ret, [
-                { value: target, target: target.ty, node: args[0]! },
-                { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-                { value: list, node: args[2]! },
-                ...ignored,
-            ], (vals) => {
-                const fn = vals[0]!;
-                const thisArg = vals[1]!;
-                const listC = vals[2]!;
-                const callArgs: string[] = [];
-                for (let i = 0; i < params.length; i++) {
-                    callArgs.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${listC}, ${i})`, ty: T_VALUE }, params[i]!, args[2]!));
-                }
-                return `({ if (${listC}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("Reflect.apply argumentsList length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
-            });
-        }
-        if (argList.elements.length !== params.length) {
-            unsupported(
-                argList,
-                `Reflect.apply target expects ${params.length} args, got ${argList.elements.length}`,
-            );
-        }
-        const specs: SequencedCallArg[] = [
-            { value: target, target: target.ty, node: args[0]! },
-            { value: this.emitExpr(args[1]!), target: T_VALUE, node: args[1]! },
-        ];
-        for (let i = 0; i < argList.elements.length; i++) {
-            const element = argList.elements[i]!;
-            if (ts.isSpreadElement(element)) unsupported(element, "Reflect.apply argumentsList spread");
-            specs.push({
-                value: this.emitExpr(element),
-                target: params[i]!,
-                node: element,
-            });
-        }
-        specs.push(...ignored);
-        const ret = this.prepareType(target.ty.ret);
-        return this.emitSequencedExpr(ret, specs, (vals) => {
-            const fn = vals[0]!;
-            const thisArg = vals[1]!;
-            const callArgs = vals.slice(2, 2 + params.length);
-            return `({ ${fn}->fn(${[`${fn}->env`, ...(target.ty.thisParam ? [thisArg] : []), ...callArgs].join(", ")}); })`;
-        });
-    }
-
-    private emitReflectConstruct(call: ts.CallExpression): EmitResult {
-        const args = call.arguments;
-        if (args.length < 2) unsupported(call, "Reflect.construct expects target and argumentsList");
-        const ignored = this.ignoredArgumentSpecs(args, args[2] ? 3 : 2);
-        const target = this.emitExpr(args[0]!);
-        const list = this.emitReflectArgumentsListExpr(args[1]!);
-        const specs: SequencedCallArg[] = [
-            { value: target, target: T_VALUE, node: args[0]! },
-            { value: list, target: T_VALUE, node: args[1]! },
-        ];
-        if (args[2]) {
-            specs.push({ value: this.emitExpr(args[2]), target: T_VALUE, node: args[2] });
-            specs.push(...ignored);
-            return this.emitSequencedExpr(
-                T_VALUE,
-                specs,
-                ([targetC, listC, newTargetC]) =>
-                    `tsc_value_construct_with_new_target(${targetC}, ${listC}, ${newTargetC})`,
-            );
-        }
-        specs.push(...ignored);
-        return this.emitSequencedExpr(
-            T_VALUE,
-            specs,
-            ([targetC, listC]) => `tsc_value_construct(${targetC}, ${listC})`,
-        );
-    }
-
-    private emitReflectArgumentsListExpr(expr: ts.Expression): EmitResult {
-        let argList = expr;
-        while (
-            ts.isParenthesizedExpression(argList) ||
-            ts.isAsExpression(argList) ||
-            ts.isTypeAssertionExpression(argList) ||
-            ts.isNonNullExpression(argList) ||
-            ts.isSatisfiesExpression(argList)
-        ) {
-            argList = argList.expression;
-        }
-        if (
-            ts.isArrayLiteralExpression(argList) &&
-            argList.elements.some((element) => ts.isSpreadElement(element))
-        ) {
-            return this.emitReflectArgumentArrayLiteral(argList);
-        }
-        return this.emitExpr(expr);
-    }
-
-    private emitReflectArgumentArrayLiteral(argList: ts.ArrayLiteralExpression): EmitResult {
-        const av = this.freshTemp("_reflect_args");
-        const pieces: string[] = [
-            `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, argList.elements.length)})`,
-        ];
-        for (const element of argList.elements) {
-            if (element.kind === ts.SyntaxKind.OmittedExpression) {
-                unsupported(element, "sparse Reflect argumentsList literals");
-            }
-            if (ts.isSpreadElement(element)) {
-                const r = this.emitExpr(element.expression);
-                if (r.ty.kind === "array") {
-                    const src = this.freshTemp("_reflect_spread_src");
-                    const idx = this.freshTemp("_reflect_spread_i");
-                    const value = this.freshTemp("_reflect_spread_value");
-                    const elem = r.ty.elem!;
-                    const current = elem.kind === "value"
-                        ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
-                        : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                    pieces.push(
-                        `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, element.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
-                    );
-                    continue;
-                }
-                if (r.ty.kind === "value" || r.ty.kind === "string") {
-                    const spread = this.freshTemp("_reflect_spread");
-                    pieces.push(`{ tsc_array_t* const ${spread} = tsc_value_iter_values(${this.coerce(r, T_VALUE, element.expression)}); tsc_array_append(${av}, ${spread}); }`);
-                    continue;
-                }
-                unsupported(element, "Reflect argumentsList spread expects an array or string");
-            }
-            const r = this.emitExpr(element as ts.Expression);
-            const value = this.freshTemp("_reflect_arg");
-            pieces.push(`${T_VALUE.c} ${value} = ${this.coerce(r, T_VALUE, element as ts.Expression)}`);
-            pieces.push(`tsc_array_push_raw(${av}, &${value})`);
-        }
-        pieces.push(av);
-        return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
-    }
-
-    private emitReflectRuntimeMethodCall(call: ts.CallExpression, name: string): EmitResult {
-        const specs = call.arguments.map((arg): SequencedCallArg => ({
-            value: this.emitExpr(arg),
-            target: T_VALUE,
-            node: arg,
-        }));
-        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
-            const reflect = this.freshTemp("_reflect_obj");
-            const fn = this.freshTemp("_reflect_fn");
-            const av = this.freshTemp("_reflect_call_args");
-            const pieces: string[] = [
-                `tsc_value_t ${reflect} = tsc_builtin_reflect()`,
-                `tsc_value_t ${fn} = tsc_value_get_prop(${reflect}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
-                `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`,
-            ];
-            for (const value of vals) {
-                pieces.push(`tsc_array_push_value(${av}, ${value})`);
-            }
-            pieces.push(`tsc_value_apply_function(${fn}, ${reflect}, tsc_value_array(${av}))`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitReflectCall(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        const runtimeArity: Record<string, number> = {
-            apply: 3,
-            construct: 2,
-            defineProperty: 3,
-            deleteProperty: 2,
-            get: 2,
-            getOwnPropertyDescriptor: 2,
-            getPrototypeOf: 1,
-            has: 2,
-            isExtensible: 1,
-            ownKeys: 1,
-            preventExtensions: 1,
-            set: 3,
-            setPrototypeOf: 2,
-        };
-        const required = runtimeArity[name];
-        if (required !== undefined && args.length < required) {
-            return this.emitReflectRuntimeMethodCall(call, name);
-        }
-        switch (name) {
-            case "apply":
-                return this.emitReflectApply(call);
-            case "construct":
-                return this.emitReflectConstruct(call);
-            case "defineProperty": {
-                if (args.length < 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
-                return this.emitPropertyDescriptorDefinition(
-                    args[0]!, this.emitExpr(args[0]!), args[1]!, args[2]!, true,
-                    this.ignoredArgumentSpecs(args, 3),
-                );
-            }
-            case "deleteProperty": {
-                if (args.length < 2) unsupported(call, "Reflect.deleteProperty expects target and key");
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                const key = this.emitExpr(args[1]!);
-                if (key.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_SYMBOL, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_delete_symbol_prop(${t}, ${k})`);
-                }
-                if (key.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_VALUE, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_delete_computed_prop(${t}, ${k})`);
-                }
-                if (mapped.kind === "array") {
-                    return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!, ignored);
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([t, k]) => `tsc_reflect_delete_prop(${t}, ${k})`);
-            }
-            case "get": {
-                if (args.length < 2) unsupported(call, "Reflect.get expects target, key, and optional receiver");
-                const consumed = args[2] ? 3 : 2;
-                const ignored = this.ignoredArgumentSpecs(args, consumed);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                const key = this.emitExpr(args[1]!);
-                const receiver = args[2] ? { value: this.emitExpr(args[2]), node: args[2] } : undefined;
-                if (key.ty.kind === "symbol" || key.ty.kind === "value") {
-                    const specs: SequencedCallArg[] = [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_VALUE, node: args[1]! },
-                    ];
-                    if (receiver) specs.push({ value: receiver.value, target: T_VALUE, node: receiver.node });
-                    specs.push(...ignored);
-                    return this.emitSequencedExpr(T_VALUE, specs, ([t, k, r]) =>
-                        `tsc_reflect_get_computed_prop_receiver(${t}, ${k}, ${receiver ? r : t})`,
-                    );
-                }
-                if (mapped.kind === "array") {
-                    return this.emitTypedArrayReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "buffer") {
-                    return this.emitBufferReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "error") {
-                    return this.emitErrorReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "url") {
-                    return this.emitUrlReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "fsstats") {
-                    return this.emitFsStatsReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "fsdirent") {
-                    return this.emitFsDirentReflectGet(args[0]!, target, args[1]!, receiver, ignored);
-                }
-                if (mapped.kind === "class") {
-                    return this.emitTypedReflectGet(args[0]!, target, args[1]!, targetType, receiver, ignored);
-                }
-                if (args[2]) {
-                    const receiver = this.emitExpr(args[2]!);
-                    const cache = this.freshTemp("_prop_cache");
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                            { value: receiver, target: T_VALUE, node: args[2]! },
-                            ...ignored,
-                        ],
-                        ([t, k, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_receiver_cached(${t}, ${k}, ${r}, &${cache}); })`,
-                    );
-                }
-                const cache = this.freshTemp("_prop_cache");
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                            ...ignored,
-                        ],
-                    ([t, k]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_get_prop_cached(${t}, ${k}, &${cache}); })`,
-                );
-            }
-            case "getOwnPropertyDescriptor": {
-                if (args.length < 2) unsupported(call, "Reflect.getOwnPropertyDescriptor expects target and key");
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                const key = this.emitExpr(args[1]!);
-                if (key.ty.kind === "symbol" || key.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_VALUE, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_get_own_property_computed_descriptor(${t}, ${k})`);
-                }
-                if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolIteratorExpression(args[1]!)) {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: target, node: args[0]! },
-                        { value: key, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_iterator_descriptor(); })`);
-                }
-                if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolUnscopablesExpression(args[1]!)) {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: target, node: args[0]! },
-                        { value: key, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
-                }
-                if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_SYMBOL, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_get_own_property_symbol_descriptor(${t}, ${k})`);
-                }
-                if (this.isStaticArrayPrototypeExpression(args[0]!)) {
-                    const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
-                    if (keyType.kind !== "symbol") {
-                        return this.emitSequencedExpr(T_VALUE, [
-                            { value: target, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                            ...ignored,
-                        ], ([t, k]) => `({ (void)${t}; tsc_array_prototype_own_property_descriptor(${k}); })`);
-                    }
-                }
-                if (
-                    mapped.kind === "map" ||
-                    mapped.kind === "set" ||
-                    mapped.kind === "weakmap" ||
-                    mapped.kind === "weakset" ||
-                    mapped.kind === "weakref" ||
-                    mapped.kind === "finregistry" ||
-                    mapped.kind === "promise" ||
-                    mapped.kind === "eventemitter" ||
-                    mapped.kind === "event" ||
-                    mapped.kind === "eventtarget" ||
-                    mapped.kind === "date" ||
-                    mapped.kind === "url" ||
-                    mapped.kind === "urlsearchparams" ||
-                    mapped.kind === "arraybuffer" ||
-                    mapped.kind === "dataview" ||
-                    mapped.kind === "hash" ||
-                    mapped.kind === "hmac"
-                ) {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: target, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_value_undefined(); })`);
-                }
-                if (mapped.kind === "buffer") {
-                    return this.emitBufferGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "error") {
-                    return this.emitErrorGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "fsstats") {
-                    return this.emitFsStatsGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "fsdirent") {
-                    return this.emitFsDirentGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "regexp") {
-                    return this.emitBoxedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "array") {
-                    return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "class") {
-                    return this.emitTypedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, targetType, ignored);
-                }
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([t, k]) => `tsc_reflect_get_own_property_descriptor(${t}, ${k})`);
-            }
-            case "getPrototypeOf": {
-                if (args.length < 1) unsupported(call, "Reflect.getPrototypeOf expects target");
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                const target = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    ...ignored,
-                ], ([t]) => `tsc_reflect_get_prototype_of(${t})`);
-            }
-            case "has": {
-                if (args.length < 2) unsupported(call, "Reflect.has expects target and key");
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                const key = this.emitExpr(args[1]!);
-                if (key.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_SYMBOL, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_has_symbol_prop(${t}, ${k})`);
-                }
-                if (key.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_VALUE, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_has_computed_prop(${t}, ${k})`);
-                }
-                if (mapped.kind === "array") {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        ...ignored,
-                    ], ([t, k]) => `tsc_reflect_has_prop(${t}, ${k})`);
-                }
-                if (mapped.kind === "buffer") {
-                    return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true, ignored);
-                }
-                if (mapped.kind === "error") {
-                    return this.emitErrorPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "url") {
-                    return this.emitUrlPropertyKeyCheck(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "fsstats") {
-                    return this.emitFsStatsOwnKeyCheck(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "fsdirent") {
-                    return this.emitFsDirentOwnKeyCheck(args[0]!, target, args[1]!, ignored);
-                }
-                if (mapped.kind === "class") {
-                    return this.emitTypedObjectHasOwn(
-                        args[0]!,
-                        target,
-                        args[1]!,
-                        targetType,
-                        "Reflect.has",
-                        ignored,
-                    );
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([t, k]) => {
-                    const cache = this.freshTemp("_cache");
-                    return `({ static tsc_prop_cache_t ${cache}; tsc_reflect_has_prop_cached(${t}, ${k}, &${cache}); })`;
-                });
-            }
-            case "isExtensible": {
-                if (args.length < 1) unsupported(call, "Reflect.isExtensible expects target");
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                if (this.isFixedBuiltinIntegrityType(mapped)) {
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, node: args[0]! },
-                        ...ignored,
-                    ], ([t]) => `((void)${t}, true)`);
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, node: args[0]! },
-                    ...ignored,
-                ], ([t]) => `tsc_reflect_is_extensible(${this.boxObjectIdentity(t!, target.ty, args[0]!)})`);
-            }
-            case "ownKeys": {
-                if (args.length < 1) unsupported(call, "Reflect.ownKeys expects target");
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                if (
-                    mapped.kind === "map" ||
-                    mapped.kind === "set" ||
-                    mapped.kind === "weakmap" ||
-                    mapped.kind === "weakset" ||
-                    mapped.kind === "weakref" ||
-                    mapped.kind === "finregistry" ||
-                    mapped.kind === "promise" ||
-                    mapped.kind === "eventemitter" ||
-                    mapped.kind === "event" ||
-                    mapped.kind === "eventtarget" ||
-                    mapped.kind === "date" ||
-                    mapped.kind === "url" ||
-                    mapped.kind === "urlsearchparams" ||
-                    mapped.kind === "arraybuffer" ||
-                    mapped.kind === "dataview" ||
-                    mapped.kind === "hash" ||
-                    mapped.kind === "hmac"
-                ) {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
-                        `({ (void)${t}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
-                    );
-                }
-                if (mapped.kind === "buffer") {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: target, target: T_VALUE, node: args[0]! }, ...ignored],
-                        ([owner]) => `tsc_reflect_own_keys(${owner})`);
-                }
-                if (mapped.kind === "error") {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitErrorOwnPropertyNames(args[0]!, target, ignored);
-                }
-                if (mapped.kind === "fsstats") {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitFsStatsOwnPropertyNames(args[0]!, target, ignored);
-                }
-                if (mapped.kind === "fsdirent") {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitFsDirentOwnPropertyNames(args[0]!, target, ignored);
-                }
-                if (mapped.kind === "regexp") {
-                    const target = this.emitExpr(args[0]!);
-                    return this.emitBoxedOwnPropertyNames(args[0]!, target, ignored);
-                }
-                if (mapped.kind === "class") {
-                    const target = this.emitExpr(args[0]!);
-                    const props = this.objectProperties(targetType);
-                    const av = this.freshTemp("_rok");
-                    const pieces: string[] = [
-                        `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${props.length || 1})`,
-                    ];
-                    for (const p of props) {
-                        const key = p.getName();
-                        const kv = this.freshTemp("_k");
-                        pieces.push(
-                            `tsc_str_t* ${kv} = tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)})`,
-                        );
-                        pieces.push(`tsc_array_push_raw(${av}, &${kv})`);
-                    }
-                    pieces.push(av);
-                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
-                        `({ (void)${t}; ${pieces.join("; ")}; })`,
-                    );
-                }
-                const target = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    ...ignored,
-                ], ([t]) => `tsc_reflect_own_keys(${t})`);
-            }
-            case "preventExtensions": {
-                if (args.length < 1) unsupported(call, "Reflect.preventExtensions expects target");
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                if (this.isFixedBuiltinIntegrityType(mapped)) {
-                    unsupported(args[0]!, "Reflect.preventExtensions does not support fixed built-in targets in this subset");
-                }
-                const target = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, node: args[0]! },
-                    ...ignored,
-                ], ([t]) => `tsc_reflect_prevent_extensions(${this.boxObjectIdentity(t!, target.ty, args[0]!)})`);
-            }
-            case "set": {
-                if (args.length < 3) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");
-                const consumed = args[3] ? 4 : 3;
-                const ignored = this.ignoredArgumentSpecs(args, consumed);
-                const targetType = this.checker.getTypeAtLocation(args[0]!);
-                const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
-                const target = this.emitExpr(args[0]!);
-                if (mapped.kind === "array") {
-                    if (args[3]) unsupported(call, "Reflect.set receiver for typed arrays requires a dynamic target");
-                    return this.emitTypedArrayReflectSet(args[0]!, target, args[1]!, args[2]!, ignored);
-                }
-                if (mapped.kind === "class") {
-                    if (args[3]) unsupported(call, "Reflect.set receiver for typed objects requires a dynamic target");
-                    return this.emitTypedReflectSet(args[0]!, target, args[1]!, args[2]!, targetType, ignored);
-                }
-                const key = this.emitExpr(args[1]!);
-                const value = this.emitExpr(args[2]!);
-                if (args[3]) {
-                    const receiver = this.emitExpr(args[3]!);
-                    if (key.ty.kind === "symbol" || key.ty.kind === "value") {
-                        return this.emitSequencedExpr(
-                            T_BOOLEAN,
-                            [
-                                { value: target, target: T_VALUE, node: args[0]! },
-                                { value: key, target: T_VALUE, node: args[1]! },
-                                { value, target: T_VALUE, node: args[2]! },
-                                { value: receiver, target: T_VALUE, node: args[3]! },
-                                ...ignored,
-                            ],
-                            ([t, k, v, r]) => `tsc_reflect_set_computed_prop_receiver(${t}, ${k}, ${v}, ${r})`,
-                        );
-                    }
-                    const cache = this.freshTemp("_prop_cache");
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                            { value, target: T_VALUE, node: args[2]! },
-                            { value: receiver, target: T_VALUE, node: args[3]! },
-                            ...ignored,
-                        ],
-                        ([t, k, v, r]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_receiver_cached(${t}, ${k}, ${v}, ${r}, &${cache}); })`,
-                    );
-                }
-                const cache = this.freshTemp("_prop_cache");
-                if (key.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_SYMBOL, node: args[1]! },
-                            { value, target: T_VALUE, node: args[2]! },
-                            ...ignored,
-                        ],
-                        ([t, k, v]) => `tsc_reflect_set_symbol_prop(${t}, ${k}, ${v})`,
-                    );
-                }
-                if (key.ty.kind === "value") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_VALUE, node: args[1]! },
-                            { value, target: T_VALUE, node: args[2]! },
-                            ...ignored,
-                        ],
-                        ([t, k, v]) => `tsc_reflect_set_computed_prop(${t}, ${k}, ${v})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                        [
-                            { value: target, target: T_VALUE, node: args[0]! },
-                            { value: key, target: T_STRING, node: args[1]! },
-                            { value, target: T_VALUE, node: args[2]! },
-                            ...ignored,
-                        ],
-                    ([t, k, v]) => `({ static tsc_prop_cache_t ${cache}; tsc_reflect_set_prop_cached(${t}, ${k}, ${v}, &${cache}); })`,
-                );
-            }
-            case "setPrototypeOf": {
-                if (args.length < 2) unsupported(call, "Reflect.setPrototypeOf expects target and prototype");
-                const ignored = this.ignoredArgumentSpecs(args, 2);
-                const target = this.emitExpr(args[0]!);
-                const proto = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: T_VALUE, node: args[0]! },
-                    { value: proto, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([t, p]) => `tsc_reflect_set_prototype_of(${t}, ${p})`);
-            }
-        }
-        unsupported(call, `Reflect.${name}`);
-    }
-
-    private isFixedBuiltinIntegrityType(ty: CType): boolean {
-        switch (ty.kind) {
-            case "map":
-            case "set":
-            case "weakmap":
-            case "weakset":
-            case "weakref":
-            case "finregistry":
-            case "promise":
-            case "eventemitter":
-            case "event":
-            case "eventtarget":
-            case "date":
-            case "url":
-            case "urlsearchparams":
-            case "arraybuffer":
-            case "dataview":
-            case "hash":
-            case "hmac":
-            case "regexp":
-            case "error":
-            case "fsstats":
-            case "fsdirent":
-                return true;
-            default:
-                return false;
-        }
     }
 
     private isUndefinedExpression(expr: ts.Expression): boolean {

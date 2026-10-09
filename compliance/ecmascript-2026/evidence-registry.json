@@ -1325,7 +1325,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
       ]
     },
     {
@@ -1491,13 +1492,6 @@
       "id": "src/emit/index.ts#emitDynamicMethod",
       "targets": [
         "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
-        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
-      ]
-    },
-    {
-      "kind": "implementation",
-      "id": "src/emit/index.ts#emitReflectConstruct",
-      "targets": [
         "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
       ]
     },

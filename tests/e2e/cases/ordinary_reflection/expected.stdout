@@ -1,0 +1,9 @@
+record: value,text 11,record
+entries: value 11
+descriptor: 11 true
+write: 13 13
+class: value true
+array: 23 2 19,23
+prototype: false true
+lookup: custom,13
+primitive: 0,1,2 A😀

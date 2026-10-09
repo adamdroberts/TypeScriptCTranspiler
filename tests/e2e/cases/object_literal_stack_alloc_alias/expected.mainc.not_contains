@@ -1,2 +1,0 @@
-TSC_GC_MALLOC_UNINIT(sizeof(Point_t))
-TSC_GC_MALLOC(sizeof(Point_t))

@@ -7,6 +7,8 @@ The shortest-number and requested decimal formatters, ordinary locale invocation
 
 # TODO — remaining work
 
+Current reflection status: Object descriptor/key/enumeration and prototype membership/accessor calls and Reflect use ordinary lookup and rooted actual Lists. EnumerableOwnProperties shares one key snapshot with ordered descriptor/Get operations across represented owners. Node properties and native E2E exercise mutation, coercion order, abrupt identity, Symbols, UTF-16 and retained values. Finish native platform owner metadata, remaining Object statics/CJS static-proof bypasses, finite Function-constructor intake, complete Proxy invariants, UTF-8 output for unpaired surrogates and exact reciprocal evidence. Retained body binding cells supersede the former literal-stack storage assumptions; source/output regressions remain, while any renewed escape/allocation optimization must preserve the canonical binding representation.
+
 Current identifier storage status: binding and field spellings share a reversible UTF-16 component encoder; module and namespace ownership use framed component Lists rather than flattened names. Independent reversibility/depth, rooted field and Node E2E checks cover that path. Finish the native class/interface physical type-name plan and audit remaining compiler-generated naming domains before claiming complete identifier hygiene or exact Identifier clause evidence.
 
 Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**.
