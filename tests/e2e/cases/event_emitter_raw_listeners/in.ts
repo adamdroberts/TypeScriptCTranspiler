@@ -23,7 +23,7 @@ const cooked = emitter.listeners("data");
 const rawAgain = emitter.rawListeners("data", mark("a"));
 
 console.log("lengths:", raw.length, cooked.length);
-console.log("types:", typeof raw[0], typeof raw[1], raw.join("|"));
+console.log("types:", typeof raw[0], typeof raw[1], raw.map(fn => String(fn).startsWith("function")).join("|"));
 console.log("normal:", Object.is(raw[0], cooked[0]), typeof raw[0].listener);
 console.log("once:", Object.is(raw[1], cooked[1]), Object.is(raw[1].listener, cooked[1]), typeof raw[1].listener);
 console.log("duplicates:", Object.is(raw[1], raw[2]), Object.is(raw[1].listener, raw[2].listener));

@@ -1,0 +1,3 @@
+{
+  "description": "Retained callable identities and descriptors survive registry growth"
+}

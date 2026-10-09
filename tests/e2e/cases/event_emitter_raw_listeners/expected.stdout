@@ -1,5 +1,5 @@
 lengths: 3 3
-types: function function [function]|[function]|[function]
+types: function function true|true|true
 normal: true undefined
 once: false true function
 duplicates: false true

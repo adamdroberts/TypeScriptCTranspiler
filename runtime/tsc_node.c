@@ -7422,11 +7422,10 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     if (!getter) return tsc_value_undefined();
     if (getter == tsc_value_dynamic_accessor_getter && env) return *(tsc_value_t*)env;
     tsc_realm_t* realm = tsc_realm_current();
-    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == TSC_FUNCTION_IDENTITY_GETTER && cur->realm == realm && cur->code.getter == getter && cur->env == env) {
-            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
-        }
-    }
+    tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_GETTER,
+        .realm = realm, .code = (uintptr_t)getter, .env = env };
+    tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
+    if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_GETTER;
     entry->realm = realm;
@@ -7440,8 +7439,7 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.getter = getter;
     entry->env = env;
-    entry->next = g_function_identities;
-    g_function_identities = entry;
+    entry = tsc_function_identity_register(entry);
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
 }
 
@@ -7449,11 +7447,10 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     if (!setter) return tsc_value_undefined();
     if (setter == tsc_value_dynamic_accessor_setter && env) return *(tsc_value_t*)env;
     tsc_realm_t* realm = tsc_realm_current();
-    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == TSC_FUNCTION_IDENTITY_SETTER && cur->realm == realm && cur->code.setter == setter && cur->env == env) {
-            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
-        }
-    }
+    tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_SETTER,
+        .realm = realm, .code = (uintptr_t)setter, .env = env };
+    tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
+    if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_SETTER;
     entry->realm = realm;
@@ -7467,8 +7464,7 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     tsc_function_init_metadata(entry, 1.0, tsc_str_from_lit("", 0));
     entry->code.setter = setter;
     entry->env = env;
-    entry->next = g_function_identities;
-    g_function_identities = entry;
+    entry = tsc_function_identity_register(entry);
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
 }
 

@@ -1,6 +1,107 @@
 #include "tsc_internal.h"
 
-tsc_function_identity_t* g_function_identities = NULL;
+typedef struct {
+    tsc_function_identity_key_t key;
+    tsc_function_identity_t* identity;
+} tsc_function_identity_entry_t;
+
+/* A single registry owns every native callable identity. The key is immutable
+ * after publication; name, length, descriptors and prototypes are not keys.
+ * Scanned entries retain the same lifetime as the former global list. */
+static tsc_function_identity_entry_t* g_function_identity_entries;
+static size_t g_function_identity_count, g_function_identity_capacity;
+
+static uint64_t function_identity_hash(const tsc_function_identity_key_t* key) {
+    const uint64_t words[] = { (uint64_t)key->kind, (uintptr_t)key->realm, key->code,
+        (uintptr_t)key->construct, (uintptr_t)key->env,
+        (uintptr_t)key->listener_identity, key->listener_order };
+    uint64_t hash = UINT64_C(0x9e3779b97f4a7c15);
+    for (size_t index = 0; index < sizeof(words) / sizeof(words[0]); ++index) {
+        uint64_t word = words[index];
+        word = (word ^ (word >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+        word = (word ^ (word >> 27)) * UINT64_C(0x94d049bb133111eb);
+        hash ^= word ^ (word >> 31);
+        hash = (hash << 27 | hash >> 37) * UINT64_C(0x9e3779b97f4a7c15);
+    }
+    return hash;
+}
+
+static bool function_identity_key_equal(const tsc_function_identity_key_t* left,
+    const tsc_function_identity_key_t* right) {
+    return left->kind == right->kind && left->realm == right->realm &&
+        left->code == right->code && left->construct == right->construct &&
+        left->env == right->env && left->listener_identity == right->listener_identity &&
+        left->listener_order == right->listener_order;
+}
+
+static size_t function_identity_slot(tsc_function_identity_entry_t* entries,
+    size_t capacity, const tsc_function_identity_key_t* key) {
+    size_t index = (size_t)function_identity_hash(key) & (capacity - 1);
+    while (entries[index].identity && !function_identity_key_equal(&entries[index].key, key)) {
+        index = (index + 1) & (capacity - 1);
+    }
+    return index;
+}
+
+static void function_identity_grow(void) {
+    if (g_function_identity_capacity > SIZE_MAX / 2)
+        tsc_panic("function identity registry capacity overflow");
+    size_t capacity = g_function_identity_capacity ? g_function_identity_capacity * 2 : 16;
+    if (capacity > SIZE_MAX / sizeof(tsc_function_identity_entry_t))
+        tsc_panic("function identity registry capacity overflow");
+    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC(capacity * sizeof(*entries));
+    if (!entries) tsc_panic("function identity registry allocation failed");
+    memset(entries, 0, capacity * sizeof(*entries));
+    for (size_t index = 0; index < g_function_identity_capacity; ++index) {
+        tsc_function_identity_entry_t* old = &g_function_identity_entries[index];
+        if (!old->identity) continue;
+        entries[function_identity_slot(entries, capacity, &old->key)] = *old;
+    }
+#ifdef TSC_NO_GC
+    free(g_function_identity_entries);
+#endif
+    g_function_identity_entries = entries;
+    g_function_identity_capacity = capacity;
+}
+
+tsc_function_identity_t* tsc_function_identity_lookup(const tsc_function_identity_key_t* key) {
+    tsc_runtime_lock();
+    tsc_function_identity_t* identity = g_function_identity_capacity
+        ? g_function_identity_entries[function_identity_slot(g_function_identity_entries,
+            g_function_identity_capacity, key)].identity : NULL;
+    tsc_runtime_unlock();
+    return identity;
+}
+
+tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t* identity) {
+    tsc_function_identity_key_t key = { .kind = identity->kind, .realm = identity->realm,
+        .construct = identity->construct, .env = identity->env };
+    switch (identity->kind) {
+        case TSC_FUNCTION_IDENTITY_GETTER: key.code = (uintptr_t)identity->code.getter; break;
+        case TSC_FUNCTION_IDENTITY_SETTER: key.code = (uintptr_t)identity->code.setter; break;
+        case TSC_FUNCTION_IDENTITY_EVENT_LISTENER:
+            key.code = (uintptr_t)identity->code.event_listener.fn;
+            key.listener_identity = identity->code.event_listener.identity;
+            break;
+        case TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER:
+            key.code = (uintptr_t)identity->code.event_raw_identity.fn;
+            key.listener_identity = identity->code.event_raw_identity.identity;
+            key.listener_order = identity->code.event_raw_identity.order;
+            break;
+        default: key.code = (uintptr_t)identity->code.generic; break;
+    }
+    tsc_runtime_lock();
+    if (!g_function_identity_capacity || g_function_identity_count >= g_function_identity_capacity / 2)
+        function_identity_grow();
+    size_t index = function_identity_slot(g_function_identity_entries, g_function_identity_capacity, &key);
+    if (!g_function_identity_entries[index].identity) {
+        g_function_identity_entries[index] = (tsc_function_identity_entry_t){ key, identity };
+        ++g_function_identity_count;
+    }
+    identity = g_function_identity_entries[index].identity;
+    tsc_runtime_unlock();
+    return identity;
+}
 
 static tsc_realm_t* volatile g_default_realm = NULL;
 static TSC_TLS tsc_realm_t* g_current_realm = NULL;
@@ -305,10 +406,8 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         intrinsics->constructor_identity->code.generic = function_constructor_body;
         intrinsics->constructor_identity->construct = function_constructor_body;
 
-        intrinsics->prototype_identity->next = g_function_identities;
-        g_function_identities = intrinsics->prototype_identity;
-        intrinsics->constructor_identity->next = g_function_identities;
-        g_function_identities = intrinsics->constructor_identity;
+        intrinsics->prototype_identity = tsc_function_identity_register(intrinsics->prototype_identity);
+        intrinsics->constructor_identity = tsc_function_identity_register(intrinsics->constructor_identity);
 
         tsc_function_init_metadata(
             intrinsics->prototype_identity,
@@ -382,17 +481,10 @@ tsc_value_t tsc_function_constructor_value(void) {
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity) {
     if (!identity) return tsc_value_undefined();
     tsc_realm_t* realm = tsc_realm_current();
-    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (
-            cur->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER &&
-            cur->code.event_listener.fn == fn &&
-            cur->code.event_listener.identity == identity &&
-            cur->realm == realm &&
-            cur->env == env
-        ) {
-            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
-        }
-    }
+    tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER,
+        .realm = realm, .code = (uintptr_t)fn, .env = env, .listener_identity = identity };
+    tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
+    if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER;
     entry->realm = realm;
@@ -407,8 +499,7 @@ tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env,
     entry->code.event_listener.fn = fn;
     entry->code.event_listener.identity = identity;
     entry->env = env;
-    entry->next = g_function_identities;
-    g_function_identities = entry;
+    entry = tsc_function_identity_register(entry);
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
 }
 
@@ -416,18 +507,11 @@ tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* 
     if (!once) return value_event_listener_identity(fn, env, identity);
     if (!identity) return tsc_value_undefined();
     tsc_realm_t* realm = tsc_realm_current();
-    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (
-            cur->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER &&
-            cur->code.event_raw_identity.fn == fn &&
-            cur->code.event_raw_identity.identity == identity &&
-            cur->code.event_raw_identity.order == order &&
-            cur->realm == realm &&
-            cur->env == env
-        ) {
-            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
-        }
-    }
+    tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER,
+        .realm = realm, .code = (uintptr_t)fn, .env = env,
+        .listener_identity = identity, .listener_order = order };
+    tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
+    if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER;
     entry->realm = realm;
@@ -443,8 +527,7 @@ tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* 
     entry->code.event_raw_identity.identity = identity;
     entry->code.event_raw_identity.order = order;
     entry->env = env;
-    entry->next = g_function_identities;
-    g_function_identities = entry;
+    entry = tsc_function_identity_register(entry);
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)entry);
 }
 

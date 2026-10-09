@@ -121,6 +121,15 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_BUILTIN,
     TSC_FUNCTION_IDENTITY_BOUND,
 } tsc_function_identity_kind_t;
+typedef struct {
+    tsc_function_identity_kind_t kind;
+    tsc_realm_t* realm;
+    uintptr_t code;
+    tsc_generic_function_t construct;
+    void* env;
+    void* listener_identity;
+    uint64_t listener_order;
+} tsc_function_identity_key_t;
 tsc_value_t tsc_value_function_named_kind(
     tsc_generic_function_t apply, tsc_generic_function_t construct, void* env,
     double length, tsc_str_t* name, tsc_function_identity_kind_t kind
@@ -217,7 +226,6 @@ typedef struct tsc_function_identity {
      * callability never implies constructability. */
     tsc_generic_function_t construct;
     void* env;
-    struct tsc_function_identity* next;
 } tsc_function_identity_t;
 
 bool tsc_value_is_html_dda(tsc_value_t value);
@@ -379,7 +387,8 @@ typedef struct tsc_event_once_promise_env {
 
 
 
-extern tsc_function_identity_t* g_function_identities;
+tsc_function_identity_t* tsc_function_identity_lookup(const tsc_function_identity_key_t* key);
+tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t* identity);
 void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, tsc_str_t* name);
 void tsc_function_identity_set_prototype(tsc_function_identity_t* entry, tsc_value_t prototype);
 void tsc_function_identity_set_own_prototype(tsc_function_identity_t* entry, tsc_value_t prototype);

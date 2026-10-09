@@ -136,6 +136,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Replace native callable identity lists and duplicated scans with one exact-key registry shared by functions, accessors and listeners. Preserve Realm/environment/constructor/registration identity through collision probing and load-bounded growth; repair the allocation-only Promise combinator timeout and verify key partitions, retained descriptors and neighboring calls in both memory modes.
+
 - Box freshly created function/arrow literals without contextual nullable-type resolution, repairing computed function-valued assignments and Promise executor spread. Forward boxed Symbol.iterator calls through the shared ordinary argument/receiver path instead of discarding their arguments. Respect declared boxed storage when considering top-level function lifting, preserve actual nullable function producers and verify captures, assignment identity and retained environments in both memory modes.
 
 - Preserve Array identity across boxed/native boundaries through one owner, matching codecs and a validated raw-cell representation worklist. Retain alias mutations, descriptors, holes and metadata without extra getters; delete conversion-copy fallbacks and fail closed on incompatible native views.

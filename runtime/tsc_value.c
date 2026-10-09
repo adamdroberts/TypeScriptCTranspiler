@@ -190,24 +190,19 @@ tsc_value_t tsc_value_function_named_kind(
 ) {
     if (!name) name = tsc_str_from_lit("", 0);
     tsc_realm_t* realm = tsc_realm_current();
-    for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (
-            cur->kind == kind &&
-            cur->realm == realm &&
-            cur->code.generic == fn &&
-            cur->construct == construct &&
-            cur->env == env
-        ) {
-            if (length > cur->length) {
-                cur->length = length;
-                (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("length", 6), tsc_value_num(length), true, false, false, false, false, false, false);
-            }
-            if ((!cur->name || cur->name->len == 0) && name->len > 0) {
-                cur->name = name;
-                (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("name", 4), tsc_value_string(name), true, false, false, false, false, false, false);
-            }
-            return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
+    tsc_function_identity_key_t key = { .kind = kind, .realm = realm,
+        .code = (uintptr_t)fn, .construct = construct, .env = env };
+    tsc_function_identity_t* cur = tsc_function_identity_lookup(&key);
+    if (cur) {
+        if (length > cur->length) {
+            cur->length = length;
+            (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("length", 6), tsc_value_num(length), true, false, false, false, false, false, false);
         }
+        if ((!cur->name || cur->name->len == 0) && name->len > 0) {
+            cur->name = name;
+            (void)tsc_object_define_desc(cur->props, tsc_str_from_lit("name", 4), tsc_value_string(name), true, false, false, false, false, false, false);
+        }
+        return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
     }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     id->kind = kind;
@@ -224,8 +219,7 @@ tsc_value_t tsc_value_function_named_kind(
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
-    id->next = g_function_identities;
-    g_function_identities = id;
+    id = tsc_function_identity_register(id);
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
 }
 
