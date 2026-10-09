@@ -29744,8 +29744,9 @@ class Emitter {
             if (cfgReturnType.kind === "void") {
                 return { c: `({ (void)(${result.c}); tsc_value_undefined(); })`, ty: T_VALUE };
             }
-            // Async return performs PromiseResolve/adoption on the expression's
-            // runtime value.  The declared resolved type is contextual evidence
+            // Async return retains the expression's runtime value until all
+            // finalizers finish, then invokes the result capability's Resolve.
+            // The declared resolved type is contextual evidence
             // for aggregate literal representation, not a runtime cast: casting
             // a returned Promise<T> to T here would suppress adoption.
             return result;
@@ -29952,12 +29953,9 @@ class Emitter {
         this.structDecls.line("tsc_value_t exception_value;");
         this.structDecls.line("void* exception_value_gc_root;");
         if (graph.finallyCount > 0) {
-            this.structDecls.line(`int finally_kind[${graph.finallyCount}];`);
-            this.structDecls.line(`int finally_pc[${graph.finallyCount}];`);
-            this.structDecls.line(`tsc_value_t finally_value[${graph.finallyCount}];`);
-            this.structDecls.line(`void* finally_value_gc_root[${graph.finallyCount}];`);
+            this.structDecls.line(`tsc_completion_record_t finalizations[${graph.finallyCount}];`);
         }
-        this.structDecls.line("tsc_promise_t* pending_return;");
+        this.structDecls.line("tsc_completion_record_t pending_return;");
         for (let slot = 0; slot < expressionSyncTypes.length; slot++) {
             const storageType = expressionSyncTypes[slot]!;
             this.structDecls.line(`${storageType.c} expression_sync_value_${slot};`);
@@ -30162,6 +30160,15 @@ class Emitter {
                 callback.line("state->exception_value_gc_root = tsc_value_gc_root(state->exception_value);");
                 callback.line("state->awaiting = false;");
                 emitTransition(targetId);
+            };
+            const emitReturnSettlement = (): void => {
+                callback.line("tsc_try_pop();");
+                callback.line("tsc_promise_resolve_into(_ret, state->pending_return.value);");
+                callback.line("tsc_completion_record_clear(&state->pending_return);");
+                callback.line("return;");
+            };
+            const emitReturnValue = (result: EmitResult, node: ts.Node): void => {
+                callback.line(`tsc_completion_record_set(&state->pending_return, TSC_COMPLETION_RETURN, ${this.coerce(result, T_VALUE, node)}, -1);`);
             };
             const emitPromiseSuspension = (
                 source: () => string,
@@ -30884,9 +30891,7 @@ class Emitter {
                     if (stateNode.next) {
                         emitTransition(stateNode.next.id);
                     } else if (stateNode.completion === "return") {
-                        callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_adopt_into(_ret, state->pending_return);");
-                        callback.line("return;");
+                        emitReturnSettlement();
                     } else if (stateNode.completion === "throw") {
                         callback.line("tsc_try_pop();");
                         callback.line("tsc_promise_reject_in_place(_ret, state->exception_value);");
@@ -31080,17 +31085,14 @@ class Emitter {
                         const resultType = this.prepareType(result.ty);
                         const resultValue = this.freshTemp("_async_cfg_expression_return");
                         callback.line(`${resultType.c} ${resultValue} = ${result.c};`);
-                        const resolved = this.promiseResolveResult(
+                        emitReturnValue(
                             { c: resultValue, ty: resultType },
                             stateNode.expression,
                         );
                         if (stateNode.completion.target) {
-                            callback.line(`state->pending_return = ${resolved};`);
                             emitTransition(stateNode.completion.target.id);
                         } else {
-                            callback.line("tsc_try_pop();");
-                            callback.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
-                            callback.line("return;");
+                            emitReturnSettlement();
                         }
                     } else if (stateNode.completion?.kind === "throw") {
                         const boxed = this.coerce(result, T_VALUE, stateNode.expression);
@@ -31306,7 +31308,7 @@ class Emitter {
                 } else if (stateNode.kind === "return-route") {
                     const completion = stateNode.completion;
                     if (!completion.value) {
-                        callback.line("state->pending_return = tsc_promise_resolve(tsc_value_undefined());");
+                        emitReturnValue({ c: "tsc_value_undefined()", ty: T_VALUE }, body);
                     } else {
                         const returned = normalizeCfgReturn(
                             emitCfgReturnExpression(completion.value),
@@ -31315,65 +31317,65 @@ class Emitter {
                         const returnedType = this.prepareType(returned.ty);
                         const returnedValue = this.freshTemp("_async_cfg_pending_return");
                         callback.line(`${returnedType.c} ${returnedValue} = ${returned.c};`);
-                        callback.line(`state->pending_return = ${this.promiseResolveResult({ c: returnedValue, ty: returnedType }, completion.value)};`);
+                        emitReturnValue({ c: returnedValue, ty: returnedType }, completion.value);
                     }
                     emitTransition(stateNode.target.id);
                 } else if (stateNode.kind === "finally-return-enter") {
-                    callback.line(`state->finally_kind[${stateNode.region}] = 2;`);
+                    callback.line(`state->finalizations[${stateNode.region}] = state->pending_return;`);
+                    callback.line("tsc_completion_record_clear(&state->pending_return);");
                     emitTransition(stateNode.finallyTarget.id);
                 } else if (stateNode.kind === "finally-enter") {
-                    callback.line(`state->finally_kind[${stateNode.region}] = ${stateNode.completion === "normal" ? 0 : 1};`);
                     if (stateNode.completion === "normal") {
-                        callback.line(`state->finally_pc[${stateNode.region}] = ${stateNode.normalTarget.id};`);
+                        callback.line(`tsc_completion_record_set(&state->finalizations[${stateNode.region}], TSC_COMPLETION_NORMAL, tsc_value_undefined(), ${stateNode.normalTarget.id});`);
                     } else {
-                        callback.line(`state->finally_value[${stateNode.region}] = state->exception_value;`);
-                        callback.line(`state->finally_value_gc_root[${stateNode.region}] = tsc_value_gc_root(state->finally_value[${stateNode.region}]);`);
+                        callback.line(`tsc_completion_record_set(&state->finalizations[${stateNode.region}], TSC_COMPLETION_THROW, state->exception_value, -1);`);
                         callback.line("state->exception_value = tsc_value_undefined();");
                         callback.line("state->exception_value_gc_root = NULL;");
                     }
                     emitTransition(stateNode.finallyTarget.id);
                 } else if (stateNode.kind === "finally-exit") {
-                    callback.open(`if (state->finally_kind[${stateNode.region}] == 0)`);
-                    callback.line(`state->pc = state->finally_pc[${stateNode.region}];`);
+                    const record = `state->finalizations[${stateNode.region}]`;
+                    callback.open(`if (${record}.kind == TSC_COMPLETION_NORMAL)`);
+                    callback.line(`state->pc = ${record}.target;`);
+                    callback.line(`tsc_completion_record_clear(&${record});`);
                     callback.line("continue;");
                     callback.close();
-                    callback.open(`if (state->finally_kind[${stateNode.region}] == 2)`);
+                    callback.open(`if (${record}.kind == TSC_COMPLETION_RETURN)`);
+                    callback.line(`state->pending_return = ${record};`);
+                    callback.line(`tsc_completion_record_clear(&${record});`);
                     if (stateNode.returnTarget) {
                         emitTransition(stateNode.returnTarget.id);
                     } else {
-                        callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_adopt_into(_ret, state->pending_return);");
-                        callback.line("return;");
+                        emitReturnSettlement();
                     }
                     callback.close();
-                    const finallyValue = this.freshTemp("_async_cfg_finally_value");
-                    callback.line(`tsc_value_t ${finallyValue} = state->finally_value[${stateNode.region}];`);
-                    callback.line(`state->finally_value[${stateNode.region}] = tsc_value_undefined();`);
-                    callback.line(`state->finally_value_gc_root[${stateNode.region}] = NULL;`);
+                    callback.line(`state->exception_value = ${record}.value;`);
+                    callback.line(`state->exception_value_gc_root = ${record}.value_gc_root;`);
+                    callback.line(`tsc_completion_record_clear(&${record});`);
                     if (stateNode.exceptionTarget) {
-                        emitExceptionTransition(finallyValue, stateNode.exceptionTarget.target.id);
+                        emitExceptionTransition("state->exception_value", stateNode.exceptionTarget.target.id);
                     } else {
                         callback.line("tsc_try_pop();");
-                        callback.line(`tsc_promise_reject_in_place(_ret, ${finallyValue});`);
+                        callback.line("tsc_promise_reject_in_place(_ret, state->exception_value);");
                         callback.line("return;");
                     }
                 } else {
                     const completion = stateNode.completion;
                     if (completion.kind === "throw") {
                         const thrown = this.emitExpr(completion.value);
-                        const reason = this.coerceToString(thrown, completion.value);
+                        const reason = this.coerce(thrown, T_VALUE, completion.value);
                         callback.line("tsc_try_pop();");
-                        callback.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${reason}));`);
+                        callback.line(`tsc_promise_reject_in_place(_ret, ${reason});`);
                     } else if (!completion.value) {
-                        callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                        emitReturnValue({ c: "tsc_value_undefined()", ty: T_VALUE }, body);
+                        emitReturnSettlement();
                     } else {
                         const returned = this.emitExpr(completion.value);
                         const returnedType = this.prepareType(returned.ty);
                         const valueVar = this.freshTemp("_async_cfg_return");
                         callback.line(`${returnedType.c} ${valueVar} = ${returned.c};`);
-                        callback.line("tsc_try_pop();");
-                        callback.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult({ c: valueVar, ty: returnedType }, completion.value)});`);
+                        emitReturnValue({ c: valueVar, ty: returnedType }, completion.value);
+                        emitReturnSettlement();
                     }
                     callback.line("return;");
                 }
@@ -31429,12 +31431,9 @@ class Emitter {
         buf.line(`${env}->exception_value = tsc_value_undefined();`);
         buf.line(`${env}->exception_value_gc_root = NULL;`);
         for (let region = 0; region < graph.finallyCount; region++) {
-            buf.line(`${env}->finally_kind[${region}] = 0;`);
-            buf.line(`${env}->finally_pc[${region}] = -1;`);
-            buf.line(`${env}->finally_value[${region}] = tsc_value_undefined();`);
-            buf.line(`${env}->finally_value_gc_root[${region}] = NULL;`);
+            buf.line(`tsc_completion_record_clear(&${env}->finalizations[${region}]);`);
         }
-        buf.line(`${env}->pending_return = NULL;`);
+        buf.line(`tsc_completion_record_clear(&${env}->pending_return);`);
         for (let slot = 0; slot < expressionSyncTypes.length; slot++) {
             const storageType = expressionSyncTypes[slot]!;
             buf.line(`${env}->expression_sync_value_${slot} = ${this.zeroValue(storageType)};`);
@@ -48060,6 +48059,10 @@ class Emitter {
                 ? this.emitProcessPropertyRead(processNamedImport)
                 : null;
             if (processProp) return processProp;
+            if (declaration && ts.isVariableDeclaration(declaration) &&
+                declaration.getSourceFile().isDeclarationFile) {
+                unsupported(expr, "ambient host value requires an ordinary runtime owner");
+            }
             const scopedTy = this.identifierScopedType(expr);
             const sourceJavaScriptFunction = this.javaScriptFunctionLikeForExpression(expr);
             const sourceTy = sourceJavaScriptFunction

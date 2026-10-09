@@ -299,10 +299,17 @@ static void promise_resolution_resolve(tsc_promise_resolution_t* record, tsc_val
     (void)value_gc_root;
 }
 
+void tsc_promise_resolve_into(tsc_promise_t* promise, tsc_value_t value) {
+    if (!tsc_promise_is_pending(promise)) return;
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    promise_resolution_resolve(promise_resolution_new(promise), value);
+    (void)value_gc_root;
+}
+
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
     void* volatile value_gc_root = tsc_value_gc_root(value);
     tsc_promise_t* promise = tsc_promise_pending();
-    promise_resolution_resolve(promise_resolution_new(promise), value);
+    tsc_promise_resolve_into(promise, value);
     (void)value_gc_root;
     return promise;
 }

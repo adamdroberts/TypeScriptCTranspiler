@@ -913,6 +913,27 @@ bool tsc_value_is_promise(tsc_value_t v);
  * for an immediate value.  Long-lived state that stores tsc_value_t must
  * retain this companion pointer so a conservative collector can see it. */
 void* tsc_value_gc_root(tsc_value_t v);
+/* Resumable regions retain completions without performing user conversions or
+ * Promise resolution. Each finalization region owns its suspended completion. */
+typedef enum {
+    TSC_COMPLETION_NORMAL,
+    TSC_COMPLETION_THROW,
+    TSC_COMPLETION_RETURN
+} tsc_completion_kind_t;
+typedef struct {
+    tsc_completion_kind_t kind;
+    tsc_value_t value;
+    void* value_gc_root;
+    int target;
+} tsc_completion_record_t;
+static inline void tsc_completion_record_set(tsc_completion_record_t* record,
+        tsc_completion_kind_t kind, tsc_value_t value, int target) {
+    *record = (tsc_completion_record_t){ .kind = kind, .value = value,
+        .value_gc_root = tsc_value_gc_root(value), .target = target };
+}
+static inline void tsc_completion_record_clear(tsc_completion_record_t* record) {
+    tsc_completion_record_set(record, TSC_COMPLETION_NORMAL, tsc_value_undefined(), -1);
+}
 /* Native aggregate fields and static cells keep decoded roots in their owner.
  * Stores return the actual assigned value and release the prior referent. */
 tsc_value_t tsc_value_store_rooted(tsc_value_t* slot, void* volatile* root, tsc_value_t value);
@@ -1123,6 +1144,8 @@ tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);
 tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value);
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value);
+/* Async completion resolves its actual result capability after finalization. */
+void tsc_promise_resolve_into(tsc_promise_t* promise, tsc_value_t value);
 /* Await uses PromiseResolve(%Promise%, value), including the observable
  * constructor read and intrinsic-Promise identity path. */
 tsc_promise_t* tsc_promise_await(tsc_value_t value);
