@@ -50712,7 +50712,7 @@ class Emitter {
 
         const rawRecv = this.emitExpr(recvExpr);
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
-        const recv: EmitResult = rawRecv.ty.kind === "function"
+        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
             : rawRecv.ty.kind === "array" &&
                 (rawRecv.ty.elem?.kind === "value" ||
@@ -52189,7 +52189,7 @@ class Emitter {
         const rawRecv = this.emitExpr(recvExpr);
         const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
         const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
-        const recv: EmitResult = rawRecv.ty.kind === "function"
+        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
             : rawRecv.ty.kind === "array" &&
                 (rawRecv.ty.elem?.kind === "value" ||
@@ -54163,12 +54163,12 @@ class Emitter {
         if (mapped.kind === "regexp") {
             const key = this.emitExpr(keyNode);
             return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: target, node: targetNode },
+                { value: target, target: T_VALUE, node: targetNode },
                 { value: key, target: T_STRING, node: keyNode },
                 ...ignored,
             ], ([value, keyC]) => method === "hasOwnProperty"
-                ? `({ (void)${value}; tsc_str_eq(${keyC}, tsc_str_from_lit("lastIndex", 9)); })`
-                : `({ (void)${value}; (void)${keyC}; false; })`);
+                ? `tsc_value_has_own_prop(${value}, ${keyC})`
+                : `tsc_value_property_is_enumerable(${value}, ${keyC})`);
         }
         if (mapped.kind === "value" || mapped.kind === "string") {
             const key = this.emitExpr(keyNode);
@@ -58707,65 +58707,7 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "exec": {
-                if (args.length < 1) unsupported(call, "RegExp.exec expects at least 1 arg");
-                const s = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    [
-                        { value: recv },
-                        { value: s, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([regexp, value]) => `tsc_regexp_exec(${regexp}, ${value})`,
-                );
-            }
-            case "test": {
-                if (args.length < 1) unsupported(call, "RegExp.test expects at least 1 arg");
-                const s = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: s, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([regexp, value]) => `tsc_regexp_test(${regexp}, ${value})`,
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([regexp]) => `tsc_regexp_to_string(${regexp})`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_REGEXP,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([regexp]) => regexp,
-                );
-            case "hasOwnProperty":
-            case "propertyIsEnumerable": {
-                if (args.length < 1) unsupported(call, `RegExp.${method} expects at least 1 arg`);
-                const key = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: recv },
-                        { value: key, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([regexp, prop]) => method === "hasOwnProperty"
-                        ? `({ (void)${regexp}; tsc_str_eq(${prop}, tsc_str_from_lit("lastIndex", 9)); })`
-                        : `({ (void)${regexp}; (void)${prop}; false; })`,
-                );
-            }
-        }
-        unsupported(call, `RegExp method .${method}`);
+        return this.emitDynamicNamedPropertyCall(call, recv, method, false);
     }
 
     private emitArrayFromWithMapper(
@@ -72757,12 +72699,15 @@ class Emitter {
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
         const tsType = this.expressionDeclaredOrCurrentType(arg);
-        const mapped = this.isTest262ScriptGlobalThisExpression(arg) ||
+        const mappedType = this.isTest262ScriptGlobalThisExpression(arg) ||
             this.hasDynamicJsonModuleRepresentation(arg) ||
             this.isUntypedJsObjectCallTarget(arg) ||
             (ts.isIdentifier(arg) && this.untypedJsLiteralVariableDeclaration(arg))
             ? T_VALUE
             : this.prepareType(mapTsType(arg, tsType, this.checker));
+        // RegExp has an ordinary cached object. All Object operations consume
+        // its descriptors and identity rather than synthesizing a fixed surface.
+        const mapped = mappedType.kind === "regexp" ? T_VALUE : mappedType;
         const primitiveObjectArg =
             mapped.kind === "number" ||
             mapped.kind === "boolean" ||
@@ -72794,7 +72739,6 @@ class Emitter {
             mapped.kind === "dataview";
         const emptyEnumerableBuiltinObjectArg =
             emptyOwnBuiltinObjectArg ||
-            mapped.kind === "regexp" ||
             mapped.kind === "error";
         const fixedBuiltinIntegrityArg =
             emptyEnumerableBuiltinObjectArg ||
@@ -72880,7 +72824,7 @@ class Emitter {
             }
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_STRING), [{ value }, ...ignored], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.keys target must not be null or undefined")); tsc_value_object_keys(${v!}); })`,
                 );
             }
@@ -72970,7 +72914,7 @@ class Emitter {
             }
             if (mapped.kind === "value") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value }, ...ignored], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.values target must not be null or undefined")); tsc_value_object_values(${v!}); })`,
                 );
             }
@@ -73126,9 +73070,9 @@ class Emitter {
                 this.identifierDeclaredType(arg)?.kind === "value" ||
                 this.identifierHasDynamicAnnotation(arg)
             );
-            if (value.ty.kind === "value" || declaredDynamic) {
+            if (value.ty.kind === "value" || declaredDynamic || mapped.kind === "value") {
                 const dynamicValue: EmitResult = declaredDynamic ? { c: value.c, ty: T_VALUE } : value;
-                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue }, ...ignored], ([v]) =>
+                return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: dynamicValue, target: T_VALUE, node: arg }, ...ignored], ([v]) =>
                     `({ if (tsc_value_is_nullish(${v!})) tsc_throw_str(tsc_str_from_cstr("Object.entries target must not be null or undefined")); tsc_value_object_entries(${v!}); })`,
                 );
             }
@@ -73206,10 +73150,6 @@ class Emitter {
                 return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_array_new(sizeof(tsc_str_t*), 1); })`,
                 );
-            }
-            if (mapped.kind === "regexp") {
-                const obj = this.emitExpr(arg);
-                return this.emitRegExpOwnPropertyNames(arg, obj, ignored);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
@@ -73393,10 +73333,6 @@ class Emitter {
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_value_undefined(); })`);
             }
-            if (mapped.kind === "regexp") {
-                const obj = this.emitExpr(arg);
-                return this.emitRegExpGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
-            }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
                 return this.emitBufferGetOwnPropertyDescriptor(arg, obj, args[1]!, ignored);
@@ -73484,10 +73420,6 @@ class Emitter {
                 return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
                     `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
                 );
-            }
-            if (mapped.kind === "regexp") {
-                const obj = this.emitExpr(arg);
-                return this.emitRegExpGetOwnPropertyDescriptors(arg, obj, ignored);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
@@ -73623,15 +73555,6 @@ class Emitter {
                     { value: key, target: T_STRING, node: args[1]! },
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; false; })`);
-            }
-            if (mapped.kind === "regexp") {
-                const obj = this.emitExpr(arg);
-                const key = this.emitExpr(args[1]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: obj, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    ...ignored,
-                ], ([o, k]) => `({ (void)${o}; tsc_str_eq(${k}, tsc_str_from_lit("lastIndex", 9)); })`);
             }
             if (mapped.kind === "buffer") {
                 const obj = this.emitExpr(arg);
@@ -74664,46 +74587,26 @@ class Emitter {
         });
     }
 
-    private emitRegExpOwnPropertyNames(
+    private emitBoxedOwnPropertyNames(
         objExpr: ts.Expression,
         obj: EmitResult,
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([regexp]) => {
-            const out = this.freshTemp("_re_keys");
-            const key = this.freshTemp("_re_key");
-            return `({ (void)${regexp}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 1); tsc_str_t* ${key} = tsc_str_from_lit("lastIndex", 9); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
-        });
+        return this.emitSequencedExpr(arrayType(T_STRING),
+            [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
+            ([value]) => `tsc_value_own_keys(${value})`);
     }
 
-    private emitRegExpGetOwnPropertyDescriptor(
+    private emitBoxedGetOwnPropertyDescriptor(
         objExpr: ts.Expression,
         obj: EmitResult,
         keyExpr: ts.Expression,
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        const key = this.emitExpr(keyExpr);
         return this.emitSequencedExpr(T_VALUE, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([regexp, keyC]) => {
-            const out = this.freshTemp("_re_desc_out");
-            const desc = this.freshTemp("_re_desc");
-            return `({ (void)${regexp}; tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("lastIndex", 9))) { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
-        });
-    }
-
-    private emitRegExpGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([regexp]) => {
-            const out = this.freshTemp("_re_descs");
-            const desc = this.freshTemp("_re_desc");
-            return `({ (void)${regexp}; tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, "tsc_value_num(0.0)", "true", "false", "false")}; tsc_object_set(${out}, tsc_str_from_lit("lastIndex", 9), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
-        });
+            { value: obj, target: T_VALUE, node: objExpr },
+            { value: this.emitExpr(keyExpr), target: T_STRING, node: keyExpr }, ...ignored,
+        ], ([value, key]) => `tsc_value_get_own_property_descriptor(${value}, ${key})`);
     }
 
     private fsStatsOwnFields(): { name: string; value: (stats: string) => string }[] {
@@ -76024,7 +75927,7 @@ class Emitter {
                     return this.emitFsDirentGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "regexp") {
-                    return this.emitRegExpGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
+                    return this.emitBoxedGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
                 }
                 if (mapped.kind === "array") {
                     return this.emitTypedArrayGetOwnPropertyDescriptor(args[0]!, target, args[1]!, ignored);
@@ -76173,7 +76076,7 @@ class Emitter {
                 }
                 if (mapped.kind === "regexp") {
                     const target = this.emitExpr(args[0]!);
-                    return this.emitRegExpOwnPropertyNames(args[0]!, target, ignored);
+                    return this.emitBoxedOwnPropertyNames(args[0]!, target, ignored);
                 }
                 if (mapped.kind === "class") {
                     const target = this.emitExpr(args[0]!);
@@ -78112,28 +78015,7 @@ class Emitter {
             };
         }
         if (recv.ty.kind === "regexp") {
-            switch (pa.name.text) {
-                case "source":
-                    return { c: `${recv.c}->source`, ty: T_STRING };
-                case "flags":
-                    return { c: `${recv.c}->flags`, ty: T_STRING };
-                case "global":
-                    return { c: `${recv.c}->global`, ty: T_BOOLEAN };
-                case "hasIndices":
-                    return { c: `${recv.c}->has_indices`, ty: T_BOOLEAN };
-                case "ignoreCase":
-                    return { c: `${recv.c}->ignore_case`, ty: T_BOOLEAN };
-                case "multiline":
-                    return { c: `${recv.c}->multiline`, ty: T_BOOLEAN };
-                case "dotAll":
-                    return { c: `${recv.c}->dot_all`, ty: T_BOOLEAN };
-                case "sticky":
-                    return { c: `${recv.c}->sticky`, ty: T_BOOLEAN };
-                case "unicode":
-                    return { c: `${recv.c}->unicode`, ty: T_BOOLEAN };
-                case "unicodeSets":
-                    return { c: `${recv.c}->unicode_sets`, ty: T_BOOLEAN };
-            }
+            return { c: `tsc_value_get_prop(tsc_value_regexp(${recv.c}), ${this.stringLit(pa.name.text)})`, ty: T_VALUE };
         }
         if (recv.ty.kind === "event") {
             switch (pa.name.text) {
@@ -78263,8 +78145,7 @@ class Emitter {
             if (
                 narrowed.kind === "number" ||
                 narrowed.kind === "boolean" ||
-                narrowed.kind === "string" ||
-                narrowed.kind === "array"
+                narrowed.kind === "string"
             ) {
                 return { c: this.coerce(value, narrowed, pa), ty: narrowed };
             }
@@ -79359,7 +79240,7 @@ class Emitter {
                         const idx = this.freshTemp("_idx");
                         const elem = this.freshTemp("_elem");
                         const unboxed = this.coerce({ c: elem, ty: T_VALUE }, target.elem, node);
-                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${tmpIn}, ${idx}); ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } ${tmpOut}; })`;
+                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = NULL; if (${tmpIn}) { ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ${tmpOut}->props = ${tmpIn}->props; ${tmpOut}->prototype = ${tmpIn}->prototype; for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${tmpIn}, ${idx}); ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } } ${tmpOut}; })`;
                     }
                     return `tsc_value_as_array(${r.c})`;
                 }

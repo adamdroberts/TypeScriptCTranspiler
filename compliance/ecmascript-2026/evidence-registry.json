@@ -981,7 +981,7 @@
     },
     {
       "kind": "implementation",
-      "id": "runtime/tsc_value.c#string_to_length",
+      "id": "runtime/tsc_value.c#tsc_value_to_length",
       "targets": [
         "sec-string.prototype.padstart#generic-tostring-length-filler-and-code-unit-prefix-fill",
         "sec-string.prototype.padend#generic-tostring-length-filler-and-code-unit-suffix-fill"

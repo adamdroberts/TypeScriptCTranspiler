@@ -204,15 +204,107 @@ static tsc_array_t* regexp_capture_array(const tsc_regexp_t* re, const uint16_t*
     return result;
 }
 
+static void regexp_set_last_index(tsc_value_t receiver, double index) {
+    if (!tsc_value_set_prop(receiver, tsc_str_from_lit("lastIndex", 9), tsc_value_num(index)))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot assign RegExp lastIndex"));
+}
+static tsc_regexp_t* regexp_require_matcher(tsc_value_t receiver) {
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = value_ptr(receiver);
+        if (object->is_regexp && object->class_ptr) return object->class_ptr;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp exec called on incompatible receiver"));
+}
+static tsc_value_t regexp_named_values(const tsc_regexp_t* re, const uint16_t* units,
+                                       const size_t* captures, const tsc_array_t* indices) {
+    if (!tsc_re_named_count(re->re)) return tsc_value_undefined();
+    tsc_object_t* object = tsc_object_new(); object->prototype = tsc_value_null();
+    for (size_t i = 0; i < tsc_re_named_count(re->re); i++) {
+        const char* name; size_t name_len, group_index;
+        if (!tsc_re_named_at(re->re, i, &name, &name_len, &group_index)) abort();
+        tsc_str_t* part = regexp_capture(units, captures, group_index);
+        tsc_value_t value = indices ? TSC_ARR(tsc_value_t, indices, group_index) :
+            part ? tsc_value_string(part) : tsc_value_undefined();
+        tsc_object_set(object, tsc_str_from_lit(name, name_len), value);
+    }
+    return tsc_value_object(object);
+}
+static tsc_array_t* regexp_match_result(const tsc_regexp_t* re, const tsc_str_t* string,
+                                        const uint16_t* units, const size_t* captures) {
+    tsc_array_t* result = regexp_capture_array(re, units, captures);
+    result->props = tsc_object_new();
+    tsc_object_set(result->props, tsc_str_from_lit("index", 5), tsc_value_num((double)captures[0]));
+    tsc_object_set(result->props, tsc_str_from_lit("input", 5), tsc_value_string((tsc_str_t*)string));
+    tsc_object_set(result->props, tsc_str_from_lit("groups", 6), regexp_named_values(re, units, captures, NULL));
+    if (re->has_indices) {
+        tsc_array_t* indices = tsc_array_new(sizeof(tsc_value_t), re->capture_count + 1);
+        for (size_t i = 0; i <= re->capture_count; i++) {
+            tsc_value_t value = tsc_value_undefined();
+            if (captures[2 * i] != RE_UNSET) {
+                tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+                tsc_array_push_value(pair, tsc_value_num((double)captures[2 * i]));
+                tsc_array_push_value(pair, tsc_value_num((double)captures[2 * i + 1]));
+                value = tsc_value_array(pair);
+            }
+            tsc_array_push_value(indices, value);
+        }
+        indices->props = tsc_object_new();
+        tsc_object_set(indices->props, tsc_str_from_lit("groups", 6), regexp_named_values(re, units, captures, indices));
+        tsc_object_set(result->props, tsc_str_from_lit("indices", 7), tsc_value_array(indices));
+    }
+    return result;
+}
 tsc_array_t* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* string) {
     size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
+    tsc_value_t receiver = tsc_value_regexp((tsc_regexp_t*)re);
+    double last_index = tsc_value_to_length(tsc_value_get_prop(receiver, tsc_str_from_lit("lastIndex", 9)));
+    bool stateful = re->global || re->sticky;
+    if (!stateful) last_index = 0;
     size_t* captures = regexp_captures(re);
-    return regexp_find(re, units, len, 0, re->sticky, captures)
-        ? regexp_capture_array(re, units, captures) : NULL;
+    if (last_index > (double)len) {
+        if (stateful) regexp_set_last_index(receiver, 0);
+        return NULL;
+    }
+    size_t offset = (size_t)last_index;
+    if ((re->unicode || re->unicode_sets) && offset > 0 && offset < len &&
+        units[offset] >= 0xdc00 && units[offset] <= 0xdfff &&
+        units[offset - 1] >= 0xd800 && units[offset - 1] <= 0xdbff) offset--;
+    if (!regexp_find(re, units, len, offset, re->sticky, captures)) {
+        if (stateful) regexp_set_last_index(receiver, 0);
+        return NULL;
+    }
+    if (stateful) regexp_set_last_index(receiver, (double)captures[1]);
+    return regexp_match_result(re, string, units, captures);
+}
+tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_regexp_t* re = regexp_require_matcher(receiver);
+    tsc_str_t* string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    tsc_array_t* result = tsc_regexp_exec(re, string);
+    return result ? tsc_value_array(value_array_from_string_array(result)) : tsc_value_null();
+}
+static tsc_value_t regexp_exec_value(tsc_value_t receiver, const tsc_str_t* string) {
+    tsc_value_t exec = tsc_value_get_prop(receiver, tsc_str_from_lit("exec", 4));
+    if (tsc_value_is_callable(exec)) {
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(args, tsc_value_string((tsc_str_t*)string));
+        tsc_value_t result = tsc_value_apply_function(exec, receiver, tsc_value_array(args));
+        if (!tsc_value_is_object(result) && result != tsc_value_null())
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp exec must return an object or null"));
+        return result;
+    }
+    tsc_array_t* result = tsc_regexp_exec(regexp_require_matcher(receiver), string);
+    return result ? tsc_value_array(value_array_from_string_array(result)) : tsc_value_null();
+}
+tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp test called on non-object"));
+    tsc_str_t* string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    return tsc_value_bool(regexp_exec_value(receiver, string) != tsc_value_null());
 }
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* string) {
-    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
-    return regexp_find(re, units, len, 0, re->sticky, regexp_captures(re));
+    return regexp_exec_value(tsc_value_regexp((tsc_regexp_t*)re), string) != tsc_value_null();
 }
 tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re) {
     tsc_str_t* head = tsc_str_concat(tsc_str_from_lit("/", 1), re->source);

@@ -662,9 +662,18 @@ interface ClassSetterDecoratorContext<This = unknown, Value = unknown> {
     addInitializer(initializer: () => void): void;
 }
 declare function eval(source: string, ...ignored: unknown[]): unknown;
+interface RegExpIndicesArray extends Array<number[] | undefined> {
+    groups: { [key: string]: number[] | undefined } | undefined;
+}
+interface RegExpExecArray extends Array<string | undefined> {
+    index: number;
+    input: string;
+    groups: { [key: string]: string | undefined } | undefined;
+    indices?: RegExpIndicesArray;
+}
 interface RegExp {
-    exec(s: string, ...ignored: any[]): string[] | null;
-    test(s: string, ...ignored: any[]): boolean;
+    exec(s?: string, ...ignored: any[]): RegExpExecArray | null;
+    test(s?: string, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): RegExp;
@@ -678,6 +687,7 @@ interface RegExp {
     readonly sticky: boolean;
     readonly unicode: boolean;
     readonly unicodeSets: boolean;
+    lastIndex: number;
 }
 interface RegExpConstructor {
     new(pattern?: string | RegExp, flags?: string, ...ignored: any[]): RegExp;

@@ -1,0 +1,12 @@
+first: a|a| 0 a ab true 1
+groups: a true
+indices: 0,1 0,1 true true
+second: ab|a|b 2 4
+fail: true 0
+test: true 4 false 0
+sticky: true 2
+sticky-fail: true 0
+unicode: 😀 0 0,2 2
+empty: 0 0 0 0
+own: 0 true false false
+missing: true undefined

@@ -374,6 +374,11 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     // Array<T> / T[]
     const arrayElem = getArrayElementType(t);
     if (arrayElem) {
+        // Per-element nullish arms must remain tagged values. A pointer-only
+        // codec cannot distinguish a missing capture from String("undefined").
+        if (arrayElem.isUnion() && arrayElem.types.some(part =>
+            !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))
+            return arrayType(T_VALUE);
         return arrayType(mapTsType(node, arrayElem, checker));
     }
 
@@ -653,13 +658,22 @@ function lookupTypeBinding(
 
 /** If t is an Array<T>, return T. Otherwise undefined. */
 export function getArrayElementType(t: ts.Type): ts.Type | undefined {
-    const sym = t.getSymbol();
-    if (!sym) return undefined;
-    if (sym.getName() !== "Array" && sym.getName() !== "ReadonlyArray") return undefined;
-    const tr = t as ts.TypeReference;
-    const args = tr.typeArguments;
-    if (!args || args.length === 0) return undefined;
-    return args[0];
+    // Array interfaces with additional own properties retain the array ABI.
+    // Walk base types rather than adding a list of metadata-bearing names.
+    const work = [t];
+    const seen = new Set<ts.Type>();
+    while (work.length) {
+        const current = work.pop()!;
+        if (seen.has(current)) continue;
+        seen.add(current);
+        const name = current.getSymbol()?.getName();
+        if (name === "Array" || name === "ReadonlyArray") {
+            const args = (current as ts.TypeReference).typeArguments;
+            if (args?.length) return args[0];
+        }
+        for (const base of current.getBaseTypes() ?? []) work.push(base);
+    }
+    return undefined;
 }
 
 function getTupleElementTypes(

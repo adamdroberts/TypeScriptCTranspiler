@@ -344,7 +344,9 @@ Typed `WeakMap<K, V>` and `WeakSet<T>` reuse these map/set tables with pointer-k
 
 `tsc_regexp_t` owns its compiled representation, capture cardinality, normalized flags, source, creation-Realm prototype, and stable boxed object identity. Flags include `d`, `g`, `i`, `m`, `s`, `u`, `v`, and `y`; unknown, duplicate, and combined `u`/`v` flags throw `SyntaxError`. Native matches and captures use UTF-16 positions; Unicode matching and zero-width consumer advancement treat surrogate pairs as code points. RegExp callback replacement first collects matches, then supplies captures, code-unit positions, original input, and null-prototype named-capture objects in order. String replacement tokens and split captures use the same spans.
 
-The complete RegExp object-model and clause-level contract remains open: `lastIndex`, mutable `exec` and symbol consumers, exec-result metadata/indices, constructor/Realm semantics, modifiers, disjoint duplicate names, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
+Ordinary creation-Realm `exec`/`test` descriptors and typed calls share mutable method lookup. Built-in execution reads `lastIndex` through `ToLength`, respects global/sticky state and strict writes, and returns ordinary `index`, `input`, `groups`, and optional `indices` metadata. Missing captures are `undefined`; named capture objects have null prototypes, and named indices reference the corresponding index pair. Scoped `i`/`m`/`s` modifiers use immutable lexical records on the pattern nodes.
+
+The complete RegExp object-model and clause-level contract remains open: symbol consumers and their `lastIndex` interactions, constructor/Realm semantics, disjoint duplicate names, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
 
 | Symbol | Signature |
 |--------|-----------|

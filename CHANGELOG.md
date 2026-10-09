@@ -1,5 +1,7 @@
 # Changelog
 
+- Added ordinary mutable RegExp `exec`/`test`, stateful `lastIndex`, capture metadata and `d` indices with shared named-pair identity. Typed reads and reflection now use the actual descriptors; dynamic array-valued property reads preserve identity.
+
 - Added scoped RegExp `i`, `m`, and `s` modifiers through immutable lexical records on the shared pattern tree, including nested restoration and Unicode sets.
 
 - Fixed numeric truthiness for integral loop indices and unified resumed-value conditions with the single-evaluation Boolean conversion path.

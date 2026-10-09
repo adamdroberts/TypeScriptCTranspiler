@@ -7575,7 +7575,8 @@ tsc_array_t* tsc_value_as_array(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return (tsc_array_t*)value_ptr(v);
     }
-    return tsc_array_new(sizeof(tsc_value_t), 1);
+    if (tsc_value_is_nullish(v)) return NULL;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not an Array"));
 }
 
 tsc_map_t* tsc_value_as_map(tsc_value_t v) {

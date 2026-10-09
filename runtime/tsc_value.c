@@ -993,7 +993,7 @@ static tsc_value_t string_search_from_values(
     tsc_panic("unknown String search operation");
 }
 
-static double string_to_length(tsc_value_t value) {
+double tsc_value_to_length(tsc_value_t value) {
     double number = tsc_value_to_number(value);
     if (isnan(number) || number <= 0.0) return 0.0;
     if (number >= 9007199254740991.0) return 9007199254740991.0;
@@ -1015,7 +1015,7 @@ static tsc_value_t string_fill_from_values(
         ));
     }
 
-    double target_length = string_to_length(length_or_count);
+    double target_length = tsc_value_to_length(length_or_count);
     if (target_length <= (double)tsc_str_utf16_length(string)) {
         return tsc_value_string((tsc_str_t*)string);
     }
@@ -8219,6 +8219,8 @@ tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_
 tsc_array_t* value_array_from_string_array(const tsc_array_t* strings) {
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), strings && strings->len ? strings->len : 1);
     if (!strings) return out;
+    out->props = strings->props;
+    out->prototype = strings->prototype;
     for (size_t i = 0; i < strings->len; i++) {
         tsc_str_t* string = TSC_ARR(tsc_str_t*, strings, i);
         tsc_value_t value = string ? tsc_value_string(string) : tsc_value_undefined();
@@ -8449,6 +8451,7 @@ tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
     tsc_object_t* o = tsc_object_new_class(r);
     o->is_regexp = true;
     o->prototype = tsc_value_object(r->prototype);
+    tsc_object_define(o, tsc_str_from_lit("lastIndex", 9), tsc_value_num(0), true, false, false);
     r->object = o;
     return tsc_value_object(o);
 }

@@ -1,2 +1,3 @@
-regexp-depth: ABc|AB
+regexp-depth: ABc true AB
+regexp-indices: true
 regexp-outer: false

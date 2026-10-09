@@ -1435,11 +1435,18 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
     switch (spec.generator) {
         case "regexp-pattern-depth":
             return `const openings: string[] = [];
-                for (let index = 0; index < ${spec.depth}; index++) openings.push(index % 2 ? "(?-i:" : "(?i:");
+                let captures = 0;
+                for (let index = 0; index < ${spec.depth}; index++) {
+                    const kind = index % 3;
+                    openings.push(kind === 0 ? "(?i:" : kind === 1 ? "(?-i:" : "(");
+                    if (kind === 2) captures++;
+                }
                 const pattern = openings.join("") + "(?i:(a|ab))c" + ")".repeat(${spec.depth}) + "|d";
-                const re = new RegExp(pattern);
+                const re = new RegExp(pattern, "d");
                 const hit = re.exec("ABc");
-                console.log("regexp-depth:", hit === null ? "missing" : hit.join("|"));
+                console.log("regexp-depth:", hit === null ? "missing" : hit[0],
+                    hit !== null && hit.length === captures + 2, hit === null ? "missing" : hit[hit.length - 1]);
+                console.log("regexp-indices:", hit !== null && hit.indices!.length === hit.length);
                 console.log("regexp-outer:", re.test("D"));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);

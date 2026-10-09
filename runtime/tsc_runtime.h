@@ -893,6 +893,7 @@ tsc_value_t tsc_value_json_stringify_top(tsc_value_t v);
 tsc_value_t tsc_structured_clone(tsc_value_t value);
 tsc_value_t tsc_value_date(struct tsc_date* d);
 tsc_value_t tsc_value_regexp(struct tsc_regexp* r);
+double tsc_value_to_length(tsc_value_t value);
 tsc_value_t tsc_value_map(struct tsc_map* m);
 tsc_value_t tsc_value_set(struct tsc_set* s);
 tsc_value_t tsc_value_error(struct tsc_error* e);

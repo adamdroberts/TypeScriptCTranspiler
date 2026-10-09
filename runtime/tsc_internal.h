@@ -755,6 +755,8 @@ size_t tsc_re_named_group(
     const char* name,
     size_t name_len
 );
+tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 /* Match the compiled pattern at exactly `start`; on success writes the
  * overall [match_start, match_end) span plus captures into cap_out. */
 bool tsc_re_match_at(

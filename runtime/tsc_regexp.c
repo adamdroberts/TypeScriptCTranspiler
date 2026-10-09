@@ -2923,9 +2923,15 @@ tsc_value_t tsc_regexp_prototype_value(void) {
             tsc_object_define_accessor(prototype, tsc_str_from_cstr(descriptor->name),
                 regexp_property_get, (void*)descriptor, true, NULL, NULL, false, false, true, true, true);
         }
-        tsc_object_define(prototype, tsc_str_from_lit("toString", 8),
-            tsc_value_function_builtin_named(regexp_to_string_apply, NULL, 0, tsc_str_from_lit("toString", 8)),
-            true, false, true);
+        static const struct { const char* name; double length; tsc_generic_function_t apply; } methods[] = {
+            {"exec", 1, tsc_regexp_exec_apply}, {"test", 1, tsc_regexp_test_apply},
+            {"toString", 0, regexp_to_string_apply}
+        };
+        for (size_t i = 0; i < sizeof(methods) / sizeof(*methods); i++) {
+            tsc_str_t* name = tsc_str_from_cstr(methods[i].name);
+            tsc_object_define(prototype, name,
+                tsc_value_function_builtin_named(methods[i].apply, NULL, methods[i].length, name), true, false, true);
+        }
     }
     tsc_runtime_unlock();
     return tsc_value_object(prototype);

@@ -1,0 +1,25 @@
+const re = /(?<part>a)(b)?/dg;
+const first = re.exec("a ab");
+console.log("first:", first!.join("|"), first!.index, first!.input, first![2] === undefined, re.lastIndex);
+console.log("groups:", first!.groups!.part, Object.getPrototypeOf(first!.groups) === null);
+console.log("indices:", first!.indices![0]!.join(","), first!.indices![1]!.join(","),
+    first!.indices![2] === undefined, first!.indices!.groups!.part === first!.indices![1]);
+const second = re.exec("a ab");
+console.log("second:", second!.join("|"), second!.index, re.lastIndex);
+console.log("fail:", re.exec("a ab") === null, re.lastIndex);
+re.lastIndex = 2;
+console.log("test:", re.test("a ab"), re.lastIndex, re.test("a ab"), re.lastIndex);
+const sticky = /a/y;
+sticky.lastIndex = 1;
+console.log("sticky:", sticky.test("ba"), sticky.lastIndex);
+sticky.lastIndex = 0;
+console.log("sticky-fail:", sticky.exec("ba") === null, sticky.lastIndex);
+const unicode = /./dgu;
+unicode.lastIndex = 1;
+const pair = unicode.exec("😀");
+console.log("unicode:", pair![0], pair!.index, pair!.indices![0]!.join(","), unicode.lastIndex);
+const empty = /(?:)/g;
+console.log("empty:", empty.exec("")!.index, empty.lastIndex, empty.exec("")!.index, empty.lastIndex);
+const descriptor = Object.getOwnPropertyDescriptor(re, "lastIndex")!;
+console.log("own:", descriptor.value, descriptor.writable, descriptor.enumerable, descriptor.configurable);
+console.log("missing:", /undefined/.test(), /undefined/.exec()![0]);
