@@ -757,6 +757,7 @@ tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, doub
 tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, double end); /* in-place */
 tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end);
 tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src);
+void tsc_array_append_actual_arguments(tsc_array_t* target, tsc_array_t* source);
 tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size);
 double tsc_array_length(const tsc_array_t* a);
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key);
@@ -797,6 +798,14 @@ typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
+typedef struct {
+    tsc_value_t value;
+    void* volatile root;
+    bool initialized;
+} tsc_callable_owner_t;
+tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
+    void* env, double length, tsc_str_t* name, bool constructable);
+void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 typedef void (*tsc_event_target_listener_fn_t)(void* env, tsc_event_target_t* target, tsc_event_t* event);
 

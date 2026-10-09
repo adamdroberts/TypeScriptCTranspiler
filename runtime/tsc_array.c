@@ -2105,6 +2105,21 @@ tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src) {
     return dst;
 }
 
+void tsc_array_append_actual_arguments(tsc_array_t* target, tsc_array_t* source) {
+    if (!target || target->es != sizeof(tsc_value_t) || target->box_element || !source)
+        tsc_panic("invalid native actual argument List");
+    tsc_array_t* volatile target_root = target;
+    tsc_array_t* volatile source_root = source;
+    const size_t length = source->len;
+    for (size_t index = 0; index < length; ++index) {
+        tsc_value_t value = tsc_value_get_index(tsc_value_array(source), (double)index);
+        void* volatile value_root = tsc_value_gc_root(value);
+        tsc_array_push_value(target, value);
+        (void)value_root;
+    }
+    (void)target_root; (void)source_root;
+}
+
 tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
     tsc_array_t* dst = tsc_array_new(elem_size, outer->len);
     for (size_t i = 0; i < outer->len; i++) {

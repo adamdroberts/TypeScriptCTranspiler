@@ -223,6 +223,25 @@ tsc_value_t tsc_value_function_named_kind(
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
 }
 
+void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value) {
+    tsc_value_store_rooted(&owner->value, &owner->root, value);
+    owner->initialized = true;
+}
+
+tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
+    void* env, double length, tsc_str_t* name, bool constructable) {
+    if (!env) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native callable has no value owner"));
+    tsc_runtime_lock();
+    if (!owner->initialized) {
+        tsc_value_t value = tsc_value_function_named_kind(apply, NULL, env, length, name,
+            constructable ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_CLOSURE);
+        tsc_callable_owner_set(owner, value);
+    }
+    tsc_value_t value = owner->value;
+    tsc_runtime_unlock();
+    return value;
+}
+
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
     return tsc_value_function_generic_arity(fn, env, 0.0);
 }

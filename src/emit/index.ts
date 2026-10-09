@@ -916,6 +916,7 @@ class Emitter {
         this.structDecls.open(`typedef struct ${type.closureName}`);
         this.structDecls.line(`${type.ret.c} (*fn)(${fnParams});`);
         this.structDecls.line("void* env;");
+        this.structDecls.line("tsc_callable_owner_t callable;");
         this.structDecls.close(` ${type.closureName};`);
     }
 
@@ -20332,7 +20333,8 @@ class Emitter {
         });
         const ret = this.prepareType(this.mapRuntimeType(fn, sig.getReturnType()));
         const thisType = this.signatureThisType(sig, fn);
-        return this.prepareType(functionType(params, ret, thisType ?? undefined));
+        return this.prepareType(functionType(params, ret, thisType ?? undefined,
+            runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
 
     private isManifestBackedCommonJsExport(node: ts.Node): boolean {
@@ -25545,9 +25547,8 @@ class Emitter {
     private javaScriptFunctionValueType(fn: ts.FunctionLikeDeclaration): CType {
         const sig = this.checker.getSignatureFromDeclaration(fn);
         if (!sig) unsupported(fn, "could not resolve JavaScript function signature");
-        const params = fn.parameters
-            .filter((parameter) => !this.isThisParameter(parameter))
-            .map((parameter) => this.prepareType(
+        const runtimeParams = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
+        const params = runtimeParams.map((parameter) => this.prepareType(
                 parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE,
             ));
         const isAsync = this.isAsyncDeclaration(fn);
@@ -25558,7 +25559,8 @@ class Emitter {
                 ? T_VALUE
                 : this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
         const thisType = this.signatureThisType(sig, fn);
-        return this.prepareType(functionType(params, ret, thisType ?? undefined));
+        return this.prepareType(functionType(params, ret, thisType ?? undefined,
+            runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
 
     private javaScriptFunctionLength(fn: ts.FunctionLikeDeclaration): number {
@@ -28933,7 +28935,9 @@ class Emitter {
         });
         const ret = this.prepareType(mapTsType(expr, sig.getReturnType(), this.checker));
         const thisType = this.directCallableThisType(expr);
-        const type = this.prepareType(functionType(params, ret, thisType ?? undefined));
+        const type = this.prepareType(functionType(params, ret, thisType ?? undefined,
+            sig.getParameters().findIndex(parameter => !!parameter.valueDeclaration &&
+                ts.isParameter(parameter.valueDeclaration) && !!parameter.valueDeclaration.dotDotDotToken)));
         return this.coerce(this.emitFunctionReferenceClosure(expr, type), T_VALUE, expr);
     }
 
@@ -41242,6 +41246,7 @@ class Emitter {
     private nullishExprFromEmitResult(value: EmitResult, node: ts.Expression, originalValue?: EmitResult): string {
         if (originalValue?.ty.kind === "value") return `tsc_value_is_nullish(${originalValue.c})`;
         if (value.ty.kind === "value") return `tsc_value_is_nullish(${value.c})`;
+        if (value.ty.kind === "function") return `tsc_value_is_nullish(${this.boxSourceValue(value, node)})`;
         if (value.ty.kind === "void") return "true";
         if (value.ty.kind === "number" || value.ty.kind === "boolean") return "false";
         if (isPointerKind(value.ty)) return `(${value.c} == NULL)`;
@@ -49352,8 +49357,8 @@ class Emitter {
         const inner = this.emitExpr(to.expression);
         const result = this.typeofName(to.expression, inner.ty);
         const nullishResult = this.nullishTypeofName(to.expression);
-        if (inner.ty.kind === "value") {
-            return { c: `tsc_value_typeof(${inner.c})`, ty: T_STRING };
+        if (inner.ty.kind === "value" || inner.ty.kind === "function") {
+            return { c: `tsc_value_typeof(${this.coerce(inner, T_VALUE, to.expression)})`, ty: T_STRING };
         }
         if (nullishResult && isPointerKind(inner.ty) && nullishResult !== result) {
             const tv = this.freshTemp("_typeof");
@@ -49520,9 +49525,9 @@ class Emitter {
                 `${this.stringLit(expected)})`;
         }
         const inner = this.emitExpr(expr);
-        if (inner.ty.kind === "value") {
+        if (inner.ty.kind === "value" || inner.ty.kind === "function") {
             const tv = this.freshTemp("_typeofv");
-            return `({ ${inner.ty.c} ${tv} = ${inner.c}; tsc_str_eq(tsc_value_typeof(${tv}), ${this.stringLit(expected)}); })`;
+            return `({ tsc_value_t ${tv} = ${this.coerce(inner, T_VALUE, expr)}; tsc_str_eq(tsc_value_typeof(${tv}), ${this.stringLit(expected)}); })`;
         }
         const result = this.typeofName(expr, inner.ty);
         const nullishResult = this.nullishTypeofName(expr);
@@ -49558,7 +49563,7 @@ class Emitter {
             const value = this.freshTemp("_truthy_string");
             return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != NULL && (${value})->len != 0); })`;
         }
-        if (r.ty.kind === "value") return `tsc_value_is_truthy(${r.c})`;
+        if (r.ty.kind === "value" || r.ty.kind === "function") return `tsc_value_is_truthy(${this.coerce(r, T_VALUE, expr)})`;
         if (isPointerKind(r.ty)) {
             const value = this.freshTemp("_truthy_pointer");
             return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != NULL); })`;
@@ -52032,7 +52037,7 @@ class Emitter {
             const c = `tsc_value_abstract_eq(${literal}, ${value})`;
             return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
         }
-        if (left.ty.kind === "value" || right.ty.kind === "value") {
+        if (left.ty.kind === "value" || right.ty.kind === "value" || left.ty.kind === "function" || right.ty.kind === "function") {
             const r = this.emitDynamicBinary("tsc_value_abstract_eq", T_BOOLEAN, bin, left, right);
             return { c: negate ? `(!${r.c})` : r.c, ty: T_BOOLEAN };
         }
@@ -52073,7 +52078,7 @@ class Emitter {
         if (left.ty.kind === "unsupported" || right.ty.kind === "unsupported") {
             unsupported(bin, `strict equality on ${left.ty.c} vs ${right.ty.c}`);
         }
-        if (left.ty.kind === "value" || right.ty.kind === "value") {
+        if (left.ty.kind === "value" || right.ty.kind === "value" || left.ty.kind === "function" || right.ty.kind === "function") {
             const result = this.emitDynamicBinary("tsc_value_eq", T_BOOLEAN, bin, left, right);
             return { c: negate ? `(!${result.c})` : result.c, ty: T_BOOLEAN };
         }
@@ -54364,7 +54369,7 @@ class Emitter {
                 for (let i = 0; i < params.length; i++) {
                     args.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${i})`, ty: T_VALUE }, params[i]!, call));
                 }
-                return `({ if (${list}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("function value argument length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
+                return `({ if (${list}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("function value argument length mismatch")); if (!${fn}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not callable")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
             });
             if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
             return result;
@@ -54387,7 +54392,7 @@ class Emitter {
         const result = this.emitSequencedExpr(ret, specs, (vals) => {
             const fn = vals[0]!;
             const args = vals.slice(1);
-            return `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
+            return `({ if (!${fn}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not callable")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
         });
         if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
         return result;
@@ -54437,6 +54442,7 @@ class Emitter {
             type,
             adapter,
             this.isLazyGeneratorFunctionValue(id) || this.isLazyGeneratorPassthroughFunctionValue(id),
+            id,
         );
     }
 
@@ -54451,6 +54457,7 @@ class Emitter {
             type,
             adapter,
             this.isGeneratorDeclaration(declaration) || this.isLazyGeneratorPassthroughFunction(declaration),
+            declaration,
         );
     }
 
@@ -54461,6 +54468,7 @@ class Emitter {
         type: CType,
         adapter: string,
         lazyGeneratorFactory: boolean,
+        node: ts.Node,
     ): EmitResult {
         const key = `${adapter}:${this.typeKey(type)}`;
         let staticName = this.functionRefClosureStatics.get(key);
@@ -54472,7 +54480,7 @@ class Emitter {
         }
         return {
             c:
-                `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; } ` +
+                `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; (void)${this.boxPhysicalValue({ c: `&${staticName}`, ty: type }, node)}; } ` +
                 `&${staticName}; })`,
             ty: type,
             lazyGeneratorFactory,
@@ -54601,6 +54609,7 @@ class Emitter {
                 params,
                 this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker)),
                 this.signatureThisType(sig, fn) ?? undefined,
+                runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken),
             ));
         const ret = this.prepareType(type.ret!);
         const captures = this.collectClosureCaptures(fn);
@@ -54706,6 +54715,7 @@ class Emitter {
         } else {
             pieces.push(`${tmp}->env = NULL`);
         }
+        pieces.push(this.boxPhysicalValue({ c: tmp, ty: type }, fn));
         pieces.push(tmp);
         return {
             c: `({ ${pieces.join("; ")}; })`,
@@ -55457,7 +55467,7 @@ class Emitter {
             case "class":
                 return `class_${type.className ?? type.c}`;
             case "function":
-                return `function_${type.thisParam ? `this_${this.typeKey(type.thisParam)}_` : ""}${type.params?.map((p) => this.typeKey(p)).join("_") || "void"}_to_${type.ret ? this.typeKey(type.ret) : "void"}`;
+                return `function_${type.thisParam ? `this_${this.typeKey(type.thisParam)}_` : ""}${type.params?.map((p) => this.typeKey(p)).join("_") || "void"}_to_${type.ret ? this.typeKey(type.ret) : "void"}_rest_${(type.restIndex ?? -1) < 0 ? "none" : type.restIndex}`;
             default:
                 return type.kind;
         }
@@ -75718,7 +75728,10 @@ class Emitter {
             const ty = this.moduleNamespaceMemberType(ea);
             return { c: moduleNsMember, ty };
         }
-        const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        const rawRecv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        const recv: EmitResult = rawRecv.ty.kind === "function"
+            ? { c: this.coerce(rawRecv, T_VALUE, ea.expression), ty: T_VALUE }
+            : rawRecv;
         const isOpt = !!ea.questionDotToken;
         const isArrayPrototypeReceiver = this.isStaticArrayPrototypeExpression(ea.expression);
         if (isArrayPrototypeReceiver && this.isSymbolIteratorExpression(ea.argumentExpression)) {
@@ -76501,6 +76514,12 @@ class Emitter {
     }
 
     private coerce(r: EmitResult, target: CType, node: ts.Node): string {
+        if (r.ty.kind === "function" && target.kind !== "function" && target.kind !== "value") {
+            return this.coerce({ c: this.boxSourceValue(r, node), ty: T_VALUE }, target, node);
+        }
+        if (r.ty.kind === "void" && target.kind === "function") {
+            return this.emitValueFunctionAdapter({ c: this.boxSourceValue(r, node), ty: T_VALUE }, target, node);
+        }
         if (r.ty.kind === target.kind) {
             if (
                 target.kind === "array" &&
@@ -76534,7 +76553,7 @@ class Emitter {
                 unsupported(node, `cannot coerce ${r.ty.c} to ${target.c}`);
             }
             if (target.kind === "function" && !sameCType(r.ty, target)) {
-                unsupported(node, `cannot coerce ${r.ty.c} to ${target.c}`);
+                return this.emitValueFunctionAdapter({ c: this.boxSourceValue(r, node), ty: T_VALUE }, target, node);
             }
             return r.c;
         }
@@ -76669,7 +76688,8 @@ class Emitter {
                 const length = sourceFunction
                     ? this.javaScriptFunctionLength(sourceFunction)
                     : (r.ty.params ?? []).length;
-                return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${length}.0, ${this.functionValueNameLiteral(node)})`;
+                const owner = this.freshTemp("_callable_owner");
+                return `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}) : tsc_value_undefined(); })`;
             }
             case "class":
                 return this.classValueBoxExpression(r, node);
@@ -76850,8 +76870,7 @@ class Emitter {
         const normalizesSloppyThis = createsActivation &&
             !!sourceFunction &&
             !this.functionHasStrictThisBinding(sourceFunction);
-        const runtimeParameters = sourceFunction?.parameters.filter((parameter) => !this.isThisParameter(parameter));
-        const restIndex = runtimeParameters?.findIndex((parameter) => !!parameter.dotDotDotToken) ?? -1;
+        const restIndex = type.restIndex ?? -1;
         const key =
             `${this.typeKey(type)}:rest=${restIndex}:activation=${createsActivation}:` +
             `sloppyThis=${normalizesSloppyThis}`;
@@ -76912,11 +76931,11 @@ class Emitter {
         const key = this.typeKey(type);
         const existing = this.valueFunctionAdapters.get(key);
         if (existing) {
-            return `({ ${type.closureName}_value_env_t* _env = (${type.closureName}_value_env_t*)TSC_GC_MALLOC(sizeof(${type.closureName}_value_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${existing}; _fn->env = _env; _fn; })`;
+            return `({ ${existing}_env_t* _env = (${existing}_env_t*)TSC_GC_MALLOC(sizeof(${existing}_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${existing}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
         }
         const adapter = `tsc_value_function_adapter_${this.valueFunctionAdapters.size}`;
         this.valueFunctionAdapters.set(key, adapter);
-        const envType = `${type.closureName}_value_env_t`;
+        const envType = `${adapter}_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_value_t value;");
         this.structDecls.line("void* value_gc_root;");
@@ -76936,6 +76955,11 @@ class Emitter {
         const args = this.freshTemp("_value_fn_args");
         buf.line(`tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, params.length)});`);
         for (let index = 0; index < params.length; index++) {
+            if (index === type.restIndex) {
+                if (params[index]!.kind !== "array") unsupported(node, "native rest parameter requires Array storage");
+                buf.line(`tsc_array_append_actual_arguments(${args}, ${paramNames[index]});`);
+                continue;
+            }
             const boxed = this.coerce({ c: paramNames[index]!, ty: params[index]! }, T_VALUE, node);
             buf.line(`tsc_value_t _boxed${index} = ${boxed};`);
             buf.line(`tsc_array_push_value(${args}, _boxed${index});`);
@@ -76956,7 +76980,7 @@ class Emitter {
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
-        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${adapter}; _fn->env = _env; _fn; })`;
+        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${adapter}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
     }
 }
 
@@ -77037,6 +77061,8 @@ function sameCType(a: CType, b: CType): boolean {
         const bParams = b.params ?? [];
         if (aParams.length !== bParams.length) return false;
         return (
+            (a.restIndex ?? -1) === (b.restIndex ?? -1) &&
+            (a.thisParam && b.thisParam ? sameCType(a.thisParam, b.thisParam) : a.thisParam === b.thisParam) &&
             sameCType(a.ret, b.ret) &&
             aParams.every((p, i) => sameCType(p, bParams[i]!))
         );

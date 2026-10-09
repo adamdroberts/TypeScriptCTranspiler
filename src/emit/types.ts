@@ -53,6 +53,8 @@ export interface CType {
     className?: string;
     /** For first-class function/closure values. */
     params?: CType[];
+    /** Native parameter projection of one actual argument List. */
+    restIndex?: number;
     thisParam?: CType;
     ret?: CType;
     closureName?: string;
@@ -152,13 +154,14 @@ export function classType(className: string): CType {
     return { kind: "class", c: `${className}_t*`, className };
 }
 
-export function functionType(params: readonly CType[], ret: CType, thisParam?: CType): CType {
+export function functionType(params: readonly CType[], ret: CType, thisParam?: CType, restIndex = -1): CType {
     const thisPart = thisParam ? `this_${typeNamePart(thisParam)}_` : "";
     const closureName = `tsc_fn_${thisPart}${params.length ? params.map(typeNamePart).join("_") : "void"}_to_${typeNamePart(ret)}_t`;
     return {
         kind: "function",
         c: `${closureName}*`,
         params: [...params],
+        restIndex,
         thisParam,
         ret,
         closureName,
@@ -385,7 +388,9 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 checker,
             );
         });
-        return functionType(params, mapTsType(node, callSig.getReturnType(), checker), thisParamType);
+        const restIndex = callSig.getParameters().findIndex(param =>
+            !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken);
+        return functionType(params, mapTsType(node, callSig.getReturnType(), checker), thisParamType, restIndex);
     }
 
     // Map<K, V>
