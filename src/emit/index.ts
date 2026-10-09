@@ -42030,26 +42030,7 @@ class Emitter {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
         if (this.isLogicalValueOperator(op)) return this.emitLogicalValue(bin, left, right);
-        if (op === ts.SyntaxKind.PlusToken) {
-            if (left.ty.kind === "value" || right.ty.kind === "value") {
-                return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
-            }
-            const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-            if (bigint) return bigint;
-            if (left.ty.kind === "string" || right.ty.kind === "string") {
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [
-                        { value: left, node: bin.left, stringify: true },
-                        { value: right, node: bin.right, stringify: true },
-                    ],
-                    ([leftString, rightString]) => `tsc_str_concat(${leftString}, ${rightString})`,
-                );
-            }
-            requireNumber(bin, left.ty);
-            requireNumber(bin, right.ty);
-            return { c: `(${left.c} + ${right.c})`, ty: T_NUMBER };
-        }
+        if (op === ts.SyntaxKind.PlusToken) return this.emitAdditionOperands(bin, left, right);
         if (
             op === ts.SyntaxKind.MinusToken ||
             op === ts.SyntaxKind.AsteriskToken ||
@@ -48489,7 +48470,7 @@ class Emitter {
             buf.line(`${completion.gcRoot} = NULL;`);
         }
         try {
-            this.emitStmtList(buf, scope.owner.finallyBlock.statements);
+            this.emitBlock(buf, scope.owner.finallyBlock);
         } finally {
             this.closureEnvScopes.pop();
             this.tryDepth = previousDepth;
@@ -48592,11 +48573,11 @@ class Emitter {
                 buf.line(`tsc_value_t ${name} = ${error};`);
                 if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
             }
-            try { this.emitStmtList(buf, clause.block.statements); } finally {
+            try { this.emitBlock(buf, clause.block); } finally {
                 if (symbol) this.catchValueSymbols.delete(symbol);
             }
         };
-        emitProtected(scope, () => this.emitStmtList(buf, statement.tryBlock.statements));
+        emitProtected(scope, () => this.emitBlock(buf, statement.tryBlock));
         buf.open("else");
         const error = saveError();
         if (completion) {
@@ -50234,47 +50215,64 @@ class Emitter {
         });
     }
 
-    private stringLiteralInfo(expr: ts.Expression): { text: string; escaped: string; len: number } | null {
-        if (
-            ts.isStringLiteral(expr) ||
-            expr.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral
-        ) {
-            const text = (expr as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral).text;
-            return { text, escaped: escapeCString(text), len: utf8ByteLen(text) };
+    /** Addition keeps one source tree and lowers its postorder worklist into
+     * flat staged values. Every operation runs after both operand evaluations;
+     * parenthesized subtrees keep their own conversion/completion boundaries. */
+    private emitAdditionExpression(root: ts.BinaryExpression): EmitResult {
+        const results = new Map<ts.Expression, EmitResult>();
+        const pending: { expression: ts.Expression; exit: boolean }[] = [{ expression: root, exit: false }];
+        const statements: string[] = [];
+        const stage = (expression: ts.Expression, value: EmitResult): void => {
+            const type = value.ty.kind === "void" || value.ty.kind === "never" ? T_VALUE : value.ty;
+            const name = this.freshTemp("_addition_value");
+            const init = type === value.ty ? value.c : this.boxSourceValue(value, expression);
+            statements.push(`${type.c}${isPointerKind(type) ? " volatile" : ""} ${name} = ${init}`);
+            if (type.kind === "value") {
+                const gcRoot = this.freshTemp("_addition_gc_root");
+                statements.push(`void* volatile ${gcRoot} = tsc_value_gc_root(${name})`, `(void)${gcRoot}`);
+            }
+            results.set(expression, { c: name, ty: type });
+        };
+        while (pending.length > 0) {
+            const work = pending.pop()!, expression = this.unwrapTransparentExpression(work.expression);
+            if (work.exit) {
+                if (!ts.isBinaryExpression(expression)) throw new Error("addition worklist node is not a binary expression");
+                stage(work.expression, this.emitAdditionOperands(expression,
+                    results.get(expression.left)!, results.get(expression.right)!));
+                continue;
+            }
+            const override = this.expressionOverride(work.expression) ?? this.expressionOverride(expression);
+            if (override) { stage(work.expression, override); continue; }
+            if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) {
+                stage(work.expression, this.emitExpr(work.expression));
+                continue;
+            }
+            pending.push({ expression: work.expression, exit: true },
+                { expression: expression.right, exit: false }, { expression: expression.left, exit: false });
         }
-        return null;
+        const result = results.get(root)!;
+        return { c: `({ ${statements.join("; ")}; ${result.c}; })`, ty: result.ty };
     }
 
-    private tryEmitLiteralNumberConcat(bin: ts.BinaryExpression): EmitResult | null {
-        if (mapType(bin, this.checker).kind !== "string") return null;
-
-        const leftLit = this.stringLiteralInfo(bin.left);
-        if (leftLit) {
-            const right = this.emitExpr(bin.right);
-            if (right.ty.kind !== "number") return null;
-            const n = right.ty.c === "int64_t" || this.isIntegerShape(bin.right)
-                ? `(int64_t)(${right.c})`
-                : null;
-            const c = n
-                ? `tsc_str_concat_lit_int("${leftLit.escaped}", ${leftLit.len}, ${n})`
-                : `tsc_str_concat_lit_num("${leftLit.escaped}", ${leftLit.len}, ${right.c})`;
-            return { c, ty: T_STRING };
+    /** Primitive native operations have no conversion hooks. Every other
+     * representation uses the ordinary default-hint value-add algorithm. */
+    private emitAdditionOperands(bin: ts.BinaryExpression, left: EmitResult, right: EmitResult): EmitResult {
+        if (left.ty.kind === "number" && right.ty.kind === "number") {
+            return this.emitSequencedExpr(T_NUMBER, [{ value: left, target: T_NUMBER }, { value: right, target: T_NUMBER }],
+                ([leftValue, rightValue]) => `(${leftValue} + ${rightValue})`);
         }
-
-        const rightLit = this.stringLiteralInfo(bin.right);
-        if (rightLit) {
-            const left = this.emitExpr(bin.left);
-            if (left.ty.kind !== "number") return null;
-            const n = left.ty.c === "int64_t" || this.isIntegerShape(bin.left)
-                ? `(int64_t)(${left.c})`
-                : null;
-            const c = n
-                ? `tsc_str_concat_int_lit(${n}, "${rightLit.escaped}", ${rightLit.len})`
-                : `tsc_str_concat_num_lit(${left.c}, "${rightLit.escaped}", ${rightLit.len})`;
-            return { c, ty: T_STRING };
+        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
+            return this.emitSequencedCall("tsc_bigint_add", T_BIGINT, [{ value: left }, { value: right }]);
         }
-
-        return null;
+        if ((left.ty.kind === "string" || right.ty.kind === "string") &&
+            ["number", "bigint", "string"].includes(left.ty.kind) &&
+            ["number", "bigint", "string"].includes(right.ty.kind)) {
+            return this.emitSequencedExpr(T_STRING, [{ value: left }, { value: right }],
+                ([leftValue, rightValue]) => `tsc_str_concat(` +
+                    `${this.coerceToString({ c: leftValue!, ty: left.ty }, bin.left)}, ` +
+                    `${this.coerceToString({ c: rightValue!, ty: right.ty }, bin.right)})`);
+        }
+        return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
     }
 
     private isLogicalValueOperator(operator: ts.SyntaxKind): boolean {
@@ -50386,12 +50384,7 @@ class Emitter {
             if (typeofComparison) return typeofComparison;
         }
 
-        // Primitive literal/number concatenation has no observable conversion
-        // hooks. Other additions retain their source-tree operation boundaries.
-        if (op === ts.SyntaxKind.PlusToken) {
-            const litNum = this.tryEmitLiteralNumberConcat(bin);
-            if (litNum) return litNum;
-        }
+        if (op === ts.SyntaxKind.PlusToken) return this.emitAdditionExpression(bin);
 
         if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
 
@@ -50472,31 +50465,6 @@ class Emitter {
                         return `({ static tsc_prop_cache_t ${cache}; tsc_value_has_prop_cached(${obj}, ${key}, &${cache}); })`;
                     },
                 );
-            }
-            case ts.SyntaxKind.PlusToken: {
-                if (
-                    left.ty.kind === "value" ||
-                    right.ty.kind === "value" ||
-                    !["number", "bigint", "string"].includes(left.ty.kind) ||
-                    !["number", "bigint", "string"].includes(right.ty.kind)
-                ) {
-                    return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                if (left.ty.kind === "string" || right.ty.kind === "string") {
-                    return this.emitSequencedExpr(
-                        T_STRING,
-                        [
-                            { value: left, node: bin.left, stringify: true },
-                            { value: right, node: bin.right, stringify: true },
-                        ],
-                        ([leftString, rightString]) => `tsc_str_concat(${leftString}, ${rightString})`,
-                    );
-                }
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                return { c: `(${left.c} + ${right.c})`, ty: T_NUMBER };
             }
             case ts.SyntaxKind.MinusToken:
             case ts.SyntaxKind.AsteriskToken:

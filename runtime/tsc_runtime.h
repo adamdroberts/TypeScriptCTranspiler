@@ -120,10 +120,6 @@ tsc_value_t tsc_builtin_json(void);
 tsc_value_t tsc_builtin_reflect(void);
 
 tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b);
-tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n);
-tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len);
-tsc_str_t* tsc_str_concat_lit_num(const char* lit, size_t lit_len, double n);
-tsc_str_t* tsc_str_concat_num_lit(double n, const char* lit, size_t lit_len);
 tsc_str_t* tsc_str_concat_n(size_t n, ...);
 /* Concatenate one canonical, dynamically sized collection of tsc_str_t*
  * parts with one result allocation. */

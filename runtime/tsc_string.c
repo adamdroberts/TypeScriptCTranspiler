@@ -96,41 +96,6 @@ tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substituti
     return result;
 }
 
-tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n) {
-    char num[21];
-    size_t num_len = fast_itoa(num, n);
-    tsc_str_t* s = str_alloc(lit_len + num_len);
-    memcpy((char*)s->data, lit, lit_len);
-    memcpy((char*)s->data + lit_len, num, num_len);
-    return s;
-}
-
-tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len) {
-    char num[21];
-    size_t num_len = fast_itoa(num, n);
-    tsc_str_t* s = str_alloc(num_len + lit_len);
-    memcpy((char*)s->data, num, num_len);
-    memcpy((char*)s->data + num_len, lit, lit_len);
-    return s;
-}
-
-tsc_str_t* tsc_str_concat_lit_num(const char* lit, size_t lit_len, double n) {
-    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
-        return tsc_str_concat_lit_int(lit, lit_len, (int64_t)n);
-    }
-    return tsc_str_concat(tsc_str_from_lit(lit, lit_len), tsc_str_from_num(n));
-}
-
-tsc_str_t* tsc_str_concat_num_lit(double n, const char* lit, size_t lit_len) {
-    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
-        return tsc_str_concat_int_lit((int64_t)n, lit, lit_len);
-    }
-    return tsc_str_concat(tsc_str_from_num(n), tsc_str_from_lit(lit, lit_len));
-}
-
-/* Variadic n-way concat — single str_alloc + n memcpy. Used by the emitter
- * when it folds a chain of `+` over strings (e.g. `s + "x" + j`) into one
- * call, dropping N-1 intermediate allocations + their byte copies. */
 tsc_str_t* tsc_str_concat_n(size_t n, ...) {
     va_list ap;
     size_t total = 0;

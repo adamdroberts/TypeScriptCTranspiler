@@ -6136,8 +6136,11 @@ static tsc_value_t value_numeric_binary(
     tsc_value_t right,
     tsc_numeric_binary_op_t operation
 ) {
-    left = tsc_value_to_numeric(left);
-    right = tsc_value_to_numeric(right);
+    void* volatile left_root = tsc_value_gc_root(left);
+    void* volatile right_root = tsc_value_gc_root(right);
+    tsc_value_store_rooted(&left, &left_root, tsc_value_to_numeric(left));
+    tsc_value_store_rooted(&right, &right_root, tsc_value_to_numeric(right));
+    (void)left_root; (void)right_root;
     bool left_bigint = value_is_bigint(left);
     bool right_bigint = value_is_bigint(right);
     if (left_bigint != right_bigint) value_throw_mixed_bigint();
@@ -6202,13 +6205,18 @@ static tsc_value_t value_numeric_binary(
 }
 
 tsc_value_t tsc_value_add(tsc_value_t a, tsc_value_t b) {
-    a = value_to_primitive_if_object(a, TSC_TO_PRIMITIVE_DEFAULT);
-    b = value_to_primitive_if_object(b, TSC_TO_PRIMITIVE_DEFAULT);
+    void* volatile a_root = tsc_value_gc_root(a);
+    void* volatile b_root = tsc_value_gc_root(b);
+    tsc_value_store_rooted(&a, &a_root, value_to_primitive_if_object(a, TSC_TO_PRIMITIVE_DEFAULT));
+    tsc_value_store_rooted(&b, &b_root, value_to_primitive_if_object(b, TSC_TO_PRIMITIVE_DEFAULT));
+    (void)a_root; (void)b_root;
     bool stringy =
         (value_is_box(a) && value_tag(a) == TSC_VALUE_TAG_STRING) ||
         (value_is_box(b) && value_tag(b) == TSC_VALUE_TAG_STRING);
     if (stringy) {
-        return tsc_value_string(tsc_str_concat(tsc_value_to_string(a), tsc_value_to_string(b)));
+        tsc_str_t* volatile left_string = tsc_value_to_string(a);
+        tsc_str_t* volatile right_string = tsc_value_to_string(b);
+        return tsc_value_string(tsc_str_concat(left_string, right_string));
     }
     return value_numeric_binary(a, b, TSC_NUMERIC_ADD);
 }

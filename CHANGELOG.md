@@ -1,5 +1,7 @@
 # Changelog
 
+- Lower addition through one source-tree worklist with flat staged operands/results and a shared native/ordinary value dispatcher. Preserve evaluation order, grouped conversion boundaries, snapshots and abrupt values; retain decoded roots across primitive/numeric conversions. Delete duplicated addition dispatch and literal/number concat helpers, and route try/catch/finally bodies through canonical Block scope entry.
+
 - Remove the separate mutable string-buffer binding representation and unsafe concat-tree flattening. Retain ordinary binding storage, stage native string compound references and old values before RHS evaluation, and share actual value addition. Preserve grouping, default conversion hints, immutable snapshots and unchanged bindings after abrupt completion; verify typed semantic properties with forced collection in both memory modes.
 
 - Retain actual function values in native callable owners across boxing and signature adaptation. Carry rest positions in the canonical parameter List, preserve creation metadata through returns/getters, and expand outgoing rest Lists with decoded roots. Route callable operators through retained values and throw TypeError after argument evaluation for uninitialized calls. Verify semantic properties and a retained-owner graph in both memory modes.
