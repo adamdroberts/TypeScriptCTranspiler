@@ -675,7 +675,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-no-lineterminator-here-automatic-semicolon-insertion-list` — List of Grammar Productions with Optional Operands and “[no |LineTerminator| here]”: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Expressions** (`sec-ecmascript-language-expressions`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: evaluation order; references and calls; operators and coercion; assignment and destructuring; spread and optional chains.
-  - Linked local regression evidence: property: tests/property/tagged-template-site.property.test.ts; E2E: call_arg_order, dynamic_ops, rest_spread, tagged_template_sites.
+  - Linked local regression evidence: property: tests/property/tagged-template-site.property.test.ts, tests/property/eval-source-flow.property.test.ts; E2E: call_arg_order, dynamic_ops, rest_spread, tagged_template_sites.
   - Known blockers: Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete.
   - [ ] `sec-ecmascript-language-expressions` — ECMAScript Language: Expressions: exact disposition and partitions missing.
   - [ ] `sec-identifiers` — Identifiers: exact disposition and partitions missing.
@@ -1068,7 +1068,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-ecmascript-standard-built-in-objects` — ECMAScript Standard Built-in Objects: exact disposition and partitions missing.
 - [ ] **The Global Object** (`sec-global-object`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: value properties; global functions; constructors; Reflect; global object semantics.
-  - Linked local regression evidence: property: tests/property/reflect-construct.property.test.ts, tests/property/symbol-coercion.property.test.ts; stress: reflect_construct_argument_width; E2E: global_number_predicates, reflect_construct_validation, runtime_eval, proxy_ownkeys_invariants.
+  - Linked local regression evidence: property: tests/property/reflect-construct.property.test.ts, tests/property/symbol-coercion.property.test.ts, tests/property/eval-source-flow.property.test.ts; stress: reflect_construct_argument_width; E2E: global_number_predicates, reflect_construct_validation, runtime_eval, proxy_ownkeys_invariants.
   - Known blockers: Runtime eval needs a non-delegating, general Script implementation for full conformance; the remaining Reflect operations require exact clause partitions and exhaustive pinned Test262 evidence.
   - [ ] `sec-global-object` — The Global Object: exact disposition and partitions missing.
   - [ ] `sec-value-properties-of-the-global-object` — Value Properties of the Global Object: exact disposition and partitions missing.

@@ -13,11 +13,19 @@ export interface ConstructorInvocation {
      * registry remains available; runtime selection still fails closed. */
     readonly choices: readonly (readonly string[])[] | null;
 }
+export interface EvaluationInvocation {
+    readonly node: ts.CallExpression | ts.NewExpression;
+    readonly operation: "eval" | "eval-script";
+    readonly direct: boolean;
+    /** Eval retains non-String values; evalScript converts primitives to text.
+     * Null keeps the existing unknown-source diagnostic/registry boundary. */
+    readonly choices: readonly string[] | null;
+}
 
 type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction |
     ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ConstructorDeclaration;
 type Domain = "constructor" | "prototype" | "instance";
-type Operation = "prototype" | "eval" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
+type Operation = "prototype" | "eval" | "eval-script" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
 type Primitive = string | number | bigint | boolean | null | undefined;
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
@@ -39,6 +47,10 @@ interface FunctionOwner {
     readonly returns: Cell; readonly receiver: Cell;
 }
 interface Call { readonly node: ts.CallExpression | ts.NewExpression; readonly callee: Cell; readonly receiver: Cell; readonly result: Cell; }
+interface EvaluationRecord {
+    readonly node: ts.CallExpression | ts.NewExpression; readonly operation: "eval" | "eval-script";
+    readonly direct: boolean; readonly source: Cell | null; readonly unknown: boolean;
+}
 
 function unwrap(node: ts.Expression): ts.Expression {
     while (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) ||
@@ -79,6 +91,7 @@ class SourceValueFlow {
     private readonly queue: Rule[] = [];
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
     private readonly invocations: Array<{ kind: DynamicFunctionKind; args: readonly Cell[] | null }> = [];
+    private readonly evaluationInvocations = new Map<ts.Node, Map<string, EvaluationRecord>>();
     private readonly intrinsicAtoms = new Map<string, Atom>();
     private readonly operations = new Map<Operation, Atom>();
     private readonly primitives = new Map<string, Atom>();
@@ -235,12 +248,12 @@ class SourceValueFlow {
         }
         if (atom.tag === "host") {
             if (key === "createRealm") this.publish(result, this.operation("realm"));
-            if (key === "evalScript") this.publish(result, this.operation("eval"));
+            if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result, this.global);
         }
         if (atom.tag === "realm-record") {
             if (key === "global") this.publish(result, this.global);
-            if (key === "evalScript") this.publish(result, this.operation("eval"));
+            if (key === "evalScript") this.publish(result, this.operation("eval-script"));
         }
         if (["function", "bound", "intrinsic", "operation"].includes(atom.tag) && ["call", "apply", "bind"].includes(key))
             this.publish(result, this.operation(key as Operation));
@@ -417,6 +430,9 @@ class SourceValueFlow {
                 if (atom.tag === "promise") this.copy(atom.value, result!); else this.publish(result!, atom);
             } });
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+            // Successful [[Construct]] always produces an Object, even when
+            // its target's implementation lies outside this source graph.
+            if (ts.isNewExpression(node)) this.publish(result, {tag:"object",owner:this.owner(node)});
             const target = unwrap(node.expression);
             const receiver = ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target) ? this.cell(target.expression) : this.empty;
             const parts = (node.arguments ?? []).map(argument => ({ cell: this.cell(ts.isSpreadElement(argument) ? argument.expression : argument), spread: ts.isSpreadElement(argument) }));
@@ -429,9 +445,13 @@ class SourceValueFlow {
             };
             let rule: Rule;
             rule = this.rule([call.callee, call.receiver, ...parts.map(part => part.cell)], () => {
+                let evaluations = this.evaluationInvocations.get(node);
+                if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(node,evaluations); }
+                evaluations.clear();
                 for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
-                const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom> }> = [
-                    ...this.arguments(parts).map(args => ({ target: call.callee, receiver: call.receiver, args, boundPath: new Set<Atom>() }))];
+                const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean }> = [
+                    ...this.arguments(parts).map(args => ({ target: call.callee, receiver: call.receiver, args, boundPath: new Set<Atom>(),
+                        direct: ts.isCallExpression(node) && !node.questionDotToken && ts.isIdentifier(target) && target.text === "eval" }))];
                 const routed = new Map<Atom, Set<string>>();
                 while (worklist.length) {
                     const invocation = worklist.pop()!; this.watch(rule, invocation.target);
@@ -441,7 +461,7 @@ class SourceValueFlow {
                         if (atom.tag === "bound") {
                             if (invocation.boundPath.has(atom)) continue;
                             const boundPath = new Set(invocation.boundPath); boundPath.add(atom);
-                            worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null,
+                            worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null, direct: false,
                                 boundPath }); continue;
                         }
                         if (atom.tag === "operation" && ["call", "apply", "reflect-apply", "construct"].includes(atom.operation)) {
@@ -451,7 +471,7 @@ class SourceValueFlow {
                             const listIndex = atom.operation === "reflect-apply" ? 2 : 1;
                             if (argv?.[listIndex]) this.watchList(rule, argv[listIndex]!);
                             const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.lists(argv[listIndex]!) : [null];
-                            if (target) for (const args of actual) worklist.push({ ...invocation, target,
+                            if (target) for (const args of actual) worklist.push({ ...invocation, target, direct: false,
                                 receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : this.empty, args });
                             continue;
                         }
@@ -480,10 +500,23 @@ class SourceValueFlow {
                                 this.publish(result!, value);
                             }
                             if (atom.operation === "realm") this.publish(result!, this.realm);
-                            if (atom.operation === "eval" && argv?.[0]) {
-                                this.watchText(rule, argv[0]);
-                                for (const text of this.primitiveChoices(argv[0])) if (typeof text === "string")
-                                    for (const value of this.evaluations.get(text) ?? []) this.copy(value, result!);
+                            if (atom.operation === "eval" || atom.operation === "eval-script") {
+                                const source = argv?.[0] ?? null;
+                                const direct = atom.operation === "eval" && invocation.direct;
+                                const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
+                                evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
+                                if (source) {
+                                    this.watchText(rule, source);
+                                    for (const text of this.primitiveChoices(source)) {
+                                        if (atom.operation === "eval" && typeof text !== "string") {
+                                            this.publish(result!, this.primitive(text));
+                                            continue;
+                                        }
+                                        for (const value of this.evaluations.get(String(text)) ?? []) this.copy(value, result!);
+                                    }
+                                    if (atom.operation === "eval") for (const value of source.values)
+                                        if (value.tag !== "text-operation" && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
+                                } else if (argv && atom.operation === "eval") this.publish(result!, this.primitive(undefined));
                             }
                             if (atom.operation === "prototype" && argv?.[0]) {
                                 const input = argv[0]; this.watch(rule, input);
@@ -552,15 +585,32 @@ class SourceValueFlow {
         }
         return values.get(root) ?? [];
     }
-    solve(): ConstructorInvocation[] {
+    solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         while (this.initializers.length || this.queue.length) {
             if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
             else { const rule = this.queue.pop()!; rule.queued = false; rule.run(); }
         }
-        return this.invocations.map(invocation => ({ kind: invocation.kind, choices: invocation.args?.map(cell => this.choices(cell)) ?? null }));
+        return {
+            constructors: this.invocations.map(invocation => ({ kind: invocation.kind, choices: invocation.args?.map(cell => this.choices(cell)) ?? null })),
+            evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
+                const { source, operation, unknown } = invocation;
+                const primitives = source ? this.primitiveChoices(source) : [];
+                const unresolved = unknown || source && (!source.values.size ||
+                    [...source.values].some(value => value.tag === "text-operation") && !primitives.length ||
+                    operation === "eval-script" && [...source.values].some(value => value.tag !== "primitive" && value.tag !== "text-operation"));
+                const choices = unresolved ? null : source
+                    ? [...new Set(primitives.filter(value => operation === "eval-script" || typeof value === "string").map(String))]
+                    : operation === "eval-script" ? ["undefined"] : [];
+                return { node: invocation.node, operation, direct: invocation.direct, choices };
+            }),
+        };
     }
 }
 
 export function sourceConstructorInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): ConstructorInvocation[] {
-    return new SourceValueFlow(program, entries).solve();
+    return new SourceValueFlow(program, entries).solve().constructors;
+}
+
+export function sourceEvaluationInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): EvaluationInvocation[] {
+    return new SourceValueFlow(program, entries).solve().evaluations;
 }

@@ -22,6 +22,7 @@ import {
 } from "./emit/index";
 import { invokeCc } from "./link/cc";
 import { staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
+import { sourceEvaluationInvocations } from "./source-value-flow";
 import {
     type NativeAddonManifest,
     loadNativeAddonManifest,
@@ -201,6 +202,17 @@ function permanentLimitDiagnostics(
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     const checker = program.getTypeChecker();
+    const finiteDirectCalls = new Map<ts.Node, boolean>();
+    if (opts.test262Observation) for (const invocation of sourceEvaluationInvocations(program,{evaluations:[
+        ...(opts.test262Observation.evalScriptEntries ?? []),
+        ...(opts.test262Observation.directEvalEntries ?? []),
+        ...(opts.test262Observation.indirectEvalEntries ?? []),
+    ]})) {
+        if (!invocation.direct) continue;
+        const represented = invocation.choices !== null && invocation.choices.every(source =>
+            opts.test262Observation!.directEvalEntries?.some(entry => entry.source === source));
+        finiteDirectCalls.set(invocation.node,(finiteDirectCalls.get(invocation.node) ?? true) && represented);
+    }
     for (const sf of program.getSourceFiles()) {
         if (sf.isDeclarationFile || sf.fileName === libCoreDts) continue;
         const visit = (node: ts.Node): void => {
@@ -244,10 +256,7 @@ function permanentLimitDiagnostics(
                         const canDispatchRuntimeManifest =
                             source === null &&
                             !!(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode));
-                        const canDispatchFiniteDirectEval = source !== null &&
-                            !!opts.test262Observation?.directEvalEntries?.some((entry) =>
-                                entry.source === source,
-                            );
+                        const canDispatchFiniteDirectEval = finiteDirectCalls.get(node) === true;
                         const canCompileWithoutDelegation = opts.test262Observation
                             ? node.arguments.length === 0 || canDispatchFiniteDirectEval
                             : canAotCompileEvalCall(node);

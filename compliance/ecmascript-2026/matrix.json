@@ -2673,7 +2673,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
-      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts", "tests/property/eval-source-flow.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
       "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete."]
     },
     {
@@ -2733,7 +2733,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["value properties", "global functions", "constructors", "Reflect", "global object semantics"],
-      "localEvidence": { "property": ["tests/property/reflect-construct.property.test.ts", "tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": ["reflect_construct_argument_width"], "e2e": ["global_number_predicates", "reflect_construct_validation", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "localEvidence": { "property": ["tests/property/reflect-construct.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/eval-source-flow.property.test.ts"], "generatedRegression": [], "stress": ["reflect_construct_argument_width"], "e2e": ["global_number_predicates", "reflect_construct_validation", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
       "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance; the remaining Reflect operations require exact clause partitions and exhaustive pinned Test262 evidence."]
     },
     {

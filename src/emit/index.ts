@@ -25789,8 +25789,7 @@ class Emitter {
         };
         const visit = (node: ts.Node): void => {
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
-            if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && ts.isCallExpression(node) &&
-                ts.isIdentifier(node.expression) && node.expression.text === "eval") {
+            if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.isDirectEvalSyntax(node)) {
                 for (const symbol of this.checker.getSymbolsInScope(node, ts.SymbolFlags.Value)) {
                     const identifier = this.environmentBindingIdentifier(symbol);
                     if (identifier) captureReference(identifier, symbol);
@@ -25809,6 +25808,12 @@ class Emitter {
         return this.freshTemp(`${clean}__cell`);
     }
 
+    private isDirectEvalSyntax(node: ts.Node): node is ts.CallExpression {
+        if (!ts.isCallExpression(node) || node.questionDotToken) return false;
+        const callee = this.unwrapTransparentExpression(node.expression);
+        return ts.isIdentifier(callee) && callee.text === "eval";
+    }
+
     private sourceEnvironmentEnabled(source: ts.SourceFile): boolean {
         if (!this.options.test262Observation || !this.isJavaScriptSourceFile(source)) return false;
         const cached = this.sourceEnvironmentFiles.get(source);
@@ -25817,7 +25822,7 @@ class Emitter {
         let enabled = false;
         while (worklist.length > 0 && !enabled) {
             const node = worklist.pop()!;
-            if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "eval") enabled = true;
+            if (this.isDirectEvalSyntax(node)) enabled = true;
             else ts.forEachChild(node, child => { worklist.push(child); });
         }
         this.sourceEnvironmentFiles.set(source, enabled);
@@ -39898,6 +39903,7 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
+        if (this.options.test262Observation && this.isDirectEvalSyntax(call)) return this.emitTest262DirectEvalCall(call);
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
@@ -40083,9 +40089,6 @@ class Emitter {
                 c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
                 ty: T_VALUE,
             });
-        }
-        if (name === "eval" && this.options.test262Observation && !call.questionDotToken) {
-            return this.emitTest262DirectEvalCall(call);
         }
         const hostGlobal = this.test262HostGlobalBindingName(calleeId);
         if (hostGlobal) {

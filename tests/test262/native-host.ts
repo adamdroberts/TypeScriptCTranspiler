@@ -13,7 +13,7 @@ import {
     moduleRequestKey,
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
-import { staticStringExpressionTexts } from "../../src/module-specifiers";
+import { sourceEvaluationInvocations } from "../../src/source-value-flow";
 import {
     bindingNames,
     earlyModuleStaticSemanticsFailure,
@@ -93,39 +93,6 @@ function sourceFileIsStrict(sourceFile: ts.SourceFile): boolean {
     return false;
 }
 
-function bindingNameContains(name: ts.BindingName, expected: string): boolean {
-    const worklist: ts.BindingName[] = [name];
-    while (worklist.length > 0) {
-        const current = worklist.pop()!;
-        if (ts.isIdentifier(current)) {
-            if (current.text === expected) return true;
-            continue;
-        }
-        for (const element of current.elements) {
-            if (element && ts.isBindingElement(element)) worklist.push(element.name);
-        }
-    }
-    return false;
-}
-
-/** Conservative lexical proof for the finite host. A source record with any
- * potentially active source binding named `eval` is left to the compiler's
- * fail-closed ordinary-call path. */
-function sourceRecordMayShadowEval(sourceFile: ts.SourceFile): boolean {
-    const worklist: ts.Node[] = [...sourceFile.statements];
-    while (worklist.length > 0) {
-        const node = worklist.pop()!;
-        if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
-            node.name?.text === "eval") return true;
-        if (ts.isVariableDeclaration(node) && bindingNameContains(node.name, "eval")) return true;
-        if (ts.isCatchClause(node) && node.variableDeclaration &&
-            bindingNameContains(node.variableDeclaration.name, "eval")) return true;
-        if (ts.isFunctionLike(node) || ts.isClassLike(node)) continue;
-        ts.forEachChild(node, (child) => { worklist.push(child); });
-    }
-    return false;
-}
-
 function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
     for (let current: ts.Node | undefined = node; current; current = current.parent) {
         if (ts.isClassLike(current) || ts.isClassStaticBlockDeclaration(current)) return true;
@@ -139,346 +106,73 @@ function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
     return inherited;
 }
 
-function transparentExpression(expression: ts.Expression): ts.Expression {
-    while (
-        ts.isParenthesizedExpression(expression) ||
-        ts.isAsExpression(expression) ||
-        ts.isTypeAssertionExpression(expression) ||
-        ts.isSatisfiesExpression(expression) ||
-        ts.isNonNullExpression(expression)
-    ) {
-        expression = expression.expression;
-    }
-    return expression;
-}
-
-function staticMemberNames(expression: ts.PropertyAccessExpression | ts.ElementAccessExpression): string[] {
-    if (ts.isPropertyAccessExpression(expression)) return [expression.name.text];
-    return expression.argumentExpression
-        ? staticStringExpressionTexts(expression.argumentExpression)
-        : [];
-}
-
-/** Build one conservative value-flow graph for expressions which can carry a
- * Realm's %eval% identity. Runtime identity checking makes over-approximation
- * safe; the graph is only used to prove the finite source records that must be
- * compiled ahead of time. */
-function evalIdentityAliases(sourceFile: ts.SourceFile): ReadonlyMap<string, readonly ts.Expression[]> {
-    const aliases = new Map<string, ts.Expression[]>();
-    const add = (name: string, expression: ts.Expression): void => {
-        const values = aliases.get(name) ?? [];
-        values.push(expression);
-        aliases.set(name, values);
-    };
-    const worklist: ts.Node[] = [sourceFile];
-    while (worklist.length > 0) {
-        const node = worklist.pop()!;
-        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-            add(node.name.text, node.initializer);
-        } else if (
-            ts.isBinaryExpression(node) &&
-            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            ts.isIdentifier(transparentExpression(node.left))
-        ) {
-            add((transparentExpression(node.left) as ts.Identifier).text, node.right);
-        }
-        ts.forEachChild(node, (child) => { worklist.push(child); });
-    }
-    return aliases;
-}
-
-function expressionMayCarryEvalIdentity(
-    expression: ts.Expression,
-    evalMayBeShadowed: boolean,
-    aliases: ReadonlyMap<string, readonly ts.Expression[]>,
-    seenAliases: Set<string> = new Set(),
-): boolean {
-    expression = transparentExpression(expression);
-    if (ts.isIdentifier(expression)) {
-        if (expression.text === "eval" && !evalMayBeShadowed) return true;
-        if (seenAliases.has(expression.text)) return false;
-        const values = aliases.get(expression.text);
-        if (!values) return false;
-        seenAliases.add(expression.text);
-        const result = values.some((value) =>
-            expressionMayCarryEvalIdentity(value, evalMayBeShadowed, aliases, seenAliases));
-        seenAliases.delete(expression.text);
-        return result;
-    }
-    if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
-        const names = staticMemberNames(expression);
-        if (names.includes("eval")) return true;
-        if (names.some((name) => name === "bind" || name === "valueOf")) {
-            return expressionMayCarryEvalIdentity(
-                expression.expression,
-                evalMayBeShadowed,
-                aliases,
-                seenAliases,
-            );
-        }
-        return false;
-    }
-    if (ts.isConditionalExpression(expression)) {
-        return expressionMayCarryEvalIdentity(
-            expression.whenTrue,
-            evalMayBeShadowed,
-            aliases,
-            seenAliases,
-        ) || expressionMayCarryEvalIdentity(
-            expression.whenFalse,
-            evalMayBeShadowed,
-            aliases,
-            seenAliases,
-        );
-    }
-    if (ts.isBinaryExpression(expression)) {
-        if (
-            expression.operatorToken.kind === ts.SyntaxKind.CommaToken ||
-            expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
-        ) {
-            return expressionMayCarryEvalIdentity(
-                expression.right,
-                evalMayBeShadowed,
-                aliases,
-                seenAliases,
-            );
-        }
-        if (
-            expression.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-            expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-            expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
-        ) {
-            return expressionMayCarryEvalIdentity(
-                expression.left,
-                evalMayBeShadowed,
-                aliases,
-                seenAliases,
-            ) || expressionMayCarryEvalIdentity(
-                expression.right,
-                evalMayBeShadowed,
-                aliases,
-                seenAliases,
-            );
-        }
-    }
-    if (ts.isCallExpression(expression)) {
-        const callee = transparentExpression(expression.expression);
-        if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
-            if (staticMemberNames(callee).includes("bind")) {
-                return expressionMayCarryEvalIdentity(
-                    callee.expression,
-                    evalMayBeShadowed,
-                    aliases,
-                    seenAliases,
-                );
-            }
-        }
-    }
-    return false;
-}
-
-function finiteApplyArgumentExpressions(expression: ts.Expression | undefined): readonly ts.Expression[] {
-    if (!expression) return [];
-    expression = transparentExpression(expression);
-    if (!ts.isArrayLiteralExpression(expression) || expression.elements.length === 0) return [];
-    const first = expression.elements[0];
-    return first && ts.isExpression(first) && !ts.isSpreadElement(first) ? [first] : [];
-}
-
-/** Return the possible String argument expressions for an indirect call of a
- * %eval% identity. All ordinary calls still use the runtime identity guard. */
-function indirectEvalSourceExpressions(
-    call: ts.CallExpression,
-    evalMayBeShadowed: boolean,
-    aliases: ReadonlyMap<string, readonly ts.Expression[]>,
-): readonly ts.Expression[] {
-    const callee = transparentExpression(call.expression);
-    if (
-        ts.isIdentifier(callee) &&
-        callee.text === "eval" &&
-        !evalMayBeShadowed &&
-        !aliases.has("eval")
-    ) {
-        return [];
-    }
-    if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
-        const names = staticMemberNames(callee);
-        if (names.includes("call") && expressionMayCarryEvalIdentity(
-            callee.expression,
-            evalMayBeShadowed,
-            aliases,
-        )) {
-            return call.arguments[1] && ts.isExpression(call.arguments[1])
-                ? [call.arguments[1]]
-                : [];
-        }
-        if (names.includes("apply") && expressionMayCarryEvalIdentity(
-            callee.expression,
-            evalMayBeShadowed,
-            aliases,
-        )) {
-            return finiteApplyArgumentExpressions(call.arguments[1]);
-        }
-    }
-    if (expressionMayCarryEvalIdentity(callee, evalMayBeShadowed, aliases)) {
-        return call.arguments[0] && ts.isExpression(call.arguments[0])
-            ? [call.arguments[0]]
-            : [];
-    }
-    return [];
-}
-
-/** Derive the transitive ParseScript source graph from one canonical AST
- * worklist. Runtime strings outside this finite graph fail closed. */
+/** Eval and dynamic Function construction consume the same source-owned
+ * value/location/List graph. Extend its exact-source records to a fixed point;
+ * source bindings remain isolated exactly as in native Script compilation. */
 export function finiteEvalScriptSourceGraph(
     roots: readonly { readonly path: string; readonly source: string }[],
 ): FiniteEvalScriptSourceGraph {
     const sources = new Set<string>();
-    const directSources = new Map<string, {
-        source: string;
-        strictCaller: boolean;
-        strict: boolean;
-    }>();
-    const indirectSources = new Map<string, {
-        source: string;
-        strict: boolean;
-    }>();
-    const records: Array<{
-        path: string;
-        source: string;
-        strictContext?: boolean;
-    }> = roots.map((root) => ({ ...root }));
-    for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
-        const record = records[recordIndex]!;
-        const sourceFile = createEcmaSourceFile(
-            record.path,
-            record.source,
-            ts.ScriptTarget.ESNext,
-            true,
-            ts.ScriptKind.JS,
-        );
-        const recordStrict = record.strictContext ?? sourceFileIsStrict(sourceFile);
-        const evalMayBeShadowed = sourceRecordMayShadowEval(sourceFile);
-        const evalAliases = evalIdentityAliases(sourceFile);
-        const worklist: ts.Node[] = [sourceFile];
-        while (worklist.length > 0) {
-            const node = worklist.pop()!;
-            if (
-                ts.isPropertyAccessExpression(node) &&
-                node.name.text === "evalScript"
-            ) {
-                const parent = node.parent;
-                if (!ts.isCallExpression(parent) || parent.expression !== node) {
-                    const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-                    return {
-                        sources: [],
-                        indirectEvalSources: [],
-                        directEvalSources: [],
-                        error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript must be called directly so its finite source graph can be proven`,
-                    };
-                }
-                const alternatives = parent.arguments[0]
-                    ? staticStringExpressionTexts(parent.arguments[0]!)
-                    : ["undefined"];
-                if (alternatives.length === 0) {
-                    const location = sourceFile.getLineAndCharacterOfPosition(parent.getStart(sourceFile));
-                    return {
-                        sources: [],
-                        indirectEvalSources: [],
-                        directEvalSources: [],
-                        error: `${record.path}:${location.line + 1}:${location.character + 1}: evalScript source is not a finite static string expression`,
-                    };
-                }
-                for (const source of alternatives) {
+    const directSources = new Map<string, {source:string;strictCaller:boolean;strict:boolean}>();
+    const indirectSources = new Map<string, {source:string;strict:boolean}>();
+    const records: Array<{path:string;source:string;strictContext?:boolean;evaluation?:boolean}> = roots.map(root => ({...root}));
+    for (;;) {
+        const byPath = new Map(records.map(record => [path.resolve(record.path),record]));
+        const options: ts.CompilerOptions = {noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext};
+        const host = ts.createCompilerHost(options);
+        host.getSourceFile = filename => {
+            const record = byPath.get(path.resolve(filename));
+            if (!record) return undefined;
+            const file = createEcmaSourceFile(filename,record.source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS);
+            (file as ts.SourceFile & {externalModuleIndicator?:ts.Node}).externalModuleIndicator ??= file;
+            return file;
+        };
+        host.fileExists = filename => byPath.has(path.resolve(filename));
+        host.readFile = filename => byPath.get(path.resolve(filename))?.source;
+        const program = ts.createProgram([...byPath.keys()],options,host);
+        const before = records.length;
+        let unresolved: string | null = null;
+        for (const invocation of sourceEvaluationInvocations(program,{evaluations:records.filter(record => record.evaluation)
+            .map(record => ({source:record.source,entry:path.resolve(record.path)}))})) {
+            const file = invocation.node.getSourceFile(),record = byPath.get(path.resolve(file.fileName))!;
+            if (invocation.choices === null) {
+                if (invocation.operation === "eval" && !invocation.direct) continue;
+                const location = file.getLineAndCharacterOfPosition(invocation.node.getStart(file));
+                const label = invocation.operation === "eval-script" ? "evalScript" : "direct eval";
+                unresolved ??= `${record.path}:${location.line+1}:${location.character+1}: ${label} source is not a finite static string expression`;
+                continue;
+            }
+            for (const source of invocation.choices) {
+                const parsed = createEcmaSourceFile("eval-source.js",source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,"script");
+                if (invocation.operation === "eval-script") {
                     if (sources.has(source)) continue;
                     sources.add(source);
-                    records.push({
-                        path: `__tsc2c_eval_script__/${sha256Text(source)}.js`,
-                        source,
-                    });
+                    records.push({path:`__tsc2c_eval_script__/${sha256Text(source)}.js`,source,evaluation:true});
+                } else if (invocation.direct) {
+                    const strictCaller = directEvalIsStrict(invocation.node,record.strictContext ?? sourceFileIsStrict(file));
+                    const strict = strictCaller || sourceFileIsStrict(parsed),key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
+                    if (directSources.has(key)) continue;
+                    directSources.set(key,{source,strictCaller,strict});
+                    records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,
+                        strictContext:strict,evaluation:true});
+                } else {
+                    if (indirectSources.has(source)) continue;
+                    const strict = sourceFileIsStrict(parsed);
+                    indirectSources.set(source,{source,strict});
+                    records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,
+                        strictContext:strict,evaluation:true});
                 }
-            }
-            if (ts.isCallExpression(node) &&
-                ts.isIdentifier(node.expression) && node.expression.text === "eval") {
-                const alternatives = node.arguments[0]
-                    ? staticStringExpressionTexts(node.arguments[0]!)
-                    : [];
-                {
-                    const strictCaller = directEvalIsStrict(node, recordStrict);
-                    if (node.arguments.length > 0 && alternatives.length === 0) {
-                        const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-                        return {
-                            sources: [],
-                            indirectEvalSources: [],
-                            directEvalSources: [],
-                            error: `${record.path}:${location.line + 1}:${location.character + 1}: direct eval source is not a finite static string expression`,
-                        };
-                    }
-                    for (const source of alternatives) {
-                        const evalSourceFile = createEcmaSourceFile(
-                            "__tsc2c_direct_eval_probe__.js",
-                            source,
-                            ts.ScriptTarget.ESNext,
-                            true,
-                            ts.ScriptKind.JS,
-                        );
-                        const strict = strictCaller || sourceFileIsStrict(evalSourceFile);
-                        const key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
-                        if (directSources.has(key)) continue;
-                        directSources.set(key, { source, strictCaller, strict });
-                        records.push({
-                            path: `__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,
-                            source,
-                            strictContext: strict,
-                        });
-                    }
-                }
-            }
-            if (ts.isCallExpression(node)) {
-                for (const expression of indirectEvalSourceExpressions(
-                    node,
-                    evalMayBeShadowed,
-                    evalAliases,
-                )) {
-                    for (const source of staticStringExpressionTexts(expression)) {
-                        if (indirectSources.has(source)) continue;
-                        const evalSourceFile = createEcmaSourceFile(
-                            "__tsc2c_indirect_eval_probe__.js",
-                            source,
-                            ts.ScriptTarget.ESNext,
-                            true,
-                            ts.ScriptKind.JS,
-                        );
-                        const strict = sourceFileIsStrict(evalSourceFile);
-                        indirectSources.set(source, { source, strict });
-                        records.push({
-                            path: `__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,
-                            source,
-                            strictContext: strict,
-                        });
-                    }
-                }
-            }
-            const children: ts.Node[] = [];
-            node.forEachChild((child) => {
-                children.push(child);
-            });
-            for (let index = children.length - 1; index >= 0; index--) {
-                worklist.push(children[index]!);
             }
         }
+        if (records.length === before) {
+            if (unresolved) return {sources:[],directEvalSources:[],indirectEvalSources:[],error:unresolved};
+            break;
+        }
     }
-    return {
-        sources: [...sources].sort(),
-        indirectEvalSources: [...indirectSources.values()].sort((left, right) =>
-            Number(left.strict) - Number(right.strict) || left.source.localeCompare(right.source),
-        ),
-        directEvalSources: [...directSources.values()].sort((left, right) =>
-            Number(left.strictCaller) - Number(right.strictCaller) ||
-            left.source.localeCompare(right.source),
-        ),
-        error: null,
-    };
+    return {sources:[...sources].sort(),indirectEvalSources:[...indirectSources.values()].sort((left,right) =>
+        Number(left.strict)-Number(right.strict) || left.source.localeCompare(right.source)),
+        directEvalSources:[...directSources.values()].sort((left,right) =>
+            Number(left.strictCaller)-Number(right.strictCaller) || left.source.localeCompare(right.source)),error:null};
 }
 
 function canonicalRelativePath(value: string, label: string): string {
