@@ -475,7 +475,6 @@ interface Test262GlobalReferencePlan {
 interface ModuleVarBindingPlan {
     readonly symbol: ts.Symbol;
     readonly name: ts.Identifier;
-    readonly declarations: ts.VariableDeclaration[];
     readonly cName: string;
     readonly gcRoot: string;
 }
@@ -597,13 +596,11 @@ class Emitter {
      * independently of the statement that first evaluates a declaration. */
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     private moduleFunctionDeclarations = new Map<ts.FunctionDeclaration, ModuleFunctionBindingPlan>();
-    private moduleVarDeclarationSymbols = new WeakMap<ts.VariableDeclaration, ts.Symbol>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
     /** Direct module `let`/`const` declarations share exporter-owned slots.
      * The initialized bit is the canonical TDZ state read by local references,
      * imports, and indirect re-exports. */
     private moduleLexicalBindings = new Map<ts.Symbol, ModuleLexicalBindingPlan>();
-    private moduleLexicalDeclarationSymbols = new WeakMap<ts.Declaration, ts.Symbol>();
     private moduleLexicalBindingsBySource = new WeakMap<ts.SourceFile, ModuleLexicalBindingPlan[]>();
     /** TypeScript/non-Module top-level lexical bindings retain one real TDZ
      * bit when a closure boundary needs environment state.  The source-file
@@ -22423,6 +22420,7 @@ class Emitter {
             ts.isSourceFile(declaration) ||
             ts.isExportAssignment(declaration) ||
             ts.isVariableDeclaration(declaration) ||
+            ts.isBindingElement(declaration) ||
             ts.isFunctionDeclaration(declaration) ||
             ts.isClassDeclaration(declaration) ||
             ts.isEnumDeclaration(declaration),
@@ -22577,7 +22575,7 @@ class Emitter {
             return this.emitFunctionDeclarationReferenceClosure(declaration, type);
         }
         if (
-            (ts.isVariableDeclaration(declaration) || ts.isEnumDeclaration(declaration)) &&
+            (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isEnumDeclaration(declaration)) &&
             declaration.name &&
             ts.isIdentifier(declaration.name)
         ) {
@@ -24355,6 +24353,10 @@ class Emitter {
         return declaration && ts.isFunctionDeclaration(declaration) ? this.moduleFunctionDeclarations.get(declaration) : undefined;
     }
 
+    private isModuleBindingSymbol(symbol: ts.Symbol): boolean {
+        return this.moduleVarBindings.has(symbol) || this.moduleLexicalBindings.has(symbol) || !!this.moduleFunctionBindingForSymbol(symbol);
+    }
+
     /** Module bindings borrow the same value/root/TDZ handles as ordinary
      * references. Import aliases keep those handles but own their immutable
      * local name. Instantiation and execution enter the same retained record. */
@@ -24465,30 +24467,24 @@ class Emitter {
                     ts.NodeFlags.AwaitUsing
                 )) === 0
             ) {
-                if (!ts.isIdentifier(node.name)) {
-                    // The existing binding-pattern lowering owns its stable
-                    // fail-closed diagnostic until it joins this shared plan.
-                    return;
+                for (const name of this.test262BindingNames(node.name)) {
+                    const symbol = this.symbolForIdentifier(name);
+                    if (!symbol) unsupported(name, "Module binding requires a canonical retained cell");
+                    let plan = this.moduleVarBindings.get(symbol);
+                    if (!plan) {
+                        const cName = this.declaredName(name);
+                        plan = {
+                            symbol,
+                            name,
+                            cName,
+                            gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`),
+                        };
+                        this.moduleVarBindings.set(symbol, plan);
+                        this.symbolStorageTypes.set(symbol, T_VALUE);
+                        this.globalDynamicRoots.set(symbol,plan.gcRoot);
+                        plans.push(plan);
+                    }
                 }
-                const symbol = this.symbolForIdentifier(node.name);
-                if (!symbol) return;
-                let plan = this.moduleVarBindings.get(symbol);
-                if (!plan) {
-                    const cName = this.declaredName(node.name);
-                    plan = {
-                        symbol,
-                        name: node.name,
-                        declarations: [],
-                        cName,
-                        gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`),
-                    };
-                    this.moduleVarBindings.set(symbol, plan);
-                    this.symbolStorageTypes.set(symbol, T_VALUE);
-                    this.globalDynamicRoots.set(symbol,plan.gcRoot);
-                    plans.push(plan);
-                }
-                plan.declarations.push(node);
-                this.moduleVarDeclarationSymbols.set(node, symbol);
             }
             ts.forEachChild(node, visit);
         };
@@ -24508,40 +24504,37 @@ class Emitter {
         }
     }
 
-    private moduleVarBindingForDeclaration(
-        declaration: ts.VariableDeclaration,
-    ): ModuleVarBindingPlan | null {
-        const symbol = this.moduleVarDeclarationSymbols.get(declaration);
-        return symbol ? this.moduleVarBindings.get(symbol) ?? null : null;
-    }
-
-    private emitModuleVarWrite(
-        buf: CBuf,
-        declaration: ts.VariableDeclaration,
-        value: EmitResult,
-        valueNode: ts.Node,
-    ): boolean {
-        const binding = this.moduleVarBindingForDeclaration(declaration);
-        if (!binding) return false;
-        const boxed = this.coerce(value, T_VALUE, valueNode);
-        buf.line(`${binding.cName} = ${boxed};`);
-        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
-        return true;
-    }
-
-    private emitModuleVarInitializer(
-        buf: CBuf,
-        declaration: ts.VariableDeclaration,
-    ): boolean {
-        if (!this.moduleVarBindingForDeclaration(declaration)) return false;
-        if (declaration.initializer) {
-            this.emitModuleVarWrite(
-                buf,
-                declaration,
-                this.emitExpr(declaration.initializer),
-                declaration.initializer,
-            );
+    private moduleVariableDeclarationKind(declaration: ts.VariableDeclaration): "var" | "lexical" | null {
+        const source = declaration.getSourceFile();
+        if (!this.isJavaScriptSourceFile(source) || !ts.isExternalModule(source) || this.isTest262ScriptSourceFile(source) ||
+            !ts.isVariableDeclarationList(declaration.parent)) return null;
+        const list = declaration.parent;
+        if ((list.flags & ts.NodeFlags.Using) !== 0) return null;
+        if ((list.flags & ts.NodeFlags.BlockScoped) !== 0)
+            return ts.isVariableStatement(list.parent) && list.parent.parent === source ? "lexical" : null;
+        for (let node: ts.Node | undefined = list.parent; node; node = node.parent) {
+            if (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node)) return null;
+            if (ts.isSourceFile(node)) return "var";
         }
+        return null;
+    }
+
+    private emitModuleBindingLeaf(buf: CBuf, identifier: ts.Identifier, value: string): void {
+        const symbol = this.symbolForIdentifier(identifier);
+        const binding = symbol && (this.moduleVarBindings.get(symbol) ?? this.moduleLexicalBindings.get(symbol));
+        if (!binding) unsupported(identifier, "Module binding requires a canonical retained cell");
+        buf.line(`${binding.cName} = ${value};`);
+        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+        if ("initialized" in binding) buf.line(`${binding.initialized} = true;`);
+    }
+
+    private emitModuleVariableInitializer(buf: CBuf, declaration: ts.VariableDeclaration): boolean {
+        const kind = this.moduleVariableDeclarationKind(declaration);
+        if (!kind) return false;
+        if (kind === "var" && !declaration.initializer) return true;
+        const value = declaration.initializer ? this.coerce(this.emitExpr(declaration.initializer),T_VALUE,declaration.initializer)
+            : "tsc_value_undefined()";
+        this.emitBindingInitialization(buf,declaration.name,value,(target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
         return true;
     }
 
@@ -24576,7 +24569,6 @@ class Emitter {
                 immutable,
             };
             this.moduleLexicalBindings.set(symbol, plan);
-            this.moduleLexicalDeclarationSymbols.set(declaration, symbol);
             this.symbolStorageTypes.set(symbol, T_VALUE);
             this.globalDynamicRoots.set(symbol,plan.gcRoot);
             plans.push(plan);
@@ -24599,13 +24591,8 @@ class Emitter {
             // plain `const` declaration.
             if ((flags & ts.NodeFlags.Using) !== 0) continue;
             for (const declaration of statement.declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name)) {
-                    // Binding-pattern declarations retain the existing stable
-                    // fail-closed diagnostic until their BoundNames join this
-                    // same plan.
-                    continue;
-                }
-                addPlan(declaration, declaration.name, (flags & ts.NodeFlags.Const) !== 0);
+                for (const name of this.test262BindingNames(declaration.name))
+                    addPlan(declaration, name, (flags & ts.NodeFlags.Const) !== 0);
             }
         }
         this.moduleLexicalBindingsBySource.set(sf, plans);
@@ -24664,24 +24651,8 @@ class Emitter {
     private moduleLexicalBindingForDeclaration(
         declaration: ts.VariableDeclaration | ts.ClassDeclaration,
     ): ModuleLexicalBindingPlan | null {
-        const symbol = this.moduleLexicalDeclarationSymbols.get(declaration);
+        const symbol = declaration.name && ts.isIdentifier(declaration.name) ? this.symbolForIdentifier(declaration.name) : undefined;
         return symbol ? this.moduleLexicalBindings.get(symbol) ?? null : null;
-    }
-
-    private emitModuleLexicalInitializer(
-        buf: CBuf,
-        declaration: ts.VariableDeclaration,
-    ): boolean {
-        const binding = this.moduleLexicalBindingForDeclaration(declaration);
-        if (!binding) return false;
-        const value = declaration.initializer
-            ? this.emitExpr(declaration.initializer)
-            : { c: "tsc_value_undefined()", ty: T_VALUE };
-        const boxed = this.coerce(value, T_VALUE, declaration.initializer ?? declaration.name);
-        buf.line(`${binding.cName} = ${boxed};`);
-        buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
-        buf.line(`${binding.initialized} = true;`);
-        return true;
     }
 
     private emitModuleClassLexicalInitializer(
@@ -25544,7 +25515,7 @@ class Emitter {
             if (!this.sourceEnvironmentEnabled(owner.getSourceFile()) || this.test262ScriptGlobalBindingName(identifier)) return;
             const symbol = this.symbolForIdentifier(identifier);
             if (!symbol || captures.has(symbol)) return;
-            if (this.moduleVarBindings.has(symbol) || this.moduleLexicalBindings.has(symbol) || this.moduleFunctionBindingForSymbol(symbol)) return;
+            if (this.isModuleBindingSymbol(symbol)) return;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
             const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
             const parameter = declaration ? this.javaScriptFormalParameterForDeclaration(declaration) : null;
@@ -25862,6 +25833,7 @@ class Emitter {
             if (
                 sym &&
                 decl &&
+                (!this.isModuleBindingSymbol(sym) || this.dispatchCaptureClone) &&
                 !this.test262ScriptGlobalBindingName(node) &&
                 (
                     !this.isNodeWithin(decl, fn) ||
@@ -32330,8 +32302,7 @@ class Emitter {
         for (const d of vs.declarationList.declarations) {
             if (this.emitTest262ScriptGlobalLexicalInitializer(initBuf, d)) continue;
             if (this.emitTest262ScriptGlobalVarInitializer(initBuf, d)) continue;
-            if (this.emitModuleLexicalInitializer(initBuf, d)) continue;
-            if (this.emitModuleVarInitializer(initBuf, d)) continue;
+            if (this.emitModuleVariableInitializer(initBuf, d)) continue;
             if (!ts.isIdentifier(d.name)) {
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
                     this.emitTopLevelCommonJsModuleDestructuring(initBuf, d);
@@ -32814,8 +32785,7 @@ class Emitter {
             (list.flags & ts.NodeFlags.Const) !== 0;
         for (const d of list.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
-            if (this.emitModuleLexicalInitializer(buf, d)) continue;
-            if (this.emitModuleVarInitializer(buf, d)) continue;
+            if (this.emitModuleVariableInitializer(buf, d)) continue;
             const sharedFunction = (list.flags & ts.NodeFlags.BlockScoped) === 0 && ts.isIdentifier(d.name)
                 ? this.lexicalBindingForSymbol(this.symbolForIdentifier(d.name)) : null;
             if (sharedFunction && ts.isFunctionDeclaration(sharedFunction.declaration)) {
@@ -33411,6 +33381,11 @@ class Emitter {
     ): void {
         if (ts.isVariableDeclarationList(initializer)) {
             const declaration = initializer.declarations[0];
+            if (initializer.declarations.length === 1 && declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
+                this.emitBindingInitialization(buf,declaration.name,this.coerce(value,T_VALUE,declaration.name),
+                    (target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
+                return;
+            }
             if (initializer.declarations.length !== 1 || !declaration || !ts.isIdentifier(declaration.name)) {
                 unsupported(initializer, "iteration binding must be one simple identifier");
             }
@@ -33424,8 +33399,6 @@ class Emitter {
                 );
                 return;
             }
-            if (this.emitModuleVarWrite(buf, declaration, value, declaration.name)) return;
-
             const cell = this.currentFunctionCellForSymbol(symbol);
             const inferred = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
             const storage = cell?.type ?? this.variableDeclarationStorageType(
@@ -33486,7 +33459,7 @@ class Emitter {
         if (ts.isVariableDeclarationList(fis.initializer)) {
             const d = fis.initializer.declarations[0];
             if (fis.initializer.declarations.length !== 1 || !d ||
-                !ts.isIdentifier(d.name) && d !== test262GlobalPattern)
+                !ts.isIdentifier(d.name) && d !== test262GlobalPattern && this.moduleVariableDeclarationKind(d) !== "var")
                 unsupported(fis.initializer, "for-in binding must be simple identifier");
         } else if (!ts.isIdentifier(fis.initializer)) {
             unsupported(fis.initializer, "for-in binding form");
@@ -33677,7 +33650,7 @@ class Emitter {
             unsupported(fos.initializer, "invalid synchronous iteration declaration");
         }
         if (declaration && !this.isForOfLexicalDeclaration(declaration) &&
-            !ts.isIdentifier(declaration.name) && !globalPattern) {
+            !ts.isIdentifier(declaration.name) && !globalPattern && this.moduleVariableDeclarationKind(declaration) !== "var") {
             unsupported(fos.initializer, "synchronous iteration var pattern requires a canonical function environment");
         }
         buf.open("");
@@ -33708,6 +33681,9 @@ class Emitter {
                 });
             } else if (globalPattern) {
                 this.emitTest262ScriptBindingName(buf, globalPattern.name, value, "var");
+            } else if (declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
+                this.emitBindingInitialization(buf,declaration.name,value,
+                    (target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
             } else {
                 const elementType = iter.ty.kind === "array" ? iter.ty.elem ?? T_VALUE
                     : iter.ty.kind === "string" ? T_STRING : T_VALUE;
@@ -41071,7 +41047,7 @@ class Emitter {
             const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
             if (!declaration || !identifier || declaration.getSourceFile().isDeclarationFile ||
                 this.test262ScriptGlobalBindingName(identifier)) continue;
-            if (this.moduleVarBindings.has(symbol) || this.moduleLexicalBindings.has(symbol) || this.moduleFunctionBindingForSymbol(symbol)) continue;
+            if (this.isModuleBindingSymbol(symbol)) continue;
             const outer = !!owner && !this.isNodeWithin(declaration, owner);
             if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
             references.push(this.environmentBindingReference(symbol, call, outer));

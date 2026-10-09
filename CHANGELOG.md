@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Allocate Module BoundNames into shared cells and initialize declarations and iteration through the canonical binding tree. Preserve TDZ/default/rest/close semantics and live BindingElement exports; delete flat initializer and declaration-symbol predecessors and verify CLI/profile native E2E in both memory modes.
+
 - Retain native source Module environments with shared binding cells, immutable live imports and instantiated function owners. Preserve Module this/new.target boundaries and explicit parse-goal strictness; verify independent Node, semantic partitions and retained-owner stress in both memory modes.
 
 - Share direct-eval Reference context across ordinary and resumed call application. Preserve caller cells, actual Lists, saved callee identity, optional indirect calls and abrupt arguments; retain implicit closure captures and mutable global source locations through shared collections. Verify generated semantics and deep native ownership in both memory modes.
