@@ -2673,7 +2673,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
-      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts", "tests/property/eval-source-flow.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
+      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts", "tests/property/eval-source-flow.property.test.ts", "tests/property/suspended-eval-context.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
       "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete."]
     },
     {

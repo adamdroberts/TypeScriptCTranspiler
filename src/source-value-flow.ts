@@ -85,6 +85,7 @@ function propertyName(node: ts.Node | undefined): string | null {
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
+    private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
     private readonly functions = new Map<FunctionNode, FunctionOwner>();
     private readonly copies = new Map<Cell, Set<Cell>>();
@@ -141,6 +142,7 @@ class SourceValueFlow {
                             for (const atom of base.values) {
                                 const owner = atom.tag === "object" ? atom.owner : atom.tag === "function" ? atom.owner.fields : null;
                                 if (owner) this.copy(value, this.field(owner, name));
+                                if (atom.tag === "global") this.copy(value, this.globalBinding(name));
                             }
                         });
                     }
@@ -215,6 +217,26 @@ class SourceValueFlow {
         if (!cell) { cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.text(key)); }
         return cell;
     }
+    private globalBinding(key: string): Cell {
+        let cell = this.globals.get(key);
+        if (!cell) {
+            cell = this.newCell();this.globals.set(key,cell);
+            if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
+            if (key === "eval") this.publish(cell,this.operation("eval"));
+            if (key === "$262") this.publish(cell,this.host);
+            if (key === "undefined") this.publish(cell,this.primitive(undefined));
+            if (key === "NaN") this.publish(cell,this.primitive(NaN));
+            if (key === "Infinity") this.publish(cell,this.primitive(Infinity));
+        }
+        return cell;
+    }
+    private isAmbientIdentifier(node: ts.Identifier): boolean {
+        return !(this.checker.getSymbolAtLocation(node)?.declarations ?? []).some(declaration =>
+            !declaration.getSourceFile().isDeclarationFile &&
+            (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration) ||
+                functionNode(declaration) || ts.isClassDeclaration(declaration) || ts.isImportClause(declaration) ||
+                ts.isImportSpecifier(declaration) || ts.isNamespaceImport(declaration)));
+    }
     private property(base: Cell, key: string): Cell {
         const result = this.newCell();
         this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result); });
@@ -242,9 +264,7 @@ class SourceValueFlow {
                 this.publish(result, this.intrinsic("instance", atom.kind));
         }
         if (atom.tag === "global") {
-            if (key === "Function") this.publish(result, this.intrinsic("constructor", "ordinary"));
-            if (key === "eval") this.publish(result, this.operation("eval"));
-            if (key === "$262") this.publish(result, this.host);
+            this.copy(this.globalBinding(key),result);
         }
         if (atom.tag === "host") {
             if (key === "createRealm") this.publish(result, this.operation("realm"));
@@ -354,16 +374,9 @@ class SourceValueFlow {
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
             this.copy(this.binding(node), result);
-            const symbol = this.checker.getSymbolAtLocation(node);
-            const ambient = (symbol?.declarations ?? []).every(declaration => declaration.getSourceFile().isDeclarationFile);
-            if (ambient) {
-                if (node.text === "Function") this.publish(result, this.intrinsic("constructor", "ordinary"));
+            if (this.isAmbientIdentifier(node)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
-                if (node.text === "$262") this.publish(result, this.host);
-                if (node.text === "eval") this.publish(result, this.operation("eval"));
-                if (node.text === "undefined") this.publish(result, this.primitive(undefined));
-                if (node.text === "NaN") this.publish(result, this.primitive(NaN));
-                if (node.text === "Infinity") this.publish(result, this.primitive(Infinity));
+                this.copy(this.globalBinding(node.text),result);
             }
         } else if (node.kind === ts.SyntaxKind.ThisKeyword) {
             let parent: ts.Node | undefined = node.parent;

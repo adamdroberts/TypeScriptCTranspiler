@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share direct-eval Reference context across ordinary and resumed call application. Preserve caller cells, actual Lists, saved callee identity, optional indirect calls and abrupt arguments; retain implicit closure captures and mutable global source locations through shared collections. Verify generated semantics and deep native ownership in both memory modes.
+
 - Share finite eval and Function discovery through the source-value and actual-List graph. Close returned and aliased source records transitively, preserve non-String eval identity and parenthesized direct calls, and replace literal-only admission and name-based alias predecessors. Verify generated call semantics and a deep dependency chain through native E2E in both memory modes.
 
 - Connect direct eval to retained caller binding cells and function variable records. Preserve mutation, TDZ, shadowing, deletion, parameter/body separation, escaped closures and resumable scopes; retain this/arguments/new.target and shared receiver boxing. Discover nested finite sources and per-call strictness through one worklist, remove the switch eligibility predecessor, and verify independent generated semantics and deep native ownership in both memory modes.

@@ -29496,21 +29496,24 @@ class Emitter {
 
         const params = this.asyncAwaitContinuationParameters(parameters);
         const capturedSymbols = new Set(params.map((param) => param.symbol));
+        const retainClosureCapture = (symbol: ts.Symbol): void => {
+            if (capturedSymbols.has(symbol)) return;
+            const capture = this.asyncAwaitClosureCaptureParameter(symbol);
+            if (!capture) return;
+            capture.field = `cfg_capture_${params.length}`;
+            capturedSymbols.add(symbol);
+            params.push(capture);
+        };
         const visitClosureCaptures = (node: ts.Node): void => {
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
-                if (symbol && !capturedSymbols.has(symbol)) {
-                    const capture = this.asyncAwaitClosureCaptureParameter(symbol);
-                    if (capture) {
-                        capture.field = `cfg_capture_${params.length}`;
-                        capturedSymbols.add(symbol);
-                        params.push(capture);
-                    }
-                }
+                if (symbol) retainClosureCapture(symbol);
             }
             ts.forEachChild(node, visitClosureCaptures);
         };
         visitClosureCaptures(body);
+        if (owner && this.sourceEnvironmentEnabled(body.getSourceFile()))
+            for (const capture of this.collectClosureCaptures(owner as ClosureLikeDeclaration)) retainClosureCapture(capture.symbol);
         const localParams: AsyncAwaitContinuationParam[] = [];
         const bodyAliases = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         if (owner && this.javaScriptParameterListIsSimple(owner)) {
@@ -30721,8 +30724,8 @@ class Emitter {
                             setReference(op.reference, updated, graph.expressionResults[stateNode.slots[operation.output]!]!);
                             evaluated = op.prefix ? updated : old;
                         } else if (op.kind === "call") {
-                            evaluated = op.construct ? `tsc_value_construct(${read(op.callee)}, ${read(op.arguments)})`
-                                : `tsc_value_apply_function(${read(op.callee)}, ${op.receiver === null ? "tsc_value_undefined()" : read(op.receiver)}, ${read(op.arguments)})`;
+                            evaluated = this.emitCallApplication(op.node,read(op.callee),
+                                op.receiver === null ? "tsc_value_undefined()" : read(op.receiver),read(op.arguments));
                         } else {
                             const overrides = new Map(op.inputs.map(input => [input.expression, { c: read(input.slot), ty: T_VALUE }]));
                             this.conditionValueScopes.push(overrides);
@@ -39903,7 +39906,7 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
-        if (this.options.test262Observation && this.isDirectEvalSyntax(call)) return this.emitTest262DirectEvalCall(call);
+        if (this.options.test262Observation && this.isDirectEvalSyntax(call)) return this.emitDynamicValueCall(call,this.emitExpr(call.expression));
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
@@ -40862,7 +40865,7 @@ class Emitter {
             : call.arguments, tagged ? { value: this.emitTemplateObject(call.template), node: call.template } : undefined);
         const list = this.freshTemp("_dyn_call_args");
         const invoke = `({ tsc_array_t* volatile ${list} = ${argumentsList.c}; ` +
-            `tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${list})); })`;
+            `${this.emitCallApplication(call,fn,receiver,`tsc_value_array(${list})`)}; })`;
         return ts.isCallExpression(call) && call.questionDotToken
             ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
             : invoke;
@@ -40911,7 +40914,15 @@ class Emitter {
         ]);
     }
 
-    private emitTest262DirectEvalCall(call: ts.CallExpression): EmitResult {
+    private emitCallApplication(node: ts.CallExpression | ts.NewExpression | ts.TaggedTemplateExpression,
+        callee: string, receiver: string, argumentsValue: string): string {
+        if (ts.isNewExpression(node)) return `tsc_value_construct(${callee}, ${argumentsValue})`;
+        if (this.options.test262Observation && this.isDirectEvalSyntax(node))
+            return this.emitDirectEvalApplication(node,callee,argumentsValue);
+        return `tsc_value_apply_function(${callee}, ${receiver}, ${argumentsValue})`;
+    }
+
+    private emitDirectEvalApplication(call: ts.CallExpression,callee: string,argumentsValue: string): string {
         let owner: ts.FunctionLikeDeclaration | null = null;
         for (let node: ts.Node | undefined = call.parent; node; node = node.parent) {
             if (ts.isFunctionLike(node) && "body" in node) { owner = node as ts.FunctionLikeDeclaration; break; }
@@ -40926,19 +40937,13 @@ class Emitter {
             if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
             references.push(this.environmentBindingReference(symbol, call, outer));
         }
-        const callee = this.emitExpr(call.expression);
-        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
-        return this.emitSequencedExpr(T_VALUE,
-            [{value:callee,target:T_VALUE,node:call.expression}, {value:argumentsList,node:call}],
-            ([fn,args]) => {
-                const scope = this.freshTemp("_direct_eval_environment");
-                const projection = references.length
-                    ? `(tsc_environment_binding_ref_t[]){ ${references.join(", ")} }` : "NULL";
-                return `({ tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = ` +
-                    `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
-                    `(void)tsc_environment_swap(${scope}.record); ` +
-                    `tsc_test262_direct_eval_call(${fn}, tsc_value_array(${args}), ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
-            });
+        const scope = this.freshTemp("_direct_eval_environment");
+        const projection = references.length
+            ? `(tsc_environment_binding_ref_t[]){ ${references.join(", ")} }` : "NULL";
+        return `({ tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = ` +
+            `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
+            `(void)tsc_environment_swap(${scope}.record); ` +
+            `tsc_test262_direct_eval_call(${callee}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
     }
 
     private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
@@ -41036,6 +41041,10 @@ class Emitter {
     }
 
     private isDirectCallableIdentifier(id: ts.Identifier): boolean {
+        // Ambient declarations describe the host binding's type; they do not
+        // own a source callable. Resolve the actual Script/Module Reference
+        // before choosing a call target, including optional indirect eval.
+        if (this.isTest262DynamicGlobalReference(id)) return false;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl)) {
