@@ -5784,6 +5784,7 @@ tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
         .source_gc_root = tsc_value_gc_root(source),
         .iterator_gc_root = NULL,
         .next_method_gc_root = NULL,
+        .completion_gc_root = NULL,
         .done = false,
     };
     void* volatile method_gc_root = tsc_value_gc_root(method);
@@ -5802,19 +5803,30 @@ tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
         tsc_str_from_lit("next", 4)
     );
     record.next_method_gc_root = tsc_value_gc_root(record.next_method);
-    if (!tsc_value_is_callable(record.next_method)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator next method is not callable"));
-    }
     return record;
 }
 
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
+    void* volatile source_gc_root = tsc_value_gc_root(source);
+    (void)source_gc_root;
     tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
     return tsc_sync_iterator_open_with_method(source, method);
 }
 
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
     if (!record || record->done) return false;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        /* IteratorStepValue marks the record complete on abrupt next, done,
+         * or value evaluation. Consumers must not subsequently close it. */
+        record->done = true;
+        tsc_value_t error = tsc_current_error_value();
+        void* volatile error_gc_root = tsc_value_gc_root(error);
+        (void)error_gc_root;
+        tsc_try_pop();
+        tsc_throw_value(error);
+    }
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_value_t result = tsc_value_apply_function(
         record->next_method,
@@ -5858,6 +5870,31 @@ void tsc_sync_iterator_close(tsc_sync_iterator_t* record) {
     if (!tsc_value_is_object(result)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return method returned a non-object"));
     }
+}
+
+void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** record) {
+    if (!record || !*record) return;
+    tsc_sync_iterator_close(*record);
+    /* Keep this read after Close so the owner, including its pending value
+     * root, stays observable throughout any allocating user callback. */
+    (void)(*record)->completion_gc_root;
+    (*record)->completion_gc_root = NULL;
+}
+
+_Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* record, tsc_value_t error) {
+    void* volatile error_gc_root = tsc_value_gc_root(error);
+    (void)error_gc_root;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_sync_iterator_close(record);
+        tsc_try_pop();
+    } else {
+        /* GetMethod(return), Call, and result validation cannot replace an
+         * incoming throw completion. Closing still performs their effects. */
+        tsc_try_pop();
+    }
+    tsc_throw_value(error);
 }
 
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {

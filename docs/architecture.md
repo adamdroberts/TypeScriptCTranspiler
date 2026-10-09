@@ -213,3 +213,9 @@ For readers planning to modify the emitter:
 - `src/compile.ts` — the glue; typically read first for orientation.
 - `runtime/tsc_runtime.h` — the authoritative list of runtime capabilities.
 - `stdlib/lib.core.d.ts` — the authoritative list of what TS the checker will accept.
+
+### Ordinary synchronous iteration
+
+Ordinary for-of lowering creates one `tsc_sync_iterator_t` through actual `@@iterator` and `next` lookup. Its lexical owner spans the complete loop and uses the same C cleanup contract as runtime exception frames, so native control-flow edges unwind arbitrary nested owners in reverse scope order. Each step precedes the binding/body exception frame: step failures complete the record; binding/body throws call the shared close operation with original-throw precedence. Fresh returned boxed values retain a decoded root while owners close. This is a cardinality-independent lowering over the source control tree, not an iterator snapshot or a control-edge fixture catalog.
+
+The head lexical environment is uninitialized while the RHS executes. Each body iteration allocates a fresh collection of value/TDZ/root slots, sharing identifier and closure operations with CaseBlock environments. The existing BindingName tree initializes those slots, including nested object/array defaults, rest and iterator closing. Object-literal methods and accessors join the existing capture collection. Native collection adapters and resumable emitters still require ordinary protocol integration; finally/disposal scopes currently fail closed through one stable completion diagnostic.

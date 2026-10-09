@@ -1036,12 +1036,26 @@ typedef struct {
     void* volatile source_gc_root;
     void* volatile iterator_gc_root;
     void* volatile next_method_gc_root;
+    /* A lexical owner retains a pending returned value while user return()
+     * methods run after C has left the binding/body locals. */
+    void* volatile completion_gc_root;
     bool done;
 } tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(tsc_value_t source, tsc_value_t method);
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* iterator, tsc_value_t* value);
 void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
+/* A lexical loop scope owns one iterator record. C control edges unwind these
+ * guards in reverse scope order; thrown completions use close_abrupt because
+ * longjmp does not execute C cleanup attributes. */
+void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** iterator);
+_Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* iterator, tsc_value_t error);
+#if defined(__GNUC__) || defined(__clang__)
+#define TSC_SYNC_ITERATOR_SCOPE(name) \
+    tsc_sync_iterator_t* name __attribute__((cleanup(tsc_sync_iterator_scope_cleanup))) = NULL
+#else
+#error "Synchronous iterator scopes require lexical cleanup support"
+#endif
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method_value(void);

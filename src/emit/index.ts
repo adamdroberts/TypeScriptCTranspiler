@@ -472,7 +472,7 @@ type SwitchLexicalDeclaration =
     | ts.VariableDeclaration
     | NamedSwitchLexicalDeclaration;
 
-interface SwitchLexicalBindingPlan {
+interface LocalLexicalBindingPlan {
     readonly symbol: ts.Symbol;
     readonly declaration: SwitchLexicalDeclaration;
     readonly name: string;
@@ -655,6 +655,7 @@ class Emitter {
     private activeLabeledBreakTargets: Array<Map<string, string>> = [];
     private activeLabeledContinueTargets: Array<Map<string, string | null>> = [];
     private syncUsingScopes: string[][] = [];
+    private syncIteratorScopes: string[] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
@@ -768,10 +769,10 @@ class Emitter {
     private capturedCellsCache = new WeakMap<ts.Node, Map<ts.Symbol, CaptureCell>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
-    /** Compile-time projection of the running CaseBlock declarative
-     * environment. Every direct lexical declaration in a switch is allocated
-     * from one source-ordered collection before any case selector executes. */
-    private switchLexicalScopes: Map<ts.Symbol, SwitchLexicalBindingPlan>[] = [];
+    /** Compile-time projection of lexical value/TDZ/root environments.
+     * CaseBlock declarations and per-iteration bindings share this collection
+     * and the same identifier/capture operations. */
+    private lexicalBindingScopes: Map<ts.Symbol, LocalLexicalBindingPlan>[] = [];
     /** Runtime parameter environments for non-simple JavaScript formal lists.
      * These are separate from CaseBlock environments but expose the same
      * value/TDZ/root contract to identifier reads, writes, and captures. */
@@ -23878,12 +23879,12 @@ class Emitter {
         return ts.isCaseClause(owner) || ts.isDefaultClause(owner);
     }
 
-    private switchLexicalBindingForSymbol(
+    private lexicalBindingForSymbol(
         symbol: ts.Symbol | undefined,
-    ): SwitchLexicalBindingPlan | null {
+    ): LocalLexicalBindingPlan | null {
         if (!symbol) return null;
-        for (let index = this.switchLexicalScopes.length - 1; index >= 0; index--) {
-            const binding = this.switchLexicalScopes[index]!.get(symbol);
+        for (let index = this.lexicalBindingScopes.length - 1; index >= 0; index--) {
+            const binding = this.lexicalBindingScopes[index]!.get(symbol);
             if (binding) return binding;
         }
         return null;
@@ -23932,7 +23933,7 @@ class Emitter {
         if (env?.initializedPtr) return env.initializedPtr;
         const cell = this.captureCellForSymbol(sym);
         if (cell?.initializedCellName) return cell.initializedCellName;
-        const binding = this.switchLexicalBindingForSymbol(sym);
+        const binding = this.lexicalBindingForSymbol(sym);
         if (binding) return `&${binding.initialized}`;
         const moduleLexical = this.moduleLexicalBindings.get(sym);
         if (moduleLexical) return `&${moduleLexical.initialized}`;
@@ -23988,7 +23989,7 @@ class Emitter {
             };
         }
 
-        const switchBinding = this.switchLexicalBindingForSymbol(symbol);
+        const switchBinding = this.lexicalBindingForSymbol(symbol);
         if (switchBinding) {
             return {
                 type: T_VALUE,
@@ -24041,6 +24042,13 @@ class Emitter {
         storageType: CType | null,
     ): CType | null {
         if (storageType?.kind !== "value" || this.isJavaScriptSourceFile(id.getSourceFile())) {
+            return null;
+        }
+        const lexical = this.localLexicalMetadataForSymbol(this.symbolForIdentifier(id));
+        if (lexical && ts.isVariableDeclaration(lexical.declaration) &&
+            this.isForOfLexicalDeclaration(lexical.declaration)) {
+            // Ordinary @@iterator can yield any value, including after a
+            // user override on an otherwise typed Array/String receiver.
             return null;
         }
         const sourceType = this.prepareType(mapType(id, this.checker));
@@ -24343,6 +24351,7 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
+        if (this.isForOfLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
             /* A direct CaseBlock class is a runtime constructor/object pair,
              * not one of the statically laid-out TypeScript class structs.
@@ -25501,7 +25510,6 @@ class Emitter {
         const frame = this.freshTemp("_binding_iterator_frame");
         const error = this.freshTemp("_binding_iterator_error");
         const errorRoot = this.freshTemp("_binding_iterator_error_gc_root");
-        const closeFrame = this.freshTemp("_binding_iterator_close_frame");
         buf.line(
             `tsc_sync_iterator_t* const ${iterator} = ` +
             `(tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`,
@@ -25550,16 +25558,7 @@ class Emitter {
         buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
         buf.line(`void* volatile ${errorRoot} = tsc_value_gc_root(${error});`);
         buf.line("tsc_try_pop();");
-        buf.line(`TSC_TRY_FRAME(${closeFrame});`);
-        buf.line(`tsc_try_push(&${closeFrame});`);
-        buf.open(`if (setjmp(${closeFrame}.jb) == 0)`);
-        buf.line(`tsc_sync_iterator_close(${iterator});`);
-        buf.line("tsc_try_pop();");
-        buf.close();
-        buf.open("else");
-        buf.line("tsc_try_pop();");
-        buf.close();
-        buf.line(`tsc_throw_value(${error});`);
+        buf.line(`tsc_sync_iterator_close_abrupt(${iterator}, ${error});`);
         buf.close();
         buf.close();
     }
@@ -25878,7 +25877,10 @@ class Emitter {
         const visit = (node: ts.Node): void => {
             if (
                 node !== owner &&
-                (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
+                (ts.isArrowFunction(node) || ts.isFunctionExpression(node) ||
+                    ts.isObjectLiteralExpression(node.parent) &&
+                    (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
+                        ts.isSetAccessorDeclaration(node)))
             ) {
                 addClosureCaptures(node);
                 return;
@@ -26135,7 +26137,9 @@ class Emitter {
                      * cannot change its storage or closure-capture ABI. */
                     let type = existingStorageType ?? (formalParameter
                         ? T_VALUE
-                        : lexical && this.isDirectSwitchLexicalDeclaration(lexical.declaration)
+                        : lexical && (this.isDirectSwitchLexicalDeclaration(lexical.declaration) ||
+                            ts.isVariableDeclaration(lexical.declaration) &&
+                            this.isForOfLexicalDeclaration(lexical.declaration))
                         ? T_VALUE
                         : ts.isVariableDeclaration(decl)
                             ? this.variableDeclarationStorageType(decl, declaredType)
@@ -26966,7 +26970,7 @@ class Emitter {
                     }
                 }
                 if (
-                    (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+                    ts.isForInStatement(parent) &&
                     parent.expression === n
                 ) {
                     return;
@@ -27121,7 +27125,7 @@ class Emitter {
             return true;
         }
         if (
-            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            ts.isForInStatement(parent) &&
             parent.expression === expr
         ) {
             return true;
@@ -27257,7 +27261,7 @@ class Emitter {
             return 0;
         }
         if (
-            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            ts.isForInStatement(parent) &&
             parent.expression === n
         ) {
             return 0;
@@ -27381,7 +27385,7 @@ class Emitter {
             return true;
         }
         if (
-            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            ts.isForInStatement(parent) &&
             parent.expression === expr
         ) {
             return true;
@@ -27446,7 +27450,7 @@ class Emitter {
             return true;
         }
         if (
-            (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
+            ts.isForInStatement(parent) &&
             parent.expression === n
         ) {
             return true;
@@ -43259,7 +43263,7 @@ class Emitter {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
-            if (this.isDirectSwitchLexicalDeclaration(d) && this.switchLexicalScopes.length > 0) {
+            if (this.isDirectSwitchLexicalDeclaration(d) && this.lexicalBindingScopes.length > 0) {
                 if (!d.initializer && !ts.isIdentifier(d.name)) {
                     unsupported(d, "switch lexical binding pattern requires an initializer");
                 }
@@ -43271,7 +43275,7 @@ class Emitter {
                     d.name,
                     sourceValue,
                     (target, identifier, value) => {
-                        const binding = this.switchLexicalBindingForSymbol(
+                        const binding = this.lexicalBindingForSymbol(
                             this.symbolForIdentifier(identifier),
                         );
                         if (!binding || binding.declaration !== d) {
@@ -43969,6 +43973,14 @@ class Emitter {
             )};`);
             return;
         }
+        const localLexical = this.localLexicalBindingIdentifier(initializer);
+        if (localLexical) {
+            buf.line(`(void)${this.localLexicalPut(
+                localLexical.reference,
+                this.coerce(value, localLexical.reference.type, initializer),
+            )};`);
+            return;
+        }
         const storage = this.storageType(initializer);
         const target = this.emitLvalue(initializer);
         buf.line(`${target} = ${this.coerce(value, storage, initializer)};`);
@@ -44100,156 +44112,199 @@ class Emitter {
         return names;
     }
 
+    private isForOfLexicalDeclaration(declaration: ts.VariableDeclaration): boolean {
+        return ts.isVariableDeclarationList(declaration.parent) &&
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+            ts.isForOfStatement(declaration.parent.parent);
+    }
+
+    /** One lexical environment collection feeds the existing BindingName tree.
+     * All slots exist before defaults/computed keys run, and captured slots are
+     * fresh cells for this iteration rather than locals hidden in pattern blocks. */
+    private emitForOfLexicalEnvironment(
+        buf: CBuf,
+        declaration: ts.VariableDeclaration,
+    ): Map<ts.Symbol, LocalLexicalBindingPlan> {
+        const bindings = new Map<ts.Symbol, LocalLexicalBindingPlan>();
+        const pending: ts.BindingName[] = [declaration.name];
+        while (pending.length > 0) {
+            const name = pending.pop()!;
+            if (!ts.isIdentifier(name)) {
+                for (let index = name.elements.length - 1; index >= 0; index--) {
+                    const element = name.elements[index]!;
+                    if (ts.isBindingElement(element)) pending.push(element.name);
+                }
+                continue;
+            }
+            const symbol = this.symbolForIdentifier(name);
+            const metadata = this.localLexicalMetadataForSymbol(symbol);
+            if (!symbol || !metadata) unsupported(name, "unresolved synchronous iteration binding");
+            this.symbolStorageTypes.set(symbol, T_VALUE);
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (cell) {
+                if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
+                    unsupported(name, "synchronous iteration binding requires a canonical value/TDZ cell");
+                }
+                this.emitCaptureCellInitialization(buf, cell, "tsc_value_undefined()", false);
+                bindings.set(symbol, {
+                    symbol, declaration, name: metadata.name, immutable: metadata.immutable,
+                    value: `(*${cell.cellName})`, initialized: `(*${cell.initializedCellName})`,
+                    gcRoot: `(*${cell.rootCellName})`,
+                });
+            } else {
+                const value = this.freshTemp("_iteration_binding");
+                const initialized = this.freshTemp("_iteration_initialized");
+                const gcRoot = this.freshTemp("_iteration_binding_gc_root");
+                buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
+                buf.line(`bool ${initialized} = false;`);
+                buf.line(`void* volatile ${gcRoot} = NULL;`);
+                bindings.set(symbol, {
+                    symbol, declaration, name: metadata.name, immutable: metadata.immutable,
+                    value, initialized, gcRoot,
+                });
+            }
+        }
+        return bindings;
+    }
+
+    /** Direct C exits cannot yet carry a finally/disposal completion through
+     * this backend. Reject that semantic boundary from one AST worklist rather
+     * than silently omitting a finalizer on a particular control-edge shape. */
+    private assertSyncIteratorCompletionRepresentable(fos: ts.ForOfStatement): void {
+        const pending: ts.Node[] = [fos.statement];
+        let unavailable = this.syncUsingScopes.length > 0;
+        for (let parent: ts.Node | undefined = fos.parent; parent && !ts.isFunctionLike(parent); parent = parent.parent) {
+            if (ts.isTryStatement(parent) && parent.finallyBlock) unavailable = true;
+        }
+        while (pending.length > 0 && !unavailable) {
+            const node = pending.pop()!;
+            if (ts.isFunctionLike(node)) continue;
+            if (ts.isTryStatement(node) && node.finallyBlock ||
+                ts.isVariableDeclarationList(node) &&
+                (node.flags & ts.NodeFlags.Using) !== 0) unavailable = true;
+            ts.forEachChild(node, child => { pending.push(child); });
+        }
+        if (unavailable) unsupported(fos, "synchronous iterator completion cannot represent finally or disposal scopes");
+    }
+
     private emitForOf(buf: CBuf, fos: ts.ForOfStatement): void {
         if (fos.awaitModifier) {
             unsupported(fos, "for-await-of requires a supported async continuation shape");
         }
-        const iter = this.emitExpr(fos.expression);
-        if (iter.ty.kind === "map") {
-            this.emitMapForOf(buf, fos, iter);
-            return;
+        this.assertSyncIteratorCompletionRepresentable(fos);
+        const declaration = ts.isVariableDeclarationList(fos.initializer)
+            ? fos.initializer.declarations[0] : undefined;
+        // The RHS runs in the head's uninitialized lexical environment. Body
+        // iterations then shadow it with fresh initialized environments.
+        buf.open("");
+        const head = declaration && this.isForOfLexicalDeclaration(declaration)
+            ? this.emitForOfLexicalEnvironment(buf, declaration) : null;
+        if (head) this.lexicalBindingScopes.push(head);
+        try {
+            this.emitForOfWithEnvironment(buf, fos);
+        } finally {
+            if (head) this.lexicalBindingScopes.pop();
         }
-        if (iter.ty.kind === "urlsearchparams") {
-            this.emitUrlSearchParamsForOf(buf, fos, iter);
-            return;
-        }
+        buf.close();
+    }
 
-        let arrayExpr = iter.c;
-        let elemType = iter.ty.elem;
-        if (iter.ty.kind === "set") {
-            arrayExpr = `tsc_set_values(${iter.c})`;
-        } else if (iter.ty.kind === "string") {
-            arrayExpr = `tsc_str_chars(${iter.c})`;
-            elemType = T_STRING;
-        } else if (iter.ty.kind === "buffer") {
-            arrayExpr = `({ tsc_buffer_t* const _for_of_buffer = ${iter.c}; tsc_array_t* _for_of_values = tsc_array_new(sizeof(double), _for_of_buffer->len ? _for_of_buffer->len : 1); for (size_t _for_of_i = 0; _for_of_i < _for_of_buffer->len; _for_of_i++) { double _for_of_byte = (double)_for_of_buffer->data[_for_of_i]; tsc_array_push_raw(_for_of_values, &_for_of_byte); } _for_of_values; })`;
-            elemType = T_NUMBER;
-        } else if (iter.ty.kind === "value") {
-            arrayExpr = `tsc_value_iter_values(${iter.c})`;
-            elemType = T_VALUE;
-        } else if (iter.ty.kind === "class") {
+    private emitForOfWithEnvironment(buf: CBuf, fos: ts.ForOfStatement): void {
+        const iter = this.emitExpr(fos.expression);
+        // Static collection/class backends remain separate until their native
+        // objects expose the ordinary live iterator protocol.
+        if (iter.ty.kind === "map") return this.emitMapForOf(buf, fos, iter);
+        if (iter.ty.kind === "urlsearchparams") return this.emitUrlSearchParamsForOf(buf, fos, iter);
+        if (iter.ty.kind === "class") {
             if (this.emitCustomIteratorForOf(buf, fos, iter)) return;
             const custom = this.emitCustomIterableArray(fos.expression, iter);
-            if (!custom) {
-                unsupported(
-                    fos.expression,
-                    `for-of over ${iter.ty.c} (class needs [Symbol.iterator]() returning a typed array)`,
-                );
-            }
-            arrayExpr = custom.c;
-            elemType = custom.ty.elem;
-        } else if (iter.ty.kind !== "array") {
-            unsupported(
-                fos.expression,
-                `for-of over ${iter.ty.c} (supports arrays, strings, Buffers, dynamic values, Map, Set, and typed custom iterables)`,
-            );
+            if (!custom) unsupported(fos.expression, "synchronous iterator object representation unavailable");
+            this.emitOrdinaryForOf(buf, fos, custom);
+            return;
         }
-        elemType ??= iter.ty.elem;
-        if (!elemType) unsupported(fos.expression, "for-of element type unavailable");
-        const idxVar = this.freshTemp("_i");
-        const arrVar = this.freshTemp("_a");
-        const test262GlobalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
+        if (iter.ty.kind === "set") {
+            this.emitOrdinaryForOf(buf, fos, { c: `tsc_set_values(${iter.c})`, ty: arrayType(iter.ty.elem ?? T_VALUE) });
+            return;
+        }
+        if (iter.ty.kind === "buffer") {
+            const values = `({ tsc_buffer_t* const source = ${iter.c}; tsc_array_t* values = tsc_array_new(sizeof(double), source->len ? source->len : 1); for (size_t index = 0; index < source->len; index++) { double value = source->data[index]; tsc_array_push_raw(values, &value); } values; })`;
+            this.emitOrdinaryForOf(buf, fos, { c: values, ty: arrayType(T_NUMBER) });
+            return;
+        }
+        this.emitOrdinaryForOf(buf, fos, iter);
+    }
 
-        if (!test262GlobalPattern && elemType.kind === "entry" && ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (d && ts.isArrayBindingPattern(d.name)) {
-                this.emitEntryArrayForOf(
-                    buf,
-                    fos,
-                    arrayExpr,
-                    elemType,
-                    arrVar,
-                    idxVar,
-                );
-                return;
-            }
+    /** One ordinary iterator record and lexical owner drives every binding/body
+     * iteration. Step errors occur outside the body frame and never close this
+     * iterator; binding/body throws close with throw-completion precedence. */
+    private emitOrdinaryForOf(buf: CBuf, fos: ts.ForOfStatement, iter: EmitResult): void {
+        const record = this.freshTemp("_for_of_iterator");
+        const value = this.freshTemp("_for_of_value");
+        const valueRoot = this.freshTemp("_for_of_value_gc_root");
+        const frame = this.freshTemp("_for_of_body_frame");
+        const globalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
+        const declaration = ts.isVariableDeclarationList(fos.initializer)
+            ? fos.initializer.declarations[0] : undefined;
+        if (ts.isVariableDeclarationList(fos.initializer) &&
+            (fos.initializer.declarations.length !== 1 || !declaration)) {
+            unsupported(fos.initializer, "invalid synchronous iteration declaration");
         }
-        if (!test262GlobalPattern && elemType.kind === "value" && ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (d && ts.isObjectBindingPattern(d.name)) {
-                this.emitDynamicObjectArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
-                return;
-            }
-            if (d && ts.isArrayBindingPattern(d.name)) {
-                this.emitDynamicArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
-                return;
-            }
+        if (declaration && !this.isForOfLexicalDeclaration(declaration) &&
+            !ts.isIdentifier(declaration.name) && !globalPattern) {
+            unsupported(fos.initializer, "synchronous iteration var pattern requires a canonical function environment");
         }
-        if (!test262GlobalPattern && elemType.kind === "array" && elemType.elem && ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (d && ts.isArrayBindingPattern(d.name)) {
-                this.emitArrayBackedArrayBindingForOf(
-                    buf,
-                    fos,
-                    arrayExpr,
-                    elemType,
-                    arrVar,
-                    idxVar,
-                );
-                return;
-            }
-        }
-        if (!test262GlobalPattern && (elemType.kind === "class" || elemType.kind === "array") && ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (d && ts.isObjectBindingPattern(d.name)) {
-                const objectTsType = this.forOfElementTsType(fos.expression);
-                if (!objectTsType) {
-                    unsupported(
-                        d.name,
-                        "typed for-of object destructuring could not resolve the element object type",
-                    );
-                }
-                this.emitTypedObjectArrayBindingForOf(
-                    buf,
-                    fos,
-                    arrayExpr,
-                    arrVar,
-                    idxVar,
-                    elemType,
-                    objectTsType,
-                );
-                return;
-            }
-        }
-
-        if (ts.isVariableDeclarationList(fos.initializer)) {
-            const d = fos.initializer.declarations[0];
-            if (fos.initializer.declarations.length !== 1 || !d ||
-                !ts.isIdentifier(d.name) && d !== test262GlobalPattern)
-                unsupported(fos.initializer, "for-of binding must be simple identifier");
-        } else if (!ts.isIdentifier(fos.initializer)) {
-            unsupported(fos.initializer, "for-of binding form");
-        }
-
         buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
-        );
-        const element = elemType.kind === "value"
-            ? `(tsc_array_index_present(${arrVar}, ${idxVar}) ? TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar}) : tsc_value_undefined())`
-            : `TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar})`;
-        if (test262GlobalPattern) {
-            this.emitTest262ScriptBindingName(
-                buf,
-                test262GlobalPattern.name,
-                this.coerce({ c: element, ty: elemType }, T_VALUE, test262GlobalPattern.name),
-                "var",
-            );
-        } else {
-            this.emitIterationIdentifierBinding(
-                buf,
-                fos.initializer,
-                { c: element, ty: elemType },
-            );
+        buf.line(`TSC_SYNC_ITERATOR_SCOPE(${record});`);
+        buf.line(`${record} = (tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`);
+        // Install the owner only after GetIterator succeeds: its abrupt
+        // completion must not attempt to close an unfinished record.
+        buf.line(`*${record} = tsc_sync_iterator_open(${this.boxObjectIdentity(iter.c, iter.ty, fos.expression)});`);
+        buf.line(`tsc_value_t ${value};`);
+        buf.open(`while (tsc_sync_iterator_step(${record}, &${value}))`);
+        buf.line(`void* volatile ${valueRoot} = tsc_value_gc_root(${value});`);
+        buf.line(`TSC_TRY_FRAME(${frame});`);
+        buf.line(`tsc_try_push(&${frame});`);
+        buf.open(`if (setjmp(${frame}.jb) == 0)`);
+        const lexical = declaration && this.isForOfLexicalDeclaration(declaration)
+            ? this.emitForOfLexicalEnvironment(buf, declaration) : null;
+        if (lexical) this.lexicalBindingScopes.push(lexical);
+        this.syncIteratorScopes.push(record);
+        this.tryDepth++;
+        try {
+            if (lexical && declaration) {
+                this.emitBindingInitialization(buf, declaration.name, value, (target, identifier, source) => {
+                    const binding = lexical.get(this.symbolForIdentifier(identifier)!);
+                    if (!binding) unsupported(identifier, "unresolved synchronous iteration binding");
+                    target.line(`${binding.value} = ${source};`);
+                    target.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
+                    target.line(`${binding.initialized} = true;`);
+                });
+            } else if (globalPattern) {
+                this.emitTest262ScriptBindingName(buf, globalPattern.name, value, "var");
+            } else {
+                const elementType = iter.ty.kind === "array" ? iter.ty.elem ?? T_VALUE
+                    : iter.ty.kind === "string" ? T_STRING : T_VALUE;
+                this.emitIterationIdentifierBinding(buf, fos.initializer, {
+                    c: this.coerce({ c: value, ty: T_VALUE }, elementType, fos.initializer), ty: elementType,
+                });
+            }
+            const continueTarget = this.directLabeledLoopName(fos)
+                ? this.freshTemp("_for_of_labeled_continue") : null;
+            this.registerLabeledContinueTarget(fos, continueTarget);
+            this.emitLoopStmtInBlock(buf, fos.statement);
+            if (continueTarget) buf.line(`${continueTarget}:;`);
+        } finally {
+            this.tryDepth--;
+            this.syncIteratorScopes.pop();
+            if (lexical) this.lexicalBindingScopes.pop();
         }
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.open("else");
+        const error = this.freshTemp("_for_of_error");
+        buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
+        buf.line("tsc_try_pop();");
+        buf.line(`tsc_sync_iterator_close_abrupt(${record}, ${error});`);
+        buf.close();
         buf.close();
         buf.close();
     }
@@ -46397,52 +46452,6 @@ class Emitter {
         }
     }
 
-    private emitTypedObjectArrayBindingForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        arrVar: string,
-        idxVar: string,
-        elemType: CType,
-        objectType: ts.Type,
-    ): void {
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(fos.initializer, "typed for-of object destructuring needs const/let {value}");
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isObjectBindingPattern(d.name)) {
-            unsupported(fos.initializer, "typed for-of binding must use an object binding pattern");
-        }
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_typed_object_entry");
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`);
-        buf.line(`${elemType.c} const ${entryVar} = TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar});`);
-        this.emitTypedObjectBindingsForOf(
-            buf,
-            d.name,
-            entryVar,
-            elemType,
-            objectType,
-            (descriptor, value) => {
-                buf.line(
-                    `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
-                );
-            },
-        );
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_typed_object_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
-
     private emitDynamicObjectRestForOf(
         buf: CBuf,
         sourceC: string,
@@ -46611,46 +46620,6 @@ class Emitter {
                 });
             assign(descriptor, value);
         }
-    }
-
-    private emitDynamicObjectArrayBindingForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        arrVar: string,
-        idxVar: string,
-    ): void {
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(fos.initializer, "dynamic for-of object destructuring needs const/let {value}");
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isObjectBindingPattern(d.name)) {
-            unsupported(fos.initializer, "dynamic for-of binding must use an object binding pattern");
-        }
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_dyn_object_entry");
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`);
-        buf.line(
-            `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
-            `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
-        );
-        this.emitDynamicObjectBindingsForOf(buf, d.name, entryVar, (descriptor, value) => {
-            buf.line(
-                `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
-            );
-        });
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_dynamic_object_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
     }
 
     private emitDynamicArrayBindingPatternForOf(
@@ -47082,69 +47051,6 @@ class Emitter {
         }
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_array_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
-
-    private emitEntryArrayForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        arrayExpr: string,
-        elemType: CType,
-        arrVar: string,
-        idxVar: string,
-    ): void {
-        if (!ts.isVariableDeclarationList(fos.initializer)) {
-            unsupported(
-                fos.initializer,
-                "Object.entries for-of destructuring needs const/let [key, value]",
-            );
-        }
-        const d = fos.initializer.declarations[0];
-        if (!d || !ts.isArrayBindingPattern(d.name)) {
-            unsupported(
-                fos.initializer,
-                "Object.entries for-of binding must destructure as [key, value]",
-            );
-        }
-        const [keyEl, valueEl] = d.name.elements;
-        if (
-            !keyEl ||
-            !valueEl ||
-            !ts.isBindingElement(keyEl) ||
-            !ts.isBindingElement(valueEl) ||
-            !ts.isIdentifier(keyEl.name) ||
-            !ts.isIdentifier(valueEl.name)
-        ) {
-            unsupported(d.name, "Object.entries for-of binding must be [keyIdentifier, valueIdentifier]");
-        }
-
-        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-        const qual = bindingIsConst ? " const" : "";
-        const entryVar = this.freshTemp("_entry");
-        const valueType = elemType.elem ?? T_VOID;
-        const keyName = mangleIdent(keyEl.name.text);
-        const valueName = mangleIdent(valueEl.name.text);
-
-        buf.open("");
-        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
-        buf.line(`tsc_array_materialize_all(${arrVar});`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
-        );
-        buf.line(
-            `${elemType.c}${qual} ${entryVar} = TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar});`,
-        );
-        buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
-        buf.line(
-            `${valueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, valueType)};`,
-        );
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_entry_for_of_labeled_continue")
             : null;
         this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
@@ -48190,9 +48096,27 @@ class Emitter {
                 : `return ${this.zeroValue(ret)};`);
             return;
         }
-        if (this.emitTailCallReturn(buf, r.expression)) return;
+        if (this.syncIteratorScopes.length === 0 && this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitExpr(r.expression);
         const coerced = this.coerce(expr, ret, r.expression);
+        if (this.syncIteratorScopes.length > 0) {
+            const returnValue = this.freshTemp("_iterator_return");
+            const returnRoot = this.freshTemp("_iterator_return_gc_root");
+            if (ret.kind === "void" || ret.kind === "never") {
+                buf.line(`${coerced};`);
+                buf.line("return;");
+                return;
+            }
+            buf.line(`${ret.c} volatile ${returnValue} = ${coerced};`);
+            const root = ret.kind === "value" ? `tsc_value_gc_root(${returnValue})`
+                : isPointerKind(ret) ? `(void*)${returnValue}` : "NULL";
+            buf.line(`void* volatile ${returnRoot} = ${root};`);
+            for (const owner of this.syncIteratorScopes) {
+                buf.line(`${owner}->completion_gc_root = ${returnRoot};`);
+            }
+            buf.line(`return ${returnValue};`);
+            return;
+        }
         if (this.syncUsingScopes.length > 0) {
             const returnValue = this.freshTemp("_using_return");
             buf.line(`${ret.c} const ${returnValue} = ${coerced};`);
@@ -48387,7 +48311,7 @@ class Emitter {
         declaration: ts.ClassDeclaration,
     ): boolean {
         if (!this.isDirectSwitchLexicalDeclaration(declaration) ||
-            this.switchLexicalScopes.length === 0) return false;
+            this.lexicalBindingScopes.length === 0) return false;
         if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) {
             unsupported(
                 declaration,
@@ -48396,7 +48320,7 @@ class Emitter {
             );
         }
         const symbol = this.symbolForIdentifier(declaration.name);
-        const binding = this.switchLexicalBindingForSymbol(symbol);
+        const binding = this.lexicalBindingForSymbol(symbol);
         if (!binding || binding.declaration !== declaration) {
             unsupported(declaration.name, "direct switch class is missing its CaseBlock cell");
         }
@@ -48453,7 +48377,7 @@ class Emitter {
             buf.line(`${scriptCompletion.gcRoot} = NULL;`);
         }
 
-        const lexicalScope = new Map<ts.Symbol, SwitchLexicalBindingPlan>();
+        const lexicalScope = new Map<ts.Symbol, LocalLexicalBindingPlan>();
         const lexicalDeclarations = this.directSwitchLexicalDeclarations(sw);
         for (const declaration of lexicalDeclarations) {
             for (const identifier of this.switchLexicalDeclarationNames(declaration)) {
@@ -48508,7 +48432,7 @@ class Emitter {
             const caseVal = this.emitExpr(caseExpr);
             return this.switchStrictEqualityCondition(dv, caseVal, caseExpr);
         };
-        this.switchLexicalScopes.push(lexicalScope);
+        this.lexicalBindingScopes.push(lexicalScope);
         try {
             for (const declaration of lexicalDeclarations) {
                 if (!ts.isFunctionDeclaration(declaration)) continue;
@@ -48519,7 +48443,7 @@ class Emitter {
                     );
                 }
                 const symbol = this.symbolForIdentifier(declaration.name);
-                const binding = this.switchLexicalBindingForSymbol(symbol);
+                const binding = this.lexicalBindingForSymbol(symbol);
                 if (!binding) {
                     unsupported(declaration.name, "direct switch function is missing its CaseBlock cell");
                 }
@@ -48560,7 +48484,7 @@ class Emitter {
                 this.activeBreakTargets.pop();
             }
         } finally {
-            const popped = this.switchLexicalScopes.pop();
+            const popped = this.lexicalBindingScopes.pop();
             if (popped !== lexicalScope) throw new Error("switch lexical scope stack corruption");
         }
         buf.line(`${endLabel}:;`);
@@ -49904,16 +49828,11 @@ class Emitter {
         if (!name) return null;
         const key = this.test262GlobalBindingKey(name);
         const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
-        if (scriptGlobal) {
-            return {
-                get: `tsc_global_reference_get(${key})`,
-                set: (value) => `tsc_global_reference_set(${key}, ${value}, ${strict})`,
-                remove: `tsc_global_reference_delete(${key})`,
-            };
-        }
         return {
             get: `tsc_global_reference_get(${key})`,
-            set: (value) => `tsc_global_reference_set(${key}, ${value}, ${strict})`,
+            set: (value) => this.emitSequencedExpr(T_VALUE, [
+                { value: { c: value, ty: T_VALUE } },
+            ], ([rooted]) => `tsc_global_reference_set(${key}, ${rooted}, ${strict})`).c,
             remove: `tsc_global_reference_delete(${key})`,
         };
     }
@@ -51498,6 +51417,7 @@ class Emitter {
         }
 
         const current = this.freshTemp("_global_current");
+        const currentRoot = this.freshTemp("_global_current_gc_root");
         const next = this.freshTemp("_global_next");
         if (
             op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
@@ -51512,6 +51432,7 @@ class Emitter {
             return {
                 c:
                     `({ tsc_value_t ${current} = ${reference.get}; ` +
+                    `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); ` +
                     `tsc_value_t ${next} = ${current}; ` +
                     `if (${assign}) ${next} = ${reference.set(value)}; ` +
                     `${next}; })`,
@@ -51519,28 +51440,12 @@ class Emitter {
             };
         }
 
-        const operation =
-            op === ts.SyntaxKind.PlusEqualsToken ? "tsc_value_add" :
-            op === ts.SyntaxKind.MinusEqualsToken ? "tsc_value_sub" :
-            op === ts.SyntaxKind.AsteriskEqualsToken ? "tsc_value_mul" :
-            op === ts.SyntaxKind.AsteriskAsteriskEqualsToken ? "tsc_value_pow" :
-            op === ts.SyntaxKind.SlashEqualsToken ? "tsc_value_div" :
-            op === ts.SyntaxKind.PercentEqualsToken ? "tsc_value_mod" :
-            op === ts.SyntaxKind.AmpersandEqualsToken ? "tsc_value_bit_and" :
-            op === ts.SyntaxKind.BarEqualsToken ? "tsc_value_bit_or" :
-            op === ts.SyntaxKind.CaretEqualsToken ? "tsc_value_bit_xor" :
-            op === ts.SyntaxKind.LessThanLessThanEqualsToken ? "tsc_value_shl" :
-            op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ? "tsc_value_shr" :
-            op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ? "tsc_value_ushr" :
-            null;
+        const operation = this.dynamicCompoundAssignmentOperation(op);
         if (!operation) unsupported(bin, `unsupported global assignment ${ts.SyntaxKind[op]}`);
-        return {
-            c:
-                `({ tsc_value_t ${current} = ${reference.get}; ` +
-                `tsc_value_t ${next} = ${operation}(${current}, ${value}); ` +
-                `${reference.set(next)}; })`,
-            ty: T_VALUE,
-        };
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: { c: reference.get, ty: T_VALUE } },
+            { value: rhs, target: T_VALUE, node: bin.right },
+        ], ([left, right]) => reference.set(`${operation}(${left}, ${right})`));
     }
 
     private emitAssignment(
@@ -51648,41 +51553,18 @@ class Emitter {
             if (fn) return { c: `(${lhsC} = ${fn}(${lhsC}, ${rhs.c}))`, ty: T_BIGINT };
         }
 
-        if (lhsType.kind === "value") {
-            const fn =
-                op === ts.SyntaxKind.PlusEqualsToken
-                    ? "tsc_value_add"
-                    : op === ts.SyntaxKind.MinusEqualsToken
-                        ? "tsc_value_sub"
-                        : op === ts.SyntaxKind.AsteriskEqualsToken
-                            ? "tsc_value_mul"
-                            : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
-                                ? "tsc_value_pow"
-                                : op === ts.SyntaxKind.SlashEqualsToken
-                                    ? "tsc_value_div"
-                                    : op === ts.SyntaxKind.PercentEqualsToken
-                                        ? "tsc_value_mod"
-                                        : op === ts.SyntaxKind.AmpersandEqualsToken
-                                            ? "tsc_value_bit_and"
-                                            : op === ts.SyntaxKind.BarEqualsToken
-                                                ? "tsc_value_bit_or"
-                                                : op === ts.SyntaxKind.CaretEqualsToken
-                                                    ? "tsc_value_bit_xor"
-                                                    : op === ts.SyntaxKind.LessThanLessThanEqualsToken
-                                                        ? "tsc_value_shl"
-                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
-                                                            ? "tsc_value_shr"
-                                                            : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
-                                                                ? "tsc_value_ushr"
-                                                                : null;
+        if (lhsType.kind === "value" || lhsType.kind === "number" && rhs.ty.kind === "value") {
+            const fn = this.dynamicCompoundAssignmentOperation(op);
             if (fn) {
-                const assignment = `${lhsC} = ${fn}(${lhsC}, ${this.coerce(rhs, T_VALUE, bin.right)})`;
+                const current = this.coerce({ c: lhsC, ty: lhsType }, T_VALUE, bin.left);
+                const result = `${fn}(${current}, ${this.coerce(rhs, T_VALUE, bin.right)})`;
+                const assignment = `${lhsC} = ${this.coerce({ c: result, ty: T_VALUE }, lhsType, bin.left)}`;
                 const refresh = this.dynamicIdentifierRootRefresh(bin.left, lhsC);
                 return {
                     c: refresh
                         ? `({ ${assignment}; ${refresh}; ${lhsC}; })`
                         : `(${assignment})`,
-                    ty: T_VALUE,
+                    ty: lhsType,
                 };
             }
         }
@@ -55162,6 +55044,7 @@ class Emitter {
         const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
         const outerTailFunctionStack = this.tailFunctionStack;
         const outerSyncUsingScopes = this.syncUsingScopes;
+        const outerSyncIteratorScopes = this.syncIteratorScopes;
         const outerTryDepth = this.tryDepth;
         const outerGeneratorStack = this.generatorStack;
         this.asyncFunctionStack = [];
@@ -55169,6 +55052,7 @@ class Emitter {
         this.asyncAwaitContinuationAdapterDepth = 0;
         this.tailFunctionStack = [];
         this.syncUsingScopes = [];
+        this.syncIteratorScopes = [];
         this.tryDepth = 0;
         this.generatorStack = [];
         try {
@@ -55265,6 +55149,7 @@ class Emitter {
             this.generatorStack = outerGeneratorStack;
             this.tryDepth = outerTryDepth;
             this.syncUsingScopes = outerSyncUsingScopes;
+            this.syncIteratorScopes = outerSyncIteratorScopes;
             this.tailFunctionStack = outerTailFunctionStack;
             this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
             this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;
