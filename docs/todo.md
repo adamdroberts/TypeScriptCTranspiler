@@ -7,6 +7,8 @@ The shortest-number and requested decimal formatters, ordinary locale invocation
 
 # TODO — remaining work
 
+Current identifier storage status: binding and field spellings share a reversible UTF-16 component encoder; module and namespace ownership use framed component Lists rather than flattened names. Independent reversibility/depth, rooted field and Node E2E checks cover that path. Finish the native class/interface physical type-name plan and audit remaining compiler-generated naming domains before claiming complete identifier hygiene or exact Identifier clause evidence.
+
 Scope of the full project (from the approved plan): **full ECMAScript 2026 + transpile arbitrary `node_modules`**.
 
 Items are grouped by how soon they unblock the most user value. Within each group the ordering reflects dependency order and implementation leverage. Completed work belongs in [`done.md`](done.md), not in this TODO file.

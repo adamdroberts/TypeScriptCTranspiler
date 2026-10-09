@@ -47,7 +47,7 @@ import {
     T_VOID,
     withTypeBindings,
 } from "./types";
-import { mangleIdent } from "./mangle";
+import { mangleIdent, mangleQualifiedIdent } from "./mangle";
 import {
     unsupported,
     UnsupportedError,
@@ -14842,8 +14842,8 @@ class Emitter {
         for (const modId of emitOrder) {
             const info = this.graph.modules.get(modId);
             if (info) {
-                this.collectModuleVarBindings(info.sf, modId);
-                this.collectModuleLexicalBindings(info.sf, modId);
+                this.collectModuleVarBindings(info.sf);
+                this.collectModuleLexicalBindings(info.sf);
                 this.collectModuleDefaultExportBinding(info.sf, modId);
                 this.collectJsonModuleBinding(info.sf, modId);
                 for (const declaration of this.test262ScriptGlobalDeclarations(info.sf).annexBFunctions) {
@@ -15611,12 +15611,10 @@ class Emitter {
     private declaredName(name: ts.Identifier): string {
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
-        if (this.test262ScriptEntryPaths.has(path.resolve(source.fileName)) ||
-            this.isTest262EvalSourceFile(source)) {
-            const moduleId = this.graph.fileToModuleId.get(source.fileName) ?? "eval_script";
-            parts.unshift(moduleId);
-        }
-        return mangleIdent(parts.join("_"));
+        const moduleId = this.graph.fileToModuleId.get(source.fileName);
+        if (!moduleId) unsupported(name, "declaration is missing its canonical module owner");
+        parts.unshift(moduleId);
+        return mangleQualifiedIdent(parts);
     }
 
     /**
@@ -15631,7 +15629,7 @@ class Emitter {
         const sf = fd.getSourceFile();
         const moduleId = this.graph.fileToModuleId.get(sf.fileName) ?? "module";
         const offset = fd.getStart(sf);
-        const name = mangleIdent(`${moduleId}_local_${fd.name?.text ?? "function"}_${offset}`);
+        const name = "tsc_local_" + mangleQualifiedIdent([moduleId, fd.name?.text ?? "function", String(offset)]);
         this.localFunctionNames.set(fd, name);
         return name;
     }
@@ -15674,9 +15672,10 @@ class Emitter {
         if (moduleVar) return moduleVar.cName;
         const moduleLexical = sym ? this.moduleLexicalBindings.get(sym) : undefined;
         if (moduleLexical) return moduleLexical.cName;
-        if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
-            const parts = [...this.declarationNamespaceParts(decl), id.text];
-            return mangleIdent(parts.join("_"));
+        if (decl && !decl.getSourceFile().isDeclarationFile && (((ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) &&
+            this.isTopLevelValueDeclaration(decl)) || this.isNamespaceTopLevelDeclaration(decl))) {
+            const name = this.declarationName(decl);
+            return name ? this.declaredName(name) : mangleIdent(id.text);
         }
         return mangleIdent(id.text);
     }
@@ -15685,8 +15684,8 @@ class Emitter {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
-            const parts = [...this.declarationNamespaceParts(decl), id.text];
-            return mangleIdent(parts.join("_"));
+            const name = this.declarationName(decl);
+            return name ? this.declaredName(name) : null;
         }
         return null;
     }
@@ -15946,7 +15945,7 @@ class Emitter {
         if (ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl) || ts.isInterfaceDeclaration(decl) || ts.isEnumDeclaration(decl)) {
             return decl.name && ts.isIdentifier(decl.name) ? decl.name : null;
         }
-        if (ts.isVariableDeclaration(decl)) {
+        if (ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) {
             return ts.isIdentifier(decl.name) ? decl.name : null;
         }
         if (ts.isExportAssignment(decl)) {
@@ -24416,7 +24415,7 @@ class Emitter {
         return plan;
     }
 
-    private collectModuleVarBindings(sf: ts.SourceFile, modId: string): ModuleVarBindingPlan[] {
+    private collectModuleVarBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
         const prepared = this.moduleVarBindingsBySource.get(sf);
         if (prepared) return prepared;
         if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf) ||
@@ -24448,7 +24447,7 @@ class Emitter {
                 if (!symbol) return;
                 let plan = this.moduleVarBindings.get(symbol);
                 if (!plan) {
-                    const cName = `${modId}_${this.declaredName(node.name)}`;
+                    const cName = this.declaredName(node.name);
                     plan = {
                         symbol,
                         name: node.name,
@@ -24471,7 +24470,7 @@ class Emitter {
     }
 
     private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
-        for (const binding of this.collectModuleVarBindings(sf, this.currentModuleId)) {
+        for (const binding of this.collectModuleVarBindings(sf)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
             this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
             this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
@@ -24524,7 +24523,6 @@ class Emitter {
      * not enter this worklist. */
     private collectModuleLexicalBindings(
         sf: ts.SourceFile,
-        modId: string,
     ): ModuleLexicalBindingPlan[] {
         const prepared = this.moduleLexicalBindingsBySource.get(sf);
         if (prepared) return prepared;
@@ -24539,7 +24537,7 @@ class Emitter {
         ): void => {
             const symbol = this.symbolForIdentifier(name);
             if (!symbol || this.moduleLexicalBindings.has(symbol)) return;
-            const cName = `${modId}_${this.declaredName(name)}`;
+            const cName = this.declaredName(name);
             const plan: ModuleLexicalBindingPlan = {
                 symbol,
                 name,
@@ -24586,7 +24584,7 @@ class Emitter {
     }
 
     private emitModuleLexicalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
-        for (const binding of this.collectModuleLexicalBindings(sf, this.currentModuleId)) {
+        for (const binding of this.collectModuleLexicalBindings(sf)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
             this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
             this.globalDecls.line(`static bool ${binding.initialized};`);
@@ -25930,7 +25928,7 @@ class Emitter {
     private emitInterfaceStruct(id: ts.InterfaceDeclaration): void {
         if (!id.name) return;
         this.structDecls.open(`struct ${id.name.text}_t`);
-        this.emitNativeAggregateFields(this.interfaceFields(id), id);
+        this.emitNativeAggregateFields(this.interfaceFields(id));
         this.structDecls.close(";");
         this.structDecls.line();
     }
@@ -25939,12 +25937,9 @@ class Emitter {
         return `__tsc_root_${mangleIdent(name)}`;
     }
 
-    private emitNativeAggregateFields(fields: readonly { name: string; type: CType }[], node: ts.Node): void {
+    private emitNativeAggregateFields(fields: readonly { name: string; type: CType }[]): void {
         for (const field of fields) {
             const name = mangleIdent(field.name);
-            if (name === "__tsc_type" || name.startsWith("__tsc_root_")) {
-                unsupported(node, "native aggregate field collides with internal storage");
-            }
             this.structDecls.line(`${field.type.c} ${name};`);
             if (field.type.kind === "value") {
                 this.structDecls.line(`void* volatile ${this.nativeFieldRootName(field.name)};`);
@@ -26057,7 +26052,7 @@ class Emitter {
         this.emitNativeAggregateFields([
             ...baseFields,
             ...this.classOwnInstanceFields(cd).filter(field => !inheritedFields.has(field.name)),
-        ], cd);
+        ]);
         this.structDecls.close(";");
         this.structDecls.line();
     }
@@ -27443,9 +27438,6 @@ class Emitter {
                 if (!fieldName)
                     unsupported(m.name, "computed property names in class must resolve to a string or number literal");
                 const ft = mapType(m, this.checker);
-                if (mangleIdent(fieldName).startsWith("__tsc_root_")) {
-                    unsupported(m, "native aggregate field collides with internal storage");
-                }
                 this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
             }
         }

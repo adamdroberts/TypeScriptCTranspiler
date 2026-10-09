@@ -36,6 +36,11 @@ function source(): string {
         }
         interface RecordOwner { value: any; second: any; }
         class StaticOwner { static value: any = payload(0, 32); static missing: any; }
+        class ReservedOwner {
+            __tsc_type: any = payload(0, 35);
+            __tsc_root_value: any = payload(2, 36);
+            static __tsc_type: any = payload(0, 37);
+        }
         function inherited(owner: Base): string { return describe(owner.value); }
         function create(kind: number): Owner { return new Owner(payload(kind, 17)); }
         function literal(kind: number): RecordOwner { return { value: payload(kind, 18), second: payload(0, 19) }; }
@@ -58,6 +63,8 @@ function source(): string {
         host.print("boxed-setter:" + describe(boxed.value));
         StaticOwner.value = payload(0, 26); sweep();
         host.print("static:" + describe(StaticOwner.value) + ":" + typeof StaticOwner.missing);
+        const reserved = new ReservedOwner(); sweep();
+        host.print("reserved:" + describe(reserved.__tsc_type) + ":" + describe(reserved.__tsc_root_value) + ":" + describe(ReservedOwner.__tsc_type));
         let trace = "";
         const mutation = create(0);
         function receiver(): Owner { trace += "L"; collect(); return mutation; }
@@ -126,7 +133,6 @@ test("native aggregate fields own boxed referents through construction, writes a
 test("unrepresentable native field layouts fail with stable diagnostics", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-field-layout-"));
     const partitions = [
-        { source: 'class Owner { __tsc_root_value: any = "x"; } console.log(new Owner().__tsc_root_value);', diagnostic: "native aggregate field collides with internal storage" },
         { source: 'class Base { value: number = 1; } class Owner extends Base { value: any = "x"; } console.log(new Owner().value);', diagnostic: "native inherited field redeclaration changes physical storage" },
         { source: 'interface Base { value: number; } interface Owner extends Base { value: any; } const owner: Owner = { value: "x" }; console.log(owner.value);', diagnostic: "native inherited field redeclaration changes physical storage" },
     ];
