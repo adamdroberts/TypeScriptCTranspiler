@@ -464,6 +464,18 @@ interface ClosureEnvBinding {
     immutable?: boolean;
 }
 
+/** The lexical scope tree is projected onto one active completion worklist.
+ * Every native control transfer leaves the same suffix, independent of the
+ * number or interleaving of protected regions and iterator owners. */
+interface SyncCompletionScope {
+    readonly owner: ts.TryStatement | ts.ForOfStatement;
+    readonly frame: string;
+    readonly iterator?: string;
+    readonly finallyEnvironment?: Map<ts.Symbol, ClosureEnvBinding>;
+    readonly outerTryDepth: number;
+    readonly controlDepths: readonly [number, number, number, number];
+}
+
 type NamedSwitchLexicalDeclaration =
     | (ts.FunctionDeclaration & { readonly name: ts.Identifier })
     | (ts.ClassDeclaration & { readonly name: ts.Identifier });
@@ -655,7 +667,7 @@ class Emitter {
     private activeLabeledBreakTargets: Array<Map<string, string>> = [];
     private activeLabeledContinueTargets: Array<Map<string, string | null>> = [];
     private syncUsingScopes: string[][] = [];
-    private syncIteratorScopes: string[] = [];
+    private syncCompletionScopes: SyncCompletionScope[] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
@@ -42465,6 +42477,7 @@ class Emitter {
                 }
                 if (!found) unsupported(stmt, "labeled break target must be a supported labeled block or current loop");
             }
+            this.emitSyncCompletionExit(buf, stmt);
             buf.line(target ? `goto ${target};` : "break;");
             return;
         }
@@ -42487,6 +42500,7 @@ class Emitter {
             }
             let target = this.activeContinueTargets[this.activeContinueTargets.length - 1];
             if (labeledTargetFound) target = labeledTarget;
+            this.emitSyncCompletionExit(buf, stmt);
             buf.line(target ? `goto ${target};` : "continue;");
             return;
         }
@@ -43764,14 +43778,24 @@ class Emitter {
         s: ts.Statement,
         continueTarget: string | null = null,
     ): void {
-        this.activeBreakTargets.push(null);
-        this.activeContinueTargets.push(continueTarget);
+        const breakTarget = this.freshTemp("_loop_break");
+        const nativeContinue = continueTarget ?? this.freshTemp("_loop_continue");
+        const normalTarget = this.freshTemp("_loop_body_end");
+        this.registerLabeledContinueTarget(s.parent as ts.Statement, nativeContinue);
+        this.activeBreakTargets.push(breakTarget);
+        this.activeContinueTargets.push(nativeContinue);
         try {
             this.emitStmtInBlock(buf, s);
         } finally {
             this.activeContinueTargets.pop();
             this.activeBreakTargets.pop();
         }
+        // Explicit destinations remain valid when an enclosing finalizer is
+        // emitted at an exit inside a different, already exited C loop.
+        buf.line(`goto ${normalTarget};`);
+        buf.line(`${breakTarget}: break;`);
+        if (!continueTarget) buf.line(`${nativeContinue}: continue;`);
+        buf.line(`${normalTarget}:;`);
     }
 
     private isDuplicateSimpleSetAdd(a: ts.Statement, b: ts.Statement): boolean {
@@ -44167,31 +44191,25 @@ class Emitter {
         return bindings;
     }
 
-    /** Direct C exits cannot yet carry a finally/disposal completion through
-     * this backend. Reject that semantic boundary from one AST worklist rather
-     * than silently omitting a finalizer on a particular control-edge shape. */
-    private assertSyncIteratorCompletionRepresentable(fos: ts.ForOfStatement): void {
-        const pending: ts.Node[] = [fos.statement];
+    /** Disposal records have not yet joined the completion worklist. */
+    private assertSyncCompletionRepresentable(statement: ts.ForOfStatement | ts.TryStatement): void {
+        const pending: ts.Node[] = [statement];
         let unavailable = this.syncUsingScopes.length > 0;
-        for (let parent: ts.Node | undefined = fos.parent; parent && !ts.isFunctionLike(parent); parent = parent.parent) {
-            if (ts.isTryStatement(parent) && parent.finallyBlock) unavailable = true;
-        }
         while (pending.length > 0 && !unavailable) {
             const node = pending.pop()!;
             if (ts.isFunctionLike(node)) continue;
-            if (ts.isTryStatement(node) && node.finallyBlock ||
-                ts.isVariableDeclarationList(node) &&
+            if (ts.isVariableDeclarationList(node) &&
                 (node.flags & ts.NodeFlags.Using) !== 0) unavailable = true;
             ts.forEachChild(node, child => { pending.push(child); });
         }
-        if (unavailable) unsupported(fos, "synchronous iterator completion cannot represent finally or disposal scopes");
+        if (unavailable) unsupported(statement, "synchronous completion cannot represent disposal scopes");
     }
 
     private emitForOf(buf: CBuf, fos: ts.ForOfStatement): void {
         if (fos.awaitModifier) {
             unsupported(fos, "for-await-of requires a supported async continuation shape");
         }
-        this.assertSyncIteratorCompletionRepresentable(fos);
+        this.assertSyncCompletionRepresentable(fos);
         const declaration = ts.isVariableDeclarationList(fos.initializer)
             ? fos.initializer.declarations[0] : undefined;
         // The RHS runs in the head's uninitialized lexical environment. Body
@@ -44267,7 +44285,7 @@ class Emitter {
         const lexical = declaration && this.isForOfLexicalDeclaration(declaration)
             ? this.emitForOfLexicalEnvironment(buf, declaration) : null;
         if (lexical) this.lexicalBindingScopes.push(lexical);
-        this.syncIteratorScopes.push(record);
+        this.syncCompletionScopes.push(this.syncCompletionScope(fos, frame, record));
         this.tryDepth++;
         try {
             if (lexical && declaration) {
@@ -44294,7 +44312,7 @@ class Emitter {
             if (continueTarget) buf.line(`${continueTarget}:;`);
         } finally {
             this.tryDepth--;
-            this.syncIteratorScopes.pop();
+            this.syncCompletionScopes.pop();
             if (lexical) this.lexicalBindingScopes.pop();
         }
         buf.line("tsc_try_pop();");
@@ -48001,6 +48019,45 @@ class Emitter {
             unsupported(r, "return outside of function");
         }
         const ret = this.returnStack[this.returnStack.length - 1]!;
+        if (this.syncCompletionScopes.length > 0) {
+            const overrides = new Map<ts.Expression, EmitResult>();
+            let completionRoot: string | null = null;
+            if (r.expression) {
+                const expression = this.emitExpr(r.expression);
+                const deferredResolution = this.generatorStack.length > 0 || this.asyncFunctionStack.length > 0 ||
+                    this.asyncAwaitContinuationReturnTargets.length > 0;
+                const type = deferredResolution ? expression.ty : ret;
+                const value = deferredResolution ? expression.c : this.coerce(expression, type, r.expression);
+                if (type.kind === "void" || type.kind === "never") {
+                    buf.line(`${value};`);
+                    overrides.set(r.expression, { c: "((void)0)", ty: T_VOID });
+                } else {
+                    const staged = this.freshTemp("_completion_return");
+                    const root = this.freshTemp("_completion_return_root");
+                    completionRoot = root;
+                    buf.line(`${type.c} volatile ${staged} = ${value};`);
+                    buf.line(`void* volatile ${root} = ${type.kind === "value" ? `tsc_value_gc_root(${staged})`
+                        : isPointerKind(type) ? `(void*)${staged}` : "NULL"};`);
+                    for (const scope of this.syncCompletionScopes) {
+                        if (scope.iterator) buf.line(`${scope.iterator}->completion_gc_root = ${root};`);
+                    }
+                    overrides.set(r.expression, { c: staged, ty: type });
+                }
+            }
+            this.emitSyncCompletionExit(buf, r);
+            if (completionRoot) buf.line(`(void)${completionRoot};`);
+            const scopes = this.syncCompletionScopes;
+            const tails = this.tailFunctionStack;
+            this.syncCompletionScopes = [];
+            this.tailFunctionStack = [];
+            this.conditionValueScopes.push(overrides);
+            try { this.emitReturn(buf, r); } finally {
+                this.conditionValueScopes.pop();
+                this.tailFunctionStack = tails;
+                this.syncCompletionScopes = scopes;
+            }
+            return;
+        }
         const continuationReturn =
             this.asyncAwaitContinuationReturnTargets[this.asyncAwaitContinuationReturnTargets.length - 1];
         if (continuationReturn) {
@@ -48050,7 +48107,8 @@ class Emitter {
                 return;
             }
             const asyncReturnExpr = this.unwrapTransparentExpression(r.expression);
-            if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0) {
+            if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0 &&
+                !this.conditionValueScopes.some(scope => scope.has(r.expression!))) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
                     if (this.syncUsingScopes.length > 0) {
@@ -48096,27 +48154,9 @@ class Emitter {
                 : `return ${this.zeroValue(ret)};`);
             return;
         }
-        if (this.syncIteratorScopes.length === 0 && this.emitTailCallReturn(buf, r.expression)) return;
+        if (this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitExpr(r.expression);
         const coerced = this.coerce(expr, ret, r.expression);
-        if (this.syncIteratorScopes.length > 0) {
-            const returnValue = this.freshTemp("_iterator_return");
-            const returnRoot = this.freshTemp("_iterator_return_gc_root");
-            if (ret.kind === "void" || ret.kind === "never") {
-                buf.line(`${coerced};`);
-                buf.line("return;");
-                return;
-            }
-            buf.line(`${ret.c} volatile ${returnValue} = ${coerced};`);
-            const root = ret.kind === "value" ? `tsc_value_gc_root(${returnValue})`
-                : isPointerKind(ret) ? `(void*)${returnValue}` : "NULL";
-            buf.line(`void* volatile ${returnRoot} = ${root};`);
-            for (const owner of this.syncIteratorScopes) {
-                buf.line(`${owner}->completion_gc_root = ${returnRoot};`);
-            }
-            buf.line(`return ${returnValue};`);
-            return;
-        }
         if (this.syncUsingScopes.length > 0) {
             const returnValue = this.freshTemp("_using_return");
             buf.line(`${ret.c} const ${returnValue} = ${coerced};`);
@@ -48697,200 +48737,240 @@ class Emitter {
         return true;
     }
 
-    private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
-        const completion = this.isTest262ScriptEvaluationNode(ts0)
-            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
-            : undefined;
-        const outerCompletion = completion
-            ? {
-                value: this.freshTemp("_try_outer_completion"),
-                gcRoot: this.freshTemp("_try_outer_completion_gc_root"),
-            }
-            : null;
-        const emitOuterCompletionSnapshot = (): void => {
-            if (!completion || !outerCompletion) return;
-            buf.line(`tsc_value_t const ${outerCompletion.value} = ${completion.value};`);
-            buf.line(
-                `void* volatile ${outerCompletion.gcRoot} = ` +
-                `tsc_value_gc_root(${outerCompletion.value});`,
-            );
-        };
-        const restoreOuterCompletion = (): void => {
-            if (!completion || !outerCompletion) return;
-            buf.line(`${completion.value} = ${outerCompletion.value};`);
-            buf.line(`${completion.gcRoot} = ${outerCompletion.gcRoot};`);
-        };
-        const emitFinallyPreservingNormalCompletion = (statements: readonly ts.Statement[]): void => {
-            if (!completion) {
-                for (const statement of statements) this.emitStmt(buf, statement);
-                return;
-            }
-            const normalValue = this.freshTemp("_try_normal_completion");
-            const normalRoot = this.freshTemp("_try_normal_completion_gc_root");
-            buf.line(`tsc_value_t const ${normalValue} = ${completion.value};`);
-            buf.line(`void* volatile ${normalRoot} = tsc_value_gc_root(${normalValue});`);
-            for (const statement of statements) this.emitStmt(buf, statement);
-            buf.line(`${completion.value} = ${normalValue};`);
-            buf.line(`${completion.gcRoot} = ${normalRoot};`);
-        };
-        if (ts0.catchClause && ts0.finallyBlock) {
-            const ehVar = this.freshTemp("_eh");
-            const catchEhVar = this.freshTemp("_catch_eh");
-            const finallyEhVar = this.freshTemp("_finally_eh");
-            const catchErrorVar = this.freshTemp("_catch_error");
-            buf.open("");
-            emitOuterCompletionSnapshot();
-            buf.line(`TSC_TRY_FRAME(${ehVar});`);
-            buf.line(`tsc_try_push(&${ehVar});`);
-            buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
-            this.tryDepth++;
-            try {
-                for (const s of ts0.tryBlock.statements) this.emitStmt(buf, s);
-            } finally {
-                this.tryDepth--;
-            }
-            buf.line(`tsc_try_pop();`);
-            buf.close();
-            buf.open("else");
-            buf.line(`tsc_try_pop();`);
-            restoreOuterCompletion();
-            buf.line(`TSC_TRY_FRAME(${catchEhVar});`);
-            buf.line(`tsc_try_push(&${catchEhVar});`);
-            buf.open(`if (setjmp(${catchEhVar}.jb) == 0)`);
-            let catchSym: ts.Symbol | undefined;
-            const catchUsesValue = this.catchBindingUsesValue(ts0.catchClause);
-            if (ts0.catchClause.variableDeclaration) {
-                const vd = ts0.catchClause.variableDeclaration;
-                if (!ts.isIdentifier(vd.name))
-                    unsupported(vd, "catch binding must be simple identifier");
-                catchSym = this.symbolForIdentifier(vd.name);
-                if (catchSym) {
-                    if (catchUsesValue) this.catchValueSymbols.add(catchSym);
-                    else this.catchStringSymbols.add(catchSym);
-                }
-                buf.line(catchUsesValue
-                    ? `tsc_value_t ${mangleIdent(vd.name.text)} = tsc_current_error_value();`
-                    : `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`);
-            }
-            try {
-                for (const s of ts0.catchClause.block.statements)
-                    this.emitStmt(buf, s);
-            } finally {
-                if (catchSym) {
-                    if (catchUsesValue) this.catchValueSymbols.delete(catchSym);
-                    else this.catchStringSymbols.delete(catchSym);
+    private syncCompletionScope(
+        owner: ts.TryStatement | ts.ForOfStatement,
+        frame: string,
+        iterator?: string,
+        finallyEnvironment?: Map<ts.Symbol, ClosureEnvBinding>,
+    ): SyncCompletionScope {
+        return { owner, frame, iterator, finallyEnvironment,
+            outerTryDepth: this.tryDepth,
+            controlDepths: [this.activeBreakTargets.length, this.activeContinueTargets.length,
+                this.activeLabeledBreakTargets.length, this.activeLabeledContinueTargets.length] };
+    }
+
+    /** Capture references, without GetValue, at the lexical location of the
+     * protected statement. Exit-site C scopes may shadow the same spelling. */
+    private emitFinallyEnvironment(buf: CBuf, statement: ts.TryStatement): Map<ts.Symbol, ClosureEnvBinding> {
+        const environment = new Map<ts.Symbol, ClosureEnvBinding>();
+        if (!statement.finallyBlock) return environment;
+        const pending: ts.Node[] = [statement.finallyBlock];
+        while (pending.length > 0) {
+            const node = pending.pop()!;
+            if (ts.isTypeNode(node)) continue;
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (symbol && declaration && !environment.has(symbol) &&
+                    !declaration.getSourceFile().isDeclarationFile &&
+                    !this.isNodeWithin(declaration, statement.finallyBlock) &&
+                    !this.test262GlobalReferencePlan(node) &&
+                    (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isParameter(declaration))) {
+                    const type = this.storageType(node);
+                    let pointer = this.capturePtrForSymbol(symbol);
+                    const formal = this.formalParameterBindingForSymbol(symbol);
+                    const lexical = this.lexicalBindingForSymbol(symbol);
+                    pointer ??= formal ? `&${formal.value}` : lexical ? `&${lexical.value}` : null;
+                    if (!pointer) {
+                        if (declaration.pos >= statement.pos || this.isNodeWithin(declaration, statement)) {
+                            unsupported(node, "synchronous completion requires a canonical finalizer binding environment");
+                        }
+                        const argumentScope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
+                        pointer = `&${argumentScope?.get(symbol) ?? this.identifierName(node)}`;
+                    }
+                    const alias = this.freshTemp("_finally_reference");
+                    buf.line(`${type.c}${type.kind === "value" ? " volatile" : ""}* ${alias} = ${pointer};`);
+                    const binding: ClosureEnvBinding = { type, ptr: alias };
+                    const rootPointer = this.captureRootPtrForSymbol(symbol);
+                    if (rootPointer) {
+                        const rootAlias = this.freshTemp("_finally_root_reference");
+                        buf.line(`void* volatile* ${rootAlias} = ${rootPointer};`);
+                        binding.rootPtr = rootAlias;
+                    }
+                    const metadata = this.localLexicalMetadataForSymbol(symbol);
+                    if (metadata) {
+                        const initializedPointer = this.captureInitializationPtrForSymbol(symbol) ??
+                            (formal?.initialized ? `&${formal.initialized}` : null);
+                        const initialized = this.freshTemp("_finally_initialized");
+                        if (initializedPointer) {
+                            buf.line(`bool* ${initialized} = ${initializedPointer};`);
+                            binding.initializedPtr = initialized;
+                        } else {
+                            buf.line(`bool ${initialized} = true;`);
+                            binding.initializedPtr = `&${initialized}`;
+                        }
+                        binding.lexicalName = metadata.name;
+                        binding.immutable = metadata.immutable;
+                    }
+                    environment.set(symbol, binding);
                 }
             }
-            buf.line(`tsc_try_pop();`);
-            buf.close();
-            buf.open("else");
-            buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_value_t const ${catchErrorVar} = tsc_current_error_value();`);
-            buf.line(`TSC_TRY_FRAME(${finallyEhVar});`);
-            buf.line(`tsc_try_push(&${finallyEhVar});`);
-            buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
-            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
-            buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_throw_value(${catchErrorVar});`);
-            buf.close();
-            buf.open("else");
-            buf.line("tsc_try_pop();");
-            buf.line("tsc_rethrow();");
-            buf.close();
-            buf.close();
-            buf.close();
-            emitFinallyPreservingNormalCompletion(ts0.finallyBlock.statements);
-            buf.close();
-            return;
+            ts.forEachChild(node, child => { pending.push(child); });
         }
-        if (!ts0.catchClause && ts0.finallyBlock) {
-            const ehVar = this.freshTemp("_eh");
-            const finallyEhVar = this.freshTemp("_finally_eh");
-            const errorVar = this.freshTemp("_try_error");
-            buf.open("");
-            emitOuterCompletionSnapshot();
-            buf.line(`TSC_TRY_FRAME(${ehVar});`);
-            buf.line(`tsc_try_push(&${ehVar});`);
-            buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
-            this.tryDepth++;
-            try {
-                for (const s of ts0.tryBlock.statements) this.emitStmt(buf, s);
-            } finally {
-                this.tryDepth--;
-            }
-            buf.line(`tsc_try_pop();`);
-            buf.close();
-            buf.open("else");
-            buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_value_t const ${errorVar} = tsc_current_error_value();`);
-            buf.line(`TSC_TRY_FRAME(${finallyEhVar});`);
-            buf.line(`tsc_try_push(&${finallyEhVar});`);
-            buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
-            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
-            buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_throw_value(${errorVar});`);
-            buf.close();
-            buf.open("else");
-            buf.line("tsc_try_pop();");
-            buf.line("tsc_rethrow();");
-            buf.close();
-            buf.close();
-            emitFinallyPreservingNormalCompletion(ts0.finallyBlock.statements);
-            buf.close();
-            return;
-        }
-        const ehVar = this.freshTemp("_eh");
+        return environment;
+    }
+
+    private emitSyncFinally(buf: CBuf, scope: SyncCompletionScope): void {
+        if (!ts.isTryStatement(scope.owner) || !scope.owner.finallyBlock) return;
+        const previousDepth = this.tryDepth;
+        const controls = [this.activeBreakTargets, this.activeContinueTargets,
+            this.activeLabeledBreakTargets, this.activeLabeledContinueTargets] as const;
+        const savedControls = controls.map(control => [...control]);
+        for (let index = 0; index < controls.length; index++) controls[index]!.length = scope.controlDepths[index]!;
+        this.tryDepth = scope.outerTryDepth;
+        this.closureEnvScopes.push(scope.finallyEnvironment ?? new Map());
         buf.open("");
-        emitOuterCompletionSnapshot();
-        buf.line(`TSC_TRY_FRAME(${ehVar});`);
-        buf.line(`tsc_try_push(&${ehVar});`);
-        buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
-        this.tryDepth++;
+        const completion = this.isTest262ScriptEvaluationNode(scope.owner)
+            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1] : undefined;
+        const normal = completion ? this.freshTemp("_finally_normal_completion") : null;
+        const root = completion ? this.freshTemp("_finally_normal_root") : null;
+        if (completion) {
+            buf.line(`tsc_value_t const ${normal} = ${completion.value};`);
+            buf.line(`void* volatile ${root} = tsc_value_gc_root(${normal});`);
+            buf.line(`${completion.value} = tsc_value_undefined();`);
+            buf.line(`${completion.gcRoot} = NULL;`);
+        }
         try {
-            for (const s of ts0.tryBlock.statements) this.emitStmt(buf, s);
+            this.emitStmtList(buf, scope.owner.finallyBlock.statements);
         } finally {
-            this.tryDepth--;
+            this.closureEnvScopes.pop();
+            this.tryDepth = previousDepth;
+            for (let index = 0; index < controls.length; index++) {
+                const control = controls[index]! as unknown[];
+                control.splice(0, control.length, ...savedControls[index]!);
+            }
         }
-        buf.line(`tsc_try_pop();`);
+        if (completion) {
+            buf.line(`${completion.value} = ${normal};`);
+            buf.line(`${completion.gcRoot} = ${root};`);
+        }
         buf.close();
-        if (ts0.catchClause) {
-            buf.open("else");
-            buf.line(`tsc_try_pop();`);
-            restoreOuterCompletion();
-            let catchSym: ts.Symbol | undefined;
-            const catchUsesValue = this.catchBindingUsesValue(ts0.catchClause);
-            if (ts0.catchClause.variableDeclaration) {
-                const vd = ts0.catchClause.variableDeclaration;
-                if (!ts.isIdentifier(vd.name))
-                    unsupported(vd, "catch binding must be simple identifier");
-                catchSym = this.symbolForIdentifier(vd.name);
-                if (catchSym) {
-                    if (catchUsesValue) this.catchValueSymbols.add(catchSym);
-                    else this.catchStringSymbols.add(catchSym);
+    }
+
+    private syncCompletionControlTarget(statement: ts.ReturnStatement | ts.BreakStatement | ts.ContinueStatement): ts.Node | null {
+        if (ts.isReturnStatement(statement)) return null;
+        for (let parent: ts.Node | undefined = statement.parent; parent && !ts.isFunctionLike(parent); parent = parent.parent) {
+            if (statement.label) {
+                if (ts.isLabeledStatement(parent) && parent.label.text === statement.label.text) {
+                    let target: ts.Statement = parent;
+                    if (ts.isContinueStatement(statement)) {
+                        target = parent.statement;
+                        while (ts.isLabeledStatement(target)) target = target.statement;
+                    }
+                    return target;
                 }
-                buf.line(catchUsesValue
-                    ? `tsc_value_t ${mangleIdent(vd.name.text)} = tsc_current_error_value();`
-                    : `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`);
+            } else if (ts.isIterationStatement(parent, false) || ts.isBreakStatement(statement) && ts.isSwitchStatement(parent)) {
+                return parent;
             }
-            try {
-                for (const s of ts0.catchClause.block.statements)
-                    this.emitStmt(buf, s);
-            } finally {
-                if (catchSym) {
-                    if (catchUsesValue) this.catchValueSymbols.delete(catchSym);
-                    else this.catchStringSymbols.delete(catchSym);
-                }
+        }
+        unsupported(statement, "unresolved synchronous completion target");
+    }
+
+    private emitSyncCompletionExit(buf: CBuf, statement: ts.ReturnStatement | ts.BreakStatement | ts.ContinueStatement): void {
+        const target = this.syncCompletionControlTarget(statement);
+        const scopes = this.syncCompletionScopes;
+        try {
+            for (let index = scopes.length - 1; index >= 0; index--) {
+                const scope = scopes[index]!;
+                const stays = target && this.isNodeWithin(target, scope.owner) &&
+                    !(target === scope.owner && ts.isBreakStatement(statement));
+                if (stays) break;
+                this.syncCompletionScopes = scopes.slice(0, index);
+                // User callbacks execute after the exited region's handler is
+                // removed; their errors belong to the remaining outer scope.
+                buf.line(`tsc_try_cleanup(&${scope.frame});`);
+                if (scope.iterator) buf.line(`tsc_sync_iterator_close(${scope.iterator});`);
+                else this.emitSyncFinally(buf, scope);
             }
+        } finally {
+            this.syncCompletionScopes = scopes;
+        }
+    }
+
+    private emitTry(buf: CBuf, statement: ts.TryStatement): void {
+        this.assertSyncCompletionRepresentable(statement);
+        buf.open("");
+        const environment = this.emitFinallyEnvironment(buf, statement);
+        const frame = this.freshTemp("_try_frame");
+        const scope = this.syncCompletionScope(statement, frame, undefined, environment);
+        const completion = this.isTest262ScriptEvaluationNode(statement)
+            ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1] : undefined;
+        if (completion) {
+            // TryStatement applies UpdateEmpty(..., undefined), so its Block
+            // starts with an empty value rather than the preceding statement.
+            buf.line(`${completion.value} = tsc_value_undefined();`);
+            buf.line(`${completion.gcRoot} = NULL;`);
+        }
+        const emitProtected = (protectedScope: SyncCompletionScope, emitBody: () => void): void => {
+            buf.line(`TSC_TRY_FRAME(${protectedScope.frame});`);
+            buf.line(`tsc_try_push(&${protectedScope.frame});`);
+            buf.open(`if (setjmp(${protectedScope.frame}.jb) == 0)`);
+            this.syncCompletionScopes.push(protectedScope);
+            this.tryDepth++;
+            try { emitBody(); } finally {
+                this.tryDepth--;
+                this.syncCompletionScopes.pop();
+            }
+            buf.line("tsc_try_pop();");
             buf.close();
+        };
+        const saveError = (): { value: string; root: string } => {
+            const error = this.freshTemp("_completion_error");
+            const root = this.freshTemp("_completion_error_root");
+            buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
+            buf.line(`void* volatile ${root} = tsc_value_gc_root(${error});`);
+            buf.line("tsc_try_pop();");
+            return { value: error, root };
+        };
+        const emitCatch = (error: string): void => {
+            const clause = statement.catchClause!;
+            let symbol: ts.Symbol | undefined;
+            const usesValue = this.catchBindingUsesValue(clause);
+            if (clause.variableDeclaration) {
+                const declaration = clause.variableDeclaration;
+                if (!ts.isIdentifier(declaration.name)) unsupported(declaration, "catch binding must be simple identifier");
+                symbol = this.symbolForIdentifier(declaration.name);
+                if (symbol) {
+                    if (usesValue) this.catchValueSymbols.add(symbol);
+                    else this.catchStringSymbols.add(symbol);
+                }
+                const name = mangleIdent(declaration.name.text);
+                buf.line(usesValue ? `tsc_value_t ${name} = ${error};`
+                    : `tsc_str_t* ${name} = tsc_current_error();`);
+                if (usesValue && symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
+            }
+            try { this.emitStmtList(buf, clause.block.statements); } finally {
+                if (symbol) {
+                    if (usesValue) this.catchValueSymbols.delete(symbol);
+                    else this.catchStringSymbols.delete(symbol);
+                }
+            }
+        };
+        emitProtected(scope, () => this.emitStmtList(buf, statement.tryBlock.statements));
+        buf.open("else");
+        const error = saveError();
+        if (completion) {
+            buf.line(`${completion.value} = tsc_value_undefined();`);
+            buf.line(`${completion.gcRoot} = NULL;`);
+        }
+        if (statement.catchClause) {
+            if (statement.finallyBlock) {
+                const catchScope = this.syncCompletionScope(statement, this.freshTemp("_catch_frame"), undefined, environment);
+                emitProtected(catchScope, () => emitCatch(error.value));
+                buf.open("else");
+                const catchError = saveError();
+                this.emitSyncFinally(buf, catchScope);
+                buf.line(`(void)${catchError.root};`);
+                buf.line(`tsc_throw_value(${catchError.value});`);
+                buf.close();
+            } else emitCatch(error.value);
         } else {
-            buf.open("else");
-            buf.line(`tsc_try_pop();`);
-            buf.line("tsc_rethrow();");
-            buf.close();
+            this.emitSyncFinally(buf, scope);
+            buf.line(`(void)${error.root};`);
+            buf.line(`tsc_throw_value(${error.value});`);
         }
-        if (ts0.finallyBlock) {
-            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
-        }
+        buf.close();
+        this.emitSyncFinally(buf, scope);
         buf.close();
     }
 
@@ -55044,7 +55124,7 @@ class Emitter {
         const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
         const outerTailFunctionStack = this.tailFunctionStack;
         const outerSyncUsingScopes = this.syncUsingScopes;
-        const outerSyncIteratorScopes = this.syncIteratorScopes;
+        const outerSyncCompletionScopes = this.syncCompletionScopes;
         const outerTryDepth = this.tryDepth;
         const outerGeneratorStack = this.generatorStack;
         this.asyncFunctionStack = [];
@@ -55052,7 +55132,7 @@ class Emitter {
         this.asyncAwaitContinuationAdapterDepth = 0;
         this.tailFunctionStack = [];
         this.syncUsingScopes = [];
-        this.syncIteratorScopes = [];
+        this.syncCompletionScopes = [];
         this.tryDepth = 0;
         this.generatorStack = [];
         try {
@@ -55149,7 +55229,7 @@ class Emitter {
             this.generatorStack = outerGeneratorStack;
             this.tryDepth = outerTryDepth;
             this.syncUsingScopes = outerSyncUsingScopes;
-            this.syncIteratorScopes = outerSyncIteratorScopes;
+            this.syncCompletionScopes = outerSyncCompletionScopes;
             this.tailFunctionStack = outerTailFunctionStack;
             this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
             this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;

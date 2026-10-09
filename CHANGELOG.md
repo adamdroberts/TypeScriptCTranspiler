@@ -1,5 +1,7 @@
 # Changelog
 
+- Unify synchronous return, break and continue through one lexical completion scope worklist. Run finally and IteratorClose in scope order, preserve overrides and exited-handler boundaries, retain pending values, and project finalizer bindings before inner shadowing. Replace duplicated try emitters; Script try/catch/finally completion values now apply UpdateEmpty with undefined.
+
 - Replaced eager ordinary for-of lowering with one iterator record, lexical close guards and shared binding environments. Preserve stepping order, head TDZ, captured patterns, abrupt close precedence, typed overrides and returned value roots. Unrepresented finalizer scopes fail closed. Global reference writes retain fresh values before key allocation, repairing a collection-dependent prototype-chain defect.
 
 - Replaced eager RegExp matchAll collections with ordinary String/RegExp symbol protocols, ordered species construction and a Realm-owned lazy iterator through shared RegExpExec. Preserve match metadata, Unicode empty advancement, original state, abrupt retries and reentrancy. Array.from and literal spread consume actual iterator methods; typed spreads share element codecs, and boxed list growth retains decoded roots.

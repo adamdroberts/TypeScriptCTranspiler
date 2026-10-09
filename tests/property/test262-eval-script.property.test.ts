@@ -1008,7 +1008,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
                 $262.evalScript(${JSON.stringify(completionIdentitySource)}) !== sentinel ||
                 $262.evalScript(${JSON.stringify(completionBranchSource)}) !== 11 ||
                 $262.evalScript(${JSON.stringify(completionLoopSource)}) !== 2 ||
-                $262.evalScript(${JSON.stringify(completionCaughtEmptySource)}) !== 20 ||
+                $262.evalScript(${JSON.stringify(completionCaughtEmptySource)}) !== undefined ||
                 $262.evalScript(${JSON.stringify(completionCatchValueSource)}) !== 30 ||
                 $262.evalScript(${JSON.stringify(completionFinallySource)}) !== 40 ||
                 $262.evalScript(${JSON.stringify(completionStressSource)}) !== sentinel ||

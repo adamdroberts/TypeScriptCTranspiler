@@ -183,13 +183,11 @@ test("for-of steps one ordinary iterator between bodies and closes lexical scope
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }, 180_000);
 
-test("unrepresented synchronous finalizer scopes fail through one stable completion diagnostic", async () => {
+test("unrepresented synchronous disposal scopes fail through one stable completion diagnostic", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-of-boundary-"));
-    const boundary = "synchronous iterator completion cannot represent finally or disposal scopes";
+    const boundary = "synchronous completion cannot represent disposal scopes";
     try {
         const bodies = [
-            `try { for (const value of source) {} } finally { console.log("finally"); }`,
-            `for (const value of source) { try { console.log(value); } finally { console.log("finally"); } }`,
             `for (const value of source) { using resource: any = null; }`,
         ];
         for (const [index, body] of bodies.entries()) {
