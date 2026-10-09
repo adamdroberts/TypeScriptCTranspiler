@@ -918,7 +918,7 @@
     },
     {
       "kind": "implementation",
-      "id": "runtime/tsc_value.c#string_value_is_regexp",
+      "id": "runtime/tsc_value.c#tsc_value_is_regexp",
       "targets": [
         "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
         "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",

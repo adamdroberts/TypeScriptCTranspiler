@@ -140,7 +140,7 @@ void* tsc_value_as_class(tsc_value_t v) {
     return NULL;
 }
 
-static tsc_value_t tsc_value_function_named_kind(
+tsc_value_t tsc_value_function_named_kind(
     tsc_generic_function_t fn,
     tsc_generic_function_t construct,
     void* env,
@@ -944,8 +944,6 @@ typedef enum {
     TSC_STRING_FILL_PAD_END,
 } tsc_string_fill_operation_t;
 
-static bool string_value_is_regexp(tsc_value_t value);
-
 static tsc_value_t string_search_from_values(
     tsc_value_t receiver,
     tsc_value_t search,
@@ -958,7 +956,7 @@ static tsc_value_t string_search_from_values(
         operation == TSC_STRING_SEARCH_INCLUDES ||
         operation == TSC_STRING_SEARCH_STARTS_WITH ||
         operation == TSC_STRING_SEARCH_ENDS_WITH;
-    if (rejects_regexp && string_value_is_regexp(search)) {
+    if (rejects_regexp && tsc_value_is_regexp(search)) {
         tsc_throw_error(
             TSC_ERROR_TYPE,
             tsc_str_from_lit("String search argument must not be a RegExp", 43)
@@ -2274,6 +2272,7 @@ tsc_value_t tsc_global_object(void) {
         { "Symbol", 6, tsc_symbol_constructor_value() },
         { "Proxy", 5, tsc_proxy_constructor_value() },
         { "Date", 4, tsc_date_constructor_value() },
+        { "RegExp", 6, tsc_regexp_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
         { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
@@ -2792,6 +2791,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE:
+            return tsc_regexp_prototype_value();
         case TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE:
@@ -2809,6 +2810,20 @@ static tsc_value_t value_intrinsic_default_prototype(
         }
     }
     tsc_panic("unknown intrinsic default prototype");
+}
+
+/* GetPrototypeFromConstructor is shared by ordinary and exotic allocation. */
+tsc_value_t tsc_value_get_prototype_from_constructor(
+    tsc_value_t constructor, tsc_intrinsic_default_prototype_kind_t kind
+) {
+    tsc_value_t prototype = tsc_value_get_prop(constructor, tsc_str_from_lit("prototype", 9));
+    if (!tsc_value_is_object(prototype)) {
+        tsc_realm_t* realm = tsc_value_function_realm(constructor);
+        tsc_realm_t* previous = tsc_realm_swap(realm);
+        prototype = value_intrinsic_default_prototype(kind);
+        (void)tsc_realm_swap(previous);
+    }
+    return prototype;
 }
 
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
@@ -2908,15 +2923,9 @@ static tsc_value_t construct_from_argument_list(
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->construct != NULL) {
             tsc_value_t receiver = tsc_value_undefined();
             if (ident->construct_allocates_receiver) {
-                tsc_value_t new_target_proto = tsc_value_get_prop(new_target, tsc_str_from_lit("prototype", 9));
-                if (!value_is_valid_prototype(new_target_proto) || value_is_null_value(new_target_proto)) {
-                    tsc_realm_t* new_target_realm = tsc_value_function_realm(new_target);
-                    tsc_realm_t* previous_realm = tsc_realm_swap(new_target_realm);
-                    new_target_proto = value_intrinsic_default_prototype(
-                        ident->construct_default_prototype
-                    );
-                    (void)tsc_realm_swap(previous_realm);
-                }
+                tsc_value_t new_target_proto = tsc_value_get_prototype_from_constructor(
+                    new_target, ident->construct_default_prototype
+                );
                 receiver = tsc_value_object(
                     tsc_object_new_with_prototype(new_target_proto)
                 );
@@ -8070,7 +8079,7 @@ static const tsc_regexp_t* string_native_regexp(tsc_value_t value) {
         : NULL;
 }
 
-static bool string_value_is_regexp(tsc_value_t value) {
+bool tsc_value_is_regexp(tsc_value_t value) {
     if (!tsc_value_is_object(value)) return false;
     tsc_value_t matcher = tsc_value_get_symbol_prop(value, tsc_symbol_match());
     if (!tsc_value_is_undefined(matcher)) return tsc_value_is_truthy(matcher);
@@ -8078,7 +8087,7 @@ static bool string_value_is_regexp(tsc_value_t value) {
 }
 
 static void string_require_global_regexp(tsc_value_t search) {
-    if (!string_value_is_regexp(search)) return;
+    if (!tsc_value_is_regexp(search)) return;
     const tsc_str_t* flags_key = tsc_str_from_lit("flags", 5);
     tsc_value_t flags = tsc_value_get_prop(search, flags_key);
     if (
@@ -8474,7 +8483,7 @@ tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
     if (r->object) return tsc_value_object(r->object);
     tsc_object_t* o = tsc_object_new_class(r);
     o->is_regexp = true;
-    o->prototype = tsc_value_object(r->prototype);
+    o->prototype = r->prototype;
     tsc_object_define(o, tsc_str_from_lit("lastIndex", 9), tsc_value_num(0), true, false, false);
     r->object = o;
     return tsc_value_object(o);

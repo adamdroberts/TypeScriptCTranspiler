@@ -1,0 +1,9 @@
+clone: true 0 4 dg
+call: true
+prototype: true true
+metadata: RegExp 2
+alias: true
+reflect: true true 1
+species: true
+lookup: \x61bc
+escape: \x61\x2db

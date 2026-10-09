@@ -2705,7 +2705,19 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
 
 /* Boxing retains one object identity and the prototype from the creation
  * Realm. The ordinary accessor collection also supplies string coercion. */
-static const char regexp_prototype_realm_key = 0;
+static const char regexp_intrinsics_realm_key = 0;
+typedef struct { tsc_object_t* prototype; tsc_value_t constructor; void* constructor_root; } regexp_intrinsics_t;
+
+static tsc_value_t regexp_species_get(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args; return receiver;
+}
+static tsc_value_t regexp_escape_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    tsc_value_t input = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!value_is_box(input) || value_tag(input) != TSC_VALUE_TAG_STRING)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp.escape requires a string"));
+    return tsc_value_string(tsc_regexp_escape(value_ptr(input)));
+}
 typedef enum { RE_P_SOURCE, RE_P_FLAGS, RE_P_GLOBAL, RE_P_INDICES, RE_P_IGNORE_CASE,
                RE_P_MULTILINE, RE_P_DOT_ALL, RE_P_UNICODE, RE_P_UNICODE_SETS, RE_P_STICKY } regexp_property_t;
 typedef struct { const char* name; regexp_property_t property; } regexp_property_descriptor_t;
@@ -2764,13 +2776,34 @@ static tsc_value_t regexp_to_string_apply(void* env, tsc_value_t receiver, tsc_a
         tsc_str_from_lit("/", 1), flags));
 }
 tsc_value_t tsc_regexp_prototype_value(void) {
-    tsc_object_t* prototype = tsc_realm_state_get(&regexp_prototype_realm_key);
-    if (prototype) return tsc_value_object(prototype);
+    regexp_intrinsics_t* state = tsc_realm_state_get(&regexp_intrinsics_realm_key);
+    if (state) return tsc_value_object(state->prototype);
     tsc_runtime_lock();
-    prototype = tsc_realm_state_get(&regexp_prototype_realm_key);
-    if (!prototype) {
-        prototype = tsc_object_new();
-        tsc_realm_state_set(&regexp_prototype_realm_key, prototype);
+    state = tsc_realm_state_get(&regexp_intrinsics_realm_key);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state));
+        memset(state, 0, sizeof(*state));
+        tsc_object_t* prototype = state->prototype = tsc_object_new();
+        tsc_realm_state_set(&regexp_intrinsics_realm_key, state);
+        state->constructor = tsc_value_function_named_kind(
+            tsc_regexp_constructor_apply, tsc_regexp_constructor_apply, NULL, 2,
+            tsc_str_from_lit("RegExp", 6), TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->constructor_root = tsc_value_gc_root(state->constructor);
+        tsc_function_identity_t* identity = value_ptr(state->constructor);
+        identity->construct_allocates_receiver = false;
+        identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE;
+        tsc_function_identity_set_own_prototype(identity, tsc_value_object(prototype));
+        identity->func_prototype_writable = false;
+        tsc_object_define(prototype, tsc_str_from_lit("constructor", 11), state->constructor, true, false, true);
+        tsc_object_t* species = tsc_object_new();
+        tsc_object_set(species, tsc_str_from_lit("get", 3), tsc_value_function_builtin_named(
+            regexp_species_get, NULL, 0, tsc_str_from_lit("get [Symbol.species]", 20)));
+        tsc_object_set(species, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
+        tsc_object_set(species, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
+        tsc_value_define_property_descriptor(state->constructor, tsc_symbol_property_key(tsc_symbol_species()), tsc_value_object(species));
+        tsc_value_define_property_desc(state->constructor, tsc_str_from_lit("escape", 6),
+            tsc_value_function_builtin_named(regexp_escape_apply, NULL, 1, tsc_str_from_lit("escape", 6)),
+            true, true, true, false, true, true, true);
         for (size_t i = 0; i < sizeof(regexp_properties) / sizeof(*regexp_properties); i++) {
             const regexp_property_descriptor_t* descriptor = &regexp_properties[i];
             tsc_object_define_accessor(prototype, tsc_str_from_cstr(descriptor->name),
@@ -2797,7 +2830,12 @@ tsc_value_t tsc_regexp_prototype_value(void) {
         }
     }
     tsc_runtime_unlock();
-    return tsc_value_object(prototype);
+    return tsc_value_object(state->prototype);
+}
+tsc_value_t tsc_regexp_constructor_value(void) {
+    (void)tsc_regexp_prototype_value();
+    regexp_intrinsics_t* state = tsc_realm_state_get(&regexp_intrinsics_realm_key);
+    return state->constructor;
 }
 
 bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position, const size_t* captures,

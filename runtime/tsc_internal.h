@@ -121,6 +121,10 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_BUILTIN,
     TSC_FUNCTION_IDENTITY_BOUND,
 } tsc_function_identity_kind_t;
+tsc_value_t tsc_value_function_named_kind(
+    tsc_generic_function_t apply, tsc_generic_function_t construct, void* env,
+    double length, tsc_str_t* name, tsc_function_identity_kind_t kind
+);
 
 typedef enum {
     TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE,
@@ -132,6 +136,7 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE,
@@ -142,6 +147,12 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_AGGREGATE_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_SUPPRESSED_ERROR_PROTOTYPE,
 } tsc_intrinsic_default_prototype_kind_t;
+
+tsc_value_t tsc_value_get_prototype_from_constructor(
+    tsc_value_t constructor, tsc_intrinsic_default_prototype_kind_t kind
+);
+bool tsc_value_is_regexp(tsc_value_t value);
+tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 
 typedef struct {
     tsc_value_t target;

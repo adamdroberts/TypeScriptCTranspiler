@@ -350,7 +350,8 @@ typedef struct tsc_re_compiled tsc_re_compiled_t;
 typedef struct tsc_regexp {
     tsc_re_compiled_t* re;
     struct tsc_object* object;
-    struct tsc_object* prototype;
+    tsc_value_t prototype;
+    void* prototype_gc_root;
     tsc_str_t* source;
     tsc_str_t* flags;
     bool global;
@@ -366,7 +367,7 @@ typedef struct tsc_regexp {
 } tsc_regexp_t;
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags);
-tsc_regexp_t* tsc_regexp_from_constructor_args(tsc_value_t pattern, tsc_value_t flags, bool as_function_call);
+tsc_value_t tsc_regexp_constructor_value(void);
 tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);

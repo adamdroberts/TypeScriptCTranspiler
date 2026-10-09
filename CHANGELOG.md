@@ -1,5 +1,7 @@
 # Changelog
 
+- Added an ordinary Realm-owned RegExp constructor with shared call/construct argument Lists, cloning and IsRegExp rules, ordered reflective prototype allocation, real constructor/species/escape descriptors, and cross-Realm defaults/errors. Constructor aliases retain callable/constructable identity structurally; mixed conditional values use shared boxing.
+
 - Added ordinary String/RegExp `match` and `search` symbol protocols through shared `RegExpExec`, including custom methods, ordered conversions, Unicode empty advancement, result metadata, and exact `lastIndex` restoration. Replaced the direct matcher dispatches and preserve arbitrary inferred JavaScript property values.
 
 - Added disjoint duplicate RegExp names through ordered capture fanout and enclosing disjunction paths, including repeated/backward references, named result/index identity, replacement groups, and Unicode-decoded names. Nullable dynamic property reads preserve unset captures.

@@ -681,6 +681,7 @@ interface RegExpExecArray extends RegExpMatchArray {
     groups: { [key: string]: string | undefined } | undefined;
 }
 interface RegExp {
+    constructor: Function;
     [Symbol.match](string?: string): RegExpMatchArray | null;
     [Symbol.search](string?: string): number;
     exec(s?: string, ...ignored: any[]): RegExpExecArray | null;
@@ -701,6 +702,10 @@ interface RegExp {
     lastIndex: number;
 }
 interface RegExpConstructor {
+    readonly prototype: RegExp;
+    readonly length: number;
+    readonly name: string;
+    readonly [Symbol.species]: RegExpConstructor;
     new(pattern?: string | RegExp, flags?: string, ...ignored: any[]): RegExp;
     (pattern?: string | RegExp, flags?: string, ...ignored: any[]): RegExp;
     escape(text: string, ...ignored: any[]): string;

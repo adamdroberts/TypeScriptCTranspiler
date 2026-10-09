@@ -49307,6 +49307,9 @@ class Emitter {
                 };
             }
             // Built-in global identifiers.
+            if (this.isUnshadowedGlobalIdentifier(expr, "RegExp")) {
+                return { c: "tsc_regexp_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };
             }
@@ -52773,17 +52776,10 @@ class Emitter {
             };
         }
         if (whenT.ty.kind !== whenF.ty.kind) {
-            const boxable: readonly CType["kind"][] = ["number", "boolean", "string", "array", "void", "value"];
-            if (boxable.includes(whenT.ty.kind) && boxable.includes(whenF.ty.kind)) {
-                return {
-                    c: `(${cond} ? ${this.coerce(whenT, T_VALUE, expr.whenTrue)} : ${this.coerce(whenF, T_VALUE, expr.whenFalse)})`,
-                    ty: T_VALUE,
-                };
-            }
-            unsupported(
-                expr,
-                `ternary branches have different types (${whenT.ty.c} vs ${whenF.ty.c})`,
-            );
+            return {
+                c: `(${cond} ? ${this.coerce(whenT, T_VALUE, expr.whenTrue)} : ${this.coerce(whenF, T_VALUE, expr.whenFalse)})`,
+                ty: T_VALUE,
+            };
         }
         return {
             c: `(${cond} ? ${whenT.c} : ${whenF.c})`,
@@ -53249,8 +53245,8 @@ class Emitter {
         if (name === "Symbol") {
             return this.emitSymbolConstructor(call);
         }
-        if (name === "RegExp") {
-            return this.emitRegExpConstructor(call);
+        if (name === "RegExp" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
+            return this.emitDynamicValueCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
         }
         if (name === "Date") {
             const specs = Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg }));
@@ -56970,17 +56966,8 @@ class Emitter {
             }
             if (memberName === "UTC") return this.emitDateStaticUtc(call);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "RegExp") {
-            if (memberName === "escape") {
-                const arg = call.arguments[0];
-                if (!arg) unsupported(call, "RegExp.escape expects one string argument");
-                const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_STRING, [
-                    { value, target: T_STRING, node: arg },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ], ([text]) => `tsc_regexp_escape(${text})`);
-            }
-            unsupported(call, `RegExp.${memberName}`);
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "RegExp")) {
+            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE }, memberName, false);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Number") {
             return this.emitNumberStatic(call, memberName);
@@ -76634,25 +76621,6 @@ class Emitter {
         ], ([code]) => `tsc_process_exit(${code})`);
     }
 
-    private emitRegExpConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
-        const args = call.arguments ?? [];
-        const specs: SequencedCallArg[] = [];
-        const patternIndex = args[0] ? specs.length : -1;
-        if (args[0]) {
-            specs.push({ value: this.emitExpr(args[0]), target: T_VALUE, node: args[0] });
-        }
-        const flagsIndex = args[1] ? specs.length : -1;
-        if (args[1]) {
-            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
-        }
-        specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_REGEXP, specs, (values) => {
-            const pattern = patternIndex >= 0 ? values[patternIndex]! : "tsc_value_undefined()";
-            const flags = flagsIndex >= 0 ? values[flagsIndex]! : "tsc_value_undefined()";
-            return `tsc_regexp_from_constructor_args(${pattern}, ${flags}, ${ts.isCallExpression(call) ? "true" : "false"})`;
-        });
-    }
-
     private emitDecoratedClassNew(
         node: ts.Node,
         cd: ts.ClassDeclaration,
@@ -76851,6 +76819,9 @@ class Emitter {
                 { value: handler, target: T_VALUE, node: args[1]! },
                 ...this.ignoredArgumentSpecs(args, 2),
             ], ([t, h]) => `tsc_proxy_new(${t}, ${h})`);
+        }
+        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "RegExp")) {
+            return this.emitDynamicValueConstruct(n, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
         }
         if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
@@ -77371,9 +77342,6 @@ class Emitter {
         }
         if (this.isErrorConstructorName(cls) && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
             return this.emitErrorConstructor(n, cls);
-        }
-        if (cls === "RegExp") {
-            return this.emitRegExpConstructor(n);
         }
         if (cls === "URL") return this.emitUrlConstructor(n);
         if (cls === "URLSearchParams") return this.emitUrlSearchParamsConstructor(n);

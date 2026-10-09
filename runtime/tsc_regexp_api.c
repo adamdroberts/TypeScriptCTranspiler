@@ -2,42 +2,42 @@
 #define RE_UNSET SIZE_MAX
 
 /* Native consumers: every offset and capture refers to the same UTF-16 collection. */
-tsc_regexp_t* tsc_regexp_from_constructor_args(
-    tsc_value_t pattern,
-    tsc_value_t flags,
-    bool as_function_call
-) {
-    tsc_regexp_t* source_regexp = NULL;
+/* The ordinary argument List feeds both [[Call]] and [[Construct]]. IsRegExp,
+ * property reads, prototype selection and conversion retain their spec order. */
+tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    tsc_value_t pattern = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t flags = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    bool pattern_is_regexp = tsc_value_is_regexp(pattern);
+    tsc_value_t new_target = tsc_value_current_new_target();
+    if (tsc_value_is_undefined(new_target)) {
+        new_target = tsc_value_current_callee();
+        if (pattern_is_regexp && tsc_value_is_undefined(flags) &&
+            tsc_value_get_prop(pattern, tsc_str_from_lit("constructor", 11)) == new_target) return pattern;
+    }
+    const tsc_regexp_t* native = NULL;
     if (value_is_box(pattern) && value_tag(pattern) == TSC_VALUE_TAG_OBJECT) {
-        const tsc_object_t* object = (const tsc_object_t*)value_ptr(pattern);
-        if (object && object->is_regexp) {
-            source_regexp = (tsc_regexp_t*)object->class_ptr;
-        }
+        const tsc_object_t* object = value_ptr(pattern);
+        if (object->is_regexp) native = object->class_ptr;
     }
-
-    const bool flags_undefined = tsc_value_is_undefined(flags);
-    if (as_function_call && source_regexp && flags_undefined) {
-        return source_regexp;
+    tsc_value_t source = pattern;
+    if (native) {
+        source = tsc_value_string(native->source);
+        if (tsc_value_is_undefined(flags)) flags = tsc_value_string(native->flags);
+    } else if (pattern_is_regexp) {
+        source = tsc_value_get_prop(pattern, tsc_str_from_lit("source", 6));
+        if (tsc_value_is_undefined(flags)) flags = tsc_value_get_prop(pattern, tsc_str_from_lit("flags", 5));
     }
-
-    const tsc_str_t* pattern_text;
-    if (source_regexp) {
-        pattern_text = source_regexp->source;
-    } else if (tsc_value_is_undefined(pattern)) {
-        pattern_text = tsc_str_from_lit("", 0);
-    } else {
-        pattern_text = tsc_value_to_string(pattern);
-    }
-
-    const tsc_str_t* flags_text;
-    if (!flags_undefined) {
-        flags_text = tsc_value_to_string(flags);
-    } else if (source_regexp) {
-        flags_text = source_regexp->flags;
-    } else {
-        flags_text = tsc_str_from_lit("", 0);
-    }
-    return tsc_regexp_new(pattern_text, flags_text);
+    void* volatile source_root = tsc_value_gc_root(source); (void)source_root;
+    void* volatile flags_root = tsc_value_gc_root(flags); (void)flags_root;
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(new_target, TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE);
+    void* volatile prototype_root = tsc_value_gc_root(prototype); (void)prototype_root;
+    tsc_str_t* pattern_text = tsc_value_is_undefined(source) ? tsc_str_from_lit("", 0) : tsc_value_to_string(source);
+    tsc_str_t* flags_text = tsc_value_is_undefined(flags) ? tsc_str_from_lit("", 0) : tsc_value_to_string(flags);
+    tsc_regexp_t* regexp = tsc_regexp_new(pattern_text, flags_text);
+    regexp->prototype = prototype;
+    regexp->prototype_gc_root = tsc_value_gc_root(prototype);
+    return tsc_value_regexp(regexp);
 }
 
 tsc_str_t* tsc_regexp_escape(const tsc_str_t* input) {
@@ -169,7 +169,8 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     result->sticky = options.sticky;
     result->compiled = true;
     result->capture_count = tsc_re_group_count(compiled);
-    result->prototype = value_ptr(tsc_regexp_prototype_value());
+    result->prototype = tsc_regexp_prototype_value();
+    result->prototype_gc_root = tsc_value_gc_root(result->prototype);
     return result;
 }
 
