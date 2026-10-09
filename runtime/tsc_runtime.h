@@ -1293,7 +1293,6 @@ tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* r
 tsc_value_t tsc_value_method_match(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_search(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_match_all(tsc_value_t recv, tsc_value_t pattern);
-tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix);
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv);
 tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args);
 tsc_value_t tsc_value_method_value_of(tsc_value_t recv);

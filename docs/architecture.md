@@ -4,6 +4,8 @@ How `tsc2c` turns a TypeScript source tree into a native gcc-linked binary.
 
 The frontend control static-semantics worklist carries one lexical iteration-name set with each control context. Lexical heads contribute their shared BoundNames, and every var binding tree in the body checks that set. Nested function bodies and class static blocks begin independent contexts; nested branches and loops retain the applicable enclosing constraints. Duplicate names and required initializer grammar checks precede reachability and emission. Both compilation and the native Test262 parse phase consume this same decision.
 
+Ordinary named-property and value calls now stage their callee/receiver roots before one shared actual-argument List application. Optional callee checks surround the complete List evaluation; ordinary and spread elements use the same source-ordered traversal. Number toString calls and named/computed method-value reads enter ordinary property lookup, retaining mutable descriptor semantics and actual return values. The primitive intrinsic validates its receiver before shared number-hint ToNumber radix conversion. Native Number formatter calls and the unreachable dynamic toString helper are removed; other typed Number method specializations remain separate work.
+
 ## Top-level pipeline
 
 ```mermaid

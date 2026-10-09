@@ -1,5 +1,7 @@
 # Changelog
 
+- Resolve typed Number toString and method values through ordinary prototype lookup and shared ToNumber radix coercion. Unify named/value calls around one rooted actual-argument List with lazy optional application; preserve lookup order, spread effects, actual return values and exact coercion exceptions. Delete the direct formatter call and unreachable dynamic/runtime toString predecessor.
+
 - Enforce iteration lexical head/body var conflicts, duplicate BoundNames, forbidden `let` bindings and missing ordinary const/pattern initializers through the shared frontend control worklist. Reset variable/control constraints at nested function and class static block boundaries; reject invalid unreachable bodies before code emission.
 
 - Lower for initializers through the shared declaration list, preallocate lexical value/root/TDZ cells and copy captured let environments at the initial and update edges. Preserve source-ordered pattern initialization, initializer closures and continue semantics across ordinary and suspended execution. Share for-of cell allocation, delete duplicate storage paths and ignore erased function type annotations in async closure classification. Fail closed for unrepresented head disposal records.

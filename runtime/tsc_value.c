@@ -852,14 +852,14 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
         return tsc_value_string(
             tsc_value_is_undefined(radix)
                 ? tsc_str_from_num(value_as_num(primitive))
-                : tsc_str_from_num_radix(value_as_num(primitive), tsc_value_as_num(radix))
+                : tsc_str_from_num_radix(value_as_num(primitive), tsc_value_to_number(radix))
         );
     }
     if (descriptor->kind == TSC_PRIMITIVE_BIGINT) {
         tsc_value_t radix = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
         return tsc_value_string(tsc_bigint_to_string(
             (const tsc_bigint_t*)value_ptr(primitive),
-            tsc_value_is_undefined(radix) ? 10.0 : tsc_value_as_num(radix)
+            tsc_value_is_undefined(radix) ? 10.0 : tsc_value_to_number(radix)
         ));
     }
     if (descriptor->kind == TSC_PRIMITIVE_SYMBOL) {
@@ -8181,39 +8181,6 @@ tsc_value_t tsc_value_method_match_all(tsc_value_t receiver, tsc_value_t pattern
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_array_push_value(args, tsc_value_string(string));
     return tsc_value_apply_function(method, regexp, tsc_value_array(args));
-}
-
-tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
-    if (!value_is_box(recv)) {
-        if (tsc_value_is_undefined(radix)) return tsc_str_from_num(value_as_num(recv));
-        return tsc_str_from_num_radix(value_as_num(recv), tsc_value_as_num(radix));
-    }
-    /* Symbol.prototype.toString is an explicit conversion and therefore does
-     * not use the throwing abstract ToString(Symbol) operation. */
-    if (value_tag(recv) == TSC_VALUE_TAG_SYMBOL) {
-        return tsc_value_to_explicit_string(recv);
-    }
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
-        tsc_object_t* o = (tsc_object_t*)value_ptr(recv);
-        if (o->is_typed_array && o->class_ptr) {
-            const tsc_str_t* encoding = tsc_value_is_undefined(radix)
-                ? tsc_str_from_lit("utf8", 4)
-                : tsc_value_to_string(radix);
-            return tsc_buffer_to_string((const tsc_buffer_t*)o->class_ptr, encoding);
-        }
-    }
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toString", 8));
-        if (tsc_value_is_callable(fn)) {
-            tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-            if (!tsc_value_is_undefined(radix)) {
-                tsc_array_push_value(args, radix);
-            }
-            return tsc_value_to_string(tsc_value_apply_function(fn, recv, tsc_value_array(args)));
-        }
-        tsc_throw_str(tsc_str_from_cstr("toString is not a function"));
-    }
-    return tsc_value_to_string(recv);
 }
 
 tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args) {

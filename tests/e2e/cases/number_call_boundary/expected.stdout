@@ -1,0 +1,6 @@
+coercion ff V
+poison true
+method true toString 1
+lookup GABCC 255 2 16 16
+optional true true
+value-optional true true

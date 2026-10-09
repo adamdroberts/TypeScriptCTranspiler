@@ -53610,53 +53610,32 @@ class Emitter {
         );
     }
 
+    /** One actual argument List and lazy application boundary serves ordinary
+     * value calls and named property calls, including optional and spread
+     * syntax. The caller stages/root-resolves its callee and receiver first. */
+    private emitOrdinaryCallApplication(
+        call: ts.CallExpression,
+        fn: string,
+        receiver: string,
+    ): string {
+        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+        const list = this.freshTemp("_dyn_call_args");
+        const invoke = `({ tsc_array_t* volatile ${list} = ${argumentsList.c}; ` +
+            `tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${list})); })`;
+        return call.questionDotToken
+            ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
+            : invoke;
+    }
+
     private emitDynamicValueCall(
         call: ts.CallExpression,
         callee: EmitResult,
         thisArg: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE },
     ): EmitResult {
-        if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
-            if (call.questionDotToken) {
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: callee, target: T_VALUE, node: call.expression },
-                        { value: thisArg, target: T_VALUE, node: call.expression },
-                    ],
-                    ([fn, receiver]) => {
-                        const list = this.emitSpreadCallArgumentList(call.arguments);
-                        return `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${list.c}))`;
-                    },
-                );
-            }
-            const list = this.emitSpreadCallArgumentList(call.arguments);
-            return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
-                { value: callee, target: T_VALUE, node: call.expression },
-                { value: thisArg, target: T_VALUE, node: call.expression },
-                { value: list, target: T_VALUE, node: call },
-            ]);
-        }
-        const args = Array.from(call.arguments, (arg) => this.emitExpr(arg));
-        return this.emitSequencedExpr(
-            T_VALUE,
-            [
-                { value: callee, target: T_VALUE, node: call.expression },
-                { value: thisArg, target: T_VALUE, node: call.expression },
-                ...args.map((value, index) => ({ value, target: T_VALUE, node: call.arguments[index]! })),
-            ],
-            ([fn, receiver, ...vals]) => {
-                const av = this.freshTemp("_dyn_call_args");
-                const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
-                for (const value of vals) {
-                    pieces.push(`tsc_array_push_value(${av}, ${value})`);
-                }
-                const invoke = `tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${av}))`;
-                pieces.push(call.questionDotToken
-                    ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
-                    : invoke);
-                return `({ ${pieces.join("; ")}; })`;
-            },
-        );
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: callee, target: T_VALUE, node: call.expression },
+            { value: thisArg, target: T_VALUE, node: call.expression },
+        ], ([fn, receiver]) => this.emitOrdinaryCallApplication(call, fn, receiver));
     }
 
     private signatureHasRestParameter(params: readonly ts.Symbol[]): boolean {
@@ -54117,7 +54096,7 @@ class Emitter {
 
     private emitSpreadCallArgumentList(args: readonly ts.Expression[]): EmitResult {
         const argumentsArray = this.freshTemp("_call_arguments");
-        const pieces = [`tsc_array_t* ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`];
+        const pieces = [`tsc_array_t* volatile ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`];
         for (const argument of args) {
             if (ts.isSpreadElement(argument)) {
                 const value = this.emitExpr(argument.expression);
@@ -56719,7 +56698,6 @@ class Emitter {
         method: string,
         optionalReceiver: boolean,
     ): EmitResult {
-        const args = call.arguments;
         const target = this.freshTemp("_dyn_call_receiver");
         const targetRoot = this.freshTemp("_dyn_call_receiver_gc_root");
         const fn = this.freshTemp("_dyn_call_fn");
@@ -56731,35 +56709,8 @@ class Emitter {
             `void* volatile ${fnRoot} = tsc_value_gc_root(${fn})`,
             `(void)${fnRoot}`,
         ];
-        let invocation: string;
-        if (args.some((arg) => ts.isSpreadElement(arg))) {
-            const argList = this.emitSpreadCallArgumentList(args);
-            const list = this.freshTemp("_dyn_call_args");
-            invocation = `({ ${[
-                ...prefix,
-                `tsc_array_t* ${list} = ${argList.c}`,
-                `tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list}))`,
-            ].join("; ")}; })`;
-        } else {
-            const pieces = [...prefix];
-            const values: string[] = [];
-            for (const argument of args) {
-                const emitted = this.emitExpr(argument);
-                const value = this.freshTemp("_dyn_call_arg");
-                const root = this.freshTemp("_dyn_call_arg_gc_root");
-                pieces.push(
-                    `tsc_value_t ${value} = ${this.coerce(emitted, T_VALUE, argument)}`,
-                    `void* volatile ${root} = tsc_value_gc_root(${value})`,
-                    `(void)${root}`,
-                );
-                values.push(value);
-            }
-            const list = this.freshTemp("_dyn_call_args");
-            pieces.push(`tsc_array_t* ${list} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`);
-            for (const value of values) pieces.push(`tsc_array_push_value(${list}, ${value})`);
-            pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${list}))`);
-            invocation = `({ ${pieces.join("; ")}; })`;
-        }
+        const invocation = `({ ${prefix.join("; ")}; ` +
+            `${this.emitOrdinaryCallApplication(call, fn, target)}; })`;
         const body = optionalReceiver
             ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invocation}`
             : invocation;
@@ -57251,12 +57202,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
-            case "toString":
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([v, radix]) => `tsc_value_method_to_string(${v}, ${radix})`);
             case "toFixed":
                 return this.emitSequencedExpr(T_STRING, [
                     { value: recv, target: T_VALUE, node: call.expression },
@@ -64730,20 +64675,9 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         switch (method) {
-            case "toString": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasRadix = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasRadix) {
-                    const radix = this.emitExpr(args[0]);
-                    requireNumber(args[0], radix.ty);
-                    specs.push({ value: radix, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const radix = hasRadix ? vals[1]! : "10.0";
-                    return `tsc_str_from_num_radix(${vals[0]}, ${radix})`;
-                });
-            }
+            case "toString":
+                return this.emitDynamicNamedPropertyCall(call, recv, method,
+                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
             case "toFixed": {
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 const hasDigits = !!args[0] && !this.isUndefinedExpression(args[0]);
@@ -74977,6 +74911,14 @@ class Emitter {
             ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
             : rawRecv;
         const isOpt = !!pa.questionDotToken;
+        if (recv.ty.kind === "number") {
+            const cache = this.freshTemp("_number_prop_cache");
+            return {
+                c: `({ static tsc_prop_cache_t ${cache}; ` +
+                    `tsc_value_get_prop_cached(${this.coerce(recv, T_VALUE, pa.expression)}, ${this.stringLit(pa.name.text)}, &${cache}); })`,
+                ty: T_VALUE,
+            };
+        }
         if (recv.ty.kind === "string" && pa.name.text === "length") {
             return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };
         }
@@ -75456,6 +75398,13 @@ class Emitter {
                 );
             }
             return { c: `tsc_buffer_get(${recv.c}, ${idx.c})`, ty: T_NUMBER };
+        }
+        if (recv.ty.kind === "number") {
+            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: recv, target: T_VALUE, node: ea.expression },
+                { value: key, target: T_VALUE, node: ea.argumentExpression },
+            ], ([number, property]) => `tsc_value_get_computed_prop(${number}, ${property})`);
         }
         if (recv.ty.kind === "value") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
