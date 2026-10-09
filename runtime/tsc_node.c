@@ -7423,14 +7423,16 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     if (getter == tsc_value_dynamic_accessor_getter && env) return *(tsc_value_t*)env;
     tsc_realm_t* realm = tsc_realm_current();
     tsc_parse_unit_t* unit = tsc_parse_unit_current();
+    tsc_environment_t* environment = tsc_environment_current();
     tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_GETTER,
-        .realm = realm, .parse_unit = unit, .code = (uintptr_t)getter, .env = env };
+        .realm = realm, .parse_unit = unit, .lexical_environment = environment, .code = (uintptr_t)getter, .env = env };
     tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
     if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_GETTER;
     entry->realm = realm;
     entry->parse_unit = unit;
+    entry->lexical_environment = environment;
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;
@@ -7450,14 +7452,16 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     if (setter == tsc_value_dynamic_accessor_setter && env) return *(tsc_value_t*)env;
     tsc_realm_t* realm = tsc_realm_current();
     tsc_parse_unit_t* unit = tsc_parse_unit_current();
+    tsc_environment_t* environment = tsc_environment_current();
     tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_SETTER,
-        .realm = realm, .parse_unit = unit, .code = (uintptr_t)setter, .env = env };
+        .realm = realm, .parse_unit = unit, .lexical_environment = environment, .code = (uintptr_t)setter, .env = env };
     tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
     if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_SETTER;
     entry->realm = realm;
     entry->parse_unit = unit;
+    entry->lexical_environment = environment;
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;

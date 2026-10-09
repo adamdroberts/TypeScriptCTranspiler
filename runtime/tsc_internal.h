@@ -124,6 +124,7 @@ typedef struct {
     tsc_function_identity_kind_t kind;
     tsc_realm_t* realm;
     tsc_parse_unit_t* parse_unit;
+    tsc_environment_t* lexical_environment;
     uintptr_t code;
     tsc_generic_function_t construct;
     void* env;
@@ -187,6 +188,7 @@ typedef struct tsc_function_identity {
      * Realm of their target through GetFunctionRealm. */
     tsc_realm_t* realm;
     tsc_parse_unit_t* parse_unit;
+    tsc_environment_t* lexical_environment;
     /* OrdinaryCreateFromConstructor resolves this intrinsic in newTarget's
      * Realm whenever newTarget.prototype is not an Object. */
     tsc_intrinsic_default_prototype_kind_t construct_default_prototype;

@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Retain finite eval lexical and strict variable bindings in one declarative Environment Record tree. Share declaration preflight, TDZ/mutation/deletion/global lookup and source callable/resumable context; isolate indirect eval and Function construction. Verify generated declaration/context partitions and one deep retained-parent graph through native E2E in both memory modes.
+
 - Cache tagged-template raw/cooked objects by source Parse Node, runtime parse unit and Realm. Share ordinary/resumable callable references and actual argument Lists, preserve UTF-16/invalid escapes/frozen descriptors and mutable String.raw lookup, and honor rejected strict property writes and deletion. Verify independent generated semantics, retained-owner stress and typed E2E in both memory modes.
 
 - Route represented Object reflection/enumeration/prototype methods and Reflect calls through ordinary lookup and rooted actual Lists; replace native dispatch and separate enumeration loops with ordered descriptor/Get traversal. Preserve coercion/error/constructor semantics and cross-fragment UTF-16 materialization; verify independent retained-key properties and Node E2E, and remove obsolete literal-stack shape assertions.

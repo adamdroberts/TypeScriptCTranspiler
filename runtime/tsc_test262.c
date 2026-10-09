@@ -21,8 +21,11 @@ static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_a
     }
     tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
     tsc_parse_unit_t* previous = tsc_parse_unit_swap(unit);
+    tsc_environment_t* previous_environment = tsc_environment_current();
+    (void)tsc_environment_swap(NULL);
     tsc_value_t result = g_test262_indirect_eval_callback(tsc_value_as_string(source));
     (void)tsc_parse_unit_swap(previous);
+    (void)tsc_environment_swap(previous_environment);
     (void)unit;
     return result;
 }
@@ -46,8 +49,10 @@ tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
     }
     tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
     tsc_parse_unit_t* previous = tsc_parse_unit_swap(unit);
+    tsc_environment_t* previous_environment = tsc_environment_current();
     tsc_value_t result = g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller);
     (void)tsc_parse_unit_swap(previous);
+    (void)tsc_environment_swap(previous_environment);
     (void)unit;
     return result;
 }
@@ -128,8 +133,10 @@ static tsc_value_t test262_host_eval_script(void* env, tsc_value_t this_arg, tsc
     tsc_str_t* text = tsc_value_to_string(source);
     tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
     tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(unit);
+    tsc_environment_t* previous_environment = tsc_environment_swap(NULL);
     tsc_value_t result = g_test262_eval_script_callback(text);
     (void)tsc_parse_unit_swap(previous_unit);
+    (void)tsc_environment_swap(previous_environment);
     (void)unit;
     (void)tsc_realm_swap(previous);
     return result;

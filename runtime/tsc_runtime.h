@@ -76,6 +76,12 @@ typedef struct tsc_parse_unit tsc_parse_unit_t;
 tsc_parse_unit_t* tsc_parse_unit_new(void);
 tsc_parse_unit_t* tsc_parse_unit_current(void);
 tsc_parse_unit_t* tsc_parse_unit_swap(tsc_parse_unit_t* unit);
+/* Source functions retain their lexical Environment Record independently of
+ * the physical C callback, Realm and runtime parse identity. */
+typedef struct tsc_environment tsc_environment_t;
+tsc_environment_t* tsc_environment_current(void);
+tsc_environment_t* tsc_environment_swap(tsc_environment_t* environment);
+tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_scope);
 
 /* A continuation may retain a mutable closure binding rather than a value
  * snapshot.  Copying this handle between states preserves both the shared
@@ -783,6 +789,7 @@ typedef struct {
     void* volatile root;
     tsc_realm_t* realm;
     tsc_parse_unit_t* parse_unit;
+    tsc_environment_t* lexical_environment;
     bool context_initialized;
     bool initialized;
 } tsc_callable_owner_t;
@@ -854,6 +861,12 @@ tsc_value_t tsc_global_object(void);
 void tsc_global_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
 bool tsc_global_annex_b_function_instantiation(tsc_str_t* key);
 tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value);
+void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
+tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value);
+tsc_value_t tsc_environment_reference_get(tsc_str_t* key);
+tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
+bool tsc_environment_reference_delete(tsc_str_t* key);
+tsc_str_t* tsc_environment_reference_typeof(tsc_str_t* key);
 tsc_value_t tsc_global_binding_get(tsc_str_t* key);
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_reference_get(tsc_str_t* key);
@@ -1846,6 +1859,7 @@ typedef struct tsc_try_frame {
     struct tsc_try_frame* prev;
     tsc_realm_t* realm;
     tsc_parse_unit_t* parse_unit;
+    tsc_environment_t* lexical_environment;
     tsc_call_activation_t* activation_top;
     void* callee_top;
     /* NaN-boxed pointer payloads and TLS slots are invisible to conservative

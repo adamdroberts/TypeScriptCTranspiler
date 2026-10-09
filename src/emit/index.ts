@@ -23731,7 +23731,7 @@ class Emitter {
         }
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         if (scriptGlobal) {
-            return `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
+            return `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
         }
         const sym = this.symbolForIdentifier(id);
         const localLexical = this.localLexicalReferenceForIdentifier(id);
@@ -23995,7 +23995,7 @@ class Emitter {
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
         if (this.functionSourcePaths.has(path.resolve(sf.fileName))) return true;
         const evalStrict = this.test262EvalEntryModes.get(path.resolve(sf.fileName));
-        if (evalStrict === true) return false;
+        if (evalStrict !== undefined) return true;
         return !!this.options.test262Observation &&
             this.isJavaScriptSourceFile(sf) &&
             (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
@@ -24798,17 +24798,14 @@ class Emitter {
     private emitTest262ScriptGlobalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         const declarations = this.test262ScriptGlobalDeclarations(sf);
         const sloppyEval = this.isTest262SloppyEvalSourceFile(sf);
-        if (sloppyEval && declarations.lexicals.length > 0) {
-            unsupported(
-                declarations.lexicals[0]!.declaration,
-                "finite eval lexical declarations require the eval-local declarative environment lowering",
-            );
+        const evalSource = this.isTest262EvalSourceFile(sf);
+        if (evalSource) {
+            const environment = this.freshTemp("_eval_environment");
+            buf.line(`tsc_environment_t* volatile ${environment} = tsc_environment_new(tsc_environment_current(), ${sloppyEval ? "false" : "true"});`);
+            buf.line(`(void)tsc_environment_swap(${environment});`);
         }
         if (sloppyEval && declarations.annexBFunctions.length > 0) {
-            unsupported(
-                declarations.annexBFunctions[0]!,
-                "finite eval Annex B functions require the deletable eval-binding insertion",
-            );
+            unsupported(declarations.annexBFunctions[0]!, "finite eval Annex B functions require the shared eval variable environment");
         }
         const length = declarations.lexicals.length + declarations.functions.length + declarations.vars.length;
         if (length > 0) {
@@ -24842,6 +24839,7 @@ class Emitter {
                     `${sloppyEval ? "TSC_GLOBAL_DECL_EVAL_FUNCTION" : "TSC_GLOBAL_DECL_FUNCTION"}, ` +
                     `${value}, NULL };`,
                 );
+                buf.line(`${plan}[${index - 1}].value_gc_root = tsc_value_gc_root(${plan}[${index - 1}].value);`);
             }
             for (const name of declarations.vars) {
                 buf.line(
@@ -24851,7 +24849,8 @@ class Emitter {
                     `tsc_value_undefined(), NULL };`,
                 );
             }
-            buf.line(`tsc_global_declaration_instantiation(${plan}, ${length});`);
+            for (let index = 0; index < length; ++index) buf.line(`${plan}[${index}].value_gc_root = tsc_value_gc_root(${plan}[${index}].value);`);
+            buf.line(`${evalSource ? "tsc_environment" : "tsc_global"}_declaration_instantiation(${plan}, ${length});`);
         }
         for (const declaration of declarations.annexBFunctions) {
             if (!this.isSupportedLocalFunctionDeclaration(declaration) &&
@@ -24892,7 +24891,7 @@ class Emitter {
         const annexKeyTmp = this.freshTemp("_store_key");
         buf.line(`tsc_str_t* ${annexKeyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
         buf.line(
-            `tsc_global_reference_set(${annexKeyTmp}, ` +
+            `tsc_environment_reference_set(${annexKeyTmp}, ` +
             `${value}, false);`,
         );
         buf.close();
@@ -24911,8 +24910,8 @@ class Emitter {
         const keyTmp = this.freshTemp("_store_key");
         buf.line(`tsc_str_t* ${keyTmp} = ${key};`);
         buf.line(mode === "lexical"
-            ? `tsc_global_lexical_initialize(${keyTmp}, ${value});`
-            : `tsc_global_binding_set(${keyTmp}, ${value});`);
+            ? `${this.isTest262EvalSourceFile(identifier.getSourceFile()) ? "tsc_environment_binding_initialize" : "tsc_global_lexical_initialize"}(${keyTmp}, ${value});`
+            : `tsc_environment_reference_set(${keyTmp}, ${value}, ${this.nodeIsInStrictMode(identifier) ? "true" : "false"});`);
     }
 
     private emitBindingInitializationElement(
@@ -25150,7 +25149,7 @@ class Emitter {
             ? this.emitExpr(declaration.initializer)
             : { c: "tsc_value_undefined()", ty: T_VALUE };
         buf.line(
-            `tsc_global_lexical_initialize(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `${this.isTest262EvalSourceFile(declaration.getSourceFile()) ? "tsc_environment_binding_initialize" : "tsc_global_lexical_initialize"}(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
             `${this.coerce(value, T_VALUE, declaration.initializer ?? declaration.name)});`,
         );
         return true;
@@ -25165,7 +25164,7 @@ class Emitter {
             ? this.classDecoratorValue(declaration)
             : this.classConstructorValue(declaration);
         buf.line(
-            `tsc_global_lexical_initialize(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
+            `${this.isTest262EvalSourceFile(declaration.getSourceFile()) ? "tsc_environment_binding_initialize" : "tsc_global_lexical_initialize"}(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
             `${this.coerce(value, T_VALUE, declaration)});`,
         );
         return true;
@@ -25185,8 +25184,8 @@ class Emitter {
             const keyTmp = this.freshTemp("_store_key");
             buf.line(`tsc_str_t* ${keyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
             buf.line(
-                `tsc_global_binding_set(${keyTmp}, ` +
-                `${this.coerce(value, T_VALUE, declaration.initializer)});`,
+                `tsc_environment_reference_set(${keyTmp}, ` +
+                `${this.coerce(value, T_VALUE, declaration.initializer)}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`,
             );
         }
         return true;
@@ -25275,7 +25274,8 @@ class Emitter {
                 return true;
             }
             if (ts.isSourceFile(current)) {
-                return (ts.isExternalModule(current) && !this.isTest262ScriptSourceFile(current)) ||
+                return this.test262EvalEntryModes.get(path.resolve(current.fileName)) === true ||
+                    (ts.isExternalModule(current) && !this.isTest262ScriptSourceFile(current)) ||
                     this.directivePrologueHasUseStrict(current.statements);
             }
         }
@@ -29776,6 +29776,7 @@ class Emitter {
         } else this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_realm_t* realm;");
         this.structDecls.line("tsc_parse_unit_t* parse_unit;");
+        this.structDecls.line("tsc_environment_t* lexical_environment;");
         this.structDecls.line("int pc;");
         this.structDecls.line("int exception_pc;");
         this.structDecls.line("tsc_value_t exception_value;");
@@ -31269,9 +31270,11 @@ class Emitter {
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_realm_t* previous = tsc_realm_swap(state->realm);");
         callback.line("tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(state->parse_unit);");
+        callback.line("tsc_environment_t* previous_environment = tsc_environment_swap(state->lexical_environment);");
         if (generator) callback.line("bool was_processing = tsc_generator_resume_enter(state->generator, previous);");
         callback.line(`${name}_resume(env);`);
         callback.line("(void)tsc_parse_unit_swap(previous_unit);");
+        callback.line("(void)tsc_environment_swap(previous_environment);");
         callback.line("(void)tsc_realm_swap(previous);");
         if (generator) callback.line("tsc_generator_resume_leave(state->generator, was_processing);");
         callback.close();
@@ -31291,6 +31294,7 @@ class Emitter {
         } else buf.line(`${env}->result_promise = ${result};`);
         buf.line(`${env}->realm = tsc_realm_current();`);
         buf.line(`${env}->parse_unit = tsc_parse_unit_current();`);
+        buf.line(`${env}->lexical_environment = tsc_environment_current();`);
         buf.line(`${env}->pc = ${graph.entry.id};`);
         buf.line(`${env}->exception_pc = -1;`);
         buf.line(`${env}->exception_value = tsc_value_undefined();`);
@@ -33062,8 +33066,8 @@ class Emitter {
                 const keyTmp = this.freshTemp("_store_key");
                 buf.line(`tsc_str_t* ${keyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
                 buf.line(
-                    `tsc_global_binding_set(${keyTmp}, ` +
-                    `${this.coerce(value, T_VALUE, declaration.name)});`,
+                    `tsc_environment_reference_set(${keyTmp}, ` +
+                    `${this.coerce(value, T_VALUE, declaration.name)}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`,
                 );
                 return;
             }
@@ -36155,7 +36159,7 @@ class Emitter {
 
         if (ts.isIdentifier(expr)) {
             if (this.isUnresolvedParameterScopeReference(expr)) {
-                return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
+                return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             if (this.isImplicitArgumentsIdentifier(expr)) {
                 return this.currentFunctionActivationBinding("arguments") ??
@@ -36165,14 +36169,14 @@ class Emitter {
             const hostGlobal = this.test262HostGlobalBindingName(expr);
             if (hostGlobal) {
                 return {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey(hostGlobal)})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(hostGlobal)})`,
                     ty: T_VALUE,
                 };
             }
             const scriptGlobal = this.test262ScriptGlobalBindingName(expr);
             if (scriptGlobal) {
                 return {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                     ty: T_VALUE,
                 };
             }
@@ -36190,13 +36194,13 @@ class Emitter {
                 )
             ) {
                 return {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
                     ty: T_VALUE,
                 };
             }
             if (this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) &&
                 this.isTest262DynamicGlobalReference(expr)) {
-                return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
+                return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Promise")) {
@@ -36220,7 +36224,7 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 if (this.options.test262Observation) {
                     return {
-                        c: `tsc_global_reference_get(${this.test262GlobalBindingKey("eval")})`,
+                        c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("eval")})`,
                         ty: T_VALUE,
                     };
                 }
@@ -36237,7 +36241,7 @@ class Emitter {
             }
             if ((expr.text === "parseInt" || expr.text === "parseFloat") &&
                 this.isUnshadowedGlobalIdentifier(expr, expr.text)) {
-                return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
+                return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
@@ -36311,7 +36315,7 @@ class Emitter {
             }
             if (this.isTest262DynamicGlobalReference(expr)) {
                 return {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey(expr.text)})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(expr.text)})`,
                     ty: T_VALUE,
                 };
             }
@@ -36600,7 +36604,7 @@ class Emitter {
             this.isUnresolvedParameterScopeReference(to.expression)
         )) {
             return {
-                c: `tsc_global_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
+                c: `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
                 ty: T_STRING,
             };
         }
@@ -36787,7 +36791,7 @@ class Emitter {
             this.isTest262DynamicGlobalReference(expr)
         )) {
             return `tsc_str_eq(` +
-                `tsc_global_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
+                `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
                 `${this.stringLit(expected)})`;
         }
         const inner = this.emitExpr(expr);
@@ -36916,11 +36920,11 @@ class Emitter {
         const key = this.test262GlobalBindingKey(name);
         const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
         return {
-            get: `tsc_global_reference_get(${key})`,
+            get: `tsc_environment_reference_get(${key})`,
             set: (value) => this.emitSequencedExpr(T_VALUE, [
                 { value: { c: value, ty: T_VALUE } },
-            ], ([rooted]) => `tsc_global_reference_set(${key}, ${rooted}, ${strict})`).c,
-            remove: `tsc_global_reference_delete(${key})`,
+            ], ([rooted]) => `tsc_environment_reference_set(${key}, ${rooted}, ${strict})`).c,
+            remove: `tsc_environment_reference_delete(${key})`,
         };
     }
 
@@ -39674,7 +39678,7 @@ class Emitter {
             return this.emitDynamicNamedPropertyCall(
                 call,
                 {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
                     ty: T_VALUE,
                 },
                 call.expression.name.text,
@@ -39690,7 +39694,7 @@ class Emitter {
             return this.emitDynamicMethod(
                 call,
                 {
-                    c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
+                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
                     ty: T_VALUE,
                 },
                 call.expression.name.text,
@@ -39840,7 +39844,7 @@ class Emitter {
             this.isTest262DynamicGlobalReference(calleeId)
         ) {
             return this.emitDynamicValueCall(call, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
                 ty: T_VALUE,
             });
         }
@@ -39851,14 +39855,14 @@ class Emitter {
         const hostGlobal = this.test262HostGlobalBindingName(calleeId);
         if (hostGlobal) {
             return this.emitDynamicValueCall(call, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(hostGlobal)})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(hostGlobal)})`,
                 ty: T_VALUE,
             });
         }
         const scriptGlobal = this.test262ScriptGlobalBindingName(calleeId);
         if (scriptGlobal) {
             return this.emitDynamicValueCall(call, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                 ty: T_VALUE,
             });
         }
@@ -39871,7 +39875,7 @@ class Emitter {
         }
         if (name === "Function" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, {
-                c: `tsc_global_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
+                c: `tsc_environment_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
             });
         }
         if (name === "structuredClone") {
@@ -40679,7 +40683,7 @@ class Emitter {
             [
                 {
                     value: {
-                        c: `tsc_global_reference_get(${this.test262GlobalBindingKey("eval")})`,
+                        c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("eval")})`,
                         ty: T_VALUE,
                     },
                     target: T_VALUE,
@@ -56934,7 +56938,7 @@ class Emitter {
         const scriptGlobal = this.test262ScriptGlobalBindingName(ctorExpr);
         if (scriptGlobal) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                 ty: T_VALUE,
             });
         }
@@ -56947,7 +56951,7 @@ class Emitter {
             )
         ) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
                 ty: T_VALUE,
             });
         }
@@ -56956,7 +56960,7 @@ class Emitter {
             this.isTest262DynamicGlobalReference(ctorExpr)
         ) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
                 ty: T_VALUE,
             });
         }
@@ -56981,7 +56985,7 @@ class Emitter {
         if ((ctorExpr.text === "Map" || ctorExpr.text === "Set") &&
             this.isTest262DynamicGlobalReference(ctorExpr)) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(ctorExpr.text)})`, ty: T_VALUE,
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(ctorExpr.text)})`, ty: T_VALUE,
             });
         }
         if (this.isJavaScriptSourceFile(n.getSourceFile()) &&
@@ -57003,7 +57007,7 @@ class Emitter {
         }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
             return this.emitDynamicValueConstruct(n, {
-                c: `tsc_global_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
+                c: `tsc_environment_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
             });
         }
         if (this.functionValueIsConstructable(ctorExpr)) {

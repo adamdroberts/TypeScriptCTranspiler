@@ -2630,8 +2630,11 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["realm and agent state", "execution contexts", "environment records", "jobs"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c"] },
-      "knownGaps": ["Fresh Realm and separate Script evaluation are missing from the Test262 host profile."]
+      "localEvidence": { "property": ["tests/property/eval-environment.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c",
+          "runtime/tsc_environment.c",
+          "runtime/tsc_core.c",
+          "runtime/tsc_value.c"] },
+      "knownGaps": ["Caller lexical-cell aliases, function variable insertion, complete class/private/this/new.target eval context, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete."]
     },
     {
       "id": "object-semantics",

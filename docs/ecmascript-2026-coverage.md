@@ -361,8 +361,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-static-semantics-propname` — Static Semantics: PropName ( ): a String or ~empty~: exact disposition and partitions missing.
 - [ ] **Executable Code and Execution Contexts** (`sec-executable-code-and-execution-contexts`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: realm and agent state; execution contexts; environment records; jobs.
-  - Linked local regression evidence: E2E: function_closures, runtime_eval.
-  - Known blockers: Fresh Realm and separate Script evaluation are missing from the Test262 host profile.
+  - Linked local regression evidence: property: tests/property/eval-environment.property.test.ts; E2E: function_closures, runtime_eval.
+  - Known blockers: Caller lexical-cell aliases, function variable insertion, complete class/private/this/new.target eval context, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete.
   - [ ] `sec-executable-code-and-execution-contexts` — Executable Code and Execution Contexts: exact disposition and partitions missing.
   - [ ] `sec-environment-records` — Environment Records: exact disposition and partitions missing.
   - [ ] `sec-the-environment-record-type-hierarchy` — The Environment Record Type Hierarchy: exact disposition and partitions missing.
