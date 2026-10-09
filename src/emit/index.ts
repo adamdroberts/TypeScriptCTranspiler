@@ -99,6 +99,8 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
     "includes",
     "indexOf",
     "lastIndexOf",
+    "match",
+    "search",
     "padEnd",
     "padStart",
     "replace",
@@ -57993,31 +57995,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_entries(${target})`,
                 );
-            case "match": {
-                if (args.length < 1) unsupported(call, "match expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: re },
-                        ...ignored,
-                    ], ([target, pattern]) => `tsc_value_method_match_regex(${target}, ${pattern})`);
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
-                    unsupported(args[0]!, "match requires a RegExp or string pattern");
-                }
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    {
-                        value: {
-                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
-                            ty: T_REGEXP,
-                        },
-                    },
-                    ...ignored,
-                ], ([target, pattern]) => `tsc_value_method_match_regex(${target}, ${pattern})`);
-            }
             case "matchAll": {
                 if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
@@ -58042,31 +58019,6 @@ class Emitter {
                     },
                     ...ignored,
                 ], ([target, pattern]) => `tsc_value_method_match_all_regex(${target}, ${pattern})`);
-            }
-            case "search": {
-                if (args.length < 1) unsupported(call, "search expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: re },
-                        ...ignored,
-                    ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value") {
-                    unsupported(args[0]!, "search requires a RegExp or string pattern");
-                }
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    {
-                        value: {
-                            c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
-                            ty: T_REGEXP,
-                        },
-                    },
-                    ...ignored,
-                ], ([s, r]) => `tsc_value_num(tsc_str_search_regex(tsc_value_as_string(${s}), ${r}))`);
             }
             case "toString":
                 return this.emitSequencedExpr(T_STRING, [
@@ -66723,32 +66675,6 @@ class Emitter {
             case "hasOwnProperty":
             case "propertyIsEnumerable":
                 return this.emitPrimitiveObjectPrototypeOwnMethod(call, recv, method, "String");
-            case "match": {
-                if (args.length < 1) unsupported(call, "match expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(
-                        arrayType(T_STRING),
-                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
-                        ([target, regex]) => `tsc_str_match_regex(${target}, ${regex})`,
-                    );
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value")
-                    unsupported(args[0]!, "match requires a RegExp or string pattern");
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        {
-                            value: {
-                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
-                                ty: T_REGEXP,
-                            },
-                        },
-                    ]),
-                    ([target, regex]) => `tsc_str_match_regex(${target}, ${regex})`,
-                );
-            }
             case "matchAll": {
                 if (args.length < 1) unsupported(call, "matchAll expects at least 1 arg");
                 const re = this.emitExpr(args[0]!);
@@ -66773,32 +66699,6 @@ class Emitter {
                         },
                     ]),
                     ([target, regex]) => `tsc_str_match_all_regex(${target}, ${regex})`,
-                );
-            }
-            case "search": {
-                if (args.length < 1) unsupported(call, "search expects at least 1 arg");
-                const re = this.emitExpr(args[0]!);
-                if (re.ty.kind === "regexp") {
-                    return this.emitSequencedExpr(
-                        T_NUMBER,
-                        optionalStringSpecs(1, [{ value: recv }, { value: re }]),
-                        ([target, regex]) => `tsc_str_search_regex(${target}, ${regex})`,
-                    );
-                }
-                if (re.ty.kind !== "string" && re.ty.kind !== "value")
-                    unsupported(args[0]!, "search requires a RegExp or string pattern");
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    optionalStringSpecs(1, [
-                        { value: recv },
-                        {
-                            value: {
-                                c: `tsc_regexp_new(${this.coerce(re, T_STRING, args[0]!)}, tsc_str_from_lit("", 0))`,
-                                ty: T_REGEXP,
-                            },
-                        },
-                    ]),
-                    ([target, regex]) => `tsc_str_search_regex(${target}, ${regex})`,
                 );
             }
         }
@@ -78141,6 +78041,9 @@ class Emitter {
                 c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
                 ty: T_VALUE,
             };
+            // Inferred JavaScript property types are not a storage guarantee:
+            // mutable properties such as lastIndex may hold arbitrary values.
+            if (this.isJavaScriptSourceFile(pa.getSourceFile())) return value;
             const propertyType = this.checker.getTypeAtLocation(pa);
             if (propertyType.isUnion() && propertyType.types.some(part =>
                 !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))

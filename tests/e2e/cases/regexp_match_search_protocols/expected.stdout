@@ -1,0 +1,11 @@
+match: a|b 0
+symbol: a|b
+global-metadata: true
+search: 0 true
+metadata: 0 bb b true
+empty: 2 3
+missing:  0
+receiver: a
+protocol: true
+custom: true
+restore: true old

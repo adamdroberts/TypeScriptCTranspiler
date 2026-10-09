@@ -20,6 +20,8 @@ interface Symbol {
     valueOf(...ignored: any[]): symbol;
 }
 interface SymbolConstructor {
+    readonly match: unique symbol;
+    readonly search: unique symbol;
     (description?: string, ...ignored: any[]): symbol;
     for(key: string, ...ignored: any[]): symbol;
     keyFor(sym: symbol, ...ignored: any[]): string | undefined;
@@ -168,9 +170,11 @@ interface String extends Iterable<string> {
     padEnd(targetLength: number, padString?: string, ...ignored: any[]): string;
     replace(search: string | RegExp, replacement: string, ...ignored: any[]): string;
     replaceAll(search: string | RegExp, replacement: string, ...ignored: any[]): string;
-    match(re: RegExp | string, ...ignored: any[]): string[] | null;
+    match(re?: RegExp | string, ...ignored: any[]): RegExpMatchArray | null;
+    match(matcher: { [Symbol.match](string: string): any }, ...ignored: any[]): any;
     matchAll(re: RegExp | string, ...ignored: any[]): string[][];
-    search(re: RegExp | string, ...ignored: any[]): number;
+    search(re?: RegExp | string, ...ignored: any[]): number;
+    search(searcher: { [Symbol.search](string: string): any }, ...ignored: any[]): any;
     split(separator: string | RegExp, limit?: number, ...ignored: any[]): string[];
     concat(...strings: string[]): string;
     [n: number]: string;
@@ -665,13 +669,20 @@ declare function eval(source: string, ...ignored: unknown[]): unknown;
 interface RegExpIndicesArray extends Array<number[] | undefined> {
     groups: { [key: string]: number[] | undefined } | undefined;
 }
-interface RegExpExecArray extends Array<string | undefined> {
+interface RegExpMatchArray extends Array<string | undefined> {
+    index?: number;
+    input?: string;
+    groups?: { [key: string]: string | undefined };
+    indices?: RegExpIndicesArray;
+}
+interface RegExpExecArray extends RegExpMatchArray {
     index: number;
     input: string;
     groups: { [key: string]: string | undefined } | undefined;
-    indices?: RegExpIndicesArray;
 }
 interface RegExp {
+    [Symbol.match](string?: string): RegExpMatchArray | null;
+    [Symbol.search](string?: string): number;
     exec(s?: string, ...ignored: any[]): RegExpExecArray | null;
     test(s?: string, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;

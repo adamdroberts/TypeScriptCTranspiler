@@ -76,8 +76,8 @@ test("native RegExp consumers share UTF-16 offsets, capture worklists and empty 
             switch (entry.operation) {
                 case "replace": observed = receiver.replace(regexp, entry.replacement); break;
                 case "split": observed = receiver.split(regexp, entry.limit); break;
-                case "match": observed = receiver.match(new RegExp(entry.pattern, entry.flags)); break;
-                case "search": observed = receiver.search(new RegExp(entry.pattern, entry.flags)); break;
+                case "match": observed = receiver.match(regexp); break;
+                case "search": observed = receiver.search(regexp); break;
             }
             print(index + ":" + encode(observed));
         }

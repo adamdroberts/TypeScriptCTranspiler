@@ -2731,6 +2731,8 @@ static tsc_value_t regexp_property_get(void* env, tsc_value_t receiver) {
         result->len = len; ((char*)result->data)[len] = 0;
         return tsc_value_string(result);
     }
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp getter called on incompatible receiver"));
     const tsc_object_t* object = value_ptr(receiver);
     if (!object->is_regexp) {
         if (receiver == tsc_regexp_prototype_value()) return descriptor->property == RE_P_SOURCE
@@ -2782,6 +2784,16 @@ tsc_value_t tsc_regexp_prototype_value(void) {
             tsc_str_t* name = tsc_str_from_cstr(methods[i].name);
             tsc_object_define(prototype, name,
                 tsc_value_function_builtin_named(methods[i].apply, NULL, methods[i].length, name), true, false, true);
+        }
+        const struct { tsc_symbol_t* key; const char* name; tsc_generic_function_t apply; } symbols[] = {
+            {tsc_symbol_match(), "[Symbol.match]", tsc_regexp_match_apply},
+            {tsc_symbol_search(), "[Symbol.search]", tsc_regexp_search_apply}
+        };
+        for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++) {
+            tsc_value_t method = tsc_value_function_builtin_named(symbols[i].apply, NULL, 1,
+                tsc_str_from_cstr(symbols[i].name));
+            tsc_value_define_symbol_property_desc(tsc_value_object(prototype), symbols[i].key,
+                method, true, true, true, false, true, true, true);
         }
     }
     tsc_runtime_unlock();

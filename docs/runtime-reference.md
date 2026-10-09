@@ -348,16 +348,18 @@ Ordinary creation-Realm `exec`/`test` descriptors and typed calls share mutable 
 
 Names are source-ordered records containing all disjoint capture indices. Persistent enclosing-disjunction paths reject definitions that might both participate; named references, result groups, index aliases, and replacement groups select from the same record. Raw and escaped group identifiers share one Unicode scalar decoder; the whole-pattern named-reference grammar parameter is selected through the same parser.
 
-The complete RegExp object-model and clause-level contract remains open: symbol consumers and their `lastIndex` interactions, dynamic String dispatch, constructor/Realm semantics, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
+String `match`/`search` use ordinary mutable method lookup and symbol dispatch, including boxed RegExp arguments and generic custom methods. RegExp `[Symbol.match]`/`[Symbol.search]` share `RegExpExec`; global matching collects results and advances empty matches from `u`/`v` flags, while search restores the exact prior `lastIndex` identity before reading the returned index. The direct matcher/search paths are deleted.
+
+The complete RegExp object-model and clause-level contract remains open: replace/split/matchAll symbol consumers, constructor/prototype access and cross-Realm semantics, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
 
 | Symbol | Signature |
 |--------|-----------|
 | `tsc_regexp_new(pattern, flags)` | `tsc_regexp_t*` |
 | `tsc_regexp_exec(re, s)` | `tsc_array_t*` — full match plus capture groups, or `NULL` if none |
 | `tsc_regexp_test(re, s)` | `bool` |
-| `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of global match strings, or full match + capture groups for non-global regexes; `NULL` if none |
+| `tsc_value_method_match(receiver, pattern)` | `tsc_value_t` — ordinary symbol dispatch, native result metadata, custom values, or `null` |
 | `tsc_str_match_all_regex(s, re)` | `tsc_array_t*` — array of per-match capture arrays |
-| `tsc_str_search_regex(s, re)` | `double` — UTF-16 code-unit offset of the first match, or `-1` if none |
+| `tsc_value_method_search(receiver, pattern)` | `tsc_value_t` — ordinary symbol dispatch with exact lastIndex restoration |
 | `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag and expands JS replacement-string tokens |
 | `tsc_str_split_regex(s, re)` | `tsc_array_t*` |
 | `tsc_str_split_regex_limit(s, re, limit)` | `tsc_array_t*` |

@@ -173,17 +173,19 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     return result;
 }
 
-static size_t regexp_advance(const tsc_regexp_t* re, const uint16_t* units, size_t len, size_t pos) {
-    if ((re->unicode || re->unicode_sets) && pos + 1 < len &&
+static double regexp_advance(const uint16_t* units, size_t len, double index, bool unicode) {
+    if (index >= (double)len) return index + 1;
+    size_t pos = (size_t)index;
+    if (unicode && pos + 1 < len &&
         units[pos] >= 0xd800 && units[pos] <= 0xdbff && units[pos + 1] >= 0xdc00 && units[pos + 1] <= 0xdfff) return pos + 2;
-    return pos + 1;
+    return index + 1;
 }
 static size_t* regexp_captures(const tsc_regexp_t* re) {
     return TSC_GC_MALLOC((re->capture_count + 1) * 2 * sizeof(size_t));
 }
 static bool regexp_find(const tsc_regexp_t* re, const uint16_t* units, size_t len,
                         size_t offset, bool sticky, size_t* captures) {
-    for (size_t pos = offset; pos <= len; pos = regexp_advance(re, units, len, pos)) {
+    for (size_t pos = offset; pos <= len; pos = (size_t)regexp_advance(units, len, pos, re->unicode || re->unicode_sets)) {
         size_t start, end;
         if (tsc_re_match_at(re->re, units, len, pos, captures, &start, &end)) return true;
         if (sticky) break;
@@ -204,8 +206,8 @@ static tsc_array_t* regexp_capture_array(const tsc_regexp_t* re, const uint16_t*
     return result;
 }
 
-static void regexp_set_last_index(tsc_value_t receiver, double index) {
-    if (!tsc_value_set_prop(receiver, tsc_str_from_lit("lastIndex", 9), tsc_value_num(index)))
+static void regexp_set_last_index_value(tsc_value_t receiver, tsc_value_t index) {
+    if (!tsc_value_set_prop(receiver, tsc_str_from_lit("lastIndex", 9), index))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot assign RegExp lastIndex"));
 }
 static tsc_regexp_t* regexp_require_matcher(tsc_value_t receiver) {
@@ -262,7 +264,7 @@ tsc_array_t* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* string) {
     if (!stateful) last_index = 0;
     size_t* captures = regexp_captures(re);
     if (last_index > (double)len) {
-        if (stateful) regexp_set_last_index(receiver, 0);
+        if (stateful) regexp_set_last_index_value(receiver, tsc_value_num(0));
         return NULL;
     }
     size_t offset = (size_t)last_index;
@@ -270,10 +272,10 @@ tsc_array_t* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* string) {
         units[offset] >= 0xdc00 && units[offset] <= 0xdfff &&
         units[offset - 1] >= 0xd800 && units[offset - 1] <= 0xdbff) offset--;
     if (!regexp_find(re, units, len, offset, re->sticky, captures)) {
-        if (stateful) regexp_set_last_index(receiver, 0);
+        if (stateful) regexp_set_last_index_value(receiver, tsc_value_num(0));
         return NULL;
     }
-    if (stateful) regexp_set_last_index(receiver, (double)captures[1]);
+    if (stateful) regexp_set_last_index_value(receiver, tsc_value_num((double)captures[1]));
     return regexp_match_result(re, string, units, captures);
 }
 tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
@@ -306,23 +308,47 @@ tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* 
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* string) {
     return regexp_exec_value(tsc_value_regexp((tsc_regexp_t*)re), string) != tsc_value_null();
 }
+tsc_value_t tsc_regexp_match_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp match called on non-object"));
+    tsc_str_t* string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    tsc_str_t* flags = tsc_value_to_string(tsc_value_get_prop(receiver, tsc_str_from_lit("flags", 5)));
+    if (!tsc_str_includes(flags, tsc_str_from_lit("g", 1), 0)) return regexp_exec_value(receiver, string);
+    bool unicode = tsc_str_includes(flags, tsc_str_from_lit("u", 1), 0) ||
+                   tsc_str_includes(flags, tsc_str_from_lit("v", 1), 0);
+    regexp_set_last_index_value(receiver, tsc_value_num(0));
+    tsc_array_t* matches = tsc_array_new(sizeof(tsc_value_t), 4);
+    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
+    for (;;) {
+        tsc_value_t result = regexp_exec_value(receiver, string);
+        if (result == tsc_value_null()) return matches->len ? tsc_value_array(matches) : tsc_value_null();
+        tsc_str_t* match = tsc_value_to_string(tsc_value_get_prop(result, tsc_str_from_lit("0", 1)));
+        tsc_array_push_value(matches, tsc_value_string(match));
+        if (!match->len) {
+            double index = tsc_value_to_length(tsc_value_get_prop(receiver, tsc_str_from_lit("lastIndex", 9)));
+            regexp_set_last_index_value(receiver, tsc_value_num(regexp_advance(units, len, index, unicode)));
+        }
+    }
+}
+tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp search called on non-object"));
+    tsc_str_t* string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    tsc_str_t* key = tsc_str_from_lit("lastIndex", 9);
+    tsc_value_t previous = tsc_value_get_prop(receiver, key);
+    if (!tsc_value_object_is(previous, tsc_value_num(0)))
+        regexp_set_last_index_value(receiver, tsc_value_num(0));
+    tsc_value_t result = regexp_exec_value(receiver, string);
+    tsc_value_t current = tsc_value_get_prop(receiver, key);
+    if (!tsc_value_object_is(current, previous)) regexp_set_last_index_value(receiver, previous);
+    return result == tsc_value_null() ? tsc_value_num(-1) :
+        tsc_value_get_prop(result, tsc_str_from_lit("index", 5));
+}
 tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re) {
     tsc_str_t* head = tsc_str_concat(tsc_str_from_lit("/", 1), re->source);
     return tsc_str_concat(head, tsc_str_concat(tsc_str_from_lit("/", 1), re->flags));
-}
-tsc_array_t* tsc_str_match_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
-    if (!re->global) return tsc_regexp_exec(re, string);
-    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
-    size_t* captures = regexp_captures(re);
-    tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), 4);
-    size_t offset = 0;
-    while (regexp_find(re, units, len, offset, re->sticky, captures)) {
-        tsc_str_t* part = regexp_capture(units, captures, 0);
-        tsc_array_push_raw(result, &part);
-        offset = captures[1];
-        if (captures[0] == offset) offset = regexp_advance(re, units, len, offset);
-    }
-    return result->len ? result : NULL;
 }
 tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
     size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
@@ -334,16 +360,10 @@ tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* string, const tsc_regexp_t
         tsc_array_push_raw(result, &part);
         if (!re->global) break;
         offset = captures[1];
-        if (captures[0] == offset) offset = regexp_advance(re, units, len, offset);
+        if (captures[0] == offset) offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets);
     }
     return result;
 }
-double tsc_str_search_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
-    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
-    size_t* captures = regexp_captures(re);
-    return regexp_find(re, units, len, 0, re->sticky, captures) ? (double)captures[0] : -1.0;
-}
-
 /* Output collection is GC-owned: callback/abrupt exits never abandon native
  * allocations. Its materializer is the shared surrogate-preserving String ABI. */
 typedef struct { uint16_t* units; size_t len, capacity; } regexp_output_t;
@@ -427,7 +447,7 @@ tsc_str_t* tsc_str_replace_regex_value(const tsc_str_t* string, const tsc_regexp
         tsc_array_push_raw(matches, &captures);
         if (!re->global) break;
         offset = captures[1];
-        if (captures[0] == offset) offset = regexp_advance(re, units, len, offset);
+        if (captures[0] == offset) offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets);
     }
     regexp_output_t output = {0};
     size_t copied = 0;
@@ -462,7 +482,7 @@ tsc_array_t* tsc_str_split_regex_limit(const tsc_str_t* string, const tsc_regexp
     size_t copied = 0, offset = 0;
     while (offset < len) {
         if (!regexp_find(re, units, len, offset, true, captures) || captures[1] == copied) {
-            offset = regexp_advance(re, units, len, offset); continue;
+            offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets); continue;
         }
         tsc_str_t* part = tsc_str_from_units_range(units, copied, offset - copied);
         tsc_array_push_raw(result, &part);

@@ -1075,6 +1075,8 @@ typedef enum {
     TSC_STRING_PROTOTYPE_REPLACE,
     TSC_STRING_PROTOTYPE_REPLACE_ALL,
     TSC_STRING_PROTOTYPE_SPLIT,
+    TSC_STRING_PROTOTYPE_MATCH,
+    TSC_STRING_PROTOTYPE_SEARCH,
     TSC_STRING_PROTOTYPE_TRIM,
     TSC_STRING_PROTOTYPE_TRIM_START,
     TSC_STRING_PROTOTYPE_TRIM_END,
@@ -1117,6 +1119,8 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "replace", 7, 2.0, TSC_STRING_PROTOTYPE_REPLACE },
     { "replaceAll", 10, 2.0, TSC_STRING_PROTOTYPE_REPLACE_ALL },
     { "split", 5, 2.0, TSC_STRING_PROTOTYPE_SPLIT },
+    { "match", 5, 1.0, TSC_STRING_PROTOTYPE_MATCH },
+    { "search", 6, 1.0, TSC_STRING_PROTOTYPE_SEARCH },
     { "trim", 4, 0.0, TSC_STRING_PROTOTYPE_TRIM },
     { "trimStart", 9, 0.0, TSC_STRING_PROTOTYPE_TRIM_START },
     { "trimEnd", 7, 0.0, TSC_STRING_PROTOTYPE_TRIM_END },
@@ -1232,6 +1236,10 @@ static tsc_value_t string_prototype_method_apply(
             return tsc_value_method_replace_all(this_arg, first, second);
         case TSC_STRING_PROTOTYPE_SPLIT:
             return tsc_value_method_split(this_arg, first, second);
+        case TSC_STRING_PROTOTYPE_MATCH:
+            return tsc_value_method_match(this_arg, first);
+        case TSC_STRING_PROTOTYPE_SEARCH:
+            return tsc_value_method_search(this_arg, first);
         case TSC_STRING_PROTOTYPE_TRIM:
             return string_trim_from_values(this_arg, TSC_STRING_TRIM_BOTH);
         case TSC_STRING_PROTOTYPE_TRIM_START:
@@ -8236,11 +8244,27 @@ tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* r
     ));
 }
 
-tsc_value_t tsc_value_method_match_regex(tsc_value_t recv, const tsc_regexp_t* re) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) return tsc_value_null();
-    tsc_array_t* matches = tsc_str_match_regex((const tsc_str_t*)value_ptr(recv), re);
-    if (!matches) return tsc_value_null();
-    return tsc_value_array(value_array_from_string_array(matches));
+/* String match/search preserve the receiver until symbol dispatch has had
+ * its chance. Fallback RegExpCreate converts the pattern independently of
+ * the public constructor's cloning and IsRegExp rules. */
+static tsc_value_t string_regexp_protocol_from_values(tsc_value_t receiver,
+                                                     tsc_value_t pattern, tsc_symbol_t* symbol) {
+    string_require_object_coercible(receiver, "String RegExp receiver");
+    tsc_value_t arguments[] = {receiver}, result;
+    if (string_protocol_call(pattern, symbol, arguments, 1, &result)) return result;
+    tsc_str_t* string = tsc_value_to_string(receiver);
+    tsc_str_t* source = tsc_value_is_undefined(pattern) ? tsc_str_from_lit("", 0) : tsc_value_to_string(pattern);
+    tsc_value_t regexp = tsc_value_regexp(tsc_regexp_new(source, tsc_str_from_lit("", 0)));
+    tsc_value_t method = tsc_value_get_symbol_prop(regexp, symbol);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, tsc_value_string(string));
+    return tsc_value_apply_function(method, regexp, tsc_value_array(args));
+}
+tsc_value_t tsc_value_method_match(tsc_value_t receiver, tsc_value_t pattern) {
+    return string_regexp_protocol_from_values(receiver, pattern, tsc_symbol_match());
+}
+tsc_value_t tsc_value_method_search(tsc_value_t receiver, tsc_value_t pattern) {
+    return string_regexp_protocol_from_values(receiver, pattern, tsc_symbol_search());
 }
 
 tsc_value_t tsc_value_method_match_all_regex(tsc_value_t recv, const tsc_regexp_t* re) {

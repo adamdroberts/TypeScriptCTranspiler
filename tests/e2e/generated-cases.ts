@@ -1449,6 +1449,7 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
                 console.log("regexp-indices:", hit !== null && hit.indices!.length === hit.length);
                 console.log("regexp-named:", hit === null ? "missing" : hit.groups!.part,
                     hit !== null && hit.indices!.groups!.part === hit.indices![hit.length - 2]);
+                console.log("regexp-protocols:", "ABc".match(re)![0], "ABc".search(re));
                 console.log("regexp-outer:", re.test("D"));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);
