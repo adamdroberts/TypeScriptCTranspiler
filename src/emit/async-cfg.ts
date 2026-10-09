@@ -1,11 +1,9 @@
 import ts from "typescript";
+import { planResumableExpression, type ResumableExpressionState } from "./resumable-expression";
 import { directLexicalDeclarations, lexicalDeclarationsFromList } from "./lexical-declarations";
 import {
-    planAsyncExpressionSequence,
     planAsyncFunctionCompletionEdge,
-    planAsyncLogicalCondition,
     type AsyncFunctionCompletionEdge,
-    type AsyncShortCircuitExit,
 } from "./async-ir";
 
 export type AsyncControlFlowTarget = { readonly kind: "state"; readonly id: number };
@@ -98,6 +96,16 @@ type AsyncBindingOperation =
 
 type AsyncControlFlowStateCore =
     | {
+        readonly kind: "resumable-expression";
+        readonly id: number;
+        readonly operation: ResumableExpressionState;
+        readonly entry: boolean;
+        readonly slots: readonly number[];
+        readonly targets: ReadonlyMap<number, AsyncControlFlowTarget>;
+        readonly next: AsyncControlFlowTarget;
+        readonly returnTarget: AsyncControlFlowTarget | null;
+    }
+    | {
         readonly kind: "sync";
         readonly id: number;
         readonly statement: ts.Statement;
@@ -172,52 +180,15 @@ type AsyncControlFlowStateCore =
         readonly completion: "normal" | "return" | "throw";
         readonly next: AsyncControlFlowTarget | null;
     }
-    | {
-        readonly kind: "await-condition";
-        readonly id: number;
-        readonly awaitExpr: ts.AwaitExpression;
-        readonly truthy: AsyncControlFlowTarget;
-        readonly falsy: AsyncControlFlowTarget;
-    }
-    | {
-        readonly kind: "await-logical-condition";
-        readonly id: number;
-        readonly awaitExpr: ts.AwaitExpression;
-        readonly truthy: AsyncControlFlowTarget;
-        readonly falsy: AsyncControlFlowTarget;
-        readonly nullish: AsyncControlFlowTarget;
-    }
-    | {
-        readonly kind: "logical-condition";
-        readonly id: number;
-        readonly expression: ts.Expression;
-        readonly truthy: AsyncControlFlowTarget;
-        readonly falsy: AsyncControlFlowTarget;
-        readonly nullish: AsyncControlFlowTarget;
-    }
+
+
     | {
         readonly kind: "completion";
         readonly id: number;
         readonly completion: AsyncFunctionCompletionEdge;
     }
-    | {
-        readonly kind: "await-return-value";
-        readonly id: number;
-        readonly target: AsyncControlFlowTarget | null;
-    }
-    | {
-        readonly kind: "await-completion";
-        readonly id: number;
-        readonly completion: AsyncFunctionCompletionEdge & { readonly awaitExpr: ts.AwaitExpression };
-    }
-    | {
-        readonly kind: "await-next";
-        readonly id: number;
-        readonly awaitExpr: ts.AwaitExpression;
-        readonly assignment: ts.Identifier | null;
-        readonly resultSlot: number | null;
-        readonly next: AsyncControlFlowTarget;
-    }
+
+
     | {
         readonly kind: "await-dispose";
         readonly id: number;
@@ -312,15 +283,6 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
-        readonly kind: "expression-await";
-        readonly id: number;
-        readonly awaitExpr: ts.AwaitExpression;
-        readonly slot: number;
-        readonly next: AsyncControlFlowTarget;
-        readonly completeTarget: AsyncControlFlowTarget;
-        readonly shortCircuitExit: AsyncShortCircuitExit | null;
-    }
-    | {
         readonly kind: "expression-complete";
         readonly id: number;
         readonly expression: ts.Expression;
@@ -339,8 +301,7 @@ type AsyncControlFlowStateCore =
             readonly nullish?: AsyncControlFlowTarget;
         } | null;
         readonly resultSlot: number | null;
-        readonly awaitExprs: readonly ts.AwaitExpression[];
-        readonly next: AsyncControlFlowTarget;
+        readonly next: AsyncControlFlowTarget | null;
     };
 
 export type AsyncControlFlowState = AsyncControlFlowStateCore & {
@@ -359,14 +320,13 @@ export interface AsyncControlFlowGraph {
     readonly iteratorCount: number;
     readonly asyncIteratorCount: number;
     readonly bindingValueCount: number;
-    readonly expressionAwaits: readonly ts.AwaitExpression[];
     readonly expressionSyncs: readonly ts.Expression[];
     readonly expressionResults: readonly ts.Expression[];
+    readonly operationResultSlots: ReadonlySet<number>;
 }
 
 export interface AsyncControlFlowPlannerOptions {
-    readonly isStableSynchronousTail: (expression: ts.Expression) => boolean;
-    readonly isStableBeforeSuspension?: (expression: ts.Expression) => boolean;
+    readonly suspensionKind?: "async" | "generator";
     readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
     readonly isSupportedNestedClass?: (node: ts.ClassDeclaration) => boolean;
 }
@@ -404,11 +364,10 @@ export function planAsyncControlFlowGraph(
     let iteratorCount = 0;
     let asyncIteratorCount = 0;
     let bindingValueCount = 0;
-    const expressionAwaits: ts.AwaitExpression[] = [];
-    const expressionAwaitSlots = new Map<ts.AwaitExpression, number>();
     const expressionSyncs: ts.Expression[] = [];
     const expressionSyncSlots = new Map<ts.Expression, number>();
     const expressionResults: ts.Expression[] = [];
+    const operationResultSlots = new Set<number>();
 
     const reserve = (): number => {
         const id = states.length;
@@ -420,35 +379,22 @@ export function planAsyncControlFlowGraph(
         state: AsyncControlFlowStateCore,
         exceptionTarget: AsyncControlFlowExceptionTarget | null = null,
     ): AsyncControlFlowTarget => {
-        states[state.id] = { ...state, exceptionTarget } as AsyncControlFlowState;
+        states[state.id] = { ...state, ...(state.kind === "expression-complete" &&
+            (state.completion || state.branch) ? { next: null } : {}), exceptionTarget } as AsyncControlFlowState;
         return target(state.id);
     };
-    const containsAwait = (node: ts.Node): boolean => {
-        let found = false;
-        const visit = (current: ts.Node): void => {
-            if (found || ts.isFunctionLike(current) || ts.isClassLike(current)) return;
-            if (ts.isAwaitExpression(current)) {
-                found = true;
-                return;
-            }
-            ts.forEachChild(current, visit);
-        };
-        visit(node);
-        return found;
+    const containsSuspension = (node: ts.Node, includeYield: boolean): boolean => {
+        const worklist = [node];
+        while (worklist.length) {
+            const current = worklist.pop()!;
+            if (ts.isFunctionLike(current) || ts.isClassLike(current)) continue;
+            if (ts.isAwaitExpression(current) || includeYield && ts.isYieldExpression(current)) return true;
+            ts.forEachChild(current, child => { worklist.push(child); });
+        }
+        return false;
     };
-    const containsSuspendingBindingExpression = (node: ts.Node): boolean => {
-        let found = false;
-        const visit = (current: ts.Node): void => {
-            if (found || ts.isFunctionLike(current) || ts.isClassLike(current)) return;
-            if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) {
-                found = true;
-                return;
-            }
-            ts.forEachChild(current, visit);
-        };
-        visit(node);
-        return found;
-    };
+    const containsAwait = (node: ts.Node): boolean => containsSuspension(node, options.suspensionKind === "generator");
+    const containsSuspendingBindingExpression = (node: ts.Node): boolean => containsSuspension(node, true);
     const containsUnsupportedNestedFunctionOrClass = (node: ts.Node): boolean => {
         let found = false;
         const visit = (current: ts.Node): void => {
@@ -506,21 +452,6 @@ export function planAsyncControlFlowGraph(
             current = current.expression;
         }
         return current;
-    };
-    const commaSequence = (expression: ts.Expression): readonly ts.Expression[] | null => {
-        const values: ts.Expression[] = [];
-        const flatten = (node: ts.Expression): void => {
-            const current = unwrapExpression(node);
-            if (ts.isBinaryExpression(current) &&
-                current.operatorToken.kind === ts.SyntaxKind.CommaToken) {
-                flatten(current.left);
-                flatten(current.right);
-                return;
-            }
-            values.push(node);
-        };
-        flatten(expression);
-        return values.length > 1 ? values : null;
     };
     const collectBindingIdentifiers = (name: ts.BindingName): readonly ts.Identifier[] => {
         if (ts.isIdentifier(name)) return [name];
@@ -654,341 +585,35 @@ export function planAsyncControlFlowGraph(
         } | null = null,
         resultSlot: number | null = null,
     ): AsyncControlFlowTarget | null => {
-        const plan = planAsyncExpressionSequence(expression, {
-            unwrap: unwrapExpression,
-            isStableSynchronousTail: options.isStableSynchronousTail,
-            isStableBeforeSuspension: options.isStableBeforeSuspension,
-            minimumAwaitCount: 1,
-            allowNestedFunctionsInAwaitSource: true,
-        });
-        if (!plan) return null;
-        const completeId = reserve();
-        const completeTarget = setState({
-            kind: "expression-complete",
-            id: completeId,
-            expression,
-            sourceResultSlot: null,
-            assignment,
-            completion,
-            branch,
-            resultSlot,
-            awaitExprs: plan.awaitExprs,
-            next,
-        }, context.exceptionTarget);
-        let successor = completeTarget;
-        for (let index = plan.states.length - 1; index >= 0; index--) {
-            const plannedState = plan.states[index]!;
-            let slot = expressionAwaitSlots.get(plannedState.awaitExpr);
-            if (slot === undefined) {
-                slot = expressionAwaits.length;
-                expressionAwaits.push(plannedState.awaitExpr);
-                expressionAwaitSlots.set(plannedState.awaitExpr, slot);
-            }
-            const id = reserve();
-            successor = setState({
-                kind: "expression-await",
-                id,
-                awaitExpr: plannedState.awaitExpr,
-                slot,
-                next: successor,
-                completeTarget,
-                shortCircuitExit: plannedState.shortCircuitExit ?? null,
-            }, context.exceptionTarget);
-        }
-        for (let index = plan.prefixExprs.length - 1; index >= 0; index--) {
-            const expression = plan.prefixExprs[index]!;
-            let slot = expressionSyncSlots.get(expression);
-            if (slot === undefined) {
-                slot = expressionSyncs.length;
-                expressionSyncs.push(expression);
-                expressionSyncSlots.set(expression, slot);
-            }
-            const id = reserve();
-            successor = setState({
-                kind: "expression-sync",
-                id,
-                expression,
-                slot,
-                next: successor,
-            }, context.exceptionTarget);
-        }
-        awaitCount += plan.awaitExprs.length;
-        return successor;
-    };
-    const buildLogicalCondition = (
-        expression: ts.Expression,
-        truthy: AsyncControlFlowTarget,
-        falsy: AsyncControlFlowTarget,
-        context: BuildContext,
-    ): AsyncControlFlowTarget | null => {
-        const plan = planAsyncLogicalCondition(expression, {
-            unwrap: unwrapExpression,
-            allowNestedFunctionsInAwaitSource: true,
-        });
-        if (!plan) return null;
-        const ids = plan.states.map(() => reserve());
-        const resolveTarget = (conditionTarget: typeof plan.entry): AsyncControlFlowTarget => {
-            if (conditionTarget.kind === "body") return truthy;
-            if (conditionTarget.kind === "fallthrough") return falsy;
-            return target(ids[conditionTarget.id]!);
-        };
-        for (const state of plan.states) {
-            if (state.kind === "await-condition") {
-                setState({
-                    kind: "await-logical-condition",
-                    id: ids[state.id]!,
-                    awaitExpr: state.awaitExpr,
-                    truthy: resolveTarget(state.truthy),
-                    falsy: resolveTarget(state.falsy),
-                    nullish: resolveTarget(state.nullish),
-                }, context.exceptionTarget);
-            } else {
-                setState({
-                    kind: "logical-condition",
-                    id: ids[state.id]!,
-                    expression: state.expression,
-                    truthy: resolveTarget(state.truthy),
-                    falsy: resolveTarget(state.falsy),
-                    nullish: resolveTarget(state.nullish),
-                }, context.exceptionTarget);
-            }
-        }
-        awaitCount += plan.awaitExprs.length;
-        return resolveTarget(plan.entry);
-    };
-    type ExpressionCompletion = {
-        readonly kind: "return" | "throw";
-        readonly target: AsyncControlFlowTarget | null;
-    } | null;
-    type ExpressionBranch = {
-        readonly mode: "truthy" | "nullish" | "tri";
-        readonly truthy: AsyncControlFlowTarget;
-        readonly falsy: AsyncControlFlowTarget;
-        readonly nullish?: AsyncControlFlowTarget;
-    } | null;
-    const buildConditionRoute3 = (
-        expression: ts.Expression,
-        truthy: AsyncControlFlowTarget,
-        falsy: AsyncControlFlowTarget,
-        nullish: AsyncControlFlowTarget,
-        context: BuildContext,
-    ): AsyncControlFlowTarget | null => {
-        const condition = unwrapExpression(expression);
-        if (ts.isAwaitExpression(condition)) {
-            const id = reserve();
-            awaitCount++;
-            return setState({
-                kind: "await-logical-condition",
-                id,
-                awaitExpr: condition,
-                truthy,
-                falsy,
-                nullish,
-            }, context.exceptionTarget);
-        }
-        if (ts.isConditionalExpression(condition)) {
-            const whenTrue = buildConditionRoute3(
-                condition.whenTrue, truthy, falsy, nullish, context,
-            );
-            const whenFalse = buildConditionRoute3(
-                condition.whenFalse, truthy, falsy, nullish, context,
-            );
-            if (!whenTrue || !whenFalse) return null;
-            return buildConditionRoute3(
-                condition.condition, whenTrue, whenFalse, whenFalse, context,
-            );
-        }
-        if (ts.isBinaryExpression(condition)) {
-            const operator = condition.operatorToken.kind;
-            if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
-                const right = buildConditionRoute3(
-                    condition.right, truthy, falsy, nullish, context,
-                );
-                return right
-                    ? buildConditionRoute3(condition.left, right, falsy, nullish, context)
-                    : null;
-            }
-            if (operator === ts.SyntaxKind.BarBarToken) {
-                const right = buildConditionRoute3(
-                    condition.right, truthy, falsy, nullish, context,
-                );
-                return right
-                    ? buildConditionRoute3(condition.left, truthy, right, right, context)
-                    : null;
-            }
-            if (operator === ts.SyntaxKind.QuestionQuestionToken) {
-                const right = buildConditionRoute3(
-                    condition.right, truthy, falsy, nullish, context,
-                );
-                return right
-                    ? buildConditionRoute3(condition.left, truthy, falsy, right, context)
-                    : null;
-            }
-        }
-        if (containsAwait(condition)) {
-            return buildExpressionSequence(
-                condition,
-                null,
-                falsy,
-                context,
-                null,
-                { mode: "tri", truthy, falsy, nullish },
-            );
-        }
-        const id = reserve();
-        return setState({
-            kind: "logical-condition",
-            id,
-            expression: condition,
-            truthy,
-            falsy,
-            nullish,
-        }, context.exceptionTarget);
-    };
-    const buildConditionRoute = (
-        expression: ts.Expression,
-        truthy: AsyncControlFlowTarget,
-        falsy: AsyncControlFlowTarget,
-        context: BuildContext,
-    ): AsyncControlFlowTarget | null => {
-        return buildConditionRoute3(expression, truthy, falsy, falsy, context);
-    };
-    const buildConditionalValueExpression = (
-        expression: ts.Expression,
-        assignment: ts.Identifier | null,
-        next: AsyncControlFlowTarget,
-        context: BuildContext,
-        completion: ExpressionCompletion = null,
-        resultSlot: number | null = null,
-    ): AsyncControlFlowTarget | null => {
-        const current = unwrapExpression(expression);
-        if (!ts.isConditionalExpression(current)) return null;
-        const buildArm = (arm: ts.Expression): AsyncControlFlowTarget | null => {
-            const nested = buildConditionalValueExpression(
-                arm,
-                assignment,
-                next,
-                context,
-                completion,
-                resultSlot,
-            ) ?? buildLogicalValueExpression(
-                arm,
-                assignment,
-                next,
-                context,
-                completion,
-                resultSlot,
-            );
-            if (nested) return nested;
-            if (containsAwait(arm)) {
-                return buildExpressionSequence(
-                    arm,
-                    assignment,
-                    next,
-                    context,
-                    completion,
-                    null,
-                    resultSlot,
-                );
-            }
-            const id = reserve();
-            return setState({
-                kind: "expression-complete",
-                id,
-                expression: arm,
-                sourceResultSlot: null,
-                assignment,
-                completion,
-                branch: null,
-                resultSlot,
-                awaitExprs: [],
+        const operationPlan = planResumableExpression(expression);
+        if (operationPlan.kind === "graph") {
+            const graph = operationPlan.graph;
+            const slots = graph.values.map(owner => {
+                const slot = expressionResults.push(owner) - 1;
+                operationResultSlots.add(slot);
+                return slot;
+            });
+            const completeTarget = setState({
+                kind: "expression-complete", id: reserve(), expression,
+                sourceResultSlot: slots[graph.result]!, assignment, completion, branch, resultSlot,
                 next,
             }, context.exceptionTarget);
-        };
-        const truthy = buildArm(current.whenTrue);
-        const falsy = buildArm(current.whenFalse);
-        if (!truthy || !falsy) return null;
-        return buildConditionRoute(current.condition, truthy, falsy, context);
-    };
-    const buildLogicalValueExpression = (
-        expression: ts.Expression,
-        assignment: ts.Identifier | null,
-        next: AsyncControlFlowTarget,
-        context: BuildContext,
-        completion: ExpressionCompletion = null,
-        resultSlot: number | null = null,
-    ): AsyncControlFlowTarget | null => {
-        const current = unwrapExpression(expression);
-        if (!ts.isBinaryExpression(current)) return null;
-        const operator = current.operatorToken.kind;
-        if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
-            operator !== ts.SyntaxKind.BarBarToken &&
-            operator !== ts.SyntaxKind.QuestionQuestionToken) return null;
-        const complete = (value: ts.Expression): AsyncControlFlowTarget | null => {
-            const nested = buildConditionalValueExpression(
-                value, assignment, next, context, completion, resultSlot,
-            ) ?? buildLogicalValueExpression(
-                value, assignment, next, context, completion, resultSlot,
-            );
-            if (nested) return nested;
-            if (containsAwait(value)) {
-                return buildExpressionSequence(
-                    value, assignment, next, context, completion, null, resultSlot,
-                );
+            const targets = new Map(graph.states.map(operation => [operation.id, target(reserve())]));
+            for (const operation of graph.states) {
+                if (operation.kind === "suspend") {
+                    if (operation.suspension !== "await" && options.suspensionKind !== "generator") return null;
+                    awaitCount++;
+                }
+                const edgeIds = operation.kind === "complete" ? [] : operation.kind === "branch"
+                    ? [operation.yes, operation.no] : [operation.next];
+                const edges = new Map(edgeIds.map(id => [id, targets.get(id)!]));
+                setState({ kind: "resumable-expression", id: targets.get(operation.id)!.id,
+                    operation, entry: operation.id === graph.entry, slots, targets: edges, next: edgeIds.length ? targets.get(edgeIds[0]!)! : completeTarget,
+                    returnTarget: operation.kind === "suspend" ? context.returnTarget : null }, context.exceptionTarget);
             }
-            const id = reserve();
-            return setState({
-                kind: "expression-complete",
-                id,
-                expression: value,
-                sourceResultSlot: null,
-                assignment,
-                completion,
-                branch: null,
-                resultSlot,
-                awaitExprs: [],
-                next,
-            }, context.exceptionTarget);
-        };
-        /* Evaluate the left subtree once into a canonical result slot, then
-         * route both the short-circuit result and the right subtree from that
-         * stored value. This is independent of operand shape and recursively
-         * composes nested logical/conditional/await trees. */
-        const leftResultSlot = expressionResults.push(current.left) - 1;
-        const leftCompleteId = reserve();
-        const leftComplete = setState({
-            kind: "expression-complete",
-            id: leftCompleteId,
-            expression: current.left,
-            sourceResultSlot: leftResultSlot,
-            assignment,
-            completion,
-            branch: null,
-            resultSlot,
-            awaitExprs: [],
-            next,
-        }, context.exceptionTarget);
-        const rightComplete = complete(current.right);
-        if (!rightComplete) return null;
-        const id = reserve();
-        const takeRight = operator === ts.SyntaxKind.AmpersandAmpersandToken
-            ? { mode: "truthy" as const, truthy: rightComplete, falsy: leftComplete }
-            : operator === ts.SyntaxKind.BarBarToken
-                ? { mode: "truthy" as const, truthy: leftComplete, falsy: rightComplete }
-                : { mode: "nullish" as const, truthy: rightComplete, falsy: leftComplete };
-        setState({
-            kind: "expression-complete",
-            id,
-            expression: current.left,
-            sourceResultSlot: leftResultSlot,
-            assignment: null,
-            completion: null,
-            branch: takeRight,
-            resultSlot: null,
-            awaitExprs: [],
-            next,
-        }, context.exceptionTarget);
-        return buildExpressionResult(current.left, leftResultSlot, target(id), context);
+            return targets.get(graph.entry)!;
+        }
+        return null;
     };
     const buildExpressionResult = (
         expression: ts.Expression,
@@ -996,57 +621,14 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget | null => {
-        const current = unwrapExpression(expression);
-        if (ts.isAwaitExpression(current)) {
-            const id = reserve();
-            awaitCount++;
-            return setState({
-                kind: "await-next",
-                id,
-                awaitExpr: current,
-                assignment: null,
-                resultSlot,
-                next,
-            }, context.exceptionTarget);
+        if (containsAwait(expression)) {
+            return buildExpressionSequence(expression, null, next, context, null, null, resultSlot);
         }
-        if (!containsAwait(expression)) {
-            const id = reserve();
-            return setState({
-                kind: "expression-complete",
-                id,
-                expression,
-                sourceResultSlot: null,
-                assignment: null,
-                completion: null,
-                branch: null,
-                resultSlot,
-                awaitExprs: [],
-                next,
-            }, context.exceptionTarget);
-        }
-        return buildConditionalValueExpression(
-            expression,
-            null,
-            next,
-            context,
-            null,
-            resultSlot,
-        ) ?? buildLogicalValueExpression(
-            expression,
-            null,
-            next,
-            context,
-            null,
-            resultSlot,
-        ) ?? buildExpressionSequence(
-            expression,
-            null,
-            next,
-            context,
-            null,
-            null,
-            resultSlot,
-        );
+        return setState({
+            kind: "expression-complete", id: reserve(), expression,
+            sourceResultSlot: null, assignment: null, completion: null,
+            branch: null, resultSlot, next,
+        }, context.exceptionTarget);
     };
 
     const buildBindingOperation = (
@@ -1593,51 +1175,16 @@ export function planAsyncControlFlowGraph(
         const rawCondition = unwrapExpression(ts.isForStatement(statement)
             ? statement.condition ?? ts.factory.createTrue()
             : statement.expression);
-        if (ts.isAwaitExpression(rawCondition)) {
-            awaitCount++;
-            loopAwaitDepth = Math.max(loopAwaitDepth, currentLoopDepth + 1);
-            setState({
-                kind: "await-condition",
-                id: conditionId,
-                awaitExpr: rawCondition,
-                truthy: bodyEntry,
-                falsy: next,
-            }, context.exceptionTarget);
-        } else if (!containsAwait(rawCondition)) {
-            setState({
-                kind: "branch",
-                id: conditionId,
-                expression: rawCondition,
-                truthy: bodyEntry,
-                falsy: next,
-            }, context.exceptionTarget);
+        if (!containsAwait(rawCondition)) {
+            setState({ kind: "branch", id: conditionId, expression: rawCondition,
+                truthy: bodyEntry, falsy: next }, context.exceptionTarget);
         } else {
-            const conditionEntry = buildLogicalCondition(
-                rawCondition,
-                bodyEntry,
-                next,
-                context,
-            ) ?? buildExpressionSequence(
-                rawCondition,
-                null,
-                next,
-                context,
-                null,
-                { mode: "truthy", truthy: bodyEntry, falsy: next },
-            );
-            if (!conditionEntry) {
-                supported = false;
-                return next;
-            }
-            // The reserved direct-condition state is unused when the general
-            // expression plan owns condition evaluation.
-            states[conditionId] = {
-                kind: "sync",
-                id: conditionId,
-                statement: ts.factory.createEmptyStatement(),
-                next: conditionEntry,
-                exceptionTarget: context.exceptionTarget,
-            };
+            loopAwaitDepth = Math.max(loopAwaitDepth, currentLoopDepth + 1);
+            const conditionEntry = buildExpressionSequence(rawCondition, null, next, context, null,
+                { mode: "truthy", truthy: bodyEntry, falsy: next });
+            if (!conditionEntry) { supported = false; return next; }
+            setState({ kind: "sync", id: conditionId,
+                statement: ts.factory.createEmptyStatement(), next: conditionEntry }, context.exceptionTarget);
         }
         let entry = ts.isDoStatement(statement)
             ? bodyEntry
@@ -1965,31 +1512,11 @@ export function planAsyncControlFlowGraph(
                 ? buildStatement(statement.elseStatement, next, context)
                 : next;
             const condition = unwrapExpression(statement.expression);
-            if (ts.isAwaitExpression(condition)) {
-                const id = reserve();
-                awaitCount++;
-                return setState(
-                    { kind: "await-condition", id, awaitExpr: condition, truthy, falsy },
-                    context.exceptionTarget,
-                );
-            }
             if (containsAwait(condition)) {
-                const entry = buildLogicalCondition(
-                    condition,
-                    truthy,
-                    falsy,
-                    context,
-                ) ?? buildExpressionSequence(
-                    condition,
-                    null,
-                    next,
-                    context,
-                    null,
-                    { mode: "truthy", truthy, falsy },
-                );
+                const entry = buildExpressionSequence(condition, null, next, context, null,
+                    { mode: "truthy", truthy, falsy });
                 if (entry) return entry;
-                supported = false;
-                return next;
+                supported = false; return next;
             }
             const id = reserve();
             return setState(
@@ -2193,53 +1720,15 @@ export function planAsyncControlFlowGraph(
         if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
             const completion = planAsyncFunctionCompletionEdge(statement, (expression) => expression);
             if (!completion) return next;
-            const awaitExpr = completion.awaitExpr;
-            const nestedCompletionValue = awaitExpr && containsAwait(awaitExpr.expression)
-                ? awaitExpr.expression
-                : !awaitExpr && completion.value && containsAwait(completion.value)
-                    ? completion.value
-                    : null;
-            if (nestedCompletionValue) {
-                let nestedReturnTarget = context.returnTarget;
-                if (awaitExpr && completion.kind === "return") {
-                    const outerAwaitId = reserve();
-                    nestedReturnTarget = setState({
-                        kind: "await-return-value",
-                        id: outerAwaitId,
-                        target: context.returnTarget,
-                    }, context.exceptionTarget);
-                    awaitCount++;
-                }
-                const expressionCompletion = {
-                    kind: completion.kind,
-                    target: completion.kind === "return" ? nestedReturnTarget : null,
-                } as const;
-                const sequence = buildConditionalValueExpression(
-                    nestedCompletionValue,
-                    null,
-                    next,
-                    context,
-                    expressionCompletion,
-                ) ?? buildLogicalValueExpression(
-                    nestedCompletionValue,
-                    null,
-                    next,
-                    context,
-                    expressionCompletion,
-                ) ?? buildExpressionSequence(
-                    nestedCompletionValue,
-                    null,
-                    next,
-                    context,
-                    expressionCompletion,
-                );
+            const expression = statement.expression;
+            if (expression && containsAwait(expression)) {
+                const sequence = buildExpressionSequence(expression, null, next, context,
+                    { kind: completion.kind, target: completion.kind === "return" ? context.returnTarget : null });
                 if (sequence) return sequence;
-                supported = false;
-                return next;
+                supported = false; return next;
             }
             const id = reserve();
             if (completion.kind === "return" && context.returnTarget) {
-                if (awaitExpr) awaitCount++;
                 return setState({
                     kind: "return-route",
                     id,
@@ -2247,20 +1736,12 @@ export function planAsyncControlFlowGraph(
                     target: context.returnTarget,
                 }, context.exceptionTarget);
             }
-            if (completion.kind === "throw" && !awaitExpr && context.exceptionTarget) {
+            if (completion.kind === "throw" && context.exceptionTarget) {
                 return setState({
                     kind: "throw-route",
                     id,
                     expression: completion.value,
                     target: context.exceptionTarget.target,
-                }, context.exceptionTarget);
-            }
-            if (awaitExpr) {
-                awaitCount++;
-                return setState({
-                    kind: "await-completion",
-                    id,
-                    completion: { ...completion, awaitExpr },
                 }, context.exceptionTarget);
             }
             return setState({ kind: "completion", id, completion }, context.exceptionTarget);
@@ -2328,108 +1809,15 @@ export function planAsyncControlFlowGraph(
                     supported = false;
                     return next;
                 }
-                if (initializer && ts.isAwaitExpression(initializer)) {
-                    awaitCount++;
-                    const id = reserve();
-                    return setState({
-                        kind: "await-next",
-                        id,
-                        awaitExpr: initializer,
-                        assignment: declaration.name,
-                        resultSlot: null,
-                        next,
-                    }, context.exceptionTarget);
-                }
                 if (initializer && containsAwait(initializer)) {
-                    const sequence = buildConditionalValueExpression(
-                        initializer,
-                        declaration.name,
-                        next,
-                        context,
-                    ) ?? buildLogicalValueExpression(
-                        initializer,
-                        declaration.name,
-                        next,
-                        context,
-                    ) ?? buildExpressionSequence(
-                        initializer,
-                        declaration.name,
-                        next,
-                        context,
-                    );
+                    const sequence = buildExpressionSequence(declaration.initializer!, declaration.name, next, context);
                     if (sequence) return sequence;
                 }
             }
         }
-        if (ts.isExpressionStatement(statement)) {
-            const expression = unwrapExpression(statement.expression);
-            const commaExpressions = containsAwait(expression)
-                ? commaSequence(expression)
-                : null;
-            if (commaExpressions) {
-                return buildSequence(
-                    commaExpressions.map((value) => ts.factory.createExpressionStatement(value)),
-                    next,
-                    context,
-                );
-            }
-            if (ts.isAwaitExpression(expression)) {
-                awaitCount++;
-                const id = reserve();
-                return setState({
-                    kind: "await-next",
-                    id,
-                    awaitExpr: expression,
-                    assignment: null,
-                    resultSlot: null,
-                    next,
-                }, context.exceptionTarget);
-            }
-            if (ts.isBinaryExpression(expression) &&
-                expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                ts.isIdentifier(expression.left)) {
-                const right = unwrapExpression(expression.right);
-                if (ts.isAwaitExpression(right)) {
-                    awaitCount++;
-                    const id = reserve();
-                    return setState({
-                        kind: "await-next",
-                        id,
-                        awaitExpr: right,
-                        assignment: expression.left,
-                        resultSlot: null,
-                        next,
-                    }, context.exceptionTarget);
-                }
-                if (containsAwait(right)) {
-                    const sequence = buildConditionalValueExpression(
-                        right,
-                        expression.left,
-                        next,
-                        context,
-                    ) ?? buildLogicalValueExpression(
-                        right,
-                        expression.left,
-                        next,
-                        context,
-                    ) ?? buildExpressionSequence(right, expression.left, next, context);
-                    if (sequence) return sequence;
-                }
-            }
-            if (containsAwait(expression)) {
-                const sequence = buildConditionalValueExpression(
-                    expression,
-                    null,
-                    next,
-                    context,
-                ) ?? buildLogicalValueExpression(
-                    expression,
-                    null,
-                    next,
-                    context,
-                ) ?? buildExpressionSequence(expression, null, next, context);
-                if (sequence) return sequence;
-            }
+        if (ts.isExpressionStatement(statement) && containsAwait(statement.expression)) {
+            const sequence = buildExpressionSequence(statement.expression, null, next, context);
+            if (sequence) return sequence;
         }
         if (containsAwait(statement) ||
             containsUnsupportedNestedFunctionOrClass(statement) ||
@@ -2463,11 +1851,18 @@ export function planAsyncControlFlowGraph(
         const targets: AsyncControlFlowTarget[] = [];
         if (state.exceptionTarget) targets.push(state.exceptionTarget.target);
         switch (state.kind) {
+            case "resumable-expression": {
+                const operation = state.operation;
+                if (operation.kind === "complete") targets.push(state.next);
+                else if (operation.kind === "branch") targets.push(state.targets.get(operation.yes)!, state.targets.get(operation.no)!);
+                else targets.push(state.targets.get(operation.next)!);
+                if (operation.kind === "suspend" && state.returnTarget) targets.push(state.returnTarget);
+                break;
+            }
             case "sync":
             case "scope-enter":
             case "scope-clone":
             case "expression-sync":
-            case "await-next":
             case "await-dispose":
             case "catch-bind":
             case "binding-init":
@@ -2485,12 +1880,11 @@ export function planAsyncControlFlowGraph(
                     if (state.branch.nullish) targets.push(state.branch.nullish);
                 } else if (state.completion?.kind === "return" && state.completion.target) {
                     targets.push(state.completion.target);
-                } else if (!state.completion) {
+                } else if (!state.completion && state.next) {
                     targets.push(state.next);
                 }
                 break;
             case "branch":
-            case "await-condition":
                 targets.push(state.truthy, state.falsy);
                 break;
             case "switch-compare":
@@ -2507,19 +1901,12 @@ export function planAsyncControlFlowGraph(
             case "async-iterator-close":
                 if (state.next) targets.push(state.next);
                 break;
-            case "await-logical-condition":
-            case "logical-condition":
-                targets.push(state.truthy, state.falsy, state.nullish);
-                break;
             case "switch-dispatch":
                 targets.push(...state.clauses.map((clause) => clause.target), state.defaultTarget);
                 break;
             case "throw-route":
             case "return-route":
                 targets.push(state.target);
-                break;
-            case "await-return-value":
-                if (state.target) targets.push(state.target);
                 break;
             case "finally-enter":
                 targets.push(state.finallyTarget);
@@ -2537,11 +1924,7 @@ export function planAsyncControlFlowGraph(
                 }
                 if (state.returnTarget) targets.push(state.returnTarget);
                 break;
-            case "expression-await":
-                targets.push(state.next, state.completeTarget);
-                break;
             case "completion":
-            case "await-completion":
                 break;
         }
         return targets;
@@ -2566,10 +1949,9 @@ export function planAsyncControlFlowGraph(
     }
     const reachableStates = states.filter((state) => reachableIds.has(state.id));
     const reachableAwaitCount = reachableStates.reduce((count, state) => count + (
-        state.kind === "await-condition" || state.kind === "await-logical-condition" || state.kind === "await-completion" ||
-        state.kind === "await-next" || state.kind === "await-dispose" ||
+        state.kind === "await-dispose" ||
         state.kind === "async-iterator-next" || state.kind === "async-iterator-close" ||
-        state.kind === "expression-await" ||
+        state.kind === "resumable-expression" && state.operation.kind === "suspend" ||
         (state.kind === "return-route" && state.completion.awaitExpr !== null)
             ? 1
             : 0
@@ -2581,7 +1963,7 @@ export function planAsyncControlFlowGraph(
      * protected region). In that case this zero-suspension graph is the
      * canonical proof that the syntax is unreachable; rejecting it would send
      * the original await-bearing tree to an emitter which must fail closed. */
-    if (reachableAwaitCount < 1 && awaitCount < 1) return null;
+    if (reachableAwaitCount < 1 && awaitCount < 1 && options.suspensionKind !== "generator") return null;
     return {
         kind: "async-control-flow",
         entry,
@@ -2594,8 +1976,8 @@ export function planAsyncControlFlowGraph(
         iteratorCount,
         asyncIteratorCount,
         bindingValueCount,
-        expressionAwaits,
         expressionSyncs,
         expressionResults,
+        operationResultSlots,
     };
 }

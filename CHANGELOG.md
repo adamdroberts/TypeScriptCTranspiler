@@ -1,5 +1,7 @@
 # Changelog
 
+- Lower suspending expressions through one explicit operation graph with rooted actual values, saved references/callee/receiver/argument Lists, branch/optional routing and literal/template staging. Replace direct-await and logical/conditional/prefix expression planners, share CopyDataProperties and cache referenced names per the pinned edition. Include accessors in the shared native class member projection, declare mutable Array.length writable, and verify independent semantic partitions plus a deep native expression.
+
 - Key native class/interface owners by source declaration across type mapping, layouts, constructors, fields, adapters and inheritance brands. Preserve public metadata, intrinsic shadowing and imported binding checks; route static method calls through ordinary lookup. Admit ECMAScript class heritage expressions, remove raw-name owner searches, share conditional ABI joins and make optimized integer reads respect boxed binding storage. Verify independent module/namespace/layout/brand partitions and retained-owner stress with native E2E.
 
 - Unify native class member names under the framed scope/kind/key plan across declarations, calls and adapters. Reuse erased generic specializations for method values and ordinary iterator/binding/close machinery for native classes; delete the superseded native loop and binding emitters. Verify independent member-domain and retained-owner properties with native E2E.

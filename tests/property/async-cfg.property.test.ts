@@ -17,9 +17,6 @@ interface ParsedSubject {
 }
 
 const plannerOptions = {
-    isStableSynchronousTail: (node: ts.Expression): boolean =>
-        ts.isIdentifier(node) || ts.isPropertyAccessExpression(node),
-    isStableBeforeSuspension: (node: ts.Expression): boolean => ts.isIdentifier(node),
     isSupportedNestedFunction: (): boolean => false,
 };
 
@@ -151,14 +148,9 @@ function sourceAwaits(body: ts.Block): ts.AwaitExpression[] {
 
 function suspensionOwner(state: AsyncControlFlowState): ts.AwaitExpression | null {
     switch (state.kind) {
-        case "await-condition":
-        case "await-logical-condition":
-        case "await-next":
-        case "expression-await":
-            return state.awaitExpr;
-        case "await-completion":
-        case "return-route":
-            return state.completion.awaitExpr;
+        case "resumable-expression":
+            return state.operation.kind === "suspend" && ts.isAwaitExpression(state.operation.node)
+                ? state.operation.node : null;
         default:
             return null;
     }
@@ -247,23 +239,19 @@ test("logical value routing evaluates every canonical left subtree once", () => 
     visit(body);
 
     for (const left of logicalLefts) {
-        const slots = graph.expressionResults
-            .map((expression, slot) => expression === left ? slot : -1)
-            .filter((slot) => slot >= 0);
-        expect(slots).toHaveLength(1);
-        const slot = slots[0]!;
-        const evaluators = graph.states.filter((state) =>
-            state.kind === "expression-complete" &&
-            state.sourceResultSlot === null &&
-            state.resultSlot === slot &&
-            state.expression === left,
-        );
+        const graphStates = graph.states.filter(state => state.kind === "resumable-expression");
+        const evaluators = graphStates.filter(state => state.operation.kind === "value" &&
+            (state.operation.operation.kind === "call" && state.operation.operation.node === left ||
+                state.operation.operation.kind === "evaluate" && state.operation.operation.expression === left));
         expect(evaluators).toHaveLength(1);
-        const readers = graph.states.filter((state) =>
-            state.kind === "expression-complete" && state.sourceResultSlot === slot,
-        );
-        expect(readers.some((state) => state.kind === "expression-complete" && state.branch !== null)).toBeTrue();
-        expect(readers.some((state) => state.kind === "expression-complete" && state.branch === null)).toBeTrue();
+        const evaluator = evaluators[0]!;
+        if (evaluator.operation.kind !== "value") throw new Error("missing value operation");
+        const slot = evaluator.slots[evaluator.operation.output]!;
+        expect(graph.expressionResults[slot]).toBe(left);
+        expect(graphStates.some(state => state.operation.kind === "branch" &&
+            state.slots[state.operation.source] === slot)).toBeTrue();
+        expect(graphStates.some(state => state.operation.kind === "value" &&
+            state.operation.operation.kind === "copy" && state.slots[state.operation.operation.source] === slot)).toBeTrue();
     }
 });
 

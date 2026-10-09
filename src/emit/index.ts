@@ -4,6 +4,7 @@ import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
+import type { ResumableReference } from "./resumable-expression";
 import {
     CType,
     arrayType,
@@ -28266,49 +28267,48 @@ class Emitter {
         return name;
     }
 
-    private classInstanceMethodsForValueBox(cd: ts.ClassDeclaration): {
-        publicName: string;
-        propertyKey: string;
-        owner: ts.ClassDeclaration;
-        method: ts.MethodDeclaration;
+    private classInstanceMembersForValueBox(cd: ts.ClassDeclaration): {
+        publicName: string; propertyKey: string; owner: ts.ClassDeclaration;
+        member: { kind: "method"; method: ts.MethodDeclaration } |
+            { kind: "accessor"; get?: ts.GetAccessorDeclaration; set?: ts.SetAccessorDeclaration } |
+            { kind: "field"; type: CType };
     }[] {
-        const methods = new Map<string, { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; method: ts.MethodDeclaration }>();
-        const base = this.baseClassDecl(cd);
-        if (base) {
-            for (const item of this.classInstanceMethodsForValueBox(base)) {
-                methods.set(item.propertyKey, item);
+        type Member = ReturnType<Emitter["classInstanceMembersForValueBox"]>[number];
+        const members = new Map<string, Member>(), chain: ts.ClassDeclaration[] = [];
+        const seen = new Set<ts.ClassDeclaration>();
+        for (let owner: ts.ClassDeclaration | null = cd; owner; owner = this.baseClassDecl(owner)) {
+            if (seen.has(owner)) unsupported(owner, "native class inheritance requires an acyclic owner graph");
+            seen.add(owner); chain.push(owner);
+        }
+        for (const owner of chain.reverse()) {
+            for (const declaration of owner.members) {
+                if (isStatic(declaration) || !(ts.isMethodDeclaration(declaration) ||
+                    ts.isGetAccessorDeclaration(declaration) || ts.isSetAccessorDeclaration(declaration))) continue;
+                if (!declaration.body) continue;
+                const symbol = ts.isComputedPropertyName(declaration.name)
+                    ? this.wellKnownSymbolName(declaration.name.expression) : null;
+                const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(declaration.name);
+                if (publicName === null) unsupported(declaration.name, "ordinary class member key is unavailable");
+                const propertyKey = symbol ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
+                    : `tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})`;
+                if (ts.isMethodDeclaration(declaration)) {
+                    members.set(propertyKey, { publicName, propertyKey, owner, member: { kind: "method", method: declaration } });
+                } else {
+                    const previous = members.get(propertyKey);
+                    const accessor = previous?.owner === owner && previous.member.kind === "accessor"
+                        ? previous.member : { kind: "accessor" as const };
+                    if (ts.isGetAccessorDeclaration(declaration)) accessor.get = declaration;
+                    else accessor.set = declaration;
+                    members.set(propertyKey, { publicName, propertyKey, owner, member: accessor });
+                }
+            }
+            for (const field of this.classOwnInstanceFields(owner)) {
+                const propertyKey = `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`;
+                members.set(propertyKey, { publicName: field.name, propertyKey, owner,
+                    member: { kind: "field", type: this.prepareType(field.type) } });
             }
         }
-        for (const method of cd.members) {
-            if (!ts.isMethodDeclaration(method) || isStatic(method)) continue;
-            const symbol = ts.isComputedPropertyName(method.name)
-                ? this.wellKnownSymbolName(method.name.expression) : null;
-            const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(method.name);
-            if (publicName === null) unsupported(method.name, "ordinary class method key is unavailable");
-            const propertyKey = symbol
-                ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
-                : `tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})`;
-            methods.set(propertyKey, { publicName, propertyKey, owner: cd, method });
-        }
-        return [...methods.values()];
-    }
-
-    private classInstanceFieldsForValueBox(cd: ts.ClassDeclaration): {
-        publicName: string;
-        owner: ts.ClassDeclaration;
-        type: CType;
-    }[] {
-        const fields = new Map<string, { publicName: string; owner: ts.ClassDeclaration; type: CType }>();
-        const base = this.baseClassDecl(cd);
-        if (base) {
-            for (const item of this.classInstanceFieldsForValueBox(base)) {
-                fields.set(item.publicName, item);
-            }
-        }
-        for (const field of this.classOwnInstanceFields(cd)) {
-            fields.set(field.name, { publicName: field.name, owner: cd, type: this.prepareType(field.type) });
-        }
-        return [...fields.values()];
+        return [...members.values()];
     }
 
     private ensureClassInstanceFieldGetterAdapter(
@@ -28371,26 +28371,29 @@ class Emitter {
         if (!classLike && !nativeInterface) return `tsc_value_class(${r.c})`;
         const cd = classLike as unknown as ts.ClassDeclaration;
         const obj = this.freshTemp("_class_box");
-        const pieces = [`tsc_object_t* ${obj} = tsc_object_new_class(${r.c})`];
-        for (const { publicName, propertyKey, owner, method } of classLike ? this.classInstanceMethodsForValueBox(cd) : []) {
-            const adapter = this.ensureClassInstanceMethodValueAdapter(owner, method);
-            const sig = this.checker.getSignatureFromDeclaration(method);
-            const length = sig?.getParameters().length ?? method.parameters.length;
-            pieces.push(
-                `tsc_object_define(${obj}, ${propertyKey}, ` +
-                `${this.withCallableSourceText(`tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}))`, method)}, true, false, true)`,
-            );
-        }
-        const fields = nativeInterface
-            ? this.interfaceFields(nativeInterface).map(field => ({ publicName: field.name, owner: nativeInterface!, type: field.type }))
-            : this.classInstanceFieldsForValueBox(cd);
-        for (const { publicName, owner, type } of fields) {
-            const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, type);
-            const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, type);
-            pieces.push(
-                `tsc_object_define_native_data(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
-                `${getter}, ${setter}, true)`,
-            );
+        const pieces = [`tsc_object_t* volatile ${obj} = tsc_object_new_class(${r.c})`];
+        const members = nativeInterface ? this.interfaceFields(nativeInterface).map(field => ({
+            publicName: field.name, propertyKey: `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`,
+            owner: nativeInterface!, member: { kind: "field" as const, type: field.type },
+        })) : this.classInstanceMembersForValueBox(cd);
+        for (const { publicName, propertyKey, owner, member } of members) {
+            if (member.kind === "method") {
+                const method = member.method, adapter = this.ensureClassInstanceMethodValueAdapter(owner as ts.ClassDeclaration, method);
+                const sig = this.checker.getSignatureFromDeclaration(method);
+                const length = sig?.getParameters().length ?? method.parameters.length;
+                pieces.push(`tsc_object_define(${obj}, ${propertyKey}, ` +
+                    `${this.withCallableSourceText(`tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}))`, method)}, true, false, true)`);
+            } else if (member.kind === "field") {
+                const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, member.type);
+                const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, member.type);
+                pieces.push(`tsc_object_define_native_data(${obj}, ${propertyKey}, ${getter}, ${setter}, true)`);
+            } else {
+                const getter = member.get ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceGetterDecoratorAdapter(owner as ts.ClassDeclaration, member.get)}, NULL, 0.0, ${this.stringLit("get " + publicName)})`, member.get) : "tsc_value_undefined()";
+                const setter = member.set ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceSetterDecoratorAdapter(owner as ts.ClassDeclaration, member.set)}, NULL, 1.0, ${this.stringLit("set " + publicName)})`, member.set) : "tsc_value_undefined()";
+                if (member.get) pieces.push(`tsc_value_object_define_getter(tsc_value_object(${obj}), ${propertyKey}, ${getter})`);
+                if (member.set) pieces.push(`tsc_value_object_define_setter(tsc_value_object(${obj}), ${propertyKey}, ${setter})`);
+                pieces.push(`tsc_value_define_property_desc(tsc_value_object(${obj}), ${propertyKey}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
+            }
         }
         pieces.push(`tsc_value_object(${obj})`);
         return `({ ${pieces.join("; ")}; })`;
@@ -29398,31 +29401,13 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         const graph = planAsyncControlFlowGraph(body, {
-            isStableSynchronousTail: (node) => {
-                if (ts.isIdentifier(node)) return this.isValueReferenceIdentifier(node);
-                if (ts.isPropertyAccessExpression(node)) {
-                    return node.expression.kind === ts.SyntaxKind.ThisKeyword ||
-                        ts.isIdentifier(node.expression);
-                }
-                return false;
-            },
-            isStableBeforeSuspension: (node) => {
-                if (!ts.isIdentifier(node) || !this.isValueReferenceIdentifier(node)) return false;
-                const symbol = this.symbolForIdentifier(node);
-                const declaration = symbol?.valueDeclaration;
-                if (!declaration || !ts.isVariableDeclaration(declaration) ||
-                    !ts.isVariableDeclarationList(declaration.parent) ||
-                    (declaration.parent.flags & ts.NodeFlags.Const) === 0) return false;
-                const type = this.prepareType(mapType(node, this.checker));
-                return type.kind === "string" || type.kind === "number" ||
-                    type.kind === "boolean" || type.kind === "bigint";
-            },
             isSupportedNestedFunction: (node) => {
                 if (ts.isFunctionDeclaration(node)) {
                     if (this.isSupportedLexicalFunctionDeclaration(node)) return true;
                     return this.isSupportedLocalFunctionDeclaration(node);
                 }
-                if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
+                if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node) && !ts.isMethodDeclaration(node) &&
+                    !ts.isGetAccessorDeclaration(node) && !ts.isSetAccessorDeclaration(node)) return false;
                 for (const capture of this.collectClosureCaptures(node)) {
                     if (!this.currentFunctionCellForSymbol(capture.symbol) &&
                         !this.closureEnvBindingForSymbol(capture.symbol)) return false;
@@ -29674,18 +29659,6 @@ class Emitter {
                 if (ts.isCaseClause(clause)) collectSwitchValueTree(clause.expression);
             }
         }
-        const expressionAwaitTypes = graph.expressionAwaits.map((awaitExpr) => {
-            if (switchValueExpressionNodes.has(awaitExpr)) return T_VALUE;
-            const awaitedType = this.prepareType(mapTsType(
-                awaitExpr,
-                this.checker.getTypeAtLocation(awaitExpr),
-                this.checker,
-            ));
-            return this.asyncAwaitContinuationStorageType(awaitExpr, awaitedType);
-        });
-        const expressionAwaitSlot = new Map(
-            graph.expressionAwaits.map((awaitExpr, slot) => [awaitExpr, slot] as const),
-        );
         const expressionSyncTypes = graph.expressionSyncs.map((expression) =>
             switchValueExpressionNodes.has(expression)
                 ? T_VALUE
@@ -29712,7 +29685,7 @@ class Emitter {
             }
         }
         const expressionResultTypes = graph.expressionResults.map((expression, slot) =>
-            switchValueResultSlots.has(slot) || sourceExpressionResultSlots.has(slot)
+            switchValueResultSlots.has(slot) || sourceExpressionResultSlots.has(slot) || graph.operationResultSlots.has(slot)
                 ? T_VALUE
                 : this.asyncAwaitContinuationStorageType(
                     expression,
@@ -29838,10 +29811,6 @@ class Emitter {
                 }
                 const plan = iteratorPlans.get(stateNode.slot);
                 if (!plan || !validateCfgBinding(plan.binding, plan.assignmentTargets)) return false;
-            } else if (stateNode.kind === "expression-await") {
-                if (expressionAwaitTypes[stateNode.slot]?.kind === "never") {
-                    return false;
-                }
             } else if (stateNode.kind === "expression-sync") {
                 const storageType = expressionSyncTypes[stateNode.slot];
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") return false;
@@ -29969,36 +29938,7 @@ class Emitter {
                         }
                     }
                 }
-            } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
-                stateNode.kind === "await-completion" ||
-                stateNode.kind === "await-next" ||
-                (stateNode.kind === "return-route" && stateNode.completion.awaitExpr)) {
-                const awaitExpr = stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition"
-                    ? stateNode.awaitExpr
-                    : stateNode.kind === "await-completion"
-                        ? stateNode.completion.awaitExpr
-                        : stateNode.kind === "await-next"
-                            ? stateNode.awaitExpr
-                            : stateNode.completion.awaitExpr!;
-                const awaitedType = this.prepareType(mapTsType(
-                    awaitExpr,
-                    this.checker.getTypeAtLocation(awaitExpr),
-                    this.checker,
-                ));
-                if (stateNode.kind === "await-next") {
-                    if (stateNode.assignment && stateNode.resultSlot !== null) return false;
-                    if (stateNode.assignment) {
-                        const symbol = this.symbolForIdentifier(stateNode.assignment);
-                        if (!symbol || (awaitedType.kind !== "void" && !fieldBySymbol.has(symbol))) return false;
-                    }
-                    if (stateNode.resultSlot !== null) {
-                        const storageType = expressionResultTypes[stateNode.resultSlot];
-                        if (awaitedType.kind === "void" || awaitedType.kind === "never" ||
-                            !storageType || storageType.kind === "void" || storageType.kind === "never") {
-                            return false;
-                        }
-                    }
-                }
+
             }
         }
         const name = `tsc_async_cfg_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -30018,14 +29958,6 @@ class Emitter {
             this.structDecls.line(`void* finally_value_gc_root[${graph.finallyCount}];`);
         }
         this.structDecls.line("tsc_promise_t* pending_return;");
-        for (let slot = 0; slot < expressionAwaitTypes.length; slot++) {
-            const storageType = expressionAwaitTypes[slot]!;
-            if (storageType.kind === "void" || storageType.kind === "never") continue;
-            this.structDecls.line(`${storageType.c} expression_value_${slot};`);
-            if (storageType.kind === "value") {
-                this.structDecls.line(`void* expression_value_${slot}_gc_root;`);
-            }
-        }
         for (let slot = 0; slot < expressionSyncTypes.length; slot++) {
             const storageType = expressionSyncTypes[slot]!;
             this.structDecls.line(`${storageType.c} expression_sync_value_${slot};`);
@@ -30261,13 +30193,6 @@ class Emitter {
                 callback.line("return;");
                 callback.close();
             };
-            const emitAwaitSuspension = (
-                awaitExpr: ts.AwaitExpression,
-                exceptionTargetId: number | null,
-            ): void => emitPromiseSuspension(() => {
-                const source = this.emitExpr(awaitExpr.expression);
-                return this.promiseAwaitResult(source, awaitExpr.expression);
-            }, exceptionTargetId);
             const awaitFulfilledValue = (sourceType: CType): EmitResult =>
                 this.promiseFulfilledValue(
                     sourceType.kind === "promise" ? sourceType.elem : sourceType,
@@ -30559,10 +30484,170 @@ class Emitter {
                     ty: T_VALUE,
                 };
             };
+            const operationLabels = new Set<number>();
+            for (const state of graph.states) if (state.kind === "resumable-expression") {
+                for (const edge of state.targets.values()) operationLabels.add(edge.id);
+            }
             for (const stateNode of [...graph.states].sort((left, right) => left.id - right.id)) {
-                callback.open(`case ${stateNode.id}:`);
+                if (operationLabels.has(stateNode.id)) callback.line(`__tsc_cfg_operation_${stateNode.id}:`);
+                // Only externally entered operations and suspension resumption
+                // require dispatch. Internal operation edges are ordinary C CFG
+                // edges; this projection does not create another state graph.
+                if (stateNode.kind !== "resumable-expression" || stateNode.entry || stateNode.operation.kind === "suspend")
+                    callback.open(`case ${stateNode.id}:`);
+                else callback.open("");
                 callback.line(`state->exception_pc = ${stateNode.exceptionTarget?.target.id ?? -1};`);
-                if (stateNode.kind === "sync") {
+                if (stateNode.kind === "resumable-expression") {
+                    const operation = stateNode.operation;
+                    const read = (slot: number): string => `state->expression_result_${stateNode.slots[slot]}`;
+                    const store = (slot: number, value: string): void => {
+                        const field = `expression_result_${stateNode.slots[slot]}`;
+                        callback.line(`state->${field} = ${value};`);
+                        callback.line(`state->${field}_gc_root = tsc_value_gc_root(state->${field});`);
+                    };
+                    const transition = (id: number): void => {
+                        callback.line(`goto __tsc_cfg_operation_${stateNode.targets.get(id)!.id};`);
+                    };
+                    const preparePropertyReference = (reference: Extract<ResumableReference, { kind: "property" }>): void => {
+                        callback.line(`if (tsc_value_is_nullish(${read(reference.base)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a property of null or undefined"));`);
+                        // GetValue/PutValue in the pinned edition update the
+                        // Reference's [[ReferencedName]] after ToObject.
+                        store(reference.key, `tsc_value_to_property_key(${read(reference.key)})`);
+                    };
+                    const getReference = (reference: ResumableReference): string => {
+                        if (reference.kind !== "property") return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
+                        preparePropertyReference(reference);
+                        return `tsc_value_get_computed_prop(${read(reference.base)}, ${read(reference.key)})`;
+                    };
+                    const setReference = (reference: ResumableReference, source: string, sourceNode: ts.Expression): void => {
+                        if (reference.kind === "property") {
+                            preparePropertyReference(reference);
+                            const write = `tsc_value_set_computed_prop(${read(reference.base)}, ${read(reference.key)}, ${source})`;
+                            if (this.nodeIsInStrictMode(reference.node)) {
+                                callback.line(`if (!${write}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("property assignment failed"));`);
+                            } else callback.line(`(void)${write};`);
+                            return;
+                        }
+                        const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
+                        if (field) {
+                            emitCfgFieldAssignment(callback, field, { c: source, ty: T_VALUE }, reference.identifier);
+                            return;
+                        }
+                        const assignment = ts.factory.createBinaryExpression(reference.identifier, ts.SyntaxKind.EqualsToken, sourceNode);
+                        Object.assign(assignment, { parent: reference.identifier.parent });
+                        ts.setTextRange(assignment, reference.identifier);
+                        const overrides = new Map([[sourceNode, { c: source, ty: T_VALUE }]]);
+                        this.conditionValueScopes.push(overrides);
+                        try { callback.line(`(void)(${this.emitExpr(assignment).c});`); }
+                        finally { this.conditionValueScopes.pop(); }
+                    };
+                    if (operation.kind === "complete") emitTransition(stateNode.next.id);
+                    else if (operation.kind === "jump") transition(operation.next);
+                    else if (operation.kind === "branch") {
+                        const test = operation.mode === "nullish" ? `tsc_value_is_nullish(${read(operation.source)})`
+                            : `tsc_value_is_truthy(${read(operation.source)})`;
+                        callback.line(`if (${test}) goto __tsc_cfg_operation_${stateNode.targets.get(operation.yes)!.id};`);
+                        transition(operation.no);
+                    } else if (operation.kind === "suspend") {
+                        if (operation.suspension !== "await") return false;
+                        callback.line(`state->pc = ${stateNode.id};`);
+                        emitPromiseSuspension(() => this.promiseAwaitResult({ c: operation.source === null
+                            ? "tsc_value_undefined()" : read(operation.source), ty: T_VALUE }, operation.node), stateNode.exceptionTarget?.target.id ?? null);
+                        store(operation.output, this.coerce(awaitFulfilledValue(T_VALUE), T_VALUE, operation.node));
+                        callback.line("state->awaiting = false;");
+                        transition(operation.next);
+                    } else if (operation.kind === "value") {
+                        const op = operation.operation;
+                        let evaluated: string;
+                        if (op.kind === "copy") evaluated = read(op.source);
+                        else if (op.kind === "undefined") evaluated = "tsc_value_undefined()";
+                        else if (op.kind === "get") evaluated = getReference(op.reference);
+                        else if (op.kind === "set") {
+                            setReference(op.reference, read(op.source), graph.expressionResults[stateNode.slots[op.source]!]!);
+                            evaluated = read(op.source);
+                        } else if (op.kind === "property-key") evaluated = `tsc_value_to_property_key(${read(op.source)})`;
+                        else if (op.kind === "arguments" || op.kind === "array") {
+                            evaluated = "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))";
+                        } else if (op.kind === "object") evaluated = "tsc_value_object(tsc_object_new())";
+                        else if (op.kind === "compound") {
+                            const fn = this.dynamicCompoundAssignmentOperation(op.operator);
+                            if (!fn) return false;
+                            evaluated = `${fn}(${read(op.left)}, ${read(op.right)})`;
+                        } else if (op.kind === "delete") {
+                            if (op.reference.kind !== "property") return false;
+                            preparePropertyReference(op.reference);
+                            const result = this.freshTemp("_resumable_delete");
+                            callback.line(`bool const ${result} = tsc_value_delete_computed_prop(${read(op.reference.base)}, ${read(op.reference.key)});`);
+                            if (this.nodeIsInStrictMode(op.reference.node)) callback.line(`if (!${result}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("property deletion failed"));`);
+                            evaluated = `tsc_value_bool(${result})`;
+                        } else if (op.kind === "update") {
+                            const old = this.freshTemp("_resumable_numeric"), updated = this.freshTemp("_resumable_updated");
+                            callback.line(`tsc_value_t const ${old} = tsc_value_to_numeric(${getReference(op.reference)});`);
+                            callback.line(`void* volatile ${old}_root = tsc_value_gc_root(${old}); (void)${old}_root;`);
+                            callback.line(`tsc_value_t const ${updated} = ${op.increment ? "tsc_value_inc" : "tsc_value_dec"}(${old});`);
+                            callback.line(`void* volatile ${updated}_root = tsc_value_gc_root(${updated}); (void)${updated}_root;`);
+                            setReference(op.reference, updated, graph.expressionResults[stateNode.slots[operation.output]!]!);
+                            evaluated = op.prefix ? updated : old;
+                        } else if (op.kind === "call") {
+                            evaluated = op.construct ? `tsc_value_construct(${read(op.callee)}, ${read(op.arguments)})`
+                                : `tsc_value_apply_function(${read(op.callee)}, ${op.receiver === null ? "tsc_value_undefined()" : read(op.receiver)}, ${read(op.arguments)})`;
+                        } else {
+                            const overrides = new Map(op.inputs.map(input => [input.expression, { c: read(input.slot), ty: T_VALUE }]));
+                            this.conditionValueScopes.push(overrides);
+                            try { evaluated = this.coerce(this.emitExpr(op.expression), T_VALUE, op.expression); }
+                            finally { this.conditionValueScopes.pop(); }
+                        }
+                        store(operation.output, evaluated);
+                        transition(operation.next);
+                    } else if (operation.kind === "append") {
+                        const target = read(operation.target);
+                        const append = (item: string): void => {
+                            if (operation.container === "arguments") callback.line(`tsc_array_push_value(tsc_value_as_array(${target}), ${item});`);
+                            else callback.line(`if (!tsc_value_create_data_property(${target}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target}))), ${item})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("array literal element definition failed"));`);
+                        };
+                        if (operation.source === null) {
+                            callback.line(`(void)tsc_value_set_prop(${target}, ${this.stringLit("length")}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target})) + 1.0));`);
+                        } else if (!operation.spread) append(read(operation.source));
+                        else {
+                            const iterator = this.freshTemp("_resumable_spread"), item = this.freshTemp("_resumable_spread_value"), frame = this.freshTemp("_resumable_spread_frame");
+                            callback.line(`tsc_sync_iterator_t* const ${iterator} = (tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`);
+                            callback.line(`*${iterator} = tsc_sync_iterator_open(${read(operation.source)});`);
+                            callback.line(`TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame});`);
+                            callback.open(`if (setjmp(${frame}.jb) == 0)`);
+                            callback.line(`tsc_value_t ${item};`);
+                            callback.open(`while (tsc_sync_iterator_step(${iterator}, &${item}))`);
+                            callback.line(`void* volatile ${item}_root = tsc_value_gc_root(${item}); (void)${item}_root;`);
+                            append(item);
+                            callback.close(); callback.line("tsc_try_pop();"); callback.close(); callback.open("else");
+                            const error = this.freshTemp("_resumable_spread_error");
+                            callback.line(`tsc_value_t const ${error} = tsc_current_error_value(); tsc_try_pop();`);
+                            callback.line(`tsc_sync_iterator_close_abrupt(${iterator}, ${error});`);
+                            callback.close();
+                        }
+                        transition(operation.next);
+                    } else if (operation.kind === "define") {
+                        callback.line(`if (!tsc_value_create_data_property(${read(operation.target)}, ${read(operation.key)}, ${read(operation.source)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"));`);
+                        transition(operation.next);
+                    } else if (operation.kind === "define-member") {
+                        const closure = this.emitClosureExpression(operation.member);
+                        const fn = ts.isGetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_getter"
+                            : ts.isSetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_setter"
+                                : "tsc_value_create_data_property";
+                        callback.line(`if (!${fn}(${read(operation.target)}, ${read(operation.key)}, ${this.coerce(closure, T_VALUE, operation.member)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal member definition failed"));`);
+                        transition(operation.next);
+                    } else if (operation.kind === "spread-object") {
+                        callback.line(`tsc_value_copy_data_properties_into(${read(operation.target)}, ${read(operation.source)}, NULL);`);
+                        transition(operation.next);
+                    } else if (operation.kind === "prototype") {
+                        callback.line(`if (tsc_value_is_object(${read(operation.source)}) || tsc_value_eq(${read(operation.source)}, tsc_value_null())) (void)tsc_value_set_prototype_of(${read(operation.target)}, ${read(operation.source)});`);
+                        transition(operation.next);
+                    } else {
+                        const string = this.freshTemp("_resumable_template");
+                        callback.line(`tsc_str_t* volatile ${string} = tsc_value_to_string(${read(operation.source)});`);
+                        store(operation.target, `tsc_value_string(tsc_str_concat(tsc_value_as_string(${read(operation.target)}), tsc_str_concat(${string}, ${this.stringLit(operation.tail)})))`);
+                        transition(operation.next);
+                    }
+                } else if (stateNode.kind === "sync") {
                     if (ts.isVariableStatement(stateNode.statement)) {
                         for (const declaration of stateNode.statement.declarationList.declarations) {
                             if (!ts.isIdentifier(declaration.name)) return false;
@@ -30822,19 +30907,6 @@ class Emitter {
                     const truth = this.truthyC(condition, stateNode.expression);
                     callback.line(`state->pc = (${truth}) ? ${stateNode.truthy.id} : ${stateNode.falsy.id};`);
                     callback.line("continue;");
-                } else if (stateNode.kind === "logical-condition") {
-                    const condition = this.emitExpr(stateNode.expression);
-                    const conditionType = this.prepareType(condition.ty);
-                    const conditionValue = this.freshTemp("_async_cfg_condition");
-                    callback.line(`${conditionType.c} ${conditionValue} = ${condition.c};`);
-                    const storedCondition = { c: conditionValue, ty: conditionType };
-                    const nullish = this.nullishExprFromEmitResult(storedCondition, stateNode.expression);
-                    callback.open(`if (${nullish})`);
-                    emitTransition(stateNode.nullish.id);
-                    callback.close();
-                    const truthy = this.truthyC(storedCondition, stateNode.expression);
-                    callback.line(`state->pc = (${truthy}) ? ${stateNode.truthy.id} : ${stateNode.falsy.id};`);
-                    callback.line("continue;");
                 } else if (stateNode.kind === "switch-dispatch") {
                     const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
                     if (!discriminatorType || discriminatorType.kind !== "value") return false;
@@ -30884,193 +30956,6 @@ class Emitter {
                         }
                     }
                     emitTransition(stateNode.miss.id);
-                } else if (stateNode.kind === "await-condition") {
-                    const promiseType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr.expression,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                        this.checker,
-                    ));
-                    const awaitedType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr),
-                        this.checker,
-                    ));
-                    emitAwaitSuspension(
-                        stateNode.awaitExpr,
-                        stateNode.exceptionTarget?.target.id ?? null,
-                    );
-                    const awaitedValue: EmitResult = awaitedType.kind === "void"
-                        ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                        : {
-                            c: this.coerce(
-                                awaitFulfilledValue(promiseType),
-                                awaitedType,
-                                stateNode.awaitExpr,
-                            ),
-                            ty: awaitedType,
-                        };
-                    callback.line("state->awaiting = false;");
-                    const truthy = this.truthyC(awaitedValue, stateNode.awaitExpr);
-                    callback.line(`state->pc = (${truthy}) ? ${stateNode.truthy.id} : ${stateNode.falsy.id};`);
-                    callback.line("continue;");
-                } else if (stateNode.kind === "await-logical-condition") {
-                    const promiseType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr.expression,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                        this.checker,
-                    ));
-                    const awaitedType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr),
-                        this.checker,
-                    ));
-                    emitAwaitSuspension(
-                        stateNode.awaitExpr,
-                        stateNode.exceptionTarget?.target.id ?? null,
-                    );
-                    const awaitedValue: EmitResult = awaitedType.kind === "void"
-                        ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                        : {
-                            c: this.coerce(
-                                awaitFulfilledValue(promiseType),
-                                awaitedType,
-                                stateNode.awaitExpr,
-                            ),
-                            ty: awaitedType,
-                        };
-                    callback.line("state->awaiting = false;");
-                    const nullish = this.nullishExprFromEmitResult(awaitedValue, stateNode.awaitExpr);
-                    callback.open(`if (${nullish})`);
-                    emitTransition(stateNode.nullish.id);
-                    callback.close();
-                    const truthy = this.truthyC(awaitedValue, stateNode.awaitExpr);
-                    callback.line(`state->pc = (${truthy}) ? ${stateNode.truthy.id} : ${stateNode.falsy.id};`);
-                    callback.line("continue;");
-                } else if (stateNode.kind === "await-completion") {
-                    const completion = stateNode.completion;
-                    const awaitExpr = completion.awaitExpr;
-                    const promiseType = this.prepareType(mapTsType(
-                        awaitExpr.expression,
-                        this.checker.getTypeAtLocation(awaitExpr.expression),
-                        this.checker,
-                    ));
-                    const awaitedType = this.prepareType(mapTsType(
-                        awaitExpr,
-                        this.checker.getTypeAtLocation(awaitExpr),
-                        this.checker,
-                    ));
-                    emitAwaitSuspension(
-                        awaitExpr,
-                        stateNode.exceptionTarget?.target.id ?? null,
-                    );
-                    if (awaitedType.kind === "void") {
-                        if (completion.kind === "throw") {
-                            if (stateNode.exceptionTarget) {
-                                emitExceptionTransition(
-                                    "tsc_value_undefined()",
-                                    stateNode.exceptionTarget.target.id,
-                                );
-                            } else {
-                                callback.line("tsc_try_pop();");
-                                callback.line("tsc_promise_reject_in_place(_ret, tsc_value_undefined());");
-                            }
-                        } else {
-                            callback.line("tsc_try_pop();");
-                            callback.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
-                        }
-                    } else {
-                        const fulfilled = awaitFulfilledValue(promiseType);
-                        const value = this.coerce(fulfilled, awaitedType, awaitExpr);
-                        const valueVar = this.freshTemp("_async_cfg_awaited_completion");
-                        callback.line(`${awaitedType.c} ${valueVar} = ${value};`);
-                        if (completion.kind === "throw") {
-                            const boxed = this.coerce({ c: valueVar, ty: awaitedType }, T_VALUE, awaitExpr);
-                            if (stateNode.exceptionTarget) {
-                                emitExceptionTransition(boxed, stateNode.exceptionTarget.target.id);
-                            } else {
-                                callback.line("tsc_try_pop();");
-                                callback.line(`tsc_promise_reject_in_place(_ret, ${boxed});`);
-                            }
-                        } else {
-                            callback.line("tsc_try_pop();");
-                            callback.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult({ c: valueVar, ty: awaitedType }, awaitExpr)});`);
-                        }
-                    }
-                    callback.line("return;");
-                } else if (stateNode.kind === "await-return-value") {
-                    callback.open("if (!state->awaiting)");
-                    callback.line("state->receiver = state->pending_return;");
-                    callback.line("state->awaiting = true;");
-                    callback.line("tsc_try_pop();");
-                    callback.line(`tsc_queue_microtask(${name}, state);`);
-                    callback.line("return;");
-                    callback.close();
-                    callback.open("if (tsc_promise_is_rejected(state->receiver))");
-                    if (stateNode.exceptionTarget) {
-                        emitExceptionTransition(
-                            "tsc_promise_reason(state->receiver)",
-                            stateNode.exceptionTarget.target.id,
-                        );
-                    } else {
-                        callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(state->receiver));");
-                        callback.line("return;");
-                    }
-                    callback.close();
-                    callback.open("if (!tsc_promise_is_fulfilled(state->receiver))");
-                    callback.line("tsc_try_pop();");
-                    callback.line("return;");
-                    callback.close();
-                    callback.line("state->awaiting = false;");
-                    if (stateNode.target) {
-                        emitTransition(stateNode.target.id);
-                    } else {
-                        callback.line("tsc_try_pop();");
-                        callback.line("tsc_promise_adopt_into(_ret, state->pending_return);");
-                        callback.line("return;");
-                    }
-                } else if (stateNode.kind === "await-next") {
-                    const promiseType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr.expression,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                        this.checker,
-                    ));
-                    const awaitedType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr),
-                        this.checker,
-                    ));
-                    emitAwaitSuspension(
-                        stateNode.awaitExpr,
-                        stateNode.exceptionTarget?.target.id ?? null,
-                    );
-                    if (stateNode.resultSlot !== null) {
-                        const storageType = expressionResultTypes[stateNode.resultSlot];
-                        if (!storageType || storageType.kind === "void" || storageType.kind === "never" ||
-                            awaitedType.kind === "void" || awaitedType.kind === "never") return false;
-                        const fulfilled = awaitFulfilledValue(promiseType);
-                        callback.line(`state->expression_result_${stateNode.resultSlot} = ${this.coerce(fulfilled, storageType, stateNode.awaitExpr)};`);
-                        if (storageType.kind === "value") {
-                            callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = tsc_value_gc_root(state->expression_result_${stateNode.resultSlot});`);
-                        }
-                    } else if (stateNode.assignment) {
-                        const symbol = this.symbolForIdentifier(stateNode.assignment);
-                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (awaitedType.kind !== "void") {
-                            if (!local) return false;
-                            const fulfilled = awaitFulfilledValue(promiseType);
-                            emitCfgFieldAssignment(
-                                callback,
-                                local,
-                                fulfilled,
-                                stateNode.awaitExpr,
-                                "state",
-                                cfgAssignmentInitializesLexical(stateNode.assignment),
-                            );
-                        }
-                    }
-                    callback.line("state->awaiting = false;");
-                    emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "await-dispose") {
                     const resourceValues: string[] = [];
                     for (const declaration of stateNode.declarations) {
@@ -31087,53 +30972,7 @@ class Emitter {
                     }, stateNode.exceptionTarget?.target.id ?? null);
                     callback.line("state->awaiting = false;");
                     emitTransition(stateNode.next.id);
-                } else if (stateNode.kind === "expression-await") {
-                    const promiseType = this.prepareType(mapTsType(
-                        stateNode.awaitExpr.expression,
-                        this.checker.getTypeAtLocation(stateNode.awaitExpr.expression),
-                        this.checker,
-                    ));
-                    const storageType = expressionAwaitTypes[stateNode.slot]!;
-                    if (storageType.kind === "never") return false;
-                    emitAwaitSuspension(
-                        stateNode.awaitExpr,
-                        stateNode.exceptionTarget?.target.id ?? null,
-                    );
-                    let storedValue: EmitResult;
-                    if (storageType.kind === "void") {
-                        storedValue = { c: "tsc_value_undefined()", ty: T_VALUE };
-                    } else {
-                        const fulfilled = awaitFulfilledValue(promiseType);
-                        callback.line(`state->expression_value_${stateNode.slot} = ${this.coerce(fulfilled, storageType, stateNode.awaitExpr)};`);
-                        if (storageType.kind === "value") {
-                            callback.line(`state->expression_value_${stateNode.slot}_gc_root = tsc_value_gc_root(state->expression_value_${stateNode.slot});`);
-                        }
-                        storedValue = { c: `state->expression_value_${stateNode.slot}`, ty: storageType };
-                    }
-                    callback.line("state->awaiting = false;");
-                    if (stateNode.shortCircuitExit) {
-                        const truthy = this.truthyC(storedValue, stateNode.awaitExpr);
-                        const exits = stateNode.shortCircuitExit === "falsy"
-                            ? `!(${truthy})`
-                            : stateNode.shortCircuitExit === "truthy"
-                                ? truthy
-                                : `!(${this.nullishExprFromEmitResult(storedValue, stateNode.awaitExpr)})`;
-                        callback.line(`state->pc = (${exits}) ? ${stateNode.completeTarget.id} : ${stateNode.next.id};`);
-                        callback.line("continue;");
-                    } else {
-                        emitTransition(stateNode.next.id);
-                    }
                 } else if (stateNode.kind === "expression-complete") {
-                    const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
-                    for (const awaitExpr of stateNode.awaitExprs) {
-                        const slot = expressionAwaitSlot.get(awaitExpr);
-                        if (slot === undefined) return false;
-                        const storageType = expressionAwaitTypes[slot]!;
-                        awaitScope.set(awaitExpr, storageType.kind === "void" || storageType.kind === "never"
-                            ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                            : { c: `state->expression_value_${slot}`, ty: storageType });
-                    }
-                    this.awaitExpressionValueScopes.push(awaitScope);
                     const syncScope = new Map<ts.Expression, EmitResult>();
                     for (const expression of graph.expressionSyncs) {
                         const slot = expressionSyncSlot.get(expression);
@@ -31176,7 +31015,6 @@ class Emitter {
                         }
                     } finally {
                         this.conditionValueScopes.pop();
-                        this.awaitExpressionValueScopes.pop();
                     }
                     let routedResult = result;
                     if (stateNode.resultSlot !== null) {
@@ -31223,7 +31061,7 @@ class Emitter {
                         }
                         callback.line("continue;");
                     } else if (stateNode.resultSlot !== null) {
-                        emitTransition(stateNode.next.id);
+                        emitTransition(stateNode.next!.id);
                     } else if (stateNode.assignment) {
                         const symbol = this.symbolForIdentifier(stateNode.assignment);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
@@ -31236,7 +31074,7 @@ class Emitter {
                             "state",
                             cfgAssignmentInitializesLexical(stateNode.assignment),
                         );
-                        emitTransition(stateNode.next.id);
+                        emitTransition(stateNode.next!.id);
                     } else if (stateNode.completion?.kind === "return") {
                         result = normalizeCfgReturn(result, stateNode.expression);
                         const resultType = this.prepareType(result.ty);
@@ -31265,7 +31103,7 @@ class Emitter {
                         }
                     } else {
                         callback.line(`(void)(${result.c});`);
-                        emitTransition(stateNode.next.id);
+                        emitTransition(stateNode.next!.id);
                     }
                 } else if (stateNode.kind === "catch-bind") {
                     if (stateNode.binding) {
@@ -31467,39 +31305,7 @@ class Emitter {
                     emitExceptionTransition(boxed, stateNode.target.id);
                 } else if (stateNode.kind === "return-route") {
                     const completion = stateNode.completion;
-                    if (completion.awaitExpr) {
-                        const awaitExpr = completion.awaitExpr;
-                        const promiseType = this.prepareType(mapTsType(
-                            awaitExpr.expression,
-                            this.checker.getTypeAtLocation(awaitExpr.expression),
-                            this.checker,
-                        ));
-                        const awaitedType = this.prepareType(mapTsType(
-                            awaitExpr,
-                            this.checker.getTypeAtLocation(awaitExpr),
-                            this.checker,
-                        ));
-                        emitAwaitSuspension(
-                            awaitExpr,
-                            stateNode.exceptionTarget?.target.id ?? null,
-                        );
-                        if (awaitedType.kind === "void") {
-                            callback.line("state->pending_return = tsc_promise_resolve(tsc_value_undefined());");
-                        } else {
-                            const fulfilled = awaitFulfilledValue(promiseType);
-                            const awaitedResult = normalizeCfgReturn(
-                                {
-                                    c: this.coerce(fulfilled, awaitedType, awaitExpr),
-                                    ty: awaitedType,
-                                },
-                                awaitExpr,
-                            );
-                            const awaitedValue = this.freshTemp("_async_cfg_pending_return");
-                            callback.line(`${awaitedResult.ty.c} ${awaitedValue} = ${awaitedResult.c};`);
-                            callback.line(`state->pending_return = ${this.promiseResolveResult({ c: awaitedValue, ty: awaitedResult.ty }, awaitExpr)};`);
-                        }
-                        callback.line("state->awaiting = false;");
-                    } else if (!completion.value) {
+                    if (!completion.value) {
                         callback.line("state->pending_return = tsc_promise_resolve(tsc_value_undefined());");
                     } else {
                         const returned = normalizeCfgReturn(
@@ -31629,14 +31435,6 @@ class Emitter {
             buf.line(`${env}->finally_value_gc_root[${region}] = NULL;`);
         }
         buf.line(`${env}->pending_return = NULL;`);
-        for (let slot = 0; slot < expressionAwaitTypes.length; slot++) {
-            const storageType = expressionAwaitTypes[slot]!;
-            if (storageType.kind === "void" || storageType.kind === "never") continue;
-            buf.line(`${env}->expression_value_${slot} = ${this.zeroValue(storageType)};`);
-            if (storageType.kind === "value") {
-                buf.line(`${env}->expression_value_${slot}_gc_root = NULL;`);
-            }
-        }
         for (let slot = 0; slot < expressionSyncTypes.length; slot++) {
             const storageType = expressionSyncTypes[slot]!;
             buf.line(`${env}->expression_sync_value_${slot} = ${this.zeroValue(storageType)};`);

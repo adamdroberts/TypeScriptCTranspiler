@@ -250,7 +250,7 @@ interface PropertyDescriptorMap {
 }
 
 interface Array<T> extends Iterable<T> {
-    readonly length: number;
+    length: number;
     push(...items: T[]): number;
     pop(...ignored: any[]): T | undefined;
     shift(...ignored: any[]): T | undefined;

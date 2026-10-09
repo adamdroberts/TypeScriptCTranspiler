@@ -5821,15 +5821,12 @@ static bool copy_data_property_is_excluded(
 
 /* CopyDataProperties consumes the runtime's one canonical [[OwnPropertyKeys]]
  * collection, preserving String/Symbol identity and Proxy/accessor effects. */
-tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excluded_keys) {
-    if (tsc_value_is_nullish(source)) {
-        tsc_throw_error(
-            TSC_ERROR_TYPE,
-            tsc_str_from_cstr("Cannot destructure null or undefined")
-        );
-    }
-    tsc_object_t* target = tsc_object_new();
-    tsc_array_t* keys = tsc_value_raw_own_keys(source);
+void tsc_value_copy_data_properties_into(tsc_value_t target, tsc_value_t source, tsc_array_t* excluded_keys) {
+    if (tsc_value_is_nullish(source)) return;
+    void* volatile target_gc_root = tsc_value_gc_root(target);
+    void* volatile source_gc_root = tsc_value_gc_root(source);
+    (void)target_gc_root; (void)source_gc_root;
+    tsc_array_t* volatile keys = tsc_value_raw_own_keys(source);
     for (size_t i = 0; i < keys->len; i++) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
         if (copy_data_property_is_excluded(key, excluded_keys)) continue;
@@ -5837,9 +5834,19 @@ tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excl
         tsc_value_t value = tsc_value_get_prop(source, key);
         void* volatile value_gc_root = tsc_value_gc_root(value);
         (void)value_gc_root;
-        tsc_object_set(target, key, value);
+        tsc_symbol_t* symbol = value_known_symbol_from_internal_key(key);
+        tsc_value_t public_key = symbol ? tsc_value_symbol(symbol) : tsc_value_string(key);
+        if (!tsc_value_create_data_property(target, public_key, value)) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("CopyDataProperties could not create a property"));
+        }
     }
-    return tsc_value_object(target);
+}
+
+tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excluded_keys) {
+    tsc_object_t* target = tsc_object_new();
+    tsc_value_t result = tsc_value_object(target);
+    tsc_value_copy_data_properties_into(result, source, excluded_keys);
+    return result;
 }
 
 double tsc_value_length(tsc_value_t v) {

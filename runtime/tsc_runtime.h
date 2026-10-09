@@ -1070,6 +1070,7 @@ tsc_value_t tsc_reflect_get_own_property_computed_descriptor(tsc_value_t v, tsc_
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v);
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 tsc_value_t tsc_value_copy_data_properties(tsc_value_t source, tsc_array_t* excluded_keys);
+void tsc_value_copy_data_properties_into(tsc_value_t target, tsc_value_t source, tsc_array_t* excluded_keys);
 double tsc_value_length(tsc_value_t v);
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
