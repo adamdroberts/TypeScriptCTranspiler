@@ -806,7 +806,11 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         let addedRoot = false;
         const sources = finiteFunctionConstructorSources(built.program, [
             { parameters: "", body: "" }, ...runtimeCode.functions,
-        ]);
+        ], { functions: [...functionEntries.values()], evaluations: [
+            ...(opts.test262Observation?.evalScriptEntries ?? []),
+            ...(opts.test262Observation?.directEvalEntries ?? []),
+            ...(opts.test262Observation?.indirectEvalEntries ?? []),
+        ] });
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
             if (functionEntries.has(key)) continue;

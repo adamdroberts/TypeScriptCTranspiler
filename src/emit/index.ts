@@ -1285,6 +1285,11 @@ class Emitter {
     }
 
     private isPrunableTopLevelVariable(decl: ts.VariableDeclaration): boolean {
+        // JavaScript initializers create ordinary values whose property reads
+        // can invoke mutable accessors. Keep their actual evaluation graph;
+        // recursively re-proving earlier anonymous owners is neither a safe
+        // GetValue optimization nor a cardinality-independent traversal.
+        if (this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isIdentifier(decl.name)) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         if (!this.isTopLevelValueDeclaration(decl)) return false;
@@ -14656,6 +14661,7 @@ class Emitter {
     }
 
     private isPrunableLocalVariable(decl: ts.VariableDeclaration): boolean {
+        if (this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
         if (!ts.isIdentifier(decl.name)) return false;
         if (!ts.isVariableStatement(decl.parent.parent)) return false;
         if (this.isTopLevelValueDeclaration(decl)) return false;
@@ -15602,6 +15608,10 @@ class Emitter {
     }
 
     private namespaceMemberName(id: ts.Identifier): string | null {
+        // ECMAScript sources have ordinary property names, not TypeScript
+        // namespace declarations. Resolving a member name asks the checker
+        // to infer the receiver's entire anonymous owner graph.
+        if (this.isJavaScriptSourceFile(id.getSourceFile())) return null;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
@@ -25224,20 +25234,14 @@ class Emitter {
      * synthesize a rest parameter for `arguments` use; admitting that symbol
      * here would make a finite inferred tuple alter ECMAScript arity. */
     private javaScriptFunctionValueType(fn: ts.FunctionLikeDeclaration): CType {
-        const sig = this.checker.getSignatureFromDeclaration(fn);
-        if (!sig) unsupported(fn, "could not resolve JavaScript function signature");
         const runtimeParams = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
         const params = runtimeParams.map((parameter) => this.prepareType(
                 parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE,
             ));
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
-        const ret = isAsync && !isGenerator
-            ? promiseType(T_VALUE)
-            : !isAsync && !isGenerator
-                ? T_VALUE
-                : this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
-        const thisType = this.signatureThisType(sig, fn);
+        const ret = isAsync && !isGenerator ? promiseType(T_VALUE) : T_VALUE;
+        const thisType = hasImplicitJavaScriptThis(fn) ? T_VALUE : undefined;
         return this.prepareType(functionType(params, ret, thisType ?? undefined,
             runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
@@ -28832,6 +28836,7 @@ class Emitter {
     }
 
     private signatureThisType(sig: ts.Signature, node: ts.Node): CType | null {
+        if (hasImplicitJavaScriptThis(node)) return T_VALUE;
         const thisParam = sig.thisParameter;
         let ty: CType | null = null;
         if (thisParam) {
@@ -28871,10 +28876,13 @@ class Emitter {
     }
 
     private directCallableThisType(id: ts.Identifier): CType | null {
-        const sig = this.checker.getTypeAtLocation(id).getCallSignatures()[0];
-        if (!sig) return null;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        const source = decl && ts.isVariableDeclaration(decl) && decl.initializer ? decl.initializer : decl;
+        if (source && this.isJavaScriptSourceFile(source.getSourceFile()))
+            return hasImplicitJavaScriptThis(source) ? T_VALUE : null;
+        const sig = this.checker.getTypeAtLocation(id).getCallSignatures()[0];
+        if (!sig) return null;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
             return this.signatureThisType(sig, decl.initializer);
         }
@@ -29431,12 +29439,10 @@ class Emitter {
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(declaration, symbol)) return false;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
-            const inferred = this.variableStorageType(
-                this.prepareType(mapType(declaration, this.checker)),
-            );
             const type = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
                 ? T_VALUE
-                : cell?.type ?? this.variableDeclarationStorageType(declaration, inferred);
+                : cell?.type ?? this.variableDeclarationStorageType(declaration,
+                    this.variableStorageType(this.prepareType(mapType(declaration, this.checker))));
             if (type.kind === "void" &&
                 !symbolHasUseOutsideDeclaration(symbol, declaration.name)) {
                 seenSymbols.add(symbol);
@@ -29513,7 +29519,8 @@ class Emitter {
             }
         }
         const expressionSyncTypes = graph.expressionSyncs.map((expression) =>
-            switchValueExpressionNodes.has(expression)
+            switchValueExpressionNodes.has(expression) ||
+                ts.isObjectLiteralExpression(expression) && this.isUntypedJsObjectLiteral(expression)
                 ? T_VALUE
                 : this.asyncAwaitContinuationStorageType(
                     expression,
@@ -31769,14 +31776,12 @@ class Emitter {
         thisType: CType | null;
     } {
         const name = this.functionDeclarationCName(fd);
-        const sig = this.checker.getSignatureFromDeclaration(fd);
-        if (!sig) unsupported(fd, "could not resolve function signature");
-        const retTsType = sig.getReturnType();
-        const retCt = this.isJavaScriptSourceFile(fd.getSourceFile()) &&
-            !this.isAsyncDeclaration(fd) && !this.isGeneratorDeclaration(fd)
-            ? T_VALUE
-            : this.prepareType(mapTsType(fd, retTsType, this.checker));
-        const thisType = this.signatureThisType(sig, fd);
+        const sourceType = this.isJavaScriptSourceFile(fd.getSourceFile())
+            ? this.javaScriptFunctionValueType(fd) : null;
+        const sig = sourceType ? null : this.checker.getSignatureFromDeclaration(fd);
+        if (!sourceType && !sig) unsupported(fd, "could not resolve function signature");
+        const retCt = sourceType?.ret ?? this.prepareType(mapTsType(fd, sig!.getReturnType(), this.checker));
+        const thisType = sourceType ? sourceType.thisParam ?? null : this.signatureThisType(sig!, fd);
         const params = this.collectParams(fd.parameters);
         const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
         const signature =
@@ -33432,10 +33437,10 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isClassDeclaration(decl) && !decl.getSourceFile().isDeclarationFile) return decl;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
-            const declared = this.checker.getTypeAtLocation(decl.name);
-            if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
             const init = this.unwrapTransparentExpression(decl.initializer);
             if (ts.isIdentifier(init)) {
+                const declared = this.checker.getTypeAtLocation(decl.name);
+                if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
                 return this.classDeclForConstructorIdentifier(init, seen);
             }
         }
@@ -34887,12 +34892,14 @@ class Emitter {
                     return this.staticBooleanValue(unwrapped, seenConsts);
             }
         }
-        try {
-            if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
-                return this.staticBooleanValue(unwrapped, seenConsts);
+        if (!this.isJavaScriptSourceFile(unwrapped.getSourceFile())) {
+            try {
+                if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
+                    return this.staticBooleanValue(unwrapped, seenConsts);
+                }
+            } catch {
+                // Keep primitive equality folding conservative for expressions mapType cannot lower.
             }
-        } catch {
-            // Keep primitive equality folding conservative for expressions mapType cannot lower.
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePrimitiveBooleanValue(init, seenConsts) : null;
@@ -38656,14 +38663,14 @@ class Emitter {
         const processEnvAssignment = this.emitProcessEnvAssignment(bin, op);
         if (processEnvAssignment) return processEnvAssignment;
 
+        const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
+        if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
+
         const classAccessorAssignment = this.emitClassAccessorAssignment(bin, op);
         if (classAccessorAssignment) return classAccessorAssignment;
 
         const nativeFieldAssignment = this.emitRootedNativeFieldAssignment(bin, op);
         if (nativeFieldAssignment) return nativeFieldAssignment;
-
-        const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
-        if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
 
         const lhsC = this.emitLvalue(bin.left);
         const lhsType = this.storageType(bin.left);
@@ -39018,12 +39025,14 @@ class Emitter {
 
         const rawRecv = this.emitExpr(recvExpr);
         const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
-        const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
         const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp" || rawRecv.ty.kind === "buffer"
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
             : rawRecv.ty.kind === "array" &&
                 (rawRecv.ty.elem?.kind === "value" ||
-                    (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value"))
+                    (() => {
+                        const mapped = this.prepareType(mapType(recvExpr, this.checker));
+                        return mapped.kind === "array" && mapped.elem?.kind === "value";
+                    })())
                 ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
                 : rawRecv;
         if (recv.ty.kind !== "value") return null;
@@ -41189,13 +41198,14 @@ class Emitter {
         if (this.isGenericFunction(declaration)) {
             unsupported(declaration, "generic anonymous default function namespace binding");
         }
-        const signature = this.checker.getSignatureFromDeclaration(declaration);
-        if (!signature) unsupported(declaration, "could not resolve function declaration signature");
+        const javascript = this.isJavaScriptSourceFile(declaration.getSourceFile());
+        const signature = javascript ? null : this.checker.getSignatureFromDeclaration(declaration);
+        if (!javascript && !signature) unsupported(declaration, "could not resolve function declaration signature");
         return this.ensureFunctionReferenceAdapterForCallee(
             declaration,
             this.functionDeclarationCName(declaration),
             type,
-            this.signatureThisType(signature, declaration),
+            javascript ? type.thisParam ?? null : this.signatureThisType(signature!, declaration),
         );
     }
 
@@ -41251,8 +41261,9 @@ class Emitter {
     }
 
     private emitClosureExpression(fn: ClosureLikeDeclaration): EmitResult {
-        const sig = this.checker.getSignatureFromDeclaration(fn);
-        if (!sig) unsupported(fn, "could not resolve closure signature");
+        const javascript = this.isJavaScriptSourceFile(fn.getSourceFile());
+        const sig = javascript ? null : this.checker.getSignatureFromDeclaration(fn);
+        if (!javascript && !sig) unsupported(fn, "could not resolve closure signature");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
             if (!this.isJavaScriptSourceFile(fn.getSourceFile()) &&
@@ -41271,8 +41282,8 @@ class Emitter {
             ? this.javaScriptFunctionValueType(fn)
             : this.prepareType(functionType(
                 params,
-                this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker)),
-                this.signatureThisType(sig, fn) ?? undefined,
+                this.prepareType(mapTsType(fn, sig!.getReturnType(), this.checker)),
+                this.signatureThisType(sig!, fn) ?? undefined,
                 runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken),
             ));
         const ret = this.prepareType(type.ret!);
@@ -42235,6 +42246,7 @@ class Emitter {
         args: readonly ts.Expression[],
         elemType: CType,
     ): string {
+        if (elemType.kind === "value") return this.emitSpreadCallArgumentList(args).c;
         const av = this.freshTemp("_rest");
         const steps = [
             `tsc_array_t* ${av} = tsc_array_new(sizeof(${elemType.c}), ${Math.max(1, args.length)})`,
@@ -58643,16 +58655,14 @@ class Emitter {
     }
 
     private emitObjectLiteral(ol: ts.ObjectLiteralExpression, ordinary = false): EmitResult {
-        const targetType =
-            this.asyncAwaitReturnContextTypes.get(ol) ??
-            this.checker.getContextualType(ol) ??
-            this.checker.getTypeAtLocation(ol);
         const hasAccessor = ol.properties.some((property) =>
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
-        const mapped = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor
-            ? T_VALUE
-            : this.prepareType(mapTsType(ol, targetType, this.checker));
+        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor ? undefined :
+            this.asyncAwaitReturnContextTypes.get(ol) ??
+            this.checker.getContextualType(ol) ??
+            this.checker.getTypeAtLocation(ol);
+        const mapped = targetType ? this.prepareType(mapTsType(ol, targetType, this.checker)) : T_VALUE;
         if (mapped.kind === "value") {
             const obj = this.freshTemp("_dynobj");
             const pieces: string[] = [`tsc_object_t* volatile ${obj} = tsc_object_new()`];
@@ -58753,7 +58763,7 @@ class Emitter {
             pieces.push(`tsc_value_object(${obj})`);
             return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
         }
-        if (mapped.kind !== "class") {
+        if (mapped.kind !== "class" || !targetType) {
             unsupported(
                 ol,
                 "object literal requires a named interface/class as its type",

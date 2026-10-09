@@ -53,6 +53,7 @@
     "src/program.ts",
     "src/regexp-escape.ts",
     "src/resolve.ts",
+    "src/source-value-flow.ts",
     "src/runtime-code-aot.ts",
     "src/tools/check-emitter-method-reachability.ts",
     "stdlib/lib.core.d.ts",

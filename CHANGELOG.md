@@ -171,6 +171,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Replace constructor-source member type inference and inline argument-shape probes with one source-value/sequence graph. Close member/getter/formal/return/eval/bound/List dependencies, preserve primitive source conversions and fail closed on cyclic expansions. Derive JavaScript callable ABIs from source syntax, retain initializer effects, select boxed property assignment before native accessor probes and share actual rest-argument Lists; avoid unused structural inference and verify independent source-key observations, retained-owner stress and typed native E2E in both memory modes.
+
 - Retain fresh runtime parse-unit ownership across finite Function/eval, source callable creation, deferred boxing, resumable callbacks and exception transfer. Instantiate Script function declarations through fresh canonical closure owners; verify independent context partitions, retained-owner stress and native E2E in both memory modes.
 
 - Replaced ArrowFunction's hard-coded lexical-`this` closure slot with one ordered descriptor collection for lexical `this`, implicit `arguments`, and `new.target`. Escaped and nested arrows now preserve activation identity across call/apply/bind, mapped and unmapped argument objects, ordinary and reflective construction, alternate new targets, and parameter initializers; the compact dual-memory property and representative deep lexical-environment tree verify the shared path. The ECMAScript-only no-LineTerminator rule no longer rejects valid TypeScript Arrows whose return annotation precedes a line-broken `=>`.
