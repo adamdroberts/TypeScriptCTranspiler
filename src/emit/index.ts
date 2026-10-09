@@ -56729,6 +56729,7 @@ class Emitter {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method) ||
+            method === "toFixed" || method === "toExponential" || method === "toPrecision" ||
             method === "keys" || method === "values" || method === "entries" ||
             method === "forEach" || method === "reduce" || method === "reduceRight") {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
@@ -57202,24 +57203,6 @@ class Emitter {
                     ],
                     ([target]) => `tsc_value_method_to_reversed(${target})`,
                 );
-            case "toFixed":
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([v, digits]) => `tsc_value_method_to_fixed(${v}, ${digits})`);
-            case "toExponential":
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([v, digits]) => `tsc_value_method_to_exponential(${v}, ${digits})`);
-            case "toPrecision":
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: args[0] ? this.emitExpr(args[0]) : missing, target: T_VALUE, node: args[0] ?? call.expression },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
             case "toLocaleString":
                 {
                     const localeArgs = Array.from(args.slice(0, 2), (arg) => this.emitExpr(arg));
@@ -57241,15 +57224,6 @@ class Emitter {
                         },
                     );
                 }
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([target]) => `tsc_value_method_value_of(${target})`,
-                );
         }
         return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
     }
@@ -64676,50 +64650,12 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toString":
+            case "toFixed":
+            case "toExponential":
+            case "toPrecision":
+            case "valueOf":
                 return this.emitDynamicNamedPropertyCall(call, recv, method,
                     ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-            case "toFixed": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasDigits = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasDigits) {
-                    const digits = this.emitExpr(args[0]);
-                    requireNumber(args[0], digits.ty);
-                    specs.push({ value: digits, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const digits = hasDigits ? vals[1]! : "0.0";
-                    return `tsc_str_from_num_fixed(${vals[0]}, ${digits})`;
-                });
-            }
-            case "toExponential": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasDigits = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasDigits) {
-                    const digits = this.emitExpr(args[0]);
-                    requireNumber(args[0], digits.ty);
-                    specs.push({ value: digits, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const digits = hasDigits ? vals[1]! : "0.0";
-                    return `tsc_str_from_num_exponential(${vals[0]}, ${digits}, ${hasDigits ? "true" : "false"})`;
-                });
-            }
-            case "toPrecision": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasPrecision = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasPrecision) {
-                    const precision = this.emitExpr(args[0]);
-                    requireNumber(args[0], precision.ty);
-                    specs.push({ value: precision, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const precision = hasPrecision ? vals[1]! : "0.0";
-                    return `tsc_str_from_num_precision(${vals[0]}, ${precision}, ${hasPrecision ? "true" : "false"})`;
-                });
-            }
             case "toLocaleString":
                 return this.emitSequencedExpr(
                     T_STRING,
@@ -64728,12 +64664,6 @@ class Emitter {
                         ...this.ignoredArgumentSpecs(args, 0),
                     ],
                     ([value]) => `tsc_str_from_num(${value})`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([value]) => value,
                 );
             case "hasOwnProperty":
             case "propertyIsEnumerable":

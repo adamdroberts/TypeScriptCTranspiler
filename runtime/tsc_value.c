@@ -836,7 +836,7 @@ static tsc_value_t primitive_prototype_value_of(void* env, tsc_value_t this_arg,
     const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
     tsc_value_t primitive;
     if (!primitive_receiver_value(descriptor, this_arg, &primitive)) {
-        tsc_throw_str(tsc_str_from_cstr("primitive valueOf called on incompatible receiver"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("primitive valueOf called on incompatible receiver"));
     }
     return primitive;
 }
@@ -866,6 +866,56 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
         return tsc_value_string(tsc_symbol_to_string((const tsc_symbol_t*)value_ptr(primitive)));
     }
     return tsc_value_string(tsc_value_to_string(primitive));
+}
+
+typedef enum {
+    TSC_NUMBER_FORMAT_FIXED,
+    TSC_NUMBER_FORMAT_EXPONENTIAL,
+    TSC_NUMBER_FORMAT_PRECISION
+} tsc_number_format_kind_t;
+
+typedef struct {
+    const char* name;
+    size_t name_length;
+    tsc_number_format_kind_t kind;
+} tsc_number_format_descriptor_t;
+
+static const tsc_number_format_descriptor_t number_format_methods[] = {
+    { "toFixed", 7, TSC_NUMBER_FORMAT_FIXED },
+    { "toExponential", 13, TSC_NUMBER_FORMAT_EXPONENTIAL },
+    { "toPrecision", 11, TSC_NUMBER_FORMAT_PRECISION }
+};
+
+static tsc_value_t number_prototype_format(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    const tsc_number_format_descriptor_t* method = (const tsc_number_format_descriptor_t*)env;
+    tsc_value_t primitive;
+    if (!primitive_receiver_value(&primitive_number, receiver, &primitive))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Number format called on incompatible receiver"));
+    const tsc_value_t option = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    const bool provided = !tsc_value_is_undefined(option);
+    const double value = value_as_num(primitive);
+    if (method->kind == TSC_NUMBER_FORMAT_PRECISION && !provided)
+        return tsc_value_string(tsc_str_from_num(value));
+    const double digits = tsc_value_to_number(option);
+    switch (method->kind) {
+        case TSC_NUMBER_FORMAT_FIXED:
+            return tsc_value_string(tsc_str_from_num_fixed(value, digits));
+        case TSC_NUMBER_FORMAT_EXPONENTIAL:
+            return tsc_value_string(tsc_str_from_num_exponential(value, digits, provided));
+        case TSC_NUMBER_FORMAT_PRECISION:
+            return tsc_value_string(tsc_str_from_num_precision(value, digits, true));
+    }
+    tsc_panic("invalid Number formatting descriptor");
+}
+
+static void number_prototype_install_intrinsics(tsc_object_t* prototype) {
+    for (size_t index = 0; index < sizeof(number_format_methods) / sizeof(number_format_methods[0]); ++index) {
+        const tsc_number_format_descriptor_t* method = &number_format_methods[index];
+        tsc_str_t* name = tsc_str_from_lit(method->name, method->name_length);
+        tsc_object_define(prototype, name,
+            tsc_value_function_builtin_named(number_prototype_format, (void*)method, 1.0, name),
+            true, false, true);
+    }
 }
 
 static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor);
@@ -1594,6 +1644,9 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
             );
             if (descriptor->kind == TSC_PRIMITIVE_STRING) {
                 string_prototype_install_intrinsics(tsc_value_object(prototype));
+            }
+            if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
+                number_prototype_install_intrinsics(prototype);
             }
             descriptor->prototype = prototype;
         }
@@ -8196,41 +8249,6 @@ tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t*
 
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv) {
     return tsc_value_method_to_locale_string_args(recv, tsc_array_new(sizeof(tsc_value_t), 0));
-}
-
-tsc_value_t tsc_value_method_value_of(tsc_value_t recv) {
-    if (value_is_box(recv)) {
-        uint8_t tag = value_tag(recv);
-        if (tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_FUNCTION) {
-            tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("valueOf", 7));
-            if (tsc_value_is_callable(fn)) {
-                tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-                return tsc_value_apply_function(fn, recv, tsc_value_array(args));
-            }
-            tsc_throw_str(tsc_str_from_cstr("valueOf is not a function"));
-        }
-    }
-    return recv;
-}
-
-tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits) {
-    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: receiver must be a number"));
-    double digits = tsc_value_is_nullish(fraction_digits) ? 0.0 : tsc_value_as_num(fraction_digits);
-    return tsc_str_from_num_fixed(value_as_num(recv), digits);
-}
-
-tsc_str_t* tsc_value_method_to_exponential(tsc_value_t recv, tsc_value_t fraction_digits) {
-    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: receiver must be a number"));
-    bool omitted = value_is_box(fraction_digits) && value_tag(fraction_digits) == TSC_VALUE_TAG_UNDEFINED;
-    double digits = omitted ? 0.0 : tsc_value_as_num(fraction_digits);
-    return tsc_str_from_num_exponential(value_as_num(recv), digits, !omitted);
-}
-
-tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision) {
-    if (value_is_box(recv)) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: receiver must be a number"));
-    bool omitted = value_is_box(precision) && value_tag(precision) == TSC_VALUE_TAG_UNDEFINED;
-    double digits = omitted ? 0.0 : tsc_value_as_num(precision);
-    return tsc_str_from_num_precision(value_as_num(recv), digits, !omitted);
 }
 
 static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen) {

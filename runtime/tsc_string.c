@@ -138,30 +138,16 @@ static inline size_t fast_itoa(char* dst, int64_t n) {
     return k;
 }
 
-/* One exact binary64 rounding interval supplies shortest positional digits
- * in every radix. Precision grows until that interval contains an integer;
- * there are no fractional-digit, magnitude or output-buffer limits. */
-static tsc_str_t* number_shortest_string(double value, unsigned base) {
-    if (isnan(value)) return tsc_str_from_lit("NaN", 3);
-    if (value == 0.0) return tsc_str_from_lit("0", 1);
-    const bool negative = value < 0.0;
-    const double magnitude = fabs(value);
-    if (isinf(magnitude)) return negative ? tsc_str_from_lit("-Infinity", 9) : tsc_str_from_lit("Infinity", 8);
+typedef struct {
+    char* digits;
+    size_t count;
+    int point;
+} number_digit_record_t;
 
-    mpq_t exact, previous, next, lower, upper, scale, scaled, temporary;
-    mpq_inits(exact, previous, next, lower, upper, scale, scaled, temporary, NULL);
-    mpz_t power, minimum, maximum, coefficient, remainder;
-    mpz_inits(power, minimum, maximum, coefficient, remainder, NULL);
-    mpq_set_d(exact, magnitude);
-    mpq_set_d(previous, nextafter(magnitude, 0.0));
-    const double next_value = nextafter(magnitude, INFINITY);
-    if (isfinite(next_value)) mpq_set_d(next, next_value);
-    else { mpq_sub(next, exact, previous); mpq_add(next, next, exact); }
-    mpq_add(lower, exact, previous); mpq_div_2exp(lower, lower, 1);
-    mpq_add(upper, exact, next); mpq_div_2exp(upper, upper, 1);
-    uint64_t bits; memcpy(&bits, &magnitude, sizeof(bits));
-    const bool closed = (bits & 1u) == 0;
-
+/* Exact radix normalization; the logarithm is only an initial estimate. */
+static int number_radix_scale(mpq_t scale, const mpq_t exact, double magnitude, unsigned base) {
+    mpz_t power; mpz_init(power);
+    mpq_t temporary; mpq_init(temporary);
     int exponent = (int)floor(log(magnitude) / log((double)base));
     mpz_ui_pow_ui(power, base, (unsigned long)(exponent < 0 ? -exponent : exponent));
     if (exponent < 0) { mpz_set_ui(mpq_numref(scale), 1); mpz_set(mpq_denref(scale), power); }
@@ -181,6 +167,56 @@ static tsc_str_t* number_shortest_string(double value, unsigned base) {
         mpq_set(scale, temporary); exponent++;
     }
 
+    mpz_clear(power); mpq_clear(temporary);
+    return exponent;
+}
+
+/* One exact quotient/remainder rounding operation. Shortest text chooses
+ * even ties; requested decimal precision chooses the larger positive value. */
+static void number_round_rational(mpz_t coefficient, const mpq_t scaled, bool ties_even) {
+    mpz_t remainder; mpz_init(remainder);
+    mpz_fdiv_qr(coefficient, remainder, mpq_numref(scaled), mpq_denref(scaled));
+    mpz_mul_2exp(remainder, remainder, 1);
+    const int halfway = mpz_cmp(remainder, mpq_denref(scaled));
+    if (halfway > 0 || (halfway == 0 && (!ties_even || mpz_odd_p(coefficient))))
+        mpz_add_ui(coefficient, coefficient, 1);
+    mpz_clear(remainder);
+}
+
+static number_digit_record_t number_coefficient_digits(
+    const mpz_t coefficient, unsigned base, int exponent, size_t minimum_width
+) {
+    const size_t capacity = mpz_sizeinbase(coefficient, (int)base) + 2;
+    char* volatile raw = (char*)TSC_GC_MALLOC_ATOMIC(capacity);
+    mpz_get_str(raw, (int)base, coefficient);
+    const size_t count = strlen(raw), width = count > minimum_width ? count : minimum_width;
+    char* volatile digits = raw;
+    if (width > count) {
+        digits = (char*)TSC_GC_MALLOC_ATOMIC(width + 1);
+        memset(digits, '0', width - count); memcpy(digits + width - count, raw, count + 1);
+    }
+    return (number_digit_record_t){ digits, width, (int)width + exponent };
+}
+
+/* One exact binary64 interval supplies shortest digits in every radix.
+ * Precision grows until the interval contains an integer, without caps. */
+static number_digit_record_t number_shortest_digits(double magnitude, unsigned base) {
+    mpq_t exact, previous, next, lower, upper, scale, scaled;
+    mpq_inits(exact, previous, next, lower, upper, scale, scaled, NULL);
+    mpz_t minimum, maximum, coefficient;
+    mpz_inits(minimum, maximum, coefficient, NULL);
+    mpq_set_d(exact, magnitude);
+    mpq_set_d(previous, nextafter(magnitude, 0.0));
+    const double next_value = nextafter(magnitude, INFINITY);
+    if (isfinite(next_value)) mpq_set_d(next, next_value);
+    else { mpq_sub(next, exact, previous); mpq_add(next, next, exact); }
+    mpq_add(lower, exact, previous); mpq_div_2exp(lower, lower, 1);
+    mpq_add(upper, exact, next); mpq_div_2exp(upper, upper, 1);
+    uint64_t bits; memcpy(&bits, &magnitude, sizeof(bits));
+    const bool closed = (bits & 1u) == 0;
+
+    int exponent = number_radix_scale(scale, exact, magnitude, base);
+
     for (;;) {
         mpq_div(scaled, lower, scale);
         mpz_cdiv_q(minimum, mpq_numref(scaled), mpq_denref(scaled));
@@ -190,10 +226,7 @@ static tsc_str_t* number_shortest_string(double value, unsigned base) {
         if (!closed && mpz_divisible_p(mpq_numref(scaled), mpq_denref(scaled))) mpz_sub_ui(maximum, maximum, 1);
         if (mpz_cmp(minimum, maximum) <= 0) {
             mpq_div(scaled, exact, scale);
-            mpz_fdiv_qr(coefficient, remainder, mpq_numref(scaled), mpq_denref(scaled));
-            mpz_mul_2exp(remainder, remainder, 1);
-            const int halfway = mpz_cmp(remainder, mpq_denref(scaled));
-            if (halfway > 0 || (halfway == 0 && mpz_odd_p(coefficient))) mpz_add_ui(coefficient, coefficient, 1);
+            number_round_rational(coefficient, scaled, true);
             if (mpz_cmp(coefficient, minimum) < 0) mpz_set(coefficient, minimum);
             if (mpz_cmp(coefficient, maximum) > 0) mpz_set(coefficient, maximum);
             break;
@@ -204,21 +237,23 @@ static tsc_str_t* number_shortest_string(double value, unsigned base) {
     while (mpz_divisible_ui_p(coefficient, base)) {
         mpz_divexact_ui(coefficient, coefficient, base); exponent++;
     }
-    const size_t capacity = mpz_sizeinbase(coefficient, (int)base) + 2;
-    char* volatile digits = (char*)TSC_GC_MALLOC_ATOMIC(capacity);
-    mpz_get_str(digits, (int)base, coefficient);
-    const size_t count = strlen(digits);
-    const int point = (int)count + exponent;
-    mpz_clears(power, minimum, maximum, coefficient, remainder, NULL);
-    mpq_clears(exact, previous, next, lower, upper, scale, scaled, temporary, NULL);
+    number_digit_record_t record = number_coefficient_digits(coefficient, base, exponent, 1);
+    mpz_clears(minimum, maximum, coefficient, NULL);
+    mpq_clears(exact, previous, next, lower, upper, scale, scaled, NULL);
 
-    const bool positional = base != 10 || (point >= -5 && point <= 21);
+    return record;
+}
+
+static tsc_str_t* number_render_digits(number_digit_record_t record, bool negative, bool positional) {
+    char* volatile digits = record.digits;
+    const size_t count = record.count;
+    const int point = record.point;
     size_t length;
     char exponent_digits[21]; size_t exponent_length = 0;
     if (positional) length = point >= (int)count ? (size_t)point
         : point > 0 ? count + 1 : count + 2 + (size_t)(-point);
     else {
-        exponent_length = fast_itoa(exponent_digits, point < 0 ? -(int64_t)(point - 1) : (int64_t)(point - 1));
+        exponent_length = fast_itoa(exponent_digits, point <= 0 ? -(int64_t)(point - 1) : (int64_t)(point - 1));
         length = count + (count > 1 ? 1 : 0) + 2 + exponent_length;
     }
     tsc_str_t* result = str_alloc(length + (negative ? 1 : 0));
@@ -238,10 +273,19 @@ static tsc_str_t* number_shortest_string(double value, unsigned base) {
     } else {
         output[position++] = digits[0];
         if (count > 1) { output[position++] = '.'; memcpy(output + position, digits + 1, count - 1); position += count - 1; }
-        output[position++] = 'e'; output[position++] = point < 0 ? '-' : '+';
+        output[position++] = 'e'; output[position++] = point <= 0 ? '-' : '+';
         memcpy(output + position, exponent_digits, exponent_length);
     }
     return result;
+}
+
+static tsc_str_t* number_shortest_string(double value, unsigned base) {
+    if (isnan(value)) return tsc_str_from_lit("NaN", 3);
+    if (value == 0.0) return tsc_str_from_lit("0", 1);
+    const bool negative = value < 0.0;
+    if (isinf(value)) return negative ? tsc_str_from_lit("-Infinity", 9) : tsc_str_from_lit("Infinity", 8);
+    number_digit_record_t record = number_shortest_digits(fabs(value), base);
+    return number_render_digits(record, negative, base != 10 || (record.point >= -5 && record.point <= 21));
 }
 
 tsc_str_t* tsc_str_from_num(double value) { return number_shortest_string(value, 10); }
@@ -260,200 +304,59 @@ tsc_str_t* tsc_str_from_num_radix(double value, double radix) {
     return number_shortest_string(value, (unsigned)trunc(radix));
 }
 
-int number_fraction_digits(double value) {
-    if (isnan(value)) return 0;
-    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: digits must be finite"));
-    int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 0 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toFixed: digits must be 0..100"));
-    return digits;
+/* ToIntegerOrInfinity is applied before conversion to a machine integer;
+ * the only width bounds here are the specification's option domains. */
+static int number_format_digits(double value, int minimum, int maximum) {
+    const double integer = isnan(value) ? 0.0 : trunc(value);
+    if (!isfinite(integer) || integer < minimum || integer > maximum)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Number format precision is out of range"));
+    return (int)integer;
 }
 
-int number_exponential_fraction_digits(double value) {
-    if (isnan(value)) return 0;
-    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: digits must be finite"));
-    int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 0 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toExponential: digits must be 0..100"));
-    return digits;
+static number_digit_record_t number_rounded_decimal(double magnitude, int width, bool fixed) {
+    mpq_t exact, scale, scaled; mpq_inits(exact, scale, scaled, NULL);
+    mpz_t coefficient, power; mpz_inits(coefficient, power, NULL);
+    mpq_set_d(exact, magnitude);
+    int exponent;
+    if (fixed) exponent = -width;
+    else if (magnitude == 0.0) exponent = 1 - width;
+    else exponent = number_radix_scale(scale, exact, magnitude, 10) + 1 - width;
+    mpz_ui_pow_ui(power, 10, (unsigned long)(exponent < 0 ? -exponent : exponent));
+    if (exponent < 0) { mpz_set_ui(mpq_numref(scale), 1); mpz_set(mpq_denref(scale), power); }
+    else { mpz_set(mpq_numref(scale), power); mpz_set_ui(mpq_denref(scale), 1); }
+    mpq_canonicalize(scale); mpq_div(scaled, exact, scale);
+    number_round_rational(coefficient, scaled, false);
+    if (!fixed) {
+        mpz_ui_pow_ui(power, 10, (unsigned long)width);
+        if (mpz_cmp(coefficient, power) >= 0) { mpz_divexact_ui(coefficient, coefficient, 10); exponent++; }
+    }
+    number_digit_record_t record = number_coefficient_digits(coefficient, 10, exponent,
+        (size_t)(fixed ? width + 1 : width));
+    mpz_clears(coefficient, power, NULL); mpq_clears(exact, scale, scaled, NULL);
+    return record;
 }
 
-int number_precision_digits(double value) {
-    if (isnan(value) || isinf(value)) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: precision must be finite"));
-    int digits = (int)(value < 0 ? ceil(value) : floor(value));
-    if (digits < 1 || digits > 100) tsc_throw_str(tsc_str_from_cstr("Number.toPrecision: precision must be 1..100"));
-    return digits;
+tsc_str_t* tsc_str_from_num_fixed(double value, double fraction_digits) {
+    const int digits = number_format_digits(fraction_digits, 0, 100);
+    if (!isfinite(value) || fabs(value) >= 1e21) return tsc_str_from_num(value);
+    return number_render_digits(number_rounded_decimal(fabs(value), digits, true), value < 0.0, true);
 }
 
-tsc_str_t* tsc_str_from_num_fixed(double n, double fraction_digits) {
-    int digits = number_fraction_digits(fraction_digits);
-    if (isnan(n) || isinf(n)) return tsc_str_from_num(n);
-    if (fabs(n) >= 1e21) return tsc_str_from_num(n);
-    if (n == 0.0) n = 0.0;
-
-    char buf[160];
-    int len = snprintf(buf, sizeof buf, "%.*f", digits, n);
-    if (len < 0 || (size_t)len >= sizeof buf) tsc_panic("Number.toFixed: formatted output too large");
-    tsc_str_t* s = str_alloc((size_t)len);
-    memcpy((char*)s->data, buf, (size_t)len);
-    return s;
+tsc_str_t* tsc_str_from_num_exponential(double value, double fraction_digits, bool has_digits) {
+    if (!isfinite(value)) return tsc_str_from_num(value);
+    const int digits = number_format_digits(fraction_digits, 0, 100);
+    number_digit_record_t record = !has_digits && value != 0.0
+        ? number_shortest_digits(fabs(value), 10)
+        : number_rounded_decimal(fabs(value), digits + 1, false);
+    return number_render_digits(record, value < 0.0, false);
 }
 
-tsc_str_t* tsc_str_from_num_exponential(double n, double fraction_digits, bool has_digits) {
-    if (isnan(n) || isinf(n)) return tsc_str_from_num(n);
-    if (n == 0.0) n = 0.0;
-
-    int digits = has_digits ? number_exponential_fraction_digits(fraction_digits) : 15;
-    char raw[192];
-    int raw_len = snprintf(raw, sizeof raw, "%.*e", has_digits ? digits + 1 : digits, n);
-    if (raw_len < 0 || (size_t)raw_len >= sizeof raw) tsc_panic("Number.toExponential: formatted output too large");
-
-    char* e = strchr(raw, 'e');
-    if (!e) tsc_panic("Number.toExponential: formatted output missing exponent");
-    *e = '\0';
-    int exp_value = atoi(e + 1);
-
-    char mantissa[128];
-    size_t mantissa_len = 0;
-    if (has_digits) {
-        const char* p = raw;
-        bool negative = false;
-        if (*p == '-') {
-            negative = true;
-            p++;
-        }
-
-        char significant[128];
-        int sig_len = 0;
-        for (; *p; p++) {
-            if (isdigit((unsigned char)*p)) {
-                if (sig_len + 1 >= (int)sizeof significant) tsc_panic("Number.toExponential: mantissa too large");
-                significant[sig_len++] = *p;
-            }
-        }
-
-        int keep = digits + 1;
-        while (sig_len <= keep) significant[sig_len++] = '0';
-        if (significant[keep] >= '5') {
-            bool carry = true;
-            for (int i = keep - 1; i >= 0; i--) {
-                if (significant[i] != '9') {
-                    significant[i]++;
-                    carry = false;
-                    break;
-                }
-                significant[i] = '0';
-            }
-            if (carry) {
-                significant[0] = '1';
-                for (int i = 1; i < keep; i++) significant[i] = '0';
-                exp_value++;
-            }
-        }
-
-        if (negative) mantissa[mantissa_len++] = '-';
-        mantissa[mantissa_len++] = significant[0];
-        if (digits > 0) {
-            mantissa[mantissa_len++] = '.';
-            for (int i = 1; i < keep; i++) mantissa[mantissa_len++] = significant[i];
-        }
-        mantissa[mantissa_len] = '\0';
-    } else {
-        mantissa_len = strlen(raw);
-        while (mantissa_len > 0 && raw[mantissa_len - 1] == '0') mantissa_len--;
-        if (mantissa_len > 0 && raw[mantissa_len - 1] == '.') mantissa_len--;
-        if (mantissa_len >= sizeof mantissa) tsc_panic("Number.toExponential: mantissa too large");
-        memcpy(mantissa, raw, mantissa_len);
-        mantissa[mantissa_len] = '\0';
-    }
-
-    char out[192];
-    int len = snprintf(out, sizeof out, "%se%+d", mantissa, exp_value);
-    if (len < 0 || (size_t)len >= sizeof out) tsc_panic("Number.toExponential: formatted output too large");
-    tsc_str_t* s = str_alloc((size_t)len);
-    memcpy((char*)s->data, out, (size_t)len);
-    return s;
-}
-
-tsc_str_t* tsc_str_from_num_precision(double n, double precision, bool has_precision) {
-    if (!has_precision) return tsc_str_from_num(n);
-    int digits = number_precision_digits(precision);
-    if (isnan(n) || isinf(n)) return tsc_str_from_num(n);
-    if (n == 0.0) n = 0.0;
-
-    char raw[192];
-    int raw_len = snprintf(raw, sizeof raw, "%.*e", digits, n);
-    if (raw_len < 0 || (size_t)raw_len >= sizeof raw) tsc_panic("Number.toPrecision: formatted output too large");
-
-    char* e = strchr(raw, 'e');
-    if (!e) tsc_panic("Number.toPrecision: formatted output missing exponent");
-    *e = '\0';
-    int exp_value = atoi(e + 1);
-
-    const char* p = raw;
-    bool negative = false;
-    if (*p == '-') {
-        negative = true;
-        p++;
-    }
-
-    char significant[128];
-    int sig_len = 0;
-    for (; *p; p++) {
-        if (isdigit((unsigned char)*p)) {
-            if (sig_len + 1 >= (int)sizeof significant) tsc_panic("Number.toPrecision: mantissa too large");
-            significant[sig_len++] = *p;
-        }
-    }
-    while (sig_len <= digits) significant[sig_len++] = '0';
-
-    if (significant[digits] >= '5') {
-        bool carry = true;
-        for (int i = digits - 1; i >= 0; i--) {
-            if (significant[i] != '9') {
-                significant[i]++;
-                carry = false;
-                break;
-            }
-            significant[i] = '0';
-        }
-        if (carry) {
-            significant[0] = '1';
-            for (int i = 1; i < digits; i++) significant[i] = '0';
-            exp_value++;
-        }
-    }
-
-    char out[192];
-    size_t pos = 0;
-    if (negative) out[pos++] = '-';
-
-    if (exp_value < -6 || exp_value >= digits) {
-        out[pos++] = significant[0];
-        if (digits > 1) {
-            out[pos++] = '.';
-            for (int i = 1; i < digits; i++) out[pos++] = significant[i];
-        }
-        int len = snprintf(out + pos, sizeof out - pos, "e%+d", exp_value);
-        if (len < 0 || pos + (size_t)len >= sizeof out) tsc_panic("Number.toPrecision: formatted output too large");
-        pos += (size_t)len;
-    } else if (exp_value >= 0) {
-        int before_dot = exp_value + 1;
-        for (int i = 0; i < before_dot; i++) out[pos++] = i < digits ? significant[i] : '0';
-        if (before_dot < digits) {
-            out[pos++] = '.';
-            for (int i = before_dot; i < digits; i++) out[pos++] = significant[i];
-        }
-    } else {
-        out[pos++] = '0';
-        out[pos++] = '.';
-        for (int i = 0; i < -exp_value - 1; i++) out[pos++] = '0';
-        for (int i = 0; i < digits; i++) out[pos++] = significant[i];
-    }
-
-    if (pos >= sizeof out) tsc_panic("Number.toPrecision: formatted output too large");
-    out[pos] = '\0';
-    tsc_str_t* s = str_alloc(pos);
-    memcpy((char*)s->data, out, pos);
-    return s;
+tsc_str_t* tsc_str_from_num_precision(double value, double precision, bool has_precision) {
+    if (!has_precision || !isfinite(value)) return tsc_str_from_num(value);
+    const int digits = number_format_digits(precision, 1, 100);
+    number_digit_record_t record = number_rounded_decimal(fabs(value), digits, false);
+    const int exponent = record.point - 1;
+    return number_render_digits(record, value < 0.0, exponent >= -6 && exponent < digits);
 }
 
 tsc_str_t* tsc_str_from_bool(bool b) {

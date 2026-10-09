@@ -1295,10 +1295,6 @@ tsc_value_t tsc_value_method_search(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_match_all(tsc_value_t recv, tsc_value_t pattern);
 tsc_str_t* tsc_value_method_to_locale_string(tsc_value_t recv);
 tsc_str_t* tsc_value_method_to_locale_string_args(tsc_value_t recv, tsc_array_t* args);
-tsc_value_t tsc_value_method_value_of(tsc_value_t recv);
-tsc_str_t* tsc_value_method_to_fixed(tsc_value_t recv, tsc_value_t fraction_digits);
-tsc_str_t* tsc_value_method_to_exponential(tsc_value_t recv, tsc_value_t fraction_digits);
-tsc_str_t* tsc_value_method_to_precision(tsc_value_t recv, tsc_value_t precision);
 
 tsc_object_t* tsc_object_new(void);
 tsc_object_t* tsc_object_new_class(void* ptr);

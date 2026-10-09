@@ -1,0 +1,16 @@
+ties: 1.13 -1.13 1.00
+integer: 1000000000000000128
+carry: 1e+1 1.0e+2
+shortest: 1e-1 5e-324
+zero: 0.00 -0.00 0.00
+threshold: 0.0000010 1.0e-7 1e+21
+wide: 0.1000000000000000055511151231257827021181583404541015625000000000000000000000000000000000000000000000
+coercion: 1.13 number
+wrapper: -1.1
+poison: true
+fixed range: true
+nonfinite: NaN Infinity
+receiver: true true
+metadata: true toFixed 1
+lookup: GABC true 2
+optional: true true
