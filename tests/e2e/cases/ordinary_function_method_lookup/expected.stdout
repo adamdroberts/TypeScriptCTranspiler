@@ -1,0 +1,4 @@
+ordinary:call,1 ordinary:apply,2 ordinary:bind,3
+snapshot: true get,argument
+native: 6 15 24
+override:true:11

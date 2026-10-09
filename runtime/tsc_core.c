@@ -2023,6 +2023,9 @@ void tsc_call_activation_push(
 ) {
     if (!activation) return;
     activation->prev = g_call_activation_top;
+    activation->this_arg_gc_root = tsc_value_gc_root(this_arg);
+    activation->callee_gc_root = tsc_value_gc_root(callee);
+    activation->arguments_object_gc_root = NULL;
     activation->arguments = arguments
         ? arguments
         : tsc_array_new(sizeof(tsc_value_t), 1);
@@ -2071,6 +2074,7 @@ tsc_value_t tsc_call_arguments(void) {
     if (activation->arguments_object_initialized) return activation->arguments_object;
 
     tsc_object_t* object = tsc_object_new();
+    activation->arguments_object_gc_root = object;
     object->is_arguments = true;
     object->arguments_parameter_cells = activation->strict
         ? NULL

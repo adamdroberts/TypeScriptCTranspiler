@@ -2952,6 +2952,7 @@ bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor) {
 }
 
 static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {
+    void* volatile arguments_root = tsc_value_gc_root(args);
     if (
         !value_is_box(args) ||
         (
@@ -2972,8 +2973,11 @@ static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message
     tsc_array_t* list = tsc_array_new(sizeof(tsc_value_t), length ? length : 1);
     for (size_t i = 0; i < length; i++) {
         tsc_value_t item = tsc_value_get_index(args, (double)i);
+        void* volatile item_root = tsc_value_gc_root(item);
         tsc_array_push_value(list, item);
+        (void)item_root;
     }
+    (void)arguments_root;
     return list;
 }
 

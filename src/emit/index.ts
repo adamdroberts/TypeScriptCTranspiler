@@ -134,6 +134,7 @@ const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
 
 const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
     ...ORDINARY_STRING_PROTOTYPE_METHODS,
+    "call", "apply", "bind",
     "toFixed", "toExponential", "toPrecision",
     "keys", "values", "entries", "forEach", "reduce", "reduceRight",
 ]);
@@ -56601,59 +56602,6 @@ class Emitter {
             );
         };
         switch (method) {
-            case "call": {
-                const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
-                if (args.slice(1).some((arg) => ts.isSpreadElement(arg))) {
-                    const argList = this.emitSpreadCallArgumentList(args.slice(1));
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
-                        { value: argList, node: call },
-                    ], ([fn, thisArgValue, list]) =>
-                        `tsc_value_apply_function(${fn}, ${thisArgValue}, tsc_value_array(${list}))`,
-                    );
-                }
-                const specs: SequencedCallArg[] = [
-                    { value: recv, target: T_VALUE, node: call.expression },
-                    { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
-                ];
-                for (const arg of args.slice(1)) {
-                    specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
-                }
-                return this.emitSequencedExpr(T_VALUE, specs, ([fn, thisArgValue, ...values]) => {
-                    const av = this.freshTemp("_dyn_call_args");
-                    const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`];
-                    for (const value of values) {
-                        const tmp = this.freshTemp("_dyn_call_arg");
-                        pieces.push(`tsc_value_t ${tmp} = ${value}`);
-                        pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
-                    }
-                    pieces.push(`tsc_value_apply_function(${fn}, ${thisArgValue}, tsc_value_array(${av}))`);
-                    return `({ ${pieces.join("; ")}; })`;
-                });
-            }
-            case "apply": {
-                const thisArg = args[0] ? this.emitExpr(args[0]) : missing;
-                const argListNode = args[1];
-                const emptyArgs: EmitResult = {
-                    c: "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))",
-                    ty: T_VALUE,
-                };
-                const argList = argListNode && !this.isUndefinedExpression(argListNode) && argListNode.kind !== ts.SyntaxKind.NullKeyword
-                    ? this.emitExpr(argListNode)
-                    : emptyArgs;
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        { value: thisArg, target: T_VALUE, node: args[0] ?? call.expression },
-                        { value: argList, target: T_VALUE, node: argListNode ?? call.expression },
-                        ...this.ignoredArgumentSpecs(args, 2),
-                    ],
-                    ([fn, thisArgValue, argListValue]) =>
-                        `tsc_value_apply_function(${fn}, ${thisArgValue}, ${argListValue})`,
-                );
-            }
             case "__defineGetter__":
             case "__defineSetter__": {
                 if (args.length < 2) unsupported(call, `${method} expects key and accessor`);

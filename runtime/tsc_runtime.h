@@ -697,6 +697,9 @@ typedef struct tsc_call_activation {
     tsc_value_t this_arg;
     tsc_value_t callee;
     tsc_value_t arguments_object;
+    void* volatile this_arg_gc_root;
+    void* volatile callee_gc_root;
+    void* volatile arguments_object_gc_root;
     tsc_array_t* parameter_cells;
     bool strict;
     bool arguments_object_initialized;
