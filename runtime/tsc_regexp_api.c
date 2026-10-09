@@ -221,7 +221,7 @@ static tsc_value_t regexp_named_values(const tsc_regexp_t* re, const uint16_t* u
     tsc_object_t* object = tsc_object_new(); object->prototype = tsc_value_null();
     for (size_t i = 0; i < tsc_re_named_count(re->re); i++) {
         const char* name; size_t name_len, group_index;
-        if (!tsc_re_named_at(re->re, i, &name, &name_len, &group_index)) abort();
+        if (!tsc_re_named_at(re->re, i, captures, &name, &name_len, &group_index)) abort();
         tsc_str_t* part = regexp_capture(units, captures, group_index);
         tsc_value_t value = indices ? TSC_ARR(tsc_value_t, indices, group_index) :
             part ? tsc_value_string(part) : tsc_value_undefined();
@@ -384,7 +384,7 @@ static void regexp_substitute(regexp_output_t* out, const tsc_regexp_t* re,
             while (close < replacement_len && replacement[close] != '>') close++;
             if (close == replacement_len) { regexp_append(out, replacement, i, 1); continue; }
             tsc_str_t* name = tsc_str_from_units_range(replacement, i + 2, close - i - 2);
-            size_t index = tsc_re_named_group(re->re, name->data, name->len);
+            size_t index = tsc_re_named_group(re->re, name->data, name->len, captures);
             if (index != RE_UNSET) { start = captures[index * 2]; end = captures[index * 2 + 1]; }
             consumed = close - i + 1;
         } else { regexp_append(out, replacement, i, 1); continue; }
@@ -407,16 +407,7 @@ static tsc_str_t* regexp_functional_replacement(
     tsc_value_t original = tsc_value_string((tsc_str_t*)source);
     tsc_array_push_raw(args, &original);
     if (tsc_re_named_count(re->re)) {
-        tsc_object_t* group_object = tsc_object_new();
-        group_object->prototype = tsc_value_null();
-        tsc_value_t groups = tsc_value_object(group_object);
-        for (size_t i = 0; i < tsc_re_named_count(re->re); i++) {
-            const char* name; size_t name_len, group_index;
-            if (!tsc_re_named_at(re->re, i, &name, &name_len, &group_index)) abort();
-            tsc_str_t* part = regexp_capture(units, captures, group_index);
-            tsc_value_set_prop(groups, tsc_str_from_lit(name, name_len),
-                part ? tsc_value_string(part) : tsc_value_undefined());
-        }
+        tsc_value_t groups = regexp_named_values(re, units, captures, NULL);
         tsc_array_push_raw(args, &groups);
     }
     return tsc_value_to_string(tsc_value_apply_function(replacement, tsc_value_undefined(), tsc_value_array(args)));

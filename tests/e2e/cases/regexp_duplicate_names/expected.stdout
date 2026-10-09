@@ -1,0 +1,8 @@
+capture: a|a| a true
+capture: b||b b true
+repeated: aabb||b b 2,3
+miss: true
+order: y|x y|x
+replace: [a][b]
+cleared: true
+forward: b

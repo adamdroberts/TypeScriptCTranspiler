@@ -747,13 +747,15 @@ tsc_re_compiled_t* tsc_re_compile(
 );
 size_t tsc_re_group_count(const tsc_re_compiled_t* re);
 size_t tsc_re_named_count(const tsc_re_compiled_t* re);
-bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position,
+bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position, const size_t* captures,
     const char** name, size_t* name_len, size_t* group_index);
-/* Returns group index for a UTF-8 name, or SIZE_MAX when absent. */
+/* Returns its participating capture (first unset index when none participate),
+ * or SIZE_MAX when the UTF-8 name is absent. */
 size_t tsc_re_named_group(
     const tsc_re_compiled_t* re,
     const char* name,
-    size_t name_len
+    size_t name_len,
+    const size_t* captures
 );
 tsc_value_t tsc_regexp_exec_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* args);

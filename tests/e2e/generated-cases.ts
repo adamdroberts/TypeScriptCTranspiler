@@ -1441,12 +1441,14 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
                     openings.push(kind === 0 ? "(?i:" : kind === 1 ? "(?-i:" : "(");
                     if (kind === 2) captures++;
                 }
-                const pattern = openings.join("") + "(?i:(a|ab))c" + ")".repeat(${spec.depth}) + "|d";
+                const pattern = openings.join("") + "(?i:(?:(?<part>a)|(?<part>ab)))c" + ")".repeat(${spec.depth}) + "|(?<part>d)";
                 const re = new RegExp(pattern, "d");
                 const hit = re.exec("ABc");
                 console.log("regexp-depth:", hit === null ? "missing" : hit[0],
-                    hit !== null && hit.length === captures + 2, hit === null ? "missing" : hit[hit.length - 1]);
+                    hit !== null && hit.length === captures + 4, hit === null ? "missing" : hit[hit.length - 2]);
                 console.log("regexp-indices:", hit !== null && hit.indices!.length === hit.length);
+                console.log("regexp-named:", hit === null ? "missing" : hit.groups!.part,
+                    hit !== null && hit.indices!.groups!.part === hit.indices![hit.length - 2]);
                 console.log("regexp-outer:", re.test("D"));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);

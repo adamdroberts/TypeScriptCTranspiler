@@ -67,6 +67,28 @@ function probes(): Probe[] {
         for (const subject of ["Ba", "BA", "AB", "Ab", "AbB", ""]) result.push({ pattern, flags: "v", subject });
     for (const header of ["ii", "i-i", "-ii", "ims-ms", "g", "u", "v", "y", "I", "\u0131", "i--m", "-", "i\\u006d"])
         result.push({ pattern: `(?${header}:a)`, flags: "", subject: "a" });
+    // Name fanout is independent of ancestry, repetition, matching direction,
+    // and the lexical record at the reference. Sequential names remain errors.
+    for (const flags of ["", "i", "u", "v"])
+        for (const pattern of ["(?<x>a)|(?<x>b)", "(?:(?<x>a)|(?<x>b))\\k<x>",
+            "(?:(?:(?<x>a)|(?<x>b))\\k<x>){2}", "^(?:(?<x>a)|(?<x>b)|z){2}\\k<x>$",
+            "(?:(?<x>a)|(?:(?<x>b)|(?<x>c)))\\k<x>", "\\k<x>(?:(?<x>a)|(?<x>b))",
+            "(?<=(?:(?<x>a)|(?<x>b))\\k<x>)c", "(?:(?<x>a)|(?<x>b))(?i:\\k<x>)",
+            "(?<x>a)(?<x>b)", "(?<x>(?<x>a)|b)", "(?:(?<x>a)|b)(?:(?<x>c)|d)",
+            "(?:(?<x>a)|(?<x>b))(?<x>c)", "(?<x>a)\\k<missing>", "[\\k<missing>](?<x>a)"])
+            for (const subject of ["", "a", "b", "aa", "bb", "aabb", "abab", "az", "bz", "zz", "bbcc", "bb c", "aA", "missing"])
+                result.push({ pattern, flags, subject });
+    for (const flags of ["", "u", "v"])
+        for (const escape of ["\\k", "\\k<missing>", "\\k<>", "\\k<a", "\\k<\\u0061>", "[\\k<missing>]", "[\\k-a]"])
+            for (const definition of ["", "(?<a>a)"])
+                for (const subject of ["k", "k<missing>", "aa", "ka", "ma"])
+                    for (const pattern of [escape + definition, definition + escape])
+                        result.push({ pattern, flags, subject });
+    for (const flags of ["", "u", "v"])
+        for (const name of ["a", "$", "a0", "\u{1d49c}", "a\u200c", "\u200d", "\ud835", "1a", "\\u0061", "\\u{61}", "\\uD835\\uDC9C", "\\u{1D49C}"])
+            for (const reference of [name, name === "a" ? "\\u0061" : name])
+                for (const pattern of [`(?<${name}>a)\\k<${reference}>`, `\\k<${reference}>(?<${name}>a)`, `(?<${name}>a)|(?<${reference}>b)`])
+                    result.push({ pattern, flags, subject: "aa" });
     return result;
 }
 

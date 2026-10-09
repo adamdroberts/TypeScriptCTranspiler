@@ -1,3 +1,4 @@
 regexp-depth: ABc true AB
 regexp-indices: true
+regexp-named: AB true
 regexp-outer: false

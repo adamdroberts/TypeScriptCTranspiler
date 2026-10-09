@@ -9,7 +9,8 @@ import { parseHostObservation } from "../test262/protocol";
 // modes independently. The reference is the host engine's ordinary API.
 function plans() {
     return ["", "g", "y", "gy", "d", "dgu", "dyu", "dgv"].flatMap(flags =>
-        ["", ".", "(a)?(b)", "(?<left>a)?(?<right>b)", "^a"].flatMap(pattern =>
+        ["", ".", "(a)?(b)", "(?<left>a)?(?<right>b)", "^a",
+            "(?<left>a)|(?<left>b)", "(?<left>a)(?<right>a)|(?<right>b)(?<left>b)"].flatMap(pattern =>
             ["", "aba", "A😀B", "A\\ud83d\\ude00B".replace(/\\u([0-9a-f]{4})/g, (_, digits) => String.fromCharCode(parseInt(digits, 16)))].flatMap(source =>
                 ["zero", "middle", "fraction", "negative", "nan", "infinity", "string", "object"].flatMap(initial =>
                     ["exec", "test"].map(method => ({ flags, pattern, source, initial, method }))))));

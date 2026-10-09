@@ -346,7 +346,9 @@ Typed `WeakMap<K, V>` and `WeakSet<T>` reuse these map/set tables with pointer-k
 
 Ordinary creation-Realm `exec`/`test` descriptors and typed calls share mutable method lookup. Built-in execution reads `lastIndex` through `ToLength`, respects global/sticky state and strict writes, and returns ordinary `index`, `input`, `groups`, and optional `indices` metadata. Missing captures are `undefined`; named capture objects have null prototypes, and named indices reference the corresponding index pair. Scoped `i`/`m`/`s` modifiers use immutable lexical records on the pattern nodes.
 
-The complete RegExp object-model and clause-level contract remains open: symbol consumers and their `lastIndex` interactions, constructor/Realm semantics, disjoint duplicate names, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
+Names are source-ordered records containing all disjoint capture indices. Persistent enclosing-disjunction paths reject definitions that might both participate; named references, result groups, index aliases, and replacement groups select from the same record. Raw and escaped group identifiers share one Unicode scalar decoder; the whole-pattern named-reference grammar parameter is selected through the same parser.
+
+The complete RegExp object-model and clause-level contract remains open: symbol consumers and their `lastIndex` interactions, dynamic String dispatch, constructor/Realm semantics, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
 
 | Symbol | Signature |
 |--------|-----------|

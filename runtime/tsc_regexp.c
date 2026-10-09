@@ -59,6 +59,8 @@ typedef struct {
 #define RE_CLS_INTERSECT 1
 #define RE_CLS_DIFFERENCE 2
 
+typedef struct tsc_re_named_entry tsc_re_named_entry_t;
+
 typedef struct tsc_re_node {
     tsc_re_kind_t kind;
     tsc_re_flags_t flags; /* immutable lexical RegExp Record at this node */
@@ -116,6 +118,8 @@ typedef struct tsc_re_node {
         struct {
             /* 1-based group number, or RE_UNSET while a fixup is pending. */
             size_t index;
+            /* A named reference shares its name record's complete fanout. */
+            const tsc_re_named_entry_t* named;
             /* Decimal escape source for provisional nodes (name NULL). */
             size_t digits_at;
             size_t ndigits;
@@ -132,16 +136,24 @@ typedef struct tsc_re_node {
     } u;
 } tsc_re_node_t;
 
-typedef struct {
+/* Persistent paths through the canonical disjunctions. Sibling alternatives
+ * share an enclosing path; group depth never consumes the native stack. */
+typedef struct tsc_re_branch {
+    struct tsc_re_branch* parent;
+    const tsc_re_node_t* disjunction;
+    size_t alternative, depth;
+} tsc_re_branch_t;
+
+struct tsc_re_named_entry {
     char* name;
     size_t name_len;
-    size_t index;
-} tsc_re_named_entry_t;
+    size_t* indices;
+    tsc_re_branch_t** branches;
+    size_t len, capacity;
+};
 
-/* Decimal/named backreference fixups: recorded at the atom site, resolved
- * once the total group count is known. holder/index address the slot that
- * references the node (RE_CHILD_SLOT selects a QUANT/GROUP/lookaround
- * child slot); arrays are stable by resolution time. */
+/* Backreference fixups resolve once group/name collections are complete.
+ * Decimal fallback also records holder/index for rewriting its AST slot. */
 typedef struct {
     tsc_re_node_t* node;
     tsc_re_node_t* holder;
@@ -152,8 +164,6 @@ typedef struct {
 
 typedef struct {
     tsc_re_node_t* node;
-    tsc_re_node_t* holder;
-    size_t index;
     char* name;
     size_t name_len;
 } re_named_fixup_t;
@@ -175,6 +185,8 @@ typedef struct {
     tsc_re_named_entry_t* named;
     size_t nnamed;
     size_t named_cap;
+    tsc_re_branch_t* branch;
+    bool named_mode;
     re_dec_fixup_t* dec;
     size_t ndec;
     size_t dec_cap;
@@ -244,25 +256,16 @@ struct tsc_re_compiled {
     size_t nnamed;
 };
 
-/* Class-atom parse result: either one code point or a set node. A named
- * backreference placeholder resolves at the end of compilation (defined
- * names fail inside classes; undefined Annex B names become literals). */
+/* Class-atom parse result: either one code point or a set node. */
 typedef struct {
     bool is_set;
-    bool named_placeholder;
     uint32_t cp;
     tsc_re_node_t* set;
-    char* name;
-    size_t name_len;
 } re_catom_t;
 
 static void re_record_named_fixup(
     tsc_re_parser_t* p,
-    tsc_re_node_t* node,
-    tsc_re_node_t* holder,
-    size_t index,
-    const char* name,
-    size_t name_len
+    tsc_re_node_t* node
 ) {
     if (p->nnamed_ref == p->named_ref_cap) {
         size_t next = p->named_ref_cap ? p->named_ref_cap * 2 : 4;
@@ -273,12 +276,8 @@ static void re_record_named_fixup(
     }
     re_named_fixup_t* fix = &p->named_ref[p->nnamed_ref++];
     fix->node = node;
-    fix->holder = holder;
-    fix->index = index;
-    char* copy = (char*)TSC_GC_MALLOC(name_len ? name_len : 1);
-    for (size_t i = 0; i < name_len; i++) copy[i] = name[i];
-    fix->name = copy;
-    fix->name_len = name_len;
+    fix->name = node->u.backref.name;
+    fix->name_len = node->u.backref.name_len;
 }
 
 static void re_qstr_push(tsc_re_parser_t* p, tsc_re_node_t* cls, const uint16_t* units, size_t len) {
@@ -313,7 +312,6 @@ static uint32_t re_parse_single_cp(tsc_re_parser_t* p) {
  * failures record an error and return false with out untouched. */
 static bool re_parse_legacy_atom(tsc_re_parser_t* p, re_catom_t* out) {
     if (re_at_end(p) || p->units[p->pos] == ']') return false;
-    out->named_placeholder = false;
     if (p->units[p->pos] == '\\') {
         p->pos++;
         tsc_re_char_t esc;
@@ -330,47 +328,26 @@ static bool re_parse_legacy_atom(tsc_re_parser_t* p, re_catom_t* out) {
         } else if (esc.kind == RE_CH_NODE) {
             node = esc.node;
         } else {
-            /* Named backreferences cannot live in a class; the class
-             * parser records the fixup once the item slot exists. The
-             * name bytes are copied here while the escape scratch owns
-             * them. */
-            node = re_new_node(p, RE_N_BACKREF);
-            node->u.backref.index = RE_UNSET;
-            node->u.backref.offset = esc.backref_offset;
-            out->named_placeholder = true;
-            out->name = (char*)TSC_GC_MALLOC(esc.backref_name_len ? esc.backref_name_len : 1);
-            for (size_t i = 0; i < esc.backref_name_len; i++) out->name[i] = esc.backref_name[i];
-            out->name_len = esc.backref_name_len;
+            re_fail(p, p->pos);
+            return false;
         }
         out->is_set = true;
         out->set = node;
         return true;
     }
     out->is_set = false;
-    out->named_placeholder = false;
     out->cp = re_parse_single_cp(p);
     return true;
 }
 
 /* Pushes one legacy atom into a union class: singles become unit ranges,
- * sets become items. Placeholders record their item slot for end Of
- * compilation resolution. */
+ * sets become items. */
 static bool re_class_push_atom(tsc_re_parser_t* p, tsc_re_node_t* cls, const re_catom_t* atom) {
     if (!atom->is_set) {
         re_range_push(p, cls, atom->cp, atom->cp);
         return true;
     }
     re_class_item_push(p, cls, atom->set);
-    if (atom->named_placeholder) {
-        re_record_named_fixup(
-            p,
-            atom->set,
-            cls,
-            cls->u.cls.nitems - 1,
-            atom->name,
-            atom->name_len
-        );
-    }
     return true;
 }
 
@@ -424,7 +401,7 @@ static tsc_re_node_t* re_parse_legacy_class(tsc_re_parser_t* p, bool negated) {
             if (!re_class_push_atom(p, cls, &second)) return NULL;
             continue;
         }
-        if (first.is_set && !first.named_placeholder && !re_at_end(p) &&
+        if (first.is_set && !re_at_end(p) &&
             p->units[p->pos] == '-' && p->pos + 1 < p->len && p->units[p->pos + 1] != ']') {
             /* A set on the left still permits Annex B union ranges such
              * as [\d-z]: the dash side re-parses as the range tail. */
@@ -528,9 +505,6 @@ static tsc_re_node_t* re_parse_v_class(tsc_re_parser_t* p, bool negated);
  * class, or \q{...} strings (wrapped as a degenerate union operand). */
 static bool re_parse_v_operand(tsc_re_parser_t* p, re_catom_t* out) {
     if (re_at_end(p)) return false;
-    out->named_placeholder = false;
-    out->name = NULL;
-    out->name_len = 0;
     uint16_t u = p->units[p->pos];
     if (u == ']' || u == '-' || u == '(' || u == ')' || u == '{' || u == '}' ||
         u == '/' || u == '|') {
@@ -569,16 +543,9 @@ static bool re_parse_v_operand(tsc_re_parser_t* p, re_catom_t* out) {
             out->cp = esc.value;
             return true;
         }
-        if (esc.kind == RE_CH_NAMED_BACKREF) {
-            out->is_set = true;
-            out->named_placeholder = true;
-            out->set = re_new_node(p, RE_N_BACKREF);
-            out->set->u.backref.index = RE_UNSET;
-            out->set->u.backref.offset = esc.backref_offset;
-            out->name = (char*)TSC_GC_MALLOC(esc.backref_name_len ? esc.backref_name_len : 1);
-            for (size_t i = 0; i < esc.backref_name_len; i++) out->name[i] = esc.backref_name[i];
-            out->name_len = esc.backref_name_len;
-            return true;
+        if (esc.kind != RE_CH_CLASS_ESCAPE && esc.kind != RE_CH_NODE) {
+            re_fail(p, p->pos);
+            return false;
         }
         out->is_set = true;
         if (esc.kind == RE_CH_CLASS_ESCAPE) {
@@ -605,13 +572,10 @@ static tsc_re_node_t* re_wrap_operand(tsc_re_parser_t* p, const re_catom_t* atom
     return wrap;
 }
 
-/* Pushes one intersection/difference operand, recording placeholders. */
+/* Pushes one intersection/difference operand. */
 static void re_operand_push(tsc_re_parser_t* p, tsc_re_node_t* cls, const re_catom_t* atom) {
     tsc_re_node_t* node = re_wrap_operand(p, atom);
     re_class_item_push(p, cls, node);
-    if (atom->named_placeholder) {
-        re_record_named_fixup(p, node, cls, cls->u.cls.nitems - 1, atom->name, atom->name_len);
-    }
 }
 
 static bool re_match_double(tsc_re_parser_t* p, uint16_t c) {
@@ -881,7 +845,7 @@ static void re_record_term_fixups(tsc_re_parser_t* p, tsc_re_node_t* term, tsc_r
     }
     if (node->kind != RE_N_BACKREF || node->u.backref.index != RE_UNSET) return;
     if (node->u.backref.name) {
-        re_record_named_fixup(p, node, holder, slot, node->u.backref.name, node->u.backref.name_len);
+        re_record_named_fixup(p, node);
         return;
     }
     re_record_dec_fixup(p, node, holder, slot);
@@ -895,7 +859,16 @@ typedef struct {
     tsc_re_node_t* sequence;
     tsc_re_node_t* wrapper;
     tsc_re_flags_t outer_flags;
+    tsc_re_branch_t* outer_branch;
 } re_parse_frame_t;
+
+static void re_enter_alternative(tsc_re_parser_t* p, const re_parse_frame_t* frame) {
+    tsc_re_branch_t* branch = TSC_GC_MALLOC(sizeof(*branch));
+    *branch = (tsc_re_branch_t) { frame->outer_branch, frame->alternatives,
+        frame->alternatives->u.list.len - 1,
+        frame->outer_branch ? frame->outer_branch->depth + 1 : 1 };
+    p->branch = branch;
+}
 
 static unsigned re_modifier_bit(uint16_t unit) {
     switch (unit) {
@@ -972,6 +945,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
     re_parse_frame_t* frames = TSC_GC_MALLOC(capacity * sizeof(*frames));
     tsc_re_node_t* wrapper = NULL;
     tsc_re_flags_t outer_flags = p->flags;
+    tsc_re_branch_t* outer_branch = p->branch;
     bool push = true;
     for (;;) {
         if (push) {
@@ -980,9 +954,10 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
                 frames = TSC_GC_REALLOC(frames, capacity * sizeof(*frames));
             }
             re_parse_frame_t frame = {
-                re_new_node(p, RE_N_ALT), re_new_node(p, RE_N_SEQ), wrapper, outer_flags
+                re_new_node(p, RE_N_ALT), re_new_node(p, RE_N_SEQ), wrapper, outer_flags, outer_branch
             };
             re_node_list_push(p, frame.alternatives, frame.sequence);
+            re_enter_alternative(p, &frame);
             frames[len++] = frame;
             push = false;
         }
@@ -990,6 +965,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
         if (!re_at_end(p) && p->units[p->pos] == '(') {
             p->pos++;
             outer_flags = p->flags;
+            outer_branch = p->branch;
             wrapper = re_group_header(p);
             if (p->failed) return NULL;
             push = true;
@@ -999,6 +975,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
             p->pos++;
             frame->sequence = re_new_node(p, RE_N_SEQ);
             re_node_list_push(p, frame->alternatives, frame->sequence);
+            re_enter_alternative(p, frame);
             continue;
         }
         if (re_at_end(p) || p->units[p->pos] == ')') {
@@ -1015,6 +992,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
                 term = frame->wrapper;
             }
             p->flags = frame->outer_flags;
+            p->branch = frame->outer_branch;
             len--;
             term = re_quantify(p, term);
             if (!term || p->failed) return NULL;
@@ -1034,68 +1012,13 @@ static tsc_re_node_t** re_fixup_slot(tsc_re_node_t* holder, size_t index) {
     return &holder->u.list.items[index];
 }
 
-/* Pushes one literal unit, folding for case-insensitive patterns. */
-static void re_push_literal_unit(tsc_re_parser_t* p, tsc_re_node_t* seq, uint32_t cp) {
-    uint32_t folded = re_canon(cp, p->flags.ignore_case, false);
-    if (folded > 0xffff) {
-        uint32_t shifted = folded - 0x10000u;
-        tsc_re_node_t* hi = re_new_node(p, RE_N_UNIT);
-        hi->u.unit.unit = (uint16_t)(0xd800u + (shifted >> 10));
-        tsc_re_node_t* lo = re_new_node(p, RE_N_UNIT);
-        lo->u.unit.unit = (uint16_t)(0xdc00u + (shifted & 0x3ffu));
-        re_node_list_push(p, seq, hi);
-        re_node_list_push(p, seq, lo);
-        return;
-    }
-    tsc_re_node_t* lit = re_new_node(p, RE_N_UNIT);
-    lit->u.unit.unit = (uint16_t)folded;
-    re_node_list_push(p, seq, lit);
-}
-
-/* Decodes our own UTF-8/CESU-8 name bytes (ASCII, 2/3-byte units
- * including lone surrogates, 4-byte astral) into literal units. */
-static void re_push_name_units(
-    tsc_re_parser_t* p,
-    tsc_re_node_t* seq,
-    const char* name,
-    size_t name_len
-) {
-    size_t i = 0;
-    while (i < name_len) {
-        unsigned char b = (unsigned char)name[i];
-        uint32_t cp;
-        size_t adv = 1;
-        if (b < 0x80) {
-            cp = b;
-        } else if ((b & 0xe0) == 0xc0 && i + 1 < name_len) {
-            cp = ((uint32_t)(b & 0x1f) << 6) | ((uint32_t)(unsigned char)name[i + 1] & 0x3f);
-            adv = 2;
-        } else if ((b & 0xf0) == 0xe0 && i + 2 < name_len) {
-            cp = ((uint32_t)(b & 0x0f) << 12) |
-                (((uint32_t)(unsigned char)name[i + 1] & 0x3f) << 6) |
-                ((uint32_t)(unsigned char)name[i + 2] & 0x3f);
-            adv = 3;
-        } else if ((b & 0xf8) == 0xf0 && i + 3 < name_len) {
-            cp = ((uint32_t)(b & 0x07) << 18) |
-                (((uint32_t)(unsigned char)name[i + 1] & 0x3f) << 12) |
-                (((uint32_t)(unsigned char)name[i + 2] & 0x3f) << 6) |
-                ((uint32_t)(unsigned char)name[i + 3] & 0x3f);
-            adv = 4;
-        } else {
-            cp = b;
-        }
-        i += adv;
-        re_push_literal_unit(p, seq, cp);
-    }
-}
-
-static size_t re_lookup_named(tsc_re_parser_t* p, const char* name, size_t name_len) {
+static tsc_re_named_entry_t* re_lookup_named(tsc_re_parser_t* p, const char* name, size_t name_len) {
     for (size_t i = 0; i < p->nnamed; i++) {
         if (p->named[i].name_len == name_len && memcmp(p->named[i].name, name, name_len) == 0) {
-            return p->named[i].index;
+            return &p->named[i];
         }
     }
-    return RE_UNSET;
+    return NULL;
 }
 
 /* Decimal escapes: live backreferences when the count allows, Annex B
@@ -1139,36 +1062,17 @@ static bool re_resolve_decimal(tsc_re_parser_t* p) {
     return true;
 }
 
-/* Named references: defined names bind (never inside classes); undefined
- * names fail in Unicode mode and spell literals per Annex B otherwise. */
+/* Every named reference binds the immutable ordered fanout of its name. */
 static bool re_resolve_named(tsc_re_parser_t* p) {
-    bool strict = re_is_unicode(p);
-    tsc_re_flags_t outer_flags = p->flags;
     for (size_t i = 0; i < p->nnamed_ref; i++) {
         re_named_fixup_t* fix = &p->named_ref[i];
-        p->flags = fix->node->flags;
-        size_t index = re_lookup_named(p, fix->name, fix->name_len);
-        bool in_class = fix->holder->kind == RE_N_CLASS;
-        if (index != RE_UNSET) {
-            if (in_class) {
-                re_fail(p, fix->node->u.backref.offset);
-                return false;
-            }
-            fix->node->u.backref.index = index;
-            continue;
-        }
-        if (strict) {
+        tsc_re_named_entry_t* entry = re_lookup_named(p, fix->name, fix->name_len);
+        if (!entry) {
             re_fail(p, fix->node->u.backref.offset);
             return false;
         }
-        tsc_re_node_t* seq = re_new_node(p, RE_N_SEQ);
-        re_push_literal_unit(p, seq, 'k');
-        re_push_literal_unit(p, seq, '<');
-        re_push_name_units(p, seq, fix->name, fix->name_len);
-        re_push_literal_unit(p, seq, '>');
-        *re_fixup_slot(fix->holder, fix->index) = seq;
+        fix->node->u.backref.named = entry;
     }
-    p->flags = outer_flags;
     return true;
 }
 
@@ -1235,8 +1139,21 @@ tsc_re_compiled_t* tsc_re_compile(
     parser.len = pattern_len;
     parser.flags = flags;
     parser.error = error;
+    parser.named_mode = flags.unicode || flags.unicode_sets;
     if (!re_prepare_v_classes(&parser)) return NULL;
     tsc_re_node_t* root = re_parse_disjunction(&parser);
+    /* Legacy IdentityEscape permits k only while the grammar parameter N is
+     * absent. Discover named groups with the same parser, then select +N for
+     * the complete pattern, including references before their definitions. */
+    if (!parser.failed && parser.nnamed && !parser.named_mode) {
+        memset(&parser, 0, sizeof(parser));
+        parser.units = pattern;
+        parser.len = pattern_len;
+        parser.flags = flags;
+        parser.error = error;
+        parser.named_mode = true;
+        root = re_parse_disjunction(&parser);
+    }
     if (!parser.failed && root && parser.pos != parser.len) {
         re_fail(&parser, parser.pos);
         root = NULL;
@@ -1250,13 +1167,7 @@ tsc_re_compiled_t* tsc_re_compile(
     re->flags = flags;
     re->ngroups = parser.ngroups;
     re->nnamed = parser.nnamed;
-    if (parser.nnamed) {
-        re->named = (tsc_re_named_entry_t*)TSC_GC_MALLOC(
-            sizeof(tsc_re_named_entry_t) * parser.nnamed);
-        for (size_t i = 0; i < parser.nnamed; i++) re->named[i] = parser.named[i];
-    } else {
-        re->named = NULL;
-    }
+    re->named = parser.named;
     return re;
 }
 
@@ -1268,11 +1179,20 @@ size_t tsc_re_named_count(const tsc_re_compiled_t* re) {
     return re ? re->nnamed : 0;
 }
 
-size_t tsc_re_named_group(const tsc_re_compiled_t* re, const char* name, size_t name_len) {
+static size_t re_named_participant(const tsc_re_named_entry_t* entry, const size_t* captures) {
+    for (size_t i = 0; captures && i < entry->len; i++) {
+        size_t index = entry->indices[i];
+        if (captures[2 * index] != RE_UNSET && captures[2 * index + 1] != RE_UNSET) return index;
+    }
+    return entry->indices[0];
+}
+
+size_t tsc_re_named_group(const tsc_re_compiled_t* re, const char* name, size_t name_len,
+                         const size_t* captures) {
     if (!re) return SIZE_MAX;
     for (size_t i = 0; i < re->nnamed; i++) {
         if (re->named[i].name_len == name_len && memcmp(re->named[i].name, name, name_len) == 0) {
-            return re->named[i].index;
+            return re_named_participant(&re->named[i], captures);
         }
     }
     return SIZE_MAX;
@@ -1415,7 +1335,8 @@ static bool re_match_leaf(re_ctx_t* ctx, const tsc_re_node_t* node) {
         return (left != right) != node->u.boundary.negated;
     }
     case RE_N_BACKREF: {
-        size_t index = node->u.backref.index;
+        size_t index = node->u.backref.named ?
+            re_named_participant(node->u.backref.named, ctx->caps) : node->u.backref.index;
         if (index == RE_UNSET || index > ctx->re->ngroups) return false;
         size_t start = ctx->caps[index * 2], end = ctx->caps[index * 2 + 1];
         if (start == RE_UNSET || end == RE_UNSET) return true;
@@ -1981,7 +1902,7 @@ static uint32_t re_peek_unicode_brace(const tsc_re_parser_t* p) {
 static bool re_is_name_start_cp(uint32_t cp) {
     if (cp == '$' || cp == '_') return true;
     if (cp < 0x80) return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z');
-    return u_hasBinaryProperty((UChar32)cp, UCHAR_ID_START) || cp == 0x200c || cp == 0x200d;
+    return u_hasBinaryProperty((UChar32)cp, UCHAR_ID_START);
 }
 
 static bool re_is_name_part_cp(uint32_t cp) {
@@ -2229,19 +2150,34 @@ static bool re_try_quantifier(tsc_re_parser_t* p, size_t* min_out, size_t* max_o
     return true;
 }
 
-/* Forward declarations for the recursive grammar. */
+/* Forward declarations for the shared atom/group grammar. */
 static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p);
 static tsc_re_node_t* re_parse_atom(tsc_re_parser_t* p);
 
-/* Registers a named group; fails on duplicates. The name bytes are copied. */
+/* MightBothParticipate is false precisely when some shared enclosing
+ * disjunction selects different alternatives. Align persistent path depths
+ * and walk to their common ancestry without native recursion. */
+static bool re_branches_disjoint(const tsc_re_branch_t* left, const tsc_re_branch_t* right) {
+    while (left && right && left->depth > right->depth) left = left->parent;
+    while (left && right && right->depth > left->depth) right = right->parent;
+    while (left && right) {
+        if (left->disjunction == right->disjunction && left->alternative != right->alternative) return true;
+        left = left->parent;
+        right = right->parent;
+    }
+    return false;
+}
+
+/* One ordered name record owns all of its disjoint capture indices. */
 static bool re_register_named(tsc_re_parser_t* p, const char* name, size_t name_len, size_t index, size_t offset) {
-    for (size_t i = 0; i < p->nnamed; i++) {
-        if (p->named[i].name_len == name_len && memcmp(p->named[i].name, name, name_len) == 0) {
+    tsc_re_named_entry_t* entry = re_lookup_named(p, name, name_len);
+    for (size_t i = 0; entry && i < entry->len; i++) {
+        if (!re_branches_disjoint(entry->branches[i], p->branch)) {
             re_fail(p, offset);
             return false;
         }
     }
-    if (p->nnamed == p->named_cap) {
+    if (!entry && p->nnamed == p->named_cap) {
         size_t next = p->named_cap ? p->named_cap * 2 : 4;
         tsc_re_named_entry_t* entries =
             (tsc_re_named_entry_t*)TSC_GC_MALLOC(sizeof(tsc_re_named_entry_t) * next);
@@ -2249,12 +2185,20 @@ static bool re_register_named(tsc_re_parser_t* p, const char* name, size_t name_
         p->named = entries;
         p->named_cap = next;
     }
-    char* copy = (char*)TSC_GC_MALLOC(name_len ? name_len : 1);
-    for (size_t i = 0; i < name_len; i++) copy[i] = name[i];
-    p->named[p->nnamed].name = copy;
-    p->named[p->nnamed].name_len = name_len;
-    p->named[p->nnamed].index = index;
-    p->nnamed++;
+    if (!entry) {
+        entry = &p->named[p->nnamed++];
+        memset(entry, 0, sizeof(*entry));
+        entry->name = TSC_GC_MALLOC(name_len ? name_len : 1);
+        memcpy(entry->name, name, name_len);
+        entry->name_len = name_len;
+    }
+    if (entry->len == entry->capacity) {
+        entry->capacity = entry->capacity ? entry->capacity * 2 : 4;
+        entry->indices = TSC_GC_REALLOC(entry->indices, entry->capacity * sizeof(*entry->indices));
+        entry->branches = TSC_GC_REALLOC(entry->branches, entry->capacity * sizeof(*entry->branches));
+    }
+    entry->indices[entry->len] = index;
+    entry->branches[entry->len++] = p->branch;
     return true;
 }
 
@@ -2451,41 +2395,14 @@ static bool re_parse_char_escape(tsc_re_parser_t* p, bool in_class, tsc_re_char_
         return true;
     }
     case 'k': {
-        if (re_at_end(p) || p->units[p->pos] != '<') {
-            if (unicode) {
-                re_fail(p, esc_at);
-                return false;
-            }
+        if (!p->named_mode) {
             out->kind = RE_CH_UNIT;
             out->value = 'k';
             return true;
         }
-        if (!unicode) {
-            /* Annex B: '\k<Name>' is a backreference only when Name parses
-             * and resolves; otherwise 'k' stays literal and the rest
-             * re-parses as ordinary pattern text. */
-            size_t save = p->pos;
-            bool was_failed = p->failed;
-            int save_code = 0;
-            size_t save_offset = 0;
-            if (p->error) {
-                save_code = p->error->code;
-                save_offset = p->error->offset;
-            }
-            if (re_parse_group_name(p, out)) {
-                out->kind = RE_CH_NAMED_BACKREF;
-                out->backref_offset = esc_at;
-                return true;
-            }
-            p->pos = save;
-            p->failed = was_failed;
-            if (p->error) {
-                p->error->code = save_code;
-                p->error->offset = save_offset;
-            }
-            out->kind = RE_CH_UNIT;
-            out->value = 'k';
-            return true;
+        if (in_class || re_at_end(p) || p->units[p->pos] != '<') {
+            re_fail(p, esc_at);
+            return false;
         }
         if (!re_parse_group_name(p, out)) return false;
         out->kind = RE_CH_NAMED_BACKREF;
@@ -2546,122 +2463,56 @@ static bool re_parse_char_escape(tsc_re_parser_t* p, bool in_class, tsc_re_char_
     }
 }
 
+/* Group identifiers always decode Unicode escape sequences with +U, even
+ * when the pattern itself is in legacy mode. Validate one scalar stream so
+ * raw, escaped and surrogate-pair spellings share the same name identity. */
 static bool re_parse_group_name(tsc_re_parser_t* p, tsc_re_char_t* out) {
     size_t start = p->pos;
-    if (re_at_end(p) || p->units[p->pos] != '<') {
-        re_fail(p, p->pos);
-        return false;
-    }
-    p->pos++;
-    bool any = false;
-    bool first_char = true;
-    for (;;) {
-        if (re_at_end(p)) {
-            re_fail(p, p->pos);
-            return false;
-        }
-        uint16_t u = p->units[p->pos];
-        if (u == '>') {
-            p->pos++;
-            break;
-        }
-        if (re_is_high_surrogate(u) && p->pos + 1 < p->len &&
-            re_is_low_surrogate(p->units[p->pos + 1])) {
-            uint32_t cp = 0x10000u +
-                (((uint32_t)u - 0xd800u) << 10) +
-                ((uint32_t)p->units[p->pos + 1] - 0xdc00u);
-            bool ok = first_char ? re_is_name_start_cp(cp) : re_is_name_part_cp(cp);
-            if (!ok) {
-                re_fail(p, p->pos);
-                return false;
-            }
-            re_name_push_utf8(p, out, cp);
-            p->pos += 2;
-            any = true;
-            first_char = false;
-            continue;
-        }
-        if (u < 0x80) {
-            bool ok = first_char ? re_is_name_start_cp(u) : re_is_name_part_cp(u);
-            if (!ok) {
-                re_fail(p, p->pos);
-                return false;
-            }
-            re_name_push_utf8(p, out, u);
-            p->pos++;
-            any = true;
-            first_char = false;
-            continue;
-        }
-        if (re_is_low_surrogate(u) || re_is_high_surrogate(u)) {
-            /* Lone surrogates encode deterministically as WTF-8 so
-             * definition/reference identity holds. */
-            re_name_push_utf8(p, out, u);
-            p->pos++;
-            any = true;
-            first_char = false;
-            continue;
-        }
-        {
-            bool ok = first_char ? re_is_name_start_cp(u) : re_is_name_part_cp(u);
-            if (!ok) {
-                re_fail(p, p->pos);
-                return false;
-            }
-            re_name_push_utf8(p, out, u);
-            p->pos++;
-            any = true;
-            first_char = false;
-            continue;
-        }
-        if (u == '\\' && p->pos + 1 < p->len && p->units[p->pos + 1] == 'u') {
-            size_t save = p->pos;
-            p->pos += 2;
-            if (p->pos < p->len && p->units[p->pos] == '{') {
-                if (!re_is_unicode(p)) {
-                    /* Braced escapes are a unicode-mode-only production. */
-                    re_fail(p, save);
-                    return false;
-                }
-                p->pos++;
-                uint32_t cp = re_peek_unicode_brace(p);
-                if (cp == UINT32_MAX) {
-                    re_fail(p, save);
-                    return false;
-                }
-                while (p->units[p->pos] != '}') p->pos++;
-                p->pos++;
-                if (!(first_char ? re_is_name_start_cp(cp) : re_is_name_part_cp(cp))) {
-                    re_fail(p, save);
-                    return false;
-                }
-                re_name_push_utf8(p, out, cp);
-                any = true;
-                first_char = false;
-                continue;
-            }
-            int32_t hex = re_parse_hex(p, p->pos, 4);
-            if (hex < 0) {
-                re_fail(p, save);
-                return false;
-            }
-            p->pos += 4;
-            if (!(first_char ? re_is_name_start_cp((uint32_t)hex) : re_is_name_part_cp((uint32_t)hex))) {
-                re_fail(p, save);
-                return false;
-            }
-            re_name_push_utf8(p, out, (uint32_t)hex);
-            any = true;
-            first_char = false;
-            continue;
-        }
-        re_fail(p, p->pos);
-        return false;
-    }
-    if (!any) {
+    if (re_at_end(p) || p->units[p->pos++] != '<') {
         re_fail(p, start);
         return false;
     }
+    bool first = true;
+    while (!re_at_end(p) && p->units[p->pos] != '>') {
+        size_t offset = p->pos;
+        uint32_t cp = p->units[p->pos++];
+        if (cp == '\\') {
+            if (re_at_end(p) || p->units[p->pos++] != 'u') {
+                re_fail(p, offset);
+                return false;
+            }
+            if (!re_at_end(p) && p->units[p->pos] == '{') {
+                p->pos++;
+                cp = re_peek_unicode_brace(p);
+                if (cp == UINT32_MAX) { re_fail(p, offset); return false; }
+                while (p->units[p->pos++] != '}') {}
+            } else {
+                int32_t hex = re_parse_hex(p, p->pos, 4);
+                if (hex < 0) { re_fail(p, offset); return false; }
+                cp = (uint32_t)hex;
+                p->pos += 4;
+                if (re_is_high_surrogate((uint16_t)cp) && p->pos + 6 <= p->len &&
+                    p->units[p->pos] == '\\' && p->units[p->pos + 1] == 'u') {
+                    int32_t low = re_parse_hex(p, p->pos + 2, 4);
+                    if (low >= 0 && re_is_low_surrogate((uint16_t)low)) {
+                        cp = 0x10000u + ((cp - 0xd800u) << 10) + (uint32_t)low - 0xdc00u;
+                        p->pos += 6;
+                    }
+                }
+            }
+        } else if (re_is_high_surrogate((uint16_t)cp) && !re_at_end(p) &&
+                   re_is_low_surrogate(p->units[p->pos])) {
+            cp = 0x10000u + ((cp - 0xd800u) << 10) + p->units[p->pos++] - 0xdc00u;
+        }
+        if (!(first ? re_is_name_start_cp(cp) : re_is_name_part_cp(cp))) {
+            re_fail(p, offset);
+            return false;
+        }
+        re_name_push_utf8(p, out, cp);
+        first = false;
+    }
+    if (first || re_at_end(p)) { re_fail(p, start); return false; }
+    p->pos++;
     return true;
 }
 
@@ -2937,11 +2788,11 @@ tsc_value_t tsc_regexp_prototype_value(void) {
     return tsc_value_object(prototype);
 }
 
-bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position,
+bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position, const size_t* captures,
     const char** name, size_t* name_len, size_t* group_index) {
     if (!re || position >= re->nnamed) return false;
     *name = re->named[position].name;
     *name_len = re->named[position].name_len;
-    *group_index = re->named[position].index;
+    *group_index = re_named_participant(&re->named[position], captures);
     return true;
 }

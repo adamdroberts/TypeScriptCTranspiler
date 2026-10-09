@@ -1,5 +1,7 @@
 # Changelog
 
+- Added disjoint duplicate RegExp names through ordered capture fanout and enclosing disjunction paths, including repeated/backward references, named result/index identity, replacement groups, and Unicode-decoded names. Nullable dynamic property reads preserve unset captures.
+
 - Added ordinary mutable RegExp `exec`/`test`, stateful `lastIndex`, capture metadata and `d` indices with shared named-pair identity. Typed reads and reflection now use the actual descriptors; dynamic array-valued property reads preserve identity.
 
 - Added scoped RegExp `i`, `m`, and `s` modifiers through immutable lexical records on the shared pattern tree, including nested restoration and Unicode sets.

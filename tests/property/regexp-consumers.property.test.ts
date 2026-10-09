@@ -32,6 +32,12 @@ function plans(): Plan[] {
                 result.push({ operation, source, pattern: pattern!, flags: flags!, replacement: "[$&:$1]" });
         }
     }
+    for (const source of ["", "aa", "bb", "aabb", "abab", "xz"])
+        for (const flags of ["", "g", "gu", "gv"])
+            for (const pattern of ["(?<part>a)|(?<part>b)", "(?:(?<part>a)|(?<part>b))\\k<part>",
+                "(?:(?<left>a)(?<right>a)|(?<right>b)(?<left>b))", "(?:(?<part>x)|(?<part>y)|z){2}\\k<part>"])
+                for (const operation of ["replace", "split", "match", "search"] as const)
+                    result.push({ operation, source, pattern, flags, replacement: "[$&:$<part>:$<left>:$<right>]" });
     return result;
 }
 function observe(plan: Plan): unknown {
@@ -61,13 +67,20 @@ test("native RegExp consumers share UTF-16 offsets, capture worklists and empty 
             for (var index = 0; index < value.length; index++) units.push(value.charCodeAt(index));
             return units.join(",");
         }
-        ${plan.map((entry, index) => {
-            const re = `new RegExp(${JSON.stringify(entry.pattern)}, ${JSON.stringify(entry.flags)})`;
-            const receiver = `Reflect.get({ text: ${JSON.stringify(entry.source)} }, "text")`;
-            const args = entry.operation === "replace" ? `, ${JSON.stringify(entry.replacement)}` :
-                entry.operation === "split" && entry.limit !== undefined ? `, ${entry.limit}` : "";
-            return `print(${JSON.stringify(String(index) + ":")} + encode(${receiver}.${entry.operation}(${re}${args})));`;
-        }).join("\n")}
+        var plans = JSON.parse(${JSON.stringify(JSON.stringify(plan))});
+        for (var index = 0; index < plans.length; index++) {
+            var entry = plans[index];
+            var regexp = new RegExp(entry.pattern, entry.flags);
+            var receiver = Reflect.get({ text: entry.source }, "text");
+            var observed;
+            switch (entry.operation) {
+                case "replace": observed = receiver.replace(regexp, entry.replacement); break;
+                case "split": observed = receiver.split(regexp, entry.limit); break;
+                case "match": observed = receiver.match(new RegExp(entry.pattern, entry.flags)); break;
+                case "search": observed = receiver.search(new RegExp(entry.pattern, entry.flags)); break;
+            }
+            print(index + ":" + encode(observed));
+        }
         var calls = [];
         var dynamicText = Reflect.get({ text: "aab" }, "text");
         var output = dynamicText.replace(/(?<part>a)(b)?/g, function(match, part, optional, offset, input, groups) {
@@ -75,6 +88,12 @@ test("native RegExp consumers share UTF-16 offsets, capture worklists and empty 
             return "[" + offset + "]";
         });
         print("callback:" + output + ":" + calls.join(";"));
+        var namedCalls = [];
+        var namedOutput = dynamicText.replace(/(?<part>a)|(?<part>b)/g, function(match, left, right, offset, input, groups) {
+            namedCalls.push(encode([left, right, groups.part, Object.getPrototypeOf(groups) === null]));
+            return groups.part.toUpperCase();
+        });
+        print("named-callback:" + namedOutput + ":" + namedCalls.join(";"));
     `;
     const calls: string[] = [];
     const output = "aab".replace(/(?<part>a)(b)?/g, (...args) => {
@@ -82,8 +101,14 @@ test("native RegExp consumers share UTF-16 offsets, capture worklists and empty 
         calls.push(encode([match, part, optional, offset, input, groups.part, Object.getPrototypeOf(groups) === null]));
         return `[${offset}]`;
     });
+    const namedCalls: string[] = [];
+    const namedOutput = "aab".replace(new RegExp("(?<part>a)|(?<part>b)", "g"), (...args) => {
+        const [match, left, right, offset, input, groups] = args;
+        namedCalls.push(encode([left, right, groups.part, Object.getPrototypeOf(groups) === null]));
+        return groups.part.toUpperCase();
+    });
     const expected = plan.map((entry, index) => `${index}:${encode(observe(entry))}\n`).join("") +
-        `callback:${output}:${calls.join(";")}\n`;
+        `callback:${output}:${calls.join(";")}\n` + `named-callback:${namedOutput}:${namedCalls.join(";")}\n`;
     try {
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
         for (const noGc of [false, true]) {

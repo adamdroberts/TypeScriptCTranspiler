@@ -78141,6 +78141,10 @@ class Emitter {
                 c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
                 ty: T_VALUE,
             };
+            const propertyType = this.checker.getTypeAtLocation(pa);
+            if (propertyType.isUnion() && propertyType.types.some(part =>
+                !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))
+                return value;
             const narrowed = this.prepareType(mapType(pa, this.checker));
             if (
                 narrowed.kind === "number" ||
