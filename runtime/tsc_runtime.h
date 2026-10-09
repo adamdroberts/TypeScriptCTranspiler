@@ -681,6 +681,21 @@ void tsc_value_callee_restore(void* checkpoint);
 
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
+/* A source Parse Node owns one segment collection. Runtime parses pair this
+ * descriptor with their retained parse unit; ordinary source sites use NULL. */
+typedef struct {
+    const uint16_t* raw;
+    size_t raw_length;
+    const uint16_t* cooked;
+    size_t cooked_length;
+    bool cooked_valid;
+} tsc_template_segment_t;
+typedef struct {
+    size_t count;
+    const tsc_template_segment_t* segments;
+    bool runtime_parse;
+} tsc_template_site_t;
+tsc_array_t* tsc_template_object(const tsc_template_site_t* site);
 tsc_array_t* tsc_array_set_value_codec(
     tsc_array_t* array,
     tsc_array_box_element_fn box_element,

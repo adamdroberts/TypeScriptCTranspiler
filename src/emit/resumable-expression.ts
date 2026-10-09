@@ -21,7 +21,8 @@ type ValueOperation =
     | { readonly kind: "compound"; readonly operator: ts.SyntaxKind;
         readonly left: ResumableValueSlot; readonly right: ResumableValueSlot }
     | { readonly kind: "arguments" }
-    | { readonly kind: "call"; readonly node: ts.CallExpression | ts.NewExpression;
+    | { readonly kind: "template-object"; readonly template: ts.TemplateLiteral }
+    | { readonly kind: "call"; readonly node: ts.CallExpression | ts.NewExpression | ts.TaggedTemplateExpression;
         readonly callee: ResumableValueSlot; readonly receiver: ResumableValueSlot | null;
         readonly arguments: ResumableValueSlot; readonly construct: boolean }
     | { readonly kind: "array" }
@@ -140,20 +141,28 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         return entry;
     };
 
-    const buildCall = (node: ts.CallExpression | ts.NewExpression, output: number, next: number, chainExit?: number): number => {
-        const target = transparent(node.expression), callee = value(target), actuals = value(node);
+    const buildCall = (node: ts.CallExpression | ts.NewExpression | ts.TaggedTemplateExpression, output: number, next: number, chainExit?: number): number => {
+        const tagged = ts.isTaggedTemplateExpression(node);
+        const targetExpression = tagged ? node.tag : node.expression;
+        const args = tagged ? ts.isTemplateExpression(node.template) ? node.template.templateSpans.map(span => span.expression) : [] : node.arguments ?? [];
+        const target = transparent(targetExpression), callee = value(target), actuals = value(node);
         let receiver: number | null = null;
         const targetIsProperty = ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target);
         if (targetIsProperty) receiver = value(target.expression);
         const apply = operation({ kind: "call", node, callee, receiver, arguments: actuals,
             construct: ts.isNewExpression(node) }, output, next);
         let argumentsEntry = apply;
-        for (let index = (node.arguments?.length ?? 0) - 1; index >= 0; --index) {
-            const argument = node.arguments![index]!, spread = ts.isSpreadElement(argument);
+        for (let index = args.length - 1; index >= 0; --index) {
+            const argument = args[index]!, spread = ts.isSpreadElement(argument);
             const source = spread ? argument.expression : argument;
             const slot = value(source);
             const append = put({ kind: "append", id: reserve(), target: actuals, source: slot, spread, container: "arguments", next: argumentsEntry });
             argumentsEntry = build(source, slot, append);
+        }
+        if (tagged) {
+            const template = value(node.template);
+            const append = put({ kind: "append", id: reserve(), target: actuals, source: template, spread: false, container: "arguments", next: argumentsEntry });
+            argumentsEntry = operation({ kind: "template-object", template: node.template }, template, append);
         }
         argumentsEntry = operation({ kind: "arguments" }, actuals, argumentsEntry);
         const skip = chainExit ?? operation({ kind: "undefined" }, output, next);
@@ -161,7 +170,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             argumentsEntry = put({ kind: "branch", id: reserve(), source: callee, mode: "nullish",
                 yes: skip, no: argumentsEntry });
         }
-        if (!targetIsProperty) return build(node.expression, callee, argumentsEntry, ts.isOptionalChain(node) ? skip : undefined);
+        if (!targetIsProperty) return build(targetExpression, callee, argumentsEntry, ts.isOptionalChain(node) ? skip : undefined);
         if (target.expression.kind === ts.SyntaxKind.SuperKeyword ||
             ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {
             reject(target); return complete;
@@ -174,7 +183,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             const raw = value(target.argumentExpression);
             get = build(target.argumentExpression, raw, copy(raw, key, get));
         }
-        const calleeExit = ts.isOptionalChain(node) && !ts.isParenthesizedExpression(node.expression)
+        const calleeExit = ts.isOptionalChain(node) && !ts.isParenthesizedExpression(targetExpression)
             ? skip : operation({ kind: "undefined" }, callee, argumentsEntry);
         if (target.questionDotToken) {
             get = put({ kind: "branch", id: reserve(), source: receiver!, mode: "nullish", yes: calleeExit, no: get });
@@ -315,7 +324,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                     })); return;
                 }
             }
-            if (ts.isCallExpression(node) || ts.isNewExpression(node)) { jump(anchor, buildCall(node, output, next, optionalExit)); return; }
+            if (ts.isCallExpression(node) || ts.isNewExpression(node) || ts.isTaggedTemplateExpression(node)) { jump(anchor, buildCall(node, output, next, optionalExit)); return; }
             if (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) { jump(anchor, buildLiteral(node, output, next)); return; }
             if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
                 jump(anchor, buildReference(node, reference => operation({ kind: "get", reference }, output, next), optionalExit)); return;

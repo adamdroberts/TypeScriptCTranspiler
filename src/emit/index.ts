@@ -1526,9 +1526,6 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(span.expression, seenConsts)
             );
         }
-        if (ts.isTaggedTemplateExpression(expr) && this.isSideEffectFreeStringRawTaggedTemplate(expr, seenConsts)) {
-            return true;
-        }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) => {
                 if (ts.isOmittedExpression(element)) return true;
@@ -1651,9 +1648,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
@@ -1853,9 +1847,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
@@ -7178,9 +7169,6 @@ class Emitter {
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -7275,9 +7263,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBase64StringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
@@ -8760,9 +8745,6 @@ class Emitter {
             return true;
         }
         if (ts.isTemplateExpression(unwrapped) && this.isSideEffectFreePrimitiveTemplateExpression(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (ts.isTaggedTemplateExpression(unwrapped) && this.isSideEffectFreeStringRawTaggedTemplate(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeJsonStringifyCall(unwrapped, seenConsts)) {
@@ -12881,25 +12863,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeBase64StringCall(init, seenConsts);
-    }
-
-    private isSideEffectFreeStringRawTaggedTemplate(
-        expr: ts.TaggedTemplateExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const tag = expr.tag;
-        if (
-            !ts.isPropertyAccessExpression(tag) ||
-            tag.name.text !== "raw" ||
-            !ts.isIdentifier(tag.expression) ||
-            !this.isUnshadowedGlobalIdentifier(tag.expression, "String")
-        ) {
-            return false;
-        }
-        if (ts.isNoSubstitutionTemplateLiteral(expr.template)) return true;
-        return expr.template.templateSpans.every((span) =>
-            this.isSideEffectFreePrimitivePromiseResolveValue(span.expression, seenConsts)
-        );
     }
 
     private isSideEffectFreeJsonStringifyCall(
@@ -30412,9 +30375,7 @@ class Emitter {
                         if (reference.kind === "property") {
                             preparePropertyReference(reference);
                             const write = `tsc_value_set_computed_prop(${read(reference.base)}, ${read(reference.key)}, ${source})`;
-                            if (this.nodeIsInStrictMode(reference.node)) {
-                                callback.line(`if (!${write}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("property assignment failed"));`);
-                            } else callback.line(`(void)${write};`);
+                            callback.line(this.emitPropertyWriteStatement(write, reference.node) + ";");
                             return;
                         }
                         const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
@@ -30541,6 +30502,7 @@ class Emitter {
                             setReference(op.reference, read(op.source), graph.expressionResults[stateNode.slots[op.source]!]!);
                             evaluated = read(op.source);
                         } else if (op.kind === "property-key") evaluated = `tsc_value_to_property_key(${read(op.source)})`;
+                        else if (op.kind === "template-object") evaluated = this.emitTemplateObject(op.template).c;
                         else if (op.kind === "arguments" || op.kind === "array") {
                             evaluated = "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))";
                         } else if (op.kind === "object") evaluated = "tsc_value_object(tsc_object_new())";
@@ -36896,154 +36858,52 @@ class Emitter {
         });
     }
 
+    private templateSites = new WeakMap<ts.TemplateLiteral, string>();
+
+    private emitTemplateObject(template: ts.TemplateLiteral): EmitResult {
+        let site = this.templateSites.get(template);
+        if (!site) {
+            site = this.freshTemp("_template_site");
+            this.templateSites.set(template, site);
+            const parts = ts.isNoSubstitutionTemplateLiteral(template)
+                ? [template] : [template.head, ...template.templateSpans.map(span => span.literal)];
+            const segments: string[] = [];
+            const units = (text: string, name: string): void => {
+                const codes = Array.from({ length: text.length }, (_, index) => text.charCodeAt(index));
+                this.globalDecls.line(`static const uint16_t ${name}[] = { ${codes.length ? codes.join(", ") : "0"} };`);
+            };
+            for (const [index, part] of parts.entries()) {
+                const metadata = part as ts.TemplateLiteralLikeNode & { rawText?: string; templateFlags?: ts.TokenFlags };
+                const raw = (metadata.rawText ?? part.text).replace(/\r\n?/g, "\n");
+                const cookedValid = !((metadata.templateFlags ?? 0) & (ts.TokenFlags as typeof ts.TokenFlags & { ContainsInvalidEscape: number }).ContainsInvalidEscape);
+                const rawName = `${site}_raw_${index}`, cookedName = `${site}_cooked_${index}`;
+                units(raw, rawName);
+                if (cookedValid) units(part.text, cookedName);
+                segments.push(`{ ${rawName}, ${raw.length}, ${cookedValid ? cookedName : "NULL"}, ${cookedValid ? part.text.length : 0}, ${cookedValid} }`);
+            }
+            this.globalDecls.line(`static const tsc_template_segment_t ${site}_segments[] = { ${segments.join(", ")} };`);
+            const filename = path.resolve(template.getSourceFile().fileName);
+            const runtimeParse = this.functionSourcePaths.has(filename) || [
+                ...(this.options.test262Observation?.evalScriptEntries ?? []),
+                ...(this.options.test262Observation?.directEvalEntries ?? []),
+                ...(this.options.test262Observation?.indirectEvalEntries ?? []),
+            ].some(entry => entry.entry && path.resolve(entry.entry) === filename);
+            this.globalDecls.line(`static const tsc_template_site_t ${site} = { ${parts.length}, ${site}_segments, ${runtimeParse} };`);
+        }
+        return { c: `tsc_value_array(tsc_template_object(&${site}))`, ty: T_VALUE };
+    }
+
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
-        if (this.isStringRawTag(tt.tag)) {
-            return this.emitStringRawTaggedTemplate(tt);
+        const tag = this.unwrapTransparentExpression(tt.tag);
+        if (ts.isPropertyAccessExpression(tag)) {
+            if (ts.isPrivateIdentifier(tag.name) || tag.expression.kind === ts.SyntaxKind.SuperKeyword)
+                unsupported(tag, "tagged template requires a canonical callable reference");
+            return this.emitDynamicNamedPropertyCall(tt, this.emitExpr(tag.expression), tag.name.text, !!tag.questionDotToken);
         }
-        const unwrappedTag = this.unwrapTransparentExpression(tt.tag);
-        if (ts.isYieldExpression(unwrappedTag)) {
-            const tag = this.emitExpr(tt.tag);
-            if (tag.ty.kind !== "value") {
-                unsupported(tt.tag, "yielded tagged template tag must be a dynamic callable value");
-            }
-            return this.emitDynamicTaggedTemplate(tt, tag);
+        if (ts.isElementAccessExpression(tag)) {
+            return this.emitDynamicComputedPropertyCall(tt, tag);
         }
-        if (!ts.isIdentifier(tt.tag)) {
-            const tag = this.emitExpr(tt.tag);
-            if (tag.ty.kind !== "value") {
-                unsupported(tt.tag, "dynamic tagged template tag must be a callable value");
-            }
-            return this.emitDynamicTaggedTemplate(tt, tag);
-        }
-        const parts = this.templateStringParts(tt.template);
-        const expressions = ts.isTemplateExpression(tt.template)
-            ? tt.template.templateSpans.map((span) => span.expression)
-            : [];
-        const sig = this.checker.getResolvedSignature(tt);
-        if (!sig) unsupported(tt, "unresolved tagged template signature");
-        const params = sig.getParameters();
-        const specs: SequencedCallArg[] = [
-            {
-                value: {
-                    c: this.stringArrayLiteral(parts),
-                    ty: arrayType(T_STRING),
-                },
-                target: params[0]?.valueDeclaration
-                    ? mapTsType(tt, this.checker.getTypeOfSymbolAtLocation(params[0], params[0].valueDeclaration), this.checker)
-                    : arrayType(T_STRING),
-                node: tt.template,
-            },
-        ];
-        for (let i = 0; i < expressions.length; i++) {
-            const expr = expressions[i]!;
-            const r = this.emitExpr(expr);
-            const paramDecl = params[i + 1]?.valueDeclaration;
-            let paramType = r.ty;
-            if (paramDecl && ts.isParameter(paramDecl)) {
-                paramType = mapType(paramDecl, this.checker);
-            }
-            specs.push({ value: r, target: paramType, node: expr });
-        }
-        const retType = mapTsType(tt, sig.getReturnType(), this.checker);
-        return this.emitSequencedCall(
-            this.identifierName(tt.tag),
-            retType,
-            specs,
-        );
-    }
-
-    private emitDynamicTaggedTemplate(tt: ts.TaggedTemplateExpression, tag: EmitResult): EmitResult {
-        const parts = this.templateStringParts(tt.template);
-        const expressions = ts.isTemplateExpression(tt.template)
-            ? tt.template.templateSpans.map((span) => span.expression)
-            : [];
-        const specs: SequencedCallArg[] = [
-            { value: tag, target: T_VALUE, node: tt.tag },
-            {
-                value: {
-                    c: this.stringArrayLiteral(parts),
-                    ty: arrayType(T_STRING),
-                },
-                target: T_VALUE,
-                node: tt.template,
-            },
-            ...expressions.map((expression) => ({
-                value: this.emitExpr(expression),
-                target: T_VALUE,
-                node: expression,
-            })),
-        ];
-        return this.emitSequencedExpr(T_VALUE, specs, ([fn, strings, ...values]) => {
-            const args = this.freshTemp("_tag_args");
-            const pieces = [
-                `tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length + 1)})`,
-                `tsc_array_push_value(${args}, ${strings})`,
-                ...values.map((value) => `tsc_array_push_value(${args}, ${value})`),
-            ];
-            pieces.push(`tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${args}))`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private isStringRawTag(expr: ts.Expression): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "raw" &&
-            ts.isIdentifier(expr.expression) &&
-            expr.expression.text === "String";
-    }
-
-    private emitStringRawTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
-        const parts = this.templateRawStringParts(tt.template);
-        const expressions = ts.isTemplateExpression(tt.template)
-            ? tt.template.templateSpans.map((span) => span.expression)
-            : [];
-        const specs = expressions.map((expression): SequencedCallArg => ({
-            value: this.emitExpr(expression),
-            node: expression,
-            stringify: true,
-        }));
-        return this.emitSequencedExpr(T_STRING, specs, (args) => {
-            let expr = `tsc_str_from_lit("${escapeCString(parts[0] ?? "")}", ${utf8ByteLen(parts[0] ?? "")})`;
-            for (let i = 0; i < args.length; i++) {
-                expr = `tsc_str_concat(${expr}, ${args[i]})`;
-                const lit = parts[i + 1] ?? "";
-                if (lit.length > 0) {
-                    expr = `tsc_str_concat(${expr}, tsc_str_from_lit("${escapeCString(lit)}", ${utf8ByteLen(lit)}))`;
-                }
-            }
-            return expr;
-        });
-    }
-
-    private templateStringParts(
-        template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
-    ): string[] {
-        if (ts.isNoSubstitutionTemplateLiteral(template)) return [template.text];
-        return [
-            template.head.text,
-            ...template.templateSpans.map((span) => span.literal.text),
-        ];
-    }
-
-    private templateRawStringParts(
-        template: ts.TemplateLiteral | ts.NoSubstitutionTemplateLiteral,
-    ): string[] {
-        // Engines normalize CR and CRLF line terminators to LF in raw template
-        // text (the pinned String.raw special-characters directory requires it);
-        // TypeScript preserves the source bytes verbatim in rawText.
-        const normalized = (part: string): string => part.replace(/\r\n?/g, "\n");
-        if (ts.isNoSubstitutionTemplateLiteral(template)) {
-            return [normalized(this.templateRawText(template))];
-        }
-        return [
-            normalized(this.templateRawText(template.head)),
-            ...template.templateSpans.map((span) => normalized(this.templateRawText(span.literal))),
-        ];
-    }
-
-    private templateRawText(node: ts.TemplateLiteralLikeNode): string {
-        const rawText = (node as ts.TemplateLiteralLikeNode & { rawText?: string }).rawText;
-        return rawText ?? node.text;
+        return this.emitDynamicValueCall(tt, this.emitExpr(tt.tag));
     }
 
     private test262GlobalReferencePlan(id: ts.Identifier): Test262GlobalReferencePlan | null {
@@ -37062,22 +36922,6 @@ class Emitter {
             ], ([rooted]) => `tsc_global_reference_set(${key}, ${rooted}, ${strict})`).c,
             remove: `tsc_global_reference_delete(${key})`,
         };
-    }
-
-    private stringArrayLiteral(parts: readonly string[]): string {
-        const av = this.freshTemp("_tpl");
-        const steps = [
-            `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_str_t*), ${Math.max(1, parts.length)})`,
-        ];
-        for (const part of parts) {
-            const sv = this.freshTemp("_tpls");
-            steps.push(
-                `tsc_str_t* ${sv} = tsc_str_from_lit("${escapeCString(part)}", ${utf8ByteLen(part)})`,
-            );
-            steps.push(`tsc_array_push_raw(${av}, &${sv})`);
-        }
-        steps.push(av);
-        return `({ ${steps.join("; ")}; })`;
     }
 
     private emitTest262GlobalUpdate(
@@ -37459,12 +37303,13 @@ class Emitter {
             receiver: ts.Expression,
             result: EmitResult,
         ): EmitResult => {
-            if (!this.moduleNamespacePlanForExpression(receiver)) return result;
+            const namespace = !!this.moduleNamespacePlanForExpression(receiver);
+            if (!namespace && !this.nodeIsInStrictMode(del)) return result;
             const deleted = this.freshTemp("_namespace_deleted");
             return {
                 c: `({ bool ${deleted} = ${result.c}; if (!${deleted}) ` +
                     `tsc_throw_error(TSC_ERROR_TYPE, ` +
-                    `tsc_str_from_cstr("Cannot delete module namespace export")); true; })`,
+                    `tsc_str_from_cstr("${namespace ? "Cannot delete module namespace export" : "property deletion failed"}")); ${deleted}; })`,
                 ty: T_BOOLEAN,
             };
         };
@@ -37498,7 +37343,7 @@ class Emitter {
                 ty: T_STRING,
             };
             if (mapped.kind === "array") {
-                return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.name);
+                return finishPropertyDelete(expr.expression, this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.name));
             }
             return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
@@ -37523,7 +37368,7 @@ class Emitter {
                 ]));
             }
             if (mapped.kind === "array") {
-                return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression);
+                return finishPropertyDelete(expr.expression, this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression));
             }
             return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
@@ -37689,7 +37534,7 @@ class Emitter {
                 const cache = this.freshTemp("_prop_cache");
                 const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
                 const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
-                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${set}; ${prefix ? next : cur}; })`;
+                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${this.emitPropertyWriteStatement(set, operand)}; ${prefix ? next : cur}; })`;
             }
             const existing = indexUpdate
                 ? `tsc_value_get_index(${obj}, ${keyC})`
@@ -37701,7 +37546,7 @@ class Emitter {
                 : symbolUpdate
                     ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${next})`
                     : `tsc_value_set_computed_prop(${obj}, ${keyC}, ${next})`;
-            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${set}; ${prefix ? next : cur}; })`;
+            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${this.emitPropertyWriteStatement(set, operand)}; ${prefix ? next : cur}; })`;
         });
     }
 
@@ -38985,6 +38830,12 @@ class Emitter {
         return result;
     }
 
+    private emitPropertyWriteStatement(write: string, node: ts.Node, moduleNamespace = false): string {
+        if (!moduleNamespace && !this.nodeIsInStrictMode(node)) return `(void)${write}`;
+        const message = moduleNamespace ? "Cannot assign to module namespace object" : "property assignment failed";
+        return `if (!${write}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("${message}"))`;
+    }
+
     private emitDynamicPropertyAssignment(
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
@@ -39124,10 +38975,7 @@ class Emitter {
                     : computedAssignment
                         ? `tsc_value_set_computed_prop(${obj}, ${keyC}, ${value})`
                         : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
-            const setStatement = (value: string) => moduleNamespaceAssignment
-                ? `if (!${set(value)}) tsc_throw_error(TSC_ERROR_TYPE, ` +
-                    `tsc_str_from_cstr("Cannot assign to module namespace object"))`
-                : `(void)${set(value)}`;
+            const setStatement = (value: string) => this.emitPropertyWriteStatement(set(value), bin, moduleNamespaceAssignment);
             const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
             if (logicalOp) {
                 const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
@@ -39963,24 +39811,7 @@ class Emitter {
                 unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
             }
             if (!argument) unsupported(call.expression, "computed method call requires a property key");
-            const receiverNode = call.expression.expression;
-            const receiver = this.emitExpr(receiverNode);
-            const key = this.emitExpr(argument);
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [
-                    { value: receiver, target: T_VALUE, node: receiverNode },
-                    { value: key, target: T_VALUE, node: argument },
-                ],
-                ([receiverValue, keyValue]) => this.emitDynamicValueCall(
-                    call,
-                    {
-                        c: `tsc_value_get_computed_prop(${receiverValue}, ${keyValue})`,
-                        ty: T_VALUE,
-                    },
-                    { c: receiverValue!, ty: T_VALUE },
-                ).c,
-            );
+            return this.emitDynamicComputedPropertyCall(call, call.expression);
         }
         if (!ts.isIdentifier(call.expression)) {
             const requireExportsDecl = this.requireCallModuleExportsDeclaration(call.expression);
@@ -40779,27 +40610,30 @@ class Emitter {
 
 
     private emitOrdinaryCallApplication(
-        call: ts.CallExpression,
+        call: ts.CallExpression | ts.TaggedTemplateExpression,
         fn: string,
         receiver: string,
     ): string {
-        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+        const tagged = ts.isTaggedTemplateExpression(call);
+        const argumentsList = this.emitSpreadCallArgumentList(tagged
+            ? ts.isTemplateExpression(call.template) ? call.template.templateSpans.map(span => span.expression) : []
+            : call.arguments, tagged ? { value: this.emitTemplateObject(call.template), node: call.template } : undefined);
         const list = this.freshTemp("_dyn_call_args");
         const invoke = `({ tsc_array_t* volatile ${list} = ${argumentsList.c}; ` +
             `tsc_value_apply_function(${fn}, ${receiver}, tsc_value_array(${list})); })`;
-        return call.questionDotToken
+        return ts.isCallExpression(call) && call.questionDotToken
             ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
             : invoke;
     }
 
     private emitDynamicValueCall(
-        call: ts.CallExpression,
+        call: ts.CallExpression | ts.TaggedTemplateExpression,
         callee: EmitResult,
         thisArg: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE },
     ): EmitResult {
         return this.emitSequencedExpr(T_VALUE, [
-            { value: callee, target: T_VALUE, node: call.expression },
-            { value: thisArg, target: T_VALUE, node: call.expression },
+            { value: callee, target: T_VALUE, node: ts.isTaggedTemplateExpression(call) ? call.tag : call.expression },
+            { value: thisArg, target: T_VALUE, node: ts.isTaggedTemplateExpression(call) ? call.tag : call.expression },
         ], ([fn, receiver]) => this.emitOrdinaryCallApplication(call, fn, receiver));
     }
 
@@ -41088,9 +40922,10 @@ class Emitter {
         return specs;
     }
 
-    private emitSpreadCallArgumentList(args: readonly ts.Expression[]): EmitResult {
+    private emitSpreadCallArgumentList(args: readonly ts.Expression[], leading?: { value: EmitResult; node: ts.Expression }): EmitResult {
         const argumentsArray = this.freshTemp("_call_arguments");
         const pieces = [`tsc_array_t* volatile ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`];
+        if (leading) pieces.push(`tsc_array_push_value(${argumentsArray}, ${this.coerce(leading.value, T_VALUE, leading.node)})`);
         for (const argument of args) {
             if (ts.isSpreadElement(argument)) {
                 const value = this.emitExpr(argument.expression);
@@ -43615,8 +43450,25 @@ class Emitter {
      * worklist.  This deliberately bypasses the type-directed method
      * specializations: a mutable intrinsic object such as Reflect must first
      * resolve its actual property, even when that property is named `apply`. */
+    private emitDynamicComputedPropertyCall(
+        call: ts.CallExpression | ts.TaggedTemplateExpression,
+        reference: ts.ElementAccessExpression,
+    ): EmitResult {
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: this.emitExpr(reference.expression), target: T_VALUE, node: reference.expression },
+        ], ([receiver]) => {
+            const callee = this.emitSequencedExpr(T_VALUE, [
+                { value: this.emitExpr(reference.argumentExpression), target: T_VALUE, node: reference.argumentExpression },
+            ], ([key]) => `tsc_value_get_computed_prop(${receiver}, ${key})`);
+            if (reference.questionDotToken) callee.c = `tsc_value_is_nullish(${receiver}) ? tsc_value_undefined() : ${callee.c}`;
+            const invocation = this.emitDynamicValueCall(call, callee, { c: receiver!, ty: T_VALUE }).c;
+            return reference.questionDotToken && ts.isCallExpression(call)
+                ? `tsc_value_is_nullish(${receiver}) ? tsc_value_undefined() : ${invocation}` : invocation;
+        });
+    }
+
     private emitDynamicNamedPropertyCall(
-        call: ts.CallExpression,
+        call: ts.CallExpression | ts.TaggedTemplateExpression,
         recv: EmitResult,
         method: string,
         optionalReceiver: boolean,
@@ -43628,17 +43480,17 @@ class Emitter {
         const cache = this.freshTemp("_prop_cache");
         const prefix = [
             `static tsc_prop_cache_t ${cache}`,
-            `tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`,
+            `tsc_value_t ${fn} = ${optionalReceiver ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`,
             `void* volatile ${fnRoot} = tsc_value_gc_root(${fn})`,
             `(void)${fnRoot}`,
         ];
         const invocation = `({ ${prefix.join("; ")}; ` +
             `${this.emitOrdinaryCallApplication(call, fn, target)}; })`;
-        const body = optionalReceiver
+        const body = optionalReceiver && ts.isCallExpression(call)
             ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invocation}`
             : invocation;
         return {
-            c: `({ tsc_value_t ${target} = ${this.coerce(recv, T_VALUE, call.expression)}; ` +
+            c: `({ tsc_value_t ${target} = ${this.coerce(recv, T_VALUE, ts.isTaggedTemplateExpression(call) ? call.tag : call.expression)}; ` +
                 `void* volatile ${targetRoot} = tsc_value_gc_root(${target}); (void)${targetRoot}; ${body}; })`,
             ty: T_VALUE,
         };

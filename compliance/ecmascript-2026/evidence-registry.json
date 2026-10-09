@@ -1227,7 +1227,7 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#emitStringRawTaggedTemplate",
+      "id": "src/emit/index.ts#emitTaggedTemplate",
       "targets": ["sec-string.raw#generic-template-raw-worklist"]
     },
     {

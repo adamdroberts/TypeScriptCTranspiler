@@ -14,6 +14,23 @@ function graph(source: string): ResumableExpressionGraph {
     return result.graph;
 }
 
+const templateObjects = new WeakMap<ts.TemplateLiteral, TemplateStringsArray>();
+function engineTemplateObject(template: ts.TemplateLiteral): TemplateStringsArray {
+    let result = templateObjects.get(template);
+    if (!result) {
+        let text = template.getText();
+        if (ts.isTemplateExpression(template)) {
+            const start = template.getStart();
+            for (const span of [...template.templateSpans].reverse()) {
+                text = text.slice(0, span.expression.getStart() - start) + "0" + text.slice(span.expression.end - start);
+            }
+        }
+        result = new Function("capture", `return capture${text};`)((strings: TemplateStringsArray) => strings);
+        templateObjects.set(template, result!);
+    }
+    return result!;
+}
+
 /** An independent executor delegates primitive operations to JavaScript,
  * while the graph alone decides effect order, saved references and branches.
  * The comparison engine executes the original source as a real generator. */
@@ -51,6 +68,7 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
             let result: any;
             if (op.kind === "copy") result = values[op.source];
             else if (op.kind === "undefined") result = undefined;
+            else if (op.kind === "template-object") result = engineTemplateObject(op.template);
             else if (op.kind === "property-key") result = key(values[op.source]);
             else if (op.kind === "get") result = get(op.reference);
             else if (op.kind === "set") { result = values[op.source]; set(op.reference, result); }
@@ -120,6 +138,13 @@ function environment(): Record<string, any> {
     Object.defineProperty(receiver, "method", { configurable: true, get() {
         events.push("get-method"); return function(this: any, ...values: any[]) { events.push("call:" + this.tag); return values.reduce((sum, value) => sum + value, 0); };
     } });
+    Object.defineProperty(receiver, "templateTag", { get() {
+        events.push("get-tag");
+        return function(this: any, strings: TemplateStringsArray, ...values: any[]) {
+            events.push("tag:" + this.tag + ":" + Object.isFrozen(strings) + ":" + Object.isFrozen(strings.raw));
+            return [strings.join("|"), strings.raw.join("|"), ...values];
+        };
+    } });
     const propertyKey = { [Symbol.toPrimitive]() { events.push("key-conversion"); return "value"; } };
     const iterable = { *[Symbol.iterator]() { events.push("iterate-start"); yield 2; events.push("iterate-next"); yield 4; } };
     class Box { value: number; constructor(value: number) { events.push("construct"); this.value = value; } }
@@ -147,6 +172,8 @@ test("resumable operation graphs preserve references, lookup, branch and literal
         "({ [propertyKey]: yield 3, ...{ value: mark(4) }, [yield 5]: mark(6) })",
         "`prefix:${conversion}:${yield 2}:${mark(3)}`",
         "new Box(yield mark(2)).value", "receiver[(yield 'value')]++",
+        "receiver.templateTag`head\\n${mark(1)}middle${yield mark(2)}tail`",
+        "receiver[mark('templateTag')]`invalid\\u{110000}${yield mark(3)}tail`",
     ];
     for (const source of sources) {
         const nativeEnv = environment(), modelEnv = environment();
@@ -175,9 +202,9 @@ test("one worklist retains a deep expression tree without recursive lowering", (
 });
 
 test("unrepresented suspending operations fail closed with a stable diagnostic", () => {
-    const result = planResumableExpression(parse('tag`${yield 1}`'));
+    const result = planResumableExpression(parse('super.method(yield 1)'));
     expect(result.kind).toBe("unsupported");
     if (result.kind !== "unsupported") throw new Error("unrepresented operation was admitted");
     expect(result.failure.message).toBe("resumable expression requires a canonical operation");
-    expect(ts.isTaggedTemplateExpression(result.failure.node)).toBeTrue();
+    expect(ts.isPropertyAccessExpression(result.failure.node)).toBeTrue();
 });

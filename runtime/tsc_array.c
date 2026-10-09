@@ -2,6 +2,51 @@
 
 /* ---------------- arrays ---------------- */
 
+typedef struct tsc_template_map_entry {
+    const tsc_template_site_t* site;
+    tsc_parse_unit_t* unit;
+    tsc_array_t* array;
+    struct tsc_template_map_entry* next;
+} tsc_template_map_entry_t;
+
+static const char template_map_realm_state_key = 0;
+
+tsc_array_t* tsc_template_object(const tsc_template_site_t* site) {
+    tsc_parse_unit_t* unit = site->runtime_parse ? tsc_parse_unit_current() : NULL;
+    if (site->runtime_parse && !unit)
+        tsc_panic("template site requires runtime parse ownership");
+    tsc_runtime_lock();
+    tsc_template_map_entry_t* entries = tsc_realm_state_get(&template_map_realm_state_key);
+    for (tsc_template_map_entry_t* entry = entries; entry; entry = entry->next) {
+        if (entry->site == site && entry->unit == unit) {
+            tsc_runtime_unlock();
+            return entry->array;
+        }
+    }
+    tsc_array_t* volatile cooked = tsc_array_new(sizeof(tsc_value_t), site->count);
+    tsc_array_t* volatile raw = tsc_array_new(sizeof(tsc_value_t), site->count);
+    for (size_t index = 0; index < site->count; ++index) {
+        const tsc_template_segment_t* segment = &site->segments[index];
+        tsc_array_push_value(raw, tsc_value_string(tsc_str_from_units_range(
+            segment->raw, 0, segment->raw_length)));
+        tsc_array_push_value(cooked, segment->cooked_valid
+            ? tsc_value_string(tsc_str_from_units_range(segment->cooked, 0, segment->cooked_length))
+            : tsc_value_undefined());
+    }
+    (void)tsc_value_freeze(tsc_value_array(raw));
+    (void)tsc_value_define_property_desc(tsc_value_array(cooked), tsc_str_from_lit("raw", 3),
+        tsc_value_array(raw), true, false, true, false, true, false, true);
+    (void)tsc_value_freeze(tsc_value_array(cooked));
+    tsc_template_map_entry_t* entry = TSC_GC_MALLOC(sizeof(*entry));
+    entry->site = site;
+    entry->unit = unit;
+    entry->array = cooked;
+    entry->next = entries;
+    tsc_realm_state_set(&template_map_realm_state_key, entry);
+    tsc_runtime_unlock();
+    return cooked;
+}
+
 typedef struct {
     bool prototype_initializing;
     bool prototype_initialized;

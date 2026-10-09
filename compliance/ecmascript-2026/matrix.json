@@ -1417,13 +1417,13 @@
           "declarationSurface": ["stdlib/lib.core.d.ts#StringConstructor"],
           "implementation": [
             "src/emit/index.ts#emitStringStatic",
-            "src/emit/index.ts#emitStringRawTaggedTemplate",
+            "src/emit/index.ts#emitTaggedTemplate",
             "runtime/tsc_value.c#string_constructor_install_static_methods",
             "runtime/tsc_value.c#string_static_raw_apply",
             "runtime/tsc_string.c#tsc_str_raw"
           ]
         },
-        "rationale": "The independent shared raw property derives the constructor surface, non-constructability, segment-only/interleaved/skipped/ignored partitions, fractional/string/negative lengths, coerced segments, nullish template/raw TypeError partitions, Symbol rejection, abrupt raw/length/segment/substitution identity with segment-before-substitution order, tagged-vs-direct equivalence with raw-backslash preservation, extra-argument evaluation, mutable lookup with surface restore, and results in both memory modes. One constructor descriptor and generic operation performs template and raw ToObject, LengthOfArrayLike via ToNumber, and ordered conversion with missing substitutions skipped; the compile-time tag fold consumes the same raw parts with engine line-terminator normalization. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
+        "rationale": "The independent shared raw property derives the constructor surface, non-constructability, segment-only/interleaved/skipped/ignored partitions, fractional/string/negative lengths, coerced segments, nullish template/raw TypeError partitions, Symbol rejection, abrupt raw/length/segment/substitution identity with segment-before-substitution order, tagged-vs-direct equivalence with raw-backslash preservation, extra-argument evaluation, mutable lookup with surface restore, and results in both memory modes. One constructor descriptor and generic operation performs template and raw ToObject, LengthOfArrayLike via ToNumber, and ordered conversion with missing substitutions skipped; tagged invocation uses ordinary mutable property lookup and a Realm-cached raw/cooked TemplateSite collection with engine line-terminator normalization. The exact pinned semantic directory executes natively in diagnostic mode; host eligibility and exhaustive signed reporting remain separate global obligations."
       }],
       "rationale": "The complete String.raw intrinsic is represented as one terminal worklist partition with reciprocal semantic, regressions, declaration, implementation, semantic-directory, and exact pinned Test262 evidence."
     },
@@ -2670,8 +2670,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
-      "knownGaps": ["General call-spread, yielded expressions, and remaining suspension graphs are incomplete."]
+      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts"] },
+      "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete direct-eval lexical capture remain incomplete."]
     },
     {
       "id": "statements",
