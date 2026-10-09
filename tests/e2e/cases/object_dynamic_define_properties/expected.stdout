@@ -5,5 +5,5 @@ closed: target:set target:target:set
 identity: true true
 hidden: false
 own map: own undefined
-failed: Object.defineProperties failed
+failed: TypeError: Object.defineProperties failed
 bad map: Object.defineProperties descriptor map must be an object

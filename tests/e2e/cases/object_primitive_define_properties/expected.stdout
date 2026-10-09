@@ -1,5 +1,5 @@
-define number literal: Object.defineProperty failed
-define string runtime: Object.defineProperty failed
-defines boolean literal: Object.defineProperties failed
-defines string runtime: Object.defineProperties failed
+define number literal: TypeError: Object.defineProperty target must be an object
+define string runtime: TypeError: Object.defineProperty target must be an object
+defines boolean literal: TypeError: Object.defineProperties target must be an object
+defines string runtime: TypeError: Object.defineProperties target must be an object
 marks: nabcsdeqfgsh

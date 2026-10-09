@@ -5,6 +5,6 @@ desc omitted key: present
 delete omitted key: true false
 set omitted key/value: true true undefined
 define no target: Reflect.defineProperty target must be an object
-define missing descriptor: Object.defineProperty descriptor must be an object
+define missing descriptor: TypeError: Property descriptor must be an object
 setProto no target: Reflect.setPrototypeOf target must be an object
 setProto missing prototype: Reflect.setPrototypeOf prototype must be an object or null

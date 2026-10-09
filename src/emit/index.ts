@@ -508,12 +508,6 @@ type BindingInitializationLeafEmitter = (
     sourceValue: string,
 ) => void;
 
-interface DescriptorAccessor {
-    adapter: string;
-    env: EmitResult | null;
-    node: ts.Expression;
-}
-
 interface Test262ScriptGlobalDeclarationPlan {
     lexicals: Array<{
         declaration: ts.VariableDeclaration | (ts.ClassDeclaration & { name: ts.Identifier });
@@ -524,32 +518,6 @@ interface Test262ScriptGlobalDeclarationPlan {
     vars: ts.Identifier[];
     annexBFunctions: ts.FunctionDeclaration[];
 }
-
-type DescriptorData =
-    | {
-        kind: "data";
-        value: ts.Expression | null;
-        hasValue: string;
-        writable: string;
-        hasWritable: string;
-        enumerable: string;
-        hasEnumerable: string;
-        configurable: string;
-        hasConfigurable: string;
-    }
-    | {
-        kind: "accessor";
-        getter: DescriptorAccessor | null;
-        hasGetter: string;
-        setter: DescriptorAccessor | null;
-        hasSetter: string;
-        enumerable: string;
-        hasEnumerable: string;
-        configurable: string;
-        hasConfigurable: string;
-    };
-
-type DataDescriptorData = Extract<DescriptorData, { kind: "data" }>;
 
 export interface EmittedProgram {
     mainC: string;
@@ -727,7 +695,6 @@ class Emitter {
     private closureCounter = 0;
     private functionRefAdapters = new Map<string, string>();
     private functionRefClosureStatics = new Map<string, string>();
-    private accessorAdapters = new Map<string, string>();
     private promiseResolveAdapters = new Map<string, string>();
     private promiseRejectAdapters = new Map<string, string>();
     private promiseThenAdapters = new Map<string, string>();
@@ -22628,56 +22595,11 @@ class Emitter {
         if (this.objectStaticCallName(call) !== "defineProperty" || call.arguments.length < 3) return null;
         const targetObject = this.commonJsLocalFactoryReturnedObjectLiteral(call.arguments[0]!);
         if (!targetObject) return null;
-        const target = this.emitCommonJsObjectLiteralDefaultValue(targetObject);
-        const key = this.emitExpr(call.arguments[1]!);
-        if (key.ty.kind === "symbol") {
-            const descriptor = this.emitExpr(call.arguments[2]!);
-            const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: target, target: T_VALUE, node: call.arguments[0]! },
-                { value: key, target: T_VALUE, node: call.arguments[1]! },
-                { value: descriptor, target: T_VALUE, node: call.arguments[2]! },
-                ...ignored,
-            ], ([object, property, desc]) =>
-                `({ if (!tsc_value_define_computed_property_descriptor(${object}, ${property}, ${desc})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${object}; })`,
-            );
-        }
-        const descriptor = this.descriptorData(call.arguments[2]!);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
-        const dynamicObjectArg = (value: string): string => value;
-        if (descriptor.kind === "accessor") {
-            const specs: SequencedCallArg[] = [
-                { value: target, target: T_VALUE, node: call.arguments[0]! },
-                { value: key, target: T_STRING, node: call.arguments[1]! },
-            ];
-            const getterEnvPos = descriptor.getter?.env ? specs.length : -1;
-            if (descriptor.getter?.env) {
-                specs.push({ value: descriptor.getter.env, node: descriptor.getter.node, pass: (tmp) => `(void*)${tmp}` });
-            }
-            const setterEnvPos = descriptor.setter?.env ? specs.length : -1;
-            if (descriptor.setter?.env) {
-                specs.push({ value: descriptor.setter.env, node: descriptor.setter.node, pass: (tmp) => `(void*)${tmp}` });
-            }
-            specs.push(...ignored);
-            return this.emitSequencedExpr(T_VALUE, specs, (values) => {
-                const object = values[0]!;
-                const property = values[1]!;
-                const getterEnv = getterEnvPos >= 0 ? values[getterEnvPos]! : "NULL";
-                const setterEnv = setterEnvPos >= 0 ? values[setterEnvPos]! : "NULL";
-                return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(object)}, ${property}, ${descriptor.getter?.adapter ?? "NULL"}, ${getterEnv}, ${descriptor.hasGetter}, ${descriptor.setter?.adapter ?? "NULL"}, ${setterEnv}, ${descriptor.hasSetter}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object)}; })`;
-            });
-        }
-        const value = descriptor.value
-            ? this.emitExpr(descriptor.value)
-            : { c: "tsc_value_undefined()", ty: T_VALUE };
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: target, target: T_VALUE, node: call.arguments[0]! },
-            { value: key, target: T_STRING, node: call.arguments[1]! },
-            { value, target: T_VALUE, node: descriptor.value ?? call.arguments[2]! },
-            ...ignored,
-        ], ([object, property, descriptorValue]) => {
-            return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(object!)}, ${property}, ${descriptorValue}, ${descriptor.hasValue}, ${descriptor.writable}, ${descriptor.hasWritable}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object!)}; })`;
-        });
+        return this.emitPropertyDescriptorDefinition(
+            call.arguments[0]!, this.emitCommonJsObjectLiteralDefaultValue(targetObject),
+            call.arguments[1]!, call.arguments[2]!, false,
+            this.ignoredArgumentSpecs(call.arguments, 3),
+        );
     }
 
     private emitCommonJsModuleExportsObjectDefinePropertiesDefaultValue(call: ts.CallExpression): EmitResult | null {
@@ -22685,71 +22607,10 @@ class Emitter {
         const targetObject = this.commonJsLocalFactoryReturnedObjectLiteral(call.arguments[0]!);
         const descriptorsObject = this.commonJsDefinePropertyExportDescriptor(call.arguments[1]!);
         if (!targetObject || !descriptorsObject) return null;
-        const target = this.emitCommonJsObjectLiteralDefaultValue(targetObject);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
-        const specs: SequencedCallArg[] = [
-            { value: target, target: T_VALUE, node: call.arguments[0]! },
-        ];
-        const entries: {
-            key: string;
-            desc: DescriptorData;
-            valuePos?: number;
-            getterEnvPos?: number;
-            setterEnvPos?: number;
-        }[] = [];
-        for (const prop of descriptorsObject.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "CommonJS Object.defineProperties descriptor map only supports property assignments");
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key == null) unsupported(prop.name, "CommonJS Object.defineProperties keys must be static");
-            const desc = this.descriptorData(prop.initializer);
-            const entry = { key, desc } as {
-                key: string;
-                desc: DescriptorData;
-                valuePos?: number;
-                getterEnvPos?: number;
-                setterEnvPos?: number;
-            };
-            if (desc.kind === "data") {
-                entry.valuePos = specs.length;
-                const value = desc.value
-                    ? this.emitCommonJsModuleExportsDefaultValue(desc.value)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
-                specs.push({ value, target: T_VALUE, node: desc.value ?? prop.initializer });
-            } else {
-                if (desc.getter?.env) {
-                    entry.getterEnvPos = specs.length;
-                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-                if (desc.setter?.env) {
-                    entry.setterEnvPos = specs.length;
-                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-            }
-            entries.push(entry);
-        }
-        specs.push(...ignored);
-        return this.emitSequencedExpr(T_VALUE, specs, (values) => {
-            const object = values[0]!;
-            const pieces: string[] = [];
-            for (const entry of entries) {
-                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
-                if (entry.desc.kind === "data") {
-                    const value = values[entry.valuePos!]!;
-                    pieces.push(
-                        `if (!tsc_value_define_property_desc(${object}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
-                    );
-                } else {
-                    const getterEnv = entry.getterEnvPos != null ? values[entry.getterEnvPos!]! : "NULL";
-                    const setterEnv = entry.setterEnvPos != null ? values[entry.setterEnvPos!]! : "NULL";
-                    pieces.push(
-                        `if (!tsc_value_define_accessor_desc(${object}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
-                    );
-                }
-            }
-            return `({ ${pieces.join("; ")}; ${object}; })`;
-        });
+        return this.emitObjectDefineProperties(
+            call.arguments[0]!, this.emitCommonJsObjectLiteralDefaultValue(targetObject),
+            descriptorsObject, this.ignoredArgumentSpecs(call.arguments, 2),
+        );
     }
 
     private emitCommonJsModuleExportsObjectWrapperDefaultValue(call: ts.CallExpression): EmitResult | null {
@@ -65012,25 +64873,8 @@ class Emitter {
         const et = recv.ty.elem!;
         const args = call.arguments;
         const emitJoinStringExpr = (arr: string, sep: string): string => {
-            if (et.kind === "value") {
-                return `tsc_value_as_string(tsc_value_method_join(tsc_value_array(${arr}), tsc_value_string(${sep})))`;
-            }
-            const av = this.freshTemp("_arr");
-            const iv = this.freshTemp("_i");
-            const stringify = (exprC: string): string => {
-                if (et.kind === "string") return exprC;
-                if (et.kind === "number") return `tsc_str_from_num(${exprC})`;
-                if (et.kind === "boolean") return `tsc_str_from_bool(${exprC})`;
-                if (et.kind === "value") return `tsc_value_to_string(${exprC})`;
-                return `tsc_str_from_lit("[obj]", 5)`;
-            };
-            return (
-                `({ tsc_array_t* const ${av} = ${arr}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
-                `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); ` +
-                `if (tsc_array_index_present(${av}, ${iv})) ` +
-                `_r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`
-            );
+            const object = this.boxObjectIdentity(arr, recv.ty, call.expression);
+            return `tsc_value_as_string(tsc_value_method_join(${object}, tsc_value_string(${sep})))`;
         };
         const emitForwardStartDecls = (len: string, from: string, out: string): string =>
             `size_t ${out} = 0; ` +
@@ -72904,26 +72748,18 @@ class Emitter {
         }
         if (name === "create") {
             if (args.length < 1) unsupported(call, "Object.create expects prototype and optional descriptor map");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            const proto = this.emitExpr(arg);
-            const created = this.emitSequencedCall("tsc_value_object_create", T_VALUE, [
-                { value: proto, target: T_VALUE, node: arg },
-            ]);
-            if (args.length >= 2) {
-                if (!ts.isObjectLiteralExpression(args[1]!)) {
-                    const descriptors = this.emitExpr(args[1]!);
-                    return this.emitSequencedExpr(T_VALUE, [
-                        { value: proto, target: T_VALUE, node: arg },
-                        { value: descriptors, target: T_VALUE, node: args[1]! },
-                        ...ignored,
-                    ], ([p, d]) => {
-                        const out = this.freshTemp("_create_obj");
-                        return `({ tsc_value_t ${out} = tsc_value_object_create(${p}); if (!tsc_value_define_properties_descriptor_map(${out}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.create defineProperties failed")); ${out}; })`;
-                    });
-                }
-                return this.emitObjectDefineProperties(arg, created, args[1]!, ignored);
-            }
-            return created;
+            const specs: SequencedCallArg[] = [
+                { value: this.emitExpr(arg), target: T_VALUE, node: arg },
+            ];
+            if (args[1]) specs.push({ value: this.emitOrdinaryObjectExpression(args[1]), target: T_VALUE, node: args[1] });
+            specs.push(...this.ignoredArgumentSpecs(args, 2));
+            return this.emitSequencedExpr(T_VALUE, specs, ([proto, descriptors]) => {
+                const out = this.freshTemp("_create_obj");
+                const define = descriptors
+                    ? `if (!tsc_value_is_undefined(${descriptors}) && !tsc_value_define_properties_descriptor_map(${out}, ${descriptors})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.create defineProperties failed")); `
+                    : "";
+                return `({ tsc_value_t ${out} = tsc_value_object_create(${proto}); ${define}${out}; })`;
+            });
         }
         if (name === "getOwnPropertyNames") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertyNames expects object");
@@ -73620,135 +73456,16 @@ class Emitter {
         }
         if (name === "defineProperty") {
             if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
-            const ignored = this.ignoredArgumentSpecs(args, 3);
-            const key = this.emitExpr(args[1]!);
-            if (key.ty.kind !== "string") {
-                const obj = this.emitExpr(arg);
-                const descriptor = this.emitExpr(args[2]!);
-                const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
-                const resultType = obj.ty.kind === "value"
-                    ? T_VALUE
-                    : mapped.kind === "function" || mapped.kind === "array" ? mapped : T_VALUE;
-                return this.emitSequencedExpr(resultType, [
-                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                    { value: key, target: T_VALUE, node: args[1]! },
-                    { value: descriptor, target: T_VALUE, node: args[2]! },
-                    ...ignored,
-                ], ([o, k, d]) => {
-                    const target = requiresValueTarget ? o! : dynamicObjectArg(o!, obj.ty);
-                    return `({ if (!tsc_value_define_computed_property_descriptor(${target}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
-                });
-            }
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                if (ts.isObjectLiteralExpression(args[2]!)) {
-                    const desc = this.descriptorData(args[2]!);
-                    if (desc.kind !== "accessor") {
-                        const arrayObj = obj.ty.kind === "array"
-                            ? obj
-                            : { c: this.coerce(obj, mapped, arg), ty: mapped };
-                        return this.emitTypedArrayDefineProperty(arg, arrayObj, args[1]!, desc, true, ignored);
-                    }
-                }
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array" && mapped.kind !== "void" && !primitiveObjectArg) {
-                unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
-            }
-            if (!ts.isObjectLiteralExpression(args[2]!)) {
-                const descValue = this.emitExpr(args[2]!);
-                const obj = this.emitExpr(arg);
-                const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
-                const objectDefineReturnType = obj.ty.kind === "value"
-                    ? T_VALUE
-                    : (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
-                return this.emitSequencedExpr(
-                    objectDefineReturnType,
-                    [
-                        { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value: descValue, target: T_VALUE, node: args[2]! },
-                        ...ignored,
-                    ],
-                    ([o, k, d]) => `({ if (!tsc_value_define_property_descriptor(${dynamicObjectArg(o!, obj.ty)}, ${k}, ${d})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
-                );
-            }
-            const desc = this.descriptorData(args[2]!);
-            const obj = this.emitExpr(arg);
-            const requiresValueTarget = obj.ty.kind === "value" || mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
-            const objectDefineReturnType = obj.ty.kind === "value"
-                ? T_VALUE
-                : mapped.kind === "function" ? mapped : T_VALUE;
-            if (desc.kind === "accessor") {
-                const specs: SequencedCallArg[] = [
-                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                ];
-                const getterEnvPos = desc.getter?.env ? specs.length : -1;
-                if (desc.getter?.env) {
-                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-                const setterEnvPos = desc.setter?.env ? specs.length : -1;
-                if (desc.setter?.env) {
-                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-                specs.push(...ignored);
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    specs,
-                    (vals) => {
-                        const o = vals[0]!;
-                        const k = vals[1]!;
-                        const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
-                        const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o, obj.ty)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o, obj.ty)}; })`;
-                    },
-                );
-            }
-            const value = desc.value
-                ? this.emitExpr(desc.value)
-                : { c: "tsc_value_undefined()", ty: T_VALUE };
-            return this.emitSequencedExpr(
-                objectDefineReturnType,
-                [
-                    { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
-                    { value, target: T_VALUE, node: desc.value ?? args[2]! },
-                    ...ignored,
-                ],
-                ([o, k, v]) => {
-                    return `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!, obj.ty)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
-                },
+            return this.emitPropertyDescriptorDefinition(
+                arg, this.emitExpr(arg), args[1]!, args[2]!, false,
+                this.ignoredArgumentSpecs(args, 3),
             );
         }
         if (name === "defineProperties") {
             if (args.length < 2) unsupported(call, "Object.defineProperties expects object and descriptor map");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                const arrayObj = obj.ty.kind === "array"
-                    ? obj
-                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
-                return this.emitTypedArrayDefineProperties(arg, arrayObj, args[1]!, ignored);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "void" && !primitiveObjectArg) {
-                unsupported(arg, "Object.defineProperties currently supports dynamic objects, arrays, and functions only");
-            }
-            const obj = this.emitExpr(arg);
-            if (!ts.isObjectLiteralExpression(args[1]!)) {
-                const descriptors = this.emitExpr(args[1]!);
-                const returnsFunctionTarget = mapped.kind === "function";
-                return this.emitSequencedExpr(returnsFunctionTarget ? mapped : T_VALUE, [
-                    { value: obj, target: returnsFunctionTarget ? undefined : T_VALUE, node: arg },
-                    { value: descriptors, target: T_VALUE, node: args[1]! },
-                    ...ignored,
-                ], ([o, d]) => {
-                    const target = returnsFunctionTarget
-                        ? this.coerce({ c: o!, ty: mapped }, T_VALUE, arg)
-                        : o;
-                    return `({ if (!tsc_value_define_properties_descriptor_map(${target}, ${d})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed")); ${o}; })`;
-                });
-            }
-            return this.emitObjectDefineProperties(arg, obj, args[1]!, ignored);
+            return this.emitObjectDefineProperties(
+                arg, this.emitExpr(arg), args[1]!, this.ignoredArgumentSpecs(args, 2),
+            );
         }
         if (name === "groupBy") {
             return this.emitObjectGroupBy(call);
@@ -74766,202 +74483,6 @@ class Emitter {
         });
     }
 
-    private emitTypedArrayDefineProperty(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        desc: DescriptorData,
-        returnObject: boolean,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperty on non-array");
-        if (desc.kind === "accessor") {
-            unsupported(keyExpr, "typed array accessors are not supported");
-        }
-        const elem = obj.ty.elem ?? T_VALUE;
-        const key = this.emitExpr(keyExpr);
-        const specs: SequencedCallArg[] = [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-        ];
-        const value = desc.value ? this.emitExpr(desc.value) : null;
-        if (value) specs.push({ value, node: desc.value! });
-        specs.push(...ignored);
-        return this.emitSequencedExpr(returnObject ? obj.ty : T_BOOLEAN, specs, (vals) => {
-            const arrC = vals[0]!;
-            const keyC = vals[1]!;
-            const valueC = vals[2];
-            const valueResult = value && desc.value
-                ? { c: valueC!, ty: value.ty }
-                : null;
-            const { pieces, out } = this.typedArrayDefinePropertyPieces(
-                arrC,
-                elem,
-                keyC,
-                desc,
-                valueResult && desc.value ? { value: valueResult, node: desc.value } : null,
-                keyExpr,
-            );
-            if (returnObject) {
-                pieces.push(`if (!${out}) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed"))`);
-            }
-            pieces.push(returnObject ? arrC : out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private typedArrayDefinePropertyPieces(
-        arrC: string,
-        elem: CType,
-        keyC: string,
-        desc: DataDescriptorData,
-        valueInfo: { value: EmitResult; node: ts.Expression } | null,
-        fallbackNode: ts.Expression,
-    ): { pieces: string[]; out: string } {
-        const out = this.freshTemp("_adef");
-        const idx = this.freshTemp("_adef_i");
-        const elemTmp = this.freshTemp("_adef_value");
-        const nextKey = this.freshTemp("_adef_next_key");
-        const newLen = this.freshTemp("_adef_len");
-        const zero = this.freshTemp("_adef_zero");
-        const valueNode = valueInfo?.node ?? fallbackNode;
-        const elemValue = valueInfo
-            ? this.coerce(valueInfo.value, elem, valueNode)
-            : `(${elem.c})0`;
-        const boxedElemValue = valueInfo
-            ? this.coerce(valueInfo.value, T_VALUE, valueNode)
-            : "tsc_value_undefined()";
-        const currentElemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, fallbackNode);
-        const lengthValue = valueInfo
-            ? this.coerce(valueInfo.value, T_VALUE, valueNode)
-            : "tsc_value_undefined()";
-        const pieces: string[] = [
-            `bool ${out} = false`,
-            `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                `bool _cur_w = !${arrC}->frozen && ${arrC}->length_writable; ` +
-                `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : _cur_w; ` +
-                `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : false; ` +
-                `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : false; ` +
-                `if (!(!_cur_w && _next_w) && !_next_e && !_next_c) { ` +
-                    `${out} = true; ` +
-                    `if (${desc.hasValue}) { ` +
-                        `double ${newLen} = tsc_value_as_num(${lengthValue}); ` +
-                        `if (isnan(${newLen}) || isinf(${newLen}) || ${newLen} < 0.0 || floor(${newLen}) != ${newLen} || (${newLen} > (double)${arrC}->len && !${arrC}->extensible) || (${arrC}->sealed && (size_t)${newLen} != ${arrC}->len) || (${arrC}->frozen && (size_t)${newLen} != ${arrC}->len) || (!_cur_w && (size_t)${newLen} != ${arrC}->len)) { ` +
-                            `${out} = false; ` +
-                        `} else { ` +
-                            `${elem.c} ${zero} = (${elem.c})0; ` +
-                            `while (${arrC}->len < (size_t)${newLen}) tsc_array_push_raw(${arrC}, &${zero}); ` +
-                            `${arrC}->len = (size_t)${newLen}; ` +
-                        `} ` +
-                    `} ` +
-                    `if (${out} && !_next_w) ${arrC}->length_writable = false; ` +
-                `} ` +
-            `} else { ` +
-                `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                    `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                    `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
-                        `bool _cur_w = !${arrC}->frozen; ` +
-                        `bool _cur_e = true; ` +
-                        `bool _cur_c = !${arrC}->sealed && !${arrC}->frozen; ` +
-                        `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : _cur_w; ` +
-                        `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : _cur_e; ` +
-                        `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : _cur_c; ` +
-                        `if (_next_w == _cur_w && _next_e == _cur_e && _next_c == _cur_c) { ` +
-                            `${out} = true; ` +
-                            `if (${desc.hasValue}) { ` +
-                                `if (${arrC}->frozen) { ${out} = tsc_value_object_is(${boxedElemValue}, ${currentElemValue}); } else { ` +
-                                    `${elem.c} ${elemTmp} = ${elemValue}; ` +
-                                    `tsc_array_store_raw(${arrC}, ${idx}, &${elemTmp}); ` +
-                                `} ` +
-                            `} ` +
-                        `} ` +
-                        `break; ` +
-                    `} ` +
-                `} ` +
-                `if (!${out} && ${arrC}->extensible && !${arrC}->sealed && !${arrC}->frozen && ${arrC}->length_writable) { ` +
-                    `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${arrC}->len); ` +
-                    `bool _next_w = ${desc.hasWritable} ? ${desc.writable} : true; ` +
-                    `bool _next_e = ${desc.hasEnumerable} ? ${desc.enumerable} : true; ` +
-                    `bool _next_c = ${desc.hasConfigurable} ? ${desc.configurable} : true; ` +
-                    `if (${desc.hasValue} && _next_w && _next_e && _next_c && tsc_str_eq(${keyC}, ${nextKey})) { ` +
-                        `${elem.c} ${elemTmp} = ${elemValue}; ` +
-                        `tsc_array_push_raw(${arrC}, &${elemTmp}); ` +
-                        `${out} = true; ` +
-                    `} ` +
-                `} ` +
-            `}`,
-        ];
-        return { pieces, out };
-    }
-
-    private emitTypedArrayDefineProperties(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        descriptorsExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array defineProperties on non-array");
-        if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
-            unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
-        }
-        const elem = obj.ty.elem ?? T_VALUE;
-        const specs: SequencedCallArg[] = [{ value: obj, node: objExpr }];
-        const entries: {
-            key: string;
-            desc: DataDescriptorData;
-            value?: EmitResult;
-            valueNode?: ts.Expression;
-            valuePos?: number;
-        }[] = [];
-        for (const prop of descriptorsExpr.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "Object.defineProperties descriptor map only supports property assignments");
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key == null) unsupported(prop.name, "Object.defineProperties keys must be static");
-            const desc = this.descriptorData(prop.initializer);
-            if (desc.kind === "accessor") {
-                unsupported(prop.initializer, "typed array accessors are not supported");
-            }
-            const entry: {
-                key: string;
-                desc: DataDescriptorData;
-                value?: EmitResult;
-                valueNode?: ts.Expression;
-                valuePos?: number;
-            } = { key, desc };
-            if (desc.value) {
-                entry.value = this.emitExpr(desc.value);
-                entry.valueNode = desc.value;
-                entry.valuePos = specs.length;
-                specs.push({ value: entry.value, node: desc.value });
-            }
-            entries.push(entry);
-        }
-        specs.push(...ignored);
-        return this.emitSequencedExpr(obj.ty, specs, (vals) => {
-            const arrC = vals[0]!;
-            const pieces: string[] = [];
-            for (const entry of entries) {
-                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
-                const valueInfo = entry.value && entry.valueNode && entry.valuePos != null
-                    ? { value: { c: vals[entry.valuePos]!, ty: entry.value.ty }, node: entry.valueNode }
-                    : null;
-                const defined = this.typedArrayDefinePropertyPieces(
-                    arrC,
-                    elem,
-                    key,
-                    entry.desc,
-                    valueInfo,
-                    descriptorsExpr,
-                );
-                pieces.push(...defined.pieces);
-                pieces.push(`if (!${defined.out}) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`);
-            }
-            return `({ ${pieces.join("; ")}; ${arrC}; })`;
-        });
-    }
-
     private emitTypedArrayReflectGet(
         objExpr: ts.Expression,
         obj: EmitResult,
@@ -75482,74 +75003,9 @@ class Emitter {
                 return this.emitReflectConstruct(call);
             case "defineProperty": {
                 if (args.length < 3) unsupported(call, "Reflect.defineProperty expects target, key, and descriptor");
-                const ignored = this.ignoredArgumentSpecs(args, 3);
-                const target = this.emitExpr(args[0]!);
-                const key = this.emitExpr(args[1]!);
-                if (key.ty.kind !== "string") {
-                    const descriptor = this.emitExpr(args[2]!);
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_VALUE, node: args[1]! },
-                        { value: descriptor, target: T_VALUE, node: args[2]! },
-                        ...ignored,
-                    ], ([t, k, d]) => `tsc_reflect_define_computed_property_descriptor(${t}, ${k}, ${d})`);
-                }
-                if (target.ty.kind === "array" && ts.isObjectLiteralExpression(args[2]!)) {
-                    const desc = this.descriptorData(args[2]!);
-                    if (desc.kind !== "accessor") {
-                        return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false, ignored);
-                    }
-                }
-                if (!ts.isObjectLiteralExpression(args[2]!)) {
-                    const descValue = this.emitExpr(args[2]!);
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value: descValue, target: T_VALUE, node: args[2]! },
-                        ...ignored,
-                    ], ([t, k, desc]) => `tsc_reflect_define_property_descriptor(${t}, ${k}, ${desc})`);
-                }
-                const desc = this.descriptorData(args[2]!);
-                if (desc.kind === "accessor") {
-                    const specs: SequencedCallArg[] = [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                    ];
-                    const getterEnvPos = desc.getter?.env ? specs.length : -1;
-                    if (desc.getter?.env) {
-                        specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
-                    }
-                    const setterEnvPos = desc.setter?.env ? specs.length : -1;
-                    if (desc.setter?.env) {
-                        specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
-                    }
-                    specs.push(...ignored);
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        specs,
-                        (vals) => {
-                            const t = vals[0]!;
-                            const k = vals[1]!;
-                            const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
-                            const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                            return `tsc_reflect_define_accessor_desc(${t}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
-                        },
-                    );
-                }
-                const value = desc.value
-                    ? this.emitExpr(desc.value)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
-                        { value, target: T_VALUE, node: desc.value ?? args[2]! },
-                        ...ignored,
-                    ],
-                    ([t, k, v]) => {
-                        return `tsc_reflect_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
-                    },
+                return this.emitPropertyDescriptorDefinition(
+                    args[0]!, this.emitExpr(args[0]!), args[1]!, args[2]!, true,
+                    this.ignoredArgumentSpecs(args, 3),
                 );
             }
             case "deleteProperty": {
@@ -76047,87 +75503,6 @@ class Emitter {
         }
     }
 
-    private descriptorData(desc: ts.Expression): DescriptorData {
-        if (!ts.isObjectLiteralExpression(desc)) {
-            unsupported(desc, "Object.defineProperty descriptor must be an object literal");
-        }
-        let value: ts.Expression | null = null;
-        let getter: DescriptorAccessor | null = null;
-        let setter: DescriptorAccessor | null = null;
-        let hasAccessor = false;
-        let hasGetter = false;
-        let hasSetter = false;
-        let hasWritable = false;
-        let hasEnumerable = false;
-        let hasConfigurable = false;
-        let writable = "false";
-        let enumerable = "false";
-        let configurable = "false";
-        for (const prop of desc.properties) {
-            let name: string | null = null;
-            let initializer: ts.Expression | null = null;
-            if (ts.isPropertyAssignment(prop)) {
-                name = this.staticPropertyName(prop.name);
-                initializer = prop.initializer;
-            } else if (ts.isShorthandPropertyAssignment(prop)) {
-                name = prop.name.text;
-                initializer = prop.name;
-            } else {
-                continue;
-            }
-            if (name === "value") {
-                value = initializer;
-            } else if (name === "get") {
-                getter = this.isUndefinedExpression(initializer)
-                    ? null
-                    : this.descriptorAccessorAdapter(initializer, "get");
-                hasAccessor = true;
-                hasGetter = true;
-            } else if (name === "set") {
-                setter = this.isUndefinedExpression(initializer)
-                    ? null
-                    : this.descriptorAccessorAdapter(initializer, "set");
-                hasAccessor = true;
-                hasSetter = true;
-            } else if (name === "writable") {
-                writable = this.descriptorBoolean(initializer, "writable");
-                hasWritable = true;
-            } else if (name === "enumerable") {
-                enumerable = this.descriptorBoolean(initializer, "enumerable");
-                hasEnumerable = true;
-            } else if (name === "configurable") {
-                configurable = this.descriptorBoolean(initializer, "configurable");
-                hasConfigurable = true;
-            }
-        }
-        if (hasAccessor) {
-            if (value) unsupported(desc, "Object.defineProperty descriptor cannot mix value with get/set");
-            if (hasWritable) unsupported(desc, "Object.defineProperty accessor descriptor cannot include writable");
-            return {
-                kind: "accessor",
-                getter,
-                hasGetter: hasGetter ? "true" : "false",
-                setter,
-                hasSetter: hasSetter ? "true" : "false",
-                enumerable,
-                hasEnumerable: hasEnumerable ? "true" : "false",
-                configurable,
-                hasConfigurable: hasConfigurable ? "true" : "false",
-            };
-        }
-        return {
-            kind: "data",
-            value,
-            hasValue: value ? "true" : "false",
-            writable,
-            hasWritable: hasWritable ? "true" : "false",
-            enumerable,
-            hasEnumerable: hasEnumerable ? "true" : "false",
-            configurable,
-            hasConfigurable: hasConfigurable ? "true" : "false",
-        };
-    }
-
     private isUndefinedExpression(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr) && expr.text === "undefined") return true;
         return ts.isVoidExpression(expr) &&
@@ -76141,275 +75516,51 @@ class Emitter {
             this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
     }
 
+    private emitOrdinaryObjectExpression(expression: ts.Expression): EmitResult {
+        const value = this.unwrapTransparentExpression(expression);
+        return ts.isObjectLiteralExpression(value)
+            ? this.emitObjectLiteral(value, true)
+            : this.emitExpr(expression);
+    }
+
+    private emitPropertyDescriptorDefinition(
+        objectExpr: ts.Expression,
+        object: EmitResult,
+        keyExpr: ts.Expression,
+        descriptorExpr: ts.Expression,
+        reflect: boolean,
+        ignored: SequencedCallArg[] = [],
+    ): EmitResult {
+        const key = this.emitExpr(keyExpr);
+        const descriptor = this.emitOrdinaryObjectExpression(descriptorExpr);
+        return this.emitSequencedExpr(reflect ? T_BOOLEAN : object.ty, [
+            { value: object, node: objectExpr },
+            { value: key, target: T_VALUE, node: keyExpr },
+            { value: descriptor, target: T_VALUE, node: descriptorExpr },
+            ...ignored,
+        ], ([value, property, desc]) => {
+            const target = this.boxObjectIdentity(value!, object.ty, objectExpr);
+            const define = `tsc_${reflect ? "reflect" : "value"}_define_computed_property_descriptor(${target}, ${property}, ${desc})`;
+            return reflect ? define
+                : `({ if (!${define}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${value}; })`;
+        });
+    }
+
     private emitObjectDefineProperties(
         objExpr: ts.Expression,
         obj: EmitResult,
         descriptorsExpr: ts.Expression,
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        if (!ts.isObjectLiteralExpression(descriptorsExpr)) {
-            unsupported(descriptorsExpr, "Object.defineProperties descriptor map must be an object literal");
-        }
-        const returnsFunctionTarget = obj.ty.kind === "function";
-        const specs: SequencedCallArg[] = [
-            { value: obj, target: returnsFunctionTarget ? undefined : T_VALUE, node: objExpr },
-        ];
-        const entries: {
-            key: string;
-            desc: DescriptorData;
-            valuePos?: number;
-            getterEnvPos?: number;
-            setterEnvPos?: number;
-        }[] = [];
-        for (const prop of descriptorsExpr.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "Object.defineProperties descriptor map only supports property assignments");
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key == null) unsupported(prop.name, "Object.defineProperties keys must be static");
-            const desc = this.descriptorData(prop.initializer);
-            const entry = { key, desc } as {
-                key: string;
-                desc: DescriptorData;
-                valuePos?: number;
-                getterEnvPos?: number;
-                setterEnvPos?: number;
-            };
-            if (desc.kind === "data") {
-                entry.valuePos = specs.length;
-                const value = desc.value
-                    ? this.emitExpr(desc.value)
-                    : { c: "tsc_value_undefined()", ty: T_VALUE };
-                specs.push({ value, target: T_VALUE, node: desc.value ?? prop.initializer });
-            } else {
-                if (desc.getter?.env) {
-                    entry.getterEnvPos = specs.length;
-                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-                if (desc.setter?.env) {
-                    entry.setterEnvPos = specs.length;
-                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
-                }
-            }
-            entries.push(entry);
-        }
-        specs.push(...ignored);
-        return this.emitSequencedExpr(returnsFunctionTarget ? obj.ty : T_VALUE, specs, (vals) => {
-            const o = vals[0]!;
-            const target = returnsFunctionTarget
-                ? this.coerce({ c: o, ty: obj.ty }, T_VALUE, objExpr)
-                : o;
-            const pieces: string[] = [];
-            for (const entry of entries) {
-                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
-                if (entry.desc.kind === "data") {
-                    const value = vals[entry.valuePos!]!;
-                    pieces.push(
-                        `if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
-                    );
-                } else {
-                    const getterEnv = entry.getterEnvPos != null ? vals[entry.getterEnvPos]! : "NULL";
-                    const setterEnv = entry.setterEnvPos != null ? vals[entry.setterEnvPos]! : "NULL";
-                    pieces.push(
-                        `if (!tsc_value_define_accessor_desc(${target}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
-                    );
-                }
-            }
-            return `({ ${pieces.join("; ")}; ${o}; })`;
+        const descriptors = this.emitOrdinaryObjectExpression(descriptorsExpr);
+        return this.emitSequencedExpr(obj.ty, [
+            { value: obj, node: objExpr },
+            { value: descriptors, target: T_VALUE, node: descriptorsExpr },
+            ...ignored,
+        ], ([value, map]) => {
+            const target = this.boxObjectIdentity(value!, obj.ty, objExpr);
+            return `({ if (!tsc_value_define_properties_descriptor_map(${target}, ${map})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperties failed")); ${value}; })`;
         });
-    }
-
-    private descriptorAccessorAdapter(expr: ts.Expression, kind: "get" | "set"): DescriptorAccessor {
-        if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
-            const type = this.prepareType(mapType(expr, this.checker));
-            this.validateDescriptorAccessorType(expr, kind, type);
-            return {
-                adapter: this.ensureDirectAccessorAdapter(expr, kind, type),
-                env: null,
-                node: expr,
-            };
-        }
-        const fn = this.emitExpr(expr);
-        this.validateDescriptorAccessorType(expr, kind, fn.ty);
-        return {
-            adapter: this.ensureClosureAccessorAdapter(expr, kind, fn.ty),
-            env: fn,
-            node: expr,
-        };
-    }
-
-    private validateDescriptorAccessorType(expr: ts.Expression, kind: "get" | "set", type: CType): void {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret) {
-            unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
-        }
-    }
-
-    private descriptorAccessorFunctionLike(
-        expression: ts.Expression,
-    ): ts.SignatureDeclaration | null {
-        const target = this.unwrapTransparentExpression(expression);
-        if (ts.isFunctionExpression(target) || ts.isArrowFunction(target)) return target;
-        if (!ts.isIdentifier(target)) return null;
-        const symbol = this.symbolForIdentifier(target);
-        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-        if (!declaration) return null;
-        if (ts.isFunctionLike(declaration)) return declaration;
-        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-            const initializer = this.unwrapTransparentExpression(declaration.initializer);
-            if (ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer)) {
-                return initializer;
-            }
-        }
-        return null;
-    }
-
-    /** Build descriptor-callback argument binding. Getters
-     * receive no actual arguments and setters receive one; fixed formals get
-     * undefined when absent and a rest formal receives the remaining actuals. */
-    private descriptorAccessorCallArguments(
-        expression: ts.Expression,
-        kind: "get" | "set",
-        type: CType,
-        valueName: string,
-    ): { prelude: string[]; args: string[] } {
-        const params = type.params ?? [];
-        const declaration = this.descriptorAccessorFunctionLike(expression);
-        const restIndex = declaration?.parameters.findIndex((parameter) => !!parameter.dotDotDotToken) ?? -1;
-        const actuals: EmitResult[] = kind === "set"
-            ? [{ c: valueName, ty: T_VALUE }]
-            : [];
-        const prelude: string[] = [];
-        const args: string[] = [];
-        for (let index = 0; index < params.length; index++) {
-            const param = this.prepareType(params[index]!);
-            if (index === restIndex) {
-                const rest = this.freshTemp("_access_rest");
-                const remaining = actuals.slice(index);
-                prelude.push(
-                    `tsc_array_t* ${rest} = ` +
-                    `tsc_array_new(sizeof(tsc_value_t), ${Math.max(remaining.length, 1)})`,
-                );
-                for (const actual of remaining) {
-                    prelude.push(
-                        `tsc_array_push_value(${rest}, ${this.coerce(actual, T_VALUE, expression)})`,
-                    );
-                }
-                args.push(param.kind === "array"
-                    ? rest
-                    : this.coerce({ c: `tsc_value_array(${rest})`, ty: T_VALUE }, param, expression));
-                break;
-            }
-            args.push(this.coerce(
-                actuals[index] ?? { c: "tsc_value_undefined()", ty: T_VALUE },
-                param,
-                expression,
-            ));
-        }
-        return { prelude, args };
-    }
-
-    private ensureDirectAccessorAdapter(expr: ts.Identifier, kind: "get" | "set", type: CType): string {
-        if (type.kind !== "function" || !type.ret) {
-            unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
-        }
-        const callee = this.identifierName(expr);
-        const key = `${kind}:direct:${callee}:${this.typeKey(type)}`;
-        const existing = this.accessorAdapters.get(key);
-        if (existing) return existing;
-        const name = `${callee}__access_${kind}_${this.accessorAdapters.size}`;
-        this.accessorAdapters.set(key, name);
-        const buf = new CBuf();
-        const thisType = this.directCallableThisType(expr);
-        if (kind === "get") {
-            const ret = this.prepareType(type.ret);
-            this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
-            buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
-            buf.line("(void)env;");
-            if (!thisType) buf.line("(void)receiver;");
-            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
-            for (const step of call.prelude) buf.line(`${step};`);
-            const args = [...(thisType ? ["receiver"] : []), ...call.args].join(", ");
-            if (ret.kind === "void" || ret.kind === "never") {
-                buf.line(`${callee}(${args});`);
-                buf.line("return tsc_value_undefined();");
-            } else {
-                const boxed = this.coerce({ c: `${callee}(${args})`, ty: ret }, T_VALUE, expr);
-                buf.line(`return ${boxed};`);
-            }
-        } else {
-            this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
-            buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
-            buf.line("(void)env;");
-            if (!thisType) buf.line("(void)receiver;");
-            buf.line("void* volatile value_gc_root = tsc_value_gc_root(value);");
-            buf.line("(void)value_gc_root;");
-            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
-            for (const step of call.prelude) buf.line(`${step};`);
-            const args = [...(thisType ? ["receiver"] : []), ...call.args].join(", ");
-            buf.line(`${callee}(${args});`);
-            buf.line("return true;");
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensureClosureAccessorAdapter(expr: ts.Expression, kind: "get" | "set", type: CType): string {
-        if (type.kind !== "function" || !type.ret || !type.closureName) {
-            unsupported(expr, `Object.defineProperty ${kind} accessor must be a function`);
-        }
-        this.prepareType(type);
-        const key = `${kind}:closure:${this.typeKey(type)}`;
-        const existing = this.accessorAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_closure_access_${kind}_${this.accessorAdapters.size}`;
-        this.accessorAdapters.set(key, name);
-        const buf = new CBuf();
-        if (kind === "get") {
-            const ret = this.prepareType(type.ret);
-            this.protos.line(`tsc_value_t ${name}(void* env, tsc_value_t receiver);`);
-            buf.open(`tsc_value_t ${name}(void* env, tsc_value_t receiver)`);
-            if (!type.thisParam) buf.line("(void)receiver;");
-            buf.line(`${type.c} fn = (${type.c})env;`);
-            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
-            for (const step of call.prelude) buf.line(`${step};`);
-            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), ...call.args].join(", ");
-            if (ret.kind === "void" || ret.kind === "never") {
-                buf.line(`fn->fn(${callArgs});`);
-                buf.line("return tsc_value_undefined();");
-            } else {
-                const boxed = this.coerce({ c: `fn->fn(${callArgs})`, ty: ret }, T_VALUE, expr);
-                buf.line(`return ${boxed};`);
-            }
-        } else {
-            this.protos.line(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value);`);
-            buf.open(`bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`);
-            if (!type.thisParam) buf.line("(void)receiver;");
-            buf.line(`${type.c} fn = (${type.c})env;`);
-            buf.line("void* volatile value_gc_root = tsc_value_gc_root(value);");
-            buf.line("(void)value_gc_root;");
-            const call = this.descriptorAccessorCallArguments(expr, kind, type, "value");
-            for (const step of call.prelude) buf.line(`${step};`);
-            const callArgs = [`fn->env`, ...(type.thisParam ? ["receiver"] : []), ...call.args].join(", ");
-            buf.line(`fn->fn(${callArgs});`);
-            buf.line("return true;");
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private descriptorBoolean(expr: ts.Expression, name: string): string {
-        if (expr.kind === ts.SyntaxKind.TrueKeyword) return "true";
-        if (expr.kind === ts.SyntaxKind.FalseKeyword) return "false";
-        const value = this.emitExpr(expr);
-        if (value.ty.kind !== "boolean") {
-            unsupported(expr, `Object.defineProperty descriptor ${name} must be boolean`);
-        }
-        return value.c;
     }
 
     private emitNumberStatic(call: ts.CallExpression, name: string): EmitResult {
@@ -78216,29 +77367,15 @@ class Emitter {
         }
         if (recv.ty.kind === "array") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            requireNumber(ea.argumentExpression, idx.ty);
             const et = recv.ty.elem!;
-            if (isOpt) {
-                return this.emitSequencedExpr(
-                    et,
-                    [{ value: recv }, { value: idx }],
-                    ([obj, index]) => `${obj} != NULL ? ${
-                        et.kind === "value"
-                            ? `tsc_value_get_index(tsc_value_array(${obj}), ${index})`
-                            : `TSC_ARR(${et.c}, ${obj}, (size_t)(${index}))`
-                    } : ${this.zeroValue(et)}`,
-                );
-            }
-            if (et.kind === "value") {
-                return {
-                    c: `tsc_value_get_index(tsc_value_array(${recv.c}), ${idx.c})`,
-                    ty: T_VALUE,
-                };
-            }
-            return {
-                c: `TSC_ARR(${et.c}, ${recv.c}, (size_t)(${idx.c}))`,
-                ty: et,
-            };
+            return this.emitSequencedExpr(et, [
+                { value: recv, node: ea.expression },
+                { value: idx, target: T_VALUE, node: ea.argumentExpression },
+            ], ([array, key]) => {
+                const object = this.boxObjectIdentity(array!, recv.ty, ea.expression);
+                const value = this.coerce({ c: `tsc_value_get_computed_prop(${object}, ${key})`, ty: T_VALUE }, et, ea);
+                return isOpt ? `${array} != NULL ? ${value} : ${this.zeroValue(et)}` : value;
+            });
         }
         if (recv.ty.kind === "entry") {
             if (!ts.isNumericLiteral(ea.argumentExpression)) {
@@ -78394,7 +77531,7 @@ class Emitter {
         return props.every((p) => seen.has(p.getName()));
     }
 
-    private emitObjectLiteral(ol: ts.ObjectLiteralExpression): EmitResult {
+    private emitObjectLiteral(ol: ts.ObjectLiteralExpression, ordinary = false): EmitResult {
         const targetType =
             this.asyncAwaitReturnContextTypes.get(ol) ??
             this.checker.getContextualType(ol) ??
@@ -78402,7 +77539,7 @@ class Emitter {
         const hasAccessor = ol.properties.some((property) =>
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
-        const mapped = this.isUntypedJsObjectLiteral(ol) || hasAccessor
+        const mapped = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor
             ? T_VALUE
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
@@ -78424,7 +77561,7 @@ class Emitter {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
                         const key = this.emitExpr(prop.name.expression);
-                        const value = this.emitExpr(prop.initializer);
+                        const value = ordinary ? this.emitOrdinaryObjectExpression(prop.initializer) : this.emitExpr(prop.initializer);
                         this.emitComputedObjectLiteralDefinition(
                             pieces,
                             obj,
@@ -78497,7 +77634,7 @@ class Emitter {
                 }
                 const value = ts.isMethodDeclaration(expr)
                     ? this.emitClosureExpression(expr)
-                    : this.emitExpr(expr);
+                    : ordinary ? this.emitOrdinaryObjectExpression(expr) : this.emitExpr(expr);
                 pieces.push(
                     `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)}), ${this.coerce(value, T_VALUE, expr)})`,
                 );
@@ -78889,11 +78026,6 @@ class Emitter {
         node: ts.Node,
     ): { box: string; unbox: string } | null {
         if (elementType.kind === "value") return null;
-        if (!(["number", "boolean", "string", "bigint", "symbol"] as const).includes(
-            elementType.kind as "number" | "boolean" | "string" | "bigint" | "symbol",
-        )) {
-            return null;
-        }
         const key = `${this.typeKey(elementType)}_${elementType.c}`;
         const existing = this.arrayValueCodecs.get(key);
         if (existing) return existing;
@@ -78907,13 +78039,24 @@ class Emitter {
         this.protos.line(`static tsc_value_t ${codec.box}(const void* element);`);
         this.protos.line(`static bool ${codec.unbox}(tsc_value_t value, void* element);`);
         const buf = new CBuf();
+        const emptyElement = elementType.kind === "void" || elementType.kind === "never";
         buf.open(`static tsc_value_t ${codec.box}(const void* element)`);
-        buf.line(`${elementType.c} current = *(const ${elementType.c}*)element;`);
-        buf.line(`return ${this.coerce({ c: "current", ty: elementType }, T_VALUE, node)};`);
+        if (emptyElement) {
+            buf.line("(void)element;");
+            buf.line("return tsc_value_undefined();");
+        } else {
+            buf.line(`${elementType.c} current = *(const ${elementType.c}*)element;`);
+            buf.line(`return ${this.boxObjectIdentity("current", elementType, node)};`);
+        }
         buf.close();
         buf.line();
         buf.open(`static bool ${codec.unbox}(tsc_value_t value, void* element)`);
-        buf.line(`*(${elementType.c}*)element = ${this.coerce({ c: "value", ty: T_VALUE }, elementType, node)};`);
+        if (emptyElement) {
+            buf.line("(void)element;");
+            buf.line("(void)value;");
+        } else {
+            buf.line(`*(${elementType.c}*)element = ${this.coerce({ c: "value", ty: T_VALUE }, elementType, node)};`);
+        }
         buf.line("return true;");
         buf.close();
         buf.line();

@@ -88,6 +88,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->primitive_value_root = NULL;
     o->arguments_parameter_cells = NULL;
     o->prototype = prototype;
+    o->prototype_gc_root = tsc_value_gc_root(prototype);
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     if (g_shape_diagnostics_enabled) {
         fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);
@@ -1539,6 +1540,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     if (!o->extensible) return false;
     if (object_chain_contains(prototype, o)) return false;
     o->prototype = prototype;
+    o->prototype_gc_root = tsc_value_gc_root(prototype);
     object_shape_changed(o, "prototype", NULL);
     return true;
 }

@@ -280,6 +280,7 @@ struct tsc_object {
      * parameter cell.  A NULL entry means the property is unmapped. */
     tsc_array_t* arguments_parameter_cells;
     tsc_value_t prototype;
+    void* prototype_gc_root;
     tsc_object_prop_t* props;
 };
 

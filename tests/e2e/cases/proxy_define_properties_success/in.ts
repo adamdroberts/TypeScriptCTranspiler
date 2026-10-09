@@ -49,5 +49,5 @@ badDescriptors.bad = 1 as any;
 try {
     console.log("bad:", Object.defineProperties(badProxy, badDescriptors) === badProxy);
 } catch (e: any) {
-    console.log("bad:", e, Object.keys(badTarget).join(","), events.join("|"));
+    console.log("bad:", e, "keys:" + Object.keys(badTarget).join(","), "events:" + events.join("|"));
 }

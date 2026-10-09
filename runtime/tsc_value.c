@@ -1934,6 +1934,27 @@ static tsc_value_t object_static_define_property(void* env, tsc_value_t this_arg
     return target;
 }
 
+static tsc_value_t object_static_define_properties(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    if (!tsc_value_define_properties_descriptor_map(target, object_constructor_arg(args, 1))) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperties failed"));
+    }
+    return target;
+}
+
+static tsc_value_t object_static_create(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t object = tsc_value_object_create(object_constructor_arg(args, 0));
+    tsc_value_t descriptors = object_constructor_arg(args, 1);
+    if (!tsc_value_is_undefined(descriptors) && !tsc_value_define_properties_descriptor_map(object, descriptors)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.create defineProperties failed"));
+    }
+    return object;
+}
+
 static tsc_value_t object_static_get_own_property_descriptor(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
@@ -1975,7 +1996,9 @@ typedef struct {
 } tsc_object_static_method_t;
 
 static const tsc_object_static_method_t object_static_methods[] = {
+    { "create", 6, 2.0, object_static_create },
     { "defineProperty", 14, 3.0, object_static_define_property },
+    { "defineProperties", 16, 2.0, object_static_define_properties },
     { "getOwnPropertyDescriptor", 24, 2.0, object_static_get_own_property_descriptor },
     { "getOwnPropertyNames", 19, 1.0, object_static_get_own_property_names },
     { "setPrototypeOf", 14, 2.0, object_static_set_prototype_of },
@@ -3574,12 +3597,13 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
             if (exists) {
-                if (a->frozen) {
-                    if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
-                    if (has_value && !tsc_value_object_is(value, TSC_ARR(tsc_value_t, a, idx))) return false;
-                    return true;
+                if (next_writable == current_writable && next_enumerable == current_enumerable && next_configurable == current_configurable) {
+                    if (!has_value) return true;
+                    if (a->frozen) return tsc_value_object_is(value, tsc_value_get_index(v, (double)idx));
+                    return tsc_value_set_array_own_index(v, idx, value);
                 }
-                tsc_value_t current = TSC_ARR(tsc_value_t, a, idx);
+                if (a->frozen) return false;
+                tsc_value_t current = tsc_value_get_index(v, (double)idx);
                 bool props_extensible = a->props->extensible;
                 a->props->extensible = true;
                 bool migrated = tsc_object_define(a->props, key, current, current_writable, current_enumerable, current_configurable);
@@ -3594,10 +3618,14 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             if (!a->extensible || (idx >= a->len && !a->length_writable)) {
                 return false;
             }
+            if (has_value && next_writable && next_enumerable && next_configurable) {
+                return tsc_value_set_array_own_index(v, idx, value);
+            }
             size_t old_len = a->len;
             while (a->len <= idx) {
-                tsc_value_t undef = tsc_value_undefined();
-                tsc_array_push_raw(a, &undef);
+                tsc_array_reserve(a, a->len + 1);
+                memset((char*)a->data + a->len * a->es, 0, a->es);
+                a->len++;
                 tsc_array_mark_hole(a, a->len - 1);
             }
             bool ok = tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
@@ -3722,8 +3750,11 @@ static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc
 }
 
 static void* dynamic_accessor_env(tsc_value_t fn) {
-    tsc_value_t* env = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));
-    *env = fn;
+    void* volatile callable_gc_root = tsc_value_gc_root(fn);
+    (void)callable_gc_root;
+    struct { tsc_value_t callable; void* callable_gc_root; }* env = TSC_GC_MALLOC(sizeof(*env));
+    env->callable = fn;
+    env->callable_gc_root = tsc_value_gc_root(fn);
     return env;
 }
 
@@ -3743,6 +3774,7 @@ typedef struct tsc_parsed_property_descriptor {
     tsc_str_t* key;
     bool accessor;
     tsc_value_t value;
+    void* value_gc_root;
     bool has_value;
     bool writable;
     bool has_writable;
@@ -3758,63 +3790,45 @@ typedef struct tsc_parsed_property_descriptor {
     bool has_configurable;
 } tsc_parsed_property_descriptor_t;
 
-static bool value_is_property_descriptor_object(tsc_value_t v) {
-    if (!value_is_box(v)) return false;
-    tsc_value_tag_t tag = value_tag(v);
-    return tag == TSC_VALUE_TAG_OBJECT || tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_FUNCTION;
-}
-
 static tsc_parsed_property_descriptor_t parse_property_descriptor(tsc_value_t desc) {
-    if (!value_is_property_descriptor_object(desc)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor must be an object"));
+    if (!tsc_value_is_object(desc)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Property descriptor must be an object"));
     }
-    tsc_value_t value = tsc_value_undefined();
-    tsc_value_t writable_value = tsc_value_undefined();
-    tsc_value_t enumerable_value = tsc_value_undefined();
-    tsc_value_t configurable_value = tsc_value_undefined();
-    tsc_value_t getter_value = tsc_value_undefined();
-    tsc_value_t setter_value = tsc_value_undefined();
-    bool has_value = descriptor_field(desc, "value", 5, &value);
-    bool has_writable = descriptor_field(desc, "writable", 8, &writable_value);
-    bool has_enumerable = descriptor_field(desc, "enumerable", 10, &enumerable_value);
-    bool has_configurable = descriptor_field(desc, "configurable", 12, &configurable_value);
-    bool has_getter = descriptor_field(desc, "get", 3, &getter_value);
-    bool has_setter = descriptor_field(desc, "set", 3, &setter_value);
+    void* volatile descriptor_gc_root = tsc_value_gc_root(desc);
+    (void)descriptor_gc_root;
     tsc_parsed_property_descriptor_t out;
-    out.key = NULL;
-    out.accessor = has_getter || has_setter;
-    out.value = value;
-    out.has_value = has_value;
-    out.writable = has_writable ? tsc_value_is_truthy(writable_value) : false;
-    out.has_writable = has_writable;
-    out.getter = NULL;
-    out.getter_env = NULL;
-    out.has_getter = has_getter;
-    out.setter = NULL;
-    out.setter_env = NULL;
-    out.has_setter = has_setter;
-    out.enumerable = has_enumerable ? tsc_value_is_truthy(enumerable_value) : false;
-    out.has_enumerable = has_enumerable;
-    out.configurable = has_configurable ? tsc_value_is_truthy(configurable_value) : false;
-    out.has_configurable = has_configurable;
-    if (has_getter || has_setter) {
-        if (has_value || has_writable) {
-            tsc_throw_str(tsc_str_from_cstr("Object.defineProperty descriptor cannot mix value with get/set"));
+    memset(&out, 0, sizeof(out));
+    out.value = tsc_value_undefined();
+    tsc_value_t field = tsc_value_undefined();
+    out.has_enumerable = descriptor_field(desc, "enumerable", 10, &field);
+    if (out.has_enumerable) out.enumerable = tsc_value_is_truthy(field);
+    out.has_configurable = descriptor_field(desc, "configurable", 12, &field);
+    if (out.has_configurable) out.configurable = tsc_value_is_truthy(field);
+    out.has_value = descriptor_field(desc, "value", 5, &out.value);
+    out.value_gc_root = tsc_value_gc_root(out.value);
+    void* volatile value_gc_root = out.value_gc_root;
+    (void)value_gc_root;
+    out.has_writable = descriptor_field(desc, "writable", 8, &field);
+    if (out.has_writable) out.writable = tsc_value_is_truthy(field);
+    out.has_getter = descriptor_field(desc, "get", 3, &field);
+    if (out.has_getter && !tsc_value_is_undefined(field)) {
+        if (!value_is_callable_function(field)) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Property descriptor getter must be callable"));
         }
-        if (has_getter && !tsc_value_is_undefined(getter_value)) {
-            if (!value_is_callable_function(getter_value)) {
-                tsc_throw_str(tsc_str_from_cstr("Object.defineProperty getter must be callable"));
-            }
-            out.getter = tsc_value_dynamic_accessor_getter;
-            out.getter_env = dynamic_accessor_env(getter_value);
+        out.getter = tsc_value_dynamic_accessor_getter;
+        out.getter_env = dynamic_accessor_env(field);
+    }
+    out.has_setter = descriptor_field(desc, "set", 3, &field);
+    if (out.has_setter && !tsc_value_is_undefined(field)) {
+        if (!value_is_callable_function(field)) {
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Property descriptor setter must be callable"));
         }
-        if (has_setter && !tsc_value_is_undefined(setter_value)) {
-            if (!value_is_callable_function(setter_value)) {
-                tsc_throw_str(tsc_str_from_cstr("Object.defineProperty setter must be callable"));
-            }
-            out.setter = tsc_value_dynamic_accessor_setter;
-            out.setter_env = dynamic_accessor_env(setter_value);
-        }
+        out.setter = tsc_value_dynamic_accessor_setter;
+        out.setter_env = dynamic_accessor_env(field);
+    }
+    out.accessor = out.has_getter || out.has_setter;
+    if (out.accessor && (out.has_value || out.has_writable)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Property descriptor cannot mix data and accessor fields"));
     }
     return out;
 }
@@ -3851,6 +3865,11 @@ static bool apply_property_descriptor(tsc_value_t v, tsc_str_t* key, const tsc_p
 }
 
 bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
+    if (!tsc_value_is_object(v)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));
+    }
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    (void)target_gc_root;
     tsc_parsed_property_descriptor_t parsed = parse_property_descriptor(desc);
     return apply_property_descriptor(v, key, &parsed);
 }
@@ -3860,29 +3879,19 @@ bool tsc_value_define_computed_property_descriptor(
     tsc_value_t key,
     tsc_value_t desc
 ) {
-    key = tsc_value_to_property_key(key);
-    if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
-        tsc_symbol_t* symbol = (tsc_symbol_t*)value_ptr(key);
-        tsc_parsed_property_descriptor_t parsed = parse_property_descriptor(desc);
-        if (parsed.accessor) {
-            tsc_str_t* internal_key = value_known_symbol_internal_key(symbol);
-            if (!internal_key) return false;
-            return apply_property_descriptor(v, internal_key, &parsed);
-        }
-        return tsc_value_define_symbol_property_desc(
-            v,
-            symbol,
-            parsed.value,
-            parsed.has_value,
-            parsed.writable,
-            parsed.has_writable,
-            parsed.enumerable,
-            parsed.has_enumerable,
-            parsed.configurable,
-            parsed.has_configurable
-        );
+    if (!tsc_value_is_object(v)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));
     }
-    return tsc_value_define_property_descriptor(v, (tsc_str_t*)value_ptr(key), desc);
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    void* volatile descriptor_gc_root = tsc_value_gc_root(desc);
+    void* volatile key_gc_root = tsc_value_gc_root(key);
+    (void)target_gc_root; (void)descriptor_gc_root; (void)key_gc_root;
+    key = tsc_value_to_property_key(key);
+    tsc_str_t* property = value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL
+        ? tsc_symbol_property_key((tsc_symbol_t*)value_ptr(key))
+        : (tsc_str_t*)value_ptr(key);
+    tsc_parsed_property_descriptor_t parsed = parse_property_descriptor(desc);
+    return apply_property_descriptor(v, property, &parsed);
 }
 
 bool tsc_value_create_data_property(
@@ -3926,9 +3935,14 @@ bool tsc_value_create_data_property(
 }
 
 bool tsc_value_define_properties_descriptor_map(tsc_value_t v, tsc_value_t descriptors) {
-    if (!value_is_property_descriptor_object(descriptors)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.defineProperties descriptor map must be an object"));
+    if (!tsc_value_is_object(v)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperties target must be an object"));
     }
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    (void)target_gc_root;
+    descriptors = tsc_value_to_object(descriptors);
+    void* volatile descriptors_gc_root = tsc_value_gc_root(descriptors);
+    (void)descriptors_gc_root;
     tsc_array_t* keys = tsc_value_raw_own_keys(descriptors);
     tsc_array_t* parsed = tsc_array_new(sizeof(tsc_parsed_property_descriptor_t), keys->len ? keys->len : 1);
     for (size_t i = 0; i < keys->len; i++) {
@@ -3988,13 +4002,15 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
             if (!a->extensible || (idx >= a->len && !a->length_writable)) return false;
             size_t old_len = a->len;
             while (a->len < idx) {
-                tsc_value_t undef = tsc_value_undefined();
-                tsc_array_push_raw(a, &undef);
+                tsc_array_reserve(a, a->len + 1);
+                memset((char*)a->data + a->len * a->es, 0, a->es);
+                a->len++;
                 tsc_array_mark_hole(a, a->len - 1);
             }
             if (idx == a->len) {
-                tsc_value_t undef = tsc_value_undefined();
-                tsc_array_push_raw(a, &undef);
+                tsc_array_reserve(a, a->len + 1);
+                memset((char*)a->data + a->len * a->es, 0, a->es);
+                a->len++;
                 tsc_array_mark_hole(a, a->len - 1);
             }
             bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
@@ -4153,11 +4169,9 @@ bool tsc_reflect_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accesso
 
 tsc_value_t tsc_value_object_create(tsc_value_t prototype) {
     if (!value_is_valid_prototype(prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.create prototype must be an object or null"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.create prototype must be an object or null"));
     }
-    tsc_object_t* o = tsc_object_new();
-    o->prototype = prototype;
-    return tsc_value_object(o);
+    return tsc_value_object(tsc_object_new_with_prototype(prototype));
 }
 
 bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object) {
@@ -8452,6 +8466,7 @@ tsc_value_t tsc_value_date(tsc_date_t* d) {
     tsc_object_t* o = tsc_object_new_class(d);
     o->is_date = true;
     o->prototype = date_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
     d->object = o;
     return tsc_value_object(o);
 }
@@ -8462,6 +8477,7 @@ tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
     tsc_object_t* o = tsc_object_new_class(r);
     o->is_regexp = true;
     o->prototype = r->prototype;
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
     tsc_object_define(o, tsc_str_from_lit("lastIndex", 9), tsc_value_num(0), true, false, false);
     r->object = o;
     return tsc_value_object(o);
@@ -8490,6 +8506,7 @@ tsc_value_t tsc_value_error(tsc_error_t* e) {
     o->prototype = tsc_value_object(
         error_intrinsic(error_kind_from_name(e->name))->prototype
     );
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
     e->object = o;
     return tsc_value_object(o);
 }

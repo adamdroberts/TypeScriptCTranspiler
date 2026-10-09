@@ -1,0 +1,7 @@
+accessor: 4 true 9 igsg
+array: true 7 11 7|11 13
+inherited: true inherited
+mixed: TypeError false
+prepare: TypeError false
+create: true 0
+empty:

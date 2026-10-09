@@ -23,9 +23,9 @@ sealed shift: Array.prototype.shift cannot mutate a sealed or frozen array
 sealed unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
 sealed splice: Array.prototype.splice cannot mutate a sealed or frozen array
 sealed fill: 5|5
-sealed define props failed: Object.defineProperties failed
+sealed define props failed: TypeError: Object.defineProperties failed
 sealed define props: 2 6|5
-sealed object define failed: Object.defineProperty failed
+sealed object define failed: TypeError: Object.defineProperty failed
 freeze identity: true
 frozen: false true true
 frozen desc: false false
