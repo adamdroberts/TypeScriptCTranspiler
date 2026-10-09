@@ -5,11 +5,11 @@ function mark(label: string): string {
   return label;
 }
 
-console.log("keys:", items.keys(mark("k")).join("|"));
-console.log("values:", items.values(mark("v")).join("|"));
-console.log("entries:", items.entries(mark("e"))[1].join("|"), seen);
+console.log("keys:", Array.from(items.keys(mark("k"))).join("|"));
+console.log("values:", Array.from(items.values(mark("v"))).join("|"));
+console.log("entries:", Array.from<any>(items.entries(mark("e")))[1].join("|"), seen);
 
-const values: any = items.values();
+const values: any = Array.from(items.values());
 values[1] = "cyan";
 console.log("copy:", values.join("|"));
 console.log("source:", items.join("|"));
@@ -22,6 +22,6 @@ Object.defineProperty(items, "1", {
   enumerable: true,
   configurable: true,
 });
-console.log("accessor values:", items.values().join("|"), seen);
-const accessorEntries: any = items.entries();
+console.log("accessor values:", Array.from(items.values()).join("|"), seen);
+const accessorEntries: any = Array.from(items.entries());
 console.log("accessor entries:", accessorEntries[1].join("|"), seen);

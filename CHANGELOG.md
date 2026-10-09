@@ -1,5 +1,7 @@
 # Changelog
 
+- Replaced eager Array keys/values/entries snapshots with ordinary live iterators over shared source/index/kind state. Array.from observes iterator and next overrides for dynamic and typed Array sources, including arguments. Typed entry codecs preserve numeric keys, iterator receivers escape stack allocation, and legacy generators expose an ordinary iterator prototype.
+
 - Replaced fixed property descriptor lowering with ordinary object evaluation and ordered runtime ToPropertyDescriptor. Object/Reflect definitions and Object.create share descriptor records, inherited fields, symbol keys, callback identity, complete map preparation, and real TypeErrors. Typed array definitions preserve storage identity and observe metadata; inherited prototype and descriptor callback/value GC roots are retained.
 
 - Added ordinary RegExp `[Symbol.replace]` with shared RegExpExec result collection, ordered generic capture processing, precomputed callback matches, Unicode empty advancement, and strict state writes. Literal and RegExp replacements share UTF-16 GetSubstitution; the direct native replacement predecessors are deleted.

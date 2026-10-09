@@ -613,41 +613,6 @@ static tsc_array_t* array_proto_generic_slice_array(tsc_value_t receiver, tsc_va
     return out;
 }
 
-static tsc_value_t array_proto_generic_keys(tsc_value_t receiver) {
-    size_t len = array_proto_length(receiver);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_value_t key = tsc_value_num((double)i);
-        tsc_array_push_raw(out, &key);
-    }
-    return tsc_value_array(out);
-}
-
-static tsc_value_t array_proto_generic_values(tsc_value_t receiver) {
-    size_t len = array_proto_length(receiver);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_value_t value = array_proto_get_index(receiver, i);
-        tsc_array_push_raw(out, &value);
-    }
-    return tsc_value_array(out);
-}
-
-static tsc_value_t array_proto_generic_entries(tsc_value_t receiver) {
-    size_t len = array_proto_length(receiver);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key = tsc_value_num((double)i);
-        tsc_value_t value = array_proto_get_index(receiver, i);
-        tsc_array_push_raw(pair, &key);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return tsc_value_array(out);
-}
-
 static tsc_value_t array_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
@@ -722,30 +687,118 @@ static tsc_value_t array_prototype_join(void* env, tsc_value_t this_arg, tsc_arr
     return tsc_value_method_join(this_arg, array_proto_arg(args, 0));
 }
 
+typedef enum { ARRAY_ITERATOR_KEY, ARRAY_ITERATOR_VALUE, ARRAY_ITERATOR_ENTRY } array_iterator_kind_t;
+static void array_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, double arity, tsc_generic_function_t fn);
+
+typedef struct {
+    tsc_value_t source;
+    void* source_gc_root;
+    uint64_t index;
+    array_iterator_kind_t kind;
+} array_iterator_state_t;
+
+static const char array_iterator_prototype_realm_state_key = 0;
+
+static tsc_value_t array_iterator_next(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT ||
+        !((tsc_object_t*)value_ptr(receiver))->is_array_iterator) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array iterator next called on incompatible receiver"));
+    }
+    tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
+    array_iterator_state_t* state = object->class_ptr;
+    tsc_value_t value = tsc_value_undefined();
+    bool done = tsc_value_is_undefined(state->source);
+    if (!done) {
+        tsc_value_t source = state->source;
+        void* volatile source_gc_root = tsc_value_gc_root(source);
+        (void)source_gc_root;
+        uint64_t index = state->index;
+        double length = tsc_value_to_length(tsc_value_get_prop(source, tsc_str_from_lit("length", 6)));
+        done = (double)index >= length;
+        if (done) {
+            state->source = tsc_value_undefined();
+            state->source_gc_root = NULL;
+        } else {
+            state->index = index + 1;
+            value = tsc_value_num((double)index);
+            if (state->kind != ARRAY_ITERATOR_KEY) {
+                tsc_value_t element = tsc_value_get_prop(source, tsc_str_from_num((double)index));
+                void* volatile element_gc_root = tsc_value_gc_root(element);
+                (void)element_gc_root;
+                if (state->kind == ARRAY_ITERATOR_VALUE) value = element;
+                else {
+                    tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
+                    tsc_array_push_value(pair, value);
+                    tsc_array_push_value(pair, element);
+                    value = tsc_value_array(pair);
+                }
+            }
+        }
+    }
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    (void)value_gc_root;
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    return tsc_value_object(result);
+}
+
+static tsc_value_t array_iterator_prototype(void) {
+    tsc_object_t* prototype = tsc_realm_state_get(&array_iterator_prototype_realm_state_key);
+    if (!prototype) {
+        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
+        tsc_realm_state_set(&array_iterator_prototype_realm_state_key, prototype);
+        array_prototype_define_method(prototype, "next", 4, 0.0, array_iterator_next);
+        tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
+            tsc_value_string(tsc_str_from_lit("Array Iterator", 14)), false, false, true);
+    }
+    return tsc_value_object(prototype);
+}
+
+static tsc_value_t array_iterator_create(tsc_value_t receiver, array_iterator_kind_t kind) {
+    tsc_value_t source = tsc_value_to_object(receiver);
+    void* volatile source_gc_root = tsc_value_gc_root(source);
+    (void)source_gc_root;
+    array_iterator_state_t* state = TSC_GC_MALLOC(sizeof(*state));
+    state->source = source;
+    state->source_gc_root = tsc_value_gc_root(source);
+    state->index = 0;
+    state->kind = kind;
+    tsc_object_t* iterator = tsc_object_new_with_prototype(array_iterator_prototype());
+    iterator->is_array_iterator = true;
+    iterator->class_ptr = state;
+    return tsc_value_object(iterator);
+}
+
+tsc_value_t tsc_value_method_keys(tsc_value_t receiver) {
+    return array_iterator_create(receiver, ARRAY_ITERATOR_KEY);
+}
+
+tsc_value_t tsc_value_method_values(tsc_value_t receiver) {
+    return array_iterator_create(receiver, ARRAY_ITERATOR_VALUE);
+}
+
+tsc_value_t tsc_value_method_entries(tsc_value_t receiver) {
+    return array_iterator_create(receiver, ARRAY_ITERATOR_ENTRY);
+}
+
 static tsc_value_t array_prototype_keys(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    array_prototype_require_receiver(this_arg, "keys");
-    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_keys(this_arg);
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
     return tsc_value_method_keys(this_arg);
 }
 
 static tsc_value_t array_prototype_values(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    array_prototype_require_receiver(this_arg, "values");
-    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_values(this_arg);
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
     return tsc_value_method_values(this_arg);
 }
 
 static tsc_value_t array_prototype_entries(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    array_prototype_require_receiver(this_arg, "entries");
-    if (array_proto_is_string_receiver(this_arg)) return array_proto_generic_entries(this_arg);
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
     return tsc_value_method_entries(this_arg);
 }
 

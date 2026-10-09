@@ -40,8 +40,8 @@ console.log("hof holes:", forEachCalls, Object.keys(mappedHoles).join("|"), Obje
 const fromHoles: any[] = Array.from(hofValues);
 const fromMappedHoles: string[] = Array.from(hofValues, (value: any) => value === undefined ? "missing" : String(value));
 console.log("from holes:", Object.keys(fromHoles).join("|"), Object.hasOwn(fromHoles, "1"), fromHoles[1], fromMappedHoles.join("|"));
-const iteratorValues = hofValues.values();
-const iteratorEntries = hofValues.entries();
+const iteratorValues = Array.from(hofValues.values());
+const iteratorEntries = Array.from(hofValues.entries());
 console.log("iter holes:", Object.keys(iteratorValues).join("|"), Object.hasOwn(iteratorValues, "1"), iteratorValues[1], iteratorEntries[1][0], iteratorEntries[1][1]);
 let forOfHoles = "";
 for (const value of hofValues) forOfHoles += String(value) + "|";
@@ -57,7 +57,7 @@ console.log("Array.of spread holes:", Object.keys(arrayOfSpread).join("|"), arra
 const typedHoles: number[] = [1, 2, 3];
 delete typedHoles[1];
 const boxedTypedHoles: any = typedHoles;
-const boxedTypedValues: any = typedHoles.values();
+const boxedTypedValues: any = Array.from(typedHoles.values());
 const boxedTypedArray: any[] = typedHoles;
 console.log("typed boxed holes:", Object.keys(boxedTypedHoles).join("|"), String(boxedTypedHoles[1]), boxedTypedHoles.join("|"));
 console.log("typed boxed values:", Object.keys(boxedTypedValues).join("|"), String(boxedTypedValues[1]), boxedTypedValues.join("|"));

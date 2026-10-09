@@ -709,6 +709,7 @@ tsc_array_t* tsc_array_set_value_codec(
     tsc_array_unbox_element_fn unbox_element
 );
 tsc_array_t* tsc_array_prototype(void);
+void tsc_array_initialize_generator(tsc_array_t* array);
 tsc_value_t tsc_array_constructor_value(void);
 tsc_value_t tsc_array_unscopables_value(void);
 tsc_array_t* tsc_array_prototype_own_property_names(void);
@@ -1036,8 +1037,6 @@ typedef struct {
     void* source_gc_root;
     void* iterator_gc_root;
     void* next_method_gc_root;
-    size_t index;
-    unsigned char kind;
     bool done;
 } tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);

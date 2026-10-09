@@ -83,7 +83,7 @@ function source(): string {
         applyOperations(alias_${plan.label}, [${plan.operations.map(operationLiteral).join(",")}]);
         console.log(${JSON.stringify(`${plan.label}:state:`)} + values_${plan.label}.join("|") + ":" + Object.keys(alias_${plan.label}).join("|"));
         console.log(${JSON.stringify(`${plan.label}:json:`)} + stringifyDynamic(values_${plan.label}));
-        const iterator_${plan.label}: any = values_${plan.label}.values();
+        const iterator_${plan.label}: any = Array.from(values_${plan.label}.values());
         console.log(${JSON.stringify(`${plan.label}:values:`)} + iterator_${plan.label}.join("|") + ":" + Object.keys(iterator_${plan.label}).join("|"));
     `);
     return `

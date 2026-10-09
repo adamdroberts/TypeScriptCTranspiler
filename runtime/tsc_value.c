@@ -1314,6 +1314,20 @@ static tsc_value_t string_iterator_self_apply(void* env, tsc_value_t this_arg, t
     return this_arg;
 }
 
+static const char iterator_prototype_realm_state_key = 0;
+
+tsc_value_t tsc_iterator_prototype_value(void) {
+    tsc_object_t* prototype = tsc_realm_state_get(&iterator_prototype_realm_state_key);
+    if (!prototype) {
+        prototype = tsc_object_new();
+        tsc_realm_state_set(&iterator_prototype_realm_state_key, prototype);
+        tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_iterator()),
+            tsc_value_function_builtin_named(string_iterator_self_apply, NULL, 0.0,
+                tsc_str_from_lit("[Symbol.iterator]", 17)), true, false, true);
+    }
+    return tsc_value_object(prototype);
+}
+
 static tsc_value_t string_iterator_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
     const string_iterator_method_env_t* method_env = (const string_iterator_method_env_t*)env;
@@ -1375,23 +1389,12 @@ static void string_prototype_install_intrinsics(tsc_value_t prototype) {
     /* The @@iterator method lives under the well-known symbol key alongside
      * the string-keyed intrinsics above and closes over this Realm's shared
      * String iterator prototype. */
-    tsc_object_t* iterator_prototype = tsc_object_new();
-    tsc_object_set_prototype_of(iterator_prototype, tsc_value_object_prototype());
+    tsc_object_t* iterator_prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
     tsc_object_define(
         iterator_prototype,
         tsc_str_from_lit("next", 4),
         tsc_value_function_builtin_named(
             string_iterator_next_apply, NULL, 0.0, tsc_str_from_lit("next", 4)
-        ),
-        true,
-        false,
-        true
-    );
-    tsc_object_define(
-        iterator_prototype,
-        tsc_symbol_property_key(tsc_symbol_iterator()),
-        tsc_value_function_builtin_named(
-            string_iterator_self_apply, NULL, 0.0, tsc_str_from_lit("[Symbol.iterator]", 17)
         ),
         true,
         false,
@@ -3049,8 +3052,18 @@ tsc_value_t tsc_value_construct_with_new_target(
 }
 
 
+static tsc_array_t* generator_receiver(void* env, tsc_value_t receiver) {
+    if (env) return (tsc_array_t*)env;
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
+        tsc_array_t* array = (tsc_array_t*)value_ptr(receiver);
+        if (array->lazy_next) return array;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Generator method called on incompatible receiver"));
+    return NULL;
+}
+
 static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = (tsc_array_t*)env;
+    tsc_array_t* av = generator_receiver(env, this_arg);
     if (av->is_lazy_generator && av->iter_pos >= av->len && av->lazy_next) {
         bool done = false;
         tsc_value_t next_arg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
@@ -3080,7 +3093,7 @@ static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc
 }
 
 static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = (tsc_array_t*)env;
+    tsc_array_t* av = generator_receiver(env, this_arg);
     tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     if (av->is_lazy_generator && av->lazy_close) {
         (void)av->lazy_close(av, av->env, valueArg, false);
@@ -3096,7 +3109,7 @@ static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, t
 }
 
 static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    tsc_array_t* av = (tsc_array_t*)env;
+    tsc_array_t* av = generator_receiver(env, this_arg);
     tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     if (av->is_lazy_generator && av->lazy_close) {
         (void)av->lazy_close(av, av->env, err, true);
@@ -3108,6 +3121,28 @@ static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, ts
     tsc_str_t* errStr = tsc_value_to_string(err);
     tsc_throw_str(errStr);
     return tsc_value_undefined();
+}
+
+static const char generator_prototype_realm_state_key = 0;
+
+void tsc_array_initialize_generator(tsc_array_t* array) {
+    tsc_object_t* prototype = tsc_realm_state_get(&generator_prototype_realm_state_key);
+    if (!prototype) {
+        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
+        tsc_realm_state_set(&generator_prototype_realm_state_key, prototype);
+        const struct { const char* name; size_t length; tsc_generic_function_t apply; } methods[] = {
+            {"next", 4, tsc_value_generator_next},
+            {"return", 6, tsc_value_generator_return},
+            {"throw", 5, tsc_value_generator_throw},
+        };
+        for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i) {
+            tsc_str_t* name = tsc_str_from_lit(methods[i].name, methods[i].length);
+            tsc_object_define(prototype, name,
+                tsc_value_function_builtin_named(methods[i].apply, NULL, 1.0, name),
+                true, false, true);
+        }
+    }
+    array->prototype = tsc_value_object(prototype);
 }
 
 static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, tsc_value_t fn) {
@@ -3158,13 +3193,13 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
-        if (str_lit_eq(key, "next")) {
+        if (!a->lazy_next && str_lit_eq(key, "next")) {
             return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
         }
-        if (str_lit_eq(key, "return")) {
+        if (!a->lazy_next && str_lit_eq(key, "return")) {
             return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
         }
-        if (str_lit_eq(key, "throw")) {
+        if (!a->lazy_next && str_lit_eq(key, "throw")) {
             return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
         }
         size_t idx = 0;
@@ -3274,13 +3309,13 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
     if (value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
-        if (str_lit_eq(key, "next")) {
+        if (!a->lazy_next && str_lit_eq(key, "next")) {
             return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
         }
-        if (str_lit_eq(key, "return")) {
+        if (!a->lazy_next && str_lit_eq(key, "return")) {
             return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
         }
-        if (str_lit_eq(key, "throw")) {
+        if (!a->lazy_next && str_lit_eq(key, "throw")) {
             return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
         }
         size_t idx = 0;
@@ -5078,22 +5113,6 @@ tsc_array_t* value_array_entries(const tsc_array_t* src) {
     return out;
 }
 
-static tsc_array_t* value_array_entries_numeric(const tsc_array_t* src) {
-    tsc_array_materialize_all((tsc_array_t*)src);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
-    if (!src || src->es != sizeof(tsc_value_t)) return out;
-    tsc_value_t recv = tsc_value_array((tsc_array_t*)src);
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key = tsc_value_num((double)i);
-        tsc_value_t value = tsc_value_get_index(recv, (double)i);
-        tsc_array_push_raw(pair, &key);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return out;
-}
 
 tsc_array_t* value_string_keys(const tsc_str_t* src, bool include_length) {
     size_t length = src ? tsc_str_utf16_length(src) : 0;
@@ -5722,12 +5741,6 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
-enum {
-    TSC_SYNC_ITERATOR_DYNAMIC = 0,
-    TSC_SYNC_ITERATOR_ARRAY = 1,
-    TSC_SYNC_ITERATOR_STRING = 2,
-};
-
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
     tsc_value_t source,
     tsc_value_t method
@@ -5742,31 +5755,10 @@ tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
         .source_gc_root = tsc_value_gc_root(source),
         .iterator_gc_root = NULL,
         .next_method_gc_root = NULL,
-        .index = 0,
-        .kind = TSC_SYNC_ITERATOR_DYNAMIC,
         .done = false,
     };
     void* volatile method_gc_root = tsc_value_gc_root(method);
     (void)method_gc_root;
-    if (
-        value_is_box(source) &&
-        value_tag(source) == TSC_VALUE_TAG_ARRAY &&
-        ((tsc_array_t*)value_ptr(source))->lazy_next == NULL &&
-        tsc_value_eq(method, tsc_value_symbol_iterator_method_value())
-    ) {
-        record.kind = TSC_SYNC_ITERATOR_ARRAY;
-        return record;
-    }
-    if (
-        value_is_box(source) &&
-        value_tag(source) == TSC_VALUE_TAG_STRING &&
-        tsc_value_is_undefined(method)
-    ) {
-        record.kind = TSC_SYNC_ITERATOR_STRING;
-        record.iterator = tsc_value_array(value_string_iterator_values((tsc_str_t*)value_ptr(source)));
-        record.iterator_gc_root = tsc_value_gc_root(record.iterator);
-        return record;
-    }
     if (!tsc_value_is_callable(method)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
     }
@@ -5794,26 +5786,6 @@ tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
 
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
     if (!record || record->done) return false;
-    if (record->kind == TSC_SYNC_ITERATOR_ARRAY) {
-        size_t length = (size_t)tsc_value_length(record->source);
-        if (record->index >= length) {
-            record->done = true;
-            return false;
-        }
-        if (value) *value = tsc_value_get_index(record->source, (double)record->index);
-        record->index++;
-        return true;
-    }
-    if (record->kind == TSC_SYNC_ITERATOR_STRING) {
-        tsc_array_t* values = tsc_value_as_array(record->iterator);
-        if (record->index >= values->len) {
-            record->done = true;
-            return false;
-        }
-        if (value) *value = TSC_ARR(tsc_value_t, values, record->index);
-        record->index++;
-        return true;
-    }
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_value_t result = tsc_value_apply_function(
         record->next_method,
@@ -5838,7 +5810,6 @@ bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
 void tsc_sync_iterator_close(tsc_sync_iterator_t* record) {
     if (!record || record->done) return;
     record->done = true;
-    if (record->kind != TSC_SYNC_ITERATOR_DYNAMIC) return;
     tsc_value_t return_method = tsc_value_get_prop(
         record->iterator,
         tsc_str_from_lit("return", 6)
@@ -7932,62 +7903,6 @@ tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_valu
         return tsc_value_array(value_array_like_slice(recv, s, e));
     }
     return tsc_value_undefined();
-}
-
-tsc_value_t tsc_value_method_keys(tsc_value_t recv) {
-    size_t len = (size_t)tsc_value_length(recv);
-    if (!value_is_box(recv) || (value_tag(recv) != TSC_VALUE_TAG_ARRAY && value_tag(recv) != TSC_VALUE_TAG_OBJECT)) return tsc_value_undefined();
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_value_t v = tsc_value_num((double)i);
-        tsc_array_push_raw(out, &v);
-    }
-    return tsc_value_array(out);
-}
-
-tsc_value_t tsc_value_method_values(tsc_value_t recv) {
-    if (!value_is_box(recv)) return tsc_value_undefined();
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        const tsc_array_t* a = (const tsc_array_t*)value_ptr(recv);
-        if (a->props && a->props->len > 0) {
-            tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-            for (size_t i = 0; i < a->len; i++) {
-                tsc_value_t value = tsc_value_get_index(recv, (double)i);
-                tsc_array_push_raw(out, &value);
-            }
-            return tsc_value_array(out);
-        }
-        return tsc_value_array(value_array_iter_values(a));
-    }
-    if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
-    size_t len = (size_t)tsc_value_length(recv);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_value_t value = tsc_value_get_index(recv, (double)i);
-        tsc_array_push_raw(out, &value);
-    }
-    return tsc_value_array(out);
-}
-
-tsc_value_t tsc_value_method_entries(tsc_value_t recv) {
-    if (!value_is_box(recv)) return tsc_value_undefined();
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        const tsc_array_t* a = (const tsc_array_t*)value_ptr(recv);
-        return tsc_value_array(value_array_entries_numeric(a));
-    }
-    if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
-    size_t len = (size_t)tsc_value_length(recv);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-    for (size_t i = 0; i < len; i++) {
-        tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t key = tsc_value_num((double)i);
-        tsc_value_t value = tsc_value_get_index(recv, (double)i);
-        tsc_array_push_raw(pair, &key);
-        tsc_array_push_raw(pair, &value);
-        tsc_value_t boxed = tsc_value_array(pair);
-        tsc_array_push_raw(out, &boxed);
-    }
-    return tsc_value_array(out);
 }
 
 tsc_value_t tsc_value_method_substring(tsc_value_t recv, tsc_value_t start, tsc_value_t end) {

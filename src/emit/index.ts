@@ -27071,19 +27071,16 @@ class Emitter {
             "flat",
             "includes",
             "indexOf",
-            "keys",
             "join",
             "lastIndexOf",
             "pop",
             "slice",
             "shift",
-            "entries",
             "toLocaleString",
             "toReversed",
             "toSorted",
             "toSpliced",
             "toString",
-            "values",
             "with",
         ].includes(method);
     }
@@ -27503,17 +27500,14 @@ class Emitter {
             "flat",
             "includes",
             "indexOf",
-            "keys",
             "join",
             "lastIndexOf",
             "slice",
-            "entries",
             "toLocaleString",
             "toReversed",
             "toSorted",
             "toSpliced",
             "toString",
-            "values",
             "with",
         ].includes(method);
     }
@@ -41193,6 +41187,7 @@ class Emitter {
         buf.line(`${arrayVar}->is_lazy_generator = true;`);
         buf.line(`${arrayVar}->state = 0;`);
         buf.line(`${arrayVar}->lazy_next = (void*)${lazyNextFuncName};`);
+        buf.line(`tsc_array_initialize_generator(${arrayVar});`);
         if (lazyCloseFuncName) {
             buf.line(`${arrayVar}->lazy_close = (void*)${lazyCloseFuncName};`);
         }
@@ -43396,7 +43391,7 @@ class Emitter {
                 buf.line(`${storage}.sealed = false;`);
                 buf.line(`${storage}.frozen = false;`);
                 buf.line(`${storage}.length_writable = true;`);
-                buf.line(`${storage}.prototype = tsc_value_undefined();`);
+                buf.line(`${storage}.prototype = tsc_value_array(tsc_array_prototype());`);
                 buf.line(`${storage}.iter_pos = 0;`);
                 buf.line(`${storage}.iter_has_return = false;`);
                 buf.line(`${storage}.iter_return_consumed = false;`);
@@ -44478,7 +44473,7 @@ class Emitter {
                 this.closureDefs.write(closeBuf.toString());
             }
             return {
-                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName};${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
+                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out});${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
                 ty: arrayType(valueType),
                 lazyGenerator: true,
             };
@@ -55638,8 +55633,8 @@ class Emitter {
             case "weakref":
             case "finregistry":
             case "promise":
-            case "entry":
                 return `${type.kind}_${type.elem ? this.typeKey(type.elem) : "void"}`;
+            case "entry":
             case "map":
             case "weakmap":
                 return `${type.kind}_${type.key ? this.typeKey(type.key) : "void"}_${type.elem ? this.typeKey(type.elem) : "void"}`;
@@ -57255,7 +57250,8 @@ class Emitter {
     ): EmitResult {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
-        if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
+        if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method) ||
+            method === "keys" || method === "values" || method === "entries") {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -58448,30 +58444,8 @@ class Emitter {
         if (items.ty.kind === "string") {
             return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgValue, thisArg, ignored);
         }
-        if (items.ty.kind === "value") {
-            return this.emitSequencedExpr(callType, [
-                { value: items, target: T_VALUE, node: itemsArg },
-                ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
-                ...ignored,
-            ], ([itemsExpr, thisArgExpr]) => {
-                const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
-                const src = this.freshTemp("_af_dyn_src");
-                const out = this.freshTemp("_af_dyn_out");
-                const iv = this.freshTemp("_af_dyn_i");
-                const item = this.freshTemp("_af_dyn_item");
-                const mapped = this.freshTemp("_af_dyn_mapped");
-                const itemExpr = `TSC_ARR(tsc_value_t, ${src}, ${iv})`;
-                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_VALUE, u, item, iv, callbackThisArg);
-                const mappedC = this.coerce(body, u, mapfnArg);
-                return (
-                    `({ tsc_array_t* const ${src} = tsc_value_array_from_values(${itemsExpr!}); ` +
-                    `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
-                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                    `tsc_value_t ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
-                    `${u.c} ${mapped} = ${mappedC}; ` +
-                    `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
-                );
-            });
+        if (!resultArrayType && (items.ty.kind === "value" || items.ty.kind === "array")) {
+            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
         }
         if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map")
             unsupported(itemsArg, "Array.from(items, mapfn) currently supports typed array, Map<K, V>, Set, dynamic, or string sources");
@@ -58656,12 +58630,8 @@ class Emitter {
     ): EmitResult {
         const r = this.emitExpr(itemsArg);
         const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        if (r.ty.kind === "value") {
-            if (resultArrayType) unsupported(itemsArg, "Array.fromAsync currently requires a typed array, Map, Set, or string source");
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: r, target: T_VALUE, node: itemsArg },
-                ...ignored,
-            ], ([items]) => `tsc_value_array(tsc_value_array_from_values(${items}))`);
+        if (!resultArrayType && (r.ty.kind === "value" || r.ty.kind === "array")) {
+            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
         }
         if (r.ty.kind === "string") {
             return this.emitSequencedExpr(
@@ -64863,6 +64833,11 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
+        if (method === "keys" || method === "values" || method === "entries") {
+            const value = { c: this.boxObjectIdentity(recv.c, recv.ty, call.expression), ty: T_VALUE };
+            return this.emitDynamicNamedPropertyCall(call, value, method,
+                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+        }
         if (method !== "next" && method !== "return" && method !== "throw") {
             const tmp = this.freshTemp("_recv_mat");
             recv = {
@@ -65249,60 +65224,6 @@ class Emitter {
                         ...this.ignoredArgumentSpecs(args, 1),
                     ],
                     ([arr, sepArg]) => emitJoinStringExpr(arr!, sepArg!),
-                );
-            }
-            case "keys": {
-                const av = this.freshTemp("_arr");
-                const out = this.freshTemp("_keys");
-                const iv = this.freshTemp("_i");
-                const kv = this.freshTemp("_key");
-                return this.emitSequencedExpr(
-                    arrayType(T_NUMBER),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ` +
-                        `tsc_array_t* ${out} = tsc_array_new(sizeof(double), ${av}->len); ` +
-                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
-                        `double ${kv} = (double)${iv}; tsc_array_push_raw(${out}, &${kv}); } ${out}; })`,
-                );
-            }
-            case "values": {
-                const av = this.freshTemp("_arr");
-                return this.emitSequencedExpr(
-                    arrayType(T_VALUE),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) => {
-                        const out = this.freshTemp("_values");
-                        const iv = this.freshTemp("_i");
-                        const value = this.freshTemp("_value");
-                        const boxed = this.freshTemp("_values_boxed");
-                        const sourceValue = this.boxObjectIdentity(arr!, recv.ty, call.expression);
-                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_value_t ${boxed} = ${sourceValue}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
-                            `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
-                            `tsc_value_t ${value} = tsc_value_get_index(${boxed}, (double)${iv}); ` +
-                            `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
-                    },
-                );
-            }
-            case "entries": {
-                const elemType = entryType(et);
-                const av = this.freshTemp("_arr");
-                const out = this.freshTemp("_entries");
-                const iv = this.freshTemp("_i");
-                const entry = this.freshTemp("_entry");
-                const boxed = this.freshTemp("_entries_boxed");
-                return this.emitSequencedExpr(
-                    arrayType(elemType),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ${et.kind === "value" ? `tsc_value_t ${boxed} = tsc_value_array(${av}); ` : ""}` +
-                        `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${av}->len ? ${av}->len : 1); ` +
-                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
-                        `${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${iv}); ` +
-                        `${this.objectEntrySet(entry, et, et.kind === "value"
-                            ? `tsc_value_get_index(${boxed}, (double)${iv})`
-                            : `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
-                        `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
                 );
             }
             case "next": {
@@ -77317,11 +77238,8 @@ class Emitter {
             );
         }
         if (this.isSymbolIteratorExpression(ea.argumentExpression) && recv.ty.kind === "array") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv }],
-                () => "tsc_value_symbol_iterator_method_value()",
-            );
+            return this.emitSequencedExpr(T_VALUE, [{ value: recv }], ([array]) =>
+                `tsc_value_get_symbol_prop(${this.boxObjectIdentity(array!, recv.ty, ea.expression)}, tsc_symbol_iterator())`);
         }
         if (this.isSymbolIteratorExpression(ea.argumentExpression) && recv.ty.kind === "value") {
             return this.emitSequencedExpr(
@@ -77973,7 +77891,7 @@ class Emitter {
         closeBuf.line();
         this.closureDefs.write(closeBuf.toString());
 
-        return `({ tsc_array_t* ${source} = ${r.c}; ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->source = ${source}; tsc_array_t* ${out} = tsc_array_new(sizeof(${target.elem.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}->lazy_close = (void*)${closeName}; ${out}; })`;
+        return `({ tsc_array_t* ${source} = ${r.c}; ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->source = ${source}; tsc_array_t* ${out} = tsc_array_new(sizeof(${target.elem.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out}); ${out}->lazy_close = (void*)${closeName}; ${out}; })`;
     }
 
     private coerceToString(r: EmitResult, node: ts.Node): string {
@@ -78168,6 +78086,16 @@ class Emitter {
                     return `tsc_value_as_bigint(${r.c})`;
                 case "symbol":
                     return `tsc_value_as_symbol(${r.c})`;
+                case "entry": {
+                    const input = this.freshTemp("_entry_value");
+                    const root = this.freshTemp("_entry_value_root");
+                    const output = this.freshTemp("_entry_record");
+                    const key = this.coerce({ c: `tsc_value_get_index(${input}, 0.0)`, ty: T_VALUE }, target.key ?? T_STRING, node);
+                    const value = this.coerce({ c: `tsc_value_get_index(${input}, 1.0)`, ty: T_VALUE }, target.elem ?? T_VALUE, node);
+                    return `({ tsc_value_t ${input} = ${r.c}; void* volatile ${root} = tsc_value_gc_root(${input}); (void)${root}; ` +
+                        `tsc_object_entry_t ${output} = {0}; ${this.objectEntryKeySet(output, target.key ?? T_STRING, key)}; ` +
+                        `${this.objectEntrySet(output, target.elem ?? T_VALUE, value)}; ${output}; })`;
+                }
                 case "array": {
                     if (target.elem && target.elem.kind !== "value") {
                         const tmpIn = this.freshTemp("_arrIn");

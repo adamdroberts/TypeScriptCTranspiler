@@ -56,6 +56,9 @@ interface Iterable<T> {
 interface IterableIterator<T> extends Iterator<T> {
     [Symbol.iterator](): IterableIterator<T>;
 }
+interface ArrayIterator<T> extends IterableIterator<T> {
+    [Symbol.iterator](): ArrayIterator<T>;
+}
 interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
     next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
     return(value?: TReturn, ...ignored: any[]): IteratorResult<T, TReturn>;
@@ -261,9 +264,9 @@ interface Array<T> extends Iterable<T> {
     slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
     join(sep?: string, ...ignored: any[]): string;
-    keys(...ignored: any[]): number[];
-    values(...ignored: any[]): T[];
-    entries(...ignored: any[]): [string, T][];
+    keys(...ignored: any[]): ArrayIterator<number>;
+    values(...ignored: any[]): ArrayIterator<T>;
+    entries(...ignored: any[]): ArrayIterator<[number, T]>;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): T[];
@@ -283,7 +286,7 @@ interface Array<T> extends Iterable<T> {
     some(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): boolean;
     every(cb: (element: T, index: number, array: T[]) => boolean, thisArg?: any, ...ignored: any[]): boolean;
     [n: number]: T;
-    [Symbol.iterator](): IterableIterator<T>;
+    [Symbol.iterator](): ArrayIterator<T>;
 }
 
 interface ReadonlyArray<T> extends Iterable<T> {
@@ -299,9 +302,9 @@ interface ReadonlyArray<T> extends Iterable<T> {
     slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
     join(sep?: string, ...ignored: any[]): string;
-    keys(...ignored: any[]): number[];
-    values(...ignored: any[]): T[];
-    entries(...ignored: any[]): [string, T][];
+    keys(...ignored: any[]): ArrayIterator<number>;
+    values(...ignored: any[]): ArrayIterator<T>;
+    entries(...ignored: any[]): ArrayIterator<[number, T]>;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): T[];
@@ -319,7 +322,7 @@ interface ReadonlyArray<T> extends Iterable<T> {
     some(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): boolean;
     every(cb: (element: T, index: number, array: ReadonlyArray<T>) => boolean, thisArg?: any, ...ignored: any[]): boolean;
     [n: number]: T;
-    [Symbol.iterator](): IterableIterator<T>;
+    [Symbol.iterator](): ArrayIterator<T>;
 }
 
 interface Object {
@@ -399,6 +402,8 @@ interface ReflectConstructor {
 declare var Reflect: ReflectConstructor;
 
 interface ArrayConstructor {
+    from<T>(items: Iterable<T>, mapfn?: undefined, thisArg?: any, ...ignored: any[]): T[];
+    from<T, U>(items: Iterable<T>, mapfn: (value: T, index: number) => U, thisArg?: any, ...ignored: any[]): U[];
     new <T>(...items: T[]): T[];
     (...items: any[]): any[];
     readonly prototype: any[];

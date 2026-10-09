@@ -18,7 +18,6 @@ function encode(value) {
     if (typeof value === "object") return Object.keys(value).map(function(key) { return key + ":" + encode(value[key]); }).join(";");
     return String(value);
 }
-function list(values) { var result = []; for (var index = 0; index < values.length; index++) result.push(values[index]); return result; }
 var plans = JSON.parse(PLAN_JSON);
 for (var plan of plans) {
     var regexp = new RegExp(plan.pattern, plan.flags);
@@ -26,7 +25,7 @@ for (var plan of plans) {
     var calls = [];
     var replacement = plan.replacement === "tokens" ? "$&-$1-$2-$01-$10-$99-$$-$\x60-$'-$<part>" : function() {
         "use strict";
-        calls.push((this === undefined) + ":" + encode(list(arguments)) + ":" + regexp.lastIndex);
+        calls.push((this === undefined) + ":" + encode(Array.from(arguments)) + ":" + regexp.lastIndex);
         return "X";
     };
     var result = plan.text.replace(regexp, replacement);
@@ -50,7 +49,7 @@ for (var position of [-Infinity, -1.5, -0, NaN, 0.5, 2.8, 99, Infinity]) {
                 get groups() { log.push("groups"); return named; }
             };
             var generic = { get flags() { log.push("flags"); return ""; }, exec: function() { log.push("exec"); return hit; } };
-            var replacement = functional ? function() { "use strict"; log.push("callback:" + (this === undefined) + ":" + encode(list(arguments))); return { toString: function() { log.push("return-string"); return "X"; } }; } :
+            var replacement = functional ? function() { "use strict"; log.push("callback:" + (this === undefined) + ":" + encode(Array.from(arguments))); return { toString: function() { log.push("return-string"); return "X"; } }; } :
                 { toString: function() { log.push("replacement-string"); return "$&:$1:$2:$3:$04:$00:$99:$\x60:$':$<part>"; } };
             var text = { toString: function() { log.push("input-string"); return "abc"; } };
             try { print("generic:" + encode(replace.call(generic, text, replacement)) + ":" + log.join(",")); }
@@ -74,7 +73,7 @@ var log = [];
 var results = [2, 0, 2, 99].map(function(position) { return { length: 2, 0: "b", 1: "capture", index: position, groups: { part: position } }; });
 var cursor = 0;
 var generic = { flags: "g", lastIndex: 0, exec: function() { log.push("exec"); return cursor < results.length ? results[cursor++] : null; } };
-print("overlap:" + encode(replace.call(generic, "abc", function() { log.push("callback:" + encode(list(arguments))); return "X"; })) + ":" + log.join(","));
+print("overlap:" + encode(replace.call(generic, "abc", function() { log.push("callback:" + encode(Array.from(arguments))); return "X"; })) + ":" + log.join(","));
 var log = [];
 var named = {};
 Object.defineProperty(named, "part", { get: function() { log.push("get-name"); return { toString: function() { log.push("name-string"); return "G"; } }; } });

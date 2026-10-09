@@ -253,6 +253,7 @@ struct tsc_object {
     bool is_set;
     bool is_error;
     bool is_arguments;
+    bool is_array_iterator;
     bool is_module_namespace;
     bool is_typed_array;
     bool is_url;
@@ -283,6 +284,8 @@ struct tsc_object {
     void* prototype_gc_root;
     tsc_object_prop_t* props;
 };
+
+tsc_value_t tsc_iterator_prototype_value(void);
 
 volatile tsc_value_t* tsc_object_arguments_mapped_cell(const tsc_object_t* object, const tsc_str_t* key);
 void tsc_object_arguments_disconnect(tsc_object_t* object, const tsc_str_t* key);
