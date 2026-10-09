@@ -136,6 +136,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Box freshly created function/arrow literals without contextual nullable-type resolution, repairing computed function-valued assignments and Promise executor spread. Forward boxed Symbol.iterator calls through the shared ordinary argument/receiver path instead of discarding their arguments. Respect declared boxed storage when considering top-level function lifting, preserve actual nullable function producers and verify captures, assignment identity and retained environments in both memory modes.
+
 - Preserve Array identity across boxed/native boundaries through one owner, matching codecs and a validated raw-cell representation worklist. Retain alias mutations, descriptors, holes and metadata without extra getters; delete conversion-copy fallbacks and fail closed on incompatible native views.
 
 - Retain boxed native class/interface fields through owner-held decoded roots and one shared store, including static cells and reflective writes. Preserve ordinary assignment order, physical field reads and inherited prefixes; expose interface fields through shared adapters and fail closed on incompatible layouts or suspended field references.

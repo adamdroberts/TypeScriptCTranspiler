@@ -41257,6 +41257,14 @@ class Emitter {
         if (!isPointerKind(value.ty) || !ts.isExpression(node)) {
             return this.boxPhysicalValue(value, node);
         }
+        // Creating a closure always produces a non-nullish function. Its
+        // contextual assignment type cannot introduce a nullish runtime arm,
+        // and querying it can force TypeScript's late-bound property resolver
+        // back into a function assigned to that same computed property.
+        const expression = this.unwrapTransparentExpression(node);
+        if (ts.isFunctionExpression(expression) || ts.isArrowFunction(expression)) {
+            return this.boxPhysicalValue(value, node);
+        }
         const type = this.checker.getTypeAtLocation(node);
         const members = type.isUnion() ? type.types : [type];
         const hasNull = members.some((member) => (member.flags & ts.TypeFlags.Null) !== 0);
@@ -52694,7 +52702,7 @@ class Emitter {
             const argument = call.expression.argumentExpression;
             if (argument && this.isSymbolIteratorExpression(argument)) {
                 const recv = this.emitExpr(call.expression.expression);
-                if (recv.ty.kind === "map" || recv.ty.kind === "set") {
+                if (recv.ty.kind === "map" || recv.ty.kind === "set" || recv.ty.kind === "value") {
                     return this.emitSequencedExpr(T_VALUE,
                         [{ value: recv, target: T_VALUE, node: call.expression.expression }],
                         ([value]) => this.emitDynamicValueCall(call,
@@ -52744,12 +52752,6 @@ class Emitter {
                             }
                         }
                     }
-                } else if (recv.ty.kind === "value") {
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([val]) => `tsc_value_symbol_iterator(${val!})`,
-                    );
                 }
                 unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
             }
@@ -54309,6 +54311,12 @@ class Emitter {
             !decl.initializer ||
             (!ts.isArrowFunction(decl.initializer) && !ts.isFunctionExpression(decl.initializer))
         ) {
+            return false;
+        }
+        // The declared slot, including an explicit any/nullable annotation,
+        // owns the ABI. A callable initializer cannot replace boxed storage
+        // with a bare C function reference.
+        if (this.variableDeclarationStorageType(decl, mapType(decl, this.checker)).kind !== "function") {
             return false;
         }
         // A lifted function has no assignable variable slot. Restrict that
