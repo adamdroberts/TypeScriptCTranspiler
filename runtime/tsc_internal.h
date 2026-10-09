@@ -98,6 +98,7 @@ typedef struct tsc_object_prop {
     tsc_value_t value;
     void* value_gc_root;
     bool accessor;
+    bool native_data; /* Data property backed by a native field codec. */
     tsc_accessor_getter_t getter;
     void* getter_env;
     tsc_value_t getter_value;
@@ -599,9 +600,9 @@ tsc_value_t value_descriptor_from_string_index(const tsc_str_t* src, size_t idx)
 tsc_value_t value_descriptor_from_string_length(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str_t* key);
 tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key);
-tsc_value_t value_descriptors_from_array(const tsc_array_t* src);
-tsc_value_t value_descriptors_from_string(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop);
+void object_order_ordinary_keys(tsc_array_t* keys);
+tsc_value_t object_prop_data_value(const tsc_object_t* owner, const tsc_object_prop_t* prop);
 double value_slice_arg(tsc_value_t v, double fallback);
 size_t value_array_forward_start(size_t len, double from_index);
 bool value_array_last_start(size_t len, double from_index, size_t* out);
@@ -634,7 +635,7 @@ ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key);
 bool tsc_proxy_trap_is_callable(tsc_value_t trap);
 bool tsc_proxy_chain_has_revoked(tsc_value_t v);
 void tsc_proxy_require_callable_trap(tsc_value_t trap, const char* message);
-void tsc_proxy_validate_get_own_property_descriptor_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result);
+
 const tsc_object_t* object_prototype_object(const tsc_object_t* o);
 const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc_str_t* key);
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);

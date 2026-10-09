@@ -1,0 +1,10 @@
+method function getOwnPropertyDescriptors 1 true
+string 0,1,2,3,length 4 false false false
+units 55357 56832 0
+array 3 1.25 true true
+keys 1,23,tail,hidden true symbol false
+proxy Kba b,a 2 false false
+fields true initial live false
+lookup GABDC true 3
+nullish true
+nullish true

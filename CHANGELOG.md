@@ -159,6 +159,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Routed unused `Promise<never>` awaits through void-valued try/catch continuation states, added shared post-finally fallthrough completions for fulfilled and caught paths, and queued migrated adapters for already-settled sources to preserve await job ordering.
 
 ### Added
+- Unify ordinary Object.getOwnPropertyDescriptors calls, numeric key ordering, actual dynamic length reads, Array element descriptors and live native field data backing. Complete Proxy descriptors through the shared parser and canonical target metadata; remove the separate descriptor-map emitters and target-kind validators. Add independent semantic/key models, retained graph stress and Node E2E coverage in both memory modes.
 
 - Replace native callable identity lists and duplicated scans with one exact-key registry shared by functions, accessors and listeners. Preserve Realm/environment/constructor/registration identity through collision probing and load-bounded growth; repair the allocation-only Promise combinator timeout and verify key partitions, retained descriptors and neighboring calls in both memory modes.
 

@@ -1310,6 +1310,7 @@ void tsc_module_namespace_finalize(tsc_object_t* object);
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);
+bool tsc_object_define_native_data(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t read, tsc_accessor_setter_t write, bool enumerable);
 bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_object_get_prototype_of(const tsc_object_t* o);
 bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype);

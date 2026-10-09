@@ -1496,7 +1496,8 @@ class Emitter {
         }
         if (ts.isCallExpression(expr)) {
             if (ts.isPropertyAccessExpression(expr.expression) &&
-                ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text)) return false;
+                (ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
+                    expr.expression.name.text === "getOwnPropertyDescriptors")) return false;
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
@@ -2279,8 +2280,7 @@ class Emitter {
                 method === "values" ||
                 method === "entries" ||
                 method === "getOwnPropertyNames" ||
-                method === "getOwnPropertySymbols" ||
-                method === "getOwnPropertyDescriptors"
+                method === "getOwnPropertySymbols"
             ) &&
             call.arguments.length >= 1 &&
             this.isUnshadowedGlobalIdentifier(recv, "Object")
@@ -6482,19 +6482,6 @@ class Emitter {
             const entries = this.sideEffectFreeObjectAssignOwnDataEntries(unwrapped, new Set(seenConsts));
             return entries === null ? null : entries.length;
         }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
-            unwrapped.expression.name.text === "getOwnPropertyDescriptors" &&
-            unwrapped.arguments.length === 1
-        ) {
-            return this.sideEffectFreeObjectGetOwnPropertyNamesLength(
-                unwrapped.arguments[0]!,
-                new Set(seenConsts),
-            );
-        }
         const descriptorObjectLength = this.sideEffectFreeOwnDataPropertyDescriptorObjectKeyCount(
             unwrapped,
             seenConsts,
@@ -8493,10 +8480,7 @@ class Emitter {
             return (key === "name" || key === "message") &&
                 this.isSideEffectFreeFreshErrorOperand(descriptorExpr.arguments[0]!, seenConsts);
         }
-        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(descriptorExpr, seenConsts);
-        return access !== null &&
-            (access.key === "name" || access.key === "message") &&
-            this.isSideEffectFreeFreshErrorOperand(access.target, seenConsts);
+        return false;
     }
 
     private sideEffectFreeDescriptorValueReceiver(
@@ -8614,10 +8598,7 @@ class Emitter {
             return key === "lastIndex" &&
                 this.isSideEffectFreeFreshRegExpOperand(descriptorExpr.arguments[0]!, seenConsts);
         }
-        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(descriptorExpr, seenConsts);
-        return access !== null &&
-            access.key === "lastIndex" &&
-            this.isSideEffectFreeFreshRegExpOperand(access.target, seenConsts);
+        return false;
     }
 
     private isSideEffectFreeErrorStringMethodCall(
@@ -10358,12 +10339,6 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): "present" | "absent" | "unsafe" {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        const descriptorMapResult = this.sideEffectFreePrimitiveDescriptorMapPropertyReadResult(
-            unwrapped,
-            key,
-            seenConsts,
-        );
-        if (descriptorMapResult !== null) return descriptorMapResult;
         if (ts.isObjectLiteralExpression(unwrapped)) {
             return this.sideEffectFreePrimitiveObjectLiteralPropertyReadResult(
                 unwrapped,
@@ -10425,69 +10400,6 @@ class Emitter {
         return init
             ? this.sideEffectFreePrimitiveObjectPropertyOperandResult(init, key, seenConsts)
             : "unsafe";
-    }
-
-    private sideEffectFreePrimitiveDescriptorMapPropertyReadResult(
-        expr: ts.Expression,
-        descriptorKey: string,
-        seenConsts: Set<ts.Symbol>,
-    ): "present" | "unsafe" | null {
-        if (
-            descriptorKey !== "value" &&
-            descriptorKey !== "writable" &&
-            descriptorKey !== "enumerable" &&
-            descriptorKey !== "configurable" &&
-            descriptorKey !== "get" &&
-            descriptorKey !== "set"
-        ) {
-            return null;
-        }
-        const access = this.sideEffectFreeOwnPropertyDescriptorsAccess(expr, seenConsts);
-        if (access === null) return null;
-        const builtinOwnResult = this.sideEffectFreeFreshBuiltinOwnDataPropertyResult(
-            access.target,
-            access.key,
-            new Set(seenConsts),
-        );
-        if (builtinOwnResult === "present") return "present";
-        if (builtinOwnResult === "absent") return "unsafe";
-        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
-            access.target,
-            access.key,
-            new Set(seenConsts),
-        ) === "present"
-            ? "present"
-            : "unsafe";
-    }
-
-    private sideEffectFreeOwnPropertyDescriptorsAccess(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): { target: ts.Expression; key: string } | null {
-        let objectExpr: ts.Expression;
-        let key: string | null;
-        if (ts.isPropertyAccessExpression(expr)) {
-            objectExpr = expr.expression;
-            key = expr.name.text;
-        } else if (ts.isElementAccessExpression(expr) && expr.argumentExpression) {
-            objectExpr = expr.expression;
-            key = this.sideEffectFreeObjectPropertyReadKey(expr.argumentExpression, seenConsts);
-        } else {
-            return null;
-        }
-        if (key === null) return null;
-        const unwrappedObject = this.unwrapSideEffectFreeStaticExpression(objectExpr);
-        if (
-            !ts.isCallExpression(unwrappedObject) ||
-            !ts.isPropertyAccessExpression(unwrappedObject.expression) ||
-            !ts.isIdentifier(unwrappedObject.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(unwrappedObject.expression.expression, "Object") ||
-            unwrappedObject.expression.name.text !== "getOwnPropertyDescriptors" ||
-            unwrappedObject.arguments.length !== 1
-        ) {
-            return null;
-        }
-        return { target: unwrappedObject.arguments[0]!, key };
     }
 
     private sideEffectFreePrimitiveObjectAssignPropertyReadResult(
@@ -26498,7 +26410,7 @@ class Emitter {
             return [
                 "entries",
                 "getOwnPropertyDescriptor",
-                "getOwnPropertyDescriptors",
+
                 "getOwnPropertyNames",
                 "hasOwn",
                 "isExtensible",
@@ -27047,7 +26959,7 @@ class Emitter {
             return [
                 "entries",
                 "getOwnPropertyDescriptor",
-                "getOwnPropertyDescriptors",
+
                 "getOwnPropertyNames",
                 "hasOwn",
                 "isExtensible",
@@ -28298,8 +28210,8 @@ class Emitter {
             const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, type);
             const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, type);
             pieces.push(
-                `tsc_object_define_accessor(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
-                `${getter}, NULL, true, ${setter}, NULL, true, true, true, true, true)`,
+                `tsc_object_define_native_data(${obj}, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}), ` +
+                `${getter}, ${setter}, true)`,
             );
         }
         pieces.push(`tsc_value_object(${obj})`);
@@ -68216,11 +68128,6 @@ class Emitter {
         ], ([owner, property]) => `tsc_value_get_own_property_computed_descriptor(${owner}, ${property})`);
     }
 
-    private emitBufferGetOwnPropertyDescriptors(objExpr: ts.Expression, obj: EmitResult, ignored: SequencedCallArg[] = []): EmitResult {
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, target: T_VALUE, node: objExpr }, ...ignored],
-            ([owner]) => `tsc_value_get_own_property_descriptors(${owner})`);
-    }
-
     private emitJsonCall(call: ts.CallExpression, name: string): EmitResult {
         const args = call.arguments;
         if (name === "stringify") {
@@ -69437,6 +69344,11 @@ class Emitter {
     }
 
     private emitObjectCall(call: ts.CallExpression, name: string): EmitResult {
+        if (name === "getOwnPropertyDescriptors") {
+            const callee = call.expression;
+            if (!ts.isPropertyAccessExpression(callee)) unsupported(call, "ordinary Object call requires a property reference");
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(callee.expression), name, !!callee.questionDotToken);
+        }
         const args = call.arguments;
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
@@ -70124,88 +70036,6 @@ class Emitter {
                 ...ignored,
             ], ([o, k]) =>
                 `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined")); tsc_value_get_own_property_computed_descriptor(${o!}, ${k!}); })`,
-            );
-        }
-        if (name === "getOwnPropertyDescriptors") {
-            if (args.length < 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (this.isStaticArrayPrototypeExpression(arg)) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_array_prototype_own_property_descriptors(); })`,
-                );
-            }
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) =>
-                    `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined")); tsc_value_get_own_property_descriptors(${o!}); })`,
-                );
-            }
-            if (nonStringPrimitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
-                );
-            }
-            if (emptyOwnBuiltinObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
-                    `({ (void)${o}; tsc_value_object(tsc_object_new()); })`,
-                );
-            }
-            if (mapped.kind === "buffer") {
-                const obj = this.emitExpr(arg);
-                return this.emitBufferGetOwnPropertyDescriptors(arg, obj, ignored);
-            }
-            if (mapped.kind === "error") {
-                const obj = this.emitExpr(arg);
-                return this.emitErrorGetOwnPropertyDescriptors(arg, obj, ignored);
-            }
-            if (mapped.kind === "fsstats") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsStatsGetOwnPropertyDescriptors(arg, obj, ignored);
-            }
-            if (mapped.kind === "fsdirent") {
-                const obj = this.emitExpr(arg);
-                return this.emitFsDirentGetOwnPropertyDescriptors(arg, obj, ignored);
-            }
-            if (mapped.kind === "string") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_get_own_property_descriptors(${o})`);
-            }
-            if (mapped.kind === "array") {
-                const obj = this.emitExpr(arg);
-                const arrayObj = obj.ty.kind === "array"
-                    ? obj
-                    : { c: this.coerce(obj, mapped, arg), ty: mapped };
-                return this.emitTypedArrayGetOwnPropertyDescriptors(arg, arrayObj, ignored);
-            }
-            if (mapped.kind === "function") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_get_own_property_descriptors(${o})`);
-            }
-            if (mapped.kind === "class") {
-                const obj = this.emitExpr(arg);
-                return this.emitTypedGetOwnPropertyDescriptors(arg, obj, tsType, ignored);
-            }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.getOwnPropertyDescriptors currently supports dynamic objects only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-                ...ignored,
-            ], ([o]) =>
-                `({ if (tsc_value_is_nullish(${o!})) tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptors target must not be null or undefined")); tsc_value_get_own_property_descriptors(${o!}); })`,
             );
         }
         if (name === "getPrototypeOf") {
@@ -71113,27 +70943,6 @@ class Emitter {
         });
     }
 
-    private emitErrorGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
-            const out = this.freshTemp("_err_descs");
-            const pieces = [`tsc_object_t* ${out} = tsc_object_new()`];
-            for (const field of fields) {
-                const desc = this.freshTemp("_err_desc");
-                pieces.push(
-                    `{ ${this.typedArrayDescriptorInit(desc, field.value(error!), "true", "false", "true")}; ` +
-                    `tsc_object_set(${out}, tsc_str_from_lit("${field.name}", ${utf8ByteLen(field.name)}), tsc_value_object(${desc})); }`,
-                );
-            }
-            pieces.push(`tsc_value_object(${out})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
     private emitErrorOwnKeyCheck(
         objExpr: ts.Expression,
         obj: EmitResult,
@@ -71335,27 +71144,6 @@ class Emitter {
         });
     }
 
-    private emitFsStatsGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const fields = this.fsStatsOwnFields();
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([stats]) => {
-            const out = this.freshTemp("_stats_descs");
-            const pieces = [`tsc_object_t* ${out} = tsc_object_new()`];
-            for (const field of fields) {
-                const desc = this.freshTemp("_stats_desc");
-                pieces.push(
-                    `{ ${this.typedArrayDescriptorInit(desc, `tsc_value_num(${field.value(stats!)})`, "true", "true", "true")}; ` +
-                    `tsc_object_set(${out}, tsc_str_from_lit("${field.name}", ${field.name.length}), tsc_value_object(${desc})); }`,
-                );
-            }
-            pieces.push(`tsc_value_object(${out})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
     private emitFsStatsOwnKeyCheck(
         objExpr: ts.Expression,
         obj: EmitResult,
@@ -71462,18 +71250,6 @@ class Emitter {
         });
     }
 
-    private emitFsDirentGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
-            const out = this.freshTemp("_dirent_descs");
-            const desc = this.freshTemp("_dirent_desc");
-            return `({ tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("name", 4), tsc_value_object(${desc})); } { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("parentPath", 10), tsc_value_object(${desc})); tsc_object_set(${out}, tsc_str_from_lit("path", 4), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
-        });
-    }
-
     private emitFsDirentOwnKeyCheck(
         objExpr: ts.Expression,
         obj: EmitResult,
@@ -71543,36 +71319,6 @@ class Emitter {
                     `} ` +
                 `}`,
                 out,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedArrayGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array descriptors on non-array");
-        const elem = obj.ty.elem ?? T_VALUE;
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([arrC]) => {
-            const out = this.freshTemp("_adescs");
-            const idx = this.freshTemp("_adescs_i");
-            const elemDesc = this.freshTemp("_adescs_elem");
-            const lenDesc = this.freshTemp("_adescs_len");
-            const key = this.freshTemp("_adescs_key");
-            const elemValue = this.coerce({ c: `TSC_ARR(${elem.c}, ${arrC}, ${idx})`, ty: elem }, T_VALUE, objExpr);
-            const pieces = [
-                `tsc_object_t* ${out} = tsc_object_new()`,
-                `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                    `if (tsc_array_index_present(${arrC}, ${idx})) { ` +
-                    `tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); ` +
-                    `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
-                    `tsc_object_set(${out}, ${key}, tsc_value_object(${elemDesc})); } ` +
-                `}`,
-                `{ ${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen && ${arrC}->length_writable`, "false", "false")}; ` +
-                    `tsc_object_set(${out}, tsc_str_from_lit("length", 6), tsc_value_object(${lenDesc})); }`,
-                `tsc_value_object(${out})`,
             ];
             return `({ ${pieces.join("; ")}; })`;
         });
@@ -71703,41 +71449,6 @@ class Emitter {
                 `}`,
                 out,
             ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitTypedGetOwnPropertyDescriptors(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        tsType: ts.Type,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "class") unsupported(objExpr, "typed property descriptors on non-object");
-        const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([objC]) => {
-            const out = this.freshTemp("_tdescs");
-            const pieces: string[] = [`tsc_object_t* ${out} = tsc_object_new()`];
-            for (const name of props) {
-                const sym = tsType.getProperty(name);
-                const decl = sym?.valueDeclaration ?? sym?.getDeclarations()?.[0];
-                if (!sym || !decl) continue;
-                const pt = this.checker.getTypeOfSymbolAtLocation(sym, decl);
-                const fieldType = this.prepareType(mapTsType(objExpr, pt, this.checker));
-                const field = `${objC}->${mangleIdent(name)}`;
-                const boxed = this.coerce({ c: field, ty: fieldType }, T_VALUE, objExpr);
-                const desc = this.freshTemp("_desc");
-                const key = `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
-                pieces.push(
-                    `{ tsc_object_t* ${desc} = tsc_object_new(); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("value", 5), ${boxed}); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("writable", 8), tsc_value_bool(true)); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true)); ` +
-                    `tsc_object_set(${desc}, tsc_str_from_lit("configurable", 12), tsc_value_bool(true)); ` +
-                    `tsc_object_set(${out}, ${key}, tsc_value_object(${desc})); }`,
-                );
-            }
-            pieces.push(`tsc_value_object(${out})`);
             return `({ ${pieces.join("; ")}; })`;
         });
     }
@@ -74044,16 +73755,6 @@ class Emitter {
                 if (key === "resolve" || key === "reject") {
                     return { c: property, ty: T_VALUE };
                 }
-            }
-            if (pa.name.text === "length") {
-                if (isOpt) {
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: recv }],
-                        ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_num(tsc_value_length(${obj}))`,
-                    );
-                }
-                return { c: `tsc_value_length(${recv.c})`, ty: T_NUMBER };
             }
             const key = pa.name.text;
             const cache = this.freshTemp("_prop_cache");

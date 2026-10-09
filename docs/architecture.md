@@ -1,5 +1,7 @@
 # Architecture
 
+Descriptor-map calls enter ordinary named lookup and the shared actual argument List. Runtime ToObject and one internal PropertyKey List drive GetOwnProperty and CreateDataProperty. A dynamic ordering record carries each key's index/String/Symbol partition and creation position; the same ordering operation serves ordinary object, Array and Function key projections, while exotic key methods retain their own order. Native aggregate data properties carry backing codecs in canonical property records, so ordinary reads and descriptors observe the actual field without exposing an accessor. Proxy GetOwnProperty captures the actual target descriptor, uses the existing ordered descriptor parser once, completes that record and validates its data/accessor partition before producing a fresh ordinary descriptor object.
+
 How `tsc2c` turns a TypeScript source tree into a native gcc-linked binary.
 
 The frontend control static-semantics worklist carries one lexical iteration-name set with each control context. Lexical heads contribute their shared BoundNames, and every var binding tree in the body checks that set. Nested function bodies and class static blocks begin independent contexts; nested branches and loops retain the applicable enclosing constraints. Duplicate names and required initializer grammar checks precede reachability and emission. Both compilation and the native Test262 parse phase consume this same decision.
