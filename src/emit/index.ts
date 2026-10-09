@@ -69330,11 +69330,7 @@ class Emitter {
     ): void {
         switch (ty.kind) {
             case "number": {
-                if (ty.c === "int64_t") {
-                    stmts.push(`tsc_jsonbuf_int(&${bv}, ${cExpr})`);
-                } else {
-                    stmts.push(`tsc_jsonbuf_num(&${bv}, ${cExpr})`);
-                }
+                stmts.push(`tsc_jsonbuf_num(&${bv}, ${cExpr})`);
                 return;
             }
             case "boolean": {
@@ -76019,15 +76015,6 @@ class Emitter {
     private coerceToString(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind === "string") return r.c;
         if (r.ty.kind === "number") {
-            // Int-shape number → cheap snprintf("%lld") path. Skips the
-            // shortest-round-trip loop in tsc_str_from_num.
-            if (r.ty.c === "int64_t") return `tsc_str_from_int(${r.c})`;
-            // Static int-shape detection on the source AST: handles cases
-            // where the value comes from a non-int64_t typed expression
-            // (e.g. an integer literal) — also avoids the round-trip loop.
-            if (ts.isExpression(node) && this.isIntegerShape(node)) {
-                return `tsc_str_from_int((int64_t)(${r.c}))`;
-            }
             return `tsc_str_from_num(${r.c})`;
         }
         if (r.ty.kind === "bigint") return `tsc_bigint_to_string(${r.c}, 10.0)`;

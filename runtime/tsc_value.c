@@ -845,7 +845,7 @@ static tsc_value_t primitive_prototype_to_string(void* env, tsc_value_t this_arg
     const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
     tsc_value_t primitive;
     if (!primitive_receiver_value(descriptor, this_arg, &primitive)) {
-        tsc_throw_str(tsc_str_from_cstr("primitive toString called on incompatible receiver"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("primitive toString called on incompatible receiver"));
     }
     if (descriptor->kind == TSC_PRIMITIVE_NUMBER) {
         tsc_value_t radix = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();

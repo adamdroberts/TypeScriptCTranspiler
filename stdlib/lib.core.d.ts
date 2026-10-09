@@ -192,6 +192,8 @@ interface String extends Iterable<string> {
 }
 interface StringConstructor {
     (value?: any, ...ignored: any[]): string;
+    new(value?: any, ...ignored: any[]): String;
+    readonly prototype: String;
     fromCharCode(...codes: number[]): string;
     fromCodePoint(...codes: number[]): string;
     raw(strings: TemplateStringsArray, ...substitutions: any[]): string;
@@ -205,6 +207,8 @@ interface Boolean {
 }
 interface BooleanConstructor {
     (value?: any, ...ignored: any[]): boolean;
+    new(value?: any, ...ignored: any[]): Boolean;
+    readonly prototype: Boolean;
 }
 declare var Boolean: BooleanConstructor;
 interface Number {
@@ -1405,6 +1409,8 @@ declare var Date: DateConstructor;
 
 interface NumberConstructor {
     (value?: any, ...ignored: any[]): number;
+    new(value?: any, ...ignored: any[]): Number;
+    readonly prototype: Number;
     readonly EPSILON: number;
     readonly MAX_SAFE_INTEGER: number;
     readonly MAX_VALUE: number;

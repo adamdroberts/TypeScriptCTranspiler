@@ -291,6 +291,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     if (t.flags & ts.TypeFlags.Unknown) return T_VALUE;
     if (t.flags & ts.TypeFlags.Any) return T_VALUE;
 
+    // Primitive wrapper interfaces describe ordinary objects, whose shared
+    // runtime representation retains [[PrimitiveData]] and object identity.
+    const wrapperSymbol = t.getSymbol();
+    if (wrapperSymbol && ["Number", "String", "Boolean"].includes(wrapperSymbol.getName()) &&
+        (wrapperSymbol.getDeclarations() ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile)) {
+        return T_VALUE;
+    }
+
     // Combined callable/constructable declaration interfaces retain their
     // ordinary runtime identity instead of narrowing to a callback-only ABI.
     {

@@ -138,35 +138,113 @@ static inline size_t fast_itoa(char* dst, int64_t n) {
     return k;
 }
 
-tsc_str_t* tsc_str_from_num(double n) {
-    char buf[64];
-    int len;
-    if (isnan(n)) {
-        return tsc_str_from_lit("NaN", 3);
+/* One exact binary64 rounding interval supplies shortest positional digits
+ * in every radix. Precision grows until that interval contains an integer;
+ * there are no fractional-digit, magnitude or output-buffer limits. */
+static tsc_str_t* number_shortest_string(double value, unsigned base) {
+    if (isnan(value)) return tsc_str_from_lit("NaN", 3);
+    if (value == 0.0) return tsc_str_from_lit("0", 1);
+    const bool negative = value < 0.0;
+    const double magnitude = fabs(value);
+    if (isinf(magnitude)) return negative ? tsc_str_from_lit("-Infinity", 9) : tsc_str_from_lit("Infinity", 8);
+
+    mpq_t exact, previous, next, lower, upper, scale, scaled, temporary;
+    mpq_inits(exact, previous, next, lower, upper, scale, scaled, temporary, NULL);
+    mpz_t power, minimum, maximum, coefficient, remainder;
+    mpz_inits(power, minimum, maximum, coefficient, remainder, NULL);
+    mpq_set_d(exact, magnitude);
+    mpq_set_d(previous, nextafter(magnitude, 0.0));
+    const double next_value = nextafter(magnitude, INFINITY);
+    if (isfinite(next_value)) mpq_set_d(next, next_value);
+    else { mpq_sub(next, exact, previous); mpq_add(next, next, exact); }
+    mpq_add(lower, exact, previous); mpq_div_2exp(lower, lower, 1);
+    mpq_add(upper, exact, next); mpq_div_2exp(upper, upper, 1);
+    uint64_t bits; memcpy(&bits, &magnitude, sizeof(bits));
+    const bool closed = (bits & 1u) == 0;
+
+    int exponent = (int)floor(log(magnitude) / log((double)base));
+    mpz_ui_pow_ui(power, base, (unsigned long)(exponent < 0 ? -exponent : exponent));
+    if (exponent < 0) { mpz_set_ui(mpq_numref(scale), 1); mpz_set(mpq_denref(scale), power); }
+    else { mpz_set(mpq_numref(scale), power); mpz_set_ui(mpq_denref(scale), 1); }
+    mpq_canonicalize(scale);
+    /* The logarithm is only an estimate. Exact comparisons establish the
+     * positional exponent even at radix powers and subnormal boundaries. */
+    while (mpq_cmp(exact, scale) < 0) {
+        mpz_mul_ui(mpq_denref(scale), mpq_denref(scale), base);
+        mpq_canonicalize(scale); exponent--;
     }
-    if (isinf(n)) {
-        return n < 0 ? tsc_str_from_lit("-Infinity", 9) : tsc_str_from_lit("Infinity", 8);
+    for (;;) {
+        mpq_set(temporary, scale);
+        mpz_mul_ui(mpq_numref(temporary), mpq_numref(temporary), base);
+        mpq_canonicalize(temporary);
+        if (mpq_cmp(exact, temporary) < 0) break;
+        mpq_set(scale, temporary); exponent++;
     }
-    if (n == 0.0) {
-        return tsc_str_from_lit("0", 1);
+
+    for (;;) {
+        mpq_div(scaled, lower, scale);
+        mpz_cdiv_q(minimum, mpq_numref(scaled), mpq_denref(scaled));
+        if (!closed && mpz_divisible_p(mpq_numref(scaled), mpq_denref(scaled))) mpz_add_ui(minimum, minimum, 1);
+        mpq_div(scaled, upper, scale);
+        mpz_fdiv_q(maximum, mpq_numref(scaled), mpq_denref(scaled));
+        if (!closed && mpz_divisible_p(mpq_numref(scaled), mpq_denref(scaled))) mpz_sub_ui(maximum, maximum, 1);
+        if (mpz_cmp(minimum, maximum) <= 0) {
+            mpq_div(scaled, exact, scale);
+            mpz_fdiv_qr(coefficient, remainder, mpq_numref(scaled), mpq_denref(scaled));
+            mpz_mul_2exp(remainder, remainder, 1);
+            const int halfway = mpz_cmp(remainder, mpq_denref(scaled));
+            if (halfway > 0 || (halfway == 0 && mpz_odd_p(coefficient))) mpz_add_ui(coefficient, coefficient, 1);
+            if (mpz_cmp(coefficient, minimum) < 0) mpz_set(coefficient, minimum);
+            if (mpz_cmp(coefficient, maximum) > 0) mpz_set(coefficient, maximum);
+            break;
+        }
+        mpz_mul_ui(mpq_denref(scale), mpq_denref(scale), base);
+        mpq_canonicalize(scale); exponent--;
     }
-    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
-        size_t int_len = fast_itoa(buf, (int64_t)n);
-        tsc_str_t* s = str_alloc(int_len);
-        memcpy((char*)s->data, buf, int_len);
-        return s;
+    while (mpz_divisible_ui_p(coefficient, base)) {
+        mpz_divexact_ui(coefficient, coefficient, base); exponent++;
     }
-    /* Shortest round-trip: try 1..17 significant digits. */
-    for (int prec = 1; prec <= 17; prec++) {
-        snprintf(buf, sizeof buf, "%.*g", prec, n);
-        double rt = strtod(buf, NULL);
-        if (rt == n) break;
+    const size_t capacity = mpz_sizeinbase(coefficient, (int)base) + 2;
+    char* volatile digits = (char*)TSC_GC_MALLOC_ATOMIC(capacity);
+    mpz_get_str(digits, (int)base, coefficient);
+    const size_t count = strlen(digits);
+    const int point = (int)count + exponent;
+    mpz_clears(power, minimum, maximum, coefficient, remainder, NULL);
+    mpq_clears(exact, previous, next, lower, upper, scale, scaled, temporary, NULL);
+
+    const bool positional = base != 10 || (point >= -5 && point <= 21);
+    size_t length;
+    char exponent_digits[21]; size_t exponent_length = 0;
+    if (positional) length = point >= (int)count ? (size_t)point
+        : point > 0 ? count + 1 : count + 2 + (size_t)(-point);
+    else {
+        exponent_length = fast_itoa(exponent_digits, point < 0 ? -(int64_t)(point - 1) : (int64_t)(point - 1));
+        length = count + (count > 1 ? 1 : 0) + 2 + exponent_length;
     }
-    len = (int)strlen(buf);
-    tsc_str_t* s = str_alloc((size_t)len);
-    memcpy((char*)s->data, buf, (size_t)len);
-    return s;
+    tsc_str_t* result = str_alloc(length + (negative ? 1 : 0));
+    char* output = (char*)result->data; size_t position = 0;
+    if (negative) output[position++] = '-';
+    if (positional && point >= (int)count) {
+        memcpy(output + position, digits, count); position += count;
+        memset(output + position, '0', (size_t)point - count);
+    } else if (positional && point > 0) {
+        memcpy(output + position, digits, (size_t)point); position += (size_t)point;
+        output[position++] = '.';
+        memcpy(output + position, digits + point, count - (size_t)point);
+    } else if (positional) {
+        output[position++] = '0'; output[position++] = '.';
+        memset(output + position, '0', (size_t)(-point)); position += (size_t)(-point);
+        memcpy(output + position, digits, count);
+    } else {
+        output[position++] = digits[0];
+        if (count > 1) { output[position++] = '.'; memcpy(output + position, digits + 1, count - 1); position += count - 1; }
+        output[position++] = 'e'; output[position++] = point < 0 ? '-' : '+';
+        memcpy(output + position, exponent_digits, exponent_length);
+    }
+    return result;
 }
+
+tsc_str_t* tsc_str_from_num(double value) { return number_shortest_string(value, 10); }
 
 tsc_str_t* tsc_str_from_int(int64_t n) {
     char buf[21];
@@ -176,51 +254,10 @@ tsc_str_t* tsc_str_from_int(int64_t n) {
     return s;
 }
 
-tsc_str_t* tsc_str_from_num_radix(double n, double radix) {
-    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-    int base = (int)radix;
-    if (base < 2 || base > 36) tsc_throw_str(tsc_str_from_cstr("Number.toString: radix must be 2..36"));
-    if (base == 10 || isnan(n) || isinf(n)) return tsc_str_from_num(n);
-    if (n == 0.0) return tsc_str_from_lit("0", 1);
-
-    double whole;
-    double frac = modf(fabs(n), &whole);
-    char rev[256];
-    size_t rev_len = 0;
-    while (whole >= 1.0 && rev_len < sizeof rev) {
-        int digit = (int)fmod(whole, (double)base);
-        if (digit < 0) digit = 0;
-        if (digit >= base) digit = base - 1;
-        rev[rev_len++] = digits[digit];
-        whole = floor(whole / (double)base);
-    }
-    if (whole >= 1.0) tsc_throw_str(tsc_str_from_cstr("Number.toString: magnitude too large for radix conversion"));
-
-    char out[512];
-    size_t pos = 0;
-    if (n < 0) out[pos++] = '-';
-    if (rev_len == 0) {
-        out[pos++] = '0';
-    } else {
-        while (rev_len > 0) out[pos++] = rev[--rev_len];
-    }
-
-    if (frac > 0.0) {
-        out[pos++] = '.';
-        size_t frac_start = pos;
-        for (int i = 0; i < 64 && frac > 0.0 && pos + 1 < sizeof out; i++) {
-            frac *= (double)base;
-            int digit = (int)floor(frac);
-            if (digit < 0) digit = 0;
-            if (digit >= base) digit = base - 1;
-            out[pos++] = digits[digit];
-            frac -= (double)digit;
-        }
-        while (pos > frac_start && out[pos - 1] == '0') pos--;
-        if (pos == frac_start) pos--;
-    }
-    out[pos] = '\0';
-    return tsc_str_from_cstr(out);
+tsc_str_t* tsc_str_from_num_radix(double value, double radix) {
+    if (!isfinite(radix) || trunc(radix) < 2.0 || trunc(radix) > 36.0)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Number.toString: radix must be 2..36"));
+    return number_shortest_string(value, (unsigned)trunc(radix));
 }
 
 int number_fraction_digits(double value) {
@@ -1653,33 +1690,10 @@ void tsc_jsonbuf_int(tsc_jsonbuf_t* b, int64_t n) {
     b->len += fast_itoa(b->data + b->len, n);
 }
 
-void tsc_jsonbuf_num(tsc_jsonbuf_t* b, double n) {
-    if (isnan(n) || isinf(n)) { tsc_jsonbuf_append(b, "null", 4); return; }
-    if (n == 0.0) { tsc_jsonbuf_byte(b, '0'); return; }
-    if (n == (double)(int64_t)n && n > -1e16 && n < 1e16) {
-        tsc_jsonbuf_int(b, (int64_t)n);
-        return;
-    }
-    if (n > -4503599627370495.0 && n < 4503599627370495.0) {
-        double twice_d = n * 2.0;
-        int64_t twice = (int64_t)twice_d;
-        if ((double)twice == twice_d && (twice & 1) != 0) {
-            if (twice < 0) {
-                tsc_jsonbuf_byte(b, '-');
-                twice = -twice;
-            }
-            tsc_jsonbuf_int(b, twice / 2);
-            tsc_jsonbuf_append(b, ".5", 2);
-            return;
-        }
-    }
-    char buf[64];
-    for (int prec = 1; prec <= 17; prec++) {
-        snprintf(buf, sizeof buf, "%.*g", prec, n);
-        double rt = strtod(buf, NULL);
-        if (rt == n) break;
-    }
-    tsc_jsonbuf_append(b, buf, strlen(buf));
+void tsc_jsonbuf_num(tsc_jsonbuf_t* buffer, double value) {
+    if (!isfinite(value)) { tsc_jsonbuf_append(buffer, "null", 4); return; }
+    tsc_str_t* text = tsc_str_from_num(value);
+    tsc_jsonbuf_append(buffer, text->data, text->len);
 }
 
 void tsc_jsonbuf_bool(tsc_jsonbuf_t* b, bool v) {

@@ -2,15 +2,15 @@ function typedRadix(radix: number): string {
     try {
         return (255).toString(radix);
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
 function typedMagnitude(): string {
     try {
-        return (1e300).toString(2);
+        return String((1e300).toString(2).length);
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -21,15 +21,15 @@ function dynamicRadix(radix: any): string {
     try {
         return dynamicNumber.toString(radix);
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
 function dynamicMagnitude(): string {
     try {
-        return hugeDynamic.toString(2);
+        return String(hugeDynamic.toString(2).length);
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 

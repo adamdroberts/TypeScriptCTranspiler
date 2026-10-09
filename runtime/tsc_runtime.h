@@ -146,9 +146,8 @@ void tsc_jsonbuf_bool(tsc_jsonbuf_t* b, bool v);
 void tsc_jsonbuf_str(tsc_jsonbuf_t* b, const tsc_str_t* s);
 tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b);
 tsc_str_t* tsc_str_from_num(double n);
-/* Fast path for integer-shape numbers — skips the up-to-17 snprintf+strtod
- * round-trip loop in tsc_str_from_num. Used by the emitter when the operand
- * is provably integer-valued (e.g. loop counters in a string concat). */
+/* Exact machine-integer formatting for internal indices and counters.
+ * Observable ECMAScript Number values use tsc_str_from_num. */
 tsc_str_t* tsc_str_from_int(int64_t n);
 tsc_str_t* tsc_str_from_num_radix(double n, double radix);
 tsc_str_t* tsc_str_from_num_fixed(double n, double fraction_digits);

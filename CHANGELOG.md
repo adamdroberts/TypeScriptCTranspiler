@@ -1,5 +1,7 @@
 # Changelog
 
+- Share one exact binary64 shortest-digit formatter across Number coercion, radix text and JSON. Use midpoint rounding intervals, minimal radix precision, nearest/even candidates and dynamic decimal/scientific layout; delete snprintf searches, capped buffers and observable integer-format shortcuts. Throw actual RangeError/TypeError for radix/receiver failures, and expose primitive wrapper constructor/prototype declarations with shared boxed storage.
+
 - Lower addition through one source-tree worklist with flat staged operands/results and a shared native/ordinary value dispatcher. Preserve evaluation order, grouped conversion boundaries, snapshots and abrupt values; retain decoded roots across primitive/numeric conversions. Delete duplicated addition dispatch and literal/number concat helpers, and route try/catch/finally bodies through canonical Block scope entry.
 
 - Remove the separate mutable string-buffer binding representation and unsafe concat-tree flattening. Retain ordinary binding storage, stage native string compound references and old values before RHS evaluation, and share actual value addition. Preserve grouping, default conversion hints, immutable snapshots and unchanged bindings after abrupt completion; verify typed semantic properties with forced collection in both memory modes.
