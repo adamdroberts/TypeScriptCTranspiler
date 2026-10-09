@@ -2,6 +2,8 @@
 
 How `tsc2c` turns a TypeScript source tree into a native gcc-linked binary.
 
+The frontend control static-semantics worklist carries one lexical iteration-name set with each control context. Lexical heads contribute their shared BoundNames, and every var binding tree in the body checks that set. Nested function bodies and class static blocks begin independent contexts; nested branches and loops retain the applicable enclosing constraints. Duplicate names and required initializer grammar checks precede reachability and emission. Both compilation and the native Test262 parse phase consume this same decision.
+
 ## Top-level pipeline
 
 ```mermaid

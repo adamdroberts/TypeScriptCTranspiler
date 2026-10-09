@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { bindingNameEntries } from "./module-static-semantics";
 
 export interface ControlStaticSemanticsFailure {
     readonly node: ts.Node;
@@ -10,6 +11,7 @@ interface ControlContext {
     readonly breakableDepth: number;
     readonly iterationDepth: number;
     readonly labels: ReadonlyMap<string, boolean>;
+    readonly lexicalIterationNames: ReadonlySet<string>;
 }
 
 /** Contextual control-flow early errors over one explicit source-tree
@@ -45,6 +47,7 @@ export function earlyControlFlowStaticSemanticsFailure(
         breakableDepth: 0,
         iterationDepth: 0,
         labels: new Map(),
+        lexicalIterationNames: new Set(),
     };
     const worklist: Array<{ readonly node: ts.Node; readonly context: ControlContext }> = [
         { node: sourceFile, context: rootContext },
@@ -61,10 +64,26 @@ export function earlyControlFlowStaticSemanticsFailure(
                         breakableDepth: 0,
                         iterationDepth: 0,
                         labels: new Map(),
+                        lexicalIterationNames: new Set(),
                     },
                 });
             }
             continue;
+        }
+        if (ts.isClassStaticBlockDeclaration(node)) {
+            worklist.push({ node: node.body, context: rootContext });
+            continue;
+        }
+        if (ts.isVariableDeclarationList(node) &&
+            (node.flags & ts.NodeFlags.BlockScoped) === 0) {
+            for (const declaration of node.declarations) {
+                for (const entry of bindingNameEntries(declaration.name)) {
+                    if (context.lexicalIterationNames.has(entry.name)) {
+                        return { node: entry.node,
+                            message: `lexical iteration binding '${entry.name}' conflicts with a body var declaration` };
+                    }
+                }
+            }
         }
         if (ts.isReturnStatement(node) && !context.allowReturn) {
             return { node, message: "return statement is not contained in a function body" };
@@ -113,11 +132,43 @@ export function earlyControlFlowStaticSemanticsFailure(
             ts.isWhileStatement(node) ||
             ts.isDoStatement(node);
         const breakable = iteration || ts.isSwitchStatement(node);
+        let lexicalIterationNames = context.lexicalIterationNames;
+        if (ts.isForStatement(node) || ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+            const list = node.initializer && ts.isVariableDeclarationList(node.initializer)
+                ? node.initializer : null;
+            if (list) {
+                if (ts.isForStatement(node)) {
+                    for (const declaration of list.declarations) {
+                        if (!declaration.initializer &&
+                            (!ts.isIdentifier(declaration.name) || (list.flags & ts.NodeFlags.Const) !== 0)) {
+                            return { node: declaration,
+                                message: "for binding pattern or const declaration requires an initializer" };
+                        }
+                    }
+                }
+                if ((list.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                    const headNames = new Set<string>();
+                    for (const declaration of list.declarations) {
+                        for (const entry of bindingNameEntries(declaration.name)) {
+                            if (entry.name === "let") {
+                                return { node: entry.node, message: "lexical iteration binding cannot be named 'let'" };
+                            }
+                            if (headNames.has(entry.name)) {
+                                return { node: entry.node, message: `duplicate lexical iteration binding '${entry.name}'` };
+                            }
+                            headNames.add(entry.name);
+                        }
+                    }
+                    lexicalIterationNames = new Set([...lexicalIterationNames, ...headNames]);
+                }
+            }
+        }
         const childContext = iteration || breakable
             ? {
                 ...context,
                 breakableDepth: context.breakableDepth + (breakable ? 1 : 0),
                 iterationDepth: context.iterationDepth + (iteration ? 1 : 0),
+                lexicalIterationNames,
             }
             : context;
         const children: ts.Node[] = [];

@@ -1,0 +1,3 @@
+{
+  "description": "Frontend control worklist rejects an unreachable body var declaration that conflicts with the lexical for head"
+}
