@@ -14,3 +14,4 @@ receiver: true true
 metadata: true toFixed 1
 lookup: GABC true 2
 optional: true true
+value identity: true true true

@@ -123,6 +123,66 @@
       "clauses": ["sec-forbidden-extensions"],
       "reason": "The exact ES6 forbidden-extensions section is the current Forbidden Extensions clause, including the restriction on own caller and arguments properties of ArrowFunction objects.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.4.2_",
+      "clauses": [
+        "sec-number.prototype.tostring"
+      ],
+      "reason": "The historical ES5 15.7.4.2 metadata denotes Number.prototype.toString; the section prefix maps its semantic owner independently of filenames and fixture counts.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.4.5_",
+      "clauses": [
+        "sec-number.prototype.tofixed"
+      ],
+      "reason": "The historical ES5 15.7.4.5 metadata denotes Number.prototype.toFixed; the section prefix maps its semantic owner independently of filenames and fixture counts.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.4.4_",
+      "clauses": [
+        "sec-number.prototype.valueof"
+      ],
+      "reason": "The historical ES5 15.7.4.4 metadata denotes Number.prototype.valueOf; the section prefix maps its semantic owner independently of filenames and fixture counts.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.3.1_",
+      "clauses": [
+        "sec-number.prototype"
+      ],
+      "reason": "The historical ES5 Number.prototype constructor-property section maps to the current exact intrinsic property clause, independently of scenario filenames.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.3.1-",
+      "clauses": [
+        "sec-number.prototype"
+      ],
+      "reason": "The historical ES5 Number.prototype constructor-property section maps to the current exact intrinsic property clause, independently of scenario filenames.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.7.4_",
+      "clauses": [
+        "sec-properties-of-the-number-prototype-object"
+      ],
+      "reason": "The historical ES5 Number prototype object metadata maps to its current ordinary-object, primitive-data and prototype contract; child methods have their own disjoint section prefixes.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [
@@ -290,6 +350,54 @@
       "esid": "sec-strict-mode-of-ecmascript",
       "clauses": ["sec-try-statement-static-semantics-early-errors"],
       "reason": "The pinned informative strict-mode annex tests in this semantic directory exercise the normative CatchParameter early errors.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/toString/",
+      "clauses": [
+        "sec-number.prototype.tostring"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toString semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/toFixed/",
+      "clauses": [
+        "sec-number.prototype.tofixed"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toFixed semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/toExponential/",
+      "clauses": [
+        "sec-number.prototype.toexponential"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toExponential semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/toPrecision/",
+      "clauses": [
+        "sec-number.prototype.toprecision"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toPrecision semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/valueOf/",
+      "clauses": [
+        "sec-number.prototype.valueof"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.valueOf semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/Number/prototype/toLocaleString/",
+      "clauses": [
+        "sec-number.prototype.tolocalestring"
+      ],
+      "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toLocaleString semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
       "reviewedBy": "tsc2c compliance review"
     }
   ],
@@ -548,6 +656,66 @@
       "reasonKind": "ambiguous-metadata",
       "clauses": ["sec-string.prototype.substring"],
       "reason": "The pinned generic standard-built-in esid establishes constructability rules but does not identify the specific String.prototype.substring intrinsic under test; add that exact owner while retaining the generic clause and its independently mapped feature dependencies.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/toString/not-a-constructor.js",
+      "sourceSha256": "d6a7229674905dc6a7b29eb2916ef647855afa4d31c0656c4b2bdb5ae259d9b7",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.tostring"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toString; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/toFixed/not-a-constructor.js",
+      "sourceSha256": "46d68ea9cc3d7c2d66933881d5ba54f75b9c36eb4d459842e26d1869617e37c7",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.tofixed"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toFixed; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/toExponential/not-a-constructor.js",
+      "sourceSha256": "38d9b714b5f57586eebf55af02d9fc46a10ea68a40a659b9bf83798414b78f79",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.toexponential"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toExponential; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/toPrecision/not-a-constructor.js",
+      "sourceSha256": "b83d440bf8c48c2cc4934cca986fe200dfa3d344cf969530bedfd03d2bc9247a",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.toprecision"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toPrecision; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/valueOf/not-a-constructor.js",
+      "sourceSha256": "3a5636cfeb99c2cbaa388ecc3b1a2287db672c859130bb130a16e551463b6740",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.valueof"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.valueOf; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Number/prototype/toLocaleString/not-a-constructor.js",
+      "sourceSha256": "de3fd9bd4ce99ffe96f05f3ce4df40eb16807a539b84b032fb4b8964b58b5c65",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-number.prototype.tolocalestring"
+      ],
+      "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toLocaleString; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
       "reviewedBy": "tsc2c compliance review"
     }
   ]

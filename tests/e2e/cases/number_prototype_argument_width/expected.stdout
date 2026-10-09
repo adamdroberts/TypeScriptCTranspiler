@@ -1,0 +1,6 @@
+toString true true true
+toFixed true true true
+toExponential true true true
+toPrecision true true true
+valueOf true true true
+toLocaleString true true true

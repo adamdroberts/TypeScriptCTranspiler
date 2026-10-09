@@ -1,7 +1,20 @@
 {
   "schemaVersion": 1,
   "baseline": "baseline.json",
-  "choiceSelections": [],
+  "choiceSelections": [
+    {
+      "obligation": "choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1",
+      "selection": "Without ECMA-402, use ThisNumberValue and intrinsic decimal Number text; ignore all reserved options.",
+      "rationale": "The pinned clause explicitly permits the same numeric text as toString when ECMA-402 is absent. The runtime has no Intl API and exposes an ordinary mutable Realm-owned method; this selects that permissible fallback and binds executable choice evidence rather than excluding the clause.",
+      "reviewedBy": "tsc2c compliance review",
+      "evidence": [
+        {
+          "clause": "sec-number.prototype.tolocalestring",
+          "partition": "non-402-number-data-decimal-text-and-ignored-options"
+        }
+      ]
+    }
+  ],
   "normativeOptionalEvidence": [],
   "clauseEvidence": [
     {
@@ -2190,6 +2203,338 @@
         "rationale": "The property specification exercises Object and Reflect observation of namespace internal methods and keys; the generated width case independently stresses the underlying export collection."
       }],
       "rationale": "The Reflection contract is tied to the same non-ordinary runtime representation and exact observable tests."
+    },
+    {
+      "clause": "sec-number.prototype.tostring",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-receiver-radix-and-shortest-digit-worklist",
+          "title": "Number.prototype.toString: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.tostring"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/number-shortest-string.property.test.ts",
+              "tests/property/number-call-boundary.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "number_shortest_string",
+              "number_call_boundary"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#primitive_prototype_to_string",
+              "runtime/tsc_string.c#number_shortest_digits",
+              "runtime/tsc_string.c#number_render_digits"
+            ]
+          },
+          "rationale": "Actual receiver branding precedes radix conversion; shared ToNumber and ToIntegerOrInfinity preserve ordered primitive coercion and abrupt values. One exact binary64 midpoint interval and progressively refined radix scale choose minimal digits with nearest/even candidates, and the digit record renders dynamically. Independent rational interval/minimality properties and ordinary lookup/receiver/List partitions cover the algorithm; the single wide iterator-driven native stress exercises the shared argument worklist."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-number.prototype.tofixed",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-receiver-fixed-decimal-rounding-and-width",
+          "title": "Number.prototype.toFixed: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.tofixed"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/number-decimal-format.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "number_decimal_rounding",
+              "number_format_errors"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#number_prototype_format",
+              "runtime/tsc_string.c#number_round_rational",
+              "runtime/tsc_string.c#number_rounded_decimal",
+              "runtime/tsc_string.c#tsc_str_from_num_fixed"
+            ]
+          },
+          "rationale": "Receiver branding, option conversion and range validation precede the non-finite/large-number paths in specified order. Exact dyadic-to-decimal quantization selects the closest integer coefficient with the larger positive tie, then one dynamic digit record retains the requested fractional width. Independent rational rounding cells, sign/zero/carry/boundary and actual method partitions verify the shared algorithm; the representative wide List stresses ignored arguments and conversion after complete evaluation."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-number.prototype.toexponential",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-receiver-exponential-rounding-and-shortest",
+          "title": "Number.prototype.toExponential: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.toexponential"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/number-decimal-format.property.test.ts",
+              "tests/property/number-shortest-string.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "number_decimal_rounding",
+              "number_format_errors"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#number_prototype_format",
+              "runtime/tsc_string.c#number_shortest_digits",
+              "runtime/tsc_string.c#number_rounded_decimal",
+              "runtime/tsc_string.c#tsc_str_from_num_exponential"
+            ]
+          },
+          "rationale": "Receiver and option conversion precede the non-finite path, which precedes the range check. Specified precision uses exact closest-coefficient rounding with larger ties and normalized carry; undefined precision uses the independent shortest-interval algorithm. One digit record renders scientific text with specified zero/significant widths and exponent signs. Rational rounding-cell and shortest-interval properties, actual method semantics and one representative argument-List stress support the complete method body."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-number.prototype.toprecision",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-receiver-significant-digit-rounding-and-layout",
+          "title": "Number.prototype.toPrecision: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.toprecision"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/number-decimal-format.property.test.ts",
+              "tests/property/number-shortest-string.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "number_decimal_rounding",
+              "number_format_errors"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#number_prototype_format",
+              "runtime/tsc_string.c#number_rounded_decimal",
+              "runtime/tsc_string.c#number_render_digits",
+              "runtime/tsc_string.c#tsc_str_from_num_precision"
+            ]
+          },
+          "rationale": "Receiver branding precedes the undefined precision return; provided precision conversion precedes non-finite handling and range validation. Exact significant-digit quantization uses larger positive ties and normalized carry, then the shared digit/point record chooses the specified positional/scientific threshold. Independent rational rounding cells verify nearest selection, retained widths, signs, zero and layout; shared ordinary method and wide argument-List partitions verify observable intake."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-number.prototype.valueof",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-receiver-number-data-and-argument-list",
+          "title": "Number.prototype.valueOf: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.valueof"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/number-decimal-format.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "number_decimal_rounding"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#primitive_prototype_value_of"
+            ]
+          },
+          "rationale": "One shared primitive-data representation accepts Number primitives and actual Number wrappers, preserving the contained Number and rejecting other receivers without coercion. The ordinary function boundary consumes an arbitrary actual argument List while ignoring its values. Independent wrapper/brand/result/mutable-method partitions and one iterator-driven wide List verify the receiver and intake contracts rather than a fixture arity inventory."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-number.prototype.tolocalestring",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "non-402-number-data-decimal-text-and-ignored-options",
+          "title": "Number.prototype.toLocaleString: ordinary receiver, argument List and intrinsic algorithm",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": "choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1",
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-number.prototype.tolocalestring"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/locale-invocation.property.test.ts",
+              "tests/property/number-shortest-string.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "number_prototype_argument_width"
+            ],
+            "e2e": [
+              "locale_ordinary_invocation"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Number"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#primitive_receiver_value",
+              "runtime/tsc_value.c#primitive_prototype_to_locale_string",
+              "runtime/tsc_string.c#number_shortest_digits"
+            ]
+          },
+          "rationale": "The explicit ECMA-262 implementation choice excludes ECMA-402, formats actual Number data through intrinsic decimal text, and ignores reserved options. Ordinary Realm-owned methods validate receivers and preserve lookup, actual argument Lists and errors. Numeric observations are independently derived from String rather than a host Intl formatter; rational shortest-text properties and one wide List support the selected fallback without treating the implementation-defined choice as an unverified waiver."
+        }
+      ],
+      "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
     }
   ],
   "groups": [
@@ -2404,9 +2749,47 @@
       "rootClause": "sec-numbers-and-dates",
       "scope": "required",
       "tracking": "in-progress",
-      "semanticPartitions": ["Number", "BigInt", "Math", "Date"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["number_constructor", "math_more", "date_instances", "bigint"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_builtin.c"] },
-      "knownGaps": ["IEEE-754 edge behavior and the full Date algorithm surface remain unverified."]
+      "semanticPartitions": [
+        "Number",
+        "BigInt",
+        "Math",
+        "Date"
+      ],
+      "localEvidence": {
+        "property": [
+          "tests/property/number-shortest-string.property.test.ts",
+          "tests/property/number-call-boundary.property.test.ts",
+          "tests/property/number-decimal-format.property.test.ts",
+          "tests/property/locale-invocation.property.test.ts"
+        ],
+        "generatedRegression": [],
+        "stress": [
+          "number_prototype_argument_width"
+        ],
+        "e2e": [
+          "number_constructor",
+          "math_more",
+          "date_instances",
+          "bigint",
+          "number_shortest_string",
+          "number_call_boundary",
+          "number_decimal_rounding",
+          "locale_ordinary_invocation"
+        ],
+        "negativeDiagnostics": [],
+        "declarationSurface": [
+          "stdlib/lib.core.d.ts#Number"
+        ],
+        "implementation": [
+          "runtime/tsc_builtin.c",
+          "runtime/tsc_string.c",
+          "runtime/tsc_value.c",
+          "src/emit/index.ts"
+        ]
+      },
+      "knownGaps": [
+        "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
+      ]
     },
     {
       "id": "text-processing",

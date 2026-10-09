@@ -92,6 +92,13 @@ for (let index = 0; index < values.length; index++) {
     host.print("omitted:" + index + ":" + value.toExponential() + ":" + value.toPrecision());
 }
 const prototype: any = Number.prototype;
+for (const value of values) {
+    const wrapper: Number = new Number(value);
+    collect();
+    host.print("value-identity:" + Object.is(Reflect.apply(prototype.valueOf, value, []), value) + ":" +
+        Object.is(wrapper.valueOf(), value));
+}
+host.print("prototype-value:" + Object.is(prototype.valueOf(), 0));
 const names: string[] = ["toFixed", "toExponential", "toPrecision", "valueOf"];
 const marker: any = { tag: "payload" };
 let trace = "";
@@ -102,7 +109,8 @@ const options: any[] = [undefined, null, NaN, Infinity, -Infinity, -1, 101, 2.9,
     { valueOf: function(): number { trace += "V"; collect(); return 2; } },
     { [Symbol.toPrimitive]: function(hint: string): number { trace += hint; collect(); return 2; } },
     { valueOf: function(): any { trace += "T"; throw marker; } }];
-const receivers: any[] = [1.125, NaN, Infinity, new Number(-1.125), {}, "1.125", 1n, null, undefined];
+const receivers: any[] = [1.125, NaN, Infinity, new Number(-1.125), {}, "1.125", 1n, null, undefined,
+    Object.create(prototype), Object.create(new Number(1)), new Proxy(new Number(1), {})];
 for (const name of names) {
     const method: any = prototype[name], descriptor: any = Object.getOwnPropertyDescriptor(prototype, name);
     const primitive: number = 1.125;

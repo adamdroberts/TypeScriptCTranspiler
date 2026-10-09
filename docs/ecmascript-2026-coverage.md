@@ -1297,8 +1297,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-installerrorcause` — InstallErrorCause ( _O_: an Object, _options_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
 - [ ] **Numbers and Dates** (`sec-numbers-and-dates`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Number; BigInt; Math; Date.
-  - Linked local regression evidence: E2E: number_constructor, math_more, date_instances, bigint.
-  - Known blockers: IEEE-754 edge behavior and the full Date algorithm surface remain unverified.
+  - Linked local regression evidence: property: tests/property/number-shortest-string.property.test.ts, tests/property/number-call-boundary.property.test.ts, tests/property/number-decimal-format.property.test.ts, tests/property/locale-invocation.property.test.ts; stress: number_prototype_argument_width; E2E: number_constructor, math_more, date_instances, bigint, number_shortest_string, number_call_boundary, number_decimal_rounding, locale_ordinary_invocation.
+  - Known blockers: The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open.
   - [ ] `sec-numbers-and-dates` — Numbers and Dates: exact disposition and partitions missing.
   - [ ] `sec-number-objects` — Number Objects: exact disposition and partitions missing.
   - [ ] `sec-number-constructor` — The Number Constructor: exact disposition and partitions missing.
@@ -1321,12 +1321,19 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-number.prototype` — Number.prototype: exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-number-prototype-object` — Properties of the Number Prototype Object: exact disposition and partitions missing.
   - [ ] `sec-number.prototype.constructor` — Number.prototype.constructor: exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.toexponential` — Number.prototype.toExponential ( _fractionDigits_ ): exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.tofixed` — Number.prototype.toFixed ( _fractionDigits_ ): exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.tolocalestring` — Number.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] ): exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.toprecision` — Number.prototype.toPrecision ( _precision_ ): exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.tostring` — Number.prototype.toString ( [ _radix_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-number.prototype.valueof` — Number.prototype.valueOf ( ): exact disposition and partitions missing.
+  - [ ] `sec-number.prototype.toexponential` — Number.prototype.toExponential ( _fractionDigits_ )
+    - [ ] `ordinary-receiver-exponential-rounding-and-shortest` (intrinsic, unbounded): Number.prototype.toExponential: ordinary receiver, argument List and intrinsic algorithm.
+  - [ ] `sec-number.prototype.tofixed` — Number.prototype.toFixed ( _fractionDigits_ )
+    - [ ] `ordinary-receiver-fixed-decimal-rounding-and-width` (intrinsic, unbounded): Number.prototype.toFixed: ordinary receiver, argument List and intrinsic algorithm.
+  - [ ] `sec-number.prototype.tolocalestring` — Number.prototype.toLocaleString ( [ _reserved1_ [ , _reserved2_ ] ] )
+    - implementation-defined selection `choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1`: Without ECMA-402, use ThisNumberValue and intrinsic decimal Number text; ignore all reserved options..
+    - [ ] `non-402-number-data-decimal-text-and-ignored-options` (intrinsic, unbounded): Number.prototype.toLocaleString: ordinary receiver, argument List and intrinsic algorithm.
+  - [ ] `sec-number.prototype.toprecision` — Number.prototype.toPrecision ( _precision_ )
+    - [ ] `ordinary-receiver-significant-digit-rounding-and-layout` (intrinsic, unbounded): Number.prototype.toPrecision: ordinary receiver, argument List and intrinsic algorithm.
+  - [ ] `sec-number.prototype.tostring` — Number.prototype.toString ( [ _radix_ ] )
+    - [ ] `ordinary-receiver-radix-and-shortest-digit-worklist` (intrinsic, unbounded): Number.prototype.toString: ordinary receiver, argument List and intrinsic algorithm.
+  - [ ] `sec-number.prototype.valueof` — Number.prototype.valueOf ( )
+    - [ ] `ordinary-receiver-number-data-and-argument-list` (intrinsic, unbounded): Number.prototype.valueOf: ordinary receiver, argument List and intrinsic algorithm.
   - [ ] `sec-thisnumbervalue` — ThisNumberValue ( _value_: an ECMAScript language value, ): either a normal completion containing a Number or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-properties-of-number-instances` — Properties of Number Instances: exact disposition and partitions missing.
   - [ ] `sec-bigint-objects` — BigInt Objects: exact disposition and partitions missing.
@@ -2487,7 +2494,7 @@ Each entry is independently extracted from normative marked text, normative host
 - [ ] `choice-66a8d3abffac3a2a97e1d05d3acd06050ccc3d422d655d4034ba2ec3dfc7b49b` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
 - [ ] `choice-6756ea32f67d6120496fd59dea46f2c2461fcdfa4302186c43d7d5d94987f2ad` — implementation-approximated, marked-text, source `sec-math.exp`: exact evidenced selection missing.
 - [ ] `choice-6893b7f1fcd20743f01117665db445260a5c7c935f242bd6251d9e4b54288a44` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
-- [ ] `choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1` — implementation-defined, marked-text, source `sec-number.prototype.tolocalestring`: exact evidenced selection missing.
+- [ ] `choice-68e24a2facc857a0f7d19070b6c658d7beb0eff7d382208f1eb7e5ff346605a1` — implementation-defined, marked-text, source `sec-number.prototype.tolocalestring`: selected behaviour: Without ECMA-402, use ThisNumberValue and intrinsic decimal Number text; ignore all reserved options..
 - [ ] `choice-6caad900ef9e94b89098e511114a60dec4f31624b7802d6ba8e41a0072b91c99` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
 - [ ] `choice-6ec4e12eafa100f803928451b958c0f16ecee037cf68dcd149b11d9058a9dfed` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
 - [ ] `choice-71d669fed37199b9e33cb90fed2352f63bd0bee4168c9fe8c3f1f4c1d071bc6e` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.

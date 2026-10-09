@@ -104,6 +104,11 @@ export interface ArrayStaticFactoryItemWidthSpec {
     width: number;
 }
 
+export interface NumberPrototypeArgumentWidthSpec {
+    generator: "number-prototype-argument-width";
+    width: number;
+}
+
 export interface SwitchClauseWorklistWidthSpec {
     generator: "switch-clause-worklist-width";
     width: number;
@@ -161,6 +166,7 @@ export type GeneratedCaseSpec =
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
+    | NumberPrototypeArgumentWidthSpec
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
     | SwitchCaseBlockBindingDepthSpec
@@ -390,6 +396,13 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             generator: spec.generator,
             width,
         };
+    }
+    if (spec.generator === "number-prototype-argument-width") {
+        const width = spec.width;
+        if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
+            throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
+        }
+        return { generator: spec.generator, width };
     }
     if (spec.generator === "switch-clause-worklist-width") {
         const width = spec.width;
@@ -1346,6 +1359,46 @@ function switchCaseBlockClassWorklistWidthSource(width: number): string {
     ].join("\n");
 }
 
+function numberPrototypeArgumentWidthSource(width: number): string {
+    return `
+const width = ${width};
+const methods: any[] = [
+    { name: "toString", expected: "1.001", converts: true },
+    { name: "toFixed", expected: "1.13", converts: true },
+    { name: "toExponential", expected: "1.13e+0", converts: true },
+    { name: "toPrecision", expected: "1.1", converts: true },
+    { name: "valueOf", expected: "1.125", converts: false },
+    { name: "toLocaleString", expected: "1.125", converts: false },
+];
+let visits = 0, conversions = 0;
+const marker: any = { tag: "unexpected conversion or order" };
+const first: any = { [Symbol.toPrimitive]: function(hint: string): number {
+    if (hint !== "number" || visits !== width) throw marker;
+    conversions++;
+    return 2;
+} };
+const iterable: any = { [Symbol.iterator]: function(): any {
+    let cursor = 0;
+    return { next: function(): any {
+        if (cursor === width) return { done: true };
+        const index = cursor++;
+        visits++;
+        return { value: index === 0 ? first : {
+            ordinal: index,
+            [Symbol.toPrimitive]: function(): any { throw marker; },
+        }, done: false };
+    } };
+} };
+const value: number = 1.125;
+for (const method of methods) {
+    visits = 0; conversions = 0;
+    const result: any = (value as any)[method.name](...iterable);
+    console.log(method.name, String(result) === method.expected, visits === width,
+        conversions === (method.converts ? 1 : 0));
+}
+`;
+}
+
 function arrayStaticFactoryItemWidthSource(width: number): string {
     return [
         "const source: any[] = [];",
@@ -1500,6 +1553,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return arrowFormalBindingTreeDepthSource(spec.depth);
         case "array-static-factory-item-width":
             return arrayStaticFactoryItemWidthSource(spec.width);
+        case "number-prototype-argument-width":
+            return numberPrototypeArgumentWidthSource(spec.width);
         case "switch-clause-worklist-width":
             return switchClauseWorklistWidthSource(spec.width);
         case "switch-caseblock-environment-depth":

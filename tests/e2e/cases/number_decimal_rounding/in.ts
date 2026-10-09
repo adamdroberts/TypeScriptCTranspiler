@@ -38,3 +38,5 @@ try {
     const skipped: any = value.toFixed?.(mark("never"));
     console.log("optional:", skipped === undefined, trace === "");
 } finally { Object.defineProperty(prototype, "toFixed", original); }
+console.log("value identity:", Object.is(new Number(-0).valueOf(), -0),
+    Number.isNaN(new Number(NaN).valueOf()), Object.is(Number.prototype.valueOf(), 0));

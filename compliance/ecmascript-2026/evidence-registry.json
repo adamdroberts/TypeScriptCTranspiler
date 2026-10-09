@@ -272,7 +272,13 @@
       "id": "src/emit/index.ts#emitSpreadCallArgumentList",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
-        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist"
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
       ]
     },
     {
@@ -1880,6 +1886,219 @@
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
         "sec-array.of#generic-constructor-item-list-and-length-finalization",
         "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/number-shortest-string.property.test.ts",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/number-call-boundary.property.test.ts",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "number_prototype_argument_width",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ],
+      "stressReview": {
+        "dimension": "iterator-driven actual argument-List width",
+        "parameter": "width",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native input exercises the shared iterator-to-List growth path, ordered argument evaluation and ignored values. Arbitrary cardinality follows from that worklist rather than successive argument-count fixtures.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "number_shortest_string",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "number_call_boundary",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#Number",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitOrdinaryCallApplication",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#primitive_receiver_value",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#primitive_prototype_to_string",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#number_shortest_digits",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#number_render_digits",
+      "targets": [
+        "sec-number.prototype.tostring#ordinary-receiver-radix-and-shortest-digit-worklist",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/number-decimal-format.property.test.ts",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "number_decimal_rounding",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "number_format_errors",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#number_prototype_format",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#number_round_rational",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#number_rounded_decimal",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width",
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_from_num_fixed",
+      "targets": [
+        "sec-number.prototype.tofixed#ordinary-receiver-fixed-decimal-rounding-and-width"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_from_num_exponential",
+      "targets": [
+        "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#tsc_str_from_num_precision",
+      "targets": [
+        "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#primitive_prototype_value_of",
+      "targets": [
+        "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/locale-invocation.property.test.ts",
+      "targets": [
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "locale_ordinary_invocation",
+      "targets": [
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#primitive_prototype_to_locale_string",
+      "targets": [
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
       ]
     }
   ]

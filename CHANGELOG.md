@@ -1,5 +1,7 @@
 # Changelog
 
+- Bind Number prototype text/value methods to reciprocal exact-clause evidence, independent rounding and protocol properties, a generated iterator-driven argument-List stress, declarations and implementation anchors. Record the selected non-402 locale specification choice and reviewed historical/path/source-hashed metadata owners; regenerate the coverage view while retaining broad group and signed host/report gaps.
+
 - Share rooted ordinary locale invocation across Object, Array and numeric primitives. Preserve actual results/receivers, single ordered length conversion, live indexed access, empty element argument Lists and exact exceptions. Document the non-402 decimal/comma fallback, install Realm-owned Number/BigInt methods, expose BigInt/Symbol prototype declarations and remove their false instance data. Replace native primitive/Array locale shortcuts and unsafe purity admission; delete coercion/join and Object-call predecessors.
 
 - Round requested Number decimal precision exactly through one rational coefficient/digit/point representation shared with shortest text. Preserve halfway selection, decimal carries, zero/significant widths and specified range/non-finite order. Install ordinary Realm-owned toFixed/toExponential/toPrecision methods, share actual receiver/ToNumber intake and route typed valueOf through ordinary lookup. Delete capped snprintf formatters, manual decimal rounding and direct dynamic/native formatting predecessors; verify independent rational rounding cells and typed Node observations in both memory modes.
