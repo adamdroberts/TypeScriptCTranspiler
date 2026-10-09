@@ -1,0 +1,1 @@
+{"description":"Retained async activation bindings preserve actual this, arguments, new.target and parameter environment aliases."}

@@ -1,0 +1,8 @@
+async-arrow-arguments:true
+async-arrow-new-target:true
+body-function-parameter-alias:true
+default-environment:true
+invocation-isolation:true
+mapped-parameter:true
+receiver-and-own-new-target:true
+strict-unmapped:true

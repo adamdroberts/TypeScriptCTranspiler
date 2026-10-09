@@ -779,6 +779,8 @@ class Emitter {
     private bodyFunctionDeclarations = new WeakMap<ts.Block, Map<string, ts.FunctionDeclaration & { name: ts.Identifier }>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private preallocatedFunctionVarCells: Set<CaptureCell>[] = [];
+    private functionActivationBindings: ReadonlyMap<ArrowLexicalCaptureKind, EmitResult>[] = [];
+    private asyncContinuationRootPointers = new WeakMap<Map<ts.Symbol, string>, Map<ts.Symbol, string>>();
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     /** Compile-time projection of lexical value/TDZ/root environments.
      * CaseBlock declarations and per-iteration bindings share this collection
@@ -23754,6 +23756,9 @@ class Emitter {
     private captureRootPtrForSymbol(sym: ts.Symbol): string | null {
         const asyncCell = this.asyncContinuationCellForSymbol(sym);
         if (asyncCell) return `${asyncCell}.gc_root_cell`;
+        const scope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
+        const stateRoot = scope ? this.asyncContinuationRootPointers.get(scope)?.get(sym) : null;
+        if (stateRoot) return stateRoot;
         const env = this.closureEnvBindingForSymbol(sym);
         if (env?.rootPtr) return env.rootPtr;
         const formal = this.formalParameterBindingForSymbol(sym);
@@ -23899,7 +23904,14 @@ class Emitter {
         scope?: Map<ts.Symbol, string>,
     ): string {
         const stored = `${env}->${param.field}`;
-        if (!param.cell) return stored;
+        if (!param.cell) {
+            if (scope && param.type.kind === "value") {
+                let roots = this.asyncContinuationRootPointers.get(scope);
+                if (!roots) { roots = new Map(); this.asyncContinuationRootPointers.set(scope, roots); }
+                roots.set(param.symbol, `&${stored}_gc_root`);
+            }
+            return stored;
+        }
         if (scope) {
             let cells = this.asyncContinuationCellScopes.get(scope);
             if (!cells) {
@@ -25542,6 +25554,18 @@ class Emitter {
         };
         if (!ts.isSourceFile(owner)) for (const parameter of owner.parameters) ts.forEachChild(parameter, visit);
         visit(body);
+        // Non-simple async formals retain their initialized state beyond the
+        // entry frame. Feed every BoundName into the existing cell collection.
+        if (!ts.isSourceFile(owner) && this.isAsyncDeclaration(owner) &&
+            !this.javaScriptParameterListIsSimple(owner) && this.isJavaScriptSourceFile(owner.getSourceFile())) {
+            for (const parameter of owner.parameters) for (const identifier of this.test262BindingNames(parameter.name)) {
+                const symbol = this.symbolForIdentifier(identifier);
+                if (!symbol || captures.has(symbol)) continue;
+                const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
+                captures.set(symbol, { type: T_VALUE, cellName,
+                    rootCellName: `${cellName}__gc_root`, initializedCellName: `${cellName}__initialized` });
+            }
+        }
         if (!ts.isSourceFile(owner) && this.functionHasMappedArgumentsObject(owner)) {
             for (const parameter of owner.parameters) {
                 if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
@@ -25634,11 +25658,11 @@ class Emitter {
      * Nested arrows remain in the same environment partition, while ordinary
      * functions and classes establish a boundary.  The result is projected
      * through a fixed semantic descriptor set, never through fixture shapes. */
-    private collectArrowLexicalCaptures(fn: ts.ArrowFunction): ArrowLexicalCapture[] {
+    private requestedFunctionActivationBindings(fn: ts.FunctionLikeDeclaration): ReadonlySet<ArrowLexicalCaptureKind> {
         const requested = new Set<ArrowLexicalCaptureKind>();
         const worklist: ts.Node[] = [];
         for (const parameter of fn.parameters) worklist.push(parameter);
-        worklist.push(fn.body);
+        if (fn.body) worklist.push(fn.body);
         while (worklist.length > 0) {
             const node = worklist.pop()!;
             const kind = this.arrowLexicalCaptureKind(node);
@@ -25653,6 +25677,15 @@ class Emitter {
                 worklist.push(children[index]!);
             }
         }
+        return requested;
+    }
+
+    private currentFunctionActivationBinding(kind: ArrowLexicalCaptureKind): EmitResult | undefined {
+        return this.functionActivationBindings[this.functionActivationBindings.length - 1]?.get(kind);
+    }
+
+    private collectArrowLexicalCaptures(fn: ts.ArrowFunction): ArrowLexicalCapture[] {
+        const requested = this.requestedFunctionActivationBindings(fn);
         return ARROW_LEXICAL_CAPTURE_KINDS
             .filter((kind) => requested.has(kind))
             .map((kind) => ({
@@ -25699,6 +25732,8 @@ class Emitter {
         fn: ts.ArrowFunction,
         kind: ArrowLexicalCaptureKind,
     ): EmitResult {
+        const current = this.currentFunctionActivationBinding(kind);
+        if (current) return current;
         const inherited = this.activeArrowLexicalBinding(fn, kind);
         if (inherited) return inherited;
         if (kind === "arguments") return { c: "tsc_call_arguments()", ty: T_VALUE };
@@ -29156,31 +29191,6 @@ class Emitter {
     /** Evaluate JavaScript parameter initializers at function entry.  Dynamic
      * calls always supply an explicit undefined slot for an omitted formal, so
      * one source-ordered pass is independent of the number of parameters. */
-    private emitJavaScriptDefaultParameterInitializers(
-        buf: CBuf,
-        fn: ts.FunctionLikeDeclaration,
-        cells: ReadonlyMap<ts.Symbol, CaptureCell>,
-    ): void {
-        if (!this.isJavaScriptSourceFile(fn.getSourceFile())) return;
-        for (const parameter of fn.parameters) {
-            if (!parameter.initializer) continue;
-            if (!ts.isIdentifier(parameter.name)) {
-                unsupported(parameter, "default destructuring parameters require binding initialization lowering");
-            }
-            this.validateDefaultParameterInitializer(parameter);
-            const symbol = this.symbolForIdentifier(parameter.name);
-            const cell = symbol ? cells.get(symbol) : undefined;
-            const target = cell ? `*${cell.cellName}` : mangleIdent(parameter.name.text);
-            const initializer = this.emitExpr(parameter.initializer);
-            buf.open(`if (tsc_value_is_undefined(${target}))`);
-            buf.line(`${target} = ${this.coerce(initializer, T_VALUE, parameter.initializer)};`);
-            if (cell?.rootCellName) {
-                buf.line(`*${cell.rootCellName} = tsc_value_gc_root(${target});`);
-            }
-            buf.close();
-        }
-    }
-
     private emitCaptureCellInitialization(
         buf: CBuf,
         cell: CaptureCell,
@@ -29304,7 +29314,6 @@ class Emitter {
         } else {
             this.emitCapturedParameterCells(this.defs, runtimeParameters, capturedCells);
             this.emitCallActivationConfiguration(this.defs, fd, capturedCells);
-            this.emitJavaScriptDefaultParameterInitializers(this.defs, fd, capturedCells);
         }
         try {
             if (!fd.body) unsupported(fd, "function without body");
@@ -29365,9 +29374,7 @@ class Emitter {
                 const visit = (current: ts.Node): void => {
                     if (!safe) return;
                     if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-                    if (current.kind === ts.SyntaxKind.ThisKeyword ||
-                        current.kind === ts.SyntaxKind.SuperKeyword ||
-                        ts.isIdentifier(current) && current.text === "arguments") {
+                    if (current.kind === ts.SyntaxKind.SuperKeyword) {
                         safe = false;
                         return;
                     }
@@ -29380,9 +29387,17 @@ class Emitter {
                 this.isSupportedDirectSwitchClassDeclaration(node),
         });
         if (!graph) return false;
-        if (ts.isFunctionLike(body.parent) && this.functionUsesOwnArgumentsObject(body.parent as ts.FunctionLikeDeclaration)) {
-            unsupported(body, "async arguments binding requires retained activation state");
-        }
+        const owner = ts.isFunctionLike(body.parent) && "body" in body.parent
+            ? body.parent as ts.FunctionLikeDeclaration : null;
+        const requested = owner ? this.requestedFunctionActivationBindings(owner) : new Set<ArrowLexicalCaptureKind>();
+        const activationBindings = ARROW_LEXICAL_CAPTURE_KINDS.flatMap(kind => {
+            const value = kind === "this" ? thisValue : requested.has(kind)
+                ? this.currentFunctionActivationBinding(kind) ?? this.activeArrowLexicalBinding(body, kind) ?? {
+                    c: kind === "arguments" ? "tsc_call_arguments()" : "tsc_value_current_new_target()",
+                    ty: T_VALUE,
+                } : null;
+            return value ? [{ kind, field: `activation_${kind.replace("-", "_")}`, value }] : [];
+        });
 
         const params = this.asyncAwaitContinuationParameters(parameters);
         const capturedSymbols = new Set(params.map((param) => param.symbol));
@@ -29402,7 +29417,20 @@ class Emitter {
         };
         visitClosureCaptures(body);
         const localParams: AsyncAwaitContinuationParam[] = [];
-        const seenSymbols = new Set(params.map((param) => param.symbol));
+        const bodyAliases = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        if (owner && this.javaScriptParameterListIsSimple(owner)) {
+            const parametersByCell = new Map(params.flatMap(parameter => {
+                const cell = this.currentFunctionCellForSymbol(parameter.symbol);
+                return cell ? [[cell, parameter] as const] : [];
+            }));
+            for (const declaration of this.functionDeclarationsForBody(body).values()) {
+                const symbol = this.symbolForIdentifier(declaration.name);
+                const cell = this.currentFunctionCellForSymbol(symbol);
+                const parameter = cell && parametersByCell.get(cell);
+                if (symbol && parameter) bodyAliases.set(symbol, parameter);
+            }
+        }
+        const seenSymbols = new Set([...params.map((param) => param.symbol), ...bodyAliases.keys()]);
         const cfgScopeCellSymbols = new Set<ts.Symbol>();
         const collectCfgScopeCellSymbols = (binding: ts.BindingName): void => {
             if (ts.isIdentifier(binding)) {
@@ -29524,6 +29552,7 @@ class Emitter {
         }
         const fields = [...params, ...localParams];
         const fieldBySymbol = new Map(fields.map((field) => [field.symbol, field]));
+        for (const [symbol, field] of bodyAliases) fieldBySymbol.set(symbol, field);
         const iteratorPlans = new Map<number, {
             statement: ts.ForInStatement | ts.ForOfStatement;
             sourceType: CType;
@@ -29967,7 +29996,10 @@ class Emitter {
         }
         this.structDecls.line("bool awaiting;");
         for (const field of fields) this.emitAsyncAwaitContinuationParamField(field);
-        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        for (const binding of activationBindings) {
+            this.structDecls.line(`${binding.value.ty.c} ${binding.field};`);
+            if (binding.value.ty.kind === "value") this.structDecls.line(`void* ${binding.field}_gc_root;`);
+        }
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${name}(void* env);`);
@@ -29982,11 +30014,15 @@ class Emitter {
         callback.open(`if (setjmp(${eh}.jb) == 0)`);
 
         const scope = new Map<ts.Symbol, string>();
-        for (const field of fields) scope.set(field.symbol, this.asyncAwaitContinuationParamRead(field, "state", scope));
+        for (const [symbol, field] of fieldBySymbol)
+            scope.set(symbol, this.asyncAwaitContinuationParamRead({ ...field, symbol }, "state", scope));
         this.argumentValueScopes.push(scope);
         this.argumentValueTypeScopes.push(new Map(
-            fields.map((field) => [field.symbol, field.type] as const),
+            [...fieldBySymbol].map(([symbol, field]) => [symbol, field.type] as const),
         ));
+        this.functionActivationBindings.push(new Map(activationBindings.map(binding => [
+            binding.kind, { c: `state->${binding.field}`, ty: binding.value.ty },
+        ])));
         const emitCfgCellAllocation = (
             target: CBuf,
             field: AsyncAwaitContinuationParam,
@@ -30091,7 +30127,7 @@ class Emitter {
                 if (assignmentTargets.has(binding)) return;
                 const symbol = this.symbolForIdentifier(binding);
                 const field = symbol ? fieldBySymbol.get(symbol) : undefined;
-                if (field?.cell) emitCfgCellAllocation(callback, field);
+                if (field?.cell?.kind === "local") emitCfgCellAllocation(callback, field);
                 return;
             }
             for (const element of binding.elements) {
@@ -30121,7 +30157,7 @@ class Emitter {
                 emitClonedCfgBindingCells(element.name);
             }
         };
-        if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+        if (thisValue) this.functionThisStack.push({ c: "state->activation_this", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
             callback.open("for (;;)");
@@ -31486,6 +31522,7 @@ class Emitter {
             callback.close();
             callback.close();
         } finally {
+            this.functionActivationBindings.pop();
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueTypeScopes.pop();
@@ -31574,7 +31611,12 @@ class Emitter {
                 if (local.type.kind === "value") buf.line(`${env}->${local.field}_gc_root = NULL;`);
             }
         }
-        if (thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
+        for (const binding of activationBindings) {
+            const value = binding.kind === "this" ? this.asyncAwaitContinuationThisValue(binding.value) : binding.value.c;
+            buf.line(`${env}->${binding.field} = ${value};`);
+            if (binding.value.ty.kind === "value")
+                buf.line(`${env}->${binding.field}_gc_root = tsc_value_gc_root(${env}->${binding.field});`);
+        }
         buf.line(`${name}(${env});`);
         buf.line(`return ${result};`);
         return true;
@@ -31617,6 +31659,15 @@ class Emitter {
         }
         const capturedCells = this.capturedCellsFor(fd);
         this.defs.open(signature);
+        const parameterValues = new Map<ts.Symbol, string>();
+        const parameterTypes = new Map<ts.Symbol, CType>();
+        const rawParameterNames = this.collectParamInfos(fd.parameters).map(parameter => parameter.name);
+        const formalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
+            ? this.emitJavaScriptFormalBindingStorage(this.defs, fd, rawParameterNames,
+                capturedCells, parameterValues, parameterTypes) : null;
+        this.argumentValueScopes.push(parameterValues);
+        this.argumentValueTypeScopes.push(parameterTypes);
+        if (formalPlans) this.formalParameterScopes.push(formalPlans);
         this.returnStack.push(mappedReturn);
         this.asyncFunctionStack.push({ promiseType: mappedReturn });
         this.cellScopes.push(capturedCells);
@@ -31626,7 +31677,12 @@ class Emitter {
         const previousDynamicRoots = this.beginAsyncDynamicRootScope(this.defs, fd.parameters);
         try {
             this.emitAsyncFunctionBoundary(this.defs, true, () => {
-                this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+                if (formalPlans) {
+                    this.emitJavaScriptFormalParameterInitialization(this.defs, fd, rawParameterNames, formalPlans);
+                } else {
+                    this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+                }
+                this.emitCallActivationConfiguration(this.defs, fd, capturedCells);
                 if (!fd.body) unsupported(fd, "function without body");
                 if (!this.emitAsyncBlockContinuation(
                     this.defs,
@@ -31647,6 +31703,9 @@ class Emitter {
             this.cellScopes.pop();
             this.asyncFunctionStack.pop();
             this.returnStack.pop();
+            if (formalPlans) this.formalParameterScopes.pop();
+            this.argumentValueTypeScopes.pop();
+            this.argumentValueScopes.pop();
         }
         this.defs.close();
         this.defs.line();
@@ -31660,10 +31719,11 @@ class Emitter {
             if (this.isThisParameter(param) || !ts.isIdentifier(param.name)) continue;
             const symbol = this.symbolForIdentifier(param.name);
             if (!symbol) continue;
-            const type = this.prepareType(mapType(param, this.checker));
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            const type = cell?.type ?? (this.isJavaScriptSourceFile(param.getSourceFile())
+                ? T_VALUE : this.prepareType(mapType(param, this.checker)));
             if (type.kind === "void" || type.kind === "never") continue;
             const name = mangleIdent(param.name.text);
-            const cell = this.currentFunctionCellForSymbol(symbol);
             params.push({
                 symbol,
                 name,
@@ -48473,6 +48533,8 @@ class Emitter {
         if (ts.isTemplateExpression(expr)) return this.emitTemplate(expr);
         if (ts.isTaggedTemplateExpression(expr)) return this.emitTaggedTemplate(expr);
         if (expr.kind === ts.SyntaxKind.ThisKeyword) {
+            const activationThis = this.currentFunctionActivationBinding("this");
+            if (activationThis) return activationThis;
             const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
             if (this.isTest262ScriptGlobalThisExpression(expr)) {
                 return { c: "tsc_global_object()", ty: T_VALUE };
@@ -48490,7 +48552,8 @@ class Emitter {
             expr.keywordToken === ts.SyntaxKind.NewKeyword &&
             expr.name.text === "target"
         ) {
-            return this.activeArrowLexicalBinding(expr, "new-target") ??
+            return this.currentFunctionActivationBinding("new-target") ??
+                this.activeArrowLexicalBinding(expr, "new-target") ??
                 { c: "tsc_value_current_new_target()", ty: T_VALUE };
         }
 
@@ -48499,7 +48562,8 @@ class Emitter {
                 return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             if (this.isImplicitArgumentsIdentifier(expr)) {
-                return this.activeArrowLexicalBinding(expr, "arguments") ??
+                return this.currentFunctionActivationBinding("arguments") ??
+                    this.activeArrowLexicalBinding(expr, "arguments") ??
                     { c: "tsc_call_arguments()", ty: T_VALUE };
             }
             const hostGlobal = this.test262HostGlobalBindingName(expr);
@@ -54465,6 +54529,8 @@ class Emitter {
         // return/throw/disposal behavior (in particular, a synchronous
         // closure created in an async CFG must not return a Promise).
         const outerAsyncFunctionStack = this.asyncFunctionStack;
+        const outerFunctionActivationBindings = this.functionActivationBindings;
+        this.functionActivationBindings = [];
         const outerContinuationReturnTargets = this.asyncAwaitContinuationReturnTargets;
         const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
         const outerTailFunctionStack = this.tailFunctionStack;
@@ -54516,7 +54582,6 @@ class Emitter {
                         } else {
                             this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
                             this.emitCallActivationConfiguration(body, fn, capturedCells);
-                            this.emitJavaScriptDefaultParameterInitializers(body, fn, capturedCells);
                         }
                         const fnBody = fn.body;
                         if (!fnBody) unsupported(fn, "closure implementation requires a body");
@@ -54581,6 +54646,7 @@ class Emitter {
             this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
             this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;
             this.asyncFunctionStack = outerAsyncFunctionStack;
+            this.functionActivationBindings = outerFunctionActivationBindings;
             if (javaScriptFormalPlans) this.formalParameterScopes.pop();
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();

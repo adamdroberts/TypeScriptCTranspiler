@@ -160,6 +160,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Retain async this/arguments/new.target bindings through one activation collection and rooted state projection. Reuse parameter/body-function cells, initialize async JavaScript formals through the shared binding plan, retain non-simple TDZ state and update resumed parameter roots in state. Preserve arrow lexical activation and nested ordinary call isolation; verify dual-memory semantic properties, a deep suspended invocation graph and Node module E2E.
+
 - Instantiate ordinary function body declarations through shared retained environments, replacing capture-free lifting. Normalize body function/var/parameter symbols, preserve hoisting, recursion, closure identity, mapped arguments and separate default-parameter scope, and enter async CFG body declarations through the same collection. Verify generated binding-graph invariants, a deep retained environment and dual-memory E2E; fail closed for unrepresented suspended activation and generator body bindings.
 - Unify ordinary Object.getOwnPropertyDescriptors calls, numeric key ordering, actual dynamic length reads, Array element descriptors and live native field data backing. Complete Proxy descriptors through the shared parser and canonical target metadata; remove the separate descriptor-map emitters and target-kind validators. Add independent semantic/key models, retained graph stress and Node E2E coverage in both memory modes.
 

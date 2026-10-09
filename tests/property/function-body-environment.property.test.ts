@@ -143,8 +143,6 @@ test("unrepresented resumable binding environments fail with stable diagnostics"
         const partitions = [
             { name: "generator", source: 'function* run() { function entry() { return 1; } yield entry; } run().next();',
                 diagnostic: "generator body declaration environment requires canonical resumable binding cells" },
-            { name: "async-arguments", source: 'async function run() { await Promise.resolve(1); return arguments[0]; } run();',
-                diagnostic: "async arguments binding requires retained activation state" },
         ];
         for (const partition of partitions) {
             const entry = path.join(temporary, partition.name + ".js");
