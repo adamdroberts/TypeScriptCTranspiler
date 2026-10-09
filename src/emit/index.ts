@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
+import { runtimeGlobalBindings } from "../global-bindings";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
@@ -468,7 +469,7 @@ export interface Test262IndirectEvalEntry extends Test262EvalScriptEntry {
     readonly strict: boolean;
 }
 
-interface Test262GlobalReferencePlan {
+interface SourceReferencePlan {
     readonly get: string;
     readonly set: (value: string) => string;
     readonly remove: string;
@@ -14432,7 +14433,7 @@ class Emitter {
         if (
             this.options.test262Observation &&
             this.isTest262ScriptSourceFile(id.getSourceFile()) &&
-            this.isTest262OutOfBandIdentifier(id)
+            this.isOutOfBandIdentifier(id)
         ) {
             // A separately parsed Script's free name is resolved against the
             // shared Global Environment Record at runtime.  A prior Script
@@ -14445,7 +14446,7 @@ class Emitter {
         return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
     }
 
-    private isTest262SyntheticGlobalPropertyDeclaration(
+    private isSyntheticGlobalPropertyDeclaration(
         declaration: ts.Declaration,
         name: string,
     ): boolean {
@@ -14455,18 +14456,18 @@ class Emitter {
             return false;
         }
         if (!ts.isIdentifier(callee.expression) ||
-            !this.isTest262OutOfBandGlobalBinding(callee.expression, "Object")) {
+            !this.isOutOfBandGlobalBinding(callee.expression, "Object")) {
             return false;
         }
         const receiver = declaration.arguments[0];
         const key = declaration.arguments[1];
         return !!receiver && ts.isIdentifier(receiver) &&
-            this.isTest262OutOfBandGlobalBinding(receiver, "globalThis") &&
+            this.isOutOfBandGlobalBinding(receiver, "globalThis") &&
             !!key && (ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) &&
             key.text === name;
     }
 
-    private isTest262OutOfBandIdentifier(id: ts.Identifier): boolean {
+    private isOutOfBandIdentifier(id: ts.Identifier): boolean {
         const symbol = this.symbolForIdentifier(id);
         return !symbol || (symbol.declarations ?? []).every((declaration) =>
             declaration.getSourceFile().isDeclarationFile ||
@@ -14474,28 +14475,40 @@ class Emitter {
             ts.isIdentifier(declaration) ||
             ts.isPropertyAccessExpression(declaration) ||
             ts.isElementAccessExpression(declaration) ||
-            this.isTest262SyntheticGlobalPropertyDeclaration(declaration, id.text)
+            this.isSyntheticGlobalPropertyDeclaration(declaration, id.text)
         );
     }
 
     private test262HostGlobalBindingName(id: ts.Identifier): string | null {
         return this.options.test262Observation &&
             TEST262_HOST_GLOBAL_NAMES.has(id.text) &&
-            this.isTest262OutOfBandIdentifier(id)
+            this.isOutOfBandIdentifier(id)
             ? id.text
             : null;
     }
 
-    private isTest262OutOfBandGlobalBinding(id: ts.Identifier, name: string): boolean {
-        if (!this.options.test262Observation || id.text !== name) return false;
+    private isOutOfBandGlobalBinding(id: ts.Identifier, name: string): boolean {
+        if (id.text !== name) return false;
         // In check-JavaScript programs TypeScript can synthesize an Identifier
         // or property-access "declaration" from a free global/property pair.
         // Such a use does not shadow the host global; real source bindings
         // have declaration nodes.
-        return this.isTest262OutOfBandIdentifier(id);
+        return this.isOutOfBandIdentifier(id);
     }
 
-    private isTest262DynamicGlobalReference(id: ts.Identifier): boolean {
+    private isRuntimeGlobalReference(id: ts.Identifier): boolean {
+        if (!this.isOutOfBandIdentifier(id)) return false;
+        const descriptor = runtimeGlobalBindings.get(id.text);
+        if (descriptor && (this.isJavaScriptSourceFile(id.getSourceFile()) || descriptor.mutableValue)) return true;
+        // A free JS name has no physical C slot. Resolve its actual property
+        // against the Realm global record, including missing-name semantics.
+        if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
+        const symbol = this.symbolForIdentifier(id);
+        return !symbol || !(symbol.declarations ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile);
+    }
+
+    private isSourceGlobalReference(id: ts.Identifier): boolean {
+        if (this.isRuntimeGlobalReference(id)) return true;
         const source = id.getSourceFile();
         if (
             (!this.options.test262Observation && !this.functionSourcePaths.has(path.resolve(source.fileName))) ||
@@ -14506,7 +14519,7 @@ class Emitter {
         ) {
             return false;
         }
-        return this.isTest262OutOfBandIdentifier(id);
+        return this.isOutOfBandIdentifier(id);
     }
 
     private objectLiteralPropertyNameHasNoDefinitionSideEffects(
@@ -23696,15 +23709,8 @@ class Emitter {
     }
 
     private identifierRead(id: ts.Identifier): string {
-        const evalShadow = this.environmentShadowReferenceName(id);
-        if (evalShadow) return `tsc_environment_reference_get(${this.stringLit(evalShadow)})`;
-        if (this.isTest262OutOfBandGlobalBinding(id, "globalThis")) {
-            return "tsc_global_object()";
-        }
-        const scriptGlobal = this.test262ScriptGlobalBindingName(id);
-        if (scriptGlobal) {
-            return `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`;
-        }
+        const reference = this.sourceReferencePlan(id);
+        if (reference) return reference.get;
         const sym = this.symbolForIdentifier(id);
         const localLexical = this.localLexicalReferenceForIdentifier(id);
         if (localLexical) return this.localLexicalRead(localLexical);
@@ -33388,7 +33394,7 @@ class Emitter {
         if (!ts.isIdentifier(initializer)) {
             unsupported(initializer, "iteration assignment target must be a simple identifier");
         }
-        const global = this.test262GlobalReferencePlan(initializer);
+        const global = this.sourceReferencePlan(initializer);
         if (global) {
             buf.line(`(void)${global.set(this.coerce(value, T_VALUE, initializer))};`);
             return;
@@ -36094,7 +36100,7 @@ class Emitter {
                 if (symbol && declaration && !environment.has(symbol) &&
                     !declaration.getSourceFile().isDeclarationFile &&
                     !this.isNodeWithin(declaration, statement.finallyBlock) &&
-                    !this.test262GlobalReferencePlan(node) &&
+                    !this.sourceReferencePlan(node) &&
                     (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isParameter(declaration))) {
                     const type = this.storageType(node);
                     let pointer = this.capturePtrForSymbol(symbol);
@@ -36400,26 +36406,8 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
-            if (
-                this.isTest262OutOfBandGlobalBinding(expr, "globalThis")
-            ) {
-                return { c: "tsc_global_object()", ty: T_VALUE };
-            }
-            if (
-                this.isJavaScriptSourceFile(expr.getSourceFile()) &&
-                expr.text === "Reflect" &&
-                (
-                    this.isUnshadowedGlobalIdentifier(expr, "Reflect") ||
-                    this.isTest262DynamicGlobalReference(expr)
-                )
-            ) {
-                return {
-                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
-                    ty: T_VALUE,
-                };
-            }
-            if (this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) &&
-                this.isTest262DynamicGlobalReference(expr)) {
+            if (this.isRuntimeGlobalReference(expr) ||
+                this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) && this.isSourceGlobalReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
             // Built-in global identifiers.
@@ -36497,9 +36485,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
                 return { c: "tsc_builtin_reflect()", ty: T_VALUE };
             }
-            if (expr.text === "NaN") return { c: "((double)NAN)", ty: T_NUMBER };
-            if (expr.text === "Infinity") return { c: "((double)INFINITY)", ty: T_NUMBER };
-            if (expr.text === "undefined") return { c: "NULL", ty: T_VOID };
+            if (this.isUnshadowedGlobalIdentifier(expr, "NaN")) return { c: "((double)NAN)", ty: T_NUMBER };
+            if (this.isUnshadowedGlobalIdentifier(expr, "Infinity")) return { c: "((double)INFINITY)", ty: T_NUMBER };
+            if (this.isUnshadowedGlobalIdentifier(expr, "undefined")) return { c: "NULL", ty: T_VOID };
             if (expr.text === "__filename") {
                 return { c: this.stringLit(expr.getSourceFile().fileName), ty: T_STRING };
             }
@@ -36533,7 +36521,7 @@ class Emitter {
             if (this.isNamedImportFrom(expr, ["os", "node:os"], "devNull")) {
                 return { c: this.stringLit("/dev/null"), ty: T_STRING };
             }
-            if (this.isTest262DynamicGlobalReference(expr)) {
+            if (this.isSourceGlobalReference(expr)) {
                 return {
                     c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(expr.text)})`,
                     ty: T_VALUE,
@@ -36820,7 +36808,7 @@ class Emitter {
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
         if (ts.isIdentifier(to.expression) && (
             this.test262ScriptGlobalBindingName(to.expression) ||
-            this.isTest262DynamicGlobalReference(to.expression) ||
+            this.isSourceGlobalReference(to.expression) ||
             this.isUnresolvedParameterScopeReference(to.expression)
         )) {
             return {
@@ -37008,7 +36996,7 @@ class Emitter {
     private emitTypeofEquals(expr: ts.Expression, expected: string): string {
         if (ts.isIdentifier(expr) && (
             this.test262ScriptGlobalBindingName(expr) ||
-            this.isTest262DynamicGlobalReference(expr)
+            this.isSourceGlobalReference(expr)
         )) {
             return `tsc_str_eq(` +
                 `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
@@ -37130,10 +37118,10 @@ class Emitter {
         return this.emitDynamicValueCall(tt, this.emitExpr(tt.tag));
     }
 
-    private test262GlobalReferencePlan(id: ts.Identifier): Test262GlobalReferencePlan | null {
+    private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         const referenceName = this.test262HostGlobalBindingName(id) ??
-            (this.isTest262DynamicGlobalReference(id) ? id.text : null);
+            (this.isSourceGlobalReference(id) ? id.text : null);
         const name = scriptGlobal ?? referenceName ??
             (this.isUnresolvedParameterScopeReference(id) ? id.text : null) ?? this.environmentShadowReferenceName(id) ??
             (this.sourceEnvironmentEnabled(id.getSourceFile()) && this.isImplicitArgumentsIdentifier(id) ? "arguments" : null);
@@ -37149,13 +37137,13 @@ class Emitter {
         };
     }
 
-    private emitTest262GlobalUpdate(
+    private emitSourceReferenceUpdate(
         operand: ts.Expression,
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
         prefix: boolean,
     ): EmitResult | null {
         if (!ts.isIdentifier(operand)) return null;
-        const reference = this.test262GlobalReferencePlan(operand);
+        const reference = this.sourceReferencePlan(operand);
         if (!reference) return null;
         const current = this.freshTemp("_global_update_current");
         const next = this.freshTemp("_global_update_next");
@@ -37423,7 +37411,7 @@ class Emitter {
             if (localLexicalUpdate) return localLexicalUpdate;
             const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, op, true);
             if (moduleLexicalUpdate) return moduleLexicalUpdate;
-            const globalUpdate = this.emitTest262GlobalUpdate(pu.operand, op, true);
+            const globalUpdate = this.emitSourceReferenceUpdate(pu.operand, op, true);
             if (globalUpdate) return globalUpdate;
             const nativeUpdate = this.emitRootedNativeFieldUpdate(pu.operand, op, true);
             if (nativeUpdate) return nativeUpdate;
@@ -37539,7 +37527,7 @@ class Emitter {
             };
         };
         if (ts.isIdentifier(expr)) {
-            const reference = this.test262GlobalReferencePlan(expr);
+            const reference = this.sourceReferencePlan(expr);
             if (reference) return { c: reference.remove, ty: T_BOOLEAN };
         }
         if (ts.isPropertyAccessExpression(expr) && this.isProcessEnvObject(expr.expression)) {
@@ -37611,7 +37599,7 @@ class Emitter {
             if (localLexicalUpdate) return localLexicalUpdate;
             const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, pu.operator, false);
             if (moduleLexicalUpdate) return moduleLexicalUpdate;
-            const globalUpdate = this.emitTest262GlobalUpdate(
+            const globalUpdate = this.emitSourceReferenceUpdate(
                 pu.operand,
                 pu.operator,
                 false,
@@ -38592,7 +38580,7 @@ class Emitter {
         op: ts.SyntaxKind,
     ): EmitResult | null {
         if (!ts.isIdentifier(bin.left)) return null;
-        const reference = this.test262GlobalReferencePlan(bin.left);
+        const reference = this.sourceReferencePlan(bin.left);
         if (!reference) return null;
         const rhs = this.emitExpr(bin.right);
         const value = this.coerce(rhs, T_VALUE, bin.right);
@@ -39887,41 +39875,6 @@ class Emitter {
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
-        if (
-            ts.isPropertyAccessExpression(call.expression) &&
-            ts.isIdentifier(call.expression.expression) &&
-            this.isJavaScriptSourceFile(call.getSourceFile()) &&
-            call.expression.expression.text === "Reflect" &&
-            (
-                this.isUnshadowedGlobalIdentifier(call.expression.expression, "Reflect") ||
-                this.isTest262DynamicGlobalReference(call.expression.expression)
-            )
-        ) {
-            return this.emitDynamicNamedPropertyCall(
-                call,
-                {
-                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
-                    ty: T_VALUE,
-                },
-                call.expression.name.text,
-                false,
-            );
-        }
-        if (
-            ts.isPropertyAccessExpression(call.expression) &&
-            ts.isIdentifier(call.expression.expression) &&
-            call.expression.expression.text === "Proxy" &&
-            this.isTest262DynamicGlobalReference(call.expression.expression)
-        ) {
-            return this.emitDynamicMethod(
-                call,
-                {
-                    c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
-                    ty: T_VALUE,
-                },
-                call.expression.name.text,
-            );
-        }
         const inlineClosure = this.emitInlineClosureCall(call);
         if (inlineClosure) return inlineClosure;
         /* JavaScript calls always cross one canonical argument-list boundary.
@@ -40061,15 +40014,6 @@ class Emitter {
         }
         const calleeId = call.expression;
         const name = calleeId.text;
-        if (
-            name === "Proxy" &&
-            this.isTest262DynamicGlobalReference(calleeId)
-        ) {
-            return this.emitDynamicValueCall(call, {
-                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
-                ty: T_VALUE,
-            });
-        }
         const hostGlobal = this.test262HostGlobalBindingName(calleeId);
         if (hostGlobal) {
             return this.emitDynamicValueCall(call, {
@@ -40084,8 +40028,8 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
-        if (this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) &&
-            this.isTest262DynamicGlobalReference(calleeId)) {
+        if (this.isRuntimeGlobalReference(calleeId) ||
+            this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) && this.isSourceGlobalReference(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         }
         if (name === "eval" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
@@ -41023,7 +40967,7 @@ class Emitter {
         // Ambient declarations describe the host binding's type; they do not
         // own a source callable. Resolve the actual Script/Module Reference
         // before choosing a call target, including optional indirect eval.
-        if (this.isTest262DynamicGlobalReference(id)) return false;
+        if (this.isSourceGlobalReference(id)) return false;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl)) {
@@ -42374,6 +42318,8 @@ class Emitter {
     ): EmitResult {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
+        if (ts.isIdentifier(recvExpr) && this.isRuntimeGlobalReference(recvExpr))
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
 
         if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
             (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") ||
@@ -57179,30 +57125,8 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
-        if (
-            this.isJavaScriptSourceFile(n.getSourceFile()) &&
-            ctorExpr.text === "Reflect" &&
-            (
-                this.isUnshadowedGlobalIdentifier(ctorExpr, "Reflect") ||
-                this.isTest262DynamicGlobalReference(ctorExpr)
-            )
-        ) {
-            return this.emitDynamicValueConstruct(n, {
-                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Reflect")})`,
-                ty: T_VALUE,
-            });
-        }
-        if (
-            ctorExpr.text === "Proxy" &&
-            this.isTest262DynamicGlobalReference(ctorExpr)
-        ) {
-            return this.emitDynamicValueConstruct(n, {
-                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey("Proxy")})`,
-                ty: T_VALUE,
-            });
-        }
-        if (this.functionSourcePaths.has(path.resolve(n.getSourceFile().fileName)) &&
-            this.isTest262DynamicGlobalReference(ctorExpr)) {
+        if (this.isRuntimeGlobalReference(ctorExpr) ||
+            this.functionSourcePaths.has(path.resolve(n.getSourceFile().fileName)) && this.isSourceGlobalReference(ctorExpr)) {
             return this.emitDynamicValueConstruct(n, this.emitExpr(ctorExpr));
         }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Proxy")) {
@@ -57218,12 +57142,6 @@ class Emitter {
         }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "RegExp")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
-        }
-        if ((ctorExpr.text === "Map" || ctorExpr.text === "Set") &&
-            this.isTest262DynamicGlobalReference(ctorExpr)) {
-            return this.emitDynamicValueConstruct(n, {
-                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(ctorExpr.text)})`, ty: T_VALUE,
-            });
         }
         if (this.isJavaScriptSourceFile(n.getSourceFile()) &&
             (this.isUnshadowedGlobalIdentifier(ctorExpr, "Map") ||
@@ -57825,6 +57743,11 @@ class Emitter {
     }
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
+        if (ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
+            const receiver = precomputedReceiver ?? this.emitExpr(pa.expression);
+            return this.emitSequencedExpr(T_VALUE, [{value: receiver, target: T_VALUE, node: pa.expression}],
+                ([value]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${value}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
+        }
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };

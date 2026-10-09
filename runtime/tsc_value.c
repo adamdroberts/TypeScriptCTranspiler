@@ -2210,6 +2210,56 @@ static tsc_value_t object_static_set_prototype_of(void* env, tsc_value_t this_ar
     return target;
 }
 
+static tsc_value_t object_static_is(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_bool(tsc_value_object_is(object_constructor_arg(args, 0), object_constructor_arg(args, 1)));
+}
+
+static tsc_value_t object_static_get_prototype_of(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_object_get_prototype_of(object_constructor_arg(args, 0));
+}
+
+static tsc_value_t object_static_assign(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    tsc_value_t target = tsc_value_to_object(object_constructor_arg(args, 0));
+    void* volatile target_root = tsc_value_gc_root(target);
+    (void)target_root;
+    for (size_t index = 1; args && index < args->len; index++)
+        (void)tsc_value_object_assign(target, TSC_ARR(tsc_value_t, args, index));
+    return target;
+}
+
+static tsc_value_t object_static_from_entries(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_object_from_entries(object_constructor_arg(args, 0));
+}
+
+typedef struct {
+    const char* name;
+    bool (*operation)(tsc_value_t);
+    bool mutation;
+} tsc_object_integrity_operation_t;
+
+static const tsc_object_integrity_operation_t object_integrity_operations[] = {
+    { "isExtensible", tsc_value_is_extensible, false },
+    { "isSealed", tsc_value_is_sealed, false },
+    { "isFrozen", tsc_value_is_frozen, false },
+    { "preventExtensions", tsc_value_prevent_extensions, true },
+    { "seal", tsc_value_seal, true },
+    { "freeze", tsc_value_freeze, true },
+};
+
+static tsc_value_t object_static_integrity(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    const tsc_object_integrity_operation_t* operation = env;
+    tsc_value_t target = object_constructor_arg(args, 0);
+    bool result = operation->operation(target);
+    if (!operation->mutation) return tsc_value_bool(result);
+    if (!result) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object integrity operation failed"));
+    return target;
+}
+
 typedef struct {
     const char* name;
     size_t name_len;
@@ -2230,6 +2280,10 @@ static const tsc_object_static_method_t object_static_methods[] = {
     { "values", 6, 1.0, object_static_values },
     { "entries", 7, 1.0, object_static_entries },
     { "setPrototypeOf", 14, 2.0, object_static_set_prototype_of },
+    { "is", 2, 2.0, object_static_is },
+    { "getPrototypeOf", 14, 1.0, object_static_get_prototype_of },
+    { "assign", 6, 2.0, object_static_assign },
+    { "fromEntries", 11, 1.0, object_static_from_entries },
 };
 
 static void object_constructor_define_static_method(
@@ -2318,6 +2372,13 @@ tsc_value_t tsc_object_constructor_value(void) {
                     intrinsic->constructor,
                     &object_static_methods[index]
                 );
+            }
+            for (size_t index = 0; index < sizeof(object_integrity_operations) / sizeof(object_integrity_operations[0]); index++) {
+                const tsc_object_integrity_operation_t* operation = &object_integrity_operations[index];
+                tsc_str_t* name = tsc_str_from_cstr(operation->name);
+                (void)tsc_value_define_property_desc(intrinsic->constructor, name,
+                    tsc_value_function_builtin_named(object_static_integrity, (void*)operation, 1.0, name),
+                    true, true, true, false, true, true, true);
             }
             intrinsic->initialization_state = 2;
         }
@@ -2447,14 +2508,13 @@ typedef struct {
 } tsc_global_function_descriptor_t;
 
 static const tsc_global_function_descriptor_t global_function_descriptors[] = {
-    { "parseFloat", 10, 1.0, TSC_GLOBAL_FUNCTION_PARSE_FLOAT },
-    { "parseInt", 8, 2.0, TSC_GLOBAL_FUNCTION_PARSE_INT },
-    { "isFinite", 8, 1.0, TSC_GLOBAL_FUNCTION_IS_FINITE },
-    { "isNaN", 5, 1.0, TSC_GLOBAL_FUNCTION_IS_NAN },
-    { "encodeURI", 9, 1.0, TSC_GLOBAL_FUNCTION_ENCODE_URI },
-    { "encodeURIComponent", 18, 1.0, TSC_GLOBAL_FUNCTION_ENCODE_URI_COMPONENT },
-    { "decodeURI", 9, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI },
-    { "decodeURIComponent", 18, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT },
+#define TSC_GLOBAL_INTRINSIC(name, value)
+#define TSC_GLOBAL_FUNCTION(name, length, kind) { #name, sizeof(#name) - 1, length, kind },
+#define TSC_GLOBAL_VALUE(name, value, writable, configurable)
+#include "tsc_global_bindings.def"
+#undef TSC_GLOBAL_INTRINSIC
+#undef TSC_GLOBAL_FUNCTION
+#undef TSC_GLOBAL_VALUE
 };
 
 static tsc_value_t global_function_argument(const tsc_array_t* args, size_t index) {
@@ -2587,43 +2647,26 @@ tsc_value_t tsc_global_object(void) {
      * constructors have their own singleton locks, so this ordering also keeps
      * the global initializer free of nested runtime-lock acquisition. */
     tsc_global_intrinsic_t intrinsics[] = {
-        { "Object", 6, tsc_object_constructor_value() },
-        { "Function", 8, tsc_function_constructor_value() },
-        { "Array", 5, tsc_array_constructor_value() },
-        { "String", 6, tsc_string_constructor_value() },
-        { "Number", 6, tsc_number_constructor_value() },
-        { "Boolean", 7, tsc_boolean_constructor_value() },
-        { "BigInt", 6, tsc_bigint_constructor_value() },
-        { "Symbol", 6, tsc_symbol_constructor_value() },
-        { "Proxy", 5, tsc_proxy_constructor_value() },
-        { "Date", 4, tsc_date_constructor_value() },
-        { "RegExp", 6, tsc_regexp_constructor_value() },
-        { "Promise", 7, tsc_promise_constructor_value() },
-        { "Map", 3, tsc_map_constructor_value() },
-        { "Set", 3, tsc_set_constructor_value() },
-        { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
-        { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
-        { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
-        { "SyntaxError", 11, tsc_error_constructor_value(TSC_ERROR_SYNTAX) },
-        { "ReferenceError", 14, tsc_error_constructor_value(TSC_ERROR_REFERENCE) },
-        { "EvalError", 9, tsc_error_constructor_value(TSC_ERROR_EVAL) },
-        { "URIError", 8, tsc_error_constructor_value(TSC_ERROR_URI) },
-        { "AggregateError", 14, tsc_error_constructor_value(TSC_ERROR_AGGREGATE) },
-        { "SuppressedError", 15, tsc_error_constructor_value(TSC_ERROR_SUPPRESSED) },
-        { "Math", 4, tsc_builtin_math() },
-        { "JSON", 4, tsc_builtin_json() },
-        { "Reflect", 7, tsc_builtin_reflect() },
+#define TSC_GLOBAL_INTRINSIC(name, value) { #name, sizeof(#name) - 1, value },
+#define TSC_GLOBAL_FUNCTION(name, length, kind)
+#define TSC_GLOBAL_VALUE(name, value, writable, configurable)
+#include "tsc_global_bindings.def"
+#undef TSC_GLOBAL_INTRINSIC
+#undef TSC_GLOBAL_FUNCTION
+#undef TSC_GLOBAL_VALUE
     };
     tsc_object_t* built = tsc_object_new();
     tsc_value_t built_value = tsc_value_object(built);
-    (void)tsc_object_define(
-        built,
-        tsc_str_from_lit("globalThis", 10),
-        built_value,
-        true,
-        false,
-        true
-    );
+#define TSC_GLOBAL_INTRINSIC(name, value)
+#define TSC_GLOBAL_FUNCTION(name, length, kind)
+#define TSC_GLOBAL_VALUE(name, value, writable, configurable) \
+    (void)tsc_object_define(built, tsc_str_from_lit(#name, sizeof(#name) - 1), \
+        value, writable, false, configurable);
+#include "tsc_global_bindings.def"
+#undef TSC_GLOBAL_INTRINSIC
+#undef TSC_GLOBAL_FUNCTION
+#undef TSC_GLOBAL_VALUE
+
     for (size_t index = 0; index < sizeof(intrinsics) / sizeof(intrinsics[0]); index++) {
         global_define_intrinsic(built, &intrinsics[index]);
     }
@@ -2643,30 +2686,6 @@ tsc_value_t tsc_global_object(void) {
             true
         );
     }
-    (void)tsc_object_define(
-        built,
-        tsc_str_from_lit("undefined", 9),
-        tsc_value_undefined(),
-        false,
-        false,
-        false
-    );
-    (void)tsc_object_define(
-        built,
-        tsc_str_from_lit("NaN", 3),
-        tsc_value_num(NAN),
-        false,
-        false,
-        false
-    );
-    (void)tsc_object_define(
-        built,
-        tsc_str_from_lit("Infinity", 8),
-        tsc_value_num(INFINITY),
-        false,
-        false,
-        false
-    );
 
     tsc_runtime_lock();
     if (!realm->global_object) realm->global_object = built;

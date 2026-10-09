@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Project Realm initialization and global Reference admission from one binding descriptor collection. Share mutable globalThis/free-name reads, writes, deletion, typeof, calls and construction across CLI and native observation; retain shadows and suspended owners, remove hardwired globalThis and duplicate dispatch branches, and publish Object static adapters over existing value operations. Verify independent Script/Module semantic partitions, retained-owner stress and typed E2E in both memory modes.
+
 - Validate resource owners, parse goals, Await contexts, loop heads, trivia and BoundNames through shared static semantics. Remove bare-switch resource lowering and share raw-token Use Strict recognition across validation, emission and eval discovery. Verify independent grammar partitions, a deep native scope tree and typed E2E in both memory modes.
 
 - Capture resource methods and receiver roots at BindingInitialization in one DisposeCapability collection. Share LIFO cleanup with ordinary/resumable completions and iterator close, preserve suppression and exact semantic Await timing, publish ordinary SuppressedError properties, and delete lazy/name-list/aggregate-Promise disposal. Verify independent semantic partitions, deep native ownership and typed E2E in both memory modes.

@@ -1,0 +1,3 @@
+{
+  "description": "Mutable globalThis References share Realm cells and descriptors across typed closures and suspended reads"
+}

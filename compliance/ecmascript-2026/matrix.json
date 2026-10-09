@@ -2630,10 +2630,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["realm and agent state", "execution contexts", "environment records", "jobs"],
-      "localEvidence": { "property": ["tests/property/eval-environment.property.test.ts", "tests/property/direct-eval-cell.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c",
-          "runtime/tsc_environment.c",
-          "runtime/tsc_core.c",
-          "runtime/tsc_value.c"] },
+      "localEvidence": {"property": ["tests/property/eval-environment.property.test.ts", "tests/property/direct-eval-cell.property.test.ts", "tests/property/global-reference.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval", "global_reference_cells"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c", "runtime/tsc_environment.c", "runtime/tsc_core.c", "runtime/tsc_value.c", "src/global-bindings.ts", "runtime/tsc_global_bindings.def"]},
       "knownGaps": ["Class/private/super/with environments, complete Annex B, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete."]
     },
     {
@@ -2733,7 +2730,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["value properties", "global functions", "constructors", "Reflect", "global object semantics"],
-      "localEvidence": { "property": ["tests/property/reflect-construct.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/eval-source-flow.property.test.ts"], "generatedRegression": [], "stress": ["reflect_construct_argument_width"], "e2e": ["global_number_predicates", "reflect_construct_validation", "runtime_eval", "proxy_ownkeys_invariants"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
+      "localEvidence": {"property": ["tests/property/reflect-construct.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/eval-source-flow.property.test.ts", "tests/property/global-reference.property.test.ts"], "generatedRegression": [], "stress": ["reflect_construct_argument_width"], "e2e": ["global_number_predicates", "reflect_construct_validation", "runtime_eval", "proxy_ownkeys_invariants", "global_reference_cells"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts", "src/global-bindings.ts", "runtime/tsc_global_bindings.def"]},
       "knownGaps": ["Runtime eval needs a non-delegating, general Script implementation for full conformance; the remaining Reflect operations require exact clause partitions and exhaustive pinned Test262 evidence."]
     },
     {
