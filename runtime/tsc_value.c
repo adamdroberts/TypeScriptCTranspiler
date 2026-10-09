@@ -235,17 +235,26 @@ void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value) {
 }
 
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
-    void* env, double length, tsc_str_t* name, bool constructable) {
+    void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source) {
     if (!env) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native callable has no value owner"));
     tsc_runtime_lock();
     if (!owner->initialized) {
         tsc_value_t value = tsc_value_function_named_kind(apply, NULL, env, length, name,
             constructable ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_CLOSURE);
+        (void)tsc_value_function_with_source(value, source);
         tsc_callable_owner_set(owner, value);
     }
     tsc_value_t value = owner->value;
     tsc_runtime_unlock();
     return value;
+}
+
+tsc_value_t tsc_value_function_with_source(tsc_value_t function, tsc_str_t* source) {
+    if (source && value_is_box(function) && value_tag(function) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(function);
+        if (!identity->source_text) identity->source_text = source;
+    }
+    return function;
 }
 
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {

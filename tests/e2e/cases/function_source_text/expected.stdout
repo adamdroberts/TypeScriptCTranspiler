@@ -1,0 +1,7 @@
+source: true true
+internal: true
+builtin: function keys() { [native code] }
+opaque: true
+error: true
+module spans: true true
+class spans: true true

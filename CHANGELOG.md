@@ -1,5 +1,7 @@
 # Changelog
 
+- Retain JavaScript callable definition spans and finite Function-constructor SourceText in canonical owners. Make Function.prototype.toString read internal source/InitialName without mutable-property or Proxy observation, and route native function string coercion through ordinary ToPrimitive. Verify independent span, metadata, Realm and retained-source partitions with native E2E in both memory modes.
+
 - Replace constant Function-constructor adapters with one transitive finite source graph and fresh ordinary function factories. Preserve mutable callee lookup, actual argument conversion, formal/default/rest/closure and Realm semantics, prototype allocation and runtime SyntaxError. Generalize shared parameter early errors, remove empty-body and single-body bridge predecessors, and verify grammar/model partitions, retained-function stress and native E2E in both memory modes.
 
 - Retain canonical Buffer owners and shared backing-byte views. Install ordinary Realm method descriptors, aliases and actual-argument calls; unify Number byte reads/writes under one width/sign/endian plan with real errors. Route live indexed properties, reflection, iterator and byte-source consumers through the shared representation; delete direct method, byte-loop and purity predecessors. Align inline Array HOF parameter storage with body emission and own descriptor collection with the key/GetOwnProperty worklist. Verify independent byte plans, forced collection, deep views and Node E2E observations.

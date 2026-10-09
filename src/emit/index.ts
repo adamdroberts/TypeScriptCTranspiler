@@ -15068,7 +15068,7 @@ class Emitter {
                 } else {
                     const moduleId = this.graph.fileToModuleId.get(path.resolve(entry.entry));
                     if (!moduleId) throw new Error(`Function source is absent from the AOT graph: ${entry.entry}`);
-                    out.line(`        return tsc_function_create_from_source(mod_evaluate_${moduleId});`);
+                    out.line(`        return tsc_function_create_from_source(mod_evaluate_${moduleId}, parameters, body);`);
                 }
                 out.line("    }");
             }
@@ -28360,7 +28360,7 @@ class Emitter {
             const length = sig?.getParameters().length ?? method.parameters.length;
             pieces.push(
                 `tsc_object_define(${obj}, ${propertyKey}, ` +
-                `tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})), true, false, true)`,
+                `${this.withCallableSourceText(`tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}))`, method)}, true, false, true)`,
             );
         }
         const fields = nativeInterface
@@ -28411,9 +28411,9 @@ class Emitter {
             buf.line();
             this.closureDefs.write(buf.toString());
         }
-        const constructor =
+        const constructor = this.withCallableSourceText(
             `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, ` +
-            `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`;
+            `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
         const staticDefinitions: string[] = [];
         for (const member of cd.members) {
             if (!isStatic(member)) continue;
@@ -28425,8 +28425,8 @@ class Emitter {
                 const methodLength = member.parameters.length;
                 const methodValue = this.classMemberHasDecorators(member)
                     ? this.classStaticMethodDecoratorValue(cd, member).c
-                    : `tsc_value_function_closure_named(${methodAdapter}, NULL, ${methodLength}.0, ` +
-                        `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}))`;
+                    : this.withCallableSourceText(`tsc_value_function_closure_named(${methodAdapter}, NULL, ${methodLength}.0, ` +
+                        `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}))`, member);
                 staticDefinitions.push(
                     `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${methodValue}, ` +
                     `true, true, true, false, true, true, true)) ` +
@@ -47786,9 +47786,9 @@ class Emitter {
         const identity = this.freshTemp("_switch_class_identity");
         const runtimeName = declaration.name.text;
         return {
-            c: `({ void* const ${identity} = TSC_GC_MALLOC(sizeof(char)); ` +
+            c: this.withCallableSourceText(`({ void* const ${identity} = TSC_GC_MALLOC(sizeof(char)); ` +
                 `tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ` +
-                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})); })`,
+                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})); })`, declaration),
             ty: T_VALUE,
         };
     }
@@ -47832,7 +47832,7 @@ class Emitter {
         const prototypeRoot = this.freshTemp("_class_expression_prototype_root");
         const pieces: string[] = [
             `void* const ${identity} = TSC_GC_MALLOC(sizeof(char))`,
-            `tsc_value_t ${constructor} = tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${this.functionValueNameLiteral(expression)})`,
+            `tsc_value_t ${constructor} = ${this.withCallableSourceText(`tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${this.functionValueNameLiteral(expression)})`, expression)}`,
             `void* volatile ${constructorRoot} = tsc_value_gc_root(${constructor})`,
             `(void)${constructorRoot}`,
             `tsc_value_t ${prototype} = tsc_value_get_prop(${constructor}, tsc_str_from_lit("prototype", 9))`,
@@ -71761,7 +71761,7 @@ class Emitter {
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
         if (r.ty.kind === "fsstats") return `tsc_str_from_lit("[object Stats]", 14)`;
         if (r.ty.kind === "fsdirent") return `tsc_str_from_lit("[object Dirent]", 15)`;
-        if (r.ty.kind === "function") return `tsc_str_from_lit("[function]", 10)`;
+        if (r.ty.kind === "function") return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "void" || r.ty.kind === "never") return `tsc_str_from_lit("undefined", 9)`;
         if (r.ty.kind === "value") return `tsc_value_to_string(${r.c})`;
         if (r.ty.kind === "class") {
@@ -72037,7 +72037,7 @@ class Emitter {
                     ? this.javaScriptFunctionLength(sourceFunction)
                     : (r.ty.params ?? []).length;
                 const owner = this.freshTemp("_callable_owner");
-                return `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}) : tsc_value_undefined(); })`;
+                return `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;
             }
             case "class":
                 return this.classValueBoxExpression(r, node);
@@ -72088,6 +72088,51 @@ class Emitter {
             default:
                 unsupported(node, `cannot box ${r.ty.c} as tsc_value_t`);
         }
+    }
+
+    /** SourceText is a source span belonging to the callable definition. All
+     * declaration/expression/member forms use this same span operation. Native
+     * typed definitions have no exact ECMAScript text until type erasure has a
+     * retained source plan, and therefore use the native representation. */
+    private callableSourceTextLiteral(node: ts.Node): string {
+        let definition: ts.Node | null = null;
+        if (ts.isClassLike(node) || ts.isFunctionLike(node)) definition = node;
+        else if (ts.isExpression(node)) {
+            const expression = this.unwrapTransparentExpression(node);
+            definition = this.functionLikeForExpression(expression);
+            if (!definition && ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.name)) {
+                const symbol = this.symbolForIdentifier(expression.name);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (declaration && ts.isMethodDeclaration(declaration)) definition = declaration;
+            }
+            if (!definition && ts.isIdentifier(expression)) {
+                const symbol = this.symbolForIdentifier(expression);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (declaration && ts.isClassLike(declaration)) definition = declaration;
+            }
+        }
+        if (!definition || definition.pos < 0) return "NULL";
+        if (ts.isConstructorDeclaration(definition)) definition = definition.parent;
+        const source = definition.getSourceFile();
+        if (!source || !this.isJavaScriptSourceFile(source)) return "NULL";
+        let start = definition.getStart(source);
+        for (const modifier of ts.canHaveModifiers(definition) ? ts.getModifiers(definition) ?? [] : []) {
+            if (modifier.kind === ts.SyntaxKind.ExportKeyword || modifier.kind === ts.SyntaxKind.DefaultKeyword ||
+                modifier.kind === ts.SyntaxKind.StaticKeyword) start = Math.max(start, modifier.end);
+        }
+        if (start !== definition.getStart(source)) {
+            const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard,
+                source.text, undefined, start, definition.end - start);
+            scanner.scan(); start = scanner.getTokenPos();
+        }
+        return this.stringLit(source.text.slice(start, definition.end));
+    }
+
+    private withCallableSourceText(value: string, node: ts.Node): string {
+        const source = this.callableSourceTextLiteral(node);
+        if (source === "NULL") return value;
+        return this.emitSequencedExpr(T_VALUE, [{ value: { c: value, ty: T_VALUE } }],
+            ([rooted]) => `tsc_value_function_with_source(${rooted}, ${source})`).c;
     }
 
     private functionValueNameLiteral(node: ts.Node): string {

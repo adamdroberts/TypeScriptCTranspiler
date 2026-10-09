@@ -706,7 +706,8 @@ The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed
 | `tsc_node_native_addon` | `(tsc_str_t*) -> tsc_value_t` | Manifest-backed native addon load through the embedded Node `require` hook. Does not require `TSC_UNSAFE_EVAL`. |
 | `tsc_builtin_eval` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `eval` references. |
 | `tsc_function_set_source_callback` | `(tsc_function_source_callback_t) -> void` | Register the compilation-wide finite source dispatcher used in every Realm. |
-| `tsc_function_create_from_source` | `(tsc_value_t (*)(void)) -> tsc_value_t` | Resolve the actual newTarget prototype and allocate a fresh ordinary function from its parsed source factory. |
+| `tsc_function_create_from_source` | `(tsc_value_t (*)(void), tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Resolve the actual newTarget prototype, allocate a fresh ordinary function and retain its anonymous parameter/body SourceText. |
+| `tsc_value_function_with_source` | `(tsc_value_t, tsc_str_t*) -> tsc_value_t` | Retain available definition text in the canonical callable owner without changing ordinary properties or identity. |
 
 ## Adding a new runtime function
 

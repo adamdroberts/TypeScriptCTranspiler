@@ -198,6 +198,9 @@ typedef struct tsc_function_identity {
     bool func_prototype_initialized;
     double length;
     tsc_str_t* name;
+    /* Decoded SourceText pointer is retained by the canonical callable owner.
+     * NULL denotes a host/native callable without available ECMAScript source. */
+    tsc_str_t* source_text;
     tsc_value_t prototype;
     /* Function [[Prototype]] and the own `prototype` value are NaN-boxed.
      * Mirror their decoded pointers so a collection cannot reclaim either

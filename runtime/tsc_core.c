@@ -171,6 +171,7 @@ void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, t
     entry->construct_allocates_receiver = entry->has_prototype_property;
     entry->length = length;
     entry->name = name;
+    entry->source_text = NULL;
     entry->props = tsc_object_new();
     tsc_object_define(entry->props, tsc_str_from_lit("length", 6), tsc_value_num(length), false, false, true);
     tsc_object_define(entry->props, tsc_str_from_lit("name", 4), tsc_value_string(name), false, false, true);
@@ -231,7 +232,7 @@ void tsc_function_set_source_callback(tsc_function_source_callback_t callback) {
     function_source_callback = callback;
 }
 
-tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void)) {
+tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body) {
     tsc_value_t new_target = tsc_value_current_new_target();
     if (tsc_value_is_undefined(new_target)) new_target = tsc_value_current_callee();
     tsc_value_t prototype = tsc_value_get_prototype_from_constructor(
@@ -244,6 +245,16 @@ tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void)) {
     identity->name = tsc_str_from_lit("anonymous", 9);
     tsc_object_define(identity->props, tsc_str_from_lit("name", 4),
         tsc_value_string(identity->name), false, false, true);
+    tsc_array_t* source_parts = tsc_array_new(sizeof(tsc_str_t*), 5);
+    tsc_str_t* prefix = tsc_str_from_lit("function anonymous(", 19);
+    tsc_str_t* middle = tsc_str_from_lit("\n) {\n", 5);
+    tsc_str_t* suffix = tsc_str_from_lit("\n}", 2);
+    tsc_array_push_raw(source_parts, &prefix);
+    tsc_array_push_raw(source_parts, &parameters);
+    tsc_array_push_raw(source_parts, &middle);
+    tsc_array_push_raw(source_parts, &body);
+    tsc_array_push_raw(source_parts, &suffix);
+    identity->source_text = tsc_str_concat_parts(source_parts);
     (void)prototype_root;
     return result;
 }
@@ -349,10 +360,15 @@ static tsc_value_t function_prototype_to_string(void* env, tsc_value_t this_arg,
     (void)env;
     (void)args;
     function_prototype_require_callable(this_arg, "toString");
-    tsc_value_t name_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("name", 4));
-    tsc_str_t* name = value_is_box(name_value) && value_tag(name_value) == TSC_VALUE_TAG_STRING
-        ? tsc_value_as_string(name_value)
-        : tsc_str_from_lit("", 0);
+    tsc_str_t* name = tsc_str_from_lit("", 0);
+    if (value_is_box(this_arg) && value_tag(this_arg) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(this_arg);
+        if (identity->source_text) return tsc_value_string(identity->source_text);
+        /* InitialName is internal metadata. Mutable name properties and Proxy
+         * traps are never consulted by Function.prototype.toString. Other
+         * callables use the permitted anonymous NativeFunction form. */
+        if (identity->kind == TSC_FUNCTION_IDENTITY_BUILTIN && identity->name) name = identity->name;
+    }
     tsc_str_t* source = tsc_str_concat(tsc_str_from_lit("function ", 9), name);
     source = tsc_str_concat(source, tsc_str_from_lit("() { [native code] }", 20));
     return tsc_value_string(source);

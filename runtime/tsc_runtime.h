@@ -809,8 +809,9 @@ typedef struct {
     bool initialized;
 } tsc_callable_owner_t;
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
-    void* env, double length, tsc_str_t* name, bool constructable);
+    void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source);
 void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value);
+tsc_value_t tsc_value_function_with_source(tsc_value_t function, tsc_str_t* source);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 typedef void (*tsc_event_target_listener_fn_t)(void* env, tsc_event_target_t* target, tsc_event_t* event);
 
@@ -834,7 +835,7 @@ tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_function_constructor_value(void);
 typedef tsc_value_t (*tsc_function_source_callback_t)(tsc_str_t* parameters, tsc_str_t* body);
 void tsc_function_set_source_callback(tsc_function_source_callback_t callback);
-tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void));
+tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void), tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);
