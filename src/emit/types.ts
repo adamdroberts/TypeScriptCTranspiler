@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { unsupported } from "../diagnostics";
+import { nativeTypeName } from "./native-type-identity";
 
 export type CTypeKind =
     | "number"
@@ -270,6 +271,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     const boundTypeParam = lookupTypeBinding(t, checker);
     if (boundTypeParam) return boundTypeParam;
     if (t.flags & ts.TypeFlags.TypeParameter) return T_VALUE;
+    // Source-owned declarations take precedence over ambient intrinsic names.
+    // A user class named Map/Date/etc. has its own physical owner and ABI.
+    const nativeDeclaration = t.getSymbol()?.getDeclarations()?.find(declaration =>
+        !declaration.getSourceFile().isDeclarationFile &&
+        (ts.isClassLike(declaration) || ts.isInterfaceDeclaration(declaration)));
+    if (nativeDeclaration && (ts.isClassLike(nativeDeclaration) || ts.isInterfaceDeclaration(nativeDeclaration))) {
+        return classType(nativeTypeName(nativeDeclaration));
+    }
 
     // Strip literal narrowings first.
     if (t.flags & ts.TypeFlags.BigIntLiteral) return T_BIGINT;
@@ -537,16 +546,16 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (decls) {
             for (const d of decls) {
                 if (ts.isClassDeclaration(d) && d.name) {
-                    return classType(d.name.text);
+                    return classType(nativeTypeName(d));
                 }
                 if (ts.isClassExpression(d) && d.name) {
-                    return classType(d.name.text);
+                    return classType(nativeTypeName(d));
                 }
                 if (ts.isInterfaceDeclaration(d) && d.name) {
                     // Skip declarations from .d.ts (lib shims) - those are
                     // handled by runtime intercepts, not user-defined structs.
                     if (!d.getSourceFile().isDeclarationFile) {
-                        return classType(d.name.text);
+                        return classType(nativeTypeName(d));
                     }
                 }
                 if (ts.isTypeLiteralNode(d)) {

@@ -48,6 +48,7 @@ import {
     withTypeBindings,
 } from "./types";
 import { mangleIdent, mangleQualifiedIdent } from "./mangle";
+import { nativeTypeName, type NativeTypeDeclaration } from "./native-type-identity";
 import {
     unsupported,
     UnsupportedError,
@@ -828,6 +829,7 @@ class Emitter {
     private referencedLocalClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedVariables = new WeakSet<ts.VariableDeclaration>();
     private localFunctionNames = new WeakMap<ts.FunctionDeclaration, string>();
+    private nativeTypeDeclarations = new Map<string, NativeTypeDeclaration>();
     /**
      * Symbols whose value is provably integer-shape at every read site.
      * Populated per source file by analyzeIntegerSymbols(); consulted by
@@ -14850,6 +14852,22 @@ class Emitter {
     run(): EmittedProgram {
         const emitOrder = this.graph.emitOrder ?? this.graph.topoOrder;
         this.prepareAnonymousDefaultClasses(emitOrder);
+        const nativeOwners: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
+        while (nativeOwners.length > 0) {
+            const node = nativeOwners.pop()!;
+            if (ts.isClassLike(node) || ts.isInterfaceDeclaration(node)) {
+                if (ts.isInterfaceDeclaration(node)) {
+                    const declarations = this.checker.getSymbolAtLocation(node.name)?.getDeclarations() ?? [];
+                    const owners = declarations.filter(declaration => ts.isInterfaceDeclaration(declaration) &&
+                        !declaration.getSourceFile().isDeclarationFile);
+                    if (owners.length > 1) unsupported(node, "native type declaration merging requires a canonical owner");
+                }
+                const name = nativeTypeName(node), previous = this.nativeTypeDeclarations.get(name);
+                if (previous && previous !== node) unsupported(node, "native type declaration identity collision");
+                this.nativeTypeDeclarations.set(name, node);
+            }
+            ts.forEachChild(node, child => { nativeOwners.push(child); });
+        }
         // Binding identities must exist before any importer is emitted. Source
         // file order is not dependency order, so derive every module plan in
         // one program-wide preparation pass.
@@ -15241,18 +15259,18 @@ class Emitter {
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
                     this.structDecls.line(
-                        `typedef struct ${inner.name.text}_t ${inner.name.text}_t;`,
+                        `typedef struct ${nativeTypeName(inner)}_t ${nativeTypeName(inner)}_t;`,
                     );
                 }
                 if (inner && ts.isInterfaceDeclaration(inner) && inner.name) {
                     this.structDecls.line(
-                        `typedef struct ${inner.name.text}_t ${inner.name.text}_t;`,
+                        `typedef struct ${nativeTypeName(inner)}_t ${nativeTypeName(inner)}_t;`,
                     );
                 }
             }
             for (const classExpr of commonJsClassExpressions) {
                 if (!classExpr.name) unsupported(classExpr, "CommonJS module.exports class default requires a named class expression");
-                this.structDecls.line(`typedef struct ${classExpr.name.text}_t ${classExpr.name.text}_t;`);
+                this.structDecls.line(`typedef struct ${nativeTypeName(classExpr)}_t ${nativeTypeName(classExpr)}_t;`);
             }
             // Pass B: struct bodies.
             for (const inner of statements) {
@@ -25973,7 +25991,7 @@ class Emitter {
 
     private emitInterfaceStruct(id: ts.InterfaceDeclaration): void {
         if (!id.name) return;
-        this.structDecls.open(`struct ${id.name.text}_t`);
+        this.structDecls.open(`struct ${nativeTypeName(id)}_t`);
         this.emitNativeAggregateFields(this.interfaceFields(id));
         this.structDecls.close(";");
         this.structDecls.line();
@@ -26083,7 +26101,7 @@ class Emitter {
 
     private emitClassStruct(cd: ts.ClassDeclaration): void {
         if (!cd.name) unsupported(cd, "anonymous class declaration");
-        const name = cd.name.text;
+        const name = nativeTypeName(cd);
         const baseFields = this.collectInheritedFields(cd);
         this.structDecls.open(`struct ${name}_t`);
         this.structDecls.line(`const char* __tsc_type;`);
@@ -26141,7 +26159,7 @@ class Emitter {
 
     private baseClassName(cd: ts.ClassDeclaration): string | null {
         const base = this.baseClassDecl(cd);
-        return base?.name?.text ?? null;
+        return base ? nativeTypeName(base) : null;
     }
 
     private baseClassDecl(cd: ts.ClassDeclaration): ts.ClassDeclaration | null {
@@ -26150,7 +26168,8 @@ class Emitter {
             if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
             const t = h.types[0];
             if (!t) continue;
-            const sym = this.checker.getSymbolAtLocation(t.expression);
+            let sym = this.checker.getSymbolAtLocation(t.expression);
+            if (sym && (sym.flags & ts.SymbolFlags.Alias) !== 0) sym = this.checker.getAliasedSymbol(sym);
             const base = sym?.getDeclarations()?.find(ts.isClassDeclaration);
             if (base && base.name) return base;
         }
@@ -26159,13 +26178,12 @@ class Emitter {
 
     private classTypeChain(cd: ts.ClassDeclaration): string {
         const names: string[] = [];
-        const visit = (cur: ts.ClassDeclaration): void => {
-            const base = this.baseClassDecl(cur);
-            if (base) visit(base);
-            if (cur.name) names.push(cur.name.text);
-        };
-        visit(cd);
-        return `|${names.join("|")}|`;
+        const visited = new Set<ts.ClassDeclaration>();
+        for (let current: ts.ClassDeclaration | null = cd; current; current = this.baseClassDecl(current)) {
+            if (visited.has(current)) unsupported(current, "cyclic native class inheritance");
+            visited.add(current); names.push(nativeTypeName(current));
+        }
+        return `|${names.reverse().join("|")}|`;
     }
 
     private collectInheritedFields(cd: ts.ClassDeclaration): { name: string; type: CType }[] {
@@ -26191,7 +26209,7 @@ class Emitter {
 
     private emitClassPrototypes(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = cd.name.text;
+        const name = nativeTypeName(cd);
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
             | undefined;
@@ -27470,7 +27488,7 @@ class Emitter {
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = cd.name.text;
+        const name = nativeTypeName(cd);
         const baseName = this.baseClassName(cd);
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
@@ -27719,7 +27737,7 @@ class Emitter {
 
     private emitClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = cd.name.text;
+        const name = nativeTypeName(cd);
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m)) {
                 if (!isStatic(m)) continue;
@@ -27754,7 +27772,7 @@ class Emitter {
 
     private classDecoratorReplacementName(cd: ts.ClassDeclaration): string {
         if (!cd.name) unsupported(cd, "decorated classes require a named class");
-        return `${cd.name.text}_class_decorator_replacement`;
+        return `${nativeTypeName(cd)}_class_decorator_replacement`;
     }
 
     private classFieldDecoratorInitializersName(
@@ -27767,7 +27785,7 @@ class Emitter {
             unsupported(member.name, "decorated field names must resolve to a string or number literal");
         }
         const scope = isStatic(member) ? "static" : "instance";
-        return `${cd.name.text}_${scope}_${mangleIdent(fieldName)}_decorator_initializers`;
+        return `${nativeTypeName(cd)}_${scope}_${mangleIdent(fieldName)}_decorator_initializers`;
     }
 
     private classStaticMethodDecoratorReplacementName(
@@ -27779,7 +27797,7 @@ class Emitter {
         if (!methodName) {
             unsupported(member.name, "decorated static method names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_static_${mangleIdent(methodName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_static_${mangleIdent(methodName)}_decorator_replacement`;
     }
 
     private classInstanceMethodDecoratorReplacementName(
@@ -27791,7 +27809,7 @@ class Emitter {
         if (!methodName) {
             unsupported(member.name, "decorated instance method names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_instance_${mangleIdent(methodName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_instance_${mangleIdent(methodName)}_decorator_replacement`;
     }
 
     private classStaticGetterDecoratorReplacementName(
@@ -27803,7 +27821,7 @@ class Emitter {
         if (!getterName) {
             unsupported(member.name, "decorated static getter names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_static_get_${mangleIdent(getterName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_static_get_${mangleIdent(getterName)}_decorator_replacement`;
     }
 
     private classInstanceGetterDecoratorReplacementName(
@@ -27815,7 +27833,7 @@ class Emitter {
         if (!getterName) {
             unsupported(member.name, "decorated instance getter names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_instance_get_${mangleIdent(getterName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_instance_get_${mangleIdent(getterName)}_decorator_replacement`;
     }
 
     private classStaticSetterDecoratorReplacementName(
@@ -27827,7 +27845,7 @@ class Emitter {
         if (!setterName) {
             unsupported(member.name, "decorated static setter names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_static_set_${mangleIdent(setterName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_static_set_${mangleIdent(setterName)}_decorator_replacement`;
     }
 
     private classInstanceSetterDecoratorReplacementName(
@@ -27839,7 +27857,7 @@ class Emitter {
         if (!setterName) {
             unsupported(member.name, "decorated instance setter names must resolve to a string or number literal");
         }
-        return `${cd.name.text}_instance_set_${mangleIdent(setterName)}_decorator_replacement`;
+        return `${nativeTypeName(cd)}_instance_set_${mangleIdent(setterName)}_decorator_replacement`;
     }
 
     private emitClassFieldDecoratorInitializerSetup(buf: CBuf, cd: ts.ClassDeclaration): void {
@@ -28001,7 +28019,7 @@ class Emitter {
                 const list = this.classFieldDecoratorInitializersName(cd, member);
                 const fieldType = mapType(member, this.checker);
                 const current = {
-                    c: `${cd.name.text}_${mangleIdent(memberName)}`,
+                    c: `${nativeTypeName(cd)}_${mangleIdent(memberName)}`,
                     ty: fieldType,
                 };
                 const transformed = {
@@ -28031,7 +28049,7 @@ class Emitter {
 
     private ensureClassDecoratorAdapter(cd: ts.ClassDeclaration): string {
         if (!cd.name) unsupported(cd, "decorated classes require a named class");
-        const className = cd.name.text;
+        const className = nativeTypeName(cd);
         const name = `${className}_class_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
@@ -28073,9 +28091,9 @@ class Emitter {
         if (!owner.name) unsupported(owner, "native method values require a named owner");
         const memberName = this.classMethodCName(member.name);
         if (!memberName) unsupported(member, "native class member key is outside the static key plan");
-        if (!this.isGenericMethod(member)) return `${owner.name.text}_${memberName}`;
+        if (!this.isGenericMethod(member)) return `${nativeTypeName(owner)}_${memberName}`;
         const erased = new Map((member.typeParameters ?? []).map(parameter => [parameter.name.text, T_VALUE]));
-        return this.ensureGenericMethodSpecialization(member, owner.name.text, erased);
+        return this.ensureGenericMethodSpecialization(member, nativeTypeName(owner), erased);
     }
 
     private ensureClassStaticMethodDecoratorAdapter(
@@ -28086,7 +28104,7 @@ class Emitter {
         if (!isStatic(member)) unsupported(member, "static method decorator adapter requires a static method");
         const methodName = this.classMethodCName(member.name);
         if (!methodName) unsupported(member, "computed static method names");
-        const name = `${cd.name.text}_${methodName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${methodName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
@@ -28150,7 +28168,7 @@ class Emitter {
         if (isStatic(member)) unsupported(member, "instance method decorator adapter requires an instance method");
         const methodName = this.classMethodCName(member.name);
         if (!methodName) unsupported(member, "computed instance method names");
-        const name = `${cd.name.text}_${methodName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${methodName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
@@ -28174,7 +28192,7 @@ class Emitter {
         buf.open(signature);
         buf.line("(void)env;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${cd.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(cd.name.text), member)};`);
+        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
         const callArgs: string[] = ["self"];
         for (let i = 0; i < paramTypes.length; i++) {
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
@@ -28202,10 +28220,10 @@ class Emitter {
         if (isStatic(member)) unsupported(member, "class method value adapters require an instance method");
         const methodName = this.classMethodCName(member.name);
         if (!methodName) unsupported(member, "computed instance method names");
-        const key = `${owner.name.text}.${methodName}`;
+        const key = `${nativeTypeName(owner)}.${methodName}`;
         const existing = this.classInstanceMethodValueAdapters.get(key);
         if (existing) return existing;
-        const name = `${owner.name.text}_${methodName}_dynamic_value`;
+        const name = `${nativeTypeName(owner)}_${methodName}_dynamic_value`;
         this.classInstanceMethodValueAdapters.set(key, name);
         const sig = this.checker.getSignatureFromDeclaration(member);
         if (!sig) unsupported(member, "could not resolve instance method signature");
@@ -28228,7 +28246,7 @@ class Emitter {
         buf.open(signature);
         buf.line("(void)env;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(owner.name.text), member)};`);
+        buf.line(`${nativeTypeName(owner)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(owner)), member)};`);
         const callArgs: string[] = ["self"];
         for (let i = 0; i < paramTypes.length; i++) {
             const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
@@ -28300,17 +28318,17 @@ class Emitter {
     ): string {
         if (!owner.name) unsupported(owner, "class field getter adapters require a named class");
         const fieldName = mangleIdent(publicName);
-        const key = `${owner.name.text}.${fieldName}.get`;
+        const key = `${nativeTypeName(owner)}.${fieldName}.get`;
         const existing = this.classInstanceFieldGetterAdapters.get(key);
         if (existing) return existing;
-        const name = `${owner.name.text}_${fieldName}_dynamic_get`;
+        const name = `${nativeTypeName(owner)}_${fieldName}_dynamic_get`;
         this.classInstanceFieldGetterAdapters.set(key, name);
         const signature = `static tsc_value_t ${name}(void* env, tsc_value_t receiver)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
         buf.open(signature);
         buf.line("(void)env;");
-        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(owner.name.text), owner)};`);
+        buf.line(`${nativeTypeName(owner)}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(nativeTypeName(owner)), owner)};`);
         buf.line(`${type.c} result = self->${fieldName};`);
         buf.line(`return ${this.coerce({ c: "result", ty: type }, T_VALUE, owner)};`);
         buf.close();
@@ -28326,18 +28344,18 @@ class Emitter {
     ): string {
         if (!owner.name) unsupported(owner, "class field setter adapters require a named class");
         const fieldName = mangleIdent(publicName);
-        const key = `${owner.name.text}.${fieldName}.set`;
+        const key = `${nativeTypeName(owner)}.${fieldName}.set`;
         const existing = this.classInstanceFieldSetterAdapters.get(key);
         if (existing) return existing;
-        const name = `${owner.name.text}_${fieldName}_dynamic_set`;
+        const name = `${nativeTypeName(owner)}_${fieldName}_dynamic_set`;
         this.classInstanceFieldSetterAdapters.set(key, name);
         const signature = `static bool ${name}(void* env, tsc_value_t receiver, tsc_value_t value)`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
         buf.open(signature);
         buf.line("(void)env;");
-        buf.line(`${owner.name.text}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(owner.name.text), owner)};`);
-        buf.line(`${this.nativeFieldStore("self", owner.name.text, publicName, type, this.coerce({ c: "value", ty: T_VALUE }, type, owner))};`);
+        buf.line(`${nativeTypeName(owner)}_t* self = ${this.coerce({ c: "receiver", ty: T_VALUE }, classType(nativeTypeName(owner)), owner)};`);
+        buf.line(`${this.nativeFieldStore("self", nativeTypeName(owner), publicName, type, this.coerce({ c: "value", ty: T_VALUE }, type, owner))};`);
         buf.line("return true;");
         buf.close();
         buf.line();
@@ -28348,16 +28366,8 @@ class Emitter {
     private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
         const classLike = this.findClassLikeDecl(r.ty.className);
-        const interfaces: ts.Node[] = classLike ? [] : [...this.graph.modules.values()].map(info => info.sf);
-        let nativeInterface: ts.InterfaceDeclaration | undefined;
-        while (interfaces.length > 0) {
-            const declaration = interfaces.pop()!;
-            if (ts.isInterfaceDeclaration(declaration) && declaration.name.text === r.ty.className) {
-                nativeInterface = declaration;
-                break;
-            }
-            ts.forEachChild(declaration, child => { interfaces.push(child); });
-        }
+        const declaration = this.nativeTypeDeclarations.get(r.ty.className);
+        const nativeInterface = declaration && ts.isInterfaceDeclaration(declaration) ? declaration : undefined;
         if (!classLike && !nativeInterface) return `tsc_value_class(${r.c})`;
         const cd = classLike as unknown as ts.ClassDeclaration;
         const obj = this.freshTemp("_class_box");
@@ -28388,7 +28398,7 @@ class Emitter {
 
     private classConstructorValue(cd: ts.ClassDeclaration): EmitResult {
         if (!cd.name) unsupported(cd, "class constructor value requires a named class");
-        const className = cd.name.text;
+        const className = nativeTypeName(cd);
         const runtimeName = this.classRuntimeName(cd);
         const ctor = cd.members.find(ts.isConstructorDeclaration);
         const params = ctor?.parameters ?? [];
@@ -28488,7 +28498,7 @@ class Emitter {
         if (!isStatic(member)) unsupported(member, "static getter decorator adapter requires a static getter");
         const accessorName = this.classAccessorCName(member.name, "get");
         if (!accessorName) unsupported(member, "computed static getter names");
-        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
@@ -28501,7 +28511,7 @@ class Emitter {
         buf.line("(void)env;");
         buf.line("(void)this_arg;");
         buf.line("(void)args;");
-        const call = `${cd.name.text}_${accessorName}()`;
+        const call = `${nativeTypeName(cd)}_${accessorName}()`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
             buf.line("return tsc_value_undefined();");
@@ -28535,7 +28545,7 @@ class Emitter {
         if (isStatic(member)) unsupported(member, "instance getter decorator adapter requires an instance getter");
         const accessorName = this.classAccessorCName(member.name, "get");
         if (!accessorName) unsupported(member, "computed instance getter names");
-        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const sig = this.checker.getSignatureFromDeclaration(member);
@@ -28547,8 +28557,8 @@ class Emitter {
         buf.open(signature);
         buf.line("(void)env;");
         buf.line("(void)args;");
-        buf.line(`${cd.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(cd.name.text), member)};`);
-        const call = `${cd.name.text}_${accessorName}(self)`;
+        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
+        const call = `${nativeTypeName(cd)}_${accessorName}(self)`;
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`${call};`);
             buf.line("return tsc_value_undefined();");
@@ -28582,7 +28592,7 @@ class Emitter {
         if (!isStatic(member)) unsupported(member, "static setter decorator adapter requires a static setter");
         const accessorName = this.classAccessorCName(member.name, "set");
         if (!accessorName) unsupported(member, "computed static setter names");
-        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const param = member.parameters[0];
@@ -28596,7 +28606,7 @@ class Emitter {
         buf.line("(void)this_arg;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
         const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
-        buf.line(`${cd.name.text}_${accessorName}(${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
+        buf.line(`${nativeTypeName(cd)}_${accessorName}(${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
         buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
@@ -28624,7 +28634,7 @@ class Emitter {
         if (isStatic(member)) unsupported(member, "instance setter decorator adapter requires an instance setter");
         const accessorName = this.classAccessorCName(member.name, "set");
         if (!accessorName) unsupported(member, "computed instance setter names");
-        const name = `${cd.name.text}_${accessorName}_decorator_original`;
+        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
         if (this.nodeFunctionAdapters.has(name)) return name;
         this.nodeFunctionAdapters.add(name);
         const param = member.parameters[0];
@@ -28636,9 +28646,9 @@ class Emitter {
         buf.open(signature);
         buf.line("(void)env;");
         buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${cd.name.text}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(cd.name.text), member)};`);
+        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
         const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
-        buf.line(`${cd.name.text}_${accessorName}(self, ${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
+        buf.line(`${nativeTypeName(cd)}_${accessorName}(self, ${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
         buf.line("return tsc_value_undefined();");
         buf.close();
         buf.line();
@@ -41923,25 +41933,9 @@ class Emitter {
     }
 
     private emitSimpleLazyResumeConditional(
-        expr: ts.ConditionalExpression,
-        cond: EmitResult,
-        whenTrue: EmitResult,
-        whenFalse: EmitResult,
+        expr: ts.ConditionalExpression, cond: EmitResult, whenTrue: EmitResult, whenFalse: EmitResult,
     ): EmitResult {
-        const condC = this.truthyExprFromEmitResult(cond, expr.condition);
-        const distinctNullish = this.emitDistinctNullishConditional(expr, condC, whenTrue, whenFalse);
-        if (distinctNullish) return distinctNullish;
-        if (whenTrue.ty.kind !== whenFalse.ty.kind) {
-            const boxable: readonly CType["kind"][] = ["number", "boolean", "string", "array", "void", "value"];
-            if (boxable.includes(whenTrue.ty.kind) && boxable.includes(whenFalse.ty.kind)) {
-                return {
-                    c: `(${condC} ? ${this.coerce(whenTrue, T_VALUE, expr.whenTrue)} : ${this.coerce(whenFalse, T_VALUE, expr.whenFalse)})`,
-                    ty: T_VALUE,
-                };
-            }
-            unsupported(expr, `lazy generator conditional branches have different types (${whenTrue.ty.c} vs ${whenFalse.ty.c})`);
-        }
-        return { c: `(${condC} ? ${whenTrue.c} : ${whenFalse.c})`, ty: whenTrue.ty };
+        return this.emitConditionalValueArms(expr, this.truthyExprFromEmitResult(cond, expr.condition), whenTrue, whenFalse);
     }
 
     private emitSimpleLazyResumeBinary(
@@ -42871,18 +42865,11 @@ class Emitter {
                 return `(${this.emitIntegerExpr(cur.left)} ${cop} ${this.emitIntegerExpr(cur.right)})`;
             }
         }
-        if (ts.isIdentifier(cur)) {
-            const sym = this.checker.getSymbolAtLocation(cur);
-            if (sym && this.intSymbols.has(sym)) {
-                // Ordinary locals may use int64_t storage, while the same
-                // proven integer symbol can live in a double-typed async CFG
-                // field. Normalize either representation at this boundary.
-                return `((int64_t)(${this.identifierRead(cur)}))`;
-            }
-        }
-        // Fallback: emit normally as double and cast to int64.
+        // The numeric value read owns its storage contract, including lexical
+        // cells and CFG fields. Never cast a raw NaN-boxed binding slot merely
+        // because integer analysis proves the source value is integral.
         const r = this.emitExpr(e);
-        return `((int64_t)(${r.c}))`;
+        return `((int64_t)(${this.coerce(r, T_NUMBER, e)}))`;
     }
 
     /**
@@ -43917,14 +43904,14 @@ class Emitter {
             );
         }
         const result = this.emitSequencedCall(
-            `${owner.name!.text}_${this.classMethodCName(method.name)}`,
+            `${nativeTypeName(owner)}_${this.classMethodCName(method.name)}`,
             ret,
             [
                 {
                     value: iter,
-                    pass: (tmp) => owner.name!.text === iter.ty.className
+                    pass: (tmp) => nativeTypeName(owner) === iter.ty.className
                         ? tmp
-                        : `((${owner.name!.text}_t*)${tmp})`,
+                        : `((${nativeTypeName(owner)}_t*)${tmp})`,
                 },
             ],
         );
@@ -43988,16 +43975,16 @@ class Emitter {
         const out = this.freshTemp("_yield_iter_values");
         const step = this.freshTemp("_yield_iter_step");
         const value = this.freshTemp("_yield_iter_value");
-        const selfArg = owner.name!.text === iter.ty.className
+        const selfArg = nativeTypeName(owner) === iter.ty.className
             ? recv
-            : `((${owner.name!.text}_t*)${recv})`;
-        const nextOwnerName = nextOwner.name!.text;
+            : `((${nativeTypeName(owner)}_t*)${recv})`;
+        const nextOwnerName = nativeTypeName(nextOwner);
         const nextSelfArg = nextOwnerName === iteratorType.className
             ? iterVar
             : `((${nextOwnerName}_t*)${iterVar})`;
         const c = (
             `({ ${iter.ty.c} ${recv} = ${iter.c}; ` +
-            `${iteratorType.c} const ${iterVar} = ${owner.name!.text}_${this.classMethodCName(method.name)}(${selfArg}); ` +
+            `${iteratorType.c} const ${iterVar} = ${nativeTypeName(owner)}_${this.classMethodCName(method.name)}(${selfArg}); ` +
             `tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ` +
             `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_${this.classMethodCName(next.name)}(${nextSelfArg}${eagerNextArg ? `, ${eagerNextArg}` : ""}); ` +
             `if (${step}->${mangleIdent("done")}) break; ${valueType.c} ${value} = ${step}->${mangleIdent("value")}; ` +
@@ -44057,10 +44044,10 @@ class Emitter {
                         )
                         : null;
                     const throwStep = this.freshTemp("_lazy_custom_throw_step");
-                    const throwSelf = throwMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${throwMethod.owner.name!.text}_t*)${env}->iterator)`;
+                    const throwSelf = nativeTypeName(throwMethod.owner) === iteratorType.className ? `${env}->iterator` : `((${nativeTypeName(throwMethod.owner)}_t*)${env}->iterator)`;
                     const throwName = this.classMethodCName(throwMethod.method.name);
                     if (!throwName) unsupported(throwMethod.method, "could not resolve iterator throw() name");
-                    closeBuf.line(`${stepType.c} const ${throwStep} = ${throwMethod.owner.name!.text}_${throwName}(${throwSelf}${throwArg ? `, ${throwArg}` : ""});`);
+                    closeBuf.line(`${stepType.c} const ${throwStep} = ${nativeTypeName(throwMethod.owner)}_${throwName}(${throwSelf}${throwArg ? `, ${throwArg}` : ""});`);
                     closeBuf.open(`if (${throwStep}->${mangleIdent("done")})`);
                     closeBuf.line(`a->iter_return = ${this.coerce({ c: `${throwStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, throwMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
@@ -44093,10 +44080,10 @@ class Emitter {
                         )
                         : null;
                     const returnStep = this.freshTemp("_lazy_custom_return_step");
-                    const returnSelf = returnMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${returnMethod.owner.name!.text}_t*)${env}->iterator)`;
+                    const returnSelf = nativeTypeName(returnMethod.owner) === iteratorType.className ? `${env}->iterator` : `((${nativeTypeName(returnMethod.owner)}_t*)${env}->iterator)`;
                     const returnName = this.classMethodCName(returnMethod.method.name);
                     if (!returnName) unsupported(returnMethod.method, "could not resolve iterator return() name");
-                    closeBuf.line(`${stepType.c} const ${returnStep} = ${returnMethod.owner.name!.text}_${returnName}(${returnSelf}${returnArg ? `, ${returnArg}` : ""});`);
+                    closeBuf.line(`${stepType.c} const ${returnStep} = ${nativeTypeName(returnMethod.owner)}_${returnName}(${returnSelf}${returnArg ? `, ${returnArg}` : ""});`);
                     closeBuf.open(`if (${returnStep}->${mangleIdent("done")})`);
                     closeBuf.line(`a->iter_return = ${this.coerce({ c: `${returnStep}->${mangleIdent("value")}`, ty: valueType }, T_VALUE, returnMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
@@ -44116,7 +44103,7 @@ class Emitter {
                 this.closureDefs.write(closeBuf.toString());
             }
             return {
-                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}_${this.classMethodCName(method.name)}(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out});${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
+                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${nativeTypeName(owner)}_${this.classMethodCName(method.name)}(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; tsc_array_initialize_generator(${out});${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
                 ty: arrayType(valueType),
                 lazyGenerator: true,
             };
@@ -44135,13 +44122,13 @@ class Emitter {
         seen = new Set<ts.Symbol>(),
     ): ts.ClassDeclaration | null {
         const imported = this.importAliasTargetDeclaration(id);
-        if (imported && ts.isClassDeclaration(imported)) return imported;
+        if (imported && ts.isClassDeclaration(imported) && !imported.getSourceFile().isDeclarationFile) return imported;
 
         const sym = this.symbolForIdentifier(id);
         if (sym && seen.has(sym)) return null;
         if (sym) seen.add(sym);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isClassDeclaration(decl)) return decl;
+        if (decl && ts.isClassDeclaration(decl) && !decl.getSourceFile().isDeclarationFile) return decl;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
             const declared = this.checker.getTypeAtLocation(decl.name);
             if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
@@ -44150,7 +44137,7 @@ class Emitter {
                 return this.classDeclForConstructorIdentifier(init, seen);
             }
         }
-        return this.findClassDecl(id.text);
+        return null;
     }
 
     private classExpressionForCommonJsDeclaration(
@@ -48160,7 +48147,18 @@ class Emitter {
             if (this.decoratedClassConstructorAliasIdentifier(expr)) {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
-            const classDecl = this.findClassDecl(expr.text);
+            const declaration = this.importAliasTargetDeclaration(expr) ??
+                this.checker.getSymbolAtLocation(expr)?.valueDeclaration;
+            const classDecl = declaration && ts.isClassDeclaration(declaration) &&
+                !declaration.getSourceFile().isDeclarationFile ? declaration : null;
+            if (classDecl) {
+                const lexicalBinding = this.moduleLexicalBindingForDeclaration(classDecl);
+                const defaultBinding = this.moduleDefaultExportBindings.get(classDecl);
+                if (lexicalBinding || defaultBinding) {
+                    return { c: lexicalBinding ? this.moduleLexicalRead(lexicalBinding)
+                        : this.moduleDefaultExportRead(defaultBinding!), ty: T_VALUE };
+                }
+            }
             if (
                 classDecl &&
                 ts.canHaveDecorators(classDecl) &&
@@ -49815,7 +49813,7 @@ class Emitter {
 
     private emitInstanceOfWithLeft(bin: ts.BinaryExpression, left: EmitResult): EmitResult {
         const classDeclaration = ts.isIdentifier(bin.right)
-            ? this.findClassDecl(bin.right.text)
+            ? this.classDeclForConstructorIdentifier(bin.right)
             : null;
         if (!classDeclaration) {
             const right = this.emitExpr(bin.right);
@@ -49839,52 +49837,33 @@ class Emitter {
             const leftDecl = this.findClassDecl(left.ty.className!);
             if (!leftDecl) unsupported(bin.left, "instanceof on interface-shaped value");
         }
+        const ownerName = nativeTypeName(classDeclaration);
         const leftValue = left.ty.kind === "value"
-            ? this.coerce(left, classType(bin.right.text), bin.left)
+            ? this.coerce(left, classType(ownerName), bin.left)
             : left.c;
-        const leftType = left.ty.kind === "value" ? classType(bin.right.text) : left.ty;
+        const leftType = left.ty.kind === "value" ? classType(ownerName) : left.ty;
         const tv = this.freshTemp("_io");
         return {
             c:
                 `({ ${leftType.c} ${tv} = ${leftValue}; ` +
-                `${tv} != NULL && tsc_instanceof(${tv}->__tsc_type, "${escapeCString(bin.right.text)}"); })`,
+                `${tv} != NULL && tsc_instanceof(${tv}->__tsc_type, "${escapeCString(ownerName)}"); })`,
             ty: T_BOOLEAN,
         };
     }
 
     private findClassDecl(name: string): ts.ClassDeclaration | null {
-        for (const info of this.graph.modules.values()) {
-            for (const stmt of info.sf.statements) {
-                const inner = this.unwrapExportDecl(stmt);
-                if (
-                    inner &&
-                    ts.isClassDeclaration(inner) &&
-                    inner.name?.text === name
-                ) {
-                    return inner;
-                }
-            }
-        }
-        return null;
+        const declaration = this.nativeTypeDeclarations.get(name);
+        return declaration && ts.isClassDeclaration(declaration) ? declaration : null;
     }
 
     private findClassLikeDecl(name: string): ts.ClassDeclaration | ts.ClassExpression | null {
-        const declaration = this.findClassDecl(name);
-        if (declaration) return declaration;
-        for (const info of this.graph.modules.values()) {
-            for (const stmt of info.sf.statements) {
-                const expression = this.commonJsClassExpressionsForStatement(stmt)
-                    .find((candidate) => candidate.name?.text === name);
-                if (expression) return expression;
-            }
-        }
-        return null;
+        const declaration = this.nativeTypeDeclarations.get(name);
+        return declaration && ts.isClassLike(declaration) ? declaration : null;
     }
 
     private staticClassReceiver(expr: ts.Expression): ts.ClassDeclaration | null {
         if (!ts.isIdentifier(expr)) return null;
-        const sym = this.checker.getSymbolAtLocation(expr);
-        return sym?.getDeclarations()?.find(ts.isClassDeclaration) ?? null;
+        return this.classDeclForConstructorIdentifier(expr);
     }
 
     private classAccessorForPropertyAccess(
@@ -49914,7 +49893,7 @@ class Emitter {
         if (!decl || !decl.parent || !ts.isClassDeclaration(decl.parent) || !decl.parent.name) {
             return null;
         }
-        return { owner: decl.parent.name.text, decl };
+        return { owner: nativeTypeName(decl.parent), decl };
     }
 
     private emitClassAccessorGet(
@@ -49981,7 +49960,7 @@ class Emitter {
         const classDecl = getter.parent;
         if (!classDecl.name) unsupported(getter, "decorated instance getter requires a named class");
         const replacement = this.classInstanceGetterDecoratorReplacementName(classDecl, getter);
-        const thisArg = this.coerce({ c: obj, ty: classType(classDecl.name.text) }, T_VALUE, node);
+        const thisArg = this.coerce({ c: obj, ty: classType(nativeTypeName(classDecl)) }, T_VALUE, node);
         const fn = this.freshTemp("_getter_replacement");
         const out = this.freshTemp("_getter_result");
         const av = this.freshTemp("_getter_args");
@@ -50076,7 +50055,7 @@ class Emitter {
         const classDecl = setter.parent;
         if (!classDecl.name) unsupported(setter, "decorated instance setter requires a named class");
         const replacement = this.classInstanceSetterDecoratorReplacementName(classDecl, setter);
-        const thisArg = this.coerce({ c: obj, ty: classType(classDecl.name.text) }, T_VALUE, node);
+        const thisArg = this.coerce({ c: obj, ty: classType(nativeTypeName(classDecl)) }, T_VALUE, node);
         const fn = this.freshTemp("_setter_replacement");
         const av = this.freshTemp("_setter_args");
         return (
@@ -50330,14 +50309,13 @@ class Emitter {
         if (field === null) return null;
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return null;
         if (ts.isIdentifier(expr.expression)) {
-            const symbol = this.checker.getSymbolAtLocation(expr.expression);
-            const owner = symbol?.getDeclarations()?.find(ts.isClassDeclaration);
+            const owner = this.staticClassReceiver(expr.expression);
             const declaration = owner?.members.find(member => ts.isPropertyDeclaration(member) &&
                 isStatic(member) && this.staticPropertyName(member.name) === field);
             if (owner?.name && declaration) {
                 const type = mapType(declaration, this.checker);
                 if (type.kind !== "value") return null;
-                const name = owner.name.text;
+                const name = nativeTypeName(owner);
                 return { setup: [], get: `${name}_${mangleIdent(field)}`,
                     set: value => this.nativeStaticFieldStore(name, field, type, value) };
             }
@@ -50933,10 +50911,7 @@ class Emitter {
                 if (nsName) return nsName;
             }
             if (ts.isIdentifier(expr.expression)) {
-                const sym = this.checker.getSymbolAtLocation(expr.expression);
-                const cd = sym
-                    ?.getDeclarations()
-                    ?.find(ts.isClassDeclaration);
+                const cd = this.staticClassReceiver(expr.expression);
                 if (cd && cd.name) {
                     const field = cd.members.find(
                         (m) =>
@@ -50948,7 +50923,7 @@ class Emitter {
                     if (field) {
                         if (mapType(field, this.checker).kind === "value") unsupported(expr,
                             "boxed native field writes require a rooted reference across suspension");
-                        return `${cd.name.text}_${mangleIdent(expr.name.text)}`;
+                        return `${nativeTypeName(cd)}_${mangleIdent(expr.name.text)}`;
                     }
                 }
             }
@@ -51348,6 +51323,11 @@ class Emitter {
         const cond = this.emitBoolExpr(expr.condition);
         const whenT = this.emitExpr(expr.whenTrue);
         const whenF = this.emitExpr(expr.whenFalse);
+        return this.emitConditionalValueArms(expr, cond, whenT, whenF);
+    }
+
+    private emitConditionalValueArms(expr: ts.ConditionalExpression, cond: string,
+        whenT: EmitResult, whenF: EmitResult): EmitResult {
         const distinctNullish = this.emitDistinctNullishConditional(expr, cond, whenT, whenF);
         if (distinctNullish) return distinctNullish;
         if (
@@ -51371,7 +51351,7 @@ class Emitter {
                 lazyGeneratorFactory: whenT.lazyGeneratorFactory && whenF.lazyGeneratorFactory,
             };
         }
-        if (whenT.ty.kind !== whenF.ty.kind) {
+        if (!sameCType(whenT.ty, whenF.ty) || whenT.ty.c !== whenF.ty.c) {
             return {
                 c: `(${cond} ? ${this.coerce(whenT, T_VALUE, expr.whenTrue)} : ${this.coerce(whenF, T_VALUE, expr.whenFalse)})`,
                 ty: T_VALUE,
@@ -51703,14 +51683,14 @@ class Emitter {
                             if (sig) {
                                 const ret = mapTsType(method, sig.getReturnType(), this.checker);
                                 return this.emitSequencedCall(
-                                    `${owner.name!.text}_${this.classMethodCName(method.name)}`,
+                                    `${nativeTypeName(owner)}_${this.classMethodCName(method.name)}`,
                                     ret,
                                     [
                                         {
                                             value: recv,
-                                            pass: (tmp) => owner.name!.text === recv.ty.className
+                                            pass: (tmp) => nativeTypeName(owner) === recv.ty.className
                                                 ? tmp
-                                                : `((${owner.name!.text}_t*)${tmp})`,
+                                                : `((${nativeTypeName(owner)}_t*)${tmp})`,
                                         },
                                         ...this.ignoredArgumentSpecs(call.arguments, 0),
                                     ],
@@ -54446,72 +54426,10 @@ class Emitter {
             }
         }
 
-        // Static class method: MyClass.foo()
-        if (ts.isIdentifier(recvExpr)) {
-            const sym = this.checker.getSymbolAtLocation(recvExpr);
-            const classDecl = sym
-                ?.getDeclarations()
-                ?.find(ts.isClassDeclaration);
-            if (classDecl && classDecl.name) {
-                const method = classDecl.members.find(
-                    (m): m is ts.MethodDeclaration =>
-                        ts.isMethodDeclaration(m) &&
-                        m.name &&
-                        this.staticPropertyName(m.name) === memberName &&
-                        isStatic(m),
-                );
-                if (method) {
-                    const sig = this.checker.getResolvedSignature(call);
-                    if (!sig) unsupported(call, "unresolved static method");
-                    const genericMethod = this.genericMethodDeclaration(sig);
-                    const genericBindings = genericMethod
-                        ? this.genericBindingsForCall(call, genericMethod, sig)
-                        : null;
-                    const ret = genericBindings
-                        ? withTypeBindings(genericBindings, () =>
-                            mapTsType(call, sig.getReturnType(), this.checker),
-                        )
-                        : mapTsType(
-                            call,
-                            sig.getReturnType(),
-                            this.checker,
-                        );
-                    const callee = genericMethod && genericBindings
-                        ? this.ensureGenericMethodSpecialization(
-                            genericMethod,
-                            classDecl.name.text,
-                            genericBindings,
-                        )
-                        : `${classDecl.name.text}_${this.classMethodCName(method.name)}`;
-                    const params = sig.getParameters();
-                    if (
-                        call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
-                        !this.signatureHasRestParameter(params)
-                    ) {
-                        return this.emitStaticSpreadCall(call, callee, ret, params);
-                    }
-                    const specs = this.callSpecsFromSignature(
-                        call,
-                        call.arguments,
-                        params,
-                    );
-                    if (this.classMemberHasDecorators(method)) {
-                        return this.emitDecoratedStaticMethodCall(
-                            call,
-                            classDecl,
-                            method,
-                            callee,
-                            ret,
-                            specs,
-                        );
-                    }
-                    return this.emitSequencedCall(
-                        callee,
-                        ret,
-                        specs,
-                    );
-                }
-            }
+        // Static class values retain the actual alias/TDZ binding and mutable
+        // method surface. Native ABI selection belongs to their value adapters.
+        if (this.staticClassReceiver(recvExpr)) {
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
 
         if (
@@ -63293,7 +63211,7 @@ class Emitter {
         let owningCls = recvCls;
         const mdecl = sig.getDeclaration();
         if (mdecl && mdecl.parent && ts.isClassDeclaration(mdecl.parent) && mdecl.parent.name) {
-            owningCls = mdecl.parent.name.text;
+            owningCls = nativeTypeName(mdecl.parent);
         }
         const genericMethod = this.genericMethodDeclaration(sig);
         const erasedGenericClassMethod =
@@ -63381,7 +63299,7 @@ class Emitter {
         }
         const classDecl = method.parent;
         if (!classDecl.name) unsupported(method, "decorated instance method requires a named class");
-        const receiverType = classType(classDecl.name.text);
+        const receiverType = classType(nativeTypeName(classDecl));
         const replacement = this.classInstanceMethodDecoratorReplacementName(classDecl, method);
         return this.emitSequencedExpr(ret, specs, (args) => {
             const fn = this.freshTemp("_method_replacement");
@@ -63419,58 +63337,6 @@ class Emitter {
             });
             const applied = {
                 c: `tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}))`,
-                ty: T_VALUE,
-            };
-            pieces.push(`${out} = ${this.coerce(applied, ret, call)};`);
-            pieces.push(`}`);
-            pieces.push(out);
-            return `({ ${pieces.join(" ")}; })`;
-        });
-    }
-
-    private emitDecoratedStaticMethodCall(
-        call: ts.CallExpression,
-        classDecl: ts.ClassDeclaration,
-        method: ts.MethodDeclaration,
-        callee: string,
-        ret: CType,
-        specs: readonly SequencedCallArg[],
-    ): EmitResult {
-        if (!classDecl.name) unsupported(classDecl, "decorated static method call requires a named class");
-        const replacement = this.classStaticMethodDecoratorReplacementName(classDecl, method);
-        return this.emitSequencedExpr(ret, specs, (args) => {
-            const fn = this.freshTemp("_method_replacement");
-            const av = this.freshTemp("_method_args");
-            const pieces: string[] = [
-                `tsc_value_t ${fn} = ${replacement};`,
-                `if (tsc_value_is_undefined(${fn})) {`,
-            ];
-            if (ret.kind === "void" || ret.kind === "never") {
-                pieces.push(`${callee}(${args.join(", ")});`);
-                pieces.push(`} else {`);
-                pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)});`);
-                args.forEach((arg, index) => {
-                    const spec = specs[index]!;
-                    const argType = spec.target ?? spec.value.ty;
-                pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
-                });
-                pieces.push(`(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}));`);
-                pieces.push(`}`);
-                return `({ ${pieces.join(" ")} })`;
-            }
-            const out = this.freshTemp("_method_result");
-            const originalCall = `${callee}(${args.join(", ")})`;
-            pieces.splice(1, 0, `${ret.c} ${out} = ${this.zeroValue(ret)};`);
-            pieces.push(`${out} = ${originalCall};`);
-            pieces.push(`} else {`);
-            pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)});`);
-            args.forEach((arg, index) => {
-                const spec = specs[index]!;
-                const argType = spec.target ?? spec.value.ty;
-                pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
-            });
-            const applied = {
-                c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
                 ty: T_VALUE,
             };
             pieces.push(`${out} = ${this.coerce(applied, ret, call)};`);
@@ -68774,26 +68640,11 @@ class Emitter {
     private typedObjectPropertyNames(tsType: ts.Type, ty: CType): string[] {
         const props = this.objectProperties(tsType).map((prop) => prop.getName());
         if (props.length > 0 || ty.kind !== "class" || !ty.className) return props;
-        for (const mod of this.graph.modules.values()) {
-            for (const stmt of mod.sf.statements) {
-                if (ts.isInterfaceDeclaration(stmt) && stmt.name.text === ty.className) {
-                    const fields: string[] = [];
-                    for (const member of stmt.members) {
-                        if (ts.isPropertySignature(member) && member.name && ts.isIdentifier(member.name)) {
-                            fields.push(member.name.text);
-                        }
-                    }
-                    return fields;
-                }
-                if (ts.isClassDeclaration(stmt) && stmt.name?.text === ty.className) {
-                    const fields = this.collectInheritedFields(stmt).map((field) => field.name);
-                    for (const field of this.classOwnInstanceFields(stmt)) {
-                        fields.push(field.name);
-                    }
-                    return fields;
-                }
-            }
-        }
+        const declaration = this.nativeTypeDeclarations.get(ty.className);
+        if (declaration && ts.isInterfaceDeclaration(declaration)) return this.interfaceFields(declaration).map(field => field.name);
+        if (declaration && ts.isClassDeclaration(declaration)) return [
+            ...this.collectInheritedFields(declaration), ...this.classOwnInstanceFields(declaration),
+        ].map(field => field.name);
         return props;
     }
 
@@ -69165,7 +69016,8 @@ class Emitter {
         }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
-        const cls = targetClassDecl?.name?.text ?? targetClassExpression?.name?.text ?? this.identifierName(ctorExpr);
+        const targetClass = targetClassDecl ?? targetClassExpression;
+        const cls = targetClass ? nativeTypeName(targetClass) : this.identifierName(ctorExpr);
         if (cls === "TextEncoder") {
             const args = n.arguments ?? [];
             return this.emitSequencedExpr(
@@ -70062,7 +69914,7 @@ class Emitter {
                 if (field) {
                     const ft = mapType(field, this.checker);
                     return {
-                        c: `${classDecl.name.text}_${mangleIdent(pa.name.text)}`,
+                        c: `${nativeTypeName(classDecl)}_${mangleIdent(pa.name.text)}`,
                         ty: ft,
                     };
                 }

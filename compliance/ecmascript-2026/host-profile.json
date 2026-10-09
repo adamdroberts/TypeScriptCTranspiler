@@ -40,6 +40,7 @@
     "src/emit/index.ts",
     "src/emit/lexical-declarations.ts",
     "src/emit/mangle.ts",
+    "src/emit/native-type-identity.ts",
     "src/emit/types.ts",
     "src/json-syntax.ts",
     "src/link/cc.ts",

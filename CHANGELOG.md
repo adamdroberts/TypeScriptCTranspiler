@@ -1,5 +1,7 @@
 # Changelog
 
+- Key native class/interface owners by source declaration across type mapping, layouts, constructors, fields, adapters and inheritance brands. Preserve public metadata, intrinsic shadowing and imported binding checks; route static method calls through ordinary lookup. Admit ECMAScript class heritage expressions, remove raw-name owner searches, share conditional ABI joins and make optimized integer reads respect boxed binding storage. Verify independent module/namespace/layout/brand partitions and retained-owner stress with native E2E.
+
 - Unify native class member names under the framed scope/kind/key plan across declarations, calls and adapters. Reuse erased generic specializations for method values and ordinary iterator/binding/close machinery for native classes; delete the superseded native loop and binding emitters. Verify independent member-domain and retained-owner properties with native E2E.
 
 - Retain JavaScript callable definition spans and finite Function-constructor SourceText in canonical owners. Make Function.prototype.toString read internal source/InitialName without mutable-property or Proxy observation, and route native function string coercion through ordinary ToPrimitive. Verify independent span, metadata, Realm and retained-source partitions with native E2E in both memory modes.

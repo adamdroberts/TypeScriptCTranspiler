@@ -239,7 +239,13 @@ export function earlyFunctionStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, allowAwait, allowYield } = worklist.pop()!;
-        if (javascript && (ts.isTypeNode(node) || ts.isTypeParameterDeclaration(node) ||
+        // The TypeScript AST also calls a JavaScript class's `extends` operand
+        // a TypeNode. Its expression is ordinary ECMAScript syntax; only an
+        // attached type-argument List belongs to the TypeScript grammar.
+        const classHeritageExpression = ts.isExpressionWithTypeArguments(node) &&
+            ts.isHeritageClause(node.parent) && node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+            ts.isClassLike(node.parent.parent) && !node.typeArguments;
+        if (javascript && (ts.isTypeNode(node) && !classHeritageExpression || ts.isTypeParameterDeclaration(node) ||
             ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node) ||
             ts.isNonNullExpression(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) ||
             ts.isEnumDeclaration(node) || ts.isImportEqualsDeclaration(node) ||
