@@ -1,5 +1,8 @@
 # Changelog
 
+- Fixed numeric truthiness for integral loop indices and unified resumed-value conditions with the single-evaluation Boolean conversion path.
+- Fixed native Test262 artifact ordering to follow the preparation protocol when filenames contain punctuation.
+
 - Replaced PCRE2-backed RegExp matching with a native UTF-16 pattern/continuation engine and shared exec, match, search, replacement, and split consumers. Unicode Sets compile through one set worklist; captures, lookbehind, zero-width advancement, named/numeric substitution, and callback arguments use code-unit spans. Complete RegExp object-model and conformance evidence remain work in progress.
 
 

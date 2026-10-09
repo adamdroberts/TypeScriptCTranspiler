@@ -42195,14 +42195,8 @@ class Emitter {
     }
 
     private truthyExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
-        if (value.ty.kind === "value") return `tsc_value_is_truthy(${value.c})`;
-        if (value.ty.kind === "void") return "false";
-        if (value.ty.kind === "boolean") return value.c;
-        if (value.ty.kind === "number") return `(${value.c} != 0.0 && !isnan(${value.c}))`;
-        if (value.ty.kind === "bigint") return `(${value.c} != NULL && tsc_bigint_cmp(${value.c}, tsc_bigint_from_lit("0")) != 0)`;
-        if (value.ty.kind === "string") return `(${value.c} != NULL && ${value.c}->len > 0)`;
-        if (isPointerKind(value.ty)) return `(${value.c} != NULL)`;
-        return this.coerce(value, T_BOOLEAN, node);
+        if (value.ty.kind === "void") return `({ (void)(${value.c}); false; })`;
+        return this.truthyC(value, node);
     }
 
     private emitSimpleLazyResumeConditional(
@@ -49933,7 +49927,9 @@ class Emitter {
         if (r.ty.kind === "boolean") return r.c;
         if (r.ty.kind === "number") {
             const value = this.freshTemp("_truthy_number");
-            return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != 0 && !isnan(${value})); })`;
+            // Loop indices may use integral C storage. ToBoolean still consumes
+            // an ECMAScript Number, and C's isnan requires a floating operand.
+            return `({ double ${value} = ${r.c}; ((${value}) != 0 && !isnan(${value})); })`;
         }
         if (r.ty.kind === "bigint") {
             const value = this.freshTemp("_truthy_bigint");

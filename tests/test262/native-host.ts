@@ -1087,7 +1087,9 @@ async function artifactPaths(root: string): Promise<string[]> {
             }
         }
     }
-    return result.sort((left, right) => left.localeCompare(right));
+    // The preparation protocol orders paths by UTF-16 code units. Locale
+    // collation can reorder punctuation (for example .c versus _api.c).
+    return result.sort();
 }
 
 async function compilerErrorPreparation(

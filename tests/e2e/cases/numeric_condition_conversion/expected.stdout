@@ -1,0 +1,9 @@
+index: even|odd|even|odd|even
+condition: F false false
+condition: F false false
+condition: T true true
+condition: T true true
+condition: F false false
+condition: T true true
+calls: 18
+generator: 0 F 1 F 2 T
