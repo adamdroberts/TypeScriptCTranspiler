@@ -1,5 +1,7 @@
 # Changelog
 
+- Share sync/async yield-delegation invocation records and rooted semantic phases. Preserve captured next, live abrupt methods, actual argument Lists, method-result Await, raw async yield values, missing-return Await and missing-throw close precedence. Abandon records on exception before catch/finalizer reuse; replace the async diagnostic predecessor and verify independent generated requests, deep delegation and typed E2E in both memory modes.
+
 - Project async generators through the shared resumable graph and one FIFO completion/capability worklist. Preserve implicit Yield/return Await, return-request adoption, catch/finalization, reentrant enqueues, completed-queue draining and retained activation. Add ordinary async protocol brands and typed declaration surfaces; include base constructor parameter properties in native field/root storage. Verify generated semantic requests, deep finalization, native roots and typed E2E in both memory modes.
 
 - Retain captured async Iterator Records and ordinary receiver-owned async-from-sync wrappers. Preserve GetIterator and pre-Await errors, conditional close suspension, actual TypeErrors, incoming throw precedence, argument presence and value-rejection cleanup. Delete next rereads, bare-iterator admission and unconditional close Await; verify independent semantic partitions, deep unwinding and typed native E2E in both memory modes.

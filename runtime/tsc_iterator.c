@@ -544,9 +544,9 @@ static tsc_value_t async_generator_apply(void* env, tsc_value_t receiver, tsc_ar
     return tsc_value_promise(capability);
 }
 
-/* Yield delegation preserves the actual iterator result object while it is
- * incomplete. In particular it must not read value until done is true. */
-bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
+/* Both delegation protocols share actual method lookup, captured next,
+ * one-element argument Lists and the same rooted completion representation. */
+tsc_delegation_phase_t tsc_generator_delegate_invoke(tsc_iterator_record_t* iterator,
         const tsc_completion_record_t* request, tsc_completion_record_t* output) {
     tsc_value_t method = iterator->next_method;
     tsc_completion_kind_t kind = TSC_COMPLETION_NORMAL;
@@ -554,13 +554,8 @@ bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
         const char* name = request->kind == TSC_COMPLETION_RETURN ? "return" : "throw";
         method = tsc_value_get_prop(iterator->iterator, tsc_str_from_cstr(name));
         if (tsc_value_is_nullish(method)) {
-            if (request->kind == TSC_COMPLETION_RETURN) {
-                iterator->done = true;
-                tsc_completion_record_set(output, TSC_COMPLETION_RETURN, request->value, -1);
-                return true;
-            }
-            tsc_sync_iterator_close(iterator);
-            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator has no throw method"));
+            tsc_completion_record_set(output, request->kind, request->value, -1);
+            return request->kind == TSC_COMPLETION_RETURN ? TSC_DELEGATION_RETURN : TSC_DELEGATION_CLOSE;
         }
         if (!tsc_value_is_callable(method))
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator method is not callable"));
@@ -570,13 +565,28 @@ bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_array_push_value(args, request->value);
     tsc_value_t result = tsc_value_apply_function(method, iterator->iterator, tsc_value_array(args));
+    tsc_completion_record_set(output, kind, result, -1);
+    (void)method_root;
+    return TSC_DELEGATION_RESULT;
+}
+
+/* Sync delegation forwards incomplete iterator result objects unchanged,
+ * without reading value. Async delegation projects different result phases. */
+bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
+        const tsc_completion_record_t* request, tsc_completion_record_t* output) {
+    tsc_delegation_phase_t phase = tsc_generator_delegate_invoke(iterator, request, output);
+    if (phase == TSC_DELEGATION_RETURN) { iterator->done = true; return true; }
+    if (phase == TSC_DELEGATION_CLOSE) {
+        tsc_sync_iterator_close(iterator);
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator has no throw method"));
+    }
+    tsc_value_t result = output->value;
     if (!tsc_value_is_object(result))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator result is not an object"));
-    void* volatile result_root = tsc_value_gc_root(result);
     bool done = tsc_value_is_truthy(tsc_value_get_prop(result, tsc_str_from_lit("done", 4)));
-    tsc_completion_record_set(output, done ? kind : TSC_COMPLETION_NORMAL,
-        done ? tsc_value_get_prop(result, tsc_str_from_lit("value", 5)) : result, -1);
+    if (done) tsc_completion_record_set(output, output->kind,
+        tsc_value_get_prop(result, tsc_str_from_lit("value", 5)), -1);
+    else output->kind = TSC_COMPLETION_NORMAL;
     iterator->done = done;
-    (void)method_root; (void)result_root;
     return done;
 }

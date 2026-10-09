@@ -1108,6 +1108,17 @@ void tsc_generator_resume_leave(tsc_generator_t* generator, bool was_processing)
 void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value);
 void tsc_generator_suspend_result(tsc_generator_t* generator, tsc_value_t result);
 void tsc_generator_complete(tsc_generator_t* generator, tsc_completion_kind_t kind, tsc_value_t value);
+/* One delegation invocation distinguishes method results and absent protocol
+ * operations; each consumer projects its required Await/close/yield phases. */
+typedef enum {
+    TSC_DELEGATION_REQUEST,
+    TSC_DELEGATION_RESULT,
+    TSC_DELEGATION_RETURN,
+    TSC_DELEGATION_CLOSE,
+    TSC_DELEGATION_YIELDED
+} tsc_delegation_phase_t;
+tsc_delegation_phase_t tsc_generator_delegate_invoke(tsc_iterator_record_t* iterator,
+    const tsc_completion_record_t* request, tsc_completion_record_t* result);
 bool tsc_generator_delegate_step(tsc_sync_iterator_t* iterator,
     const tsc_completion_record_t* request, tsc_completion_record_t* result);
 #if defined(__GNUC__) || defined(__clang__)

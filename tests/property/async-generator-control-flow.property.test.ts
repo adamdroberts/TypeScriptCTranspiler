@@ -139,18 +139,3 @@ test("async generator requests use one retained graph and FIFO completion workli
         }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }, 240_000);
-
-test("unrepresented async delegation fails closed at the shared graph boundary", async () => {
-    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-async-generator-missing-"));
-    try {
-        const entry = path.join(temporary, "subject.js"), output = path.join(temporary, "subject");
-        await fs.writeFile(entry, "async function* subject() { yield* [1]; } subject().next();");
-        const diagnostics: string[] = [];
-        const result = await compile({ entry, output, emitCOnly: true, buildDir: path.join(temporary, "build"),
-            diagnosticWriter: message => diagnostics.push(message) });
-        expect(result.exitCode).toBe(3);
-        expect(diagnostics.join("")).toContain("generator suspension graph requires a canonical operation");
-        expect(result.mainC).toBe("");
-        expect(await fs.stat(output).then(() => true, () => false)).toBeFalse();
-    } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-});

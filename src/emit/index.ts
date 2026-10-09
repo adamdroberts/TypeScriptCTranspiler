@@ -29798,6 +29798,7 @@ class Emitter {
             this.structDecls.line("tsc_generator_t* generator;");
             this.structDecls.line("tsc_sync_iterator_t* delegation;");
             this.structDecls.line("tsc_completion_record_t delegation_result;");
+            this.structDecls.line("tsc_delegation_phase_t delegation_phase;");
         } else this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_realm_t* realm;");
         this.structDecls.line("int pc;");
@@ -30014,6 +30015,11 @@ class Emitter {
                 callback.line(`state->exception_value = ${value};`);
                 callback.line("state->exception_value_gc_root = tsc_value_gc_root(state->exception_value);");
                 callback.line("state->awaiting = false;");
+                if (generator) {
+                    callback.line("state->delegation = NULL;");
+                    callback.line("state->delegation_phase = TSC_DELEGATION_REQUEST;");
+                    callback.line("tsc_completion_record_clear(&state->delegation_result);");
+                }
                 emitTransition(targetId);
             };
             const emitReturnSettlement = (): void => {
@@ -30424,19 +30430,54 @@ class Emitter {
                         if (generator && operation.suspension !== "await") {
                             const source = operation.source === null ? "tsc_value_undefined()" : read(operation.source);
                             if (operation.suspension === "delegate") {
-                                if (asyncGenerator) return false;
-                                callback.open("if (!state->awaiting)");
+                                callback.open(asyncGenerator ? "if (!state->delegation)" : "if (!state->awaiting)");
                                 callback.line("state->delegation = TSC_GC_MALLOC(sizeof(*state->delegation));");
-                                callback.line(`*state->delegation = tsc_sync_iterator_open(${source});`);
-                                callback.line("state->awaiting = true;");
+                                callback.line(`*state->delegation = ${asyncGenerator ? "tsc_async_iterator_open" : "tsc_sync_iterator_open"}(${source});`);
+                                callback.line("state->delegation_phase = TSC_DELEGATION_REQUEST;");
+                                if (!asyncGenerator) callback.line("state->awaiting = true;");
                                 callback.line("tsc_completion_record_set(&state->generator->request, TSC_COMPLETION_NORMAL, tsc_value_undefined(), -1);");
                                 callback.close();
-                                callback.open("if (!tsc_generator_delegate_step(state->delegation, &state->generator->request, &state->delegation_result))");
-                                callback.line("tsc_generator_suspend_result(state->generator, state->delegation_result.value);");
-                                callback.line("tsc_try_pop();");
-                                callback.line("return;");
-                                callback.close();
+                                if (asyncGenerator) {
+                                    callback.line("if (state->delegation_phase == TSC_DELEGATION_YIELDED) state->delegation_phase = TSC_DELEGATION_REQUEST;");
+                                    callback.open("if (state->delegation_phase == TSC_DELEGATION_REQUEST)");
+                                    callback.line("state->delegation_phase = tsc_generator_delegate_invoke(state->delegation, &state->generator->request, &state->delegation_result);");
+                                    callback.close();
+                                    callback.open("if (state->delegation_phase == TSC_DELEGATION_CLOSE)");
+                                    emitPromiseSuspension(() => "tsc_async_iterator_close(state->delegation, false)",
+                                        stateNode.exceptionTarget?.target.id ?? null, { optional: true });
+                                    callback.line('if (state->receiver && !tsc_value_is_object(tsc_promise_value(state->receiver))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator return result is not an object"));');
+                                    callback.line('tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator has no throw method"));');
+                                    callback.close();
+                                    emitPromiseSuspension(() => "tsc_promise_await(state->delegation_result.value)",
+                                        stateNode.exceptionTarget?.target.id ?? null);
+                                    callback.line("state->awaiting = false;");
+                                    callback.open("if (state->delegation_phase == TSC_DELEGATION_RETURN)");
+                                    callback.line("tsc_completion_record_set(&state->delegation_result, TSC_COMPLETION_RETURN, tsc_promise_value(state->receiver), -1);");
+                                    callback.close();
+                                    callback.open("else");
+                                    const result = this.freshTemp("_async_delegate_result");
+                                    const done = this.freshTemp("_async_delegate_done");
+                                    callback.line(`tsc_value_t ${result} = tsc_promise_value(state->receiver);`);
+                                    callback.line(`if (!tsc_value_is_object(${result})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Delegated iterator result is not an object"));`);
+                                    callback.line(`bool ${done} = tsc_value_is_truthy(tsc_value_get_prop(${result}, tsc_str_from_lit("done", 4)));`);
+                                    callback.line(`tsc_completion_record_set(&state->delegation_result, ${done} ? state->delegation_result.kind : TSC_COMPLETION_NORMAL, tsc_value_get_prop(${result}, tsc_str_from_lit("value", 5)), -1);`);
+                                    callback.line(`state->delegation->done = ${done};`);
+                                    callback.open(`if (!${done})`);
+                                    callback.line("state->delegation_phase = TSC_DELEGATION_YIELDED;");
+                                    callback.line("tsc_generator_suspend(state->generator, state->delegation_result.value);");
+                                    callback.line("tsc_try_pop();");
+                                    callback.line("return;");
+                                    callback.close();
+                                    callback.close();
+                                } else {
+                                    callback.open("if (!tsc_generator_delegate_step(state->delegation, &state->generator->request, &state->delegation_result))");
+                                    callback.line("tsc_generator_suspend_result(state->generator, state->delegation_result.value);");
+                                    callback.line("tsc_try_pop();");
+                                    callback.line("return;");
+                                    callback.close();
+                                }
                                 callback.line("state->delegation = NULL;");
+                                callback.line("state->delegation_phase = TSC_DELEGATION_REQUEST;");
                                 callback.line("state->awaiting = false;");
                                 callback.open("if (state->delegation_result.kind == TSC_COMPLETION_RETURN)");
                                 emitReturnValue({ c: "state->delegation_result.value", ty: T_VALUE }, operation.node);
@@ -31239,6 +31280,11 @@ class Emitter {
         callback.line("state->exception_value_gc_root = tsc_value_gc_root(state->exception_value);");
         callback.line("state->pc = state->exception_pc;");
         callback.line("state->awaiting = false;");
+        if (generator) {
+            callback.line("state->delegation = NULL;");
+            callback.line("state->delegation_phase = TSC_DELEGATION_REQUEST;");
+            callback.line("tsc_completion_record_clear(&state->delegation_result);");
+        }
         callback.line("goto __tsc_resume_dispatch;");
         callback.close();
         callback.line(finish("throw", "tsc_current_error_value()"));
@@ -31264,6 +31310,7 @@ class Emitter {
         if (generator) {
             buf.line(`${env}->generator = tsc_generator_new(${name}, ${env}, ${asyncGenerator ? "true" : "false"});`);
             buf.line(`${env}->delegation = NULL;`);
+            buf.line(`${env}->delegation_phase = TSC_DELEGATION_REQUEST;`);
             buf.line(`tsc_completion_record_clear(&${env}->delegation_result);`);
         } else buf.line(`${env}->result_promise = ${result};`);
         buf.line(`${env}->realm = tsc_realm_current();`);
