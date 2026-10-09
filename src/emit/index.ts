@@ -22474,7 +22474,7 @@ class Emitter {
 
     private emitCommonJsObjectLiteralDefaultValue(ol: ts.ObjectLiteralExpression): EmitResult {
         const obj = this.freshTemp("_cjsobj");
-        const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+        const pieces: string[] = [`tsc_object_t* volatile ${obj} = tsc_object_new()`];
         for (const prop of ol.properties) {
             if (ts.isSpreadAssignment(prop)) {
                 if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) {
@@ -22505,7 +22505,7 @@ class Emitter {
 
     private emitCommonJsObjectLiteralWholeValue(ol: ts.ObjectLiteralExpression): EmitResult {
         const obj = this.freshTemp("_cjsobj");
-        const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+        const pieces: string[] = [`tsc_object_t* volatile ${obj} = tsc_object_new()`];
         for (const prop of ol.properties) {
             if (ts.isSpreadAssignment(prop)) {
                 if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) {
@@ -39296,7 +39296,7 @@ class Emitter {
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
             const object = this.freshTemp("_lazy_dynobj");
-            const pieces: string[] = [`tsc_object_t* ${object} = tsc_object_new()`];
+            const pieces: string[] = [`tsc_object_t* volatile ${object} = tsc_object_new()`];
             for (const property of ol.properties) {
                 let name: string;
                 let expression: ts.Expression;
@@ -41734,7 +41734,7 @@ class Emitter {
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
             const obj = this.freshTemp("_dynobj");
-            const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+            const pieces: string[] = [`tsc_object_t* volatile ${obj} = tsc_object_new()`];
             for (const prop of ol.properties) {
                 let fieldName: string;
                 let expr: ts.Expression | ts.MethodDeclaration;
@@ -77462,7 +77462,7 @@ class Emitter {
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
             const obj = this.freshTemp("_dynobj");
-            const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+            const pieces: string[] = [`tsc_object_t* volatile ${obj} = tsc_object_new()`];
             for (const prop of ol.properties) {
                 let fieldName: string;
                 let expr: ts.Expression | ts.MethodDeclaration;

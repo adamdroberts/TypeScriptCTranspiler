@@ -1,5 +1,7 @@
 # Changelog
 
+- Retain decoded object targets throughout ordinary, CommonJS and resumable literal construction, and root accessor targets/callbacks before conversion and allocation. Repairs a native GC lifetime defect exposed by generic replacement; properties now force collection during construction and exercise frequent collection.
+
 - Replaced eager Array keys/values/entries snapshots with ordinary live iterators over shared source/index/kind state. Array.from observes iterator and next overrides for dynamic and typed Array sources, including arguments. Typed entry codecs preserve numeric keys, iterator receivers escape stack allocation, and legacy generators expose an ordinary iterator prototype.
 
 - Replaced fixed property descriptor lowering with ordinary object evaluation and ordered runtime ToPropertyDescriptor. Object/Reflect definitions and Object.create share descriptor records, inherited fields, symbol keys, callback identity, complete map preparation, and real TypeErrors. Typed array definitions preserve storage identity and observe metadata; inherited prototype and descriptor callback/value GC roots are retained.

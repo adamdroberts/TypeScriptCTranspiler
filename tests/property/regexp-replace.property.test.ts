@@ -125,7 +125,10 @@ test("RegExp replacement shares RegExpExec results, capture Lists and GetSubstit
                 test262Observation: { kind: "test262-native-observation", scenarioId: "property/regexp-replace.js#sloppy",
                     setupEntries: [], testEntry: entry, async: false }, diagnosticWriter: message => diagnostics.push(message) });
             expect(diagnostics.join("")).toBe(""); expect(result.exitCode).toBe(0);
-            const native = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
+            // Exercise decoded-root lifetimes under frequent collection as well as
+            // the allocation-only memory mode.
+            const native = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe",
+                env: { ...process.env, GC_FREE_SPACE_DIVISOR: "100" } });
             expect(native.exitCode).toBe(0); expect(native.stderr.toString()).toBe("");
             const observation = parseHostObservation(JSON.parse(native.stdout.toString()));
             if (observation.kind !== "normal") throw new Error(JSON.stringify({ ...observation, stdout: observation.stdout?.slice(-400) }));

@@ -4059,6 +4059,10 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
 }
 
 bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t getter) {
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    void* volatile getter_gc_root = tsc_value_gc_root(getter);
+    (void)target_gc_root;
+    (void)getter_gc_root;
     if (tsc_value_is_nullish(v)) {
         tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineGetter__ receiver is null or undefined"));
     }
@@ -4083,6 +4087,10 @@ bool tsc_value_object_define_getter(tsc_value_t v, tsc_str_t* key, tsc_value_t g
 }
 
 bool tsc_value_object_define_setter(tsc_value_t v, tsc_str_t* key, tsc_value_t setter) {
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    void* volatile setter_gc_root = tsc_value_gc_root(setter);
+    (void)target_gc_root;
+    (void)setter_gc_root;
     if (tsc_value_is_nullish(v)) {
         tsc_throw_str(tsc_str_from_cstr("Object.prototype.__defineSetter__ receiver is null or undefined"));
     }
@@ -4119,6 +4127,8 @@ bool tsc_value_object_define_computed_getter(
     tsc_value_t key,
     tsc_value_t getter
 ) {
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    (void)target_gc_root;
     void* volatile key_gc_root = tsc_value_gc_root(key);
     void* volatile getter_gc_root = tsc_value_gc_root(getter);
     (void)key_gc_root;
@@ -4131,6 +4141,8 @@ bool tsc_value_object_define_computed_setter(
     tsc_value_t key,
     tsc_value_t setter
 ) {
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    (void)target_gc_root;
     void* volatile key_gc_root = tsc_value_gc_root(key);
     void* volatile setter_gc_root = tsc_value_gc_root(setter);
     (void)key_gc_root;

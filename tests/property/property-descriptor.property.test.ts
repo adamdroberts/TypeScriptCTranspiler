@@ -6,6 +6,21 @@ import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
 
 const source = String.raw`
+// Collection during a computed key must retain the unfinished literal and
+// all accessor values; the reference engine observes identical semantics.
+function constructionKey(key) { if (NATIVE_GC) $262.gc(); return key; }
+var constructionMarker = { token: "kept" };
+var constructionSymbol = Symbol("construction");
+var constructed = {
+    first: constructionMarker,
+    get [constructionKey("read")]() { return constructionMarker; },
+    set [constructionKey("write")](value) { this.assigned = value; },
+    [constructionKey(constructionSymbol)]() { return this.first; },
+    ...{ spread: constructionMarker },
+    [constructionKey("last")]: constructionMarker
+};
+constructed.write = constructionMarker;
+print("construction:" + (constructed.first === constructed.read) + ":" + (constructed[constructionSymbol]() === constructionMarker) + ":" + (constructed.assigned === constructed.spread) + ":" + (constructed.last === constructionMarker));
 function snapshot(target, key) {
     var d = Object.getOwnPropertyDescriptor(target, key);
     return d === undefined ? "missing" : ["value" in d ? String(d.value) : "accessor", d.writable, d.enumerable, d.configurable].join(":");
@@ -130,11 +145,11 @@ print("depth:" + snapshot(target, "deep"));
 test("property descriptors use ordinary objects and one ordered runtime conversion", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-property-descriptor-"));
     const expected: string[] = [];
-    new Function("print", source)((value: unknown) => expected.push(String(value)));
+    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
     try {
         const entry = path.join(temporary, "subject.js");
-        await fs.writeFile(entry, source);
         for (const noGc of [false, true]) {
+            await fs.writeFile(entry, source.replaceAll("NATIVE_GC", String(!noGc)));
             const output = path.join(temporary, noGc ? "no-gc" : "gc");
             const diagnostics: string[] = [];
             const result = await compile({ entry, output, initializationEntries: [entry], noGc,
@@ -143,7 +158,8 @@ test("property descriptors use ordinary objects and one ordered runtime conversi
                     setupEntries: [], testEntry: entry, async: false }, diagnosticWriter: message => diagnostics.push(message) });
             expect(diagnostics.join("")).toBe("");
             expect(result.exitCode).toBe(0);
-            const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe" });
+            const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe",
+                env: { ...process.env, GC_FREE_SPACE_DIVISOR: "100" } });
             expect(native.exitCode).toBe(0);
             expect(native.stderr.toString()).toBe("");
             const observation = parseHostObservation(JSON.parse(native.stdout.toString()));
