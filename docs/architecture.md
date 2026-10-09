@@ -128,7 +128,7 @@ Today's emitter prefers specialized C types for each TS type and uses a NaN-boxe
 | `WeakMap<K, V>` | `tsc_map_t*` | pointer-key map without iteration API |
 | `WeakSet<T>` | `tsc_set_t*` | pointer-key set without iteration API |
 | `WeakRef<T>` | `tsc_weakref_t*` | typed target pointer wrapper |
-| `RegExp` | `tsc_regexp_t*` | PCRE2 regex behind the wrapper |
+| `RegExp` | `tsc_regexp_t*` | ECMAScript AST, continuation graph, and UTF-16 offsets |
 | `(args) => ret` | `tsc_fn_*_t*` | typed closure value with generated `{fn, env}` struct; function-scope captures use GC-managed ref cells |
 | `class Foo` | `Foo_t*` | struct with inherited fields laid at prefix |
 | `interface Foo` | `Foo_t*` | same (struct of fields, no methods) |
@@ -168,7 +168,7 @@ flowchart TD
     RT --> STR[Strings<br/>tsc_str_*]
     RT --> ARR[Arrays<br/>tsc_array_*]
     RT --> MS[Map / Set<br/>tsc_map_* / tsc_set_*]
-    RT --> REG[RegExp<br/>PCRE2 regex wrapper]
+    RT --> REG[RegExp<br/>UTF-16 continuation matcher]
     RT --> EX[Exceptions<br/>setjmp/longjmp]
     RT --> NUM[Numbers<br/>parseFloat/Int, num_mod, math_random]
     RT --> JSON[JSON helpers<br/>escape_string, num]

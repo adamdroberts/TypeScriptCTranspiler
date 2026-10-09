@@ -1,0 +1,16 @@
+units: 2 1
+search: 3
+halves: 72,56832 55357,76
+zero: 45,55357,45,56832,45 45,55357,56832,45
+split: 55357|56832 55357,56832
+units: 2 1
+search: 3
+halves: 72,56832 55357,76
+zero: 45,55357,45,56832,45 45,55357,56832,45
+split: 55357|56832 55357,56832
+backtrack: abc|ab
+lookbehind: |a|bc
+lookahead: true
+named: a|b|a2|$|ab
+empty: 0 a|b|c
+flags: im true

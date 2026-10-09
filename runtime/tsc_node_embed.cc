@@ -38,7 +38,7 @@ typedef struct tsc_array {
 } tsc_array_t;
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
-void tsc_panic(const char* msg);
+[[noreturn]] void tsc_panic(const char* msg);
 tsc_str_t* tsc_str_from_lit(const char* data, size_t len);
 tsc_str_t* tsc_str_from_cstr(const char* s);
 tsc_object_t* tsc_object_new(void);

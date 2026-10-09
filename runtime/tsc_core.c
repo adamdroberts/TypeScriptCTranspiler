@@ -1034,7 +1034,7 @@ void tsc_bootstrap(int argc, char** argv) {
     (void)tsc_realm_current();
 }
 
-void tsc_panic(const char* msg) {
+_Noreturn void tsc_panic(const char* msg) {
     fputs("tsc: panic: ", stderr);
     fputs(msg, stderr);
     fputc('\n', stderr);

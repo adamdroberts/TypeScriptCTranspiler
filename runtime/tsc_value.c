@@ -8129,16 +8129,10 @@ static tsc_value_t string_replace_from_values(
         ? NULL
         : string_native_regexp(search);
     if (native_regexp) {
-        if (tsc_value_is_callable(replacement)) {
-            tsc_throw_error(
-                TSC_ERROR_TYPE,
-                tsc_str_from_lit("RegExp functional replacement is not yet supported", 50)
-            );
-        }
-        return tsc_value_string(tsc_str_replace_regex(
+        return tsc_value_string(tsc_str_replace_regex_value(
             string,
             native_regexp,
-            tsc_value_to_string(replacement)
+            replacement
         ));
     }
     const tsc_str_t* search_string = tsc_value_to_string(search);
@@ -8226,7 +8220,8 @@ tsc_array_t* value_array_from_string_array(const tsc_array_t* strings) {
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), strings && strings->len ? strings->len : 1);
     if (!strings) return out;
     for (size_t i = 0; i < strings->len; i++) {
-        tsc_value_t value = tsc_value_string(TSC_ARR(tsc_str_t*, strings, i));
+        tsc_str_t* string = TSC_ARR(tsc_str_t*, strings, i);
+        tsc_value_t value = string ? tsc_value_string(string) : tsc_value_undefined();
         tsc_array_push_raw(out, &value);
     }
     return out;
@@ -8450,8 +8445,11 @@ tsc_value_t tsc_value_date(tsc_date_t* d) {
 
 tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
     if (!r) return tsc_value_null();
+    if (r->object) return tsc_value_object(r->object);
     tsc_object_t* o = tsc_object_new_class(r);
     o->is_regexp = true;
+    o->prototype = tsc_value_object(r->prototype);
+    r->object = o;
     return tsc_value_object(o);
 }
 

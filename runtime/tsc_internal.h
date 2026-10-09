@@ -429,7 +429,7 @@ static inline bool value_is_valid_prototype(tsc_value_t v) {
 
 bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b);
 
-static bool key_eq(tsc_key_kind_t kk, size_t ks, const void* a, const void* b) {
+static inline bool key_eq(tsc_key_kind_t kk, size_t ks, const void* a, const void* b) {
     switch (kk) {
         case TSC_KEY_NUM: {
             double x, y; memcpy(&x, a, sizeof x); memcpy(&y, b, sizeof y);
@@ -565,6 +565,8 @@ void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth);
 uint32_t split_limit_from_value(tsc_value_t limit);
 tsc_array_t* value_array_from_string_array(const tsc_array_t* strings);
 tsc_str_t* str_alloc(size_t len);
+const uint16_t* tsc_str_utf16_units(const tsc_str_t* string, size_t* len_out);
+tsc_str_t* tsc_str_from_units_range(const uint16_t* units, size_t start, size_t count);
 int number_fraction_digits(double value);
 int number_exponential_fraction_digits(double value);
 int number_precision_digits(double value);
@@ -621,7 +623,6 @@ int32_t tsc_int32_from_uint32(uint32_t u);
 int32_t tsc_shift_right_int32(int32_t value, uint32_t shift);
 tsc_bigint_t* bigint_alloc(void);
 const char* bigint_digits_for(const char* s, int* base);
-pcre2_match_data* re_md(const tsc_regexp_t* re);
 void replace_append(char** out, size_t* pos, size_t* cap, const char* data, size_t len);
 uint8_t byte_from_double(double n);
 tsc_buffer_t* buffer_alloc_len(size_t len);
@@ -707,5 +708,63 @@ void event_emitter_reserve(tsc_event_emitter_t* ee, size_t cap);
 tsc_array_t* event_args_copy_as_values(tsc_array_t* args);
 void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
+
+/* ------------- Canonical ECMAScript RegExp engine (UTF-16 units) -------------
+ * One parsed representation shared by every consumer (exec/test/match/
+ * search/replace/split). Patterns compile from canonical UTF-16 code units;
+ * matching reports code-unit offsets. Implemented in runtime/tsc_regexp.c. */
+typedef struct {
+    bool global;
+    bool ignore_case;
+    bool multiline;
+    bool dot_all;
+    bool sticky;
+    bool unicode;
+    bool unicode_sets;
+    bool has_indices;
+} tsc_re_flags_t;
+
+typedef struct tsc_re_compiled tsc_re_compiled_t;
+
+typedef struct {
+    int code;
+    size_t offset;
+} tsc_re_error_t;
+
+#define TSC_RE_OK 0
+#define TSC_RE_ERR_SYNTAX 1
+#define TSC_RE_ERR_FLAGS 2
+
+/* Validates a flags string into tsc_re_flags_t; returns TSC_RE_OK or
+ * TSC_RE_ERR_FLAGS (unknown, duplicated, or u+v combined). */
+int tsc_re_parse_flags(const uint16_t* units, size_t len, tsc_re_flags_t* out);
+/* Capture buffer: 2 * (group_count + 1) unit offsets; SIZE_MAX marks unset. */
+tsc_re_compiled_t* tsc_re_compile(
+    const uint16_t* pattern,
+    size_t pattern_len,
+    tsc_re_flags_t flags,
+    tsc_re_error_t* error
+);
+size_t tsc_re_group_count(const tsc_re_compiled_t* re);
+size_t tsc_re_named_count(const tsc_re_compiled_t* re);
+bool tsc_re_named_at(const tsc_re_compiled_t* re, size_t position,
+    const char** name, size_t* name_len, size_t* group_index);
+/* Returns group index for a UTF-8 name, or SIZE_MAX when absent. */
+size_t tsc_re_named_group(
+    const tsc_re_compiled_t* re,
+    const char* name,
+    size_t name_len
+);
+/* Match the compiled pattern at exactly `start`; on success writes the
+ * overall [match_start, match_end) span plus captures into cap_out. */
+bool tsc_re_match_at(
+    const tsc_re_compiled_t* re,
+    const uint16_t* units,
+    size_t units_len,
+    size_t start,
+    size_t* cap_out,
+    size_t* match_start,
+    size_t* match_end
+);
 
 #endif

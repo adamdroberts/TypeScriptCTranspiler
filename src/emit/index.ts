@@ -78135,6 +78135,8 @@ class Emitter {
                     return { c: `${recv.c}->sticky`, ty: T_BOOLEAN };
                 case "unicode":
                     return { c: `${recv.c}->unicode`, ty: T_BOOLEAN };
+                case "unicodeSets":
+                    return { c: `${recv.c}->unicode_sets`, ty: T_BOOLEAN };
             }
         }
         if (recv.ty.kind === "event") {

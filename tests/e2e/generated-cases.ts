@@ -1,3 +1,8 @@
+export interface RegexpPatternDepthSpec {
+    generator: "regexp-pattern-depth";
+    depth: number;
+}
+
 export interface AsyncLeadingAwaitChainSpec {
     generator: "async-leading-await-chain";
     awaitCount: number;
@@ -135,6 +140,7 @@ export interface SwitchCaseBlockClassWorklistWidthSpec {
 }
 
 export type GeneratedCaseSpec =
+    | RegexpPatternDepthSpec
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | AsyncLogicalExpressionDepthSpec
@@ -174,6 +180,13 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if (spec.generator === "regexp-pattern-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return { generator: spec.generator, depth };
+    }
     if (spec.generator === "async-leading-await-chain") {
         const awaitCount = spec.awaitCount;
         if (typeof awaitCount !== "number" || !Number.isInteger(awaitCount) || awaitCount < 2) {
@@ -1420,6 +1433,10 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "regexp-pattern-depth":
+            return `const pattern = "(?:".repeat(${spec.depth}) + "(a|ab)c" + ")".repeat(${spec.depth});
+                const hit = new RegExp(pattern).exec("abc");
+                console.log("regexp-depth:", hit === null ? "missing" : hit.join("|"));`;
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);
         case "async-binding-default-depth":

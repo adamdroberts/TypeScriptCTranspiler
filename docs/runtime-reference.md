@@ -340,20 +340,11 @@ Typed `WeakMap<K, V>` and `WeakSet<T>` reuse these map/set tables with pointer-k
 
 ## Regex (`tsc_regexp_t`)
 
-Wraps PCRE2 8-bit regexes (`<pcre2.h>`) with UTF and Unicode-property support enabled.
+`runtime/tsc_regexp.c` parses one UTF-16 pattern tree and compiles character-set expressions through an explicit worklist. Matching uses immutable continuation tasks, ordered alternatives, reversible capture writes, and backward traversal for lookbehind. `runtime/tsc_regexp_api.c` routes native consumers through that representation and the shared String code-unit projection. There is no PCRE2 dependency.
 
-```c
-typedef struct tsc_regexp {
-    pcre2_code* re;
-    tsc_str_t* source;
-    tsc_str_t* flags;
-    bool global, has_indices, ignore_case, multiline, dot_all, sticky, unicode;
-    bool compiled;
-    uint32_t capture_count;
-} tsc_regexp_t;
-```
+`tsc_regexp_t` owns its compiled representation, capture cardinality, normalized flags, source, creation-Realm prototype, and stable boxed object identity. Flags include `d`, `g`, `i`, `m`, `s`, `u`, `v`, and `y`; unknown, duplicate, and combined `u`/`v` flags throw `SyntaxError`. Native matches and captures use UTF-16 positions; Unicode matching and zero-width consumer advancement treat surrogate pairs as code points. RegExp callback replacement first collects matches, then supplies captures, code-unit positions, original input, and null-prototype named-capture objects in order. String replacement tokens and split captures use the same spans.
 
-`tsc_regexp_new` compiles JS regex literals through PCRE2. Supported flag properties include `d`, `g`, `i`, `m`, `s`, `u`, and `y`; matching options currently use `i`, `m`, and `s`, while `d`/`y` are exposed as properties without full indices/sticky execution semantics. UTF/UCP mode is enabled so Unicode property escapes such as `\p{L}` and `\p{Script=Greek}` work. PCRE2 also covers lookahead, lookbehind, normal capture groups, and named capture syntax. Named groups are returned by numeric capture position today; a JS-style `.groups` object needs the future dynamic object runtime.
+The complete RegExp object-model and clause-level contract remains open: `lastIndex`, mutable `exec` and symbol consumers, exec-result metadata/indices, constructor/Realm semantics, modifiers, disjoint duplicate names, and exhaustive syntax/legacy partitions still require implementation and exact pinned evidence. These native operations do not establish whole-RegExp conformance.
 
 | Symbol | Signature |
 |--------|-----------|
@@ -362,7 +353,7 @@ typedef struct tsc_regexp {
 | `tsc_regexp_test(re, s)` | `bool` |
 | `tsc_str_match_regex(s, re)` | `tsc_array_t*` — array of global match strings, or full match + capture groups for non-global regexes; `NULL` if none |
 | `tsc_str_match_all_regex(s, re)` | `tsc_array_t*` — array of per-match capture arrays |
-| `tsc_str_search_regex(s, re)` | `double` — byte offset of the first match, or `-1` if none |
+| `tsc_str_search_regex(s, re)` | `double` — UTF-16 code-unit offset of the first match, or `-1` if none |
 | `tsc_str_replace_regex(s, re, repl)` | `tsc_str_t*` — honors the `g` flag and expands JS replacement-string tokens |
 | `tsc_str_split_regex(s, re)` | `tsc_array_t*` |
 | `tsc_str_split_regex_limit(s, re, limit)` | `tsc_array_t*` |

@@ -753,6 +753,25 @@ static tsc_str_t* string_from_utf16_range(
     return result;
 }
 
+/* Canonical UTF-16 projection shared with the RegExp engine: the same
+ * lazily published immutable code-unit collection every String algorithm
+ * consumes. Units preserve lone surrogates (WTF-8 storage). */
+const uint16_t* tsc_str_utf16_units(const tsc_str_t* string, size_t* len_out) {
+    tsc_utf16_sequence_t sequence = string_utf16_sequence(string);
+    if (len_out) *len_out = sequence.len;
+    return sequence.data;
+}
+
+/* Materializes a String from a UTF-16 unit range (lone surrogates survive
+ * as WTF-8, matching observable String indexing semantics). */
+tsc_str_t* tsc_str_from_units_range(
+    const uint16_t* units,
+    size_t start,
+    size_t count
+) {
+    return string_from_utf16_range(units, start, count);
+}
+
 static tsc_str_t* string_from_numeric_values(
     const tsc_array_t* values,
     bool code_points

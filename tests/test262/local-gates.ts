@@ -216,7 +216,6 @@ export async function collectToolchain(
         openssl: await toolVersion("pkg-config", ["--modversion", "openssl"]),
         icu: await toolVersion("pkg-config", ["--modversion", "icu-uc"]),
         libuv: await toolVersion("pkg-config", ["--modversion", "libuv"]),
-        pcre2: await toolVersion("pkg-config", ["--modversion", "libpcre2-8"]),
         gmp: await toolVersion("pkg-config", ["--modversion", "gmp"]),
     };
 }

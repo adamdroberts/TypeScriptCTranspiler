@@ -24,7 +24,7 @@ Substantial working subset, backed by native end-to-end regressions including a 
 | 6 (partial) | **Promise + `async`/`await` typed suspension subset** — the canonical heap-backed async CFG is the sole lowering for admitted suspension graphs; central PromiseResolve/adoption handles native promises, non-Promise values, and supported dynamic thenables; rejection, `try`/`catch`/awaited-finally completion, async iteration, and queued resumption compose through graph edges. Promise combinators and the bounded before-exit task queues remain available. Unsupported async graphs fail closed; broader host event-loop scheduling and nonzero-delay timers remain deferred. | ✅ |
 | 7 (partial) | `Map<K,V>` + `Set<T>` with insertion-order hash tables, SameValueZero keys, weak collections/references, Set composition, grouping, collection iteration, custom iterable classes and self-iterable iterator objects, plus **lazy `function*` generators** with heap-backed suspend/resume, `yield`/`yield*`, and supported `.next(value)`/`.return(value)`/`.throw(error)` control and expression graphs. Async generators and remaining generator/iterator semantic partitions remain deferred. | ✅ |
 | 7 (partial) | JSON.stringify (type-driven, recursive for arrays and objects; object-property omission for `undefined`/function values) + strict one-argument JSON.parse via a non-recursive materializing frame worklist | ✅ |
-| 8 (partial) | **RegExp via PCRE2** (`/pattern/flags`, `new RegExp(pattern, flags?)`, `RegExp.escape`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`/`replaceAll`/`match`/`matchAll`/`search`/`split` with both string and RegExp patterns and full replacement-token expansion `$&`/`$1`/`$<name>`/`` $` ``/`$'`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
+| 8 (partial) | **RegExp over UTF-16** (`/pattern/flags`, `new RegExp(pattern, flags?)`, `RegExp.escape`, `re.exec`, `re.test`, `re.source`/`flags`/flag booleans including `hasIndices`/`sticky`, `re.toString`/`toLocaleString`/`valueOf`, `s.replace`/`replaceAll`/`match`/`matchAll`/`search`/`split` with both string and RegExp patterns and full replacement-token expansion `$&`/`$1`/`$<name>`/`` $` ``/`$'`, capture groups, lookahead/lookbehind, named capture syntax, Unicode properties) | ✅ |
 | 9 | **Proxy + Reflect over dynamic values** — all object traps, callable/constructable proxy paths, revocation, own-key/descriptor/prototype/extensibility invariants, and dynamic `Reflect.apply` / `Reflect.construct` validation | ✅ |
 | 10+ | **Sync Node stdlib** — `fs` (read/write including explicit readFile Buffer/null options/append/exists/readdir/realpath/readlink/mkdtemp incl. Buffer encoding, bounded Buffer/file URL path arguments, recursive + Dirent with `parentPath`/deprecated `path` aliases, recursive, encoded, buffer-sized `opendir` handles, and Promise-chain libuv directory scheduling, stat/lstat with full numeric metadata + timestamps + kind predicates, symlink/link/truncate/utimes/lutimes/chown/lchown/chmod/access with constants/mkdir with mode/unlink/rm/rmdir/cp recursive with symlink options/copyFile/rename plus literal encoding/recursive/withFileTypes/bigint/flag/mode options), `path` (incl. `posix`, `parse`/`format`, `normalize`, `relative`, `basename(p, suffix?)`, `toNamespacedPath`, constants), `Math` (full libm + int32 + fround + constants), `os` (incl. `devNull`, system stats, user info), `Date` (`UTC`/`parse`/`now`, local constructor overloads, instance methods, UTC/local getters and UTC/local setters, ISO/UTC/JSON formatting), `Number.*` statics + predicates + global `isNaN`/`isFinite` coercion, `Buffer` (alloc/allocUnsafe/concat/copy/fill/from(Buffer)/base64/int IO/uint IO/uint multi-byte IO/float IO/swap/search/static methods/write/toJSON + object methods), `URL` (incl. `canParse` and bounded base resolution), synchronous `EventEmitter` (full subset: `on`/`addListener`/`prependListener`/`once`/`prependOnceListener`/`off`/`removeListener`/`removeAllListeners`/`emit`/`listenerCount`/`listeners`/`rawListeners`/`eventNames`/`setMaxListeners`/`getMaxListeners`, module-level helpers, `events.once` promise form, static `EventEmitter.listenerCount`, `defaultMaxListeners`, unhandled `error` throwing), synchronous `Event`/`EventTarget` (`addEventListener`/`removeEventListener` with literal options, `dispatchEvent`, cancelable events, `preventDefault`), **`process.env`/`cwd`/`chdir`/`argv`/`argv0`/`pid`/`ppid`/`platform`/`arch`/`title`/`versions`/`release`/`features`/`hrtime`/`hrtime.bigint`/`memoryUsage`/`resourceUsage`/`cpuUsage`/`getgroups`/`umask`/`uid`/`gid`/`euid`/`egid`/`kill`/`stdout.write`/`stderr.write`/`nextTick` (bounded queue with up to three callback args)** | ✅ |
 | 11 (immediate) | **`fs.promises` immediate-settled wrappers** around every supported sync fs call, **`dns.lookup` and `dns.promises.lookup`** (host `getaddrinfo`, `family`/`all`/`hints`/literal `verbatim`/`order` options), **`net.isIP`/`isIPv4`/`isIPv6`**, minimal `process.stdout`/`stderr.write` stream subset, named + namespace + node-prefixed imports. Nonrecursive Promise-chain `fs.Dir` scheduling uses libuv; recursive/direct-await directory handles, sockets, http/https, http2, broader stream APIs, and remaining libuv-backed async scheduling are still deferred. | ✅ |
@@ -67,7 +67,7 @@ Full docs live in [`docs/`](docs/). Fast routing:
 ```bash
 # one-time: install native libraries for runtime features.
 # without it, pass --no-gc and the binary will leak (fine for short programs).
-sudo apt-get install -y libgc-dev libssl-dev libicu-dev libgmp-dev libpcre2-dev
+sudo apt-get install -y libgc-dev libssl-dev libicu-dev libgmp-dev
 
 bun install
 
@@ -152,7 +152,7 @@ function isEven(n: number): boolean { return n % 2 === 0; }
 nums.map(doubler).filter(isEven);
 ```
 
-### Regex (PCRE2)
+### Regex
 
 ```ts
 const re = /\d+/;
@@ -323,7 +323,7 @@ The entry file plus every reachable `.ts` / supported `.js` (and resolved Common
    ▼
  runtime/ — hand-written C11 linked into every binary:
            • UTF-8 strings, dynamic arrays, Map/Set/WeakMap/WeakSet/WeakRef,
-             FinalizationRegistry, PCRE2 regex, GMP BigInt, ICU normalization
+             FinalizationRegistry, UTF-16 regex, GMP BigInt, ICU normalization
            • console / process / fs / fs.promises immediate / path / Math /
              os / Date / Number / Buffer / URL / dns / net / child_process
            • EventEmitter, Error hierarchy, Promise/typed async CFG, lazy generators
@@ -331,7 +331,7 @@ The entry file plus every reachable `.ts` / supported `.js` (and resolved Common
            • Boehm GC behind a wrapper (malloc fallback for --no-gc)
    │
    ▼
- gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -lresolv -lpcre2-8 -lssl -lcrypto -licuuc -licui18n -lgmp -o <output>
+ gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -lresolv -lssl -lcrypto -licuuc -licui18n -lgmp -o <output>
  # --release switches the gcc optimization/link mode to -Os -s.
 ```
 
@@ -365,7 +365,7 @@ TSC2C_NO_GC=1 bun tests/e2e/run.ts
 
 The cases under [`tests/e2e/cases/`](tests/e2e/cases/) are auto-discovered regressions. The harness compiles each case, executes the binary, and diffs the output. Aggregate case totals are not evidence of general language coverage; see [`docs/testing.md`](docs/testing.md) for the regression and pinned-conformance workflows.
 
-Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, GMP, and PCRE2 are still required for crypto, Unicode normalization, BigInt, and regex.
+Drop `TSC2C_NO_GC=1` after `sudo apt-get install libgc-dev`; OpenSSL, ICU, and GMP are still required for crypto, Unicode normalization and RegExp properties, and BigInt.
 
 ## Repo layout
 

@@ -108,6 +108,8 @@ const RUNTIME_SOURCES = [
     "tsc_object.c",
     "tsc_map_set.c",
     "tsc_builtin.c",
+    "tsc_regexp.c",
+    "tsc_regexp_api.c",
     "tsc_node.c",
     "tsc_promise.c"
 ];
@@ -124,77 +126,6 @@ const UNKNOWN_FUNCTION_AOT_MESSAGE =
     "unknown Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
 const UNKNOWN_NEW_FUNCTION_AOT_MESSAGE =
     "unknown new Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
-
-interface Pcre2Flags {
-    compileFlags: string[];
-    linkFlags: string[];
-    useDefaultLib: boolean;
-}
-
-async function pcre2Flags(): Promise<Pcre2Flags> {
-    try {
-        const [cflags, libs] = await Promise.all([
-            execFileAsync("pcre2-config", ["--cflags"]),
-            execFileAsync("pcre2-config", ["--libs8"]),
-        ]);
-        const libFlags = splitCompilerFlags(libs.stdout);
-        const libDirs = libFlags
-            .filter((flag) => flag.startsWith("-L"))
-            .map((flag) => flag.slice(2));
-        const exactLib = await findExactLibrary(libDirs, "pcre2-8");
-        return {
-            compileFlags: pcre2IncludeFlags(splitCompilerFlags(cflags.stdout)),
-            linkFlags: exactLib ? [exactLib] : [],
-            useDefaultLib: !exactLib,
-        };
-    } catch (e) {
-        if (require('node:fs').existsSync('/home/adam/miniconda3/include/pcre2.h')) {
-            return {
-                compileFlags: ['-I/home/adam/miniconda3/include'],
-                linkFlags: ['-L/home/adam/miniconda3/lib', '-Wl,-rpath,/home/adam/miniconda3/lib', '-lpcre2-8'],
-                useDefaultLib: false
-            };
-        }
-        return { compileFlags: [], linkFlags: [], useDefaultLib: true };
-    }
-}
-
-function splitCompilerFlags(text: string): string[] {
-    return text.trim().split(/\s+/).filter(Boolean);
-}
-
-function pcre2IncludeFlags(flags: readonly string[]): string[] {
-    const out: string[] = [];
-    for (let i = 0; i < flags.length; i++) {
-        const flag = flags[i]!;
-        if (flag === "-I" && i + 1 < flags.length) {
-            out.push("-idirafter", flags[++i]!);
-        } else if (flag.startsWith("-I") && flag.length > 2) {
-            out.push("-idirafter", flag.slice(2));
-        } else {
-            out.push(flag);
-        }
-    }
-    return out;
-}
-
-async function findExactLibrary(
-    dirs: readonly string[],
-    name: string,
-): Promise<string | null> {
-    for (const dir of dirs) {
-        for (const suffix of [".so", ".a"]) {
-            const candidate = path.join(dir, `lib${name}${suffix}`);
-            try {
-                await fs.access(candidate);
-                return candidate;
-            } catch {
-                // try next candidate
-            }
-        }
-    }
-    return null;
-}
 
 interface PermanentLimitDiagnostic {
     node: ts.Node;
@@ -962,7 +893,6 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         return { exitCode: 0, buildDir, mainC };
     }
 
-    const pcFlags = await pcre2Flags();
     const dispatchLink = usesDispatch && dispatchMode === "threaded" ? findDispatchLinkOptions() : null;
     if (usesDispatch && dispatchMode === "threaded" && !dispatchLink) {
         writeDiagnostic(
@@ -985,7 +915,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const baseLibs = opts.noGc
         ? ["m", "resolv", "ssl", "crypto", "icui18n", "icuuc", "icudata", "gmp"]
         : ["gc", "m", "resolv", "ssl", "crypto", "icui18n", "icuuc", "icudata", "gmp"];
-    const libs = pcFlags.useDefaultLib ? [...baseLibs, "pcre2-8"] : baseLibs;
+    const libs = baseLibs;
     const cc = await invokeCc({
         sources: [mainPath, ...runtimeSources.map((f) => path.join(buildDir, f))],
         output: opts.output,
@@ -998,10 +928,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             ...(usesLibuv ? ["-DTSC_HAS_LIBUV"] : []),
             ...(usesDispatch && dispatchMode === "serial" ? ["-DTSC_DISPATCH_SERIAL"] : []),
             ...(dispatchLink ? ["-DTSC_THREADS", "-pthread", `-I${dispatchLink.includeDir}`] : []),
-            ...pcFlags.compileFlags,
         ],
         linkFlags: [
-            ...pcFlags.linkFlags,
             ...(dispatchLink
                 ? [`-L${dispatchLink.libDir}`, "-ldispatch", `-Wl,-rpath,${dispatchLink.libDir}`]
                 : []),

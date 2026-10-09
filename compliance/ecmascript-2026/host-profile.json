@@ -18,6 +18,8 @@
     "runtime/tsc_node_embed.cc",
     "runtime/tsc_object.c",
     "runtime/tsc_promise.c",
+    "runtime/tsc_regexp.c",
+    "runtime/tsc_regexp_api.c",
     "runtime/tsc_runtime.h",
     "runtime/tsc_string.c",
     "runtime/tsc_test262.c",

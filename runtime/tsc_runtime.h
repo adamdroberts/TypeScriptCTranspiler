@@ -11,8 +11,6 @@
 #include <string.h>
 #include <math.h>
 #include <gmp.h>
-#define PCRE2_CODE_UNIT_WIDTH 8
-#include <pcre2.h>
 
 #ifdef TSC_NO_GC
 void* tsc_no_gc_malloc_uninit(size_t n);
@@ -84,7 +82,7 @@ typedef struct tsc_async_cell_ref {
 
 /* ------------- bootstrap ------------- */
 void tsc_bootstrap(int argc, char** argv);
-void tsc_panic(const char* msg);
+_Noreturn void tsc_panic(const char* msg);
 
 /* ------------- strings (immutable, WTF-8 storage) ------------- */
 typedef struct tsc_str {
@@ -347,10 +345,12 @@ int tsc_bigint_cmp(const tsc_bigint_t* a, const tsc_bigint_t* b);
 bool tsc_bigint_eq(const tsc_bigint_t* a, const tsc_bigint_t* b);
 tsc_str_t* tsc_bigint_to_string(const tsc_bigint_t* a, double radix);
 
-/* ------------- RegExp (PCRE2-backed) ------------- */
+/* ------------- RegExp (ECMAScript UTF-16 matcher) ------------- */
+typedef struct tsc_re_compiled tsc_re_compiled_t;
 typedef struct tsc_regexp {
-    pcre2_code* re;
-    pcre2_match_data* cached_md;  /* lazily allocated; reused across .test/.match/.replace */
+    tsc_re_compiled_t* re;
+    struct tsc_object* object;
+    struct tsc_object* prototype;
     tsc_str_t* source;
     tsc_str_t* flags;
     bool global;
@@ -360,32 +360,23 @@ typedef struct tsc_regexp {
     bool dot_all;
     bool sticky;
     bool unicode;
+    bool unicode_sets;
     bool compiled;
-    bool jit;
-    uint32_t capture_count;
+    size_t capture_count;
 } tsc_regexp_t;
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags);
 tsc_regexp_t* tsc_regexp_from_constructor_args(tsc_value_t pattern, tsc_value_t flags, bool as_function_call);
 tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
-/* Inline test: skips a function call + lazy-init function call per match.
- * Hot in tight regex loops (e.g. validators applied per line). */
-static inline bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s) {
-    if (!re->compiled) return false;
-    if (!re->cached_md) {
-        ((tsc_regexp_t*)re)->cached_md = pcre2_match_data_create_from_pattern(re->re, NULL);
-    }
-    if (re->jit) {
-        return pcre2_jit_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, re->cached_md, NULL) >= 0;
-    }
-    return pcre2_match(re->re, (PCRE2_SPTR)s->data, s->len, 0, 0, re->cached_md, NULL) >= 0;
-}
+bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);
+tsc_value_t tsc_regexp_prototype_value(void);
 tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re);
 struct tsc_array* tsc_str_match_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 struct tsc_array* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 double tsc_str_search_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 tsc_str_t* tsc_str_replace_regex(const tsc_str_t* s, const tsc_regexp_t* re, const tsc_str_t* repl);
+tsc_str_t* tsc_str_replace_regex_value(const tsc_str_t* s, const tsc_regexp_t* re, tsc_value_t replacement);
 struct tsc_array* tsc_str_split_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 struct tsc_array* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp_t* re, uint32_t limit);
 struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_t* re, double limit);

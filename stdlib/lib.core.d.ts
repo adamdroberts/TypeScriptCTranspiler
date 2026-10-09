@@ -677,6 +677,7 @@ interface RegExp {
     readonly dotAll: boolean;
     readonly sticky: boolean;
     readonly unicode: boolean;
+    readonly unicodeSets: boolean;
 }
 interface RegExpConstructor {
     new(pattern?: string | RegExp, flags?: string, ...ignored: any[]): RegExp;
