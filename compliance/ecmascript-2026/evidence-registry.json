@@ -1868,7 +1868,7 @@
     },
     {
       "kind": "implementation",
-      "id": "runtime/tsc_value.c#tsc_sync_iterator_open_with_method",
+      "id": "runtime/tsc_iterator.c#tsc_sync_iterator_open_with_method",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
       ]

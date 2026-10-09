@@ -483,7 +483,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "EventEmitter") return T_EVENT_EMITTER;
         if (sym?.getName() === "Event") return T_EVENT;
         if (sym?.getName() === "EventTarget") return T_EVENT_TARGET;
-        if (sym?.getName() === "ArrayIterator" || sym?.getName() === "RegExpStringIterator") return T_VALUE;
+        if (["IteratorObject", "ArrayIterator", "RegExpStringIterator", "MapIterator", "SetIterator"].includes(sym?.getName() ?? "")) return T_VALUE;
         if (sym?.getName() === "IterableIterator" || sym?.getName() === "Iterator" || sym?.getName() === "Generator") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;

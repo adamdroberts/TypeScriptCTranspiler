@@ -1044,6 +1044,7 @@ typedef struct {
     bool done;
 } tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
+tsc_sync_iterator_t tsc_sync_iterator_open_direct(tsc_value_t iterator);
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(tsc_value_t source, tsc_value_t method);
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* iterator, tsc_value_t* value);
 void tsc_sync_iterator_close(tsc_sync_iterator_t* iterator);
@@ -1325,6 +1326,21 @@ typedef enum {
     TSC_KEY_VALUE = 4,
 } tsc_key_kind_t;
 
+/* Stable insertion links separate iterator position from dense native
+ * storage. Deleted links carry no values; retained cursors can still reach
+ * later insertions, including after clear, without a serial-number bound. */
+typedef struct tsc_collection_order_node {
+    struct tsc_collection_order_node* next;
+    size_t index;
+    bool active;
+} tsc_collection_order_node_t;
+
+typedef struct tsc_collection_order {
+    tsc_collection_order_node_t* head;
+    tsc_collection_order_node_t* tail;
+    tsc_collection_order_node_t** entries;
+} tsc_collection_order_t;
+
 typedef struct tsc_map {
     size_t ks, vs;
     tsc_key_kind_t kk;
@@ -1335,6 +1351,10 @@ typedef struct tsc_map {
     void** value_roots;
     size_t* buckets;          /* power-of-2-sized open-addressing index table */
     size_t bucket_cap;        /* always a power of 2 (or 0 before first insert) */
+    tsc_collection_order_t order;
+    tsc_object_t* object;
+    tsc_array_box_element_fn box_key, box_value;
+    tsc_array_unbox_element_fn unbox_key, unbox_value;
 } tsc_map_t;
 
 tsc_map_t* tsc_map_new(size_t ks, size_t vs, int kk, size_t initial_cap);
@@ -1349,6 +1369,11 @@ void tsc_map_clear(tsc_map_t* m);
 double tsc_map_size(const tsc_map_t* m);
 struct tsc_array* tsc_map_keys(const tsc_map_t* m);
 struct tsc_array* tsc_map_values(const tsc_map_t* m);
+tsc_value_t tsc_map_constructor_value(void);
+tsc_value_t tsc_map_prototype_value(void);
+tsc_map_t* tsc_map_set_value_codecs(tsc_map_t* map,
+    tsc_array_box_element_fn box_key, tsc_array_unbox_element_fn unbox_key,
+    tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
 
 typedef struct tsc_set {
     size_t es;
@@ -1358,6 +1383,10 @@ typedef struct tsc_set {
     void** value_roots;
     size_t* buckets;          /* power-of-2-sized open-addressing index table */
     size_t bucket_cap;
+    tsc_collection_order_t order;
+    tsc_object_t* object;
+    tsc_array_box_element_fn box_value;
+    tsc_array_unbox_element_fn unbox_value;
 } tsc_set_t;
 
 tsc_map_t* tsc_value_as_map(tsc_value_t v);
@@ -1384,6 +1413,10 @@ bool tsc_set_delete_raw(tsc_set_t* s, const void* v);
 void tsc_set_clear(tsc_set_t* s);
 double tsc_set_size(const tsc_set_t* s);
 struct tsc_array* tsc_set_values(const tsc_set_t* s);
+tsc_value_t tsc_set_constructor_value(void);
+tsc_value_t tsc_set_prototype_value(void);
+tsc_set_t* tsc_set_set_value_codec(tsc_set_t* set,
+    tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
 /* Set composition helpers — both operands must be Set<T> with matching es/kk. */
 tsc_set_t* tsc_set_union(const tsc_set_t* a, const tsc_set_t* b);
 tsc_set_t* tsc_set_intersection(const tsc_set_t* a, const tsc_set_t* b);

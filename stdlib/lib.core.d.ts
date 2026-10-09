@@ -52,14 +52,25 @@ type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnR
 interface Iterator<T, TReturn = any, TNext = undefined> {
     next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
 }
+interface IteratorObject<T, TReturn = any, TNext = undefined> extends Iterator<T, TReturn, TNext> {
+    forEach(callback: (value: T, index: number) => void, ...ignored: any[]): void;
+    reduce(reducer: (accumulator: T, value: T, index: number) => T): T;
+    reduce<U>(reducer: (accumulator: U, value: T, index: number) => U, initialValue: U, ...ignored: any[]): U;
+}
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>;
 }
 interface IterableIterator<T> extends Iterator<T> {
     [Symbol.iterator](): IterableIterator<T>;
 }
-interface ArrayIterator<T> extends IterableIterator<T> {
+interface ArrayIterator<T> extends IterableIterator<T>, IteratorObject<T> {
     [Symbol.iterator](): ArrayIterator<T>;
+}
+interface MapIterator<T> extends IterableIterator<T>, IteratorObject<T> {
+    [Symbol.iterator](): MapIterator<T>;
+}
+interface SetIterator<T> extends IterableIterator<T>, IteratorObject<T> {
+    [Symbol.iterator](): SetIterator<T>;
 }
 interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
     next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
@@ -465,16 +476,17 @@ interface Map<K, V> extends Iterable<[K, V]> {
     has(key: K): boolean;
     delete(key: K): boolean;
     clear(): void;
-    keys(...ignored: any[]): K[];
-    values(...ignored: any[]): V[];
-    entries(...ignored: any[]): ObjectEntry<V, K>[];
+    keys(...ignored: any[]): MapIterator<K>;
+    values(...ignored: any[]): MapIterator<V>;
+    entries(...ignored: any[]): MapIterator<[K, V]>;
     forEach(cb: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any, ...ignored: any[]): void;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): Map<K, V>;
-    [Symbol.iterator](): IterableIterator<[K, V]>;
+    [Symbol.iterator](): MapIterator<[K, V]>;
 }
 interface MapConstructor {
+    readonly prototype: Map<any, any>;
     new <K, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): Map<K, V>;
     new <K, V>(entries: Map<K, V>, ...ignored: any[]): Map<K, V>;
     new <K, V>(): Map<K, V>;
@@ -492,9 +504,9 @@ interface Set<T> extends Iterable<T> {
     has(value: T): boolean;
     delete(value: T): boolean;
     clear(): void;
-    keys(...ignored: any[]): T[];
-    values(...ignored: any[]): T[];
-    entries(...ignored: any[]): ObjectEntry<T, T>[];
+    keys(...ignored: any[]): SetIterator<T>;
+    values(...ignored: any[]): SetIterator<T>;
+    entries(...ignored: any[]): SetIterator<[T, T]>;
     forEach(cb: (value: T, value2: T, set: Set<T>) => void, thisArg?: any, ...ignored: any[]): void;
     union(other: Set<T>, ...ignored: any[]): Set<T>;
     intersection(other: Set<T>, ...ignored: any[]): Set<T>;
@@ -506,9 +518,10 @@ interface Set<T> extends Iterable<T> {
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): Set<T>;
-    [Symbol.iterator](): IterableIterator<T>;
+    [Symbol.iterator](): SetIterator<T>;
 }
 interface SetConstructor {
+    readonly prototype: Set<any>;
     new <T>(values: T[], ...ignored: any[]): Set<T>;
     new <T>(values: Set<T>, ...ignored: any[]): Set<T>;
     new <T>(): Set<T>;

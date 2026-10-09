@@ -7584,7 +7584,7 @@ tsc_map_t* tsc_value_as_map(tsc_value_t v) {
         tsc_object_t* object = (tsc_object_t*)value_ptr(v);
         if (object && object->is_map) return (tsc_map_t*)object->class_ptr;
     }
-    tsc_throw_str(tsc_str_from_cstr("value is not a Map"));
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not a Map"));
     return NULL;
 }
 
@@ -7593,7 +7593,7 @@ tsc_set_t* tsc_value_as_set(tsc_value_t v) {
         tsc_object_t* object = (tsc_object_t*)value_ptr(v);
         if (object && object->is_set) return (tsc_set_t*)object->class_ptr;
     }
-    tsc_throw_str(tsc_str_from_cstr("value is not a Set"));
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not a Set"));
     return NULL;
 }
 

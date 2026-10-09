@@ -138,6 +138,8 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_MAP_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_SET_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE,
@@ -256,6 +258,7 @@ struct tsc_object {
     bool is_error;
     bool is_arguments;
     bool is_array_iterator;
+    bool is_collection_iterator;
     bool is_regexp_string_iterator;
     bool is_module_namespace;
     bool is_typed_array;

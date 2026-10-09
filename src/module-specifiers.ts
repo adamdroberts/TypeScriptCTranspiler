@@ -3423,8 +3423,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (mapGroupBy) return resolveCollectionExpression(mapGroupBy);
             const setComposition = resolveStaticSetCompositionCollectionExpression(cur);
             if (setComposition) return resolveCollectionExpression(setComposition);
-            const mapSetCollections = resolveStaticMapSetCollectionExpression(cur);
-            if (mapSetCollections) return resolveCollectionExpression(mapSetCollections);
             const mapGet = resolveStaticMapGetCollectionExpression(cur);
             if (mapGet) return resolveCollectionExpression(mapGet);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
@@ -4022,6 +4020,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const resolveStaticArrayFromSource = (expr: ts.Expression): ts.ArrayLiteralExpression | null => {
+        // Collection factories produce iterator objects. Their items may be
+        // folded only at an explicit iterable consumer, never as indexed
+        // properties of the iterator itself.
+        const iterator = unwrapStaticExpression(expr);
+        if (ts.isCallExpression(iterator)) {
+            const items = resolveStaticMapSetCollectionExpression(iterator);
+            if (items && ts.isArrayLiteralExpression(items)) return items;
+        }
         const source = resolveCollectionExpression(expr);
         if (source && ts.isArrayLiteralExpression(source)) {
             const elements: ts.Expression[] = [];

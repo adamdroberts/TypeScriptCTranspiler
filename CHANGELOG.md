@@ -1,5 +1,7 @@
 # Changelog
 
+- Implement ordinary live Map/Set protocols through stable insertion links, shared element codecs and rooted cursor records. Replace typed loop/callback adapters, preserve constructor/closing order and expose common iterator forEach/reduce consumers. Require explicit materialization for static module projections and correct collection iterator declarations.
+
 - Give JavaScript declarations, closure cells and continuation fields one boxed storage contract. Initialize typed captures using their planned cell type, remove initializer-specific JavaScript storage selection, and unblock the pinned Promise.try argument diagnostic. Verify cross-type writes and retained captures with forced collection in both memory modes.
 
 - Implement ordinary Promise.try through actual argument Lists and generic capabilities. Forward spread/rest arguments synchronously, preserve callback completion identity, and propagate capability callback failures. Share one rooted call-completion record with reaction jobs; remove the direct callback predecessor and update the variadic declaration.

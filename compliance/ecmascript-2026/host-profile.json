@@ -13,6 +13,7 @@
     "runtime/tsc_core.c",
     "runtime/tsc_dispatch.c",
     "runtime/tsc_internal.h",
+    "runtime/tsc_iterator.c",
     "runtime/tsc_map_set.c",
     "runtime/tsc_node.c",
     "runtime/tsc_node_embed.cc",

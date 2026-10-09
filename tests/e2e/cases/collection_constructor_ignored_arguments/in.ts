@@ -16,7 +16,7 @@ console.log("map:", map.size, map.get("a"), mapCopy.get("b"));
 
 const set = new Set([1, 2, 2], mark("c"));
 const setCopy = new Set(set, mark("d"));
-console.log("set:", set.size, setCopy.has(2), setCopy.values().join("|"));
+console.log("set:", set.size, setCopy.has(2), Array.from(setCopy.values()).join("|"));
 
 const alice: Box = { name: "alice" };
 const bob: Box = { name: "bob" };

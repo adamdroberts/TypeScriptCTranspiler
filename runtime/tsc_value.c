@@ -1338,25 +1338,6 @@ static tsc_value_t string_iterator_next_apply(void* env, tsc_value_t this_arg, t
     return tsc_iterator_result(value, false);
 }
 
-static tsc_value_t string_iterator_self_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    return this_arg;
-}
-
-static const char iterator_prototype_realm_state_key = 0;
-
-tsc_value_t tsc_iterator_prototype_value(void) {
-    tsc_object_t* prototype = tsc_realm_state_get(&iterator_prototype_realm_state_key);
-    if (!prototype) {
-        prototype = tsc_object_new();
-        tsc_realm_state_set(&iterator_prototype_realm_state_key, prototype);
-        tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_iterator()),
-            tsc_value_function_builtin_named(string_iterator_self_apply, NULL, 0.0,
-                tsc_str_from_lit("[Symbol.iterator]", 17)), true, false, true);
-    }
-    return tsc_value_object(prototype);
-}
 
 static tsc_value_t string_iterator_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
@@ -2332,6 +2313,8 @@ tsc_value_t tsc_global_object(void) {
         { "Date", 4, tsc_date_constructor_value() },
         { "RegExp", 6, tsc_regexp_constructor_value() },
         { "Promise", 7, tsc_promise_constructor_value() },
+        { "Map", 3, tsc_map_constructor_value() },
+        { "Set", 3, tsc_set_constructor_value() },
         { "Error", 5, tsc_error_constructor_value(TSC_ERROR_ERROR) },
         { "TypeError", 9, tsc_error_constructor_value(TSC_ERROR_TYPE) },
         { "RangeError", 10, tsc_error_constructor_value(TSC_ERROR_RANGE) },
@@ -2854,6 +2837,10 @@ static tsc_value_t value_intrinsic_default_prototype(
             return tsc_regexp_prototype_value();
         case TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE:
             return tsc_promise_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_MAP_PROTOTYPE:
+            return tsc_map_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_SET_PROTOTYPE:
+            return tsc_set_prototype_value();
         case TSC_INTRINSIC_DEFAULT_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_TYPE_ERROR_PROTOTYPE:
         case TSC_INTRINSIC_DEFAULT_RANGE_ERROR_PROTOTYPE:
@@ -5797,132 +5784,6 @@ tsc_array_t* tsc_value_iter_values(tsc_value_t value) {
     return result;
 }
 
-tsc_sync_iterator_t tsc_sync_iterator_open_with_method(
-    tsc_value_t source,
-    tsc_value_t method
-) {
-    if (tsc_value_is_nullish(source)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
-    }
-    tsc_sync_iterator_t record = {
-        .source = source,
-        .iterator = tsc_value_undefined(),
-        .next_method = tsc_value_undefined(),
-        .source_gc_root = tsc_value_gc_root(source),
-        .iterator_gc_root = NULL,
-        .next_method_gc_root = NULL,
-        .completion_gc_root = NULL,
-        .done = false,
-    };
-    void* volatile method_gc_root = tsc_value_gc_root(method);
-    (void)method_gc_root;
-    if (!tsc_value_is_callable(method)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Value is not iterable"));
-    }
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-    record.iterator = tsc_value_apply_function(method, source, tsc_value_array(args));
-    if (!tsc_value_is_object(record.iterator)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator method returned a non-object"));
-    }
-    record.iterator_gc_root = tsc_value_gc_root(record.iterator);
-    record.next_method = tsc_value_get_prop(
-        record.iterator,
-        tsc_str_from_lit("next", 4)
-    );
-    record.next_method_gc_root = tsc_value_gc_root(record.next_method);
-    return record;
-}
-
-tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
-    void* volatile source_gc_root = tsc_value_gc_root(source);
-    (void)source_gc_root;
-    tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
-    return tsc_sync_iterator_open_with_method(source, method);
-}
-
-bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
-    if (!record || record->done) return false;
-    TSC_TRY_FRAME(frame);
-    tsc_try_push(&frame);
-    if (setjmp(frame.jb) != 0) {
-        /* IteratorStepValue marks the record complete on abrupt next, done,
-         * or value evaluation. Consumers must not subsequently close it. */
-        record->done = true;
-        tsc_value_t error = tsc_current_error_value();
-        void* volatile error_gc_root = tsc_value_gc_root(error);
-        (void)error_gc_root;
-        tsc_try_pop();
-        tsc_throw_value(error);
-    }
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_value_t result = tsc_value_apply_function(
-        record->next_method,
-        record->iterator,
-        tsc_value_array(args)
-    );
-    if (!tsc_value_is_object(result)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator result is not an object"));
-    }
-    void* volatile result_gc_root = tsc_value_gc_root(result);
-    (void)result_gc_root;
-    if (tsc_value_is_truthy(tsc_value_get_prop(result, tsc_str_from_lit("done", 4)))) {
-        record->done = true;
-        return false;
-    }
-    if (value) {
-        *value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
-    }
-    return true;
-}
-
-void tsc_sync_iterator_close(tsc_sync_iterator_t* record) {
-    if (!record || record->done) return;
-    record->done = true;
-    tsc_value_t return_method = tsc_value_get_prop(
-        record->iterator,
-        tsc_str_from_lit("return", 6)
-    );
-    void* volatile return_method_gc_root = tsc_value_gc_root(return_method);
-    (void)return_method_gc_root;
-    if (tsc_value_is_nullish(return_method)) return;
-    if (!tsc_value_is_callable(return_method)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return method is not callable"));
-    }
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_value_t result = tsc_value_apply_function(
-        return_method,
-        record->iterator,
-        tsc_value_array(args)
-    );
-    if (!tsc_value_is_object(result)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return method returned a non-object"));
-    }
-}
-
-void tsc_sync_iterator_scope_cleanup(tsc_sync_iterator_t** record) {
-    if (!record || !*record) return;
-    tsc_sync_iterator_close(*record);
-    /* Keep this read after Close so the owner, including its pending value
-     * root, stays observable throughout any allocating user callback. */
-    (void)(*record)->completion_gc_root;
-    (*record)->completion_gc_root = NULL;
-}
-
-_Noreturn void tsc_sync_iterator_close_abrupt(tsc_sync_iterator_t* record, tsc_value_t error) {
-    void* volatile error_gc_root = tsc_value_gc_root(error);
-    (void)error_gc_root;
-    TSC_TRY_FRAME(frame);
-    tsc_try_push(&frame);
-    if (setjmp(frame.jb) == 0) {
-        tsc_sync_iterator_close(record);
-        tsc_try_pop();
-    } else {
-        /* GetMethod(return), Call, and result validation cannot replace an
-         * incoming throw completion. Closing still performs their effects. */
-        tsc_try_pop();
-    }
-    tsc_throw_value(error);
-}
 
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {
     if (value_is_box(v)) {
@@ -5994,33 +5855,12 @@ tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t v) {
 }
 
 tsc_map_t* tsc_value_map_constructor_entries(tsc_value_t entries) {
-    if (tsc_value_is_nullish(entries)) {
-        return tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, 0);
-    }
-    if (
-        !value_is_box(entries) ||
-        (value_tag(entries) != TSC_VALUE_TAG_ARRAY && value_tag(entries) != TSC_VALUE_TAG_STRING)
-    ) {
-        tsc_throw_str(tsc_str_from_cstr("Map constructor source is not iterable"));
-    }
-    tsc_array_t* outer = value_tag(entries) == TSC_VALUE_TAG_ARRAY
-        ? value_array_values((const tsc_array_t*)value_ptr(entries))
-        : value_string_iterator_values((const tsc_str_t*)value_ptr(entries));
-    tsc_map_t* out = tsc_map_new(sizeof(tsc_value_t), sizeof(tsc_value_t), TSC_KEY_VALUE, outer->len);
-    for (size_t i = 0; i < outer->len; i++) {
-        tsc_value_t pair_value = TSC_ARR(tsc_value_t, outer, i);
-        if (!value_is_box(pair_value) || value_tag(pair_value) != TSC_VALUE_TAG_ARRAY) {
-            tsc_throw_str(tsc_str_from_cstr("Map constructor entry must be an array pair"));
-        }
-        tsc_array_t* pair = (tsc_array_t*)value_ptr(pair_value);
-        if (pair->len < 2) {
-            tsc_throw_str(tsc_str_from_cstr("Map constructor entry must be an array pair"));
-        }
-        tsc_value_t key = TSC_ARR(tsc_value_t, pair, 0);
-        tsc_value_t value = TSC_ARR(tsc_value_t, pair, 1);
-        tsc_map_set_raw(out, &key, &value);
-    }
-    return out;
+    void* volatile source_root = tsc_value_gc_root(entries);
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_raw(arguments, &entries);
+    tsc_value_t result = tsc_value_construct(tsc_map_constructor_value(), tsc_value_array(arguments));
+    (void)source_root;
+    return tsc_value_as_map(result);
 }
 
 bool tsc_value_is_weak_key(tsc_value_t v) {
@@ -8509,15 +8349,23 @@ tsc_value_t tsc_value_regexp(tsc_regexp_t* r) {
 
 tsc_value_t tsc_value_map(tsc_map_t* m) {
     if (!m) return tsc_value_null();
+    if (m->object) return tsc_value_object(m->object);
     tsc_object_t* o = tsc_object_new_class(m);
     o->is_map = true;
+    o->prototype = tsc_map_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
+    m->object = o;
     return tsc_value_object(o);
 }
 
 tsc_value_t tsc_value_set(tsc_set_t* s) {
     if (!s) return tsc_value_null();
+    if (s->object) return tsc_value_object(s->object);
     tsc_object_t* o = tsc_object_new_class(s);
     o->is_set = true;
+    o->prototype = tsc_set_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
+    s->object = o;
     return tsc_value_object(o);
 }
 

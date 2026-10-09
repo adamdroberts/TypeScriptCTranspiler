@@ -3938,9 +3938,8 @@ class Emitter {
             case "keys":
             case "values":
             case "entries":
-                return Array.from(args).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
+                // Ordinary factory lookup may invoke a replaced getter.
+                return false;
             default:
                 return false;
         }
@@ -3997,9 +3996,7 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
         }
         if (method === "keys" || method === "values") {
-            return Array.from(args).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
+            return false;
         }
         if (
             method !== "union" &&
@@ -44225,19 +44222,13 @@ class Emitter {
 
     private emitForOfWithEnvironment(buf: CBuf, fos: ts.ForOfStatement): void {
         const iter = this.emitExpr(fos.expression);
-        // Static collection/class backends remain separate until their native
-        // objects expose the ordinary live iterator protocol.
-        if (iter.ty.kind === "map") return this.emitMapForOf(buf, fos, iter);
+        // Remaining native class backends still need ordinary object protocols.
         if (iter.ty.kind === "urlsearchparams") return this.emitUrlSearchParamsForOf(buf, fos, iter);
         if (iter.ty.kind === "class") {
             if (this.emitCustomIteratorForOf(buf, fos, iter)) return;
             const custom = this.emitCustomIterableArray(fos.expression, iter);
             if (!custom) unsupported(fos.expression, "synchronous iterator object representation unavailable");
             this.emitOrdinaryForOf(buf, fos, custom);
-            return;
-        }
-        if (iter.ty.kind === "set") {
-            this.emitOrdinaryForOf(buf, fos, { c: `tsc_set_values(${iter.c})`, ty: arrayType(iter.ty.elem ?? T_VALUE) });
             return;
         }
         if (iter.ty.kind === "buffer") {
@@ -47137,72 +47128,6 @@ class Emitter {
         buf.close();
     }
 
-    private emitMapForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        iter: EmitResult,
-    ): void {
-        const keyType = iter.ty.key!;
-        const valueType = iter.ty.elem!;
-        const mapVar = this.freshTemp("_m");
-        const idxVar = this.freshTemp("_i");
-
-        let keyName: string | undefined;
-        let valueName: string | undefined;
-        let bindingIsConst = false;
-        if (ts.isVariableDeclarationList(fos.initializer)) {
-            bindingIsConst =
-                (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-            const d = fos.initializer.declarations[0];
-            if (!d || !ts.isArrayBindingPattern(d.name)) {
-                unsupported(
-                    fos.initializer,
-                    "Map for-of binding must destructure as [key, value]",
-                );
-            }
-            const [keyEl, valueEl] = d.name.elements;
-            if (
-                !keyEl ||
-                !valueEl ||
-                !ts.isBindingElement(keyEl) ||
-                !ts.isBindingElement(valueEl) ||
-                !ts.isIdentifier(keyEl.name) ||
-                !ts.isIdentifier(valueEl.name)
-            ) {
-                unsupported(
-                    d.name,
-                    "Map for-of binding must be [keyIdentifier, valueIdentifier]",
-                );
-            }
-            keyName = mangleIdent(keyEl.name.text);
-            valueName = mangleIdent(valueEl.name.text);
-        } else {
-            unsupported(
-                fos.initializer,
-                "Map for-of assignment must use a const/let [key, value] binding",
-            );
-        }
-
-        const qual = bindingIsConst ? " const" : "";
-        const keyAt = `*(${keyType.c}*)((char*)${mapVar}->keys + ${idxVar} * ${mapVar}->ks)`;
-        const valueAt = `*(${valueType.c}*)((char*)${mapVar}->values + ${idxVar} * ${mapVar}->vs)`;
-
-        buf.open("");
-        buf.line(`tsc_map_t* const ${mapVar} = ${iter.c};`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${mapVar}->len; ${idxVar}++)`,
-        );
-        buf.line(`${keyType.c}${qual} ${keyName} = ${keyAt};`);
-        buf.line(`${valueType.c}${qual} ${valueName} = ${valueAt};`);
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_map_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
 
     private emitBlock(buf: CBuf, b: ts.Block): void {
         buf.open("");
@@ -49068,6 +48993,12 @@ class Emitter {
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Promise")) {
                 return { c: "tsc_promise_constructor_value()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Map")) {
+                return { c: "tsc_map_constructor_value()", ty: T_VALUE };
+            }
+            if (this.isUnshadowedGlobalIdentifier(expr, "Set")) {
+                return { c: "tsc_set_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "RegExp")) {
                 return { c: "tsc_regexp_constructor_value()", ty: T_VALUE };
@@ -52806,6 +52737,13 @@ class Emitter {
             const argument = call.expression.argumentExpression;
             if (argument && this.isSymbolIteratorExpression(argument)) {
                 const recv = this.emitExpr(call.expression.expression);
+                if (recv.ty.kind === "map" || recv.ty.kind === "set") {
+                    return this.emitSequencedExpr(T_VALUE,
+                        [{ value: recv, target: T_VALUE, node: call.expression.expression }],
+                        ([value]) => this.emitDynamicValueCall(call,
+                            { c: `tsc_value_get_symbol_prop(${value}, tsc_symbol_iterator())`, ty: T_VALUE },
+                            { c: value!, ty: T_VALUE }).c);
+                }
                 if (recv.ty.kind === "array") {
                     return this.emitSequencedExpr(
                         recv.ty,
@@ -52817,18 +52755,6 @@ class Emitter {
                         arrayType(T_STRING),
                         [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
                         ([str]) => `tsc_str_chars(${str!})`,
-                    );
-                } else if (recv.ty.kind === "set") {
-                    return this.emitSequencedExpr(
-                        arrayType(recv.ty.elem!),
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([set]) => `tsc_set_values(${set!})`,
-                    );
-                } else if (recv.ty.kind === "map") {
-                    return this.emitSequencedExpr(
-                        arrayType(entryType(recv.ty.elem!, recv.ty.key!)),
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "[Symbol.iterator]").c,
                     );
                 } else if (recv.ty.kind === "urlsearchparams") {
                     return this.emitSequencedExpr(
@@ -52978,6 +52904,10 @@ class Emitter {
         }
         if (name === "Promise" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE });
+        }
+        if ((name === "Map" || name === "Set") && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
+            return this.emitDynamicValueCall(call, { c: name === "Map"
+                ? "tsc_map_constructor_value()" : "tsc_set_constructor_value()", ty: T_VALUE });
         }
         if (name === "RegExp" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
@@ -57200,7 +57130,8 @@ class Emitter {
         const args = call.arguments;
         const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method) ||
-            method === "keys" || method === "values" || method === "entries") {
+            method === "keys" || method === "values" || method === "entries" ||
+            method === "forEach" || method === "reduce" || method === "reduceRight") {
             return this.emitDynamicNamedPropertyCall(call, recv, method, optionalReceiver);
         }
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
@@ -57636,18 +57567,12 @@ class Emitter {
                     return `({ ${pieces.join("; ")}; })`;
                 });
             }
-            case "forEach":
-                return this.emitDynamicArrayHof(call, recv, "forEach");
             case "map":
                 return this.emitDynamicArrayHof(call, recv, "map");
             case "flatMap":
                 return this.emitDynamicArrayHof(call, recv, "flatMap");
             case "filter":
                 return this.emitDynamicArrayHof(call, recv, "filter");
-            case "reduce":
-                return this.emitDynamicArrayReduce(call, recv, "reduce");
-            case "reduceRight":
-                return this.emitDynamicArrayReduce(call, recv, "reduceRight");
             case "find":
                 return this.emitDynamicArrayHof(call, recv, "find");
             case "findIndex":
@@ -58178,139 +58103,6 @@ class Emitter {
         );
     }
 
-    private emitDynamicArrayReduce(call: ts.CallExpression, recv: EmitResult, method: "reduce" | "reduceRight"): EmitResult {
-        const cb = call.arguments[0];
-        const initArg = call.arguments[1];
-        if (!cb) unsupported(call, `dynamic ${method}: missing callback`);
-        const init = initArg ? this.emitExpr(initArg) : null;
-        const av = this.freshTemp("_dynred");
-        const iv = this.freshTemp("_i");
-        const acc = this.freshTemp("_acc");
-        const elem = this.freshTemp("_el");
-        const bindings: string[] = [`tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`];
-        let body: EmitResult;
-        let bodyNode: ts.Expression = cb;
-
-        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            const accSlot = cb.parameters[0];
-            const elemSlot = cb.parameters[1];
-            if (!accSlot || !ts.isIdentifier(accSlot.name)) {
-                unsupported(cb, `dynamic ${method}: callback needs an accumulator parameter`);
-            }
-            if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
-                unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
-            }
-            const idxSlot = cb.parameters[2];
-            if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
-                unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
-            }
-            const arraySlot = cb.parameters[3];
-            if (arraySlot && !ts.isIdentifier(arraySlot.name)) {
-                unsupported(arraySlot, `dynamic ${method}: array parameter must be an identifier`);
-            }
-            const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
-            const arrayName = arraySlot && ts.isIdentifier(arraySlot.name) ? arraySlot.name.text : null;
-            const bodyExpr = this.callbackReturnExpression(cb, `dynamic ${method}`);
-            bindings.unshift(`tsc_value_t ${mangleIdent(accSlot.name.text)} = ${acc}`);
-            bindings.push(`tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`);
-            if (idxName) {
-                bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
-            }
-            if (arrayName) {
-                bindings.push(`tsc_value_t ${mangleIdent(arrayName)} = tsc_value_array(${av})`);
-            }
-            body = this.emitExpr(bodyExpr);
-            bodyNode = bodyExpr;
-        } else if (ts.isIdentifier(cb)) {
-            const cbType = this.checker.getTypeAtLocation(cb);
-            const sig = cbType.getCallSignatures()[0];
-            if (!sig) unsupported(cb, `dynamic ${method}: callback must be callable`);
-            if (this.isDirectCallableIdentifier(cb)) {
-                let fnName = this.identifierName(cb);
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                const genericBindings = genericDecl
-                    ? this.genericBindingsForCallback(
-                        cb,
-                        genericDecl,
-                        this.contextualCallSignature(cb, method),
-                    )
-                    : null;
-                if (genericDecl && genericBindings) {
-                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                }
-                const params = sig.getParameters();
-                const typedArg = (index: number, source: EmitResult): string => {
-                    const param = params[index];
-                    if (!param) return source.c;
-                    const decl = param.valueDeclaration ?? cb;
-                    const target = this.prepareType(genericBindings
-                        ? withTypeBindings(genericBindings, () =>
-                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                        )
-                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                    return this.coerce(source, target, cb);
-                };
-                const callArgs: string[] = [];
-                if (params.length >= 1) callArgs.push(typedArg(0, { c: acc, ty: T_VALUE }));
-                if (params.length >= 2) callArgs.push(typedArg(1, { c: elem, ty: T_VALUE }));
-                if (params.length >= 3) callArgs.push(typedArg(2, { c: `(double)${iv}`, ty: T_NUMBER }));
-                if (params.length >= 4) callArgs.push(typedArg(3, { c: `tsc_value_array(${av})`, ty: T_VALUE }));
-                const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift("tsc_value_undefined()");
-                const retType = this.prepareType(genericBindings
-                    ? withTypeBindings(genericBindings, () =>
-                        mapTsType(cb, sig.getReturnType(), this.checker),
-                    )
-                    : mapTsType(cb, sig.getReturnType(), this.checker));
-                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
-            } else {
-                const fn = this.emitExpr(cb);
-                if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                    unsupported(cb, `dynamic ${method}: callback must be callable`);
-                }
-                const fnv = this.freshTemp("_cb");
-                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
-                const params = fn.ty.params ?? [];
-                const callArgs: string[] = [];
-                if (params.length >= 1) callArgs.push(this.coerce({ c: acc, ty: T_VALUE }, params[0]!, cb));
-                if (params.length >= 2) callArgs.push(this.coerce({ c: elem, ty: T_VALUE }, params[1]!, cb));
-                if (params.length >= 3) callArgs.push(this.coerce({ c: `(double)${iv}`, ty: T_NUMBER }, params[2]!, cb));
-                if (params.length >= 4) callArgs.push(this.coerce({ c: `tsc_value_array(${av})`, ty: T_VALUE }, params[3]!, cb));
-                body = {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
-                    ty: this.prepareType(fn.ty.ret),
-                };
-            }
-        } else {
-            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression or function reference`);
-        }
-        const reduced = this.coerce(body, T_VALUE, bodyNode);
-        const specs: SequencedCallArg[] = [
-            { value: recv, target: T_VALUE, node: call.expression },
-        ];
-        if (init && initArg) specs.push({ value: init, target: T_VALUE, node: initArg });
-        specs.push(...this.ignoredArgumentSpecs(call.arguments, initArg ? 2 : 1));
-        return this.emitSequencedExpr(T_VALUE, specs, ([value, initial]) => {
-            const initC = initial
-                ? `tsc_value_t ${acc} = ${initial}; size_t ${iv}_start = ${av}->len;`
-                : method === "reduce"
-                    ? `size_t ${iv}_start = 0; ` +
-                        `while (${iv}_start < ${av}->len && !tsc_array_index_present(${av}, ${iv}_start)) ${iv}_start++; ` +
-                        `if (${iv}_start == ${av}->len) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
-                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${iv}_start); ${iv}_start++;`
-                    : `size_t ${iv}_start = ${av}->len; ` +
-                        `while (${iv}_start > 0 && !tsc_array_index_present(${av}, ${iv}_start - 1)) ${iv}_start--; ` +
-                        `if (${iv}_start == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
-                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${iv}_start - 1); ${iv}_start--;`;
-            const loop = method === "reduce"
-                ? `for (size_t ${iv} = ${initial ? "0" : `${iv}_start`}; ${iv} < ${av}->len; ${iv}++) `
-                : `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) `;
-            return `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
-                `${initC} ${loop}` +
-                `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
-                `${acc} = ${reduced}; } } ${acc}; })`;
-        });
-    }
 
     private emitRegexpMethod(
         call: ts.CallExpression,
@@ -58877,103 +58669,6 @@ class Emitter {
         return statement.expression;
     }
 
-    private emitMapForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
-        const k = recv.ty.key!;
-        const v = recv.ty.elem!;
-        const args = call.arguments;
-        if (args.length < 1) unsupported(call, "Map.forEach expects callback and optional thisArg");
-        const cb = args[0]!;
-        const specs: SequencedCallArg[] = [{ value: recv }];
-        if (args[1]) {
-            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
-        }
-        specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_VOID, specs, ([map, thisArg]) => {
-            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
-            const mt = this.freshTemp("_map_each");
-            const iv = this.freshTemp("_i");
-            const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
-            const keyExpr = `*((${k.c}*)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
-            const bindings: string[] = [];
-            let bodyC: string;
-            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                const sig = this.checker.getSignatureFromDeclaration(cb);
-                if (!sig) unsupported(cb, "Map.forEach callback must be callable");
-                const thisType = this.signatureThisType(sig, cb);
-                const bodyExpr = this.callbackReturnExpression(cb, "Map.forEach");
-                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-                const valueParam = params[0];
-                const keyParam = params[1];
-                const mapParam = params[2];
-                if (valueParam && ts.isIdentifier(valueParam.name)) {
-                    bindings.push(`${v.c} ${mangleIdent(valueParam.name.text)} = ${valueExpr};`);
-                }
-                if (keyParam && ts.isIdentifier(keyParam.name)) {
-                    bindings.push(`${k.c} ${mangleIdent(keyParam.name.text)} = ${keyExpr};`);
-                }
-                if (mapParam && ts.isIdentifier(mapParam.name)) {
-                    bindings.push(`${recv.ty.c} ${mangleIdent(mapParam.name.text)} = ${mt};`);
-                }
-                if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
-                try {
-                    bodyC = this.emitExpr(bodyExpr).c;
-                } finally {
-                    if (thisType) this.functionThisStack.pop();
-                }
-            } else if (ts.isIdentifier(cb)) {
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "Map.forEach callback must be callable");
-                const sources: EmitResult[] = [
-                    { c: valueExpr, ty: v },
-                    { c: keyExpr, ty: k },
-                    { c: mt, ty: recv.ty },
-                ];
-                if (this.isDirectCallableIdentifier(cb)) {
-                    let fnName = this.identifierName(cb);
-                    const genericDecl = this.genericFunctionDeclaration(sig);
-                    const genericBindings = genericDecl
-                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [v, k, recv.ty], T_VOID)
-                        : null;
-                    if (genericDecl && genericBindings) {
-                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                    }
-                    const params = sig.getParameters();
-                    const callArgs = params.slice(0, 3).map((param, index) => {
-                        const decl = param.valueDeclaration ?? cb;
-                        const target = this.prepareType(genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                            )
-                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                        return this.coerce(sources[index]!, target, cb);
-                    });
-                    const thisType = this.directCallableThisType(cb);
-                    if (thisType) callArgs.unshift(callbackThisArg);
-                    bodyC = `${fnName}(${callArgs.join(", ")})`;
-                } else {
-                    const fn = this.emitExpr(cb);
-                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                        unsupported(cb, "Map.forEach callback must be callable");
-                    }
-                    const fnv = this.freshTemp("_cb");
-                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-                    const params = fn.ty.params ?? [];
-                    const callArgs = params.slice(0, 3).map((param, index) =>
-                        this.coerce(sources[index]!, param, cb),
-                    );
-                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
-                }
-            } else {
-                unsupported(cb, "Map.forEach callback must be an inline arrow/function expression or function reference");
-            }
-            return (
-                `({ tsc_map_t* const ${mt} = ${map}; ` +
-                `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) ` +
-                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
-            );
-        });
-    }
 
     private emitMapEntriesArray(node: ts.Node, recv: EmitResult, feature: string): EmitResult {
         if (recv.ty.kind !== "map") unsupported(node, `${feature} expects a Map`);
@@ -59087,26 +58782,11 @@ class Emitter {
             case "clear":
                 return { c: `(tsc_map_clear(${recv.c}), (void)0)`, ty: T_VOID };
             case "keys":
-                return this.emitSequencedExpr(
-                    arrayType(k),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([map]) => `tsc_map_keys(${map!})`,
-                );
             case "values":
-                return this.emitSequencedExpr(
-                    arrayType(v),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([map]) => `tsc_map_values(${map!})`,
-                );
-            case "entries": {
-                return this.emitSequencedExpr(
-                    arrayType(entryType(v, k)),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([map]) => this.mapEntriesArrayExpr(call, map!, recv.ty, "Map.entries").c,
-                );
-            }
+            case "entries":
             case "forEach":
-                return this.emitMapForEach(call, recv);
+                return this.emitDynamicMethod(call,
+                    { c: this.coerce(recv, T_VALUE, call.expression), ty: T_VALUE }, method);
             case "size":
                 return { c: `tsc_map_size(${recv.c})`, ty: T_NUMBER };
             case "hasOwnProperty":
@@ -59119,101 +58799,6 @@ class Emitter {
         unsupported(call, `Map method .${method}`);
     }
 
-    private emitSetForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
-        const e = recv.ty.elem!;
-        const args = call.arguments;
-        if (args.length < 1) unsupported(call, "Set.forEach expects callback and optional thisArg");
-        const cb = args[0]!;
-        const specs: SequencedCallArg[] = [{ value: recv }];
-        if (args[1]) {
-            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
-        }
-        specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_VOID, specs, ([set, thisArg]) => {
-            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
-            const st = this.freshTemp("_set_each");
-            const iv = this.freshTemp("_i");
-            const elemExpr = `*((${e.c}*)((char*)${st}->data + ${iv} * ${st}->es))`;
-            const bindings: string[] = [];
-            let bodyC: string;
-            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                const sig = this.checker.getSignatureFromDeclaration(cb);
-                if (!sig) unsupported(cb, "Set.forEach callback must be callable");
-                const thisType = this.signatureThisType(sig, cb);
-                const bodyExpr = this.callbackReturnExpression(cb, "Set.forEach");
-                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-                const valueParam = params[0];
-                const value2Param = params[1];
-                const setParam = params[2];
-                if (valueParam && ts.isIdentifier(valueParam.name)) {
-                    bindings.push(`${e.c} ${mangleIdent(valueParam.name.text)} = ${elemExpr};`);
-                }
-                if (value2Param && ts.isIdentifier(value2Param.name)) {
-                    bindings.push(`${e.c} ${mangleIdent(value2Param.name.text)} = ${elemExpr};`);
-                }
-                if (setParam && ts.isIdentifier(setParam.name)) {
-                    bindings.push(`${recv.ty.c} ${mangleIdent(setParam.name.text)} = ${st};`);
-                }
-                if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
-                try {
-                    bodyC = this.emitExpr(bodyExpr).c;
-                } finally {
-                    if (thisType) this.functionThisStack.pop();
-                }
-            } else if (ts.isIdentifier(cb)) {
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "Set.forEach callback must be callable");
-                const sources: EmitResult[] = [
-                    { c: elemExpr, ty: e },
-                    { c: elemExpr, ty: e },
-                    { c: st, ty: recv.ty },
-                ];
-                if (this.isDirectCallableIdentifier(cb)) {
-                    let fnName = this.identifierName(cb);
-                    const genericDecl = this.genericFunctionDeclaration(sig);
-                    const genericBindings = genericDecl
-                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [e, e, recv.ty], T_VOID)
-                        : null;
-                    if (genericDecl && genericBindings) {
-                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                    }
-                    const params = sig.getParameters();
-                    const callArgs = params.slice(0, 3).map((param, index) => {
-                        const decl = param.valueDeclaration ?? cb;
-                        const target = this.prepareType(genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                            )
-                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                        return this.coerce(sources[index]!, target, cb);
-                    });
-                    const thisType = this.directCallableThisType(cb);
-                    if (thisType) callArgs.unshift(callbackThisArg);
-                    bodyC = `${fnName}(${callArgs.join(", ")})`;
-                } else {
-                    const fn = this.emitExpr(cb);
-                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                        unsupported(cb, "Set.forEach callback must be callable");
-                    }
-                    const fnv = this.freshTemp("_cb");
-                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-                    const params = fn.ty.params ?? [];
-                    const callArgs = params.slice(0, 3).map((param, index) =>
-                        this.coerce(sources[index]!, param, cb),
-                    );
-                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
-                }
-            } else {
-                unsupported(cb, "Set.forEach callback must be an inline arrow/function expression or function reference");
-            }
-            return (
-                `({ tsc_set_t* const ${st} = ${set}; ` +
-                `for (size_t ${iv} = 0; ${iv} < ${st}->len; ${iv}++) ` +
-                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
-            );
-        });
-    }
 
     private emitSetMethod(
         call: ts.CallExpression,
@@ -59279,13 +58864,10 @@ class Emitter {
                 return { c: `(tsc_set_clear(${recv.c}), (void)0)`, ty: T_VOID };
             case "keys":
             case "values":
-                return this.emitSequencedExpr(
-                    arrayType(e),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([set]) => `tsc_set_values(${set!})`,
-                );
+            case "entries":
             case "forEach":
-                return this.emitSetForEach(call, recv);
+                return this.emitDynamicMethod(call,
+                    { c: this.coerce(recv, T_VALUE, call.expression), ty: T_VALUE }, method);
             case "size":
                 return { c: `tsc_set_size(${recv.c})`, ty: T_NUMBER };
             case "union":
@@ -75131,6 +74713,18 @@ class Emitter {
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "RegExp")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
         }
+        if ((ctorExpr.text === "Map" || ctorExpr.text === "Set") &&
+            this.isTest262DynamicGlobalReference(ctorExpr)) {
+            return this.emitDynamicValueConstruct(n, {
+                c: `tsc_global_reference_get(${this.test262GlobalBindingKey(ctorExpr.text)})`, ty: T_VALUE,
+            });
+        }
+        if (this.isJavaScriptSourceFile(n.getSourceFile()) &&
+            (this.isUnshadowedGlobalIdentifier(ctorExpr, "Map") ||
+                this.isUnshadowedGlobalIdentifier(ctorExpr, "Set"))) {
+            return this.emitDynamicValueConstruct(n, { c: ctorExpr.text === "Map"
+                ? "tsc_map_constructor_value()" : "tsc_set_constructor_value()", ty: T_VALUE });
+        }
         if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
@@ -77247,6 +76841,16 @@ class Emitter {
             : null;
     }
 
+    private collectionWithValueCodecs(value: string, type: CType, node: ts.Node): string {
+        const element = this.ensureArrayValueCodec(type.elem ?? T_VALUE, node);
+        if (type.kind === "map") {
+            const key = this.ensureArrayValueCodec(type.key ?? T_VALUE, node);
+            return `tsc_map_set_value_codecs(${value}, ${key?.box ?? "NULL"}, ${key?.unbox ?? "NULL"}, ` +
+                `${element?.box ?? "NULL"}, ${element?.unbox ?? "NULL"})`;
+        }
+        return `tsc_set_set_value_codec(${value}, ${element?.box ?? "NULL"}, ${element?.unbox ?? "NULL"})`;
+    }
+
     private boxObjectIdentity(value: string, type: CType, node: ts.Node): string {
         // Integrity and prototype operations observe the object itself. Typed
         // arrays therefore keep their original allocation instead of using the
@@ -77487,9 +77091,9 @@ class Emitter {
                 case "regexp":
                     return `tsc_value_regexp(${r.c})`;
                 case "map":
-                    return `tsc_value_map(${r.c})`;
+                    return `tsc_value_map(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
                 case "set":
-                    return `tsc_value_set(${r.c})`;
+                    return `tsc_value_set(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
                 case "error":
                     return `tsc_value_error(${r.c})`;
                 case "buffer":

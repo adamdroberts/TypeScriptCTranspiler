@@ -2822,6 +2822,8 @@ void map_grow_ordered(tsc_map_t* m, size_t want) {
     void* nv = m->values ? TSC_GC_REALLOC(m->values, cap * m->vs) : TSC_GC_MALLOC(cap * m->vs);
     m->keys = nk;
     m->values = nv;
+    m->order.entries = TSC_GC_REALLOC(m->order.entries, cap * sizeof(*m->order.entries));
+    memset(m->order.entries + old_cap, 0, (cap - old_cap) * sizeof(*m->order.entries));
     if (m->ks == sizeof(tsc_value_t)) {
         m->key_roots = m->key_roots
             ? (void**)TSC_GC_REALLOC(m->key_roots, cap * sizeof(void*))
