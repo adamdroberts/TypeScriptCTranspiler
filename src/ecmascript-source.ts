@@ -1,5 +1,11 @@
 import ts from "typescript";
 
+export type EcmaParseGoal = "script" | "module";
+export function ecmaParseGoal(sourceFile: ts.SourceFile): EcmaParseGoal {
+    return (sourceFile as ts.SourceFile & { ecmaParseGoal?: EcmaParseGoal }).ecmaParseGoal ??
+        (ts.isExternalModule(sourceFile) ? "module" : "script");
+}
+
 /**
  * TypeScript 5.9 treats a LineTerminator before the `with` token of an import
  * attributes clause as the end of the declaration. ECMA-262 permits trivia in
@@ -85,11 +91,51 @@ export function createEcmaSourceFile(
     languageVersion: ts.ScriptTarget | ts.CreateSourceFileOptions,
     setParentNodes: boolean,
     scriptKind: ts.ScriptKind,
+    goal?: EcmaParseGoal,
 ): ts.SourceFile {
-    const shadow = ecmaImportAttributesParserShadow(source);
-    const sourceFile = ts.createSourceFile(filename, shadow, languageVersion, setParentNodes, scriptKind);
+    goal ??= /\.c[jt]s$/iu.test(filename) ? "script" : /\.m[jt]s$/iu.test(filename) ? "module" : undefined;
+    const parserOptions = goal === "script" && typeof languageVersion === "object"
+        ? { ...languageVersion, setExternalModuleIndicator: (_file: ts.SourceFile): void => {} }
+        : languageVersion;
+    let shadow = ecmaImportAttributesParserShadow(source);
+    let sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
+    goal ??= ts.isExternalModule(sourceFile) || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
+    // TypeScript speculatively parses an `await` reference followed by an
+    // expression-start token as AwaitExpression even under the Script goal.
+    // Its parser context flag distinguishes that speculation from the real
+    // async grammar. Reparse an equal-width shadow, then restore Identifier
+    // names before binding; offsets and exact source text remain unchanged.
+    const referenceTokens = new Set<number>();
+    if (goal === "script" && (scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX)) {
+        const worklist: ts.Node[] = [sourceFile];
+        while (worklist.length > 0) {
+            const node = worklist.pop()!;
+            if (ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext))
+                referenceTokens.add(node.getStart(sourceFile));
+            node.forEachChild(child => { worklist.push(child); });
+        }
+        if (referenceTokens.size > 0) {
+            const characters = shadow.split("");
+            for (const start of referenceTokens) {
+                const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, start);
+                scanner.scan();
+                const end = scanner.getTextPos();
+                for (let index = start; index < end; ++index) characters[index] = index === start ? "a" : "_";
+            }
+            shadow = characters.join("");
+            sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
+            const worklist: ts.Node[] = [sourceFile];
+            while (worklist.length > 0) {
+                const node = worklist.pop()!;
+                if (ts.isIdentifier(node) && referenceTokens.has(node.getStart(sourceFile)))
+                    (node as ts.Identifier & { escapedText: ts.__String }).escapedText = "await" as ts.__String;
+                node.forEachChild(child => { worklist.push(child); });
+            }
+        }
+    }
     if (shadow !== source) {
         (sourceFile as ts.SourceFile & { text: string }).text = source;
     }
+    (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
 }

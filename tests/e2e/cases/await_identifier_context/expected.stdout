@@ -1,0 +1,5 @@
+script: function
+parameter: 4
+nested: 7 9 11
+resolved: 7
+typed: 11,13

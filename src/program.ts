@@ -104,7 +104,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             sourceFile &&
             !sourceFile.isDeclarationFile &&
             /\.[cm]?[jt]sx?$/i.test(sourceFile.fileName) &&
-            ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text
+            (/\.[cm]?jsx?$/i.test(sourceFile.fileName) || ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text)
         ) {
             const original = sourceFile;
             sourceFile = createEcmaSourceFile(
@@ -113,6 +113,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
                 languageVersion,
                 true,
                 (original as ts.SourceFile & { scriptKind?: ts.ScriptKind }).scriptKind ?? scriptKindForFile(fileName),
+                moduleRoots.has(path.resolve(fileName)) ? "module" : isolatedScriptRoots.has(path.resolve(fileName)) ? "script" : undefined,
             );
             (sourceFile as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat =
                 (original as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat;
@@ -168,7 +169,7 @@ function collectStaticRequireRoots(
         const fileName = queue.shift()!;
         const sourceText = ts.sys.readFile(fileName);
         if (sourceText === undefined) continue;
-        const sf = ts.createSourceFile(
+        const sf = createEcmaSourceFile(
             fileName,
             sourceText,
             compilerOptions.target ?? ts.ScriptTarget.ES2022,

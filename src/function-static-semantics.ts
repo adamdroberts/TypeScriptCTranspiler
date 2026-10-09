@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { ecmaParseGoal } from "./ecmascript-source";
 import {
     bindingNameEntries,
     strictModeBindingIdentifierNames,
@@ -212,14 +213,52 @@ function functionLikeFailure(
 export function earlyFunctionStaticSemanticsFailure(
     sourceFile: ts.SourceFile,
 ): FunctionStaticSemanticsFailure | null {
-    const worklist: ts.Node[] = [sourceFile];
+    const module = ecmaParseGoal(sourceFile) === "module";
+    const worklist: Array<{ node: ts.Node; allowAwait: boolean }> = [{ node: sourceFile, allowAwait: module }];
     while (worklist.length > 0) {
-        const node = worklist.pop()!;
+        const { node, allowAwait } = worklist.pop()!;
+        if (ts.isIdentifier(node) && node.text === "await" &&
+            (module || ((node.flags & ts.NodeFlags.AwaitContext) &&
+                !(ts.isFunctionExpression(node.parent) && node.parent.name === node))) && isAwaitGrammarIdentifier(node)) {
+            return { node, message: "identifier 'await' is not permitted in this grammar context" };
+        }
+        if (ts.isAwaitExpression(node) && !allowAwait)
+            return { node, message: "AwaitExpression is not permitted in this grammar context" };
         if (isFunctionDefinition(node) && node.body) {
             const failure = functionLikeFailure(node);
             if (failure) return failure;
+            const async = !!ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+            const children: ts.Node[] = [];
+            node.forEachChild(child => { children.push(child); });
+            for (let index = children.length - 1; index >= 0; --index) {
+                const child = children[index]!;
+                worklist.push({ node: child, allowAwait: child === node.body ? async :
+                    ts.isParameter(child) ? false : allowAwait });
+            }
+            continue;
         }
-        pushChildren(worklist, node);
+        const children: ts.Node[] = [];
+        node.forEachChild(child => { children.push(child); });
+        for (let index = children.length - 1; index >= 0; --index)
+            worklist.push({ node: children[index]!, allowAwait: ts.isClassStaticBlockDeclaration(node) ? false : allowAwait });
     }
     return null;
+}
+
+/** IdentifierName property positions do not consume the contextual
+ * BindingIdentifier/IdentifierReference grammar parameters. */
+function isAwaitGrammarIdentifier(node: ts.Identifier): boolean {
+    const parent = node.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
+    if ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) ||
+        ts.isPropertyDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) && parent.name === node)
+        return false;
+    if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
+    if (ts.isImportAttribute(parent) && parent.name === node) return false;
+    if (ts.isImportSpecifier(parent) && parent.propertyName === node) return false;
+    if (ts.isExportSpecifier(parent)) {
+        const declaration = parent.parent.parent;
+        if (declaration.moduleSpecifier || (parent.name === node && parent.propertyName)) return false;
+    }
+    return true;
 }

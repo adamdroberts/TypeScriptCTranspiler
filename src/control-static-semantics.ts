@@ -34,13 +34,47 @@ export function earlyControlFlowStaticSemanticsFailure(
             ts.isParenthesizedExpression(expression) ||
             ts.isAsExpression(expression) ||
             ts.isTypeAssertionExpression(expression) ||
-            ts.isSatisfiesExpression(expression)
+            ts.isSatisfiesExpression(expression) || ts.isNonNullExpression(expression)
         ) {
             expression = expression.expression;
         }
         return ts.isIdentifier(expression) ||
-            ts.isPropertyAccessExpression(expression) ||
-            ts.isElementAccessExpression(expression);
+            ((ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) &&
+                !(expression.flags & ts.NodeFlags.OptionalChain));
+    };
+    const assignmentTarget = (root: ts.Expression): boolean => {
+        const targets: ts.Expression[] = [root];
+        while (targets.length > 0) {
+            const target = targets.pop()!;
+            if (simpleAssignmentTarget(target)) continue;
+            if (ts.isArrayLiteralExpression(target)) {
+                for (let index = 0; index < target.elements.length; ++index) {
+                    const element = target.elements[index]!;
+                    if (ts.isOmittedExpression(element)) continue;
+                    if (ts.isSpreadElement(element)) {
+                        if (index !== target.elements.length - 1 || target.elements.hasTrailingComma) return false;
+                        targets.push(element.expression);
+                    } else targets.push(ts.isBinaryExpression(element) && element.operatorToken.kind === ts.SyntaxKind.EqualsToken
+                        ? element.left : element);
+                }
+                continue;
+            }
+            if (ts.isObjectLiteralExpression(target)) {
+                for (let index = 0; index < target.properties.length; ++index) {
+                    const property = target.properties[index]!;
+                    if (ts.isShorthandPropertyAssignment(property)) targets.push(property.name);
+                    else if (ts.isPropertyAssignment(property)) {
+                        const value = property.initializer;
+                        targets.push(ts.isBinaryExpression(value) && value.operatorToken.kind === ts.SyntaxKind.EqualsToken ? value.left : value);
+                    } else if (ts.isSpreadAssignment(property)) {
+                        if (index !== target.properties.length - 1 || target.properties.hasTrailingComma || !simpleAssignmentTarget(property.expression)) return false;
+                    } else return false;
+                }
+                continue;
+            }
+            return false;
+        }
+        return true;
     };
     const rootContext: ControlContext = {
         allowReturn: false,
@@ -68,6 +102,8 @@ export function earlyControlFlowStaticSemanticsFailure(
                     },
                 });
             }
+            for (const parameter of (node as ts.SignatureDeclaration).parameters)
+                worklist.push({ node: parameter, context: rootContext });
             continue;
         }
         if (ts.isClassStaticBlockDeclaration(node)) {
@@ -116,6 +152,15 @@ export function earlyControlFlowStaticSemanticsFailure(
             !simpleAssignmentTarget(node.operand)
         ) {
             return { node: node.operand, message: "update expression operand is not a valid assignment target" };
+        }
+        if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+            node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+            !(node.operatorToken.kind === ts.SyntaxKind.EqualsToken ? assignmentTarget(node.left) : simpleAssignmentTarget(node.left))) {
+            return { node: node.left, message: "assignment expression left-hand side is not a valid assignment target" };
+        }
+        if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && !ts.isVariableDeclarationList(node.initializer) &&
+            !assignmentTarget(node.initializer)) {
+            return { node: node.initializer, message: "iteration expression left-hand side is not a valid assignment target" };
         }
         if (ts.isLabeledStatement(node)) {
             if (context.labels.has(node.label.text)) {

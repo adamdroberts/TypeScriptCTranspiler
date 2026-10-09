@@ -605,6 +605,7 @@ function parseFailure(
         ts.ScriptTarget.ESNext,
         true,
         ts.ScriptKind.JS,
+        goal,
     );
     const diagnostics = (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] })
         .parseDiagnostics ?? [];

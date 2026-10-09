@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import ts from "typescript";
+import { createEcmaSourceFile } from "./ecmascript-source";
 
 export type AotRuntimeConstant =
     | { kind: "number"; value: number }
@@ -77,7 +78,7 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
 }
 
 function parseExpression(source: string): ts.Expression | null {
-    const sf = ts.createSourceFile(
+    const sf = createEcmaSourceFile(
         "runtime-code-aot.ts",
         `(${source});`,
         ts.ScriptTarget.ES2022,

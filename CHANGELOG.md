@@ -160,6 +160,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share Script await reference parsing through an equal-width contextual token projection with restored names and exact source spans. Preserve explicit parse goals across compiler/host/dependency/AOT intake; validate reserved await names and general assignment-pattern targets through shared static worklists, with independent Node grammar and CommonJS/typed E2E evidence.
+
 - Route ordinary call/apply/bind properties through shared rooted lookup and actual-argument application; delete direct helper shortcuts. Retain temporary argument conversion sources/items and activation values across collection, with independent ordering/identity/optional/GC properties and typed Node E2E evidence.
 
 - Share Await intake with ordinary PromiseResolve intrinsic identity, observable constructor reads and rooted thenable jobs. Retain continuation Realms, queue settled async-from-sync reactions and remove the eager await fallback. Verify independent FIFO/abrupt/Realm properties, a deep thenable graph and typed Node E2E observations.
