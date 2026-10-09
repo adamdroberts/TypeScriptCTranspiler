@@ -75,11 +75,10 @@ import {
     type AotRuntimeCodeEntry,
     emptyRuntimeCodeManifest,
     parseAotEvalConstant,
-    parseAotFunctionBodyConstant,
     runtimeCodeManifestHasEval,
-    runtimeCodeManifestHasFunctions,
     type RuntimeCodeManifest,
 } from "../runtime-code-aot";
+import type { FunctionConstructorEntry } from "../function-constructor-source";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
 import { validateJsonSyntax } from "../json-syntax";
 import {
@@ -639,6 +638,7 @@ export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
     runtimeCode?: RuntimeCodeManifest;
+    functionEntries?: readonly FunctionConstructorEntry[];
     unsafeEval?: boolean;
     test262Observation?: Test262NativeObservationPlan;
 }
@@ -840,6 +840,8 @@ class Emitter {
         private graph: ModuleGraph,
         private options: EmitProgramOptions = {},
     ) {
+        this.functionSourcePaths = new Set((options.functionEntries ?? [])
+            .flatMap(source => source.entry ? [path.resolve(source.entry)] : []));
         this.test262ScriptEntryPaths = new Set(
             [
                 ...(options.test262Observation?.scriptEntries ?? []),
@@ -862,6 +864,7 @@ class Emitter {
         );
     }
 
+    private readonly functionSourcePaths: ReadonlySet<string>;
     private readonly test262ScriptEntryPaths: ReadonlySet<string>;
     private readonly test262EvalEntryModes: ReadonlyMap<string, boolean>;
     private test262ScriptDeclaredGlobalBindingNamesCache: ReadonlySet<string> | null = null;
@@ -14658,7 +14661,7 @@ class Emitter {
     private isTest262DynamicGlobalReference(id: ts.Identifier): boolean {
         const source = id.getSourceFile();
         if (
-            !this.options.test262Observation ||
+            (!this.options.test262Observation && !this.functionSourcePaths.has(path.resolve(source.fileName))) ||
             !this.isJavaScriptSourceFile(source) ||
             (!this.isTest262ScriptSourceFile(source) &&
                 !this.isTest262EvalSourceFile(source) &&
@@ -15054,9 +15057,29 @@ class Emitter {
             out.line("}");
             out.line();
         }
+        const functionEntries = this.options.functionEntries ?? [];
+        if (functionEntries.length) {
+            out.line("static tsc_value_t function_source_dispatch(tsc_str_t* parameters, tsc_str_t* body) {");
+            for (const entry of functionEntries) {
+                out.line(`    if (tsc_str_eq(parameters, ${this.cStringLiteral(entry.parameters)}) && ` +
+                    `tsc_str_eq(body, ${this.cStringLiteral(entry.body)})) {`);
+                if (entry.entry === null) {
+                    out.line('        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("invalid Function constructor source"));');
+                } else {
+                    const moduleId = this.graph.fileToModuleId.get(path.resolve(entry.entry));
+                    if (!moduleId) throw new Error(`Function source is absent from the AOT graph: ${entry.entry}`);
+                    out.line(`        return tsc_function_create_from_source(mod_evaluate_${moduleId});`);
+                }
+                out.line("    }");
+            }
+            out.line("    return tsc_value_undefined();");
+            out.line("}");
+            out.line();
+        }
         // main(): bootstrap, then evaluate one canonical ordered root graph.
         out.line("int main(int argc, char** argv) {");
         out.line("    tsc_bootstrap(argc, argv);");
+        if (functionEntries.length) out.line("    tsc_function_set_source_callback(function_source_dispatch);");
         const observation = this.options.test262Observation;
         if (observation) {
             const setupIds = new Set(observation.setupEntries.map((filename) => {
@@ -15186,6 +15209,17 @@ class Emitter {
             instantiationBuf.line(`${binding.gcRoot} = NULL;`);
             initBuf.line(`${binding.cName} = tsc_json_parse(${this.stringLit(sf.text)});`);
             initBuf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+            return;
+        }
+        if (this.functionSourcePaths.has(path.resolve(sf.fileName))) {
+            const statement = sf.statements[0];
+            if (!statement || !ts.isExpressionStatement(statement)) {
+                unsupported(sf, "Function source requires a canonical function expression");
+            }
+            const result = this.emitExpr(statement.expression);
+            const value = this.freshTemp("_function_source_value");
+            initBuf.line(`tsc_value_t ${value} = ${this.coerce(result, T_VALUE, statement.expression)};`);
+            this.sourceRecordCompletionValues.set(modId, value);
             return;
         }
         const capturedCells = this.capturedCellsFor(sf);
@@ -24110,6 +24144,7 @@ class Emitter {
     }
 
     private isTest262ScriptSourceFile(sf: ts.SourceFile): boolean {
+        if (this.functionSourcePaths.has(path.resolve(sf.fileName))) return true;
         const evalStrict = this.test262EvalEntryModes.get(path.resolve(sf.fileName));
         if (evalStrict === true) return false;
         return !!this.options.test262Observation &&
@@ -48612,6 +48647,10 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
+            if (this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) &&
+                this.isTest262DynamicGlobalReference(expr)) {
+                return { c: `tsc_global_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
+            }
             // Built-in global identifiers.
             if (this.isUnshadowedGlobalIdentifier(expr, "Promise")) {
                 return { c: "tsc_promise_constructor_value()", ty: T_VALUE };
@@ -52417,11 +52456,17 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
+        if (this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) &&
+            this.isTest262DynamicGlobalReference(calleeId)) {
+            return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
+        }
         if (name === "eval" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitUnsafeEvalCall(call);
         }
         if (name === "Function" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitUnsafeFunctionConstructor(call);
+            return this.emitDynamicValueCall(call, {
+                c: `tsc_global_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
+            });
         }
         if (name === "structuredClone") {
             if (call.arguments.length < 1) unsupported(call, "structuredClone expects at least 1 arg");
@@ -53256,45 +53301,6 @@ class Emitter {
         );
     }
 
-    private emitUnsafeFunctionConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
-        const args = call.arguments ?? [];
-        const bodyNode = this.functionConstructorBodyArg(call);
-        const bodyText = bodyNode ? this.aotRuntimeCodeStaticString(bodyNode) : (args.length === 0 ? "" : null);
-        if (bodyText !== null) {
-            const constant = parseAotFunctionBodyConstant(bodyText);
-            if (constant) return this.emitAotFunctionConstructor(call, constant);
-        }
-        const runtimeCode = this.options.runtimeCode ?? emptyRuntimeCodeManifest();
-        if (runtimeCodeManifestHasFunctions(runtimeCode)) {
-            if (!bodyNode) {
-                unsupported(call, "runtime-code manifest Function dispatch requires static parameter-name strings");
-            }
-            return this.emitAotFunctionManifestDispatch(call, bodyNode, runtimeCode.functions);
-        }
-        if (args.length > 1) {
-            unsupported(call, "unsafe Function bridge currently expects a single function body string");
-        }
-        if (args.length < 1) unsupported(call, "Function constructor expects source text");
-        if (!bodyNode) unsupported(call, "Function constructor expects source text");
-        const body = this.emitExpr(bodyNode);
-        const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (type.kind !== "function" || !type.closureName) {
-            unsupported(call, "Function constructor result must be callable");
-        }
-        return this.emitSequencedExpr(type, [
-            { value: body, target: T_STRING, node: bodyNode },
-        ], ([source]) => this.emitNodeFunctionBridgeAllocation(call, type, source));
-    }
-
-    private functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression): ts.Expression | null {
-        const args = call.arguments ?? [];
-        if (args.length < 1) return null;
-        for (let i = 0; i < args.length - 1; i++) {
-            if (this.aotRuntimeCodeStaticString(args[i]!) === null) return null;
-        }
-        return args[args.length - 1]!;
-    }
-
     private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
         return staticStringExpressionText(expr) ??
             this.sideEffectFreeStringLiteralText(expr, new Set());
@@ -53326,90 +53332,6 @@ class Emitter {
         });
     }
 
-    private emitAotFunctionConstructor(call: ts.CallExpression | ts.NewExpression, constant: AotRuntimeConstant): EmitResult {
-        const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (type.kind !== "function" || !type.closureName || !type.ret || type.ret.kind !== "value") {
-            unsupported(call, "AOT Function constructor result must be callable");
-        }
-        const adapter = this.ensureAotConstantFunctionAdapter(type, constant);
-        return this.emitSequencedExpr(type, [], () => this.emitAotFunctionAllocation(type, adapter));
-    }
-
-    private emitAotFunctionManifestDispatch(
-        call: ts.CallExpression | ts.NewExpression,
-        bodyNode: ts.Expression,
-        entries: AotRuntimeCodeEntry[],
-    ): EmitResult {
-        const type = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (type.kind !== "function" || !type.closureName || !type.ret || type.ret.kind !== "value") {
-            unsupported(call, "AOT Function constructor result must be callable");
-        }
-        const body = this.emitExpr(bodyNode);
-        return this.emitSequencedExpr(type, [
-            { value: body, target: T_STRING, node: bodyNode },
-        ], ([bodyValue]) => {
-            const out = this.freshTemp("_aot_fn_out");
-            const pieces = [`${type.c} ${out} = NULL`];
-            let dispatch = "";
-            entries.forEach((entry, index) => {
-                const adapter = this.ensureAotConstantFunctionAdapter(type, entry.constant);
-                const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${bodyValue}, ${this.cStringLiteral(entry.source)}))`;
-                dispatch += `${cond} { ${out} = ${this.emitAotFunctionAllocation(type, adapter)}; } `;
-            });
-            dispatch += this.options.unsafeEval
-                ? `else { ${out} = ${this.emitNodeFunctionBridgeAllocation(call, type, bodyValue)}; }`
-                : `else { tsc_throw_str(tsc_str_from_cstr("runtime Function source outside AOT allow-list")); }`;
-            pieces.push(dispatch);
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitNodeFunctionBridgeAllocation(
-        node: ts.Node,
-        type: CType,
-        bodyValue: string,
-    ): string {
-        const adapter = this.ensureNodeFunctionAdapter(node, type);
-        const envType = `${adapter}_env_t`;
-        const env = this.freshTemp("_node_fn_env");
-        const fn = this.freshTemp("_node_fn");
-        return (
-            `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
-            `${env}->fn = tsc_node_function(${bodyValue}); ` +
-            `${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
-            `${fn}->fn = ${adapter}; ${fn}->env = ${env}; ${fn}; })`
-        );
-    }
-
-    private emitAotFunctionAllocation(type: CType, adapter: string): string {
-        const fn = this.freshTemp("_aot_fn");
-        return (
-            `({ ${type.c} ${fn} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName})); ` +
-            `${fn}->fn = ${adapter}; ${fn}->env = NULL; ${fn}; })`
-        );
-    }
-
-    private ensureAotConstantFunctionAdapter(type: CType, constant: AotRuntimeConstant): string {
-        const key = `${type.closureName}_${this.aotRuntimeConstantKey(constant)}`;
-        const name = `${key}_aot`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const params = type.params ?? [];
-        const args = ["void* raw_env"];
-        if (type.thisParam) args.push("tsc_value_t this_arg");
-        args.push(...params.map((param, i) => `${param.c} _p${i}`));
-        const signature = `static ${type.ret!.c} ${name}(${args.join(", ")})`;
-        this.protos.line(`${signature};`);
-        this.closureDefs.open(signature);
-        this.closureDefs.line("(void)raw_env;");
-        if (type.thisParam) this.closureDefs.line("(void)this_arg;");
-        params.forEach((_, i) => this.closureDefs.line(`(void)_p${i};`));
-        this.closureDefs.line(`return ${this.emitAotRuntimeConstant(constant).c};`);
-        this.closureDefs.close();
-        return name;
-    }
-
     private emitAotRuntimeConstant(value: AotRuntimeConstant): EmitResult {
         switch (value.kind) {
             case "number":
@@ -53425,57 +53347,11 @@ class Emitter {
                 return { c: "tsc_value_null()", ty: T_VALUE };
             case "undefined":
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
-            case "global-this":
-                return { c: "tsc_global_object()", ty: T_VALUE };
         }
     }
 
     private cStringLiteral(value: string): string {
         return `tsc_str_from_lit("${escapeCString(value)}", ${utf8ByteLen(value)})`;
-    }
-
-    private aotRuntimeConstantKey(value: AotRuntimeConstant): string {
-        switch (value.kind) {
-            case "number":
-                return `num_${mangleIdent(String(value.value))}`;
-            case "string":
-                return `str_${mangleIdent(value.value)}`;
-            case "boolean":
-                return value.value ? "true" : "false";
-            case "null":
-                return "null";
-            case "undefined":
-                return "undefined";
-            case "global-this":
-                return "global_this";
-        }
-    }
-
-    private ensureNodeFunctionAdapter(node: ts.Node, type: CType): string {
-        if (
-            type.kind !== "function" ||
-            !type.closureName ||
-            !type.ret ||
-            type.ret.kind !== "value" ||
-            (type.params?.length ?? 0) !== 1 ||
-            type.params?.[0]?.kind !== "array" ||
-            type.params?.[0]?.elem?.kind !== "value"
-        ) {
-            unsupported(node, "unsafe Function bridge currently supports (...args: unknown[]) => unknown");
-        }
-        const name = `${type.closureName}_node_bridge`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const envType = `${name}_env_t`;
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line("tsc_value_t fn;");
-        this.structDecls.close(` ${envType};`);
-        this.protos.line(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args);`);
-        this.closureDefs.open(`static tsc_value_t ${name}(void* raw_env, tsc_array_t* args)`);
-        this.closureDefs.line(`${envType}* env = (${envType}*)raw_env;`);
-        this.closureDefs.line("return tsc_node_function_call(env->fn, args);");
-        this.closureDefs.close();
-        return name;
     }
 
     private emitStaticSpreadCall(
@@ -69880,6 +69756,10 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
+        if (this.functionSourcePaths.has(path.resolve(n.getSourceFile().fileName)) &&
+            this.isTest262DynamicGlobalReference(ctorExpr)) {
+            return this.emitDynamicValueConstruct(n, this.emitExpr(ctorExpr));
+        }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Proxy")) {
             const args = n.arguments ?? [];
             if (args.length < 2) unsupported(n, "new Proxy expects target and handler");
@@ -69918,7 +69798,9 @@ class Emitter {
             return this.emitDynamicValueConstruct(n, { c: primitiveConstructor, ty: T_VALUE });
         }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
-            return this.emitUnsafeFunctionConstructor(n);
+            return this.emitDynamicValueConstruct(n, {
+                c: `tsc_global_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
+            });
         }
         if (this.functionValueIsConstructable(ctorExpr)) {
             const functionValue = this.emitExpr(n.expression);

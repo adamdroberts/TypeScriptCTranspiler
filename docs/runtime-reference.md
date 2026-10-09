@@ -697,15 +697,16 @@ The `-DTSC_NO_GC` define in `src/link/cc.ts` switches all of these to `calloc`/`
 
 ## Embedded Node Bridge
 
-The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed native addons require it. First-class global `eval` and `Function` value references lower to generic function wrappers that route through this bridge; they remain rejected unless `--unsafe-eval` is enabled.
+The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed native addons require it. First-class Function values use the ordinary constructor and its finite AOT source registry. Only registry misses route already-converted parameter/body strings to the embedded bridge when `--unsafe-eval` is enabled. First-class eval bridge admission remains separately gated.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
 | `tsc_node_eval` | `(tsc_str_t*) -> tsc_value_t` | Dynamic `eval(...)` execution through V8, gated by `TSC_UNSAFE_EVAL`. |
-| `tsc_node_function` | `(tsc_str_t*) -> tsc_value_t` | Dynamic `Function(...)` body compilation through V8, gated by `TSC_UNSAFE_EVAL`. |
+| `tsc_node_function_source` | `(tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Joined parameters/body compilation through the V8 Function constructor, gated by `TSC_UNSAFE_EVAL`. |
 | `tsc_node_native_addon` | `(tsc_str_t*) -> tsc_value_t` | Manifest-backed native addon load through the embedded Node `require` hook. Does not require `TSC_UNSAFE_EVAL`. |
 | `tsc_builtin_eval` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `eval` references. |
-| `tsc_builtin_function` | `(void*, tsc_value_t, tsc_array_t*) -> tsc_value_t` | Generic function wrapper for first-class global `Function` references. |
+| `tsc_function_set_source_callback` | `(tsc_function_source_callback_t) -> void` | Register the compilation-wide finite source dispatcher used in every Realm. |
+| `tsc_function_create_from_source` | `(tsc_value_t (*)(void)) -> tsc_value_t` | Resolve the actual newTarget prototype and allocate a fresh ordinary function from its parsed source factory. |
 
 ## Adding a new runtime function
 

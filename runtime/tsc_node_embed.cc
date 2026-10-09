@@ -60,11 +60,9 @@ bool tsc_value_is_constructable(tsc_value_t value);
 double tsc_value_as_num(tsc_value_t value);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
-tsc_value_t tsc_node_function(tsc_str_t* body);
-tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args);
+tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_array_t* args);
-tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, tsc_array_t* args);
 }
 
 #ifndef TSC_HAS_LIBNODE
@@ -74,12 +72,7 @@ extern "C" tsc_value_t tsc_node_eval(tsc_str_t*) {
     return tsc_value_undefined();
 }
 
-extern "C" tsc_value_t tsc_node_function(tsc_str_t*) {
-    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
-    return tsc_value_undefined();
-}
-
-extern "C" tsc_value_t tsc_node_function_call(tsc_value_t, tsc_array_t*) {
+extern "C" tsc_value_t tsc_node_function_source(tsc_str_t*, tsc_str_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -90,11 +83,6 @@ extern "C" tsc_value_t tsc_node_native_addon(tsc_str_t*) {
 }
 
 extern "C" tsc_value_t tsc_builtin_eval(void*, tsc_value_t, tsc_array_t*) {
-    tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
-    return tsc_value_undefined();
-}
-
-extern "C" tsc_value_t tsc_builtin_function(void*, tsc_value_t, tsc_array_t*) {
     tsc_panic("embedded Node bridge unavailable: binary was not linked with libnode");
     return tsc_value_undefined();
 }
@@ -443,54 +431,38 @@ extern "C" tsc_value_t tsc_node_eval(tsc_str_t* source) {
 #endif
 }
 
-extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
+extern "C" tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body) {
 #ifndef TSC_UNSAFE_EVAL
+    (void)parameters;
     (void)body;
     tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
     return tsc_value_undefined();
 #else
-    std::string wrapped = "(function(){";
-    wrapped += tscToString(body);
-    wrapped += "\n})";
-    tsc_str_t source = { wrapped.size(), wrapped.c_str(), 0, nullptr, 0 };
     NodeEmbedState* current = ensureState();
     v8::Isolate* isolate = current->isolate;
     v8::Isolate::Scope isolateScope(isolate);
     v8::HandleScope handleScope(isolate);
     v8::Local<v8::Context> context = current->context.Get(isolate);
     v8::Context::Scope contextScope(context);
-
-    std::string src = tscToString(&source);
-    v8::Local<v8::String> code;
-    if (!v8::String::NewFromUtf8(
-             isolate,
-             src.c_str(),
-             v8::NewStringType::kNormal,
-             (int)src.size()
-         ).ToLocal(&code)) {
-        tsc_panic("embedded Node bridge: could not allocate Function source string");
-    }
     v8::TryCatch tryCatch(isolate);
-    v8::Local<v8::Script> script;
-    if (!v8::Script::Compile(context, code).ToLocal(&script)) {
+    // The native constructor already converted the full actual List. Pass
+    // joined FormalParameters and body through V8's constructor, which parses
+    // both inputs independently, without repeating user conversion hooks.
+    v8::Local<v8::Value> constructor;
+    if (!context->Global()->Get(context, v8::String::NewFromUtf8Literal(isolate, "Function"))
+        .ToLocal(&constructor) || !constructor->IsFunction()) {
+        tsc_panic("embedded Node bridge: Function constructor unavailable");
+    }
+    v8::Local<v8::Value> inputs[] = {
+        toV8(isolate, context, tsc_value_string(parameters)),
+        toV8(isolate, context, tsc_value_string(body))
+    };
+    v8::Local<v8::Value> result;
+    if (!constructor.As<v8::Function>()->Call(context, v8::Undefined(isolate), 2, inputs).ToLocal(&result) ||
+        !result->IsFunction()) {
         tsc_panic("embedded Node bridge: Function compile failed");
     }
-    v8::Local<v8::Value> result;
-    if (!script->Run(context).ToLocal(&result) || !result->IsFunction()) {
-        tsc_panic("embedded Node bridge: Function source did not produce a callable");
-    }
-    return fromV8Function(isolate, v8::Local<v8::Function>::Cast(result));
-#endif
-}
-
-extern "C" tsc_value_t tsc_node_function_call(tsc_value_t fn, tsc_array_t* args) {
-#ifndef TSC_UNSAFE_EVAL
-    (void)fn;
-    (void)args;
-    tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
-    return tsc_value_undefined();
-#else
-    return tsc_value_apply_function(fn, tsc_value_undefined(), tsc_value_array(args));
+    return fromV8Function(isolate, result.As<v8::Function>());
 #endif
 }
 
@@ -541,25 +513,5 @@ extern "C" tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, tsc_arr
 #endif
 }
 
-extern "C" tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)this_arg;
-#ifndef TSC_UNSAFE_EVAL
-    (void)args;
-    tsc_panic("embedded Node unsafe Function bridge disabled: compile with --unsafe-eval");
-    return tsc_value_undefined();
-#else
-    if (!args || args->len < 1) {
-        static tsc_str_t empty = { 0, "", 0, nullptr, 1 };
-        return tsc_node_function(&empty);
-    }
-    tsc_value_t arg = (static_cast<tsc_value_t*>(args->data))[args->len - 1];
-    if (valueIsBox(arg) && valueTag(arg) == TSC_VALUE_TAG_STRING) {
-        return tsc_node_function(static_cast<tsc_str_t*>(valuePtr(arg)));
-    }
-    static tsc_str_t empty = { 0, "", 0, nullptr, 1 };
-    return tsc_node_function(&empty);
-#endif
-}
 
 #endif

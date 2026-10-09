@@ -112,11 +112,9 @@ tsc_str_t* tsc_str_from_cstr(const char* s);
 
 /* ------------- embedded Node bridge ------------- */
 tsc_value_t tsc_node_eval(tsc_str_t* source);
-tsc_value_t tsc_node_function(tsc_str_t* body);
-tsc_value_t tsc_node_function_call(tsc_value_t fn, struct tsc_array* args);
+tsc_value_t tsc_node_function_source(tsc_str_t* parameters, tsc_str_t* body);
 tsc_value_t tsc_node_native_addon(tsc_str_t* resolved_path);
 tsc_value_t tsc_builtin_eval(void* env, tsc_value_t this_arg, struct tsc_array* args);
-tsc_value_t tsc_builtin_function(void* env, tsc_value_t this_arg, struct tsc_array* args);
 tsc_value_t tsc_builtin_math(void);
 tsc_value_t tsc_builtin_json(void);
 tsc_value_t tsc_builtin_reflect(void);
@@ -834,6 +832,9 @@ tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, voi
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_function_constructor_value(void);
+typedef tsc_value_t (*tsc_function_source_callback_t)(tsc_str_t* parameters, tsc_str_t* body);
+void tsc_function_set_source_callback(tsc_function_source_callback_t callback);
+tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void));
 tsc_value_t tsc_object_constructor_value(void);
 tsc_value_t tsc_string_constructor_value(void);
 tsc_value_t tsc_number_constructor_value(void);

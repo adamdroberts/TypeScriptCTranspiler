@@ -63,7 +63,7 @@ function isStrictFunctionContext(node: ts.FunctionLikeDeclaration): boolean {
         if (ts.isClassLike(current)) return true;
         if (isFunctionDefinition(current) && containsUseStrict(current.body)) return true;
         if (ts.isSourceFile(current)) {
-            return sourceContainsUseStrict(current);
+            return ecmaParseGoal(current) === "module" || sourceContainsUseStrict(current);
         }
     }
     return false;
@@ -127,6 +127,21 @@ function directBodyLexicalNames(
 function functionLikeFailure(
     node: ts.FunctionLikeDeclaration,
 ): FunctionStaticSemanticsFailure | null {
+    if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
+        // Ordinary function definitions have no HomeObject. Arrows retain
+        // this lexical restriction; nested non-arrow definitions establish
+        // their own context and are visited separately by the source walk.
+        const worklist: ts.Node[] = [...node.parameters, ...(node.body ? [node.body] : [])];
+        while (worklist.length) {
+            const current = worklist.pop()!;
+            if (current.kind === ts.SyntaxKind.SuperKeyword) {
+                return { node: current, message: "super is not permitted in an ordinary function definition" };
+            }
+            if (ts.isFunctionLike(current) && !ts.isArrowFunction(current) ||
+                ts.isClassStaticBlockDeclaration(current) || ts.isPropertyDeclaration(current)) continue;
+            pushChildren(worklist, current);
+        }
+    }
     const parameters = node.parameters;
     for (let index = 0; index < parameters.length; index++) {
         const parameter = parameters[index]!;
@@ -155,7 +170,8 @@ function functionLikeFailure(
 
 
     const entries = parameterEntries(node);
-    if (isStrictFunctionContext(node)) {
+    const strict = isStrictFunctionContext(node);
+    if (strict) {
         const restricted = entries.find((entry) => strictModeBindingIdentifierNames.has(entry.name));
         if (restricted) {
             return {
@@ -165,19 +181,14 @@ function functionLikeFailure(
         }
     }
 
-    if (!ts.isArrowFunction(node)) return null;
-    if (isJavaScriptSourceFile(node.getSourceFile()) && arrowHasLineTerminatorBeforeToken(node)) {
-        return {
-            node: node.equalsGreaterThanToken,
-            message: "a line terminator is not permitted before an arrow token",
-        };
-    }
+    const uniqueParameters = strict || !isSimpleParameterList(node) ||
+        !(ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node));
     const seen = new Set<string>();
     for (const entry of entries) {
-        if (seen.has(entry.name)) {
+        if (uniqueParameters && seen.has(entry.name)) {
             return {
                 node: entry.node,
-                message: `ArrowFormalParameters BoundNames contains duplicate '${entry.name}'`,
+                message: `${ts.isArrowFunction(node) ? "ArrowFormalParameters" : "FormalParameters"} BoundNames contains duplicate '${entry.name}'`,
             };
         }
         seen.add(entry.name);
@@ -188,9 +199,17 @@ function functionLikeFailure(
         if (lexicalNames.has(entry.name)) {
             return {
                 node: entry.node,
-                message: `arrow parameter '${entry.name}' conflicts with a body lexical declaration`,
+                message: `${ts.isArrowFunction(node) ? "arrow" : "function"} parameter '${entry.name}' conflicts with a body lexical declaration`,
             };
         }
+    }
+
+    if (!ts.isArrowFunction(node)) return null;
+    if (isJavaScriptSourceFile(node.getSourceFile()) && arrowHasLineTerminatorBeforeToken(node)) {
+        return {
+            node: node.equalsGreaterThanToken,
+            message: "a line terminator is not permitted before an arrow token",
+        };
     }
 
     for (const parameter of parameters) {
@@ -214,9 +233,19 @@ export function earlyFunctionStaticSemanticsFailure(
     sourceFile: ts.SourceFile,
 ): FunctionStaticSemanticsFailure | null {
     const module = ecmaParseGoal(sourceFile) === "module";
-    const worklist: Array<{ node: ts.Node; allowAwait: boolean }> = [{ node: sourceFile, allowAwait: module }];
+    const javascript = isJavaScriptSourceFile(sourceFile);
+    const worklist: Array<{ node: ts.Node; allowAwait: boolean; allowYield: boolean }> = [
+        { node: sourceFile, allowAwait: module, allowYield: false },
+    ];
     while (worklist.length > 0) {
-        const { node, allowAwait } = worklist.pop()!;
+        const { node, allowAwait, allowYield } = worklist.pop()!;
+        if (javascript && (ts.isTypeNode(node) || ts.isTypeParameterDeclaration(node) ||
+            ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node) ||
+            ts.isNonNullExpression(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) ||
+            ts.isEnumDeclaration(node) || ts.isImportEqualsDeclaration(node) ||
+            ts.isParameter(node) && !!node.questionToken)) {
+            return { node, message: "TypeScript syntax is not permitted in ECMAScript source" };
+        }
         if (ts.isIdentifier(node) && node.text === "await" &&
             (module || ((node.flags & ts.NodeFlags.AwaitContext) &&
                 !(ts.isFunctionExpression(node.parent) && node.parent.name === node))) && isAwaitGrammarIdentifier(node)) {
@@ -224,6 +253,8 @@ export function earlyFunctionStaticSemanticsFailure(
         }
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
+        if (ts.isYieldExpression(node) && !allowYield)
+            return { node, message: "YieldExpression is not permitted in this grammar context" };
         if (isFunctionDefinition(node) && node.body) {
             const failure = functionLikeFailure(node);
             if (failure) return failure;
@@ -233,14 +264,17 @@ export function earlyFunctionStaticSemanticsFailure(
             for (let index = children.length - 1; index >= 0; --index) {
                 const child = children[index]!;
                 worklist.push({ node: child, allowAwait: child === node.body ? async :
-                    ts.isParameter(child) ? false : allowAwait });
+                    ts.isParameter(child) ? false : allowAwait,
+                    allowYield: child === node.body ? !!("asteriskToken" in node && node.asteriskToken) :
+                        ts.isParameter(child) ? false : allowYield });
             }
             continue;
         }
         const children: ts.Node[] = [];
         node.forEachChild(child => { children.push(child); });
         for (let index = children.length - 1; index >= 0; --index)
-            worklist.push({ node: children[index]!, allowAwait: ts.isClassStaticBlockDeclaration(node) ? false : allowAwait });
+            worklist.push({ node: children[index]!, allowAwait: ts.isClassStaticBlockDeclaration(node) ? false : allowAwait,
+                allowYield: ts.isClassStaticBlockDeclaration(node) ? false : allowYield });
     }
     return null;
 }

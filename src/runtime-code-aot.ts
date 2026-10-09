@@ -1,14 +1,14 @@
 import * as fs from "node:fs/promises";
 import ts from "typescript";
 import { createEcmaSourceFile } from "./ecmascript-source";
+import type { FunctionConstructorSource } from "./function-constructor-source";
 
 export type AotRuntimeConstant =
     | { kind: "number"; value: number }
     | { kind: "string"; value: string }
     | { kind: "boolean"; value: boolean }
     | { kind: "null" }
-    | { kind: "undefined" }
-    | { kind: "global-this" };
+    | { kind: "undefined" };
 
 export interface AotRuntimeCodeEntry {
     source: string;
@@ -17,7 +17,7 @@ export interface AotRuntimeCodeEntry {
 
 export interface RuntimeCodeManifest {
     eval: AotRuntimeCodeEntry[];
-    functions: AotRuntimeCodeEntry[];
+    functions: FunctionConstructorSource[];
 }
 
 export function emptyRuntimeCodeManifest(): RuntimeCodeManifest {
@@ -40,7 +40,7 @@ export async function loadRuntimeCodeManifest(
     const parsed = JSON.parse(raw) as { eval?: unknown; functions?: unknown };
     return {
         eval: parseManifestList(parsed.eval, "eval", parseAotEvalConstant),
-        functions: parseManifestList(parsed.functions, "functions", parseAotFunctionBodyConstant),
+        functions: parseFunctionManifest(parsed.functions),
     };
 }
 
@@ -48,21 +48,6 @@ export function parseAotEvalConstant(source: string): AotRuntimeConstant | null 
     if (source.trim() === "") return { kind: "undefined" };
     const expr = parseExpression(source);
     return expr ? evaluateConstant(expr) : null;
-}
-
-export function parseAotFunctionBodyConstant(body: string): AotRuntimeConstant | null {
-    if (body.trim() === "") return { kind: "undefined" };
-    const match = body.trim().match(/^return(?:\s+([\s\S]*?))?;?$/);
-    if (!match) return null;
-    const exprText = match[1]?.trim();
-    if (!exprText) return { kind: "undefined" };
-    const expression = parseExpression(exprText);
-    if (expression && unwrapExpression(expression).kind === ts.SyntaxKind.ThisKeyword) {
-        // Function-constructor code is non-strict unless its own body contains
-        // a strict directive, which the single-return grammar above rejects.
-        return { kind: "global-this" };
-    }
-    return parseAotEvalConstant(exprText);
 }
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
@@ -194,9 +179,24 @@ function constantToJsValue(value: AotRuntimeConstant): unknown {
             return null;
         case "undefined":
             return undefined;
-        case "global-this":
-            return undefined;
     }
+}
+
+function parseFunctionManifest(raw: unknown): FunctionConstructorSource[] {
+    if (raw === undefined) return [];
+    const entries = manifestSourceEntries(raw);
+    if (!entries) throw new Error("runtime code manifest field 'functions' must be an array or object map");
+    return entries.map(entry => {
+        if (typeof entry === "string") return { parameters: "", body: entry };
+        if (entry && typeof entry === "object" && "body" in entry && "parameters" in entry) {
+            const { body, parameters } = entry as { body: unknown; parameters: unknown };
+            if (typeof body === "string" && (typeof parameters === "string" ||
+                Array.isArray(parameters) && parameters.every(value => typeof value === "string"))) {
+                return { parameters: typeof parameters === "string" ? parameters : parameters.join(","), body };
+            }
+        }
+        throw new Error("runtime code manifest function entries require a body string and parameter strings");
+    });
 }
 
 function parseManifestList(

@@ -12,6 +12,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
 import { buildModuleGraph } from "./resolve";
@@ -36,11 +37,17 @@ import {
 import {
     loadRuntimeCodeManifest,
     parseAotEvalConstant,
-    parseAotFunctionBodyConstant,
     runtimeCodeManifestHasEval,
     runtimeCodeManifestHasFunctions,
     type RuntimeCodeManifest,
 } from "./runtime-code-aot";
+import {
+    finiteFunctionConstructorSources,
+    functionConstructorExpressionSource,
+    functionConstructorSourceIsValid,
+    functionConstructorSourceKey,
+    type FunctionConstructorEntry,
+} from "./function-constructor-source";
 import {
     formatTsDiagnostics,
     formatUnsupported,
@@ -189,7 +196,6 @@ function permanentLimitDiagnostics(
         nativeAddons?: NativeAddonManifest;
         dynamicRequires?: DynamicRequireManifest;
         runtimeCode?: RuntimeCodeManifest;
-        allowFunctionValueReference?: boolean;
         test262Observation?: Test262NativeObservationPlan;
     } = {},
 ): PermanentLimitDiagnostic[] {
@@ -260,7 +266,7 @@ function permanentLimitDiagnostics(
                         const body = functionConstructorBodyText(node);
                         const canDispatchRuntimeManifest =
                             body === null &&
-                            !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node));
+                            !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode));
                         if (
                             !opts.unsafeEval &&
                             !canAotCompileFunctionConstructor(node) &&
@@ -343,7 +349,7 @@ function permanentLimitDiagnostics(
                 const body = functionConstructorBodyText(node);
                 const canDispatchRuntimeManifest =
                     body === null &&
-                    !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node));
+                    !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode));
                 if (
                     !opts.unsafeEval &&
                     !canAotCompileFunctionConstructor(node) &&
@@ -356,8 +362,7 @@ function permanentLimitDiagnostics(
                 }
             } else if (
                 ts.isIdentifier(node) &&
-                ((node.text === "eval" && !opts.test262Observation) ||
-                    (node.text === "Function" && !opts.allowFunctionValueReference)) &&
+                node.text === "eval" && !opts.test262Observation &&
                 !opts.unsafeEval &&
                 isGlobalEvalOrFunctionValueReference(node, checker)
             ) {
@@ -545,12 +550,8 @@ function canAotCompileEvalCall(call: ts.CallExpression): boolean {
 }
 
 function canAotCompileFunctionConstructor(call: ts.CallExpression | ts.NewExpression): boolean {
-    const body = functionConstructorBodyText(call);
-    return body !== null && parseAotFunctionBodyConstant(body) !== null;
-}
-
-function canAotDispatchFunctionManifest(call: ts.CallExpression | ts.NewExpression): boolean {
-    return functionConstructorBodyArg(call) !== null;
+    return (call.arguments ?? []).every(argument => !ts.isSpreadElement(argument) &&
+        staticStringExpressionTexts(argument).length > 0);
 }
 
 function functionConstructorBodyText(call: ts.CallExpression | ts.NewExpression): string | null {
@@ -787,7 +788,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
     const usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
 
-    const { program, checker, entrySourceFile, libCoreDts } = buildProgram({
+    const programOptions = {
         entry: opts.entry,
         packageRoot: pkg,
         additionalRoots: opts.additionalRoots,
@@ -796,7 +797,38 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         ignoreCheckJsDirectiveRoots: opts.ignoreCheckJsDirectiveRoots,
         dynamicRequires,
         customConditions: opts.customConditions,
-    });
+    };
+    let built = buildProgram(programOptions);
+    const functionEntries = new Map<string, FunctionConstructorEntry>();
+    // Close the finite source graph transitively. Every admitted body goes
+    // through the same JS parser/binder and ordinary function lowering.
+    for (;;) {
+        let addedRoot = false;
+        const sources = finiteFunctionConstructorSources(built.program, [
+            { parameters: "", body: "" }, ...runtimeCode.functions,
+        ]);
+        for (const source of sources) {
+            const key = functionConstructorSourceKey(source);
+            if (functionEntries.has(key)) continue;
+            let entry: string | null = null;
+            if (functionConstructorSourceIsValid(source)) {
+                entry = path.join(buildDir, `function-source-${createHash("sha256").update(key).digest("hex")}.js`);
+                // Source strings are ECMAScript UTF-16 sequences, including
+                // isolated surrogates. TypeScript's BOM-aware source reader
+                // preserves them; UTF-8 fs encoding would replace those units.
+                await fs.writeFile(entry, Buffer.from("\ufeff" + functionConstructorExpressionSource(source), "utf16le"));
+                addedRoot = true;
+            }
+            functionEntries.set(key, { ...source, entry });
+        }
+        if (!addedRoot) break;
+        const roots = [...functionEntries.values()].flatMap(source => source.entry ? [source.entry] : []);
+        built = buildProgram({ ...programOptions,
+            additionalRoots: [...(opts.additionalRoots ?? []), ...roots],
+            isolatedScriptRoots: [...(opts.isolatedScriptRoots ?? []), ...roots],
+        });
+    }
+    const { program, checker, entrySourceFile, libCoreDts } = built;
     const staticSemanticsFailures = [
         ...controlStaticSemanticsDiagnostics(program),
         ...functionStaticSemanticsDiagnostics(program),
@@ -819,7 +851,6 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         nativeAddons,
         dynamicRequires,
         runtimeCode,
-        allowFunctionValueReference: !!opts.test262Observation,
         test262Observation: opts.test262Observation,
     });
     if (permanent.length > 0) {
@@ -855,6 +886,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         nativeAddons,
         dynamicRequires,
         runtimeCode,
+        functionEntries: [...functionEntries.values()],
         unsafeEval: opts.unsafeEval,
         test262Observation: opts.test262Observation,
     });

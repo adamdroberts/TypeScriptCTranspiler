@@ -225,44 +225,65 @@ static tsc_value_t function_prototype_call_body(void* env, tsc_value_t this_arg,
     return tsc_value_undefined();
 }
 
-static tsc_value_t function_constructor_empty_body(
-    void* env,
-    tsc_value_t this_arg,
-    tsc_array_t* args
-) {
-    (void)env;
-    (void)this_arg;
-    (void)args;
-    return tsc_value_undefined();
+static tsc_function_source_callback_t function_source_callback;
+
+void tsc_function_set_source_callback(tsc_function_source_callback_t callback) {
+    function_source_callback = callback;
+}
+
+tsc_value_t tsc_function_create_from_source(tsc_value_t (*factory)(void)) {
+    tsc_value_t new_target = tsc_value_current_new_target();
+    if (tsc_value_is_undefined(new_target)) new_target = tsc_value_current_callee();
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(
+        new_target, TSC_INTRINSIC_DEFAULT_FUNCTION_PROTOTYPE
+    );
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
+    tsc_value_t result = factory();
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
+    tsc_function_identity_set_prototype(identity, prototype);
+    identity->name = tsc_str_from_lit("anonymous", 9);
+    tsc_object_define(identity->props, tsc_str_from_lit("name", 4),
+        tsc_value_string(identity->name), false, false, true);
+    (void)prototype_root;
+    return result;
 }
 
 static tsc_value_t function_constructor_body(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    if (!args || args->len == 0) {
-        /* The empty source form has no runtime source uncertainty and can be
-         * represented directly without a parser or semantic delegation. */
-        tsc_value_t result = tsc_value_function_generic_named(
-            function_constructor_empty_body,
-            NULL,
-            0.0,
-            tsc_str_from_lit("anonymous", 9)
-        );
-        if (!tsc_value_is_undefined(tsc_value_current_new_target())) {
-            tsc_function_identity_set_prototype(
-                (tsc_function_identity_t*)value_ptr(result),
-                tsc_value_get_prototype_of(this_arg)
-            );
+    const size_t count = args ? args->len : 0;
+    /* Actual argument values have already been evaluated by the call boundary.
+     * Convert each parameter and then the body in source order. Decoded string
+     * pointers stay visible to the conservative collector across later calls. */
+    tsc_array_t* volatile strings = tsc_array_new(sizeof(tsc_str_t*), count ? count : 1);
+    for (size_t index = 0; index < count; index++) {
+        tsc_str_t* volatile string = tsc_value_to_string(TSC_ARR(tsc_value_t, args, index));
+        tsc_array_push_raw(strings, (const void*)&string);
+    }
+    tsc_str_t* volatile parameters = tsc_str_from_lit("", 0);
+    if (count > 1) {
+        tsc_array_t* parts = tsc_array_new(sizeof(tsc_str_t*), count);
+        tsc_str_t* comma = tsc_str_from_lit(",", 1);
+        for (size_t index = 0; index + 1 < count; index++) {
+            if (index) tsc_array_push_raw(parts, &comma);
+            tsc_str_t* string = TSC_ARR(tsc_str_t*, strings, index);
+            tsc_array_push_raw(parts, &string);
         }
+        parameters = tsc_str_concat_parts(parts);
+    }
+    tsc_str_t* volatile body = count ? TSC_ARR(tsc_str_t*, strings, count - 1) : tsc_str_from_lit("", 0);
+    tsc_value_t result = function_source_callback
+        ? function_source_callback(parameters, body) : tsc_value_undefined();
+    if (!tsc_value_is_undefined(result)) {
         return result;
     }
 #ifdef TSC_UNSAFE_EVAL
-    return tsc_builtin_function(NULL, tsc_value_undefined(), args);
+    return tsc_node_function_source(parameters, body);
 #else
     (void)args;
     tsc_throw_error(
         TSC_ERROR_EVAL,
-        tsc_str_from_cstr("Function constructor source is unavailable in ahead-of-time execution")
+        tsc_str_from_cstr("Function source is outside the finite AOT graph")
     );
     return tsc_value_undefined();
 #endif
@@ -419,6 +440,7 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
             1.0,
             tsc_str_from_lit("Function", 8)
         );
+        intrinsics->constructor_identity->construct_allocates_receiver = false;
 
         tsc_function_identity_set_prototype(intrinsics->prototype_identity, tsc_value_object_prototype());
         const tsc_value_t prototype = value_box(
