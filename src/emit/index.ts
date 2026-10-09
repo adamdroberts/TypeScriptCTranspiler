@@ -368,9 +368,10 @@ interface ClosureEnvBinding {
  * Every native control transfer leaves the same suffix, independent of the
  * number or interleaving of protected regions and iterator owners. */
 interface SyncCompletionScope {
-    readonly owner: ts.TryStatement | ts.ForOfStatement;
+    readonly owner: ts.Node;
     readonly frame: string;
     readonly iterator?: string;
+    readonly dispose?: string;
     readonly finallyEnvironment?: Map<ts.Symbol, ClosureEnvBinding>;
     readonly outerTryDepth: number;
     readonly controlDepths: readonly [number, number, number, number];
@@ -563,7 +564,8 @@ class Emitter {
     private activeContinueTargets: Array<string | null> = [];
     private activeLabeledBreakTargets: Array<Map<string, string>> = [];
     private activeLabeledContinueTargets: Array<Map<string, string | null>> = [];
-    private syncUsingScopes: string[][] = [];
+    private resourceCapabilityBindings = new Map<ts.VariableDeclaration, string>();
+    private emittingResourceBindings = new Set<ts.VariableDeclaration>();
     private syncCompletionScopes: SyncCompletionScope[] = [];
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
@@ -15188,6 +15190,7 @@ class Emitter {
             // Pass E: top-level statements. VariableStatements are split into
             // file-scope declarations + in-mod_init assignments so that other
             // top-level functions (including lifted arrows) can reference them.
+            this.emitResourceScope(initBuf, sf, this.directResourceDeclarations(statements), () => {
             for (const inner of statements) {
                 if (!inner) continue;
                 for (const commonJsClassExpression of this.commonJsClassExpressionsForStatement(inner)) {
@@ -15409,6 +15412,7 @@ class Emitter {
                 }
                 this.emitStmt(initBuf, inner);
             }
+            });
         } catch (e) {
             if (e instanceof UnsupportedError) {
                 this.diagnostics.push(formatUnsupported(e, sf));
@@ -23341,7 +23345,7 @@ class Emitter {
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0) return null;
         return {
             name: identifier.text,
-            immutable: (declaration.parent.flags & ts.NodeFlags.Const) !== 0,
+            immutable: (declaration.parent.flags & (ts.NodeFlags.Const | ts.NodeFlags.Using)) !== 0,
             declaration,
             identifier,
         };
@@ -24455,10 +24459,10 @@ class Emitter {
 
     private moduleVariableDeclarationKind(declaration: ts.VariableDeclaration): "var" | "lexical" | null {
         const source = declaration.getSourceFile();
-        if (!this.isJavaScriptSourceFile(source) || !ts.isExternalModule(source) || this.isTest262ScriptSourceFile(source) ||
+        if ((!this.isJavaScriptSourceFile(source) && this.resourceDeclarationHint(declaration) === null) ||
+            !ts.isExternalModule(source) || this.isTest262ScriptSourceFile(source) ||
             !ts.isVariableDeclarationList(declaration.parent)) return null;
         const list = declaration.parent;
-        if ((list.flags & ts.NodeFlags.Using) !== 0) return null;
         if ((list.flags & ts.NodeFlags.BlockScoped) !== 0)
             return ts.isVariableStatement(list.parent) && list.parent.parent === source ? "lexical" : null;
         for (let node: ts.Node | undefined = list.parent; node; node = node.parent) {
@@ -24496,7 +24500,8 @@ class Emitter {
     ): ModuleLexicalBindingPlan[] {
         const prepared = this.moduleLexicalBindingsBySource.get(sf);
         if (prepared) return prepared;
-        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf) ||
+        const resourceOnly = !this.isJavaScriptSourceFile(sf);
+        if (!ts.isExternalModule(sf) ||
             this.isTest262ScriptSourceFile(sf)) return [];
 
         const plans: ModuleLexicalBindingPlan[] = [];
@@ -24524,6 +24529,7 @@ class Emitter {
         };
         for (const statement of sf.statements) {
             if (ts.isClassDeclaration(statement)) {
+                if (resourceOnly) continue;
                 // Class declarations create mutable lexical bindings. Their
                 // values remain uninitialized until ClassDefinitionEvaluation
                 // completes, including static elements and decorators.
@@ -24534,14 +24540,10 @@ class Emitter {
             }
             if (!ts.isVariableStatement(statement)) continue;
             const flags = statement.declarationList.flags;
-            if ((flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) continue;
-            // AwaitUsing is a composite flag that includes Const; the Using
-            // bit alone distinguishes both resource-declaration forms from a
-            // plain `const` declaration.
-            if ((flags & ts.NodeFlags.Using) !== 0) continue;
+            if ((flags & ts.NodeFlags.BlockScoped) === 0 || resourceOnly && (flags & ts.NodeFlags.Using) === 0) continue;
             for (const declaration of statement.declarationList.declarations) {
                 for (const name of this.test262BindingNames(declaration.name))
-                    addPlan(declaration, name, (flags & ts.NodeFlags.Const) !== 0);
+                    addPlan(declaration, name, (flags & (ts.NodeFlags.Const | ts.NodeFlags.Using)) !== 0);
             }
         }
         this.moduleLexicalBindingsBySource.set(sf, plans);
@@ -25027,9 +25029,16 @@ class Emitter {
         initialize: BindingInitializationLeafEmitter,
     ): void {
         if (ts.isIdentifier(binding)) {
-            initialize(buf, binding, sourceValue);
+            const declaration = ts.isVariableDeclaration(binding.parent) ? binding.parent : null;
+            const value = this.resourceInitializationValue(declaration, sourceValue);
+            if (declaration) this.emittingResourceBindings.add(declaration);
+            try { initialize(buf, binding, value); } finally {
+                if (declaration) this.emittingResourceBindings.delete(declaration);
+            }
             return;
         }
+        if (ts.isVariableDeclaration(binding.parent) && this.resourceDeclarationHint(binding.parent) !== null)
+            unsupported(binding, "resource declarations require an initialized identifier binding");
 
         const source = this.freshTemp("_binding_source");
         const sourceRoot = this.freshTemp("_binding_source_gc_root");
@@ -29923,13 +29932,6 @@ class Emitter {
                     const caseType = expressionResultTypes[stateNode.caseResultSlot];
                     if (!caseType || caseType.kind !== "value") return false;
                 }
-            } else if (stateNode.kind === "await-dispose") {
-                for (const declaration of stateNode.declarations) {
-                    if (!ts.isIdentifier(declaration.name)) return false;
-                    const symbol = this.symbolForIdentifier(declaration.name);
-                    const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                    if (!local || local.type.kind !== "value") return false;
-                }
             } else if (stateNode.kind === "async-iterator-init") {
                 if (stateNode.sourceResultSlot !== null) {
                     const storageType = expressionResultTypes[stateNode.sourceResultSlot];
@@ -30058,6 +30060,8 @@ class Emitter {
             this.structDecls.line(`tsc_value_t binding_value_${slot};`);
             this.structDecls.line(`void* binding_value_${slot}_gc_root;`);
         }
+        for (const [slot] of graph.resourceScopes.entries())
+            this.structDecls.line(`tsc_dispose_capability_t* resource_scope_${slot};`);
         for (let slot = 0; slot < graph.iteratorCount; slot++) {
             this.structDecls.line(`tsc_sync_iterator_t iterator_${slot};`);
         }
@@ -30075,6 +30079,12 @@ class Emitter {
         this.protos.line(`void ${name}(void* env);`);
         this.protos.line(`static void ${name}_resume(void* env);`);
 
+        const resourceBindingsBefore = graph.resourceScopes.flatMap(scope => scope.declarations.map(declaration =>
+            [declaration, this.resourceCapabilityBindings.get(declaration)] as const));
+        try {
+        for (const [slot, scope] of graph.resourceScopes.entries())
+            for (const declaration of scope.declarations)
+                this.resourceCapabilityBindings.set(declaration, `state->resource_scope_${slot}`);
         const callback = new CBuf();
         const eh = this.freshTemp("_async_cfg_eh");
         callback.open(`static void ${name}_resume(void* env)`);
@@ -30144,6 +30154,9 @@ class Emitter {
             initializeLexical = false,
         ): void => {
             const lvalue = cfgFieldValue(field, env);
+            const declaration = field.symbol.valueDeclaration ?? field.symbol.declarations?.[0];
+            if (initializeLexical && declaration && ts.isVariableDeclaration(declaration))
+                value = {c: this.resourceInitializationValue(declaration, this.coerce(value, T_VALUE, node)), ty: T_VALUE};
             if (field.lexical) {
                 const staged = this.freshTemp("_async_cfg_lexical_value");
                 target.line(
@@ -31071,21 +31084,23 @@ class Emitter {
                         }
                     }
                     emitTransition(stateNode.miss.id);
-                } else if (stateNode.kind === "await-dispose") {
-                    const resourceValues: string[] = [];
-                    for (const declaration of stateNode.declarations) {
-                        if (!ts.isIdentifier(declaration.name)) return false;
-                        const symbol = this.symbolForIdentifier(declaration.name);
-                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (!local || local.type.kind !== "value") return false;
-                        resourceValues.push(cfgFieldValue(local));
-                    }
-                    emitPromiseSuspension(() => {
-                        const resources = this.freshTemp("_async_cfg_dispose_resources");
-                        callback.line(`tsc_value_t ${resources}[${resourceValues.length}] = { ${resourceValues.join(", ")} };`);
-                        return `tsc_promise_after_async_dispose_many(${resources}, ${resourceValues.length}, tsc_promise_resolve(tsc_value_undefined()))`;
-                    }, stateNode.exceptionTarget?.target.id ?? null);
-                    callback.line("state->awaiting = false;");
+                } else if (stateNode.kind === "resource-enter") {
+                    callback.line(`state->resource_scope_${stateNode.slot} = tsc_dispose_capability_new();`);
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "resource-dispose") {
+                    const capability = `state->resource_scope_${stateNode.slot}`;
+                    const completion = `&state->finalizations[${stateNode.region}]`;
+                    if (stateNode.asynchronous) {
+                        emitPromiseSuspension(() => `tsc_dispose_resources_async_step(${capability}, ${completion})`, stateNode.exceptionTarget?.target.id ?? null,
+                            {optional: true, preserveRejection: true});
+                        callback.open("if (state->receiver)");
+                        callback.line(`tsc_dispose_resources_async_resume(${capability}, ${completion}, state->receiver);`);
+                        callback.line("state->awaiting = false;");
+                        emitTransition(stateNode.id);
+                        callback.close();
+                        callback.line("state->awaiting = false;");
+                    } else callback.line(`tsc_dispose_resources_sync(${capability}, ${completion});`);
+                    callback.line(`${capability} = NULL;`);
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "expression-complete") {
                     const syncScope = new Map<ts.Expression, EmitResult>();
@@ -31192,13 +31207,7 @@ class Emitter {
                         emitTransition(stateNode.next!.id);
                     } else if (stateNode.completion?.kind === "return") {
                         result = normalizeCfgReturn(result, stateNode.expression);
-                        const resultType = this.prepareType(result.ty);
-                        const resultValue = this.freshTemp("_async_cfg_expression_return");
-                        callback.line(`${resultType.c} ${resultValue} = ${result.c};`);
-                        emitReturnValue(
-                            { c: resultValue, ty: resultType },
-                            stateNode.expression,
-                        );
+                        emitReturnValue(result, stateNode.expression);
                         if (stateNode.completion.target) {
                             emitTransition(stateNode.completion.target.id);
                         } else {
@@ -31424,10 +31433,7 @@ class Emitter {
                             emitCfgReturnExpression(completion.value),
                             completion.value,
                         );
-                        const returnedType = this.prepareType(returned.ty);
-                        const returnedValue = this.freshTemp("_async_cfg_pending_return");
-                        callback.line(`${returnedType.c} ${returnedValue} = ${returned.c};`);
-                        emitReturnValue({ c: returnedValue, ty: returnedType }, completion.value);
+                        emitReturnValue(returned, completion.value);
                     }
                     emitTransition(stateNode.target.id);
                 } else if (stateNode.kind === "finally-return-enter") {
@@ -31481,10 +31487,7 @@ class Emitter {
                         emitReturnSettlement();
                     } else {
                         const returned = this.emitExpr(completion.value);
-                        const returnedType = this.prepareType(returned.ty);
-                        const valueVar = this.freshTemp("_async_cfg_return");
-                        callback.line(`${returnedType.c} ${valueVar} = ${returned.c};`);
-                        emitReturnValue({ c: valueVar, ty: returnedType }, completion.value);
+                        emitReturnValue(returned, completion.value);
                         emitReturnSettlement();
                     }
                     callback.line("return;");
@@ -31628,6 +31631,12 @@ class Emitter {
             buf.line(`return ${result};`);
         }
         return true;
+        } finally {
+            for (const [declaration, previous] of resourceBindingsBefore) {
+                if (previous) this.resourceCapabilityBindings.set(declaration, previous);
+                else this.resourceCapabilityBindings.delete(declaration);
+            }
+        }
     }
 
     private emitAsyncBlockContinuation(
@@ -32735,6 +32744,17 @@ class Emitter {
         for (const d of list.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleVariableInitializer(buf, d)) continue;
+            if (this.resourceDeclarationHint(d) !== null && !this.emittingResourceBindings.has(d)) {
+                if (!ts.isIdentifier(d.name) || !d.initializer) unsupported(d, "resource declarations require an initialized identifier binding");
+                const acquired = this.freshTemp("_acquired_resource");
+                const value = this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer);
+                buf.line(`tsc_value_t const ${acquired} = ${this.resourceInitializationValue(d, value)};`);
+                this.emittingResourceBindings.add(d);
+                this.conditionValueScopes.push(new Map([[d.initializer, {c: acquired, ty: T_VALUE}]]));
+                try { this.emitVariableDeclarationList(buf, ts.factory.createVariableDeclarationList([d], list.flags)); }
+                finally { this.conditionValueScopes.pop(); this.emittingResourceBindings.delete(d); }
+                continue;
+            }
             const sharedFunction = (list.flags & ts.NodeFlags.BlockScoped) === 0 && ts.isIdentifier(d.name)
                 ? this.lexicalBindingForSymbol(this.symbolForIdentifier(d.name)) : null;
             if (sharedFunction && ts.isFunctionDeclaration(sharedFunction.declaration)) {
@@ -33261,11 +33281,14 @@ class Emitter {
     }
 
     private emitFor(buf: CBuf, fs: ts.ForStatement): void {
+        const declarations = fs.initializer && ts.isVariableDeclarationList(fs.initializer)
+            ? [...fs.initializer.declarations].filter(declaration => this.resourceDeclarationHint(declaration) !== null) : [];
+        this.emitResourceScope(buf, fs, declarations, () => this.emitForWithResourceScope(buf, fs));
+    }
+
+    private emitForWithResourceScope(buf: CBuf, fs: ts.ForStatement): void {
         const list = fs.initializer && ts.isVariableDeclarationList(fs.initializer)
             ? fs.initializer : null;
-        if (list && (list.flags & ts.NodeFlags.Using) !== 0) {
-            unsupported(fs, "synchronous completion cannot represent disposal scopes");
-        }
         const declarations = list ? lexicalDeclarationsFromList(list) : [];
         const varInitializer = !!list && declarations.length === 0;
         if (!varInitializer) buf.open("");
@@ -33540,25 +33563,10 @@ class Emitter {
         return this.createScopeLexicalBindings(buf, [declaration]);
     }
 
-    /** Disposal records have not yet joined the completion worklist. */
-    private assertSyncCompletionRepresentable(statement: ts.ForOfStatement | ts.TryStatement): void {
-        const pending: ts.Node[] = [statement];
-        let unavailable = this.syncUsingScopes.length > 0;
-        while (pending.length > 0 && !unavailable) {
-            const node = pending.pop()!;
-            if (ts.isFunctionLike(node)) continue;
-            if (ts.isVariableDeclarationList(node) &&
-                (node.flags & ts.NodeFlags.Using) !== 0) unavailable = true;
-            ts.forEachChild(node, child => { pending.push(child); });
-        }
-        if (unavailable) unsupported(statement, "synchronous completion cannot represent disposal scopes");
-    }
-
     private emitForOf(buf: CBuf, fos: ts.ForOfStatement): void {
         if (fos.awaitModifier) {
             unsupported(fos, "for-await-of requires a supported async continuation shape");
         }
-        this.assertSyncCompletionRepresentable(fos);
         const declaration = ts.isVariableDeclarationList(fos.initializer)
             ? fos.initializer.declarations[0] : undefined;
         // The RHS runs in the head's uninitialized lexical environment. Body
@@ -33620,6 +33628,8 @@ class Emitter {
         this.syncCompletionScopes.push(this.syncCompletionScope(fos, frame, record));
         this.tryDepth++;
         try {
+            const resources = declaration && this.resourceDeclarationHint(declaration) !== null ? [declaration] : [];
+            this.emitResourceScope(buf, fos.statement, resources, () => {
             if (lexical && declaration) {
                 this.emitBindingInitialization(buf, declaration.name, value, (target, identifier, source) => {
                     const binding = lexical.get(this.symbolForIdentifier(identifier)!);
@@ -33645,6 +33655,7 @@ class Emitter {
             this.registerLabeledContinueTarget(fos, continueTarget);
             this.emitLoopStmtInBlock(buf, fos.statement);
             if (continueTarget) buf.line(`${continueTarget}:;`);
+            });
         } finally {
             this.tryDepth--;
             this.syncCompletionScopes.pop();
@@ -34614,129 +34625,83 @@ class Emitter {
             this.lexicalBindingScopes.push(bodyScope);
             this.initializeScopeFunctions(buf, declarations);
         }
-        const disposables = this.syncUsingNames(statements);
-        let exited = false;
         this.localDynamicRootScopes.push(new Map());
-        if (disposables.length > 0) this.syncUsingScopes.push(disposables);
         try {
-            for (const stmt of statements) {
-                if (disposables.length > 0 && ts.isReturnStatement(stmt)) {
-                    this.emitReturn(buf, stmt);
-                    exited = true;
-                    break;
+            this.emitResourceScope(buf, owner ?? this.currentSf!, this.directResourceDeclarations(statements), () => {
+                for (const statement of statements) {
+                    this.emitStmt(buf, statement);
+                    if (this.statementAlwaysExits(statement)) break;
                 }
-                if (disposables.length > 0 && ts.isThrowStatement(stmt)) {
-                    this.emitThrow(buf, stmt);
-                    exited = true;
-                    break;
-                }
-                if (disposables.length > 0 && this.isDirectUsingExit(stmt)) {
-                    this.emitSyncDisposals(buf, disposables);
-                    exited = true;
-                }
-                this.emitStmt(buf, stmt);
-                if (this.statementAlwaysExits(stmt)) {
-                    exited = true;
-                    break;
-                }
-            }
-            if (!exited) this.emitSyncDisposals(buf, disposables);
+            });
         } finally {
-            if (disposables.length > 0) this.syncUsingScopes.pop();
             this.localDynamicRootScopes.pop();
             if (bodyScope && this.lexicalBindingScopes.pop() !== bodyScope) throw new Error("function body environment stack corruption");
             if (this.preallocatedFunctionVarCells.pop() !== preallocatedVars) throw new Error("function var allocation stack corruption");
         }
     }
 
-    private emitSyncDisposals(buf: CBuf, disposables: readonly string[]): void {
-        for (let i = disposables.length - 1; i >= 0; i--) {
-            buf.line(`tsc_value_dispose_sync(${disposables[i]!});`);
-        }
+    private resourceDeclarationHint(declaration: ts.VariableDeclaration): boolean | null {
+        const list = declaration.parent;
+        return ts.isVariableDeclarationList(list) && (list.flags & ts.NodeFlags.Using) !== 0
+            ? (list.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing : null;
     }
 
-    private emitActiveSyncDisposals(buf: CBuf): void {
-        for (let i = this.syncUsingScopes.length - 1; i >= 0; i--) {
-            this.emitSyncDisposals(buf, this.syncUsingScopes[i]!);
-        }
+    private directResourceDeclarations(statements: readonly ts.Statement[]): ts.VariableDeclaration[] {
+        return statements.flatMap(statement => ts.isVariableStatement(statement)
+            ? [...statement.declarationList.declarations].filter(declaration => this.resourceDeclarationHint(declaration) !== null) : []);
     }
 
-    private isDirectUsingExit(stmt: ts.Statement): boolean {
-        return ts.isReturnStatement(stmt) ||
-            ts.isThrowStatement(stmt) ||
-            ts.isBreakStatement(stmt) ||
-            ts.isContinueStatement(stmt);
+    private resourceInitializationValue(declaration: ts.VariableDeclaration | null, value: string): string {
+        if (!declaration) return value;
+        const hint = this.resourceDeclarationHint(declaration);
+        if (hint === null || this.emittingResourceBindings.has(declaration)) return value;
+        const capability = this.resourceCapabilityBindings.get(declaration);
+        if (!capability) unsupported(declaration, "resource declaration requires a canonical disposal scope");
+        return `tsc_dispose_capability_add(${capability}, ${value}, ${hint ? "true" : "false"})`;
     }
 
-    private syncUsingNames(
-        statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
-    ): string[] {
-        const names: string[] = [];
-        for (const stmt of statements) {
-            if (!ts.isVariableStatement(stmt)) continue;
-            const flags = stmt.declarationList.flags;
-            if ((flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing) {
-                unsupported(stmt, "await using declarations are not supported yet");
-            }
-            if ((flags & ts.NodeFlags.Using) === 0) continue;
-            for (const declaration of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name)) {
-                    unsupported(declaration, "using declarations require identifier bindings");
-                }
-                const type = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
-                if (type.kind !== "value") {
-                    unsupported(declaration, "using declarations currently require dynamic disposable values");
-                }
-                if (!this.shouldEmitLocalVariable(declaration)) {
-                    unsupported(declaration, "using declarations are only supported in local block scopes");
-                }
-                names.push(mangleIdent(declaration.name.text));
-            }
-        }
-        const firstUsingIndex = statements.findIndex(
-            (statement) => ts.isVariableStatement(statement) &&
-                (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
-        );
-        const directEarlyExitIndexes = statements
-            .map((statement, index) =>
-                this.isDirectUsingExit(statement) ? index : -1,
-            )
-            .filter((index) => index >= 0);
-        const hasUnsupportedEarlyExit = statements.some((statement) =>
-            !this.isDirectUsingExit(statement) &&
-            this.usingScopeHasUnsupportedEarlyExit(statement),
-        );
-        const hasEarlyExitBeforeUsing = directEarlyExitIndexes.some((index) => index < firstUsingIndex);
-        const hasUsingAfterEarlyExit = directEarlyExitIndexes.some((index) =>
-            statements.slice(index + 1).some(
-                (statement) => ts.isVariableStatement(statement) &&
-                    (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
-            ),
-        );
-        if (names.length > 0 && (hasUnsupportedEarlyExit || hasEarlyExitBeforeUsing || hasUsingAfterEarlyExit)) {
-            const usingStatement = statements.find(
-                (statement): statement is ts.VariableStatement =>
-                    ts.isVariableStatement(statement) &&
-                    (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
-            );
-            unsupported(
-                usingStatement ?? statements[0]!,
-                "using scopes only support local return/throw and direct loop-body break/continue cleanup after their declarations",
-            );
-        }
-        return names;
+    private emitSyncResourceDrain(buf: CBuf, capability: string, error?: string): void {
+        const completion = this.freshTemp("_disposal_completion");
+        buf.line(`tsc_completion_record_t ${completion};`);
+        buf.line(`tsc_completion_record_set(&${completion}, ${error ? "TSC_COMPLETION_THROW" : "TSC_COMPLETION_NORMAL"}, ${error ?? "tsc_value_undefined()"}, -1);`);
+        buf.line(`tsc_dispose_resources_sync(${capability}, &${completion});`);
+        buf.line(`if (${completion}.kind == TSC_COMPLETION_THROW) tsc_throw_value(${completion}.value);`);
     }
 
-    private usingScopeHasUnsupportedEarlyExit(node: ts.Node): boolean {
-        if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
-        if (node.kind === ts.SyntaxKind.BreakStatement || node.kind === ts.SyntaxKind.ContinueStatement) {
-            return true;
+    private emitResourceScope(buf: CBuf, owner: ts.Node, declarations: readonly ts.VariableDeclaration[], emitBody: () => void): void {
+        if (declarations.length === 0) { emitBody(); return; }
+        for (const declaration of declarations) {
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer && !ts.isForOfStatement(declaration.parent.parent))
+                unsupported(declaration, "resource declarations require an initialized identifier binding");
+            if (this.resourceDeclarationHint(declaration)) unsupported(declaration, "await using requires a resumable disposal scope");
         }
-        let found = false;
-        node.forEachChild((child) => {
-            if (!found && this.usingScopeHasUnsupportedEarlyExit(child)) found = true;
-        });
-        return found;
+        const capability = this.freshTemp("_dispose_capability"), frame = this.freshTemp("_disposal_frame");
+        buf.open("");
+        buf.line(`tsc_dispose_capability_t* const ${capability} = tsc_dispose_capability_new();`);
+        const scope = { ...this.syncCompletionScope(owner, frame), dispose: capability };
+        for (const declaration of declarations) this.resourceCapabilityBindings.set(declaration, capability);
+        buf.line(`TSC_TRY_FRAME(${frame});`);
+        buf.line(`tsc_try_push(&${frame});`);
+        buf.open(`if (setjmp(${frame}.jb) == 0)`);
+        this.syncCompletionScopes.push(scope);
+        this.tryDepth++;
+        try { emitBody(); } finally {
+            this.tryDepth--;
+            this.syncCompletionScopes.pop();
+            for (const declaration of declarations) this.resourceCapabilityBindings.delete(declaration);
+        }
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.open("else");
+        const error = this.freshTemp("_disposal_error"), root = this.freshTemp("_disposal_error_root");
+        buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
+        buf.line(`void* volatile ${root} = tsc_value_gc_root(${error});`);
+        buf.line("tsc_try_pop();");
+        this.emitSyncResourceDrain(buf, capability, error);
+        buf.line(`(void)${root};`);
+        buf.close();
+        this.emitSyncResourceDrain(buf, capability);
+        buf.close();
     }
 
     private statementAlwaysExits(stmt: ts.Statement): boolean {
@@ -35461,7 +35426,6 @@ class Emitter {
             this.asyncAwaitContinuationReturnTargets[this.asyncAwaitContinuationReturnTargets.length - 1];
         if (continuationReturn) {
             if (!r.expression) {
-                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
                 buf.line("return;");
@@ -35471,14 +35435,12 @@ class Emitter {
             const returnedType = this.prepareType(expr.ty);
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 buf.line(`${expr.c};`);
-                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
             } else {
                 const returnVar = this.freshTemp("_await_return");
                 const resolvedVar = this.freshTemp("_await_resolved");
                 buf.line(`${returnedType.c} ${returnVar} = ${expr.c};`);
-                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_t* ${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, r.expression)};`);
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, ${resolvedVar});`);
@@ -35489,7 +35451,6 @@ class Emitter {
         const asyncCtx = this.asyncFunctionStack[this.asyncFunctionStack.length - 1];
         if (asyncCtx) {
             if (!r.expression) {
-                this.emitActiveSyncDisposals(buf);
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
@@ -35498,44 +35459,19 @@ class Emitter {
                 !this.conditionValueScopes.some(scope => scope.has(r.expression!))) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
-                    if (this.syncUsingScopes.length > 0) {
-                        const sourceValue = this.freshTemp("_using_async_source");
-                        buf.line(`${awaitedSource.ty.c} const ${sourceValue} = ${awaitedSource.c};`);
-                        this.emitActiveSyncDisposals(buf);
-                        buf.line(`return tsc_promise_adopt(${sourceValue});`);
-                        return;
-                    }
-                    this.emitActiveSyncDisposals(buf);
                     buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
                     return;
                 }
             }
             const expr = this.emitExpr(r.expression);
             if (expr.ty.kind === "promise") {
-                if (this.syncUsingScopes.length > 0) {
-                    const promiseValue = this.freshTemp("_using_async_promise");
-                    buf.line(`${expr.ty.c} const ${promiseValue} = ${expr.c};`);
-                    this.emitActiveSyncDisposals(buf);
-                    buf.line(`return tsc_promise_adopt(${promiseValue});`);
-                    return;
-                }
-                this.emitActiveSyncDisposals(buf);
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
                 return;
             }
-            if (this.syncUsingScopes.length > 0) {
-                const resolvedValue = this.freshTemp("_using_async_resolved");
-                buf.line(`tsc_promise_t* const ${resolvedValue} = ${this.promiseResolveResult(expr, r.expression)};`);
-                this.emitActiveSyncDisposals(buf);
-                buf.line(`return ${resolvedValue};`);
-                return;
-            }
-            this.emitActiveSyncDisposals(buf);
             buf.line(`return ${this.promiseResolveResult(expr, r.expression)};`);
             return;
         }
         if (!r.expression) {
-            this.emitActiveSyncDisposals(buf);
             buf.line(ret.kind === "void" || ret.kind === "never"
                 ? "return;"
                 : `return ${this.zeroValue(ret)};`);
@@ -35544,13 +35480,6 @@ class Emitter {
         if (this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitExpr(r.expression);
         const coerced = this.coerce(expr, ret, r.expression);
-        if (this.syncUsingScopes.length > 0) {
-            const returnValue = this.freshTemp("_using_return");
-            buf.line(`${ret.c} const ${returnValue} = ${coerced};`);
-            this.emitActiveSyncDisposals(buf);
-            buf.line(`return ${returnValue};`);
-            return;
-        }
         buf.line(`return ${coerced};`);
     }
 
@@ -35584,7 +35513,6 @@ class Emitter {
         for (let i = 0; i < temps.length; i++) {
             buf.line(`${ctx.params[i]!.name} = ${temps[i]!.name};`);
         }
-        this.emitActiveSyncDisposals(buf);
         buf.line(`goto ${ctx.label};`);
         buf.close();
         return true;
@@ -35872,6 +35800,11 @@ class Emitter {
     }
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
+        const declarations = this.directResourceDeclarations(sw.caseBlock.clauses.flatMap(clause => [...clause.statements]));
+        this.emitResourceScope(buf, sw.caseBlock, declarations, () => this.emitSwitchWithResourceScope(buf, sw));
+    }
+
+    private emitSwitchWithResourceScope(buf: CBuf, sw: ts.SwitchStatement): void {
         this.assertExhaustiveSwitch(sw);
         const scriptCompletion = this.isTest262ScriptEvaluationNode(sw)
             ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
@@ -36135,12 +36068,6 @@ class Emitter {
         const e = this.emitExpr(t.expression);
         const asValue = this.coerce(e, T_VALUE, t.expression);
         let thrown = asValue;
-        if (this.syncUsingScopes.length > 0) {
-            const thrownValue = this.freshTemp("_using_throw");
-            buf.line(`tsc_value_t const ${thrownValue} = ${asValue};`);
-            this.emitActiveSyncDisposals(buf);
-            thrown = thrownValue;
-        }
         if (
             this.asyncFunctionStack.length > 0 &&
             this.tryDepth === 0 &&
@@ -36153,7 +36080,7 @@ class Emitter {
     }
 
     private syncCompletionScope(
-        owner: ts.TryStatement | ts.ForOfStatement,
+        owner: ts.Node,
         frame: string,
         iterator?: string,
         finallyEnvironment?: Map<ts.Symbol, ClosureEnvBinding>,
@@ -36226,6 +36153,7 @@ class Emitter {
     }
 
     private emitSyncFinally(buf: CBuf, scope: SyncCompletionScope): void {
+        if (scope.dispose) { this.emitSyncResourceDrain(buf, scope.dispose); return; }
         if (!ts.isTryStatement(scope.owner) || !scope.owner.finallyBlock) return;
         const previousDepth = this.tryDepth;
         const controls = [this.activeBreakTargets, this.activeContinueTargets,
@@ -36303,7 +36231,6 @@ class Emitter {
     }
 
     private emitTry(buf: CBuf, statement: ts.TryStatement): void {
-        this.assertSyncCompletionRepresentable(statement);
         buf.open("");
         const environment = this.emitFinallyEnvironment(buf, statement);
         const frame = this.freshTemp("_try_frame");
@@ -41820,14 +41747,12 @@ class Emitter {
         const outerContinuationReturnTargets = this.asyncAwaitContinuationReturnTargets;
         const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
         const outerTailFunctionStack = this.tailFunctionStack;
-        const outerSyncUsingScopes = this.syncUsingScopes;
         const outerSyncCompletionScopes = this.syncCompletionScopes;
         const outerTryDepth = this.tryDepth;
         this.asyncFunctionStack = [];
         this.asyncAwaitContinuationReturnTargets = [];
         this.asyncAwaitContinuationAdapterDepth = 0;
         this.tailFunctionStack = [];
-        this.syncUsingScopes = [];
         this.syncCompletionScopes = [];
         this.tryDepth = 0;
         try {
@@ -41923,7 +41848,6 @@ class Emitter {
             }
         } finally {
             this.tryDepth = outerTryDepth;
-            this.syncUsingScopes = outerSyncUsingScopes;
             this.syncCompletionScopes = outerSyncCompletionScopes;
             this.tailFunctionStack = outerTailFunctionStack;
             this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
@@ -58515,10 +58439,10 @@ class Emitter {
                 return { c: `(${recv.c}->errors ? ${recv.c}->errors : tsc_array_new(sizeof(tsc_value_t), 1))`, ty: arrayType(T_VALUE) };
             }
             if (pa.name.text === "error" && this.isSuppressedErrorExpression(pa.expression)) {
-                return { c: `${recv.c}->error`, ty: T_VALUE };
+                return { c: `tsc_value_get_prop(tsc_value_error(${recv.c}), ${this.stringLit("error")})`, ty: T_VALUE };
             }
             if (pa.name.text === "suppressed" && this.isSuppressedErrorExpression(pa.expression)) {
-                return { c: `${recv.c}->suppressed`, ty: T_VALUE };
+                return { c: `tsc_value_get_prop(tsc_value_error(${recv.c}), ${this.stringLit("suppressed")})`, ty: T_VALUE };
             }
         }
         if (recv.ty.kind === "class") {

@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Capture resource methods and receiver roots at BindingInitialization in one DisposeCapability collection. Share LIFO cleanup with ordinary/resumable completions and iterator close, preserve suppression and exact semantic Await timing, publish ordinary SuppressedError properties, and delete lazy/name-list/aggregate-Promise disposal. Verify independent semantic partitions, deep native ownership and typed E2E in both memory modes.
+
 - Resolve JSON defaults and namespace References through the shared Module export graph. Borrow synthetic cells into retained Module environments, preserve local/named/star reexports and namespace identity through diamonds/cycles, and delete name-based/single-step predecessors. Verify Node loader comparisons and deep native ownership in both memory modes.
 
 - Allocate Module BoundNames into shared cells and initialize declarations and iteration through the canonical binding tree. Preserve TDZ/default/rest/close semantics and live BindingElement exports; delete flat initializer and declaration-symbol predecessors and verify CLI/profile native E2E in both memory modes.

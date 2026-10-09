@@ -1,0 +1,3 @@
+{
+  "description": "Captured resource methods, raw throw suppression, ordinary error properties and implicit async disposal compose through the shared completion worklist"
+}

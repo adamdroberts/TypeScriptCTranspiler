@@ -17587,6 +17587,8 @@ tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
     e->errors = NULL;
     e->error = tsc_value_undefined();
     e->suppressed = tsc_value_undefined();
+    e->error_gc_root = NULL;
+    e->suppressed_gc_root = NULL;
     e->is_suppressed = false;
     e->object = NULL;
     return e;
@@ -17614,6 +17616,8 @@ tsc_error_t* tsc_suppressed_error_new(tsc_value_t error, tsc_value_t suppressed,
     tsc_error_t* e = tsc_error_new_named(tsc_str_from_lit("SuppressedError", 15), message);
     e->error = error;
     e->suppressed = suppressed;
+    e->error_gc_root = tsc_value_gc_root(error);
+    e->suppressed_gc_root = tsc_value_gc_root(suppressed);
     e->is_suppressed = true;
     return e;
 }

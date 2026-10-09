@@ -3945,38 +3945,128 @@ tsc_value_t tsc_value_get_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     return tsc_value_undefined();
 }
 
-void tsc_value_dispose_sync(tsc_value_t value) {
-    if (tsc_value_is_nullish(value)) return;
-    tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_dispose());
-    if (tsc_value_is_undefined(method) || tsc_value_is_nullish(method)) {
-        tsc_throw_str(tsc_str_from_cstr("Object is not disposable"));
-    }
-    if (!tsc_value_is_callable(method)) {
-        tsc_throw_str(tsc_str_from_cstr("Symbol.dispose is not callable"));
-    }
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-    (void)tsc_value_apply_function(method, value, tsc_value_array(args));
+/* A scope owns one acquired-resource stack. Entries capture GetMethod at
+ * initialization, and retain decoded roots independently of binding storage. */
+typedef struct tsc_disposable_resource {
+    struct tsc_disposable_resource* previous;
+    tsc_value_t value;
+    tsc_value_t method;
+    void* value_gc_root;
+    void* method_gc_root;
+    bool asynchronous;
+    bool synchronous_fallback;
+} tsc_disposable_resource_t;
+
+struct tsc_dispose_capability {
+    tsc_disposable_resource_t* top;
+    tsc_disposable_resource_t* current;
+    tsc_promise_t* pending;
+    bool needs_await;
+    bool has_awaited;
+};
+
+tsc_dispose_capability_t* tsc_dispose_capability_new(void) {
+    tsc_dispose_capability_t* capability = TSC_GC_MALLOC(sizeof(*capability));
+    *capability = (tsc_dispose_capability_t){0};
+    return capability;
 }
 
-tsc_promise_t* tsc_value_dispose_async(tsc_value_t value) {
-    if (tsc_value_is_nullish(value)) return tsc_promise_resolve(tsc_value_undefined());
-    tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_dispose());
-    if (tsc_value_is_undefined(method) || tsc_value_is_nullish(method)) {
-        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("Object is not asynchronously disposable")));
+tsc_value_t tsc_dispose_capability_add(tsc_dispose_capability_t* capability, tsc_value_t value, bool asynchronous) {
+    tsc_value_t method = tsc_value_undefined();
+    bool fallback = false;
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    if (tsc_value_is_nullish(value)) {
+        if (!asynchronous) return value;
+    } else {
+        if (!tsc_value_is_object(value))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Disposable resource must be an object"));
+        if (asynchronous) method = tsc_value_get_symbol_prop(value, tsc_symbol_async_dispose());
+        if (!asynchronous || tsc_value_is_nullish(method)) {
+            method = tsc_value_get_symbol_prop(value, tsc_symbol_dispose());
+            fallback = asynchronous;
+        }
+        if (!tsc_value_is_callable(method))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Resource disposal method is not callable"));
     }
-    if (!tsc_value_is_callable(method)) {
-        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("Symbol.asyncDispose is not callable")));
+    void* volatile method_gc_root = tsc_value_gc_root(method);
+    tsc_disposable_resource_t* resource = TSC_GC_MALLOC(sizeof(*resource));
+    *resource = (tsc_disposable_resource_t){ .previous = capability->top,
+        .value = value, .method = method, .value_gc_root = value_gc_root,
+        .method_gc_root = method_gc_root, .asynchronous = asynchronous,
+        .synchronous_fallback = fallback };
+    capability->top = resource;
+    return value;
+}
+
+static void dispose_accumulate_error(tsc_completion_record_t* completion, tsc_value_t error) {
+    void* volatile error_gc_root = tsc_value_gc_root(error);
+    if (completion->kind == TSC_COMPLETION_THROW)
+        error = tsc_value_error(tsc_suppressed_error_new(error, completion->value, NULL));
+    tsc_completion_record_set(completion, TSC_COMPLETION_THROW, error, -1);
+    (void)error_gc_root;
+}
+
+/* Return only the next semantic Await operand. The resumable graph awaits
+ * it directly and re-enters this worklist; there is no aggregate Promise or
+ * extra reaction between DisposeResources and its enclosing completion. */
+tsc_promise_t* tsc_dispose_resources_async_step(tsc_dispose_capability_t* capability, tsc_completion_record_t* completion) {
+    while (capability->top) {
+        tsc_disposable_resource_t* resource = capability->top;
+        if (!resource->asynchronous && capability->needs_await && !capability->has_awaited) {
+            capability->needs_await = false;
+            return capability->pending = tsc_promise_resolve(tsc_value_undefined());
+        }
+        capability->top = resource->previous;
+        capability->current = resource;
+        if (tsc_value_is_undefined(resource->method)) {
+            capability->needs_await = true;
+            capability->current = NULL;
+            continue;
+        }
+        TSC_TRY_FRAME(frame);
+        tsc_try_push(&frame);
+        if (setjmp(frame.jb) == 0) {
+            tsc_value_t result = tsc_value_apply_function(resource->method, resource->value,
+                tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 0)));
+            tsc_try_pop();
+            if (resource->asynchronous) {
+                capability->has_awaited = true;
+                capability->pending = resource->synchronous_fallback
+                    ? tsc_promise_resolve(tsc_value_undefined()) : tsc_promise_resolve_thenable(result);
+                capability->current = NULL;
+                return capability->pending;
+            }
+        } else {
+            tsc_value_t error = tsc_current_error_value();
+            void* volatile error_gc_root = tsc_value_gc_root(error);
+            tsc_try_pop();
+            if (resource->synchronous_fallback) {
+                capability->has_awaited = true;
+                capability->pending = tsc_promise_reject(error);
+                capability->current = NULL;
+                return capability->pending;
+            }
+            dispose_accumulate_error(completion, error);
+            (void)error_gc_root;
+        }
+        capability->current = NULL;
     }
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-        tsc_value_t result = tsc_value_apply_function(method, value, tsc_value_array(args));
-        tsc_try_pop();
-        return tsc_promise_resolve_thenable(result);
+    if (capability->needs_await && !capability->has_awaited) {
+        capability->needs_await = false;
+        return capability->pending = tsc_promise_resolve(tsc_value_undefined());
     }
-    tsc_try_pop();
-    return tsc_promise_reject(tsc_current_error_value());
+    return NULL;
+}
+
+void tsc_dispose_resources_async_resume(tsc_dispose_capability_t* capability,
+        tsc_completion_record_t* completion, tsc_promise_t* settled) {
+    if (tsc_promise_is_rejected(settled)) dispose_accumulate_error(completion, tsc_promise_reason(settled));
+    capability->pending = NULL;
+}
+
+void tsc_dispose_resources_sync(tsc_dispose_capability_t* capability, tsc_completion_record_t* completion) {
+    if (tsc_dispose_resources_async_step(capability, completion))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Asynchronous resource requires a resumable disposal scope"));
 }
 
 static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
@@ -8355,6 +8445,12 @@ tsc_value_t tsc_value_error(tsc_error_t* e) {
     );
     o->prototype_gc_root = tsc_value_gc_root(o->prototype);
     e->object = o;
+    if (e->is_suppressed) {
+        (void)tsc_object_define(o, tsc_str_from_lit("error", 5), e->error, true, false, true);
+        (void)tsc_object_define(o, tsc_str_from_lit("suppressed", 10), e->suppressed, true, false, true);
+        e->error_gc_root = NULL;
+        e->suppressed_gc_root = NULL;
+    }
     return tsc_value_object(o);
 }
 

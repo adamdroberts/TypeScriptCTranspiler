@@ -190,9 +190,17 @@ type AsyncControlFlowStateCore =
 
 
     | {
-        readonly kind: "await-dispose";
+        readonly kind: "resource-enter";
         readonly id: number;
-        readonly declarations: readonly ts.VariableDeclaration[];
+        readonly slot: number;
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "resource-dispose";
+        readonly id: number;
+        readonly slot: number;
+        readonly region: number;
+        readonly asynchronous: boolean;
         readonly next: AsyncControlFlowTarget;
     }
     | {
@@ -320,6 +328,7 @@ export interface AsyncControlFlowGraph {
     readonly iteratorCount: number;
     readonly asyncIteratorCount: number;
     readonly bindingValueCount: number;
+    readonly resourceScopes: readonly { readonly declarations: readonly ts.VariableDeclaration[]; readonly asynchronous: boolean }[];
     readonly expressionSyncs: readonly ts.Expression[];
     readonly expressionResults: readonly ts.Expression[];
     readonly operationResultSlots: ReadonlySet<number>;
@@ -356,6 +365,8 @@ export function planAsyncControlFlowGraph(
     const states: AsyncControlFlowState[] = [];
     const declarations: ts.VariableDeclaration[] = [];
     const bindingIdentifiers: ts.Identifier[] = [];
+    const resourceScopes: Array<{declarations: readonly ts.VariableDeclaration[]; asynchronous: boolean}> = [];
+    const resourceBindings = new Map<ts.VariableDeclaration, number>();
     let supported = true;
     let awaitCount = 0;
     let loopAwaitDepth = 0;
@@ -427,7 +438,9 @@ export function planAsyncControlFlowGraph(
                 current.label
                 ? current.label.text
                 : null;
-            if (ts.isAwaitExpression(current) || ((options.suspensionKind === "generator" || options.suspensionKind === "async-generator") && ts.isYieldExpression(current)) || ts.isReturnStatement(current) ||
+            if (ts.isAwaitExpression(current) ||
+                (ts.isVariableDeclarationList(current) && (current.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing) ||
+                ((options.suspensionKind === "generator" || options.suspensionKind === "async-generator") && ts.isYieldExpression(current)) || ts.isReturnStatement(current) ||
                 (labelledCompletion !== null && labelledCompletion !== localLabel)) {
                 ok = false;
                 return;
@@ -947,12 +960,10 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
-        const firstAwaitUsing = sequence.findIndex((statement) =>
-            ts.isVariableStatement(statement) &&
-            (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing);
-        if (firstAwaitUsing >= 0) {
-            return buildAwaitUsingScope(sequence, firstAwaitUsing, next, context);
-        }
+        const firstResource = sequence.findIndex(statement => ts.isVariableStatement(statement) &&
+            (statement.declarationList.flags & ts.NodeFlags.Using) !== 0 &&
+            statement.declarationList.declarations.some(declaration => !resourceBindings.has(declaration)));
+        if (firstResource >= 0) return buildResourceScope(sequence, firstResource, next, context);
         let entry = next;
         for (let index = sequence.length - 1; index >= 0 && supported; index--) {
             entry = buildStatement(sequence[index]!, entry, context);
@@ -980,7 +991,7 @@ export function planAsyncControlFlowGraph(
     const buildFinalizationRegion = (
         next: AsyncControlFlowTarget,
         context: BuildContext,
-        buildFinalizer: (exit: AsyncControlFlowTarget) => AsyncControlFlowTarget,
+        buildFinalizer: (exit: AsyncControlFlowTarget, region: number) => AsyncControlFlowTarget,
         buildProtected: (
             normalEnter: AsyncControlFlowTarget,
             throwEnter: AsyncControlFlowTarget,
@@ -990,7 +1001,7 @@ export function planAsyncControlFlowGraph(
         const region = finallyCount++;
         const finallyExitId = reserve();
         const finallyExitTarget = target(finallyExitId);
-        const finallyEntry = buildFinalizer(finallyExitTarget);
+        const finallyEntry = buildFinalizer(finallyExitTarget, region);
 
         const normalEnterId = reserve();
         const normalEnter = setState({
@@ -1062,56 +1073,47 @@ export function planAsyncControlFlowGraph(
         return buildProtected(normalEnter, throwEnter, protectedContext);
     };
 
-    const buildAwaitUsingScope = (
+    const buildResourceRegion = (
+        resources: readonly ts.VariableDeclaration[],
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+        buildProtected: (next: AsyncControlFlowTarget, context: BuildContext) => AsyncControlFlowTarget,
+    ): AsyncControlFlowTarget => {
+        if (resources.some(declaration => !ts.isIdentifier(declaration.name))) {
+            supported = false;
+            return next;
+        }
+        const asynchronous = resources.some(declaration =>
+            (declaration.parent.flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing);
+        const slot = resourceScopes.push({declarations: resources, asynchronous}) - 1;
+        for (const declaration of resources) resourceBindings.set(declaration, slot);
+        return buildFinalizationRegion(next, context, (finallyExit, region) => {
+            const id = reserve();
+            if (asynchronous) awaitCount++;
+            return setState({kind: "resource-dispose", id, slot, region, asynchronous, next: finallyExit}, context.exceptionTarget);
+        }, (normalEnter, throwEnter, protectedContext) => {
+            const entry = buildProtected(normalEnter, {...protectedContext, exceptionTarget: {target: throwEnter}});
+            const id = reserve();
+            return setState({kind: "resource-enter", id, slot, next: entry}, context.exceptionTarget);
+        });
+    };
+
+    const buildResourceScope = (
         sequence: readonly ts.Statement[],
-        firstAwaitUsing: number,
+        firstResource: number,
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
-        const prefix = sequence.slice(0, firstAwaitUsing);
-        const protectedStatements = sequence.slice(firstAwaitUsing);
-        const resources: ts.VariableDeclaration[] = [];
-        const normalized = protectedStatements.map((statement) => {
-            if (!ts.isVariableStatement(statement) ||
-                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== ts.NodeFlags.AwaitUsing) {
-                return statement;
-            }
-            for (const declaration of statement.declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-                    supported = false;
-                    return statement;
-                }
-                resources.push(declaration);
-            }
-            return ts.factory.createVariableStatement(
-                statement.modifiers,
-                ts.factory.createVariableDeclarationList(
-                    statement.declarationList.declarations,
-                    ts.NodeFlags.Const,
-                ),
-            );
-        });
-        if (!supported || resources.length === 0) return next;
-        const protectedEntry = buildFinalizationRegion(
-            next,
-            context,
-            (finallyExit) => {
-                const id = reserve();
-                awaitCount++;
-                return setState({
-                    kind: "await-dispose",
-                    id,
-                    declarations: resources,
-                    next: finallyExit,
-                }, context.exceptionTarget);
-            },
-            (normalEnter, throwEnter, protectedContext) => buildSequence(
-                normalized,
-                normalEnter,
-                { ...protectedContext, exceptionTarget: { target: throwEnter } },
-            ),
-        );
-        return buildSequence(prefix, protectedEntry, context);
+        const protectedStatements = sequence.slice(firstResource);
+        const resources = protectedStatements.flatMap(statement => ts.isVariableStatement(statement) &&
+            (statement.declarationList.flags & ts.NodeFlags.Using) !== 0 ? [...statement.declarationList.declarations] : []);
+        if (resources.some(declaration => !declaration.initializer)) {
+            supported = false;
+            return next;
+        }
+        const entry = buildResourceRegion(resources, next, context,
+            (normal, protectedContext) => buildSequence(protectedStatements, normal, protectedContext));
+        return buildSequence(sequence.slice(0, firstResource), entry, context);
     };
 
     const buildLoop = (
@@ -1120,6 +1122,11 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
+        if (ts.isForStatement(statement) && statement.initializer && ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.Using) !== 0 &&
+            statement.initializer.declarations.some(declaration => !resourceBindings.has(declaration)))
+            return buildResourceRegion([...statement.initializer.declarations], next, context,
+                (normal, protectedContext) => buildLoop(statement, normal, protectedContext, label));
         const conditionId = reserve();
         const conditionTarget = target(conditionId);
         const headList = ts.isForStatement(statement) && statement.initializer &&
@@ -1301,17 +1308,26 @@ export function planAsyncControlFlowGraph(
             exceptionTarget: { target: closeThrow },
             returnTarget: closeReturn,
         };
-        const bodyEntry = ts.isBlock(statement.statement)
-            ? buildLexicalBlock(statement.statement, nextTarget, bodyContext)
-            : buildSequence([statement.statement], nextTarget, bodyContext);
-        const bound = buildBindingFromValueSlot(binding, bodyEntry, bodyContext, assignmentTargets);
-        if (!bound) {
+        let bindingValueSlot = -1;
+        const buildIteration = (bodyNext: AsyncControlFlowTarget, iterationContext: BuildContext): AsyncControlFlowTarget => {
+            const bodyEntry = ts.isBlock(statement.statement)
+                ? buildLexicalBlock(statement.statement, bodyNext, iterationContext)
+                : buildSequence([statement.statement], bodyNext, iterationContext);
+            const bound = buildBindingFromValueSlot(binding, bodyEntry, iterationContext, assignmentTargets);
+            if (!bound) { supported = false; return bodyNext; }
+            bindingValueSlot = bound.valueSlot;
+            return bound.entry;
+        };
+        const resources = ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.Using) !== 0 ? [...statement.initializer.declarations] : [];
+        const bindingEntry = resources.length > 0
+            ? buildResourceRegion(resources, nextTarget, bodyContext, buildIteration)
+            : buildIteration(nextTarget, bodyContext);
+        if (!supported || bindingValueSlot < 0) {
             currentLoopDepth--;
             supported = false;
             return next;
         }
-        const bindingEntry = bound.entry;
-        const bindingValueSlot = bound.valueSlot;
         currentLoopDepth--;
         const nextState = {
             id: nextId,
@@ -1755,7 +1771,8 @@ export function planAsyncControlFlowGraph(
             case "scope-enter":
             case "scope-clone":
             case "expression-sync":
-            case "await-dispose":
+            case "resource-enter":
+            case "resource-dispose":
             case "catch-bind":
             case "binding-init":
                 targets.push(state.next);
@@ -1842,7 +1859,7 @@ export function planAsyncControlFlowGraph(
     }
     const reachableStates = states.filter((state) => reachableIds.has(state.id));
     const reachableAwaitCount = reachableStates.reduce((count, state) => count + (
-        state.kind === "await-dispose" ||
+        state.kind === "resource-dispose" && state.asynchronous ||
         state.kind === "async-iterator-next" || state.kind === "async-iterator-close" ||
         state.kind === "resumable-expression" && state.operation.kind === "suspend" ||
         (state.kind === "return-route" && state.completion.awaitExpr !== null)
@@ -1869,6 +1886,7 @@ export function planAsyncControlFlowGraph(
         iteratorCount,
         asyncIteratorCount,
         bindingValueCount,
+        resourceScopes,
         expressionSyncs,
         expressionResults,
         operationResultSlots,
