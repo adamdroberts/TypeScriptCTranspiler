@@ -1561,6 +1561,95 @@ tsc_array_t* tsc_array_set_value_codec(
     return array;
 }
 
+static bool array_native_has_tag(tsc_value_t value, uint64_t tag) {
+    return value_is_box(value) && value_tag(value) == tag;
+}
+
+static bool array_native_element_kind_matches(tsc_value_t value, tsc_native_element_kind_t kind) {
+    switch (kind) {
+        case TSC_NATIVE_ELEMENT_NUMBER: return !value_is_box(value);
+        case TSC_NATIVE_ELEMENT_BOOLEAN:
+            return array_native_has_tag(value, TSC_VALUE_TAG_TRUE) || array_native_has_tag(value, TSC_VALUE_TAG_FALSE);
+        case TSC_NATIVE_ELEMENT_STRING: return array_native_has_tag(value, TSC_VALUE_TAG_STRING);
+        case TSC_NATIVE_ELEMENT_BIGINT: return array_native_has_tag(value, TSC_VALUE_TAG_BIGINT);
+        case TSC_NATIVE_ELEMENT_SYMBOL: return array_native_has_tag(value, TSC_VALUE_TAG_SYMBOL);
+        case TSC_NATIVE_ELEMENT_ARRAY: return array_native_has_tag(value, TSC_VALUE_TAG_ARRAY);
+        case TSC_NATIVE_ELEMENT_OBJECT: return array_native_has_tag(value, TSC_VALUE_TAG_OBJECT);
+        case TSC_NATIVE_ELEMENT_FUNCTION: return tsc_value_is_callable(value);
+        case TSC_NATIVE_ELEMENT_UNDEFINED: return array_native_has_tag(value, TSC_VALUE_TAG_UNDEFINED);
+        default: return false;
+    }
+}
+
+static _Noreturn void array_native_representation_failure(void) {
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array cannot preserve identity through this native element representation"));
+}
+
+/* One owner retains all Array identity, properties, holes and iterator state.
+ * A published native codec is its physical contract: subsequent matching
+ * consumers borrow the allocation without touching any indexed property.
+ * Boxed storage may adopt a native codec only after every stored value survives
+ * an exact round trip. Raw cells deliberately skip getters and prototypes.
+ * A source Array literal can also change its initial codec before exposure;
+ * incompatible existing native views fail closed instead of making a copy. */
+tsc_array_t* tsc_array_require_native_representation(
+    tsc_value_t value, size_t element_size,
+    tsc_array_box_element_fn box_element,
+    tsc_array_unbox_element_fn unbox_element,
+    tsc_native_element_kind_t kind, bool fresh_literal
+) {
+    if (!array_native_has_tag(value, TSC_VALUE_TAG_ARRAY) || !value_ptr(value)) {
+        array_native_representation_failure();
+    }
+    tsc_array_t* array = (tsc_array_t*)value_ptr(value);
+    if (!box_element && !unbox_element) return array;
+    if (!box_element || !unbox_element || !element_size) array_native_representation_failure();
+    if (array->es == element_size && array->box_element == box_element && array->unbox_element == unbox_element) return array;
+    if (array->is_lazy_generator ||
+        (!fresh_literal && (array->box_element || array->unbox_element)) ||
+        (!array->box_element && array->es != sizeof(tsc_value_t))) {
+        array_native_representation_failure();
+    }
+    if (array->cap > SIZE_MAX / element_size) array_native_representation_failure();
+    void* volatile converted = array->cap ? TSC_GC_MALLOC(array->cap * element_size) : NULL;
+    if (converted) memset(converted, 0, array->cap * element_size);
+    volatile bool supported = true;
+    TSC_TRY_FRAME(conversion_frame);
+    tsc_try_push(&conversion_frame);
+    if (setjmp(conversion_frame.jb) == 0) {
+        for (size_t index = 0; index < array->len; index++) {
+            if (!tsc_array_index_present(array, index)) continue;
+            if (array->props && tsc_object_has_own(array->props, tsc_str_from_int((int64_t)index))) continue;
+            tsc_value_t current;
+            const void* input = (const char*)array->data + index * array->es;
+            if (array->box_element) current = array->box_element(input);
+            else memcpy(&current, input, sizeof(current));
+            void* volatile current_gc_root = tsc_value_gc_root(current);
+            void* output = (char*)converted + index * element_size;
+            if (!array_native_element_kind_matches(current, kind) || !unbox_element(current, output) ||
+                !tsc_value_object_is(current, box_element(output))) {
+                supported = false;
+                break;
+            }
+            (void)current_gc_root;
+        }
+        tsc_try_pop();
+    } else {
+        tsc_try_pop();
+        supported = false;
+    }
+    if (!supported) array_native_representation_failure();
+    array->data = converted;
+    array->es = element_size;
+    array->box_element = box_element;
+    array->unbox_element = unbox_element;
+    /* Native cells contain scanned pointers rather than hidden NaN payloads.
+     * Old buffers can still be borrowed by a surrounding native operation;
+     * the collector reclaims them once those borrowers have returned. */
+    array->value_roots = NULL;
+    return array;
+}
+
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n) {
     tsc_array_t* a = tsc_array_new(elem_size, n > 0 ? n : 1);
     if (n > 0) memcpy(a->data, src, n * elem_size);

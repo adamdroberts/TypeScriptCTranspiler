@@ -136,6 +136,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Preserve Array identity across boxed/native boundaries through one owner, matching codecs and a validated raw-cell representation worklist. Retain alias mutations, descriptors, holes and metadata without extra getters; delete conversion-copy fallbacks and fail closed on incompatible native views.
+
 - Retain boxed native class/interface fields through owner-held decoded roots and one shared store, including static cells and reflective writes. Preserve ordinary assignment order, physical field reads and inherited prefixes; expose interface fields through shared adapters and fail closed on incompatible layouts or suspended field references.
 
 - Replaced the fixed variadic `String.fromCharCode` / `String.fromCodePoint` ABI with one arbitrary-width runtime value worklist, ordered `ToNumber` conversion, defined modulo-2^16 code-unit conversion, native `RangeError` validation, spread support, and ordinary `ToPropertyKey` handling for dynamically typed String indexes. Realm-owned `String` constructors now expose stable ordinary `fromCharCode`, `fromCodePoint`, and `raw` built-ins with the specified metadata and mutable descriptors; dynamic method lookup occurs before argument evaluation. Added compact dual-memory semantic partitions and one generated representative wide-list stress.

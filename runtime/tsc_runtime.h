@@ -639,6 +639,18 @@ typedef struct tsc_object tsc_object_t;
 /* ------------- arrays ------------- */
 typedef tsc_value_t (*tsc_array_box_element_fn)(const void* element);
 typedef bool (*tsc_array_unbox_element_fn)(tsc_value_t value, void* element);
+typedef enum {
+    TSC_NATIVE_ELEMENT_NUMBER,
+    TSC_NATIVE_ELEMENT_BOOLEAN,
+    TSC_NATIVE_ELEMENT_STRING,
+    TSC_NATIVE_ELEMENT_BIGINT,
+    TSC_NATIVE_ELEMENT_SYMBOL,
+    TSC_NATIVE_ELEMENT_ARRAY,
+    TSC_NATIVE_ELEMENT_OBJECT,
+    TSC_NATIVE_ELEMENT_FUNCTION,
+    TSC_NATIVE_ELEMENT_UNDEFINED,
+    TSC_NATIVE_ELEMENT_UNSUPPORTED
+} tsc_native_element_kind_t;
 
 typedef struct tsc_array {
     size_t len;
@@ -706,6 +718,12 @@ tsc_array_t* tsc_array_set_value_codec(
     tsc_array_t* array,
     tsc_array_box_element_fn box_element,
     tsc_array_unbox_element_fn unbox_element
+);
+tsc_array_t* tsc_array_require_native_representation(
+    tsc_value_t value, size_t element_size,
+    tsc_array_box_element_fn box_element,
+    tsc_array_unbox_element_fn unbox_element,
+    tsc_native_element_kind_t kind, bool fresh_literal
 );
 tsc_array_t* tsc_array_prototype(void);
 void tsc_array_initialize_generator(tsc_array_t* array);

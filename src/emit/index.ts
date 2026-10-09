@@ -76476,6 +76476,22 @@ class Emitter {
         return this.coerce({ c: value, ty: type }, T_VALUE, node);
     }
 
+    private nativeArrayRepresentation(value: EmitResult, target: CType, node: ts.Node): string {
+        if (target.kind !== "array" || !target.elem) unsupported(node, "native Array requires an element representation");
+        const element = target.elem;
+        const codec = this.ensureArrayValueCodec(element, node);
+        const boxed = value.ty.kind === "array" ? this.boxObjectIdentity(value.c, value.ty, node) : value.c;
+        const kind = element.kind === "number" ? "NUMBER" : element.kind === "boolean" ? "BOOLEAN"
+            : element.kind === "string" ? "STRING" : element.kind === "bigint" ? "BIGINT"
+            : element.kind === "symbol" ? "SYMBOL" : element.kind === "array" ? "ARRAY"
+            : element.kind === "function" ? "FUNCTION" : element.kind === "void" || element.kind === "never" ? "UNDEFINED"
+            : element.kind === "entry" || element.kind === "unsupported" ? "UNSUPPORTED" : "OBJECT";
+        const fresh = value.ty.kind === "array" && ts.isExpression(node) &&
+            ts.isArrayLiteralExpression(this.unwrapTransparentExpression(node));
+        return `tsc_array_require_native_representation(${boxed}, sizeof(${element.c}), ` +
+            `${codec?.box ?? "NULL"}, ${codec?.unbox ?? "NULL"}, TSC_NATIVE_ELEMENT_${kind}, ${fresh ? "true" : "false"})`;
+    }
+
     private coerce(r: EmitResult, target: CType, node: ts.Node): string {
         if (r.ty.kind === target.kind) {
             if (
@@ -76491,33 +76507,7 @@ class Emitter {
                 if (r.lazyGenerator || this.isLazyGeneratorPassthroughParameter(node)) {
                     return this.coerceLazyGeneratorArray(r, target, node);
                 }
-                const tmpIn = this.freshTemp("_arrIn");
-                const tmpOut = this.freshTemp("_arrOut");
-                const idx = this.freshTemp("_idx");
-                if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
-                    const converted = this.freshTemp("_converted");
-                    const convertedExpr = this.zeroValue(target.elem);
-                    return (
-                        `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); ` +
-                        `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ` +
-                        `${target.elem.c} ${converted} = ${convertedExpr}; tsc_array_push_raw(${tmpOut}, &${converted}); ` +
-                        `if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}; })`
-                    );
-                }
-                const elem = this.freshTemp("_elem");
-                const converted = this.freshTemp("_converted");
-                const convertedExpr = this.coerce({ c: elem, ty: r.ty.elem }, target.elem, node);
-                const holeValue = target.elem.kind === "value" ? "tsc_value_undefined()" : `(${target.elem.c})0`;
-                return (
-                    `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); ` +
-                    `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ` +
-                    `${target.elem.c} ${converted}; if (tsc_array_index_present(${tmpIn}, ${idx})) { ` +
-                    `${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); ${converted} = ${convertedExpr}; ` +
-                    `} else { ${converted} = ${holeValue}; } tsc_array_push_raw(${tmpOut}, &${converted}); ` +
-                    `if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}; })`
-                );
+                return this.nativeArrayRepresentation(r, target, node);
             }
             if (
                 target.kind === "class" &&
@@ -76570,17 +76560,8 @@ class Emitter {
                         `tsc_object_entry_t ${output} = {0}; ${this.objectEntryKeySet(output, target.key ?? T_STRING, key)}; ` +
                         `${this.objectEntrySet(output, target.elem ?? T_VALUE, value)}; ${output}; })`;
                 }
-                case "array": {
-                    if (target.elem && target.elem.kind !== "value") {
-                        const tmpIn = this.freshTemp("_arrIn");
-                        const tmpOut = this.freshTemp("_arrOut");
-                        const idx = this.freshTemp("_idx");
-                        const elem = this.freshTemp("_elem");
-                        const unboxed = this.coerce({ c: elem, ty: T_VALUE }, target.elem, node);
-                        return `({ tsc_array_t* ${tmpIn} = tsc_value_as_array(${r.c}); tsc_array_t* ${tmpOut} = NULL; if (${tmpIn}) { ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ${tmpOut}->props = ${tmpIn}->props; ${tmpOut}->prototype = ${tmpIn}->prototype; for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t ${elem} = tsc_value_get_index(tsc_value_array(${tmpIn}), (double)${idx}); void* volatile ${elem}_gc_root = tsc_value_gc_root(${elem}); (void)${elem}_gc_root; ${target.elem.c} _unboxed = ${unboxed}; tsc_array_push_raw(${tmpOut}, &_unboxed); } } ${tmpOut}; })`;
-                    }
-                    return `tsc_value_as_array(${r.c})`;
-                }
+                case "array":
+                    return this.nativeArrayRepresentation(r, target, node);
                 case "map":
                     return `tsc_value_as_map(${r.c})`;
                 case "set":
@@ -76637,27 +76618,8 @@ class Emitter {
                 return `tsc_value_bigint(${r.c})`;
             case "symbol":
                 return `tsc_value_symbol(${r.c})`;
-            case "array": {
-                const aliased = this.arrayWithValueCodec(r.c, r.ty, node);
-                if (aliased && r.ty.elem?.kind !== "value") {
-                    return `tsc_value_array(${aliased})`;
-                }
-                if (r.ty.elem && r.ty.elem.kind !== "value") {
-                    if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
-                        const tmpIn = this.freshTemp("_arrIn");
-                        const tmpOut = this.freshTemp("_arrOut");
-                        const idx = this.freshTemp("_idx");
-                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed = tsc_value_undefined(); tsc_array_push_raw(${tmpOut}, &_boxed); if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
-                    }
-                    const tmpIn = this.freshTemp("_arrIn");
-                    const tmpOut = this.freshTemp("_arrOut");
-                    const idx = this.freshTemp("_idx");
-                    const elem = this.freshTemp("_elem");
-                    const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
-                    return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed; if (tsc_array_index_present(${tmpIn}, ${idx})) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); _boxed = ${boxed}; } else { _boxed = tsc_value_undefined(); } tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
-                }
-                return `tsc_value_array(${r.c})`;
-            }
+            case "array":
+                return `tsc_value_array(${this.arrayWithValueCodec(r.c, r.ty, node) ?? r.c})`;
             case "entry": {
                 const keyType = r.ty.key ?? T_STRING;
                 const valueType = r.ty.elem ?? T_VOID;
