@@ -879,6 +879,8 @@ bool tsc_value_is_promise(tsc_value_t v);
 void* tsc_value_gc_root(tsc_value_t v);
 tsc_promise_t* tsc_value_as_promise(tsc_value_t v);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
+/* Host diagnostics inspect intrinsic storage without invoking user coercion. */
+tsc_str_t* tsc_value_diagnostic_string(tsc_value_t v);
 tsc_str_t* tsc_value_to_string_coercion(tsc_value_t v);
 tsc_value_t tsc_value_to_property_key(tsc_value_t v);
 tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v);
@@ -1695,10 +1697,12 @@ tsc_str_t* tsc_path_win32_relative(const tsc_str_t* from, const tsc_str_t* to);
 bool tsc_path_win32_matches_glob(const tsc_str_t* path, const tsc_str_t* pattern);
 
 /* ------------- exceptions ------------- */
-typedef struct tsc_try_roots {
-    void* value;
-    tsc_str_t* message;
-} tsc_try_roots_t;
+typedef struct tsc_throw_completion {
+    tsc_value_t value;
+    void* value_gc_root;
+    tsc_str_t* diagnostic;
+    bool initialized;
+} tsc_throw_completion_t;
 
 typedef struct tsc_try_frame {
     jmp_buf jb;
@@ -1709,7 +1713,7 @@ typedef struct tsc_try_frame {
     /* NaN-boxed pointer payloads and TLS slots are invisible to conservative
      * GC.  This cell is allocated before setjmp, so longjmp cannot make its
      * subsequently updated contents indeterminate with the frame's locals. */
-    tsc_try_roots_t* roots;
+    tsc_throw_completion_t* completion;
     bool active;
 } tsc_try_frame_t;
 

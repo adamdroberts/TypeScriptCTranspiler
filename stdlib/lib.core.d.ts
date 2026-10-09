@@ -34,6 +34,7 @@ interface SymbolConstructor {
     readonly unscopables: symbol;
     readonly isConcatSpreadable: symbol;
     readonly toStringTag: symbol;
+    readonly toPrimitive: unique symbol;
     readonly species: symbol;
 }
 declare var Symbol: SymbolConstructor;

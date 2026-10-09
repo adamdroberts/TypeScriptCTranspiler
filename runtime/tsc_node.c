@@ -15013,7 +15013,7 @@ static tsc_value_t tsc_fs_dir_read_builtin(void* env, tsc_value_t this_arg, tsc_
         tsc_try_pop();
         return tsc_value_promise(tsc_promise_resolve(value));
     }
-    return tsc_value_promise(tsc_promise_reject(tsc_value_string(tsc_current_error())));
+    return tsc_value_promise(tsc_promise_reject(tsc_current_error_value()));
 }
 
 static tsc_value_t tsc_fs_dir_close_sync_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -15072,7 +15072,7 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
             tsc_fs_dir_iterator_result(value, false)
         ));
     }
-    return tsc_value_promise(tsc_promise_reject(tsc_value_string(tsc_current_error())));
+    return tsc_value_promise(tsc_promise_reject(tsc_current_error_value()));
 }
 
 static tsc_value_t tsc_fs_dir_return_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {

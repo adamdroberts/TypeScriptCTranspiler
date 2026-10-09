@@ -18,15 +18,21 @@ void* tsc_value_gc_root(tsc_value_t value) {
     }
 }
 
-tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
+static tsc_promise_t* promise_settled(tsc_promise_state_t state, tsc_value_t value) {
+    void* volatile value_gc_root = tsc_value_gc_root(value);
     tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_FULFILLED;
+    p->state = state;
     p->result = value;
-    p->ptr_result = tsc_value_gc_root(value);
+    p->ptr_result = value_gc_root;
     p->callbacks = NULL;
     p->callbacks_len = 0;
     p->callbacks_cap = 0;
+    (void)value_gc_root;
     return p;
+}
+
+tsc_promise_t* tsc_promise_resolve(tsc_value_t value) {
+    return promise_settled(TSC_PROMISE_FULFILLED, value);
 }
 
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value) {
@@ -272,7 +278,7 @@ static void promise_thenable_job(void* env) {
     tsc_try_pop();
     if (!state->done && tsc_promise_is_pending(state->promise)) {
         state->done = true;
-        tsc_promise_reject_in_place(state->promise, tsc_value_string(tsc_current_error()));
+        tsc_promise_reject_in_place(state->promise, tsc_current_error_value());
     }
 }
 
@@ -317,11 +323,11 @@ static tsc_promise_t* tsc_promise_resolve_thenable_seen(tsc_value_t value, tsc_a
         return (tsc_promise_t*)out;
     }
     if (out && tsc_promise_is_pending((tsc_promise_t*)out)) {
-        tsc_promise_reject_in_place((tsc_promise_t*)out, tsc_value_string(tsc_current_error()));
+        tsc_promise_reject_in_place((tsc_promise_t*)out, tsc_current_error_value());
         return (tsc_promise_t*)out;
     }
     if (out) return (tsc_promise_t*)out;
-    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+    return tsc_promise_reject(tsc_current_error_value());
 }
 
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
@@ -510,7 +516,7 @@ tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
         return tsc_promise_resolve_thenable(result);
     }
     tsc_try_pop();
-    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+    return tsc_promise_reject(tsc_current_error_value());
 }
 
 tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
@@ -528,7 +534,7 @@ tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
         return tsc_promise_resolve_thenable(result);
     }
     tsc_try_pop();
-    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+    return tsc_promise_reject(tsc_current_error_value());
 }
 
 typedef struct {
@@ -827,7 +833,7 @@ static tsc_promise_t* promise_call_dynamic_callback(tsc_value_t fn, tsc_value_t 
         return tsc_promise_resolve_thenable(result);
     }
     tsc_try_pop();
-    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+    return tsc_promise_reject(tsc_current_error_value());
 }
 
 static void tsc_dynamic_promise_then_callback(void* env) {
@@ -994,14 +1000,7 @@ tsc_promise_t* tsc_value_as_promise(tsc_value_t v) {
 }
 
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason) {
-    tsc_promise_t* p = (tsc_promise_t*)TSC_GC_MALLOC(sizeof(tsc_promise_t));
-    p->state = TSC_PROMISE_REJECTED;
-    p->result = reason;
-    p->ptr_result = tsc_value_gc_root(reason);
-    p->callbacks = NULL;
-    p->callbacks_len = 0;
-    p->callbacks_cap = 0;
-    return p;
+    return promise_settled(TSC_PROMISE_REJECTED, reason);
 }
 
 tsc_promise_t* tsc_promise_pending(void) {

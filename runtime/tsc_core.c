@@ -613,9 +613,7 @@ void tsc_dispatch_task_scheduled(void) {}
  * static exactly as before. */
 static TSC_TLS tsc_try_frame_t* g_try_top = NULL;
 static TSC_TLS tsc_call_activation_t* g_call_activation_top = NULL;
-static TSC_TLS tsc_str_t* g_current_error = NULL;
-static TSC_TLS tsc_value_t g_current_error_value;
-static TSC_TLS bool g_current_error_value_set = false;
+static TSC_TLS tsc_throw_completion_t g_current_throw;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
 static bool g_dynamic_stats_enabled = false;
@@ -2065,7 +2063,7 @@ void tsc_try_push(tsc_try_frame_t* f) {
     f->realm = tsc_realm_current();
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
-    f->roots = (tsc_try_roots_t*)TSC_GC_MALLOC(sizeof(tsc_try_roots_t));
+    f->completion = (tsc_throw_completion_t*)TSC_GC_MALLOC(sizeof(tsc_throw_completion_t));
     f->active = true;
     g_try_top = f;
 }
@@ -2097,60 +2095,51 @@ void tsc_try_cleanup(tsc_try_frame_t* frame) {
 }
 
 _Noreturn void tsc_throw_str(tsc_str_t* message) {
-    g_current_error = message ? message : tsc_str_from_lit("(unknown error)", 15);
-    g_current_error_value = tsc_value_string(g_current_error);
-    g_current_error_value_set = true;
-    if (g_try_top) {
-        tsc_try_frame_t* f = g_try_top;
-        f->roots->value = tsc_value_gc_root(g_current_error_value);
-        f->roots->message = g_current_error;
-        /* The setjmp landing path owns the matching tsc_try_pop().  Leaving
-         * the frame installed until control lands keeps push/pop balanced;
-         * popping here as well makes the handler discard its caller's frame
-         * and can leave g_try_top pointing at an expired async stack frame. */
-        g_call_activation_top = f->activation_top;
-        tsc_value_callee_restore(f->callee_top);
-        (void)tsc_realm_swap(f->realm);
-        longjmp(f->jb, 1);
-    }
-    fputs("Uncaught: ", stderr);
-    if (g_current_error) fwrite(g_current_error->data, 1, g_current_error->len, stderr);
-    fputc('\n', stderr);
-    exit(1);
+    tsc_throw_value(tsc_value_string(message ? message : tsc_str_from_lit("(unknown error)", 15)));
 }
 
 _Noreturn void tsc_throw_value(tsc_value_t value) {
-    g_current_error_value = value;
-    g_current_error_value_set = true;
-    g_current_error = tsc_value_to_string(value);
-    if (!g_current_error) g_current_error = tsc_str_from_lit("(unknown error)", 15);
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    g_current_throw = (tsc_throw_completion_t){
+        .value = value,
+        .value_gc_root = value_gc_root,
+        .diagnostic = value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_STRING
+            ? (tsc_str_t*)value_ptr(value) : NULL,
+        .initialized = true,
+    };
     if (g_try_top) {
-        tsc_try_frame_t* f = g_try_top;
-        f->roots->value = tsc_value_gc_root(g_current_error_value);
-        f->roots->message = g_current_error;
-        /* The setjmp landing path owns the matching tsc_try_pop(). */
-        g_call_activation_top = f->activation_top;
-        tsc_value_callee_restore(f->callee_top);
-        (void)tsc_realm_swap(f->realm);
-        longjmp(f->jb, 1);
+        tsc_try_frame_t* frame = g_try_top;
+        // The heap record predates setjmp and retains decoded references even
+        // though TLS and NaN-boxed values are invisible to conservative GC.
+        *frame->completion = g_current_throw;
+        // The landing path owns pop; no language conversion precedes transfer.
+        g_call_activation_top = frame->activation_top;
+        tsc_value_callee_restore(frame->callee_top);
+        (void)tsc_realm_swap(frame->realm);
+        longjmp(frame->jb, 1);
     }
+    tsc_str_t* diagnostic = tsc_current_error();
     fputs("Uncaught: ", stderr);
-    if (g_current_error) fwrite(g_current_error->data, 1, g_current_error->len, stderr);
+    if (diagnostic) fwrite(diagnostic->data, 1, diagnostic->len, stderr);
     fputc('\n', stderr);
+    (void)value_gc_root;
     exit(1);
 }
 
 _Noreturn void tsc_rethrow(void) {
-    if (g_current_error_value_set) tsc_throw_value(g_current_error_value);
-    if (g_current_error) tsc_throw_str(g_current_error);
-    exit(1);
+    tsc_throw_value(tsc_current_error_value());
 }
 
 tsc_str_t* tsc_current_error(void) {
-    return g_current_error ? g_current_error : tsc_str_from_lit("(unknown error)", 15);
+    if (!g_current_throw.initialized) return tsc_str_from_lit("(unknown error)", 15);
+    if (g_current_throw.diagnostic) return g_current_throw.diagnostic;
+    void* volatile value_gc_root = g_current_throw.value_gc_root;
+    tsc_str_t* diagnostic = tsc_value_diagnostic_string(g_current_throw.value);
+    (void)value_gc_root;
+    return diagnostic;
 }
 
 tsc_value_t tsc_current_error_value(void) {
-    if (g_current_error_value_set) return g_current_error_value;
-    return tsc_value_string(tsc_str_from_lit("(unknown error)", 15));
+    return g_current_throw.initialized ? g_current_throw.value
+        : tsc_value_string(tsc_str_from_lit("(unknown error)", 15));
 }

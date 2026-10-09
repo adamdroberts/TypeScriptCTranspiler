@@ -1,5 +1,7 @@
 # Changelog
 
+- Transport throws through one rooted value completion without user coercion. Separate intrinsic host diagnostics, preserve payloads through promise rejection bridges, and add one async call rejection boundary shared by function emitters. Promise settlement roots values before allocation; ordinary catch string predecessors are removed, and Symbol.toPrimitive is declared.
+
 - Unify synchronous return, break and continue through one lexical completion scope worklist. Run finally and IteratorClose in scope order, preserve overrides and exited-handler boundaries, retain pending values, and project finalizer bindings before inner shadowing. Replace duplicated try emitters; Script try/catch/finally completion values now apply UpdateEmpty with undefined.
 
 - Replaced eager ordinary for-of lowering with one iterator record, lexical close guards and shared binding environments. Preserve stepping order, head TDZ, captured patterns, abrupt close precedence, typed overrides and returned value roots. Unrepresented finalizer scopes fail closed. Global reference writes retain fresh values before key allocation, repairing a collection-dependent prototype-chain defect.

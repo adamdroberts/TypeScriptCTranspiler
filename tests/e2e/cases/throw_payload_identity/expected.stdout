@@ -1,0 +1,5 @@
+sync: true finally
+symbol: true
+async: true
+callback: true
+thenable: true

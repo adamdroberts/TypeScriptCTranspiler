@@ -14,6 +14,30 @@ tsc_value_t tsc_value_num(double n) {
 tsc_value_t tsc_value_string(tsc_str_t* s) { return value_box(TSC_VALUE_TAG_STRING, (uintptr_t)s); }
 tsc_value_t tsc_value_bigint(tsc_bigint_t* value) { return value_box(TSC_VALUE_TAG_BIGINT, (uintptr_t)value); }
 tsc_value_t tsc_value_symbol(tsc_symbol_t* value) { return value_box(TSC_VALUE_TAG_SYMBOL, (uintptr_t)value); }
+
+tsc_str_t* tsc_value_diagnostic_string(tsc_value_t value) {
+    if (!value_is_box(value)) return tsc_str_from_num(value_as_num(value));
+    switch (value_tag(value)) {
+        case TSC_VALUE_TAG_UNDEFINED: return tsc_str_from_lit("undefined", 9);
+        case TSC_VALUE_TAG_NULL: return tsc_str_from_lit("null", 4);
+        case TSC_VALUE_TAG_FALSE: return tsc_str_from_lit("false", 5);
+        case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("true", 4);
+        case TSC_VALUE_TAG_STRING: return (tsc_str_t*)value_ptr(value);
+        case TSC_VALUE_TAG_BIGINT: return tsc_bigint_to_string((tsc_bigint_t*)value_ptr(value), 10.0);
+        case TSC_VALUE_TAG_SYMBOL: return tsc_symbol_to_string((tsc_symbol_t*)value_ptr(value));
+        case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("[function]", 10);
+        case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
+        case TSC_VALUE_TAG_OBJECT: {
+            tsc_object_t* object = (tsc_object_t*)value_ptr(value);
+            if (object && !object->is_proxy && object->is_error) {
+                return tsc_error_to_string((tsc_error_t*)object->class_ptr);
+            }
+            return tsc_str_from_lit("[object Object]", 15);
+        }
+    }
+    return tsc_str_from_lit("(unknown error)", 15);
+}
+
 tsc_object_t* tsc_object_new_class(void* ptr) {
     tsc_object_t* o = tsc_object_new();
     o->class_ptr = ptr;
@@ -3794,7 +3818,7 @@ tsc_promise_t* tsc_value_dispose_async(tsc_value_t value) {
         return tsc_promise_resolve_thenable(result);
     }
     tsc_try_pop();
-    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+    return tsc_promise_reject(tsc_current_error_value());
 }
 
 static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {

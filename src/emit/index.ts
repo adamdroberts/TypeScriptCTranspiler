@@ -27877,21 +27877,24 @@ class Emitter {
                     const previousDynamicRoots = isAsync
                         ? this.beginAsyncDynamicRootScope(this.defs, m.parameters)
                         : null;
-                    this.emitCapturedParameterCells(this.defs, m.parameters, capturedCells);
                     try {
-                        const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
-                            this.defs,
-                            m.body,
-                            m.parameters,
-                            isStatic(m) ? null : { c: "self", ty: classType(name) },
-                        );
-                        if (!handledAsyncAwait) {
-                            if (isAsync && this.containsAwaitInFunctionBody(m.body)) {
-                                unsupported(m.body, "async suspension graph is not supported by the canonical CFG");
+                        this.emitAsyncFunctionBoundary(this.defs, isAsync, () => {
+                            const methodBody = m.body!;
+                            this.emitCapturedParameterCells(this.defs, m.parameters, capturedCells);
+                            const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
+                                this.defs,
+                                methodBody,
+                                m.parameters,
+                                isStatic(m) ? null : { c: "self", ty: classType(name) },
+                            );
+                            if (!handledAsyncAwait) {
+                                if (isAsync && this.containsAwaitInFunctionBody(methodBody)) {
+                                    unsupported(methodBody, "async suspension graph is not supported by the canonical CFG");
+                                }
+                                this.emitStmtList(this.defs, methodBody.statements);
+                                if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
                             }
-                            this.emitStmtList(this.defs, m.body.statements);
-                            if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-                        }
+                        });
                     } finally {
                         if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
                         this.cellScopes.pop();
@@ -31867,6 +31870,25 @@ class Emitter {
         return this.emitAsyncControlFlowGraphContinuation(buf, body, parameters, thisValue);
     }
 
+    /** Every async call completes with a Promise, including source exceptions
+     * raised before its first suspension or by synchronous finalizers. */
+    private emitAsyncFunctionBoundary(buf: CBuf, enabled: boolean, emitBody: () => void): void {
+        if (!enabled) { emitBody(); return; }
+        const frame = this.freshTemp("_async_call_frame");
+        const error = this.freshTemp("_async_call_error");
+        buf.line(`TSC_TRY_FRAME(${frame});`);
+        buf.line(`tsc_try_push(&${frame});`);
+        buf.open(`if (setjmp(${frame}.jb) == 0)`);
+        emitBody();
+        buf.line("tsc_try_pop();");
+        buf.close();
+        buf.open("else");
+        buf.line(`tsc_value_t const ${error} = tsc_current_error_value();`);
+        buf.line("tsc_try_pop();");
+        buf.line(`return tsc_promise_reject(${error});`);
+        buf.close();
+    }
+
     private emitAsyncFunctionBody(fd: ts.FunctionDeclaration): void {
         this.validateImmediateAsyncFunction(fd);
         const { signature, returnType, thisType } = this.fnSignature(fd);
@@ -31883,21 +31905,23 @@ class Emitter {
             this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
         }
         const previousDynamicRoots = this.beginAsyncDynamicRootScope(this.defs, fd.parameters);
-        this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
-            if (!fd.body) unsupported(fd, "function without body");
-            if (!this.emitAsyncBlockContinuation(
-                this.defs,
-                fd.body,
-                fd.parameters,
-                thisType ? { c: "__tsc_this", ty: thisType } : null,
-            )) {
-                if (this.containsAwaitInFunctionBody(fd.body)) {
-                    unsupported(fd.body, "async suspension graph is not supported by the canonical CFG");
+            this.emitAsyncFunctionBoundary(this.defs, true, () => {
+                this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
+                if (!fd.body) unsupported(fd, "function without body");
+                if (!this.emitAsyncBlockContinuation(
+                    this.defs,
+                    fd.body,
+                    fd.parameters,
+                    thisType ? { c: "__tsc_this", ty: thisType } : null,
+                )) {
+                    if (this.containsAwaitInFunctionBody(fd.body)) {
+                        unsupported(fd.body, "async suspension graph is not supported by the canonical CFG");
+                    }
+                    this.emitStmtList(this.defs, fd.body.statements);
+                    this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
                 }
-                this.emitStmtList(this.defs, fd.body.statements);
-                this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-            }
+            });
         } finally {
             this.endAsyncDynamicRootScope(previousDynamicRoots);
             if (thisType) this.functionThisStack.pop();
@@ -48730,13 +48754,6 @@ class Emitter {
         buf.line(`tsc_throw_value(${thrown});`);
     }
 
-    private catchBindingUsesValue(_catchClause: ts.CatchClause): boolean {
-        // Ordinary synchronous try/catch has a value-preserving runtime frame.
-        // Async/lazy continuation emitters use their own compatibility string
-        // bridge and do not pass through this direct emitter path.
-        return true;
-    }
-
     private syncCompletionScope(
         owner: ts.TryStatement | ts.ForOfStatement,
         frame: string,
@@ -48925,25 +48942,17 @@ class Emitter {
         const emitCatch = (error: string): void => {
             const clause = statement.catchClause!;
             let symbol: ts.Symbol | undefined;
-            const usesValue = this.catchBindingUsesValue(clause);
             if (clause.variableDeclaration) {
                 const declaration = clause.variableDeclaration;
                 if (!ts.isIdentifier(declaration.name)) unsupported(declaration, "catch binding must be simple identifier");
                 symbol = this.symbolForIdentifier(declaration.name);
-                if (symbol) {
-                    if (usesValue) this.catchValueSymbols.add(symbol);
-                    else this.catchStringSymbols.add(symbol);
-                }
+                if (symbol) this.catchValueSymbols.add(symbol);
                 const name = mangleIdent(declaration.name.text);
-                buf.line(usesValue ? `tsc_value_t ${name} = ${error};`
-                    : `tsc_str_t* ${name} = tsc_current_error();`);
-                if (usesValue && symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
+                buf.line(`tsc_value_t ${name} = ${error};`);
+                if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
             }
             try { this.emitStmtList(buf, clause.block.statements); } finally {
-                if (symbol) {
-                    if (usesValue) this.catchValueSymbols.delete(symbol);
-                    else this.catchStringSymbols.delete(symbol);
-                }
+                if (symbol) this.catchValueSymbols.delete(symbol);
             }
         };
         emitProtected(scope, () => this.emitStmtList(buf, statement.tryBlock.statements));
@@ -55158,65 +55167,67 @@ class Emitter {
                 const previousDynamicRoots = isAsync
                     ? this.beginAsyncDynamicRootScope(body, runtimeParams)
                     : null;
-                if (javaScriptFormalPlans) {
-                    this.emitJavaScriptFormalParameterInitialization(
-                        body,
-                        fn,
-                        paramNames,
-                        javaScriptFormalPlans,
-                    );
-                    this.emitCallActivationConfiguration(body, fn, capturedCells);
-                } else {
-                    this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
-                    this.emitCallActivationConfiguration(body, fn, capturedCells);
-                    this.emitJavaScriptDefaultParameterInitializers(body, fn, capturedCells);
-                }
                 try {
-                    const fnBody = fn.body;
-                    if (!fnBody) unsupported(fn, "closure implementation requires a body");
-                    if (ts.isBlock(fnBody)) {
-                        const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
-                            body,
-                            fnBody,
-                            runtimeParams,
-                            functionThisBinding,
-                        );
-                        if (!handledAsyncAwait) {
-                            if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
-                                unsupported(fnBody, "async suspension graph is not supported by the canonical CFG");
+                    this.emitAsyncFunctionBoundary(body, isAsync, () => {
+                        if (javaScriptFormalPlans) {
+                            this.emitJavaScriptFormalParameterInitialization(
+                                body,
+                                fn,
+                                paramNames,
+                                javaScriptFormalPlans,
+                            );
+                            this.emitCallActivationConfiguration(body, fn, capturedCells);
+                        } else {
+                            this.emitCapturedParameterCells(body, runtimeParams, capturedCells);
+                            this.emitCallActivationConfiguration(body, fn, capturedCells);
+                            this.emitJavaScriptDefaultParameterInitializers(body, fn, capturedCells);
+                        }
+                        const fnBody = fn.body;
+                        if (!fnBody) unsupported(fn, "closure implementation requires a body");
+                        if (ts.isBlock(fnBody)) {
+                            const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
+                                body,
+                                fnBody,
+                                runtimeParams,
+                                functionThisBinding,
+                            );
+                            if (!handledAsyncAwait) {
+                                if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
+                                    unsupported(fnBody, "async suspension graph is not supported by the canonical CFG");
+                                }
+                                this.emitStmtList(body, fnBody.statements);
+                                if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
+                                else if (this.isJavaScriptSourceFile(fn.getSourceFile()) && ret.kind !== "void" && ret.kind !== "never") {
+                                    body.line(`return ${this.zeroValue(ret)};`);
+                                }
                             }
-                            this.emitStmtList(body, fnBody.statements);
-                            if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
-                            else if (this.isJavaScriptSourceFile(fn.getSourceFile()) && ret.kind !== "void" && ret.kind !== "never") {
-                                body.line(`return ${this.zeroValue(ret)};`);
+                        } else {
+                            const asyncExpressionBlock = isAsync
+                                ? this.asyncExpressionBodyAsBlock(fn, fnBody)
+                                : null;
+                            const handledAsyncControlFlowGraph = !!asyncExpressionBlock && this.emitAsyncControlFlowGraphContinuation(
+                                body,
+                                asyncExpressionBlock,
+                                runtimeParams,
+                                functionThisBinding,
+                            );
+                            if (!handledAsyncControlFlowGraph) {
+                                if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
+                                    unsupported(fnBody, "async suspension expression is not supported by the canonical CFG");
+                                }
+                                const r = this.emitExpr(fnBody);
+                                if (isAsync) {
+                                    if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
+                                    else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
+                                } else if (ret.kind === "void") {
+                                    body.line(`(void)(${r.c});`);
+                                    body.line("return;");
+                                } else {
+                                    body.line(`return ${this.coerce(r, ret, fnBody)};`);
+                                }
                             }
                         }
-                    } else {
-                        const asyncExpressionBlock = isAsync
-                            ? this.asyncExpressionBodyAsBlock(fn, fnBody)
-                            : null;
-                        const handledAsyncControlFlowGraph = !!asyncExpressionBlock && this.emitAsyncControlFlowGraphContinuation(
-                            body,
-                            asyncExpressionBlock,
-                            runtimeParams,
-                            functionThisBinding,
-                        );
-                        if (!handledAsyncControlFlowGraph) {
-                            if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
-                                unsupported(fnBody, "async suspension expression is not supported by the canonical CFG");
-                            }
-                            const r = this.emitExpr(fnBody);
-                            if (isAsync) {
-                                if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
-                                else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
-                            } else if (ret.kind === "void") {
-                                body.line(`(void)(${r.c});`);
-                                body.line("return;");
-                            } else {
-                                body.line(`return ${this.coerce(r, ret, fnBody)};`);
-                            }
-                        }
-                    }
+                    });
                 } finally {
                     if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
                     if (functionThisBinding) this.functionThisStack.pop();
@@ -58666,7 +58677,7 @@ class Emitter {
                     `${sourceType.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
                     `${pushMapped} } ` +
                     `tsc_try_pop(); ` +
-                    `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ` +
+                    `} else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ` +
                     `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
                 );
             });
@@ -58703,7 +58714,7 @@ class Emitter {
                     `({ tsc_promise_t* ${result} = NULL; tsc_array_t* ${src} = NULL; ` +
                     `TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); ` +
                     `if (setjmp(${eh}.jb) == 0) { ${src} = tsc_value_array_from_values(${items}); tsc_try_pop(); ${result} = tsc_promise_resolve_array(${src}); ` +
-                    `} else { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${result}; })`
+                    `} else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ${result}; })`
                 );
             });
         }
@@ -66175,47 +66186,49 @@ class Emitter {
             ? this.beginAsyncDynamicRootScope(this.defs, info.fn.parameters)
             : null;
         try {
-            if (ts.isBlock(info.fn.body)) {
-                const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
-                    this.defs,
-                    info.fn.body,
-                    info.fn.parameters,
-                    thisType ? { c: "__tsc_this", ty: thisType } : null,
-                );
-                if (!handledAsyncAwait) {
-                    if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
-                        unsupported(info.fn.body, "async suspension graph is not supported by the canonical CFG");
+            this.emitAsyncFunctionBoundary(this.defs, isAsync, () => {
+                if (ts.isBlock(info.fn.body)) {
+                    const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
+                        this.defs,
+                        info.fn.body,
+                        info.fn.parameters,
+                        thisType ? { c: "__tsc_this", ty: thisType } : null,
+                    );
+                    if (!handledAsyncAwait) {
+                        if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
+                            unsupported(info.fn.body, "async suspension graph is not supported by the canonical CFG");
+                        }
+                        for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
+                        if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
+                        else if (this.isJavaScriptSourceFile(info.fn.getSourceFile()) && mappedRet.kind !== "void" && mappedRet.kind !== "never") {
+                            this.defs.line(`return ${this.zeroValue(mappedRet)};`);
+                        }
                     }
-                    for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
-                    if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-                    else if (this.isJavaScriptSourceFile(info.fn.getSourceFile()) && mappedRet.kind !== "void" && mappedRet.kind !== "never") {
-                        this.defs.line(`return ${this.zeroValue(mappedRet)};`);
+                } else {
+                    const asyncExpressionBlock = isAsync
+                        ? this.asyncExpressionBodyAsBlock(info.fn, info.fn.body)
+                        : null;
+                    const handledAsyncControlFlowGraph = !!asyncExpressionBlock && this.emitAsyncControlFlowGraphContinuation(
+                        this.defs,
+                        asyncExpressionBlock,
+                        info.fn.parameters,
+                        thisType ? { c: "__tsc_this", ty: thisType } : null,
+                    );
+                    if (!handledAsyncControlFlowGraph) {
+                        if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
+                            unsupported(info.fn.body, "async suspension expression is not supported by the canonical CFG");
+                        }
+                        const r = this.emitExpr(info.fn.body);
+                        if (isAsync) {
+                            if (r.ty.kind === "promise") this.defs.line(`return tsc_promise_adopt(${r.c});`);
+                            else this.defs.line(`return ${this.promiseResolveResult(r, info.fn.body)};`);
+                        } else {
+                            const coerced = this.coerce(r, mappedRet, info.fn.body);
+                            this.defs.line(`return ${coerced};`);
+                        }
                     }
                 }
-            } else {
-                const asyncExpressionBlock = isAsync
-                    ? this.asyncExpressionBodyAsBlock(info.fn, info.fn.body)
-                    : null;
-                const handledAsyncControlFlowGraph = !!asyncExpressionBlock && this.emitAsyncControlFlowGraphContinuation(
-                    this.defs,
-                    asyncExpressionBlock,
-                    info.fn.parameters,
-                    thisType ? { c: "__tsc_this", ty: thisType } : null,
-                );
-                if (!handledAsyncControlFlowGraph) {
-                    if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
-                        unsupported(info.fn.body, "async suspension expression is not supported by the canonical CFG");
-                    }
-                    const r = this.emitExpr(info.fn.body);
-                    if (isAsync) {
-                        if (r.ty.kind === "promise") this.defs.line(`return tsc_promise_adopt(${r.c});`);
-                        else this.defs.line(`return ${this.promiseResolveResult(r, info.fn.body)};`);
-                    } else {
-                        const coerced = this.coerce(r, mappedRet, info.fn.body);
-                        this.defs.line(`return ${coerced};`);
-                    }
-                }
-            }
+            });
         } finally {
             if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
             if (thisType) this.functionThisStack.pop();
@@ -69426,7 +69439,7 @@ class Emitter {
     private emitImmediatePromiseTry(successExpr: string): string {
         const out = this.freshTemp("_promise_try");
         const eh = this.freshTemp("_promise_try_eh");
-        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${out} = ${successExpr}; tsc_try_pop(); } else { ${out} = tsc_promise_reject(tsc_value_string(tsc_current_error())); } ${out}; })`;
+        return `({ tsc_promise_t* ${out}; TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); if (setjmp(${eh}.jb) == 0) { ${out} = ${successExpr}; tsc_try_pop(); } else { ${out} = tsc_promise_reject(tsc_current_error_value()); } ${out}; })`;
     }
 
     private emitPathCall(call: ts.CallExpression, name: string, isWin32 = false): EmitResult {
@@ -76131,7 +76144,7 @@ class Emitter {
                 const eh = this.freshTemp("_promise_executor_eh");
                 pieces.push(`TSC_TRY_FRAME(${eh})`);
                 pieces.push(`tsc_try_push(&${eh})`);
-                pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else { tsc_promise_reject_in_place(${result}, tsc_value_string(tsc_current_error())); }`);
+                pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else { tsc_promise_reject_in_place(${result}, tsc_current_error_value()); }`);
                 pieces.push(result);
                 return `({ ${pieces.join("; ")}; })`;
             });
