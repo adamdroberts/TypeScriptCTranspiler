@@ -196,8 +196,10 @@ tsc_value_t tsc_value_function_named_kind(
 ) {
     if (!name) name = tsc_str_from_lit("", 0);
     tsc_realm_t* realm = tsc_realm_current();
+    tsc_parse_unit_t* unit = kind == TSC_FUNCTION_IDENTITY_BUILTIN ||
+        kind == TSC_FUNCTION_IDENTITY_BOUND ? NULL : tsc_parse_unit_current();
     tsc_function_identity_key_t key = { .kind = kind, .realm = realm,
-        .code = (uintptr_t)fn, .construct = construct, .env = env };
+        .parse_unit = unit, .code = (uintptr_t)fn, .construct = construct, .env = env };
     tsc_function_identity_t* cur = tsc_function_identity_lookup(&key);
     if (cur) {
         if (length > cur->length) {
@@ -214,6 +216,7 @@ tsc_value_t tsc_value_function_named_kind(
     id->kind = kind;
     id->function_kind_initialized = false;
     id->realm = realm;
+    id->parse_unit = unit;
     id->construct_default_prototype = TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE;
     id->extensible = true;
     id->sealed = false;
@@ -230,7 +233,20 @@ tsc_value_t tsc_value_function_named_kind(
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
 }
 
+void tsc_callable_owner_capture(tsc_callable_owner_t* owner) {
+    if (owner->context_initialized) return;
+    owner->realm = tsc_realm_current();
+    owner->parse_unit = tsc_parse_unit_current();
+    owner->context_initialized = true;
+}
+
 void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value) {
+    tsc_callable_owner_capture(owner);
+    if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_FUNCTION) {
+        tsc_function_identity_t* identity = value_ptr(value);
+        owner->realm = identity->realm;
+        owner->parse_unit = identity->parse_unit;
+    }
     tsc_value_store_rooted(&owner->value, &owner->root, value);
     owner->initialized = true;
 }
@@ -240,10 +256,15 @@ tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_func
     if (!env) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native callable has no value owner"));
     tsc_runtime_lock();
     if (!owner->initialized) {
+        tsc_callable_owner_capture(owner);
+        tsc_realm_t* previous_realm = tsc_realm_swap(owner->realm);
+        tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(owner->parse_unit);
         tsc_value_t value = tsc_value_function_named_kind(apply, NULL, env, length, name,
             constructable ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_CLOSURE);
         (void)tsc_value_function_with_source(value, source);
         tsc_callable_owner_set(owner, value);
+        (void)tsc_parse_unit_swap(previous_unit);
+        (void)tsc_realm_swap(previous_realm);
     }
     tsc_value_t value = owner->value;
     tsc_runtime_unlock();
@@ -3171,8 +3192,14 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     tsc_realm_t* previous_realm = tsc_realm_swap(
         ident->realm ? ident->realm : tsc_realm_current()
     );
+    /* Native built-ins and bound forwarding have no source Parse Nodes of
+     * their own. Their source callbacks enter their retained owner context. */
+    tsc_parse_unit_t* previous_unit = tsc_parse_unit_current();
+    if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN && ident->kind != TSC_FUNCTION_IDENTITY_BOUND)
+        (void)tsc_parse_unit_swap(ident->parse_unit);
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         tsc_value_t result = ident->code.getter(ident->env, this_arg);
+        (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_realm_swap(previous_realm);
         return result;
     }
@@ -3190,25 +3217,30 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         value_current_callee = &frame;
         tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
         value_current_callee = frame.prev;
+        (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_realm_swap(previous_realm);
         return result;
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
         ident->code.event_listener.fn(ident->env, NULL, list);
+        (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_realm_swap(previous_realm);
         return tsc_value_undefined();
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER) {
         ident->code.event_raw_identity.fn(ident->env, NULL, list);
+        (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_realm_swap(previous_realm);
         return tsc_value_undefined();
     }
     if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
+        (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_realm_swap(previous_realm);
         tsc_panic("Reflect.apply target is not a callable function identity");
     }
     tsc_value_t value = list->len > 0 ? TSC_ARR(tsc_value_t, list, 0) : tsc_value_undefined();
     ident->code.setter(ident->env, this_arg, value);
+    (void)tsc_parse_unit_swap(previous_unit);
     (void)tsc_realm_swap(previous_realm);
     return tsc_value_undefined();
 }
@@ -3259,6 +3291,9 @@ static tsc_value_t construct_from_argument_list(
             tsc_realm_t* previous_realm = tsc_realm_swap(
                 ident->realm ? ident->realm : tsc_realm_current()
             );
+            tsc_parse_unit_t* previous_unit = tsc_parse_unit_current();
+            if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN)
+                (void)tsc_parse_unit_swap(ident->parse_unit);
             tsc_callee_frame_t frame = {
                 .prev = value_current_callee,
                 .value = target,
@@ -3267,6 +3302,7 @@ static tsc_value_t construct_from_argument_list(
             value_current_callee = &frame;
             tsc_value_t result = construct(ident->env, receiver, list);
             value_current_callee = frame.prev;
+            (void)tsc_parse_unit_swap(previous_unit);
             (void)tsc_realm_swap(previous_realm);
             if (
                 value_is_box(result) &&

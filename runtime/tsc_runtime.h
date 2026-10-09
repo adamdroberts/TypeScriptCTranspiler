@@ -70,6 +70,12 @@ typedef uint64_t tsc_value_t;
 typedef struct tsc_realm tsc_realm_t;
 tsc_realm_t* tsc_realm_current(void);
 tsc_realm_t* tsc_realm_swap(tsc_realm_t* realm);
+/* A finite AOT evaluator reuses code, but each runtime parse has distinct
+ * Parse Nodes. Source owners retain this identity independently of Realm. */
+typedef struct tsc_parse_unit tsc_parse_unit_t;
+tsc_parse_unit_t* tsc_parse_unit_new(void);
+tsc_parse_unit_t* tsc_parse_unit_current(void);
+tsc_parse_unit_t* tsc_parse_unit_swap(tsc_parse_unit_t* unit);
 
 /* A continuation may retain a mutable closure binding rather than a value
  * snapshot.  Copying this handle between states preserves both the shared
@@ -760,8 +766,12 @@ typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, t
 typedef struct {
     tsc_value_t value;
     void* volatile root;
+    tsc_realm_t* realm;
+    tsc_parse_unit_t* parse_unit;
+    bool context_initialized;
     bool initialized;
 } tsc_callable_owner_t;
+void tsc_callable_owner_capture(tsc_callable_owner_t* owner);
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
     void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source);
 void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value);
@@ -1820,6 +1830,7 @@ typedef struct tsc_try_frame {
     jmp_buf jb;
     struct tsc_try_frame* prev;
     tsc_realm_t* realm;
+    tsc_parse_unit_t* parse_unit;
     tsc_call_activation_t* activation_top;
     void* callee_top;
     /* NaN-boxed pointer payloads and TLS slots are invisible to conservative

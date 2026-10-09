@@ -24857,8 +24857,11 @@ class Emitter {
             }
             for (const declaration of declarations.functions) {
                 const name = declaration.name!;
+                // Script evaluation instantiates fresh source owners. AOT code
+                // can be reused by eval/another Realm without reusing a prior
+                // callable's parse-unit or creation context.
                 const type = this.javaScriptFunctionValueType(declaration);
-                const closure = this.emitFunctionReferenceClosure(name, type);
+                const closure = this.emitFunctionReferenceClosure(name, type, "evaluation");
                 const value = this.coerce(closure, T_VALUE, name);
                 buf.line(
                     `${plan}[${index++}] = (tsc_global_declaration_t){ ` +
@@ -29802,6 +29805,7 @@ class Emitter {
             this.structDecls.line("tsc_delegation_phase_t delegation_phase;");
         } else this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_realm_t* realm;");
+        this.structDecls.line("tsc_parse_unit_t* parse_unit;");
         this.structDecls.line("int pc;");
         this.structDecls.line("int exception_pc;");
         this.structDecls.line("tsc_value_t exception_value;");
@@ -31295,8 +31299,10 @@ class Emitter {
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_realm_t* previous = tsc_realm_swap(state->realm);");
+        callback.line("tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(state->parse_unit);");
         if (generator) callback.line("bool was_processing = tsc_generator_resume_enter(state->generator, previous);");
         callback.line(`${name}_resume(env);`);
+        callback.line("(void)tsc_parse_unit_swap(previous_unit);");
         callback.line("(void)tsc_realm_swap(previous);");
         if (generator) callback.line("tsc_generator_resume_leave(state->generator, was_processing);");
         callback.close();
@@ -31315,6 +31321,7 @@ class Emitter {
             buf.line(`tsc_completion_record_clear(&${env}->delegation_result);`);
         } else buf.line(`${env}->result_promise = ${result};`);
         buf.line(`${env}->realm = tsc_realm_current();`);
+        buf.line(`${env}->parse_unit = tsc_parse_unit_current();`);
         buf.line(`${env}->pc = ${graph.entry.id};`);
         buf.line(`${env}->exception_pc = -1;`);
         buf.line(`${env}->exception_value = tsc_value_undefined();`);
@@ -41092,14 +41099,16 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
     }
 
-    private emitFunctionReferenceClosure(id: ts.Identifier, type: CType): EmitResult {
+    private emitFunctionReferenceClosure(id: ts.Identifier, type: CType,
+        lifetime: "binding" | "evaluation" = "binding"): EmitResult {
         if (type.kind !== "function") unsupported(id, "function reference type expected");
         this.prepareType(type);
         const adapter = this.ensureFunctionReferenceAdapter(id, type);
-        return this.emitStaticFunctionReferenceClosure(
+        return this.emitFunctionReferenceOwner(
             type,
             adapter,
             id,
+            lifetime,
         );
     }
 
@@ -41110,21 +41119,30 @@ class Emitter {
         if (type.kind !== "function") unsupported(declaration, "function declaration type expected");
         this.prepareType(type);
         const adapter = this.ensureFunctionDeclarationReferenceAdapter(declaration, type);
-        return this.emitStaticFunctionReferenceClosure(
+        return this.emitFunctionReferenceOwner(
             type,
             adapter,
             declaration,
         );
     }
 
-    /** One stable closure cell represents a declaration binding.  Boxing that
-     * cell therefore reaches the runtime's canonical function identity rather
-     * than manufacturing an identity on each namespace getter invocation. */
-    private emitStaticFunctionReferenceClosure(
+    /** A declaration's code is reusable; its owner follows binding/evaluation
+     * lifetime. Script instantiation allocates freshly, while namespace reads
+     * reach the stable module binding. Both initialize the same owner record. */
+    private emitFunctionReferenceOwner(
         type: CType,
         adapter: string,
         node: ts.Node,
+        lifetime: "binding" | "evaluation" = "binding",
     ): EmitResult {
+        const initialize = (owner: string, reference: string): string =>
+            `${owner}.fn = ${adapter}; ${owner}.env = NULL; tsc_callable_owner_capture(&${owner}.callable); ` +
+            `(void)${this.boxPhysicalValue({ c: reference, ty: type }, node)}; `;
+        if (lifetime === "evaluation") {
+            const owner = this.freshTemp("_function_reference_owner");
+            return { c: `({ ${type.c} ${owner} = (${type.c})TSC_GC_MALLOC(sizeof(*${owner})); ` +
+                initialize(`(*${owner})`, owner) + `${owner}; })`, ty: type };
+        }
         const key = `${adapter}:${this.typeKey(type)}`;
         let staticName = this.functionRefClosureStatics.get(key);
         if (!staticName) {
@@ -41135,7 +41153,7 @@ class Emitter {
         }
         return {
             c:
-                `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; (void)${this.boxPhysicalValue({ c: `&${staticName}`, ty: type }, node)}; } ` +
+                `({ if (!${staticName}_initialized) { ` + initialize(staticName, `&${staticName}`) + `${staticName}_initialized = true; } ` +
                 `&${staticName}; })`,
             ty: type,
         };
@@ -41285,6 +41303,7 @@ class Emitter {
         const pieces = [
             `${type.c} ${tmp} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName}))`,
             `${tmp}->fn = ${implName}`,
+            `tsc_callable_owner_capture(&${tmp}->callable)`,
         ];
         if (envType) {
             const env = this.freshTemp("_env");

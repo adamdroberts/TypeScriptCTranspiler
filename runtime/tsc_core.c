@@ -12,7 +12,8 @@ static tsc_function_identity_entry_t* g_function_identity_entries;
 static size_t g_function_identity_count, g_function_identity_capacity;
 
 static uint64_t function_identity_hash(const tsc_function_identity_key_t* key) {
-    const uint64_t words[] = { (uint64_t)key->kind, (uintptr_t)key->realm, key->code,
+    const uint64_t words[] = { (uint64_t)key->kind, (uintptr_t)key->realm,
+        (uintptr_t)key->parse_unit, key->code,
         (uintptr_t)key->construct, (uintptr_t)key->env,
         (uintptr_t)key->listener_identity, key->listener_order };
     uint64_t hash = UINT64_C(0x9e3779b97f4a7c15);
@@ -29,6 +30,7 @@ static uint64_t function_identity_hash(const tsc_function_identity_key_t* key) {
 static bool function_identity_key_equal(const tsc_function_identity_key_t* left,
     const tsc_function_identity_key_t* right) {
     return left->kind == right->kind && left->realm == right->realm &&
+        left->parse_unit == right->parse_unit &&
         left->code == right->code && left->construct == right->construct &&
         left->env == right->env && left->listener_identity == right->listener_identity &&
         left->listener_order == right->listener_order;
@@ -75,6 +77,7 @@ tsc_function_identity_t* tsc_function_identity_lookup(const tsc_function_identit
 
 tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t* identity) {
     tsc_function_identity_key_t key = { .kind = identity->kind, .realm = identity->realm,
+        .parse_unit = identity->parse_unit,
         .construct = identity->construct, .env = identity->env };
     switch (identity->kind) {
         case TSC_FUNCTION_IDENTITY_GETTER: key.code = (uintptr_t)identity->code.getter; break;
@@ -105,6 +108,21 @@ tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t*
 
 static tsc_realm_t* volatile g_default_realm = NULL;
 static TSC_TLS tsc_realm_t* g_current_realm = NULL;
+
+struct tsc_parse_unit { unsigned char identity; };
+static TSC_TLS tsc_parse_unit_t* g_current_parse_unit;
+
+tsc_parse_unit_t* tsc_parse_unit_new(void) {
+    return (tsc_parse_unit_t*)TSC_GC_MALLOC(sizeof(tsc_parse_unit_t));
+}
+
+tsc_parse_unit_t* tsc_parse_unit_current(void) { return g_current_parse_unit; }
+
+tsc_parse_unit_t* tsc_parse_unit_swap(tsc_parse_unit_t* unit) {
+    tsc_parse_unit_t* previous = g_current_parse_unit;
+    g_current_parse_unit = unit;
+    return previous;
+}
 
 tsc_realm_t* tsc_realm_new(void) {
     return (tsc_realm_t*)TSC_GC_MALLOC(sizeof(tsc_realm_t));
@@ -260,7 +278,11 @@ tsc_value_t tsc_function_create_from_source(tsc_dynamic_function_kind_t kind, ts
         new_target, descriptor->default_prototype
     );
     void* volatile prototype_root = tsc_value_gc_root(prototype);
+    tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
+    tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(unit);
     tsc_value_t result = tsc_dynamic_function_value(factory(), kind);
+    (void)tsc_parse_unit_swap(previous_unit);
+    (void)unit;
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(result);
     tsc_function_identity_set_prototype(identity, prototype);
     identity->name = tsc_str_from_lit("anonymous", 9);
@@ -593,6 +615,7 @@ tsc_value_t tsc_dynamic_function_value(tsc_value_t function, tsc_dynamic_functio
     if (!identity->function_kind_initialized) {
         const dynamic_function_descriptor_t* descriptor = dynamic_function_descriptor(kind);
         void* volatile function_root = tsc_value_gc_root(function);
+        tsc_realm_t* previous_realm = tsc_realm_swap(identity->realm);
         tsc_function_identity_set_prototype(identity, tsc_dynamic_function_prototype(kind));
         if (descriptor->generator) {
             tsc_object_t* prototype = tsc_object_new_with_prototype(tsc_generator_prototype_value(descriptor->asynchronous));
@@ -601,6 +624,7 @@ tsc_value_t tsc_dynamic_function_value(tsc_value_t function, tsc_dynamic_functio
             identity->has_prototype_property = true;
         }
         identity->function_kind_initialized = true;
+        (void)tsc_realm_swap(previous_realm);
         (void)function_root;
     }
     return function;
@@ -609,13 +633,15 @@ tsc_value_t tsc_dynamic_function_value(tsc_value_t function, tsc_dynamic_functio
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity) {
     if (!identity) return tsc_value_undefined();
     tsc_realm_t* realm = tsc_realm_current();
+    tsc_parse_unit_t* unit = tsc_parse_unit_current();
     tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER,
-        .realm = realm, .code = (uintptr_t)fn, .env = env, .listener_identity = identity };
+        .realm = realm, .parse_unit = unit, .code = (uintptr_t)fn, .env = env, .listener_identity = identity };
     tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
     if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_LISTENER;
     entry->realm = realm;
+    entry->parse_unit = unit;
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;
@@ -635,14 +661,16 @@ tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* 
     if (!once) return value_event_listener_identity(fn, env, identity);
     if (!identity) return tsc_value_undefined();
     tsc_realm_t* realm = tsc_realm_current();
+    tsc_parse_unit_t* unit = tsc_parse_unit_current();
     tsc_function_identity_key_t key = { .kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER,
-        .realm = realm, .code = (uintptr_t)fn, .env = env,
+        .realm = realm, .parse_unit = unit, .code = (uintptr_t)fn, .env = env,
         .listener_identity = identity, .listener_order = order };
     tsc_function_identity_t* cached = tsc_function_identity_lookup(&key);
     if (cached) return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cached);
     tsc_function_identity_t* entry = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
     entry->kind = TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER;
     entry->realm = realm;
+    entry->parse_unit = unit;
     entry->extensible = true;
     entry->sealed = false;
     entry->frozen = false;
@@ -2276,6 +2304,7 @@ tsc_value_t tsc_call_arguments(void) {
 void tsc_try_push(tsc_try_frame_t* f) {
     f->prev = g_try_top;
     f->realm = tsc_realm_current();
+    f->parse_unit = tsc_parse_unit_current();
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
     f->completion = (tsc_throw_completion_t*)TSC_GC_MALLOC(sizeof(tsc_throw_completion_t));
@@ -2331,6 +2360,7 @@ _Noreturn void tsc_throw_value(tsc_value_t value) {
         g_call_activation_top = frame->activation_top;
         tsc_value_callee_restore(frame->callee_top);
         (void)tsc_realm_swap(frame->realm);
+        (void)tsc_parse_unit_swap(frame->parse_unit);
         longjmp(frame->jb, 1);
     }
     tsc_str_t* diagnostic = tsc_current_error();

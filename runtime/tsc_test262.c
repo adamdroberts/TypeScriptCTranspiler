@@ -19,7 +19,12 @@ static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_a
     if (!g_test262_indirect_eval_callback) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("indirect eval has no finite AOT source graph"));
     }
-    return g_test262_indirect_eval_callback(tsc_value_as_string(source));
+    tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
+    tsc_parse_unit_t* previous = tsc_parse_unit_swap(unit);
+    tsc_value_t result = g_test262_indirect_eval_callback(tsc_value_as_string(source));
+    (void)tsc_parse_unit_swap(previous);
+    (void)unit;
+    return result;
 }
 
 void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback) {
@@ -39,7 +44,12 @@ tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
     if (!g_test262_direct_eval_callback) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("direct eval has no finite AOT source graph"));
     }
-    return g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller);
+    tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
+    tsc_parse_unit_t* previous = tsc_parse_unit_swap(unit);
+    tsc_value_t result = g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller);
+    (void)tsc_parse_unit_swap(previous);
+    (void)unit;
+    return result;
 }
 
 tsc_value_t tsc_test262_direct_eval_call(
@@ -115,7 +125,12 @@ static tsc_value_t test262_host_eval_script(void* env, tsc_value_t this_arg, tsc
     tsc_value_t source = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
-    tsc_value_t result = g_test262_eval_script_callback(tsc_value_to_string(source));
+    tsc_str_t* text = tsc_value_to_string(source);
+    tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
+    tsc_parse_unit_t* previous_unit = tsc_parse_unit_swap(unit);
+    tsc_value_t result = g_test262_eval_script_callback(text);
+    (void)tsc_parse_unit_swap(previous_unit);
+    (void)unit;
     (void)tsc_realm_swap(previous);
     return result;
 }

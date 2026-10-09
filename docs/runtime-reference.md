@@ -9,6 +9,21 @@ Conventions:
 - `double` is the numeric type for all JS numbers (IEEE 754).
 - `bool` comes from `<stdbool.h>`.
 
+## Runtime source context
+
+`tsc_parse_unit_t` is an opaque identity for one runtime parse. Finite AOT source evaluators reuse compiled code while each Function construction or native-host eval allocates a fresh token. A statically parsed source uses the default null token. Callable registry keys retain parse ownership separately from code, environment and Realm; built-ins and bound forwarding enter source callbacks through their own owners.
+
+Physical source closures call `tsc_callable_owner_capture` at creation, before any deferred boxing. Owners retain their creation Realm and parse unit; boxing publishes metadata in that context. Calls and construction enter it, resumable environments retain it across callbacks, and exception frames restore it before `longjmp`. Fresh parse tokens remain decoded roots during source evaluation. Script function declarations use fresh closure owners at each evaluation.
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_parse_unit_new` | `tsc_parse_unit_t*(void)` | Allocate a distinct runtime parse identity. |
+| `tsc_parse_unit_current` | `tsc_parse_unit_t*(void)` | Read the current source context. |
+| `tsc_parse_unit_swap` | `tsc_parse_unit_t*(tsc_parse_unit_t*)` | Enter a source context and return the previous token, including null. |
+| `tsc_callable_owner_capture` | `void(tsc_callable_owner_t*)` | Capture physical callable creation context once. |
+
+Tagged-template descriptors and Realm TemplateMap construction remain separate work; parse ownership alone does not implement GetTemplateObject.
+
 ## Bootstrap
 
 | Symbol | Signature | Purpose |
