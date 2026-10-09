@@ -68,6 +68,8 @@ void* tsc_no_gc_malloc_uninit(size_t n);
 
 typedef uint64_t tsc_value_t;
 typedef struct tsc_realm tsc_realm_t;
+tsc_realm_t* tsc_realm_current(void);
+tsc_realm_t* tsc_realm_swap(tsc_realm_t* realm);
 
 /* A continuation may retain a mutable closure binding rather than a value
  * snapshot.  Copying this handle between states preserves both the shared
@@ -1115,6 +1117,9 @@ tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);
 tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value);
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value);
+/* Await uses PromiseResolve(%Promise%, value), including the observable
+ * constructor read and intrinsic-Promise identity path. */
+tsc_promise_t* tsc_promise_await(tsc_value_t value);
 tsc_promise_t* tsc_promise_new_executor(tsc_array_t* arguments);
 tsc_value_t tsc_promise_constructor_value(void);
 tsc_value_t tsc_promise_prototype_value(void);

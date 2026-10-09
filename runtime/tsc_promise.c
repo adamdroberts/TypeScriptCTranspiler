@@ -418,6 +418,10 @@ static tsc_value_t promise_static_resolve(void* env, tsc_value_t receiver, tsc_a
     (void)env;
     return promise_resolve_constructor(receiver, promise_argument(args, 0));
 }
+
+tsc_promise_t* tsc_promise_await(tsc_value_t value) {
+    return tsc_value_as_promise(promise_resolve_constructor(tsc_promise_constructor_value(), value));
+}
 static tsc_value_t promise_static_reject(void* env, tsc_value_t receiver, tsc_array_t* args) {
     (void)env;
     tsc_promise_capability_t* capability = promise_new_capability(receiver);
@@ -667,7 +671,7 @@ static tsc_value_t async_from_sync_result_promise(tsc_value_t result) {
     }
     tsc_value_t done = tsc_value_get_prop(result, tsc_str_from_lit("done", 4));
     tsc_value_t value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
-    tsc_promise_t* value_promise = tsc_promise_resolve_thenable(value);
+    tsc_promise_t* value_promise = tsc_promise_await(value);
     tsc_async_from_sync_result_env_t* env =
         (tsc_async_from_sync_result_env_t*)TSC_GC_MALLOC(sizeof(tsc_async_from_sync_result_env_t));
     env->source = value_promise;
@@ -676,7 +680,7 @@ static tsc_value_t async_from_sync_result_promise(tsc_value_t result) {
     if (tsc_promise_is_pending(value_promise)) {
         tsc_promise_add_callback(value_promise, async_from_sync_result_callback, env);
     } else {
-        async_from_sync_result_callback(env);
+        tsc_queue_microtask(async_from_sync_result_callback, env);
     }
     return tsc_value_promise(output);
 }
@@ -804,7 +808,7 @@ tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
         tsc_value_t result = tsc_value_apply_function(next, iterator, tsc_value_array(args));
         tsc_try_pop();
-        return tsc_promise_resolve_thenable(result);
+        return tsc_promise_await(result);
     }
     tsc_try_pop();
     return tsc_promise_reject(tsc_current_error_value());
@@ -822,7 +826,7 @@ tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
         tsc_value_t result = tsc_value_apply_function(close, iterator, tsc_value_array(args));
         tsc_try_pop();
-        return tsc_promise_resolve_thenable(result);
+        return tsc_promise_await(result);
     }
     tsc_try_pop();
     return tsc_promise_reject(tsc_current_error_value());

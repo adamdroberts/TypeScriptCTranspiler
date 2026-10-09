@@ -86,8 +86,6 @@ struct tsc_realm {
 };
 
 tsc_realm_t* tsc_realm_new(void);
-tsc_realm_t* tsc_realm_current(void);
-tsc_realm_t* tsc_realm_swap(tsc_realm_t* realm);
 void* tsc_realm_state_get(const void* key);
 void tsc_realm_state_set(const void* key, void* value);
 

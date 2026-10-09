@@ -29949,6 +29949,7 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
+        this.structDecls.line("tsc_realm_t* realm;");
         this.structDecls.line("int pc;");
         this.structDecls.line("int exception_pc;");
         this.structDecls.line("tsc_value_t exception_value;");
@@ -30003,10 +30004,11 @@ class Emitter {
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${name}(void* env);`);
+        this.protos.line(`static void ${name}_resume(void* env);`);
 
         const callback = new CBuf();
         const eh = this.freshTemp("_async_cfg_eh");
-        callback.open(`void ${name}(void* env)`);
+        callback.open(`static void ${name}_resume(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _ret = state->result_promise;");
         callback.line(`TSC_TRY_FRAME(${eh});`);
@@ -30207,7 +30209,7 @@ class Emitter {
                 exceptionTargetId: number | null,
             ): void => emitPromiseSuspension(() => {
                 const source = this.emitExpr(awaitExpr.expression);
-                return this.promiseResolveResult(source, awaitExpr.expression);
+                return this.promiseAwaitResult(source, awaitExpr.expression);
             }, exceptionTargetId);
             const awaitFulfilledValue = (sourceType: CType): EmitResult =>
                 this.promiseFulfilledValue(
@@ -31543,6 +31545,13 @@ class Emitter {
         callback.close();
         callback.close();
         callback.line();
+        callback.open(`void ${name}(void* env)`);
+        callback.line(`${envType}* state = (${envType}*)env;`);
+        callback.line("tsc_realm_t* previous = tsc_realm_swap(state->realm);");
+        callback.line(`${name}_resume(env);`);
+        callback.line("(void)tsc_realm_swap(previous);");
+        callback.close();
+        callback.line();
         this.closureDefs.write(callback.toString());
 
         const result = this.freshTemp("_async_cfg_result");
@@ -31551,6 +31560,7 @@ class Emitter {
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = NULL;`);
         buf.line(`${env}->result_promise = ${result};`);
+        buf.line(`${env}->realm = tsc_realm_current();`);
         buf.line(`${env}->pc = ${graph.entry.id};`);
         buf.line(`${env}->exception_pc = -1;`);
         buf.line(`${env}->exception_value = tsc_value_undefined();`);
@@ -48980,49 +48990,7 @@ class Emitter {
             const value = this.awaitExpressionValueScopes[i]!.get(expr);
             if (value) return value;
         }
-        if (this.asyncFunctionStack.length === 0) {
-            unsupported(expr, "await outside of async functions");
-        }
-        const source = this.emitExpr(expr.expression);
-        const promise = this.prepareType(source.ty);
-        const awaited = this.prepareType(mapTsType(expr, this.checker.getTypeAtLocation(expr), this.checker));
-        if (promise.kind === "value") {
-            return this.emitSequencedExpr(awaited, [
-                { value: source, target: promise, node: expr.expression },
-            ], ([value]) => {
-                const p = this.freshTemp("_await_dynamic");
-                let fulfilled: string;
-                if (awaited.kind === "fsstats") fulfilled = `tsc_promise_fs_stats_value(${p})`;
-                else if (awaited.kind === "buffer") fulfilled = `tsc_promise_buffer_value(${p})`;
-                else if (awaited.kind === "array") fulfilled = `tsc_promise_array_value(${p})`;
-                else if (awaited.kind === "void" || awaited.kind === "never") fulfilled = `(void)tsc_promise_value(${p})`;
-                else fulfilled = this.coerce({ c: `tsc_promise_value(${p})`, ty: T_VALUE }, awaited, expr);
-                const rejected = this.tryDepth > 0
-                    ? `tsc_throw_str(tsc_value_to_string(tsc_promise_reason(${p})))`
-                    : `return tsc_promise_reject(tsc_promise_reason(${p}))`;
-                return `({ tsc_promise_t* const ${p} = tsc_promise_resolve_thenable(${value}); if (tsc_promise_is_rejected(${p})) { ${rejected}; } if (tsc_promise_is_pending(${p})) return tsc_promise_pending(); ${fulfilled}; })`;
-            });
-        }
-        if (promise.kind !== "promise") {
-            return this.emitSequencedExpr(awaited, [
-                { value: source, target: awaited, node: expr.expression },
-            ], ([value]) => value!);
-        }
-        return this.emitSequencedExpr(awaited, [
-            { value: source, target: promise, node: expr.expression },
-        ], ([promiseC]) => {
-            const p = this.freshTemp("_await");
-            let fulfilled: string;
-            if (awaited.kind === "fsstats") fulfilled = `tsc_promise_fs_stats_value(${p})`;
-            else if (awaited.kind === "buffer") fulfilled = `tsc_promise_buffer_value(${p})`;
-            else if (awaited.kind === "array") fulfilled = `tsc_promise_array_value(${p})`;
-            else if (awaited.kind === "void" || awaited.kind === "never") fulfilled = `(void)tsc_promise_value(${p})`;
-            else fulfilled = this.coerce({ c: `tsc_promise_value(${p})`, ty: T_VALUE }, awaited, expr);
-            const rejected = this.tryDepth > 0
-                ? `tsc_throw_str(tsc_value_to_string(tsc_promise_reason(${p})))`
-                : `return tsc_promise_reject(tsc_promise_reason(${p}))`;
-            return `({ tsc_promise_t* const ${p} = ${promiseC}; if (tsc_promise_is_rejected(${p})) { ${rejected}; } if (tsc_promise_is_pending(${p})) return tsc_promise_pending(); ${fulfilled}; })`;
-        });
+        unsupported(expr, "await expression is missing its canonical suspension state");
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
@@ -58675,6 +58643,10 @@ class Emitter {
             c: `tsc_promise_value(${this.promiseWithValueCodec(promise, promiseType(stored), node)})`,
             ty: T_VALUE,
         };
+    }
+
+    private promiseAwaitResult(result: EmitResult, node: ts.Node): string {
+        return `tsc_promise_await(${this.coerce(result, T_VALUE, node)})`;
     }
 
     private promiseResolveResult(result: EmitResult, node: ts.Node): string {
