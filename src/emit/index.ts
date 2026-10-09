@@ -15615,63 +15615,51 @@ class Emitter {
         }
     }
 
-    private jsonModuleBindingForImportIdentifier(id: ts.Identifier): JsonModuleBindingPlan | null {
-        const importDeclarations: ts.ImportDeclaration[] = [];
-        const raw = this.checker.getSymbolAtLocation(id);
-        for (const declaration of raw?.declarations ?? []) {
-            if (
-                ts.isImportClause(declaration) &&
-                declaration.name?.text === id.text &&
-                !declaration.isTypeOnly &&
-                ts.isImportDeclaration(declaration.parent)
-            ) {
-                importDeclarations.push(declaration.parent);
-                continue;
-            }
-            if (
-                ts.isImportSpecifier(declaration) &&
-                declaration.name.text === id.text &&
-                !declaration.isTypeOnly &&
-                (declaration.propertyName?.text ?? declaration.name.text) === "default"
-            ) {
-                const importDeclaration = declaration.parent.parent.parent;
-                if (ts.isImportDeclaration(importDeclaration) && !importDeclaration.importClause?.isTypeOnly) {
-                    importDeclarations.push(importDeclaration);
-                }
-            }
-        }
-        if (importDeclarations.length === 0) {
-            for (const statement of id.getSourceFile().statements) {
-                if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) continue;
-                const clause = statement.importClause;
-                if (clause?.name?.text === id.text) {
-                    importDeclarations.push(statement);
-                    continue;
-                }
-                const bindings = clause?.namedBindings;
-                if (!bindings || !ts.isNamedImports(bindings)) continue;
-                if (bindings.elements.some((element) =>
-                    !element.isTypeOnly &&
-                    element.name.text === id.text &&
-                    (element.propertyName?.text ?? element.name.text) === "default"
-                )) {
-                    importDeclarations.push(statement);
-                }
-            }
-        }
-        for (const declaration of importDeclarations) {
-            const specifier = declaration.moduleSpecifier;
+    /** Resolve the actual import/export edge before consulting the checker
+     * alias target: JSON defaults and namespaces share a checker SourceFile
+     * symbol, but represent different ECMAScript References. */
+    private moduleImportBindingForSymbol(symbol: ts.Symbol | undefined, resolveSet = new Set<string>()): ts.Node | null {
+        for (const declaration of symbol?.declarations ?? []) {
+            let importDeclaration: ts.ImportDeclaration | ts.JSDocImportTag;
+            let exportName = "default";
+            if (ts.isImportClause(declaration) && declaration.name && !declaration.isTypeOnly) {
+                importDeclaration = declaration.parent;
+                exportName = "default";
+            } else if (ts.isImportSpecifier(declaration) && !declaration.isTypeOnly && !declaration.parent.parent.isTypeOnly) {
+                importDeclaration = declaration.parent.parent.parent;
+                exportName = (declaration.propertyName ?? declaration.name).text;
+            } else if (ts.isNamespaceImport(declaration) && !declaration.parent.isTypeOnly) {
+                importDeclaration = declaration.parent.parent;
+            } else continue;
+            if (!ts.isImportDeclaration(importDeclaration)) continue;
+            const specifier = importDeclaration.moduleSpecifier;
             if (!ts.isStringLiteralLike(specifier)) continue;
-            const info = this.resolvedModuleInfoForSpecifier(
-                specifier.text,
-                id.getSourceFile().fileName,
-            );
-            if (!info || !this.isJsonSourceFile(info.sf)) continue;
-            if (raw) this.symbolStorageTypes.set(raw, T_VALUE);
-            return this.jsonModuleBindings.get(info.sf) ??
-                this.collectJsonModuleBinding(info.sf, info.moduleId);
+            const info = this.resolvedModuleInfoForSpecifier(specifier.text, declaration.getSourceFile().fileName);
+            if (!info) continue;
+            if (ts.isNamespaceImport(declaration)) return declaration;
+            const target = this.resolveModuleNamespaceExport(info, exportName, resolveSet);
+            if (target === "ambiguous") unsupported(declaration, "ambiguous module import binding");
+            return target;
         }
         return null;
+    }
+
+    private moduleNamespaceTargetInfo(declaration: ts.Node | null): ModuleInfo | null {
+        const edge = declaration && ts.isNamespaceImport(declaration) ? declaration.parent.parent :
+            declaration && ts.isNamespaceExport(declaration) ? declaration.parent : null;
+        const specifier = edge?.moduleSpecifier;
+        return specifier && ts.isStringLiteralLike(specifier)
+            ? this.resolvedModuleInfoForSpecifier(specifier.text, edge.getSourceFile().fileName) : null;
+    }
+
+    private jsonModuleBindingForImportIdentifier(id: ts.Identifier): JsonModuleBindingPlan | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        const target = this.moduleImportBindingForSymbol(raw);
+        if (!target || !ts.isSourceFile(target) || !this.isJsonSourceFile(target)) return null;
+        const moduleId = this.graph.fileToModuleId.get(target.fileName);
+        if (!moduleId) unsupported(id, "Module binding requires a canonical retained cell");
+        if (raw) this.symbolStorageTypes.set(raw, T_VALUE);
+        return this.jsonModuleBindings.get(target) ?? this.collectJsonModuleBinding(target, moduleId);
     }
 
     private hasDynamicJsonModuleRepresentation(expression: ts.Expression): boolean {
@@ -22487,9 +22475,10 @@ class Emitter {
         return names;
     }
 
-    /** ResolveExport over the AOT Module Record graph. The checker supplies
-     * binding identity, while this traversal independently rejects star
-     * ambiguity instead of accepting the checker's first enumerated symbol. */
+    /** ResolveExport traverses the AOT Module Record graph with a visited
+     * (module, export name) set. Import and named/star re-export edges preserve
+     * namespace References; the checker supplies only local declaration
+     * identity. Namespace resolution equality is the target Module Record. */
     private resolveModuleNamespaceExport(
         info: ModuleInfo,
         exportName: string,
@@ -22504,6 +22493,23 @@ class Emitter {
         nextResolveSet.add(resolutionKey);
 
         if (this.moduleExplicitRuntimeExportNames(info.sf).has(exportName)) {
+            for (const statement of info.sf.statements) {
+                if (!ts.isExportDeclaration(statement) || statement.isTypeOnly || !statement.exportClause) continue;
+                if (ts.isNamespaceExport(statement.exportClause)) {
+                    if (statement.exportClause.name.text === exportName) return statement.exportClause;
+                    continue;
+                }
+                const element = statement.exportClause.elements.find(element => !element.isTypeOnly && element.name.text === exportName);
+                if (!element) continue;
+                if (statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier)) {
+                    const target = this.resolvedModuleInfoForSpecifier(statement.moduleSpecifier.text, info.sf.fileName);
+                    if (!target) unsupported(statement, "namespace re-export target is outside the AOT module graph");
+                    return this.resolveModuleNamespaceExport(target, (element.propertyName ?? element.name).text, nextResolveSet);
+                }
+                const local = this.checker.getExportSpecifierLocalTargetSymbol(element);
+                return this.moduleImportBindingForSymbol(local, nextResolveSet) ??
+                    (local ? this.moduleNamespaceExportDeclaration(local) : null);
+            }
             const moduleSymbol = this.moduleSymbol(info.sf);
             const symbol = moduleSymbol
                 ? this.checker.getExportsOfModule(moduleSymbol)
@@ -22536,13 +22542,19 @@ class Emitter {
             );
             if (candidate === "ambiguous") return "ambiguous";
             if (!candidate) continue;
-            if (resolved && resolved !== candidate) return "ambiguous";
+            if (resolved && resolved !== candidate) {
+                const previousNamespace = this.moduleNamespaceTargetInfo(resolved);
+                const candidateNamespace = this.moduleNamespaceTargetInfo(candidate);
+                if (!previousNamespace || previousNamespace.sf !== candidateNamespace?.sf) return "ambiguous";
+            }
             resolved = candidate;
         }
         return resolved;
     }
 
     private moduleNamespaceExportRead(declaration: ts.Node): EmitResult {
+        const namespaceTarget = this.moduleNamespaceTargetInfo(declaration);
+        if (namespaceTarget) return { c: `${this.ensureModuleNamespacePlan(namespaceTarget).factory}()`, ty: T_VALUE };
         if (ts.isSourceFile(declaration)) {
             const jsonBinding = this.jsonModuleBindings.get(declaration);
             if (jsonBinding) return { c: jsonBinding.cName, ty: T_VALUE };
@@ -22667,44 +22679,8 @@ class Emitter {
     }
 
     private moduleNamespacePlanForIdentifier(id: ts.Identifier): ModuleNamespacePlan | null {
-        const raw = this.checker.getSymbolAtLocation(id);
-        for (const declaration of raw?.declarations ?? []) {
-            if (!ts.isNamespaceImport(declaration) || declaration.name.text !== id.text) continue;
-            const importDeclaration = declaration.parent.parent;
-            const specifier = importDeclaration.moduleSpecifier;
-            if (!ts.isStringLiteralLike(specifier)) return null;
-            const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
-            return info ? this.ensureModuleNamespacePlan(info) : null;
-        }
-        let target = raw;
-        const seen = new Set<ts.Symbol>();
-        while (target && (target.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(target)) {
-            seen.add(target);
-            try {
-                target = this.checker.getAliasedSymbol(target);
-            } catch {
-                break;
-            }
-        }
-        for (const declaration of target?.declarations ?? []) {
-            if (ts.isSourceFile(declaration)) {
-                const moduleId = this.graph.fileToModuleId.get(declaration.fileName);
-                const info = moduleId ? this.graph.modules.get(moduleId) : undefined;
-                if (info) return this.ensureModuleNamespacePlan(info);
-            }
-            if (!ts.isNamespaceExport(declaration)) continue;
-            const exportDeclaration = declaration.parent;
-            const specifier = exportDeclaration.moduleSpecifier;
-            if (!specifier || !ts.isStringLiteralLike(specifier)) continue;
-            const info = this.resolvedModuleInfoForSpecifier(
-                specifier.text,
-                exportDeclaration.getSourceFile().fileName,
-            );
-            if (info) return this.ensureModuleNamespacePlan(info);
-        }
-        const reExport = this.moduleNamespaceReExportInfo(id);
-        if (!reExport) return null;
-        const info = this.resolvedModuleInfoForSpecifier(reExport.specifier, reExport.containingFile);
+        const target = this.moduleImportBindingForSymbol(this.checker.getSymbolAtLocation(id));
+        const info = this.moduleNamespaceTargetInfo(target);
         return info ? this.ensureModuleNamespacePlan(info) : null;
     }
 
@@ -22713,34 +22689,6 @@ class Emitter {
         return ts.isIdentifier(unwrapped)
             ? this.moduleNamespacePlanForIdentifier(unwrapped)
             : null;
-    }
-
-    private moduleNamespaceReExportInfo(id: ts.Identifier): { specifier: string; containingFile: string } | null {
-        const sym = this.checker.getSymbolAtLocation(id);
-        for (const decl of sym?.declarations ?? []) {
-            if (!ts.isImportSpecifier(decl) || decl.name.text !== id.text) continue;
-            const importDecl = decl.parent.parent.parent;
-            const importSpecifier = importDecl.moduleSpecifier;
-            if (!ts.isStringLiteralLike(importSpecifier)) continue;
-            const importedName = decl.propertyName?.text ?? decl.name.text;
-            const info = this.resolvedModuleInfoForSpecifier(importSpecifier.text, id.getSourceFile().fileName);
-            const sf = info?.sf;
-            if (!sf) continue;
-            for (const stmt of sf.statements) {
-                if (
-                    !ts.isExportDeclaration(stmt) ||
-                    !stmt.exportClause ||
-                    !ts.isNamespaceExport(stmt.exportClause) ||
-                    stmt.exportClause.name.text !== importedName ||
-                    !stmt.moduleSpecifier ||
-                    !ts.isStringLiteralLike(stmt.moduleSpecifier)
-                ) {
-                    continue;
-                }
-                return { specifier: stmt.moduleSpecifier.text, containingFile: sf.fileName };
-            }
-        }
-        return null;
     }
 
     private moduleNamespaceReExportMemberDeclaration(access: CommonJsExportAccess): { name: string; decl: ts.Node } | null {
@@ -22848,10 +22796,9 @@ class Emitter {
             ? this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName)
             : null;
         if (!info) {
-            const reExport = this.moduleNamespaceReExportInfo(access.expression);
-            info = reExport
-                ? this.resolvedModuleInfoForSpecifier(reExport.specifier, reExport.containingFile)
-                : null;
+            info = this.moduleNamespaceTargetInfo(
+                this.moduleImportBindingForSymbol(this.checker.getSymbolAtLocation(access.expression)),
+            );
         }
         if (!info) return null;
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
@@ -24312,11 +24259,8 @@ class Emitter {
         return false;
     }
 
-    /** ECMAScript ModuleDeclarationInstantiation derives every `var` binding
-     * from VarScopedDeclarations before evaluation begins.  One tree walk is
-     * shared by direct declarations, nested blocks, and loop declarations;
-     * function, class, and namespace bodies are independent declaration
-     * scopes and therefore terminate the walk. */
+    /** Synthetic Module Link initializes its sole default cell to undefined;
+     * evaluation publishes the parsed value into that same rooted handle. */
     private collectJsonModuleBinding(sf: ts.SourceFile, modId: string): JsonModuleBindingPlan | null {
         if (!this.isJsonSourceFile(sf)) return null;
         const existing = this.jsonModuleBindings.get(sf);
@@ -24415,6 +24359,11 @@ class Emitter {
                 else for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) names.push(element.name);
             }
             for (const name of names) {
+                const json = this.jsonModuleBindingForImportIdentifier(name);
+                if (json) {
+                    add(name.text,json.cName,json.gcRoot,"NULL",true,true);
+                    continue;
+                }
                 const namespace = this.moduleNamespacePlanForIdentifier(name);
                 if (namespace) {
                     const value = this.freshTemp("_module_namespace_binding"),root = this.freshTemp("_module_namespace_root");
