@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { directLexicalDeclarations } from "./lexical-declarations";
+import { directLexicalDeclarations, lexicalDeclarationsFromList } from "./lexical-declarations";
 import {
     planAsyncExpressionSequence,
     planAsyncFunctionCompletionEdge,
@@ -453,6 +453,9 @@ export function planAsyncControlFlowGraph(
         let found = false;
         const visit = (current: ts.Node): void => {
             if (found) return;
+            // FunctionType/ConstructorType nodes are erased annotations;
+            // they do not create closures or require runtime environments.
+            if (ts.isTypeNode(current)) return;
             if (current !== node && ts.isFunctionLike(current)) {
                 if (options.isSupportedNestedFunction?.(current)) return;
                 found = true;
@@ -1537,6 +1540,10 @@ export function planAsyncControlFlowGraph(
     ): AsyncControlFlowTarget => {
         const conditionId = reserve();
         const conditionTarget = target(conditionId);
+        const headList = ts.isForStatement(statement) && statement.initializer &&
+            ts.isVariableDeclarationList(statement.initializer) ? statement.initializer : null;
+        const headDeclarations = headList ? lexicalDeclarationsFromList(headList) : [];
+        const headBindings = headDeclarations.map((declaration) => declaration.name);
         let continueTarget = conditionTarget;
         if (ts.isForStatement(statement) && statement.incrementor) {
             continueTarget = buildStatement(
@@ -1547,11 +1554,8 @@ export function planAsyncControlFlowGraph(
             if (!supported) return next;
         }
         let initialIterationTarget: AsyncControlFlowTarget | null = null;
-        if (ts.isForStatement(statement) &&
-            statement.initializer &&
-            ts.isVariableDeclarationList(statement.initializer) &&
-            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
-            const bindings = statement.initializer.declarations.map((declaration) => declaration.name);
+        if (headList && (headList.flags & ts.NodeFlags.Let) !== 0) {
+            const bindings = headBindings;
             // ECMAScript creates one copied environment before the first
             // condition and another before each update.  They share the same
             // binding operation but have different successors: routing the
@@ -1643,6 +1647,11 @@ export function planAsyncControlFlowGraph(
                 ? ts.factory.createVariableStatement(undefined, statement.initializer)
                 : ts.factory.createExpressionStatement(statement.initializer);
             entry = buildStatement(initializer, entry, context);
+        }
+        if (headBindings.length > 0) {
+            const id = reserve();
+            entry = setState({ kind: "scope-enter", id, bindings: headBindings,
+                functions: [], next: entry }, context.exceptionTarget);
         }
         return entry;
     };

@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { directLexicalDeclarations, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
+import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
@@ -23758,6 +23758,10 @@ class Emitter {
         declaration: ts.Declaration,
     ): declaration is ScopeLexicalDeclaration {
         if (this.isDirectSwitchLexicalDeclaration(declaration)) return true;
+        if (ts.isVariableDeclaration(declaration) &&
+            ts.isVariableDeclarationList(declaration.parent) &&
+            (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0 &&
+            ts.isForStatement(declaration.parent.parent)) return true;
         const owner = ts.isVariableDeclaration(declaration) &&
             ts.isVariableDeclarationList(declaration.parent) &&
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0 &&
@@ -24236,6 +24240,7 @@ class Emitter {
     ): CType {
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
         if (this.isForOfLexicalDeclaration(declaration)) return T_VALUE;
+        if (this.isDirectScopeLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
             /* A direct CaseBlock class is a runtime constructor/object pair,
              * not one of the statically laid-out TypeScript class structs.
@@ -43037,9 +43042,13 @@ class Emitter {
     }
 
     private emitVarStmt(buf: CBuf, vs: ts.VariableStatement): void {
+        this.emitVariableDeclarationList(buf, vs.declarationList);
+    }
+
+    private emitVariableDeclarationList(buf: CBuf, list: ts.VariableDeclarationList): void {
         const isConst =
-            (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
-        for (const d of vs.declarationList.declarations) {
+            (list.flags & ts.NodeFlags.Const) !== 0;
+        for (const d of list.declarations) {
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleLexicalInitializer(buf, d)) continue;
             if (this.emitModuleVarInitializer(buf, d)) continue;
@@ -43558,79 +43567,45 @@ class Emitter {
     }
 
     private emitFor(buf: CBuf, fs: ts.ForStatement): void {
-        const varInitializer = !!fs.initializer && ts.isVariableDeclarationList(fs.initializer) &&
-            (fs.initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0;
+        const list = fs.initializer && ts.isVariableDeclarationList(fs.initializer)
+            ? fs.initializer : null;
+        if (list && (list.flags & ts.NodeFlags.Using) !== 0) {
+            unsupported(fs, "synchronous completion cannot represent disposal scopes");
+        }
+        const declarations = list ? lexicalDeclarationsFromList(list) : [];
+        const varInitializer = !!list && declarations.length === 0;
         if (!varInitializer) buf.open("");
-        if (fs.initializer) {
-            if (ts.isVariableDeclarationList(fs.initializer)) {
-                const isConst =
-                    (fs.initializer.flags & ts.NodeFlags.Const) !== 0;
-                for (const d of fs.initializer.declarations) {
-                    if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
-                    if (this.emitModuleVarInitializer(buf, d)) continue;
-                    if (!ts.isIdentifier(d.name))
-                        unsupported(d, "destructuring in for-init");
-                    const name = this.identifierName(d.name);
-                    const sym = this.symbolForIdentifier(d.name);
-                    const cell = this.currentFunctionCellForSymbol(sym);
-                    let ct: CType;
-                    let r: EmitResult | null = null;
-                    if (d.initializer) {
-                        r = this.emitExpr(d.initializer);
-                        ct = this.prepareType(d.type ? mapType(d, this.checker) : r.ty);
-                    } else {
-                        ct = this.prepareType(mapType(d, this.checker));
-                    }
-                    const useInt = !cell &&
-                        ct.c === "double" &&
-                        sym !== undefined &&
-                        this.intSymbols.has(sym);
-                    if (useInt) ct = T_NUMBER_INT;
-                    let init = "";
-                    if (r) {
-                        const coerced = useInt && r.ty.kind === "number"
-                            ? `((int64_t)(${r.c}))`
-                            : this.coerce(r, ct, d.initializer!);
-                        init = " = " + coerced;
-                    }
-                    if (cell) {
-                        this.emitCaptureCellInitialization(
-                            buf,
-                            cell,
-                            init ? init.slice(3) : this.zeroValue(ct),
-                        );
-                        continue;
-                    }
-                    if (sym && this.asyncAwaitHoistedPreludeSymbols.has(sym)) {
-                        if (init) buf.line(`${name} = ${init.slice(3)};`);
-                        continue;
-                    }
-                    const qual = isConst ? " const" : "";
-                    buf.line(`${ct.c}${qual} ${name}${init};`);
-                }
-            } else {
-                const r = this.emitExpr(fs.initializer);
-                buf.line(r.c + ";");
+        const scope = this.createScopeLexicalBindings(buf, declarations);
+        this.lexicalBindingScopes.push(scope);
+        try {
+            if (list) {
+                this.emitVariableDeclarationList(buf, list);
+            } else if (fs.initializer && !ts.isVariableDeclarationList(fs.initializer)) {
+                buf.line(this.emitExpr(fs.initializer).c + ";");
             }
-        }
-        if (fs.condition && this.staticBooleanValue(fs.condition) === false) {
+            const perIteration = !!list && (list.flags & ts.NodeFlags.Let) !== 0;
+            if (perIteration) this.emitClonedScopeLexicalBindings(buf, scope);
+            if (fs.condition && this.staticBooleanValue(fs.condition) === false) return;
+            const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
+            const upd = fs.incrementor ? this.emitExpr(fs.incrementor).c : "";
+            // Continue must pass through environment copying even without an
+            // increment expression; closures created in the condition/body
+            // must retain the preceding iteration's cells.
+            const continueLabel = upd || perIteration ? this.freshTemp("_for_continue") : null;
+            const labeledContinueTarget = this.directLabeledLoopName(fs)
+                ? continueLabel ?? this.freshTemp("_for_labeled_continue") : null;
+            this.registerLabeledContinueTarget(fs, labeledContinueTarget);
+            buf.open(`while (${cond})`);
+            this.emitLoopStmtInBlock(buf, fs.statement, continueLabel);
+            if (!continueLabel && labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+            if (continueLabel) buf.line(`${continueLabel}:;`);
+            if (perIteration) this.emitClonedScopeLexicalBindings(buf, scope);
+            if (upd) buf.line(`(void)(${upd});`);
+            buf.close();
+        } finally {
+            if (this.lexicalBindingScopes.pop() !== scope) throw new Error("lexical scope stack corruption");
             if (!varInitializer) buf.close();
-            return;
         }
-        const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
-        const upd = fs.incrementor ? this.emitExpr(fs.incrementor).c : "";
-        const continueLabel = upd ? this.freshTemp("_for_continue") : null;
-        const labeledContinueTarget = this.directLabeledLoopName(fs)
-            ? continueLabel ?? this.freshTemp("_for_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fs, labeledContinueTarget);
-        buf.open(`while (${cond})`);
-        this.emitLoopStmtInBlock(buf, fs.statement, continueLabel);
-        if (!continueLabel && labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        if (continueLabel) buf.line(`${continueLabel}:;`);
-        if (upd) buf.line(`(void)(${upd});`);
-        buf.close();
-        if (!varInitializer) buf.close();
     }
 
     /** Recognize the one global-var pattern route shared by iteration forms. */
@@ -43865,46 +43840,7 @@ class Emitter {
         buf: CBuf,
         declaration: ts.VariableDeclaration,
     ): Map<ts.Symbol, LocalLexicalBindingPlan> {
-        const bindings = new Map<ts.Symbol, LocalLexicalBindingPlan>();
-        const pending: ts.BindingName[] = [declaration.name];
-        while (pending.length > 0) {
-            const name = pending.pop()!;
-            if (!ts.isIdentifier(name)) {
-                for (let index = name.elements.length - 1; index >= 0; index--) {
-                    const element = name.elements[index]!;
-                    if (ts.isBindingElement(element)) pending.push(element.name);
-                }
-                continue;
-            }
-            const symbol = this.symbolForIdentifier(name);
-            const metadata = this.localLexicalMetadataForSymbol(symbol);
-            if (!symbol || !metadata) unsupported(name, "unresolved synchronous iteration binding");
-            this.symbolStorageTypes.set(symbol, T_VALUE);
-            const cell = this.currentFunctionCellForSymbol(symbol);
-            if (cell) {
-                if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
-                    unsupported(name, "synchronous iteration binding requires a canonical value/TDZ cell");
-                }
-                this.emitCaptureCellInitialization(buf, cell, "tsc_value_undefined()", false);
-                bindings.set(symbol, {
-                    symbol, declaration, name: metadata.name, immutable: metadata.immutable,
-                    value: `(*${cell.cellName})`, initialized: `(*${cell.initializedCellName})`,
-                    gcRoot: `(*${cell.rootCellName})`,
-                });
-            } else {
-                const value = this.freshTemp("_iteration_binding");
-                const initialized = this.freshTemp("_iteration_initialized");
-                const gcRoot = this.freshTemp("_iteration_binding_gc_root");
-                buf.line(`tsc_value_t ${value} = tsc_value_undefined();`);
-                buf.line(`bool ${initialized} = false;`);
-                buf.line(`void* volatile ${gcRoot} = NULL;`);
-                bindings.set(symbol, {
-                    symbol, declaration, name: metadata.name, immutable: metadata.immutable,
-                    value, initialized, gcRoot,
-                });
-            }
-        }
-        return bindings;
+        return this.createScopeLexicalBindings(buf, [declaration]);
     }
 
     /** Disposal records have not yet joined the completion worklist. */
@@ -48027,6 +47963,7 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(identifier);
                 if (!symbol) unsupported(identifier, "unresolved lexical binding");
                 if (lexicalScope.has(symbol)) continue;
+                this.symbolStorageTypes.set(symbol, T_VALUE);
                 const metadata = this.localLexicalMetadataForSymbol(symbol);
                 if (!metadata) unsupported(identifier, "invalid lexical binding metadata");
                 const cell = this.currentFunctionCellForSymbol(symbol);
@@ -48072,6 +48009,35 @@ class Emitter {
             }
         }
         return lexicalScope;
+    }
+
+    /** CreatePerIterationEnvironment copies the canonical binding collection.
+     * Only escaped cells need fresh physical storage: uncaptured slots cannot
+     * expose environment identity. Publish each new value/root/TDZ cell set
+     * together after allocation, leaving prior closures' pointers untouched. */
+    private emitClonedScopeLexicalBindings(
+        buf: CBuf,
+        scope: ReadonlyMap<ts.Symbol, LocalLexicalBindingPlan>,
+    ): void {
+        for (const [symbol, binding] of scope) {
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (!cell) continue;
+            if (cell.type.kind !== "value" || !cell.rootCellName || !cell.initializedCellName) {
+                unsupported(binding.declaration, "lexical environment copy requires a canonical value/TDZ cell");
+            }
+            const copy: CaptureCell = {
+                type: T_VALUE,
+                cellName: this.freshTemp("_iteration_value_cell"),
+                rootCellName: this.freshTemp("_iteration_root_cell"),
+                initializedCellName: this.freshTemp("_iteration_initialized_cell"),
+            };
+            buf.open("");
+            this.emitCaptureCellInitialization(buf, copy, binding.value);
+            buf.line(`${cell.cellName} = ${copy.cellName};`);
+            buf.line(`${cell.rootCellName} = ${copy.rootCellName};`);
+            buf.line(`${cell.initializedCellName} = ${copy.initializedCellName};`);
+            buf.close();
+        }
     }
 
     private initializeScopeFunctions(buf: CBuf, declarations: readonly ScopeLexicalDeclaration[]): void {

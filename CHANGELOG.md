@@ -1,5 +1,7 @@
 # Changelog
 
+- Lower for initializers through the shared declaration list, preallocate lexical value/root/TDZ cells and copy captured let environments at the initial and update edges. Preserve source-ordered pattern initialization, initializer closures and continue semantics across ordinary and suspended execution. Share for-of cell allocation, delete duplicate storage paths and ignore erased function type annotations in async closure classification. Fail closed for unrepresented head disposal records.
+
 - Share one exact binary64 shortest-digit formatter across Number coercion, radix text and JSON. Use midpoint rounding intervals, minimal radix precision, nearest/even candidates and dynamic decimal/scientific layout; delete snprintf searches, capped buffers and observable integer-format shortcuts. Throw actual RangeError/TypeError for radix/receiver failures, and expose primitive wrapper constructor/prototype declarations with shared boxed storage.
 
 - Lower addition through one source-tree worklist with flat staged operands/results and a shared native/ordinary value dispatcher. Preserve evaluation order, grouped conversion boundaries, snapshots and abrupt values; retain decoded roots across primitive/numeric conversions. Delete duplicated addition dispatch and literal/number concat helpers, and route try/catch/finally bodies through canonical Block scope entry.
