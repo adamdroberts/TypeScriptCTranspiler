@@ -1307,44 +1307,26 @@ tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
     return string_from_utf16_range((const uint16_t*)nbuf, 0, (size_t)norm_len);
 }
 
-static bool is_trim_whitespace_unit(uint16_t unit) {
-    return unit == 0x0009 ||
-        unit == 0x000a ||
-        unit == 0x000b ||
-        unit == 0x000c ||
-        unit == 0x000d ||
-        unit == 0x0020 ||
-        unit == 0x00a0 ||
-        unit == 0x1680 ||
-        (unit >= 0x2000 && unit <= 0x200a) ||
-        unit == 0x2028 ||
-        unit == 0x2029 ||
-        unit == 0x202f ||
-        unit == 0x205f ||
-        unit == 0x3000 ||
-        unit == 0xfeff;
-}
-
 tsc_str_t* tsc_str_trim(const tsc_str_t* s) {
     tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
     size_t start = 0;
-    while (start < sequence.len && is_trim_whitespace_unit(sequence.data[start])) start++;
+    while (start < sequence.len && tsc_is_whitespace_unit(sequence.data[start])) start++;
     size_t end = sequence.len;
-    while (end > start && is_trim_whitespace_unit(sequence.data[end - 1])) end--;
+    while (end > start && tsc_is_whitespace_unit(sequence.data[end - 1])) end--;
     return string_from_utf16_range(sequence.data, start, end - start);
 }
 
 tsc_str_t* tsc_str_trim_start(const tsc_str_t* s) {
     tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
     size_t start = 0;
-    while (start < sequence.len && is_trim_whitespace_unit(sequence.data[start])) start++;
+    while (start < sequence.len && tsc_is_whitespace_unit(sequence.data[start])) start++;
     return string_from_utf16_range(sequence.data, start, sequence.len - start);
 }
 
 tsc_str_t* tsc_str_trim_end(const tsc_str_t* s) {
     tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
     size_t end = sequence.len;
-    while (end > 0 && is_trim_whitespace_unit(sequence.data[end - 1])) end--;
+    while (end > 0 && tsc_is_whitespace_unit(sequence.data[end - 1])) end--;
     return string_from_utf16_range(sequence.data, 0, end);
 }
 

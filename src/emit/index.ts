@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
@@ -13794,97 +13795,13 @@ class Emitter {
             }));
         }
         if (this.isUnshadowedGlobalIdentifier(recv, "RegExp")) {
-            if (method !== "escape") return null;
-            if (expr.arguments.length < 1) return null;
+            if (method !== "escape" || expr.arguments.length < 1) return null;
             if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) return null;
-            const argText = this.sideEffectFreeTemplateSubstitutionText(expr.arguments[0]!, seenConsts);
-            if (argText === null) return null;
-            for (let i = 0; i < argText.length; i++) {
-                if (argText.charCodeAt(i) >= 128) return null;
-            }
-            return this.escapeRegExpAscii(argText);
+            const text = this.sideEffectFreeStringLiteralText(expr.arguments[0]!, seenConsts);
+            return text === null ? null : escapeRegExpString(text);
         }
         return null;
     }
-
-    private escapeRegExpAscii(input: string): string {
-        const hex = "0123456789abcdef";
-        let out = "";
-        for (let i = 0; i < input.length; i++) {
-            const c = input.charCodeAt(i);
-            const leading_alnum = i === 0 && (
-                (c >= 48 && c <= 57) || // 0-9
-                (c >= 65 && c <= 90) || // A-Z
-                (c >= 97 && c <= 122)   // a-z
-            );
-            if (leading_alnum) {
-                out += "\\x" + hex[c >> 4] + hex[c & 0x0f];
-                continue;
-            }
-            switch (c) {
-                case 94:  // ^
-                case 36:  // $
-                case 92:  // \
-                case 46:  // .
-                case 42:  // *
-                case 43:  // +
-                case 63:  // ?
-                case 40:  // (
-                case 41:  // )
-                case 91:  // [
-                case 93:  // ]
-                case 123: // {
-                case 125: // }
-                case 124: // |
-                case 47:  // /
-                    out += "\\" + String.fromCharCode(c);
-                    break;
-                case 10:  // \n
-                    out += "\\n";
-                    break;
-                case 13:  // \r
-                    out += "\\r";
-                    break;
-                case 9:   // \t
-                    out += "\\t";
-                    break;
-                case 12:  // \f
-                    out += "\\f";
-                    break;
-                case 11:  // \v
-                    out += "\\v";
-                    break;
-                case 45:  // -
-                case 32:  // ' '
-                case 44:  // ,
-                case 61:  // =
-                case 60:  // <
-                case 62:  // >
-                case 35:  // #
-                case 38:  // &
-                case 33:  // !
-                case 37:  // %
-                case 58:  // :
-                case 59:  // ;
-                case 64:  // @
-                case 126: // ~
-                case 39:  // '
-                case 96:  // `
-                case 34:  // "
-                    out += "\\x" + hex[c >> 4] + hex[c & 0x0f];
-                    break;
-                default:
-                    if (c < 0x20 || c === 0x7f) {
-                        out += "\\x" + hex[c >> 4] + hex[c & 0x0f];
-                    } else {
-                        out += String.fromCharCode(c);
-                    }
-                    break;
-            }
-        }
-        return out;
-    }
-
 
     private sideEffectFreeStringInstanceCallText(
         expr: ts.Expression,
@@ -78948,7 +78865,7 @@ class Emitter {
         if (r.ty.kind === "eventemitter") return `tsc_str_from_lit("[object EventEmitter]", 21)`;
         if (r.ty.kind === "event") return `tsc_str_from_lit("[object Event]", 14)`;
         if (r.ty.kind === "eventtarget") return `tsc_str_from_lit("[object EventTarget]", 20)`;
-        if (r.ty.kind === "regexp") return `tsc_regexp_to_string(${r.c})`;
+        if (r.ty.kind === "regexp") return `tsc_value_to_string(tsc_value_regexp(${r.c}))`;
         if (r.ty.kind === "url") return `${r.c}->href`;
         if (r.ty.kind === "urlsearchparams") return `tsc_url_search_params_to_string(${r.c})`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;

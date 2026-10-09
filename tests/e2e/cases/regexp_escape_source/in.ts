@@ -1,0 +1,12 @@
+console.log("escape:", RegExp.escape("a-\n\u00a0\u2028\ud800😀"));
+console.log("controls:", RegExp.escape("\0\u0001\u007f").charCodeAt(0), RegExp.escape("\0\u0001\u007f").length);
+const source: RegExp = new RegExp("/\n\u2028");
+console.log("source:", source.source, source.toString());
+console.log("class:", new RegExp("[/]").source);
+console.log("empty:", new RegExp("").source);
+const cloned = new RegExp(source.source);
+console.log("roundtrip:", cloned.test("/\n\u2028"));
+const unit = "\ud800";
+console.log("surrogate:", new RegExp(RegExp.escape(unit), "u").test(unit));
+source.toString = () => "changed";
+console.log("coerce:", source);

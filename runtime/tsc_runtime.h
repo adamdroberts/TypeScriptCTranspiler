@@ -372,7 +372,6 @@ tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);
 tsc_value_t tsc_regexp_prototype_value(void);
-tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re);
 struct tsc_array* tsc_str_match_all_regex(const tsc_str_t* s, const tsc_regexp_t* re);
 tsc_str_t* tsc_str_replace_regex(const tsc_str_t* s, const tsc_regexp_t* re, const tsc_str_t* repl);
 tsc_str_t* tsc_str_replace_regex_value(const tsc_str_t* s, const tsc_regexp_t* re, tsc_value_t replacement);

@@ -2,6 +2,21 @@
 #define RE_UNSET SIZE_MAX
 
 /* Native consumers: every offset and capture refers to the same UTF-16 collection. */
+/* Output collection is GC-owned: callback/abrupt exits never abandon native
+ * allocations. Its materializer is the shared surrogate-preserving String ABI. */
+typedef struct { uint16_t* units; size_t len, capacity; } regexp_output_t;
+static void regexp_append(regexp_output_t* out, const uint16_t* units, size_t start, size_t count) {
+    if (count > SIZE_MAX - out->len) abort();
+    if (out->len + count > out->capacity) {
+        size_t next = out->capacity ? out->capacity : 64;
+        while (next < out->len + count) { if (next > SIZE_MAX / 2) abort(); next *= 2; }
+        if (next > SIZE_MAX / sizeof(*out->units)) abort();
+        out->units = TSC_GC_REALLOC(out->units, next * sizeof(*out->units));
+        out->capacity = next;
+    }
+    if (count) memcpy(out->units + out->len, units + start, count * sizeof(*units));
+    out->len += count;
+}
 /* The ordinary argument List feeds both [[Call]] and [[Construct]]. IsRegExp,
  * property reads, prototype selection and conversion retain their spec order. */
 tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
@@ -40,99 +55,75 @@ tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_ar
     return tsc_value_regexp(regexp);
 }
 
-tsc_str_t* tsc_regexp_escape(const tsc_str_t* input) {
-    static const char* hex = "0123456789abcdef";
-    tsc_str_t* out = str_alloc(input->len * 4);
-    char* dst = (char*)out->data;
-    size_t pos = 0;
-    for (size_t i = 0; i < input->len; i++) {
-        unsigned char c = (unsigned char)input->data[i];
-        bool leading_alnum = i == 0 && ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
-        if (leading_alnum) {
-            dst[pos++] = '\\';
-            dst[pos++] = 'x';
-            dst[pos++] = hex[c >> 4];
-            dst[pos++] = hex[c & 0x0f];
-            continue;
-        }
-        switch (c) {
-            case '^':
-            case '$':
-            case '\\':
-            case '.':
-            case '*':
-            case '+':
-            case '?':
-            case '(':
-            case ')':
-            case '[':
-            case ']':
-            case '{':
-            case '}':
-            case '|':
-            case '/':
-                dst[pos++] = '\\';
-                dst[pos++] = (char)c;
-                break;
-            case '\n':
-                dst[pos++] = '\\';
-                dst[pos++] = 'n';
-                break;
-            case '\r':
-                dst[pos++] = '\\';
-                dst[pos++] = 'r';
-                break;
-            case '\t':
-                dst[pos++] = '\\';
-                dst[pos++] = 't';
-                break;
-            case '\f':
-                dst[pos++] = '\\';
-                dst[pos++] = 'f';
-                break;
-            case '\v':
-                dst[pos++] = '\\';
-                dst[pos++] = 'v';
-                break;
-            case '-':
-            case ' ':
-            case ',':
-            case '=':
-            case '<':
-            case '>':
-            case '#':
-            case '&':
-            case '!':
-            case '%':
-            case ':':
-            case ';':
-            case '@':
-            case '~':
-            case '\'':
-            case '`':
-            case '"':
-                dst[pos++] = '\\';
-                dst[pos++] = 'x';
-                dst[pos++] = hex[c >> 4];
-                dst[pos++] = hex[c & 0x0f];
-                break;
-            default:
-                if (c < 0x20 || c == 0x7f) {
-                    dst[pos++] = '\\';
-                    dst[pos++] = 'x';
-                    dst[pos++] = hex[c >> 4];
-                    dst[pos++] = hex[c & 0x0f];
-                } else {
-                    dst[pos++] = (char)c;
-                }
-                break;
-        }
+static void regexp_output_unit(regexp_output_t* out, uint16_t unit) {
+    regexp_append(out, &unit, 0, 1);
+}
+static void regexp_output_hex(regexp_output_t* out, uint16_t unit, bool unicode) {
+    static const uint16_t hex[] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
+    regexp_output_unit(out, '\\');
+    regexp_output_unit(out, unicode ? 'u' : 'x');
+    for (unsigned shift = unicode ? 16 : 8; shift;) {
+        shift -= 4;
+        regexp_output_unit(out, hex[(unit >> shift) & 15]);
     }
-    dst[pos] = '\0';
-    out->len = pos;
-    return out;
 }
 
+tsc_str_t* tsc_regexp_escape(const tsc_str_t* input) {
+    size_t len;
+    const uint16_t* units = tsc_str_utf16_units(input, &len);
+    regexp_output_t output = {0};
+    for (size_t index = 0; index < len; index++) {
+        uint16_t unit = units[index];
+        if (is_high_surrogate(unit) && index + 1 < len && is_low_surrogate(units[index + 1])) {
+            regexp_append(&output, units, index++, 2);
+            continue;
+        }
+        bool leading_alnum = index == 0 && ((unit >= '0' && unit <= '9') ||
+            (unit >= 'A' && unit <= 'Z') || (unit >= 'a' && unit <= 'z'));
+        bool syntax = unit < 128 && strchr("^$\\.*+?()[]{}|/", unit) != NULL && unit != 0;
+        uint16_t control = unit == '\t' ? 't' : unit == '\n' ? 'n' : unit == '\v' ? 'v' :
+            unit == '\f' ? 'f' : unit == '\r' ? 'r' : 0;
+        bool punctuation = unit < 128 && unit != 0 && strchr(",-=<>#&!%:;@~'`\"", unit) != NULL;
+        if (leading_alnum) regexp_output_hex(&output, unit, false);
+        else if (syntax || control) {
+            regexp_output_unit(&output, '\\');
+            regexp_output_unit(&output, control ? control : unit);
+        } else if (punctuation || tsc_is_whitespace_unit(unit) || is_high_surrogate(unit) || is_low_surrogate(unit)) {
+            regexp_output_hex(&output, unit, unit > 0xff);
+        } else regexp_output_unit(&output, unit);
+    }
+    return tsc_str_from_units_range(output.units, 0, output.len);
+}
+
+/* EscapeRegExpPattern serializes the immutable original pattern. Escaped
+ * units are consumed together, so a delimiter is never escaped twice and a
+ * backslash before a raw line terminator becomes its equivalent escape. */
+tsc_str_t* tsc_regexp_source(const tsc_regexp_t* regexp) {
+    size_t len;
+    const uint16_t* units = tsc_str_utf16_units(regexp->source, &len);
+    if (!len) return tsc_str_from_lit("(?:)", 4);
+    regexp_output_t output = {0};
+    size_t class_depth = 0;
+    for (size_t index = 0; index < len; index++) {
+        uint16_t unit = units[index];
+        bool escaped = unit == '\\' && index + 1 < len;
+        if (escaped) unit = units[++index];
+        if (unit == '\n' || unit == '\r') {
+            regexp_output_unit(&output, '\\');
+            regexp_output_unit(&output, unit == '\n' ? 'n' : 'r');
+        } else if (unit == 0x2028 || unit == 0x2029) {
+            regexp_output_hex(&output, unit, true);
+        } else {
+            if (escaped || (unit == '/' && !class_depth)) regexp_output_unit(&output, '\\');
+            regexp_output_unit(&output, unit);
+            if (!escaped) {
+                if (unit == '[' && (!class_depth || regexp->unicode_sets)) class_depth++;
+                else if (unit == ']' && class_depth) class_depth--;
+            }
+        }
+    }
+    return tsc_str_from_units_range(output.units, 0, output.len);
+}
 
 tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     size_t pn, fn;
@@ -347,10 +338,6 @@ tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t
     return result == tsc_value_null() ? tsc_value_num(-1) :
         tsc_value_get_prop(result, tsc_str_from_lit("index", 5));
 }
-tsc_str_t* tsc_regexp_to_string(const tsc_regexp_t* re) {
-    tsc_str_t* head = tsc_str_concat(tsc_str_from_lit("/", 1), re->source);
-    return tsc_str_concat(head, tsc_str_concat(tsc_str_from_lit("/", 1), re->flags));
-}
 tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
     size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
     size_t* captures = regexp_captures(re);
@@ -364,20 +351,6 @@ tsc_array_t* tsc_str_match_all_regex(const tsc_str_t* string, const tsc_regexp_t
         if (captures[0] == offset) offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets);
     }
     return result;
-}
-/* Output collection is GC-owned: callback/abrupt exits never abandon native
- * allocations. Its materializer is the shared surrogate-preserving String ABI. */
-typedef struct { uint16_t* units; size_t len, capacity; } regexp_output_t;
-static void regexp_append(regexp_output_t* out, const uint16_t* units, size_t start, size_t count) {
-    if (count > SIZE_MAX - out->len) abort();
-    if (out->len + count > out->capacity) {
-        size_t next = out->capacity ? out->capacity : 64;
-        while (next < out->len + count) { if (next > SIZE_MAX / 2) abort(); next *= 2; }
-        out->units = TSC_GC_REALLOC(out->units, next * sizeof(*out->units));
-        out->capacity = next;
-    }
-    if (count) memcpy(out->units + out->len, units + start, count * sizeof(*units));
-    out->len += count;
 }
 static void regexp_substitute(regexp_output_t* out, const tsc_regexp_t* re,
                               const uint16_t* source, size_t len, const size_t* captures,

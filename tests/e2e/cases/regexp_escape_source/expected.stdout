@@ -1,0 +1,8 @@
+escape: \x61\x2d\n\xa0\u2028\ud800😀
+controls: 0 3
+source: \/\n\u2028 /\/\n\u2028/
+class: [/]
+empty: (?:)
+roundtrip: true
+surrogate: true
+coerce: changed

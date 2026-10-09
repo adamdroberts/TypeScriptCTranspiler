@@ -434,6 +434,15 @@ static inline bool value_is_valid_prototype(tsc_value_t v) {
 
 
 
+/* ECMAScript WhiteSpace and LineTerminator are one code-unit partition. */
+static inline bool tsc_is_whitespace_unit(uint16_t unit) {
+    return unit == 0x0009 || unit == 0x000a || unit == 0x000b || unit == 0x000c ||
+        unit == 0x000d || unit == 0x0020 || unit == 0x00a0 || unit == 0x1680 ||
+        (unit >= 0x2000 && unit <= 0x200a) || unit == 0x2028 || unit == 0x2029 ||
+        unit == 0x202f || unit == 0x205f || unit == 0x3000 || unit == 0xfeff;
+}
+tsc_str_t* tsc_regexp_source(const tsc_regexp_t* regexp);
+
 // --- Hash & Map Helpers ---
 #define TSC_BKT_EMPTY     ((size_t)-1)
 #define TSC_BKT_TOMBSTONE ((size_t)-2)

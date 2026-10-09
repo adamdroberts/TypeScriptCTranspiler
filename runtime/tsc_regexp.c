@@ -228,7 +228,6 @@ static bool re_is_unicode(const tsc_re_parser_t* p);
 static bool re_is_high_surrogate(uint16_t u);
 static bool re_is_low_surrogate(uint16_t u);
 static bool re_is_word_unit(uint16_t u);
-static bool re_is_space_unit(uint16_t u);
 static uint32_t re_canon(uint32_t cp, bool ignore_case, bool unicode);
 static void re_node_list_push(tsc_re_parser_t* p, tsc_re_node_t* list_node, tsc_re_node_t* item);
 static void re_class_item_push(tsc_re_parser_t* p, tsc_re_node_t* cls, tsc_re_node_t* item);
@@ -1773,14 +1772,6 @@ static bool re_is_word_unit(uint16_t u) {
         (u >= '0' && u <= '9') || u == '_';
 }
 
-static bool re_is_space_unit(uint16_t u) {
-    return u == '\t' || u == '\n' || u == '\v' || u == '\f' || u == '\r' ||
-        u == ' ' || u == 0x00a0 || u == 0x1680 || u == 0x2000 || u == 0x2001 ||
-        u == 0x2002 || u == 0x2003 || u == 0x2004 || u == 0x2005 || u == 0x2006 ||
-        u == 0x2007 || u == 0x2008 || u == 0x2009 || u == 0x200a || u == 0x2028 ||
-        u == 0x2029 || u == 0x202f || u == 0x205f || u == 0x3000 || u == 0xfeff;
-}
-
 /* Identity escapes allowed in Unicode mode after a backslash: the
  * SyntaxCharacters plus '/' so literals can escape the delimiter. */
 static bool re_is_unicode_identity(uint16_t u) {
@@ -2598,7 +2589,7 @@ static USet* re_escape_set(tsc_re_class_escape_t escape) {
         uset_addRange(set, 'A', 'Z'); uset_addRange(set, 'a', 'z');
         uset_addRange(set, '0', '9'); uset_add(set, '_'); break;
     case RE_CE_SPACE: case RE_CE_SPACE_NEG:
-        for (uint32_t cp = 0; cp <= 0xffff; cp++) if (re_is_space_unit(cp)) uset_add(set, cp);
+        for (uint32_t cp = 0; cp <= 0xffff; cp++) if (tsc_is_whitespace_unit(cp)) uset_add(set, cp);
         break;
     }
     return set;
@@ -2753,7 +2744,7 @@ static tsc_value_t regexp_property_get(void* env, tsc_value_t receiver) {
     }
     const tsc_regexp_t* re = object->class_ptr;
     switch (descriptor->property) {
-    case RE_P_SOURCE: return tsc_value_string(re->source);
+    case RE_P_SOURCE: return tsc_value_string(tsc_regexp_source(re));
     case RE_P_GLOBAL: return tsc_value_bool(re->global);
     case RE_P_INDICES: return tsc_value_bool(re->has_indices);
     case RE_P_IGNORE_CASE: return tsc_value_bool(re->ignore_case);
@@ -2765,6 +2756,17 @@ static tsc_value_t regexp_property_get(void* env, tsc_value_t receiver) {
     case RE_P_FLAGS: break;
     }
     tsc_panic("unknown RegExp getter");
+}
+static tsc_value_t regexp_property_get_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)args; return regexp_property_get(env, receiver);
+}
+static void regexp_define_getter(tsc_value_t object, tsc_str_t* key, tsc_str_t* name,
+                                 tsc_generic_function_t getter, void* env) {
+    tsc_object_t* descriptor = tsc_object_new();
+    tsc_object_set(descriptor, tsc_str_from_lit("get", 3), tsc_value_function_builtin_named(getter, env, 0, name));
+    tsc_object_set(descriptor, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
+    tsc_object_set(descriptor, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
+    tsc_value_define_property_descriptor(object, key, tsc_value_object(descriptor));
 }
 static tsc_value_t regexp_to_string_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
     (void)env; (void)args;
@@ -2795,19 +2797,16 @@ tsc_value_t tsc_regexp_prototype_value(void) {
         tsc_function_identity_set_own_prototype(identity, tsc_value_object(prototype));
         identity->func_prototype_writable = false;
         tsc_object_define(prototype, tsc_str_from_lit("constructor", 11), state->constructor, true, false, true);
-        tsc_object_t* species = tsc_object_new();
-        tsc_object_set(species, tsc_str_from_lit("get", 3), tsc_value_function_builtin_named(
-            regexp_species_get, NULL, 0, tsc_str_from_lit("get [Symbol.species]", 20)));
-        tsc_object_set(species, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
-        tsc_object_set(species, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
-        tsc_value_define_property_descriptor(state->constructor, tsc_symbol_property_key(tsc_symbol_species()), tsc_value_object(species));
+        regexp_define_getter(state->constructor, tsc_symbol_property_key(tsc_symbol_species()),
+            tsc_str_from_lit("get [Symbol.species]", 20), regexp_species_get, NULL);
         tsc_value_define_property_desc(state->constructor, tsc_str_from_lit("escape", 6),
             tsc_value_function_builtin_named(regexp_escape_apply, NULL, 1, tsc_str_from_lit("escape", 6)),
             true, true, true, false, true, true, true);
         for (size_t i = 0; i < sizeof(regexp_properties) / sizeof(*regexp_properties); i++) {
             const regexp_property_descriptor_t* descriptor = &regexp_properties[i];
-            tsc_object_define_accessor(prototype, tsc_str_from_cstr(descriptor->name),
-                regexp_property_get, (void*)descriptor, true, NULL, NULL, false, false, true, true, true);
+            tsc_str_t* key = tsc_str_from_cstr(descriptor->name);
+            regexp_define_getter(tsc_value_object(prototype), key,
+                tsc_str_concat(tsc_str_from_lit("get ", 4), key), regexp_property_get_apply, (void*)descriptor);
         }
         static const struct { const char* name; double length; tsc_generic_function_t apply; } methods[] = {
             {"exec", 1, tsc_regexp_exec_apply}, {"test", 1, tsc_regexp_test_apply},

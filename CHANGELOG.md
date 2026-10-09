@@ -1,5 +1,7 @@
 # Changelog
 
+- Replaced byte-oriented RegExp escaping with UTF-16 scalar handling, added equivalent source serialization and named accessor metadata, and preserved ordinary mutable string coercion. Runtime trim/whitespace/escaping share one category predicate; compiler and module analysis share the complete String escape evaluator.
+
 - Added an ordinary Realm-owned RegExp constructor with shared call/construct argument Lists, cloning and IsRegExp rules, ordered reflective prototype allocation, real constructor/species/escape descriptors, and cross-Realm defaults/errors. Constructor aliases retain callable/constructable identity structurally; mixed conditional values use shared boxing.
 
 - Added ordinary String/RegExp `match` and `search` symbol protocols through shared `RegExpExec`, including custom methods, ordered conversions, Unicode empty advancement, result metadata, and exact `lastIndex` restoration. Replaced the direct matcher dispatches and preserve arbitrary inferred JavaScript property values.
