@@ -1,3 +1,5 @@
+Removed obsolete expression_value_ generated-C expectations from expression CFG regressions. Node observations and native GC/no-GC behavior agree; runtime assertions remain unchanged and no language-coverage claim is promoted.
+
 Unchecked JavaScript reads, calls and construction use their canonical actual-value fact domain before checker inference; redundant source-formal inference edges are deleted, removing the deep source-alias stack failure. Empty observation plans no longer activate typed eval environments. Full target coverage remains open.
 
 CLI and native-host eval now share finite source graph admission, retained lexical/private environments, canonical Realm eval identity and UTF-16 source roots. Constant-only and separate manifest result emitters were removed; unresolved source still requires an explicit admission/fallback boundary. Node semantic partitions, retained-owner stress and imported typed consumers verify the scoped change; full target coverage remains open.
