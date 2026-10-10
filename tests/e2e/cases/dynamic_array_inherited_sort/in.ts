@@ -1,7 +1,7 @@
 function report(label: string, value: any[]): void {
     console.log(
         label,
-        value.join("|"),
+        Array.prototype.join.call(value, "|"),
         Object.keys(value).join("|"),
         Object.hasOwn(value, "2"),
     );

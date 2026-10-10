@@ -1,7 +1,7 @@
 function report(label: string, target: any[], removed: any[]): void {
     console.log(
         label,
-        target.join("|"),
+        Array.prototype.join.call(target, "|"),
         Object.keys(target).join("|"),
         removed.join("|"),
         Object.keys(removed).join("|"),

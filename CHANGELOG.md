@@ -556,6 +556,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `child_process.spawn(file, args?, options?)` now creates real asynchronous POSIX child handles with pipe-backed stdin/stdout/stderr, dynamic EventEmitter-compatible listeners, `data` / `end` stream events, `spawn` / `exit` / `close` lifecycle events, UTF-8 stream encoding, stdin `write` / `end`, and `kill` / exit-signal state. Tests: `child_process_spawn`, `child_process_spawn_streams`, `child_process_spawn_kill`.
 
 ### Fixed
+
+- Borrow Array.prototype.join in inherited-array mutation fixture reports after prototype replacement, so their expected results agree with independent Node execution.
+
 - Keep top-level Script lexical function initializers in their Global Environment Record binding instead of lifting immutable arrows/functions past binding initialization; captured readers and mutable function-valued bindings now resolve the same boxed slot in both memory modes.
 - CommonJS static require-alias fixtures now mark explicit `exports.default` values with `__esModule`, keeping bind/call/apply/`Reflect.apply` alias coverage aligned with the documented default-interop split while unmarked default behavior remains covered separately. Tests: `node_modules_commonjs_module_require_bind_alias`, `node_modules_commonjs_module_alias_require_bind_alias`, `node_modules_commonjs_require_alias_bind_alias`, `node_modules_commonjs_module_require_call_wrapper`.
 - Proxy target and handler slots now retain raw GC-visible roots alongside their tagged values, preventing normal-GC descriptor invariant validation from dereferencing a collected target after trap allocations; revocation releases the handler root. The normal-GC `proxy_` audit passes 110 cases, with focused no-GC invariant checks also passing. Test: `proxy_descriptor_invariants`.
