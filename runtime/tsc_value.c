@@ -3212,6 +3212,12 @@ tsc_value_t tsc_value_get_prototype_from_constructor(
 }
 
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
+    // The canonical invocation owns its encoded operands across argument-list
+    // materialization and arbitrary user callbacks, including native callers.
+    void* volatile invocation_roots[] = {
+        tsc_value_gc_root(fn), tsc_value_gc_root(this_arg), tsc_value_gc_root(args)
+    };
+    (void)invocation_roots;
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
         if (o->is_proxy) {
@@ -3220,7 +3226,11 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply target must be callable"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
+            tsc_array_t* volatile arguments_root = list;
+            (void)arguments_root;
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
+            void* volatile trap_root = tsc_value_gc_root(trap);
+            (void)trap_root;
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return tsc_value_apply_function(o->proxy_target, this_arg, tsc_value_array(list));
             }
@@ -3241,6 +3251,8 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
         );
     }
     tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
+    tsc_array_t* volatile arguments_root = list;
+    (void)arguments_root;
     tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
     tsc_realm_t* previous_realm = tsc_realm_swap(
         ident->realm ? ident->realm : tsc_realm_current()
@@ -3326,6 +3338,10 @@ static tsc_value_t construct_from_argument_list(
     tsc_array_t* list,
     tsc_value_t new_target
 ) {
+    void* volatile construction_roots[] = {
+        tsc_value_gc_root(target), list, tsc_value_gc_root(new_target)
+    };
+    (void)construction_roots;
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_BOUND) {
@@ -3345,10 +3361,16 @@ static tsc_value_t construct_from_argument_list(
                 tsc_value_t new_target_proto = tsc_value_get_prototype_from_constructor(
                     new_target, ident->construct_default_prototype
                 );
+                void* volatile prototype_root = tsc_value_gc_root(new_target_proto);
+                (void)prototype_root;
                 receiver = tsc_value_object(
                     tsc_object_new_with_prototype(new_target_proto)
                 );
             }
+            // A constructor can allocate or collect before decoding this
+            // freshly allocated, otherwise only NaN-boxed receiver.
+            void* volatile receiver_root = tsc_value_gc_root(receiver);
+            (void)receiver_root;
             tsc_generic_function_t construct = ident->construct ? ident->construct : ident->code.generic;
             tsc_realm_t* previous_realm = tsc_realm_swap(
                 ident->realm ? ident->realm : tsc_realm_current()
@@ -3394,6 +3416,8 @@ static tsc_value_t construct_from_argument_list(
         if (o->is_proxy) {
             if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
             tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("construct", 9));
+            void* volatile trap_root = tsc_value_gc_root(trap);
+            (void)trap_root;
             if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
                 return construct_from_argument_list(o->proxy_target, list, new_target);
             }
@@ -3431,6 +3455,10 @@ tsc_value_t tsc_value_construct_with_new_target(
     tsc_value_t args,
     tsc_value_t new_target
 ) {
+    void* volatile construction_roots[] = {
+        tsc_value_gc_root(target), tsc_value_gc_root(args), tsc_value_gc_root(new_target)
+    };
+    (void)construction_roots;
     if (!tsc_value_is_constructable(target)) {
         tsc_throw_error(
             TSC_ERROR_TYPE,
@@ -6479,6 +6507,8 @@ static tsc_value_t value_ordinary_to_primitive(
     tsc_value_t object,
     tsc_to_primitive_hint_t hint
 ) {
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
     static const struct {
         const char* name;
         size_t name_len;
@@ -6494,6 +6524,8 @@ static tsc_value_t value_ordinary_to_primitive(
             object,
             tsc_str_from_lit(method_name, method_name_len)
         );
+        void* volatile method_root = tsc_value_gc_root(method);
+        (void)method_root;
         if (!tsc_value_is_callable(method)) continue;
         tsc_value_t result = tsc_value_apply_function(
             method,
@@ -6509,6 +6541,8 @@ static tsc_value_t value_to_primitive(
     tsc_value_t object,
     tsc_to_primitive_hint_t hint
 ) {
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
     static const struct {
         const char* name;
         size_t name_len;
@@ -6519,6 +6553,8 @@ static tsc_value_t value_to_primitive(
     };
 
     tsc_value_t exotic = tsc_value_get_symbol_prop(object, tsc_symbol_to_primitive());
+    void* volatile exotic_root = tsc_value_gc_root(exotic);
+    (void)exotic_root;
     if (!tsc_value_is_nullish(exotic)) {
         if (!tsc_value_is_callable(exotic)) {
             tsc_throw_error(
@@ -6736,6 +6772,8 @@ static int date_numeric_arguments(
 }
 
 static tsc_value_t date_prototype_to_json(tsc_value_t receiver) {
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    (void)receiver_root;
     tsc_value_t primitive = value_to_primitive_if_object(
         receiver,
         TSC_TO_PRIMITIVE_NUMBER
@@ -6747,6 +6785,8 @@ static tsc_value_t date_prototype_to_json(tsc_value_t receiver) {
         receiver,
         tsc_str_from_lit("toISOString", 11)
     );
+    void* volatile method_root = tsc_value_gc_root(method);
+    (void)method_root;
     if (!tsc_value_is_callable(method)) {
         tsc_throw_error(
             TSC_ERROR_TYPE,

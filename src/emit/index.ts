@@ -29175,7 +29175,9 @@ class Emitter {
         buf.line(`${qualifier}${cell.type.c}* ${cell.cellName} = (${qualifier}${cell.type.c}*)TSC_GC_MALLOC(sizeof(${cell.type.c}));`);
         buf.line(`*${cell.cellName} = ${value};`);
         if (cell.rootCellName) {
-            buf.line(`void** ${cell.rootCellName} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
+            // Keep the companion root allocation reachable even after its
+            // last store; later reads of the NaN-boxed value cannot root it.
+            buf.line(`void** volatile ${cell.rootCellName} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
             buf.line(`*${cell.rootCellName} = tsc_value_gc_root(*${cell.cellName});`);
         }
         if (cell.initializedCellName) {

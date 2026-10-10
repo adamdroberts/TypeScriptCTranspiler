@@ -19,8 +19,14 @@ function subject():string {
             {name:'setMilliseconds',values:[4]}, {name:'setYear',values:[24]}
         ];
         function check(value,label){if(!value)throw new Error(label);PRINT(label);}
+        for(const value of [0,seed,-1,NaN,Infinity]){
+            const date=new Date({valueOf(){COLLECT;return value;}});
+            COLLECT;
+            check(Object.is(date.getTime(),Number.isFinite(value)?value:NaN),'constructed-receiver:'+value);
+        }
         for(const plan of plans)for(const invalid of [false,true])for(const mode of ['absent','present','undefined','abrupt']){
             const date=new Date(invalid?NaN:seed),events=[];
+            COLLECT;
             const first={valueOf(){events.push('first');COLLECT;date.setTime(mode==='abrupt'?12345:0);if(mode==='abrupt')throw raw;return plan.values[0];}};
             const args=[first];
             if(mode==='present')for(let position=1;position<plan.values.length;position++)args.push({valueOf(){events.push('optional:'+position);COLLECT;date.setTime(0);return plan.values[position];}});

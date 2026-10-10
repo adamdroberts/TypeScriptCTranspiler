@@ -2746,7 +2746,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["realm and agent state", "execution contexts", "environment records", "jobs"],
-      "localEvidence": {"property": ["tests/property/eval-environment.property.test.ts", "tests/property/direct-eval-cell.property.test.ts", "tests/property/global-reference.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval", "global_reference_cells"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c", "runtime/tsc_environment.c", "runtime/tsc_core.c", "runtime/tsc_value.c", "src/global-bindings.ts", "runtime/tsc_global_bindings.def"]},
+      "localEvidence": {"property": ["tests/property/eval-environment.property.test.ts", "tests/property/direct-eval-cell.property.test.ts", "tests/property/global-reference.property.test.ts", "tests/property/lexical-cell-lifetime.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["function_closures", "runtime_eval", "global_reference_cells"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "runtime/tsc_promise.c", "runtime/tsc_environment.c", "runtime/tsc_core.c", "runtime/tsc_value.c", "src/global-bindings.ts", "runtime/tsc_global_bindings.def"]},
       "knownGaps": ["Class/private/super/with environments, complete Annex B, full Realm intrinsics and exact reciprocal Environment Record clause evidence remain incomplete."]
     },
     {

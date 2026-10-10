@@ -1,5 +1,7 @@
 # Changelog
 
+- Retain boxed lexical companion roots after their last store and root canonical native invocation/construction operands across allocation and callbacks. Verify forced collection across value kinds, fresh constructor receivers, deep escaped cells and typed Date consumers in both memory modes.
+
 - Compose local Date construction and UTC/local/legacy setters through one Number calendar component kernel before host time-zone conversion. Preserve cancellation, fractional truncation, invalid-year wall-time fallback and valid negative epoch seconds; verify independent normalization, offset/clip properties, deep retention and typed E2E in both memory modes.
 
 - Share ordinary Date instance lookup and pre-coercion time snapshots, migrate UTC setters to the exact calendar kernel and remove direct method/purity predecessors. Share Date/Buffer owner admission and a source fact worklist for inferred result/alias storage; verify Node and pinned year semantics, retained owners, deep source dependencies and typed/suspended consumers.
