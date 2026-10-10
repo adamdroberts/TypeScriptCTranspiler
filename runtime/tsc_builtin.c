@@ -139,50 +139,6 @@ tsc_str_t* tsc_symbol_to_string(const tsc_symbol_t* sym) {
     );
 }
 
-/* ---------------- WeakRef ---------------- */
-
-tsc_weakref_t* tsc_weakref_new(void* target) {
-    tsc_weakref_t* ref = (tsc_weakref_t*)TSC_GC_MALLOC(sizeof(tsc_weakref_t));
-    ref->target = target;
-    return ref;
-}
-
-void* tsc_weakref_deref(const tsc_weakref_t* ref) {
-    return ref ? ref->target : NULL;
-}
-
-/* ---------------- FinalizationRegistry ---------------- */
-
-tsc_finregistry_t* tsc_finregistry_new(void) {
-    return (tsc_finregistry_t*)TSC_GC_MALLOC(sizeof(tsc_finregistry_t));
-}
-
-void tsc_finregistry_register(tsc_finregistry_t* r, void* token) {
-    if (!r) return;
-    if (r->len == r->cap) {
-        size_t ncap = r->cap ? r->cap * 2 : 4;
-        r->entries = (tsc_finregistry_entry_t*)TSC_GC_REALLOC(
-            r->entries, ncap * sizeof(tsc_finregistry_entry_t));
-        r->cap = ncap;
-    }
-    r->entries[r->len++].unregister_token = token;
-}
-
-bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token) {
-    if (!r || !token) return false;
-    bool found = false;
-    size_t w = 0;
-    for (size_t i = 0; i < r->len; i++) {
-        if (r->entries[i].unregister_token == token) {
-            found = true;
-        } else {
-            r->entries[w++] = r->entries[i];
-        }
-    }
-    r->len = w;
-    return found;
-}
-
 /* ---------------- numbers ---------------- */
 /* tsc_num_mod is defined as `static inline` in tsc_runtime.h. */
 

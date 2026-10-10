@@ -277,30 +277,10 @@ tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym);
 tsc_str_t* tsc_symbol_to_string(const tsc_symbol_t* sym);
 
 /* ------------- WeakRef ------------- */
-typedef struct tsc_weakref {
-    void* target;
-} tsc_weakref_t;
-
-tsc_weakref_t* tsc_weakref_new(void* target);
-void* tsc_weakref_deref(const tsc_weakref_t* ref);
-
-/* ------------- FinalizationRegistry -------------
- * Stub: tracks registered entries so that `.unregister(token)` returns the
- * right boolean, but the cleanup callback never fires (this AOT runtime has
- * no GC-finalizer plumbing). */
-typedef struct tsc_finregistry_entry {
-    void* unregister_token; /* NULL if no token was supplied */
-} tsc_finregistry_entry_t;
-
-typedef struct tsc_finregistry {
-    tsc_finregistry_entry_t* entries;
-    size_t len;
-    size_t cap;
-} tsc_finregistry_t;
-
-tsc_finregistry_t* tsc_finregistry_new(void);
-void tsc_finregistry_register(tsc_finregistry_t* r, void* token);
-bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token);
+tsc_value_t tsc_weak_ref_constructor_value(void);
+tsc_value_t tsc_weak_ref_prototype_value(void);
+tsc_value_t tsc_finalization_registry_constructor_value(void);
+tsc_value_t tsc_finalization_registry_prototype_value(void);
 
 /* ------------- numbers ------------- */
 /* Number remainder shares binary64 evaluation with typed and boxed callers.

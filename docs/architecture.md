@@ -1,3 +1,5 @@
+WeakRef and FinalizationRegistry now use the shared ordinary weak-state owners and descriptor collection. Encoded targets and unregister tokens stay weak; finalization callbacks and holdings have decoded strong roots. Agent job checkpoints clear kept references and enqueue cleanup outside the collector, with pending-cell removal before callbacks and duplicate-token unregistration. Native pointer wrappers and inert registry stubs are deleted. Runtime constructor heritage follows the canonical class plan, including retained aliases. Compact Node partitions, one deep retained-owner input, native disappearing-link checks, and fully typed imported consumers provide scoped evidence; exhaustive eligible managing-memory conformance remains open.
+
 Weak collection owners project runtime/tsc_weak_collections.def into constructor/member descriptors. Native entries retain encoded keys/values; decoded roots belong to actual call/constructor temporaries. The GC mark-end dependency index and heap worklist enforce collection-and-key conditional reachability, including ephemeron chains and cycles. Collector scratch storage uses mmap rather than the suspended-thread allocator; initialization is serialized for threaded builds, and dead registry nodes are unlinked before sweeping.
 
 Console integration exposed a GC lifetime regression in retained URL construction. URL constructor results now keep a decoded owner root across newTarget prototype lookup; member publication also anchors callable/descriptor temporaries, and the shared object allocator anchors an encoded prototype across allocation. The descriptor-inspection worklist retains decoded value and descriptor roots. These repairs preserve ordinary ownership rather than adding source-shape cases.
@@ -367,7 +369,8 @@ The typed emitter prefers specialized C types and uses a NaN-boxed dynamic value
 | `Set<T>` | `tsc_set_t*` | same |
 | `WeakMap<K, V>` | `tsc_value_t` | ordinary owner of encoded weak entries and conditional value edges |
 | `WeakSet<T>` | `tsc_value_t` | ordinary owner using the shared weak-entry representation |
-| `WeakRef<T>` | `tsc_weakref_t*` | typed target pointer wrapper |
+| `WeakRef<T>` | `tsc_value_t` | ordinary weak-state owner with job-scoped kept target roots |
+| `FinalizationRegistry<T>` | `tsc_value_t` | shared weak cells; strong callback/holdings roots and deferred cleanup jobs |
 | `RegExp` | `tsc_regexp_t*` | ECMAScript AST, continuation graph, and UTF-16 offsets |
 | `(args) => ret` | `tsc_fn_*_t*` | typed closure value with generated `{fn, env}` struct; function-scope captures use GC-managed ref cells |
 | `class Foo` | `Foo_t*` | struct with inherited fields laid at prefix |

@@ -3562,6 +3562,10 @@ static tsc_value_t value_intrinsic_default_prototype(
             return tsc_weak_map_prototype_value();
         case TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE:
             return tsc_weak_set_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_WEAK_REF_PROTOTYPE:
+            return tsc_weak_ref_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_FINALIZATION_REGISTRY_PROTOTYPE:
+            return tsc_finalization_registry_prototype_value();
         case TSC_INTRINSIC_DEFAULT_URL_PROTOTYPE:
             return tsc_url_prototype_value();
         case TSC_INTRINSIC_DEFAULT_URL_SEARCH_PARAMS_PROTOTYPE:

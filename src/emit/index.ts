@@ -840,8 +840,6 @@ class Emitter {
             case "array":
             case "entry":
             case "set":
-            case "weakref":
-            case "finregistry":
             case "promise":
                 if (type.key) this.prepareType(type.key);
                 if (type.elem) this.prepareType(type.elem);
@@ -1302,9 +1300,10 @@ class Emitter {
                 if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
                 for (const heritage of clause.types) {
                     const expression = this.unwrapTransparentExpression(heritage.expression);
-                    if (!ts.isIdentifier(expression)) continue;
+                    if (!ts.isIdentifier(expression)) return true;
                     const base = this.classDeclForConstructorIdentifier(expression);
                     if (base) pending.push(base);
+                    else return true;
                 }
             }
         }
@@ -1985,12 +1984,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeWeakSetMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeWeakRefMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeFinRegistryMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
@@ -2944,8 +2937,6 @@ class Emitter {
             this.isSideEffectFreeFreshSetOperand(recv, seenConsts) ||
             this.isSideEffectFreeFreshWeakMapOperand(recv, seenConsts) ||
             this.isSideEffectFreeFreshWeakSetOperand(recv, seenConsts) ||
-            this.isSideEffectFreeFreshWeakRefOperand(recv, seenConsts) ||
-            this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts) ||
             this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(recv, seenConsts);
         if (!recvPure) return false;
         switch (method) {
@@ -3254,80 +3245,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeFreshWeakSetOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeWeakRefMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return method === "deref" &&
-            this.isSideEffectFreeFreshWeakRefOperand(recv, seenConsts) &&
-            Array.from(args).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-    }
-
-    private isSideEffectFreeFreshWeakRefOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "WeakRef")
-        ) {
-            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshWeakRefOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeFinRegistryMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeFreshFinRegistryOperand(recv, seenConsts)) return false;
-        if (method === "unregister") {
-            return args.length >= 1 &&
-                this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts) &&
-                Array.from(args).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (method !== "register" || args.length < 2) return false;
-        if (
-            !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts) ||
-            !this.isSideEffectFreeTopLevelConstInitializer(args[1]!, seenConsts)
-        ) {
-            return false;
-        }
-        if (args[2] && !this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[2], seenConsts)) {
-            return false;
-        }
-        return Array.from(args).slice(3).every((arg) =>
-            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-        );
-    }
-
-    private isSideEffectFreeFreshFinRegistryOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "FinalizationRegistry")
-        ) {
-            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshFinRegistryOperand(init, seenConsts);
     }
 
     private isSideEffectFreeArrayOperand(
@@ -6648,14 +6565,6 @@ class Emitter {
                         args.length === 1 &&
                         this.isSideEffectFreeWeakSetConstructorSource(args[0]!, seenConsts)
                     );
-            }
-            if (name === "WeakRef") {
-                return args.length === 1 &&
-                    this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(args[0]!, seenConsts);
-            }
-            if (name === "FinalizationRegistry") {
-                return args.length === 1 &&
-                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
             }
             return false;
         }
@@ -21478,8 +21387,6 @@ class Emitter {
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||
-            type.kind === "weakref" ||
-            type.kind === "finregistry" ||
             type.kind === "regexp" ||
             type.kind === "hash" ||
             type.kind === "hmac" ||
@@ -31709,8 +31616,6 @@ class Emitter {
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakSetOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshWeakRefOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshFinRegistryOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshBufferOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshEventOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshEventTargetOperand(expr, seenConsts) ||
@@ -33500,8 +33405,6 @@ class Emitter {
             case "class":
             case "map":
             case "set":
-            case "weakref":
-            case "finregistry":
             case "promise":
             case "eventemitter":
             case "regexp":
@@ -35071,7 +34974,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -35146,7 +35049,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -37429,8 +37332,6 @@ class Emitter {
         switch (type.kind) {
             case "array":
             case "set":
-            case "weakref":
-            case "finregistry":
             case "promise":
                 return `${type.kind}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "entry":
@@ -38445,10 +38346,6 @@ class Emitter {
             return this.emitMapMethod(call, recv, memberName);
         if (recv.ty.kind === "set")
             return this.emitSetMethod(call, recv, memberName);
-        if (recv.ty.kind === "weakref")
-            return this.emitWeakRefMethod(call, recv, memberName);
-        if (recv.ty.kind === "finregistry")
-            return this.emitFinRegistryMethod(call, recv, memberName);
         if (recv.ty.kind === "promise")
             return this.emitPromiseMethod(call, recv, memberName);
         if (recv.ty.kind === "eventemitter")
@@ -38983,142 +38880,6 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Set");
         }
         unsupported(call, `Set method .${method}`);
-    }
-
-    private emitWeakRefMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "deref": {
-                const target = recv.ty.elem!;
-                return this.emitSequencedExpr(
-                    target,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                    ([ref]) =>
-                    target.kind === "value"
-                        ? `((tsc_value_t)(uintptr_t)tsc_weakref_deref(${ref!}))`
-                        : `((${target.c})tsc_weakref_deref(${ref!}))`,
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakRef");
-        }
-        unsupported(call, `WeakRef method .${method}`);
-    }
-
-    private emitFinRegistryMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "register": {
-                const args = call.arguments;
-                if (args.length < 2)
-                    unsupported(call, "FinalizationRegistry.register expects (target, heldValue, unregisterToken?)");
-                const targetArg = args[0]!;
-                const targetRes = this.emitExpr(targetArg);
-                if (targetRes.ty.kind !== "value") {
-                    requireWeakObjectKey(targetArg, targetRes.ty, "FinalizationRegistry target");
-                }
-                const heldValue = this.emitExpr(args[1]!);
-                const targetCheck = (target: string) => targetRes.ty.kind === "value"
-                    ? `if (!tsc_value_is_weak_key(${target})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry target must be an object")); `
-                    : "";
-                const tokenExpr = (registry: string, tokenRes: EmitResult, token: string) => {
-                    if (tokenRes.ty.kind === "value") {
-                        return (
-                            `if (tsc_value_is_undefined(${token})) { tsc_finregistry_register(${registry}, NULL); } ` +
-                            `else { if (!tsc_value_is_weak_key(${token})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry unregisterToken must be an object")); ` +
-                            `tsc_finregistry_register(${registry}, (void*)(uintptr_t)${token}); }`
-                        );
-                    }
-                    return `tsc_finregistry_register(${registry}, (void*)${token})`;
-                };
-                // target and heldValue are accepted but ignored after evaluation — cleanup callback never fires.
-                // Only unregisterToken is tracked so that unregister(token) returns the right boolean.
-                if (args.length >= 3 && this.isUndefinedExpression(args[2]!)) {
-                    return this.emitSequencedExpr(
-                        T_VOID,
-                        [
-                            { value: recv },
-                            { value: targetRes },
-                            { value: heldValue },
-                            ...this.ignoredArgumentSpecs(args, 3),
-                        ],
-                        ([r, target]) => `({ ${targetCheck(target!)}tsc_finregistry_register(${r!}, NULL); (void)0; })`,
-                    );
-                }
-                if (args.length === 3) {
-                    const tokenArg = args[2]!;
-                    const tokenRes = this.emitExpr(tokenArg);
-                    if (tokenRes.ty.kind !== "value") {
-                        requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
-                    }
-                    return this.emitSequencedExpr(
-                        T_VOID,
-                        [
-                            { value: recv },
-                            { value: targetRes },
-                            { value: heldValue },
-                            { value: tokenRes },
-                        ],
-                        ([r, target, , tok]) => `({ ${targetCheck(target!)}${tokenExpr(r!, tokenRes, tok!)}; (void)0; })`,
-                    );
-                }
-                if (args.length > 3) {
-                    const tokenArg = args[2]!;
-                    const tokenRes = this.emitExpr(tokenArg);
-                    if (tokenRes.ty.kind !== "value") {
-                        requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
-                    }
-                    return this.emitSequencedExpr(
-                        T_VOID,
-                        [
-                            { value: recv },
-                            { value: targetRes },
-                            { value: heldValue },
-                            { value: tokenRes },
-                            ...this.ignoredArgumentSpecs(args, 3),
-                        ],
-                        ([r, target, , tok]) => `({ ${targetCheck(target!)}${tokenExpr(r!, tokenRes, tok!)}; (void)0; })`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_VOID,
-                    [{ value: recv }, { value: targetRes }, { value: heldValue }],
-                    ([r, target]) => `({ ${targetCheck(target!)}tsc_finregistry_register(${r!}, NULL); (void)0; })`,
-                );
-            }
-            case "unregister": {
-                if (call.arguments.length < 1)
-                    unsupported(call, "FinalizationRegistry.unregister expects (unregisterToken)");
-                const tokenArg = call.arguments[0]!;
-                const tokenRes = this.emitExpr(tokenArg);
-                if (tokenRes.ty.kind !== "value") {
-                    requireWeakObjectKey(tokenArg, tokenRes.ty, "FinalizationRegistry unregisterToken");
-                }
-                const tokenTemp = this.freshTemp("_finreg_token");
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [{ value: recv }, { value: tokenRes }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
-                    ([r, tok]) => tokenRes.ty.kind === "value"
-                        ? `({ tsc_value_t const ${tokenTemp} = ${tok!}; ` +
-                            `if (!tsc_value_is_weak_key(${tokenTemp})) tsc_throw_str(tsc_str_from_cstr("FinalizationRegistry unregisterToken must be an object")); ` +
-                            `tsc_finregistry_unregister(${r!}, (void*)(uintptr_t)${tokenTemp}); })`
-                        : `tsc_finregistry_unregister(${r!}, (void*)${tok!})`,
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "FinalizationRegistry");
-        }
-        unsupported(call, `FinalizationRegistry method .${method}`);
     }
 
     private emitPromiseMethod(call: ts.CallExpression, recv: EmitResult, method: string): EmitResult {
@@ -46883,49 +46644,6 @@ class Emitter {
                 return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
             });
         }
-        if (cls === "WeakRef") {
-            const target = n.arguments?.[0];
-            if (!target) unsupported(n, "new WeakRef() expects target");
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "weakref" || !mapped.elem)
-                unsupported(n, "new WeakRef() requires <T> type parameter");
-            if (mapped.elem.kind !== "value") requireWeakObjectKey(n, mapped.elem, "WeakRef");
-            const r = this.emitExpr(target);
-            if (mapped.elem.kind === "value") {
-                const targetTemp = this.freshTemp("_weak_ref_target");
-                return this.emitSequencedExpr(mapped, [
-                    { value: r, target: T_VALUE, node: target },
-                    ...this.ignoredArgumentSpecs(n.arguments ?? [], 1),
-                ], ([value]) =>
-                    `({ tsc_value_t const ${targetTemp} = ${value!}; ` +
-                    `if (!tsc_value_is_weak_key(${targetTemp})) tsc_throw_str(tsc_str_from_cstr("WeakRef target must be an object")); ` +
-                    `tsc_weakref_new((void*)(uintptr_t)${targetTemp}); })`,
-                );
-            }
-            return this.emitSequencedExpr(mapped, [
-                { value: r, target: mapped.elem, node: target },
-                ...this.ignoredArgumentSpecs(n.arguments ?? [], 1),
-            ], ([value]) => `tsc_weakref_new((void*)${value!})`);
-        }
-        if (cls === "FinalizationRegistry") {
-            // The cleanup callback is accepted but never invoked — this AOT runtime
-            // has no GC-finalizer plumbing. We still evaluate it for side effects
-            // and to satisfy the type system, then discard the value.
-            const cb = n.arguments?.[0];
-            if (!cb) unsupported(n, "new FinalizationRegistry() expects cleanup callback");
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "finregistry" || !mapped.elem)
-                unsupported(n, "new FinalizationRegistry() requires <T> type parameter");
-            // Evaluate the callback once for side effects; cast to void.
-            const r = this.emitExpr(cb);
-            return this.emitSequencedExpr(
-                mapped,
-                [{ value: r, node: cb }, ...this.ignoredArgumentSpecs(n.arguments ?? [], 1)],
-                ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
-            );
-        }
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
                 T_EVENT_EMITTER,
@@ -48099,8 +47817,6 @@ class Emitter {
         if (r.ty.kind === "symbol") return `tsc_symbol_to_string(${r.c})`;
         if (r.ty.kind === "boolean") return `tsc_str_from_bool(${r.c})`;
         if (r.ty.kind === "array") return `tsc_str_from_lit("[array]", 7)`;
-        if (r.ty.kind === "weakref") return `tsc_str_from_lit("[object WeakRef]", 16)`;
-        if (r.ty.kind === "finregistry") return `tsc_str_from_lit("[object FinalizationRegistry]", 29)`;
         if (r.ty.kind === "promise") return `tsc_str_from_lit("[object Promise]", 16)`;
         if (r.ty.kind === "eventemitter") return `tsc_str_from_lit("[object EventEmitter]", 21)`;
         if (r.ty.kind === "event") return `tsc_str_from_lit("[object Event]", 14)`;
@@ -48271,7 +47987,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -48933,39 +48649,9 @@ function requireNumber(node: ts.Node, t: CType): void {
     }
 }
 
-function requireWeakObjectKey(node: ts.Node, t: CType, label: string): void {
-    if (!isWeakObjectKey(t)) {
-        unsupported(node, `${label} keys must be object pointer types`);
-    }
-}
-
-function isWeakObjectKey(t: CType): boolean {
-    return [
-        "array",
-        "class",
-        "map",
-        "set",
-        "weakref",
-        "finregistry",
-        "promise",
-        "eventemitter",
-        "event",
-        "eventtarget",
-        "regexp",
-        "hash",
-        "url",
-        "urlsearchparams",
-        "date",
-        "error",
-        "buffer",
-        "fsstats",
-        "fsdirent",
-    ].includes(t.kind);
-}
-
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }
@@ -48976,8 +48662,6 @@ function sameCType(a: CType, b: CType): boolean {
     if (
         a.kind === "array" ||
         a.kind === "set" ||
-        a.kind === "weakref" ||
-        a.kind === "finregistry" ||
         a.kind === "promise"
     ) {
         if (!a.elem || !b.elem) return a.elem === b.elem;

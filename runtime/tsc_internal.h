@@ -153,6 +153,8 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_WEAK_REF_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_FINALIZATION_REGISTRY_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_URL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_URL_SEARCH_PARAMS_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
@@ -847,5 +849,7 @@ bool tsc_re_match_at(
 );
 
 bool tsc_buffer_integer_index(const tsc_object_t* object, const tsc_str_t* key, size_t* index, bool* valid);
+
+void tsc_weak_job_checkpoint(void);
 
 #endif

@@ -1798,6 +1798,7 @@ void tsc_process_drain_next_ticks(void) {
         if (entry.fn) {
             g_executing_next_tick_depth = entry.depth;
             entry.fn(entry.env);
+            tsc_weak_job_checkpoint();
         }
     }
     g_executing_next_tick_depth = old_executing_depth;
@@ -1830,13 +1831,16 @@ void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env) {
 void tsc_drain_microtasks(void) {
     size_t idx = 0;
     while (idx < g_microtask_len) {
-        tsc_microtask_entry_t entry = g_microtask_queue[idx++];
+        tsc_microtask_entry_t entry = g_microtask_queue[idx];
+        g_microtask_queue[idx++] = (tsc_microtask_entry_t){0};
         if (entry.fn) entry.fn(entry.env);
+        tsc_weak_job_checkpoint();
     }
     g_microtask_len = 0;
 }
 
 void tsc_drain_microtasks_and_next_ticks(void) {
+    tsc_weak_job_checkpoint();
     while (g_next_tick_len > 0 || g_microtask_len > 0) {
         if (g_next_tick_len > 0) {
             tsc_process_drain_next_ticks();
@@ -1903,6 +1907,7 @@ void tsc_drain_immediates(void) {
         tsc_immediate_entry_t entry = g_immediate_queue[idx++];
         if (!g_immediate_queue[idx - 1].canceled && entry.fn) {
             entry.fn(entry.env);
+            tsc_weak_job_checkpoint();
         }
         tsc_drain_microtasks_and_next_ticks();
     }
@@ -2019,6 +2024,7 @@ void tsc_drain_timeouts(void) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
         if (!g_timeout_queue[idx - 1].canceled && entry.fn && tsc_timeout_ready(&entry, now_ms)) {
             entry.fn(entry.env);
+            tsc_weak_job_checkpoint();
             if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
                 entry.refed = g_timeout_queue[idx - 1].refed;
                 tsc_append_interval(&entry);
@@ -2040,6 +2046,7 @@ void tsc_drain_timeouts(void) {
             continue;
         }
         entry.fn(entry.env);
+        tsc_weak_job_checkpoint();
         if (!g_timeout_queue[current_idx].canceled) {
             entry.refed = g_timeout_queue[current_idx].refed;
             tsc_append_interval(&entry);
@@ -2132,6 +2139,7 @@ static bool tsc_has_referenced_event_source(void) {
 }
 
 void tsc_run_event_loop(void) {
+    tsc_weak_job_checkpoint();
     while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_referenced_event_source()) {
 #ifdef TSC_THREADS
         tsc_drain_cross_queue();

@@ -577,14 +577,15 @@ interface WeakSetConstructor {
 }
 declare var WeakSet: WeakSetConstructor;
 
-interface WeakRef<T extends object> {
+interface WeakRef<T extends WeakKey> {
     deref(...ignored: any[]): T | undefined;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): WeakRef<T>;
 }
 interface WeakRefConstructor {
-    new <T extends object>(target: T, ...ignored: any[]): WeakRef<T>;
+    readonly prototype: WeakRef<WeakKey>;
+    new <T extends WeakKey>(target: T, ...ignored: any[]): WeakRef<T>;
 }
 declare var WeakRef: WeakRefConstructor;
 
@@ -626,13 +627,14 @@ declare namespace Reflect {
 }
 
 interface FinalizationRegistry<T> {
-    register(target: object, heldValue: T, unregisterToken?: object, ...ignored: any[]): void;
-    unregister(unregisterToken: object, ...ignored: any[]): boolean;
+    register(target: WeakKey, heldValue: T, unregisterToken?: WeakKey, ...ignored: any[]): void;
+    unregister(unregisterToken: WeakKey, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): FinalizationRegistry<T>;
 }
 interface FinalizationRegistryConstructor {
+    readonly prototype: FinalizationRegistry<any>;
     new <T>(cleanupCallback: (heldValue: T) => void, ...ignored: any[]): FinalizationRegistry<T>;
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;

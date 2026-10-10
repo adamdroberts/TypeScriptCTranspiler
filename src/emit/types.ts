@@ -15,8 +15,8 @@ export type CTypeKind =
     | "class"
     | "map"
     | "set"
-    | "weakref"
-    | "finregistry"
+
+
     | "promise"
     | "eventemitter"
     | "event"
@@ -122,14 +122,6 @@ export function mapType_(key: CType, value: CType): CType {
 
 export function setType(elem: CType): CType {
     return { kind: "set", c: "tsc_set_t*", elem: collectionKeyType(elem) };
-}
-
-export function weakRefType(elem: CType): CType {
-    return { kind: "weakref", c: "tsc_weakref_t*", elem };
-}
-
-export function finRegistryType(elem: CType): CType {
-    return { kind: "finregistry", c: "tsc_finregistry_t*", elem };
 }
 
 export function promiseType(elem: CType): CType {
@@ -478,22 +470,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             return setType(T_VALUE);
         }
         if (sym?.getName() === "WeakMap" || sym?.getName() === "WeakSet") return T_VALUE;
-        if (sym?.getName() === "WeakRef") {
-            const tr = t as ts.TypeReference;
-            const ta = tr.typeArguments;
-            if (ta && ta.length >= 1) {
-                return weakRefType(mapTsType(node, ta[0]!, checker));
-            }
-            return weakRefType(T_VALUE);
-        }
-        if (sym?.getName() === "FinalizationRegistry") {
-            const tr = t as ts.TypeReference;
-            const ta = tr.typeArguments;
-            if (ta && ta.length >= 1) {
-                return finRegistryType(mapTsType(node, ta[0]!, checker));
-            }
-            return finRegistryType(T_VALUE);
-        }
+        if (sym?.getName() === "WeakRef") return T_VALUE;
+        if (sym?.getName() === "FinalizationRegistry") return T_VALUE;
         if (sym?.getName() === "Promise") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;
@@ -618,10 +596,6 @@ function typeNamePart(t: CType): string {
             return `map_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "set":
             return `set_${t.elem ? typeNamePart(t.elem) : "void"}`;
-        case "weakref":
-            return `weakref_${t.elem ? typeNamePart(t.elem) : "void"}`;
-        case "finregistry":
-            return `finregistry_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "promise":
             return `promise_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "eventemitter":

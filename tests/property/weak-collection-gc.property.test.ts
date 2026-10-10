@@ -39,7 +39,8 @@ static __attribute__((noinline)) void setup(void){
  (void)tsc_value_apply_function(setter,map_value,tsc_value_array(actuals(key,value)));
  (void)key_anchor;(void)value_anchor;
 }
-static void collect_without_old_frames(void){GC_clear_stack(NULL);GC_gcollect();}
+static __attribute__((noinline)) void scrub(void){volatile uintptr_t unused[4096];for(size_t i=0;i<4096;++i)unused[i]=0;}
+static void collect_without_old_frames(void){scrub();GC_clear_stack(NULL);GC_gcollect();}
 int main(int argc,char** argv){
  tsc_bootstrap(argc,argv);setup();collect_without_old_frames();
  if(!*key_link||!*value_link)return 2;

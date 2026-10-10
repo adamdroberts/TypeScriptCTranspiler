@@ -2,38 +2,38 @@
 #ifndef TSC_NO_GC
 #include <gc/gc_mark.h>
 #include <sys/mman.h>
+#endif
 #ifdef TSC_THREADS
 #include <pthread.h>
 #endif
-#endif
 
 typedef enum {
-#define TSC_WEAK_COLLECTION(name, provider, kind) kind,
+#define TSC_WEAK_COLLECTION(name, provider, kind, length) kind,
 #define TSC_WEAK_METHOD(kind, name, operation, length)
 #include "tsc_weak_collections.def"
 #undef TSC_WEAK_COLLECTION
 #undef TSC_WEAK_METHOD
     WEAK_KIND_COUNT
 } weak_kind_t;
-typedef enum { WEAK_DELETE, WEAK_GET, WEAK_GET_OR_INSERT, WEAK_GET_OR_INSERT_COMPUTED, WEAK_HAS, WEAK_SET_VALUE } weak_operation_t;
-typedef struct weak_entry { struct weak_entry* next; tsc_value_t key, value; } weak_entry_t;
-typedef struct { tsc_object_t* object; weak_entry_t* entries; weak_kind_t kind; } weak_collection_t;
-typedef struct { const char* name; weak_kind_t kind; tsc_intrinsic_default_prototype_kind_t prototype; } weak_constructor_t;
+typedef enum { WEAK_DELETE, WEAK_GET, WEAK_GET_OR_INSERT, WEAK_GET_OR_INSERT_COMPUTED, WEAK_HAS, WEAK_SET_VALUE, WEAK_DEREF, WEAK_REGISTER, WEAK_UNREGISTER } weak_operation_t;
+typedef struct weak_entry { struct weak_entry* next; tsc_value_t key, value, token; void* held_root; bool pending; } weak_entry_t;
+typedef struct { tsc_object_t* object; weak_entry_t* entries; weak_kind_t kind; tsc_value_t callback; void* callback_root; bool cleanup_scheduled; } weak_collection_t;
+typedef struct { const char* name; weak_kind_t kind; tsc_intrinsic_default_prototype_kind_t prototype; double length; } weak_constructor_t;
 typedef struct { weak_kind_t kind; const char* name; weak_operation_t operation; double length; } weak_member_t;
-#define TSC_WEAK_COLLECTION(name, provider, kind) tsc_value_t tsc_##provider##_prototype_value(void);
+#define TSC_WEAK_COLLECTION(name, provider, kind, length) tsc_value_t tsc_##provider##_prototype_value(void);
 #define TSC_WEAK_METHOD(kind, name, operation, length)
 #include "tsc_weak_collections.def"
 #undef TSC_WEAK_COLLECTION
 #undef TSC_WEAK_METHOD
 static const weak_constructor_t constructors[]={
-#define TSC_WEAK_COLLECTION(name, provider, kind) {#name, kind, TSC_INTRINSIC_DEFAULT_##kind##_PROTOTYPE},
+#define TSC_WEAK_COLLECTION(name, provider, kind, length) {#name, kind, TSC_INTRINSIC_DEFAULT_##kind##_PROTOTYPE, length},
 #define TSC_WEAK_METHOD(kind, name, operation, length)
 #include "tsc_weak_collections.def"
 #undef TSC_WEAK_COLLECTION
 #undef TSC_WEAK_METHOD
 };
 static const weak_member_t members[]={
-#define TSC_WEAK_COLLECTION(name, provider, kind)
+#define TSC_WEAK_COLLECTION(name, provider, kind, length)
 #define TSC_WEAK_METHOD(kind, name, operation, length) {kind,#name,operation,length},
 #include "tsc_weak_collections.def"
 #undef TSC_WEAK_COLLECTION
@@ -94,8 +94,14 @@ static void weak_registry_cleanup(void) {
     while(*link) {
         weak_registry_t* node=*link;weak_collection_t* collection=(void*)~node->hidden_collection;
         if(!GC_is_marked(collection)){*link=node->next;continue;}
-        for(weak_entry_t* entry=collection->entries;entry;entry=entry->next)
-            if(!weak_key_live(entry->key))entry->key=entry->value=tsc_value_undefined();
+        for(weak_entry_t* entry=collection->entries;entry;entry=entry->next) {
+            if(!tsc_value_is_undefined(entry->token)&&!weak_key_live(entry->token))entry->token=tsc_value_undefined();
+            if(!tsc_value_is_undefined(entry->key)&&!weak_key_live(entry->key)) {
+                entry->key=tsc_value_undefined();
+                if(collection->kind==FINALIZATION_REGISTRY)entry->pending=true;
+                else entry->value=tsc_value_undefined();
+            }
+        }
         link=&node->next;
     }
 }
@@ -109,6 +115,7 @@ static void weak_collection_event(GC_EventType stage) {
     size_t entries=0;
     for(weak_registry_t* node=registry;node;node=node->next) {
         weak_collection_t* collection=(void*)~node->hidden_collection;
+        if(collection->kind!=WEAK_MAP)continue;
         for(weak_entry_t* entry=collection->entries;entry;entry=entry->next)
             if(tsc_value_gc_root(entry->key)){if(entries==SIZE_MAX)weak_collector_failure();++entries;}
     }
@@ -124,6 +131,7 @@ static void weak_collection_event(GC_EventType stage) {
     weak_mark_worklist_t work={0};
     for(weak_registry_t* node=registry;node;node=node->next) {
         weak_collection_t* collection=(void*)~node->hidden_collection;
+        if(collection->kind!=WEAK_MAP)continue;
         for(weak_entry_t* entry=collection->entries;entry;entry=entry->next) {
             void* key=tsc_value_gc_root(entry->key);if(!key)continue;
             weak_index_add(&index,collection,collection,entry);weak_index_add(&index,GC_base(key),collection,entry);
@@ -183,16 +191,128 @@ static weak_entry_t* weak_find(weak_collection_t* collection,tsc_value_t key) {
 static void weak_store(weak_collection_t* collection,tsc_value_t key,tsc_value_t value) {
     weak_entry_t* entry=weak_find(collection,key);
     if(!entry) {
-        for(entry=collection->entries;entry;entry=entry->next)if(tsc_value_is_undefined(entry->key))break;
-        if(!entry){entry=TSC_GC_MALLOC(sizeof(*entry));entry->next=collection->entries;collection->entries=entry;}
+        for(entry=collection->entries;entry;entry=entry->next)if(tsc_value_is_undefined(entry->key)&&!entry->pending)break;
+        if(!entry){entry=TSC_GC_MALLOC(sizeof(*entry));memset(entry,0,sizeof(*entry));entry->token=tsc_value_undefined();entry->next=collection->entries;collection->entries=entry;}
     }
     entry->key=key;entry->value=value;
+}
+/* Kept objects belong to the agent's current job, including calls into
+ * another realm. Store decoded roots in the collector-visible list. */
+typedef struct weak_kept { struct weak_kept* next; void* root;
+#ifdef TSC_THREADS
+    pthread_t agent;
+#endif
+} weak_kept_t;
+static weak_kept_t* kept_objects;
+#if defined(TSC_THREADS) && defined(TSC_NO_GC)
+static pthread_mutex_t kept_mutex=PTHREAD_MUTEX_INITIALIZER;
+#endif
+static void* weak_keep_locked(void* arg) {
+    weak_kept_t* kept=arg;kept->next=kept_objects;kept_objects=kept;return NULL;
+}
+static void weak_keep(tsc_value_t target) {
+    void* volatile root=tsc_value_gc_root(target);
+    weak_kept_t* kept=TSC_GC_MALLOC(sizeof(*kept));kept->root=root;
+#ifdef TSC_THREADS
+    kept->agent=pthread_self();
+#endif
+#ifndef TSC_NO_GC
+    (void)GC_call_with_alloc_lock(weak_keep_locked,kept);
+#else
+#ifdef TSC_THREADS
+    pthread_mutex_lock(&kept_mutex);
+#endif
+    (void)weak_keep_locked(kept);
+#ifdef TSC_THREADS
+    pthread_mutex_unlock(&kept_mutex);
+#endif
+#endif
+}
+static void weak_clear_entry(weak_entry_t* entry) {
+    entry->key=entry->value=entry->token=tsc_value_undefined();entry->held_root=NULL;entry->pending=false;
+}
+static void weak_cleanup_job(void* env) {
+    weak_collection_t* collection=env;
+    for(;;) {
+        weak_entry_t* entry=collection->entries;
+        while(entry&&!entry->pending)entry=entry->next;
+        if(!entry)break;
+        tsc_value_t held=entry->value;void* volatile root=entry->held_root;
+        weak_clear_entry(entry);
+        tsc_try_frame_t frame;tsc_try_push(&frame);
+        if(setjmp(frame.jb)==0) {
+            (void)weak_call(collection->callback,tsc_value_undefined(),weak_actuals(held,tsc_value_undefined(),1));
+            tsc_try_pop();
+        } else {
+            tsc_value_t error=tsc_current_error_value();tsc_try_pop();collection->cleanup_scheduled=false;tsc_throw_value(error);
+        }
+        (void)root;
+    }
+    collection->cleanup_scheduled=false;
+}
+static void* weak_clear_kept_locked(void* arg) {
+    (void)arg;
+    weak_kept_t** link=&kept_objects;
+    while(*link) {
+        weak_kept_t* kept=*link;
+#ifdef TSC_THREADS
+        if(!pthread_equal(kept->agent,pthread_self())){link=&kept->next;continue;}
+#endif
+        *link=kept->next;kept->root=NULL;
+    }
+    return NULL;
+}
+void tsc_weak_job_checkpoint(void) {
+#ifndef TSC_NO_GC
+    (void)GC_call_with_alloc_lock(weak_clear_kept_locked,NULL);
+#else
+#ifdef TSC_THREADS
+    pthread_mutex_lock(&kept_mutex);
+#endif
+    (void)weak_clear_kept_locked(NULL);
+#ifdef TSC_THREADS
+    pthread_mutex_unlock(&kept_mutex);
+#endif
+#endif
+#ifndef TSC_NO_GC
+    /* No allocation or source callbacks occur inside the collector hook. */
+    for(weak_registry_t* node=registry;node;node=node->next) {
+        weak_collection_t* collection=(void*)~node->hidden_collection;
+        if(collection->kind!=FINALIZATION_REGISTRY||collection->cleanup_scheduled)continue;
+        for(weak_entry_t* entry=collection->entries;entry;entry=entry->next)if(entry->pending) {
+            collection->cleanup_scheduled=true;tsc_queue_microtask(weak_cleanup_job,collection);break;
+        }
+    }
+#endif
 }
 static tsc_value_t weak_member_apply(void* env,tsc_value_t receiver,tsc_array_t* args) {
     const weak_member_t* member=env;
     tsc_object_t* object=value_is_box(receiver)&&value_tag(receiver)==TSC_VALUE_TAG_OBJECT?value_ptr(receiver):NULL;
     weak_collection_t* collection=object&&object->is_weak_collection?object->class_ptr:NULL;
     if(!collection||collection->kind!=member->kind)tsc_throw_error(TSC_ERROR_TYPE,weak_key("Weak collection method called on incompatible receiver"));
+    if(member->operation==WEAK_DEREF) {
+        tsc_value_t target=collection->entries?collection->entries->key:tsc_value_undefined();
+        if(!tsc_value_is_undefined(target))weak_keep(target);
+        return target;
+    }
+    if(member->operation==WEAK_REGISTER) {
+        tsc_value_t target=weak_argument(args,0),held=weak_argument(args,1),token=weak_argument(args,2);
+        if(!tsc_value_is_weak_key(target))tsc_throw_error(TSC_ERROR_TYPE,weak_key("Invalid finalization target"));
+        if(target==held)tsc_throw_error(TSC_ERROR_TYPE,weak_key("Finalization target and holdings must differ"));
+        if(!tsc_value_is_undefined(token)&&!tsc_value_is_weak_key(token))tsc_throw_error(TSC_ERROR_TYPE,weak_key("Invalid finalization unregister token"));
+        void* volatile held_root=tsc_value_gc_root(held);void* volatile target_root=tsc_value_gc_root(target);void* volatile token_root=tsc_value_gc_root(token);
+        weak_entry_t* entry=collection->entries;
+        while(entry&&(!tsc_value_is_undefined(entry->key)||entry->pending))entry=entry->next;
+        if(!entry){entry=TSC_GC_MALLOC(sizeof(*entry));memset(entry,0,sizeof(*entry));entry->next=collection->entries;collection->entries=entry;}
+        entry->key=target;entry->value=held;entry->held_root=held_root;entry->token=token;entry->pending=false;
+        (void)target_root;(void)token_root;return tsc_value_undefined();
+    }
+    if(member->operation==WEAK_UNREGISTER) {
+        tsc_value_t token=weak_argument(args,0);bool found=false;
+        if(!tsc_value_is_weak_key(token))tsc_throw_error(TSC_ERROR_TYPE,weak_key("Invalid finalization unregister token"));
+        for(weak_entry_t* entry=collection->entries;entry;entry=entry->next)if(entry->token==token){weak_clear_entry(entry);found=true;}
+        return tsc_value_bool(found);
+    }
     tsc_value_t key=weak_argument(args,0),value=weak_argument(args,1);
     bool admissible=tsc_value_is_weak_key(key);
     bool insertion=member->operation==WEAK_SET_VALUE||member->operation==WEAK_GET_OR_INSERT||member->operation==WEAK_GET_OR_INSERT_COMPUTED;
@@ -219,13 +339,19 @@ static tsc_value_t weak_constructor_apply(void* env,tsc_value_t receiver,tsc_arr
 }
 static tsc_value_t weak_constructor_construct(void* env,tsc_value_t receiver,tsc_array_t* args) {
     (void)receiver;const weak_constructor_t* descriptor=env;
+    tsc_value_t initial=weak_argument(args,0);
+    if(descriptor->kind==WEAK_REF&&!tsc_value_is_weak_key(initial))tsc_throw_error(TSC_ERROR_TYPE,weak_key("Invalid WeakRef target"));
+    if(descriptor->kind==FINALIZATION_REGISTRY&&!tsc_value_is_callable(initial))tsc_throw_error(TSC_ERROR_TYPE,weak_key("FinalizationRegistry cleanup callback is not callable"));
+    void* volatile initial_root=tsc_value_gc_root(initial);
     weak_collection_t* collection=TSC_GC_MALLOC(sizeof(*collection));memset(collection,0,sizeof(*collection));collection->kind=descriptor->kind;
     void* volatile collection_root=collection;weak_register(collection);
     tsc_object_t* object=tsc_object_new_class(collection);collection->object=object;object->is_weak_collection=true;
     tsc_value_t result=tsc_value_object(object);void* volatile result_root=object;
     tsc_value_t prototype=tsc_value_get_prototype_from_constructor(tsc_value_current_new_target(),descriptor->prototype);
     (void)tsc_value_object_set_prototype_of(result,prototype);
-    tsc_value_t iterable=weak_argument(args,0);
+    if(descriptor->kind==WEAK_REF){weak_store(collection,initial,tsc_value_undefined());weak_keep(initial);return result;}
+    if(descriptor->kind==FINALIZATION_REGISTRY){collection->callback=initial;collection->callback_root=initial_root;return result;}
+    tsc_value_t iterable=initial;
     if(tsc_value_is_undefined(iterable)||(value_is_box(iterable)&&value_tag(iterable)==TSC_VALUE_TAG_NULL))return result;
     tsc_value_t adder=tsc_value_get_prop(result,weak_key(descriptor->kind==WEAK_MAP?"set":"add"));
     void* volatile adder_root=tsc_value_gc_root(adder);
@@ -258,7 +384,7 @@ static weak_realm_t* weak_realm(void) {
     for(size_t index=0;index<sizeof(constructors)/sizeof(constructors[0]);++index) {
         const weak_constructor_t* descriptor=&constructors[index];
         state->prototypes[index]=tsc_value_object(tsc_object_new());state->prototype_roots[index]=tsc_value_gc_root(state->prototypes[index]);
-        state->constructors[index]=tsc_value_function_named_kind(weak_constructor_apply,weak_constructor_construct,(void*)descriptor,0,weak_key(descriptor->name),TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->constructors[index]=tsc_value_function_named_kind(weak_constructor_apply,weak_constructor_construct,(void*)descriptor,descriptor->length,weak_key(descriptor->name),TSC_FUNCTION_IDENTITY_BUILTIN);
         tsc_function_identity_t* identity=tsc_value_gc_root(state->constructors[index]);state->constructor_roots[index]=identity;
         identity->construct_allocates_receiver=false;identity->construct_default_prototype=descriptor->prototype;
         tsc_function_identity_set_own_prototype(identity,state->prototypes[index]);identity->func_prototype_writable=false;
@@ -272,7 +398,7 @@ static weak_realm_t* weak_realm(void) {
     }
     return state;
 }
-#define TSC_WEAK_COLLECTION(name, provider, kind) \
+#define TSC_WEAK_COLLECTION(name, provider, kind, length) \
     tsc_value_t tsc_##provider##_prototype_value(void){return weak_realm()->prototypes[kind];} \
     tsc_value_t tsc_##provider##_constructor_value(void){return weak_realm()->constructors[kind];}
 #define TSC_WEAK_METHOD(kind, name, operation, length)
