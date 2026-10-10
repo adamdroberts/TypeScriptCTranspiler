@@ -385,9 +385,7 @@ interface ObjectConstructor {
     entries<T>(o: ReadonlyArray<T>, ...ignored: any[]): ObjectEntry<T>[];
     entries<T extends object>(o: T, ...ignored: any[]): ObjectEntry<T[keyof T]>[];
     entries(o: unknown, ...ignored: any[]): ObjectEntry<any>[];
-    fromEntries<T>(entries: ObjectEntry<any>[], ...ignored: any[]): T;
-    fromEntries<T>(entries: Map<string, any>, ...ignored: any[]): T;
-    fromEntries<T>(entries: URLSearchParams, ...ignored: any[]): T;
+    fromEntries<T = any>(entries: Iterable<any>, ...ignored: any[]): T;
     create(o: any, properties?: any, ...ignored: any[]): any;
     defineProperty<T>(o: T, p: PropertyKey, attributes: any, ...ignored: any[]): T;
     defineProperties<T>(o: T, properties: any, ...ignored: any[]): T;

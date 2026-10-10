@@ -23935,6 +23935,22 @@ class Emitter {
             // and results. The existing dependency graph carries that ABI to
             // retained owners, aliases, aggregates and source call sites.
             if (hasCanonicalValueFormals(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
+            if (ts.isElementAccessExpression(node)) {
+                const receivers = [this.checker.getTypeAtLocation(node.expression)];
+                const receiverTypes = new Set<ts.Type>();
+                while (receivers.length) {
+                    const receiver = receivers.pop()!;
+                    if (receiverTypes.has(receiver)) continue;
+                    receiverTypes.add(receiver);
+                    if (receiver.isUnionOrIntersection()) receivers.push(...receiver.types);
+                    if (this.checker.isArrayType(receiver) || this.checker.isTupleType(receiver) ||
+                        (receiver.flags & ts.TypeFlags.StringLike) !== 0 ||
+                        receiver.getSymbol()?.getName() === "ObjectEntry") { admitPositive(node); break; }
+                }
+            }
+            if (ts.isPropertyAccessExpression(node) && node.name.text === "fromEntries" &&
+                ts.isIdentifier(node.expression) && this.isUnshadowedGlobalIdentifier(node.expression, "Object"))
+                admitPositive(node);
             if (node.kind === ts.SyntaxKind.ThisKeyword) {
                 for (let owner: ts.Node | undefined = node.parent; owner; owner = owner.parent) {
                     if (ts.isClassLike(owner)) break;
@@ -37402,45 +37418,23 @@ class Emitter {
             ]);
         }
         if (ts.isPropertyAccessExpression(expr)) {
-            const recvType = this.expressionDeclaredOrCurrentType(expr.expression);
-            const mapped = this.prepareType(mapTsType(expr.expression, recvType, this.checker));
             const recv = this.emitExpr(expr.expression);
             const keyText = expr.name.text;
             const key: EmitResult = {
                 c: `tsc_str_from_lit("${escapeCString(keyText)}", ${utf8ByteLen(keyText)})`,
                 ty: T_STRING,
             };
-            if (mapped.kind === "array") {
-                return finishPropertyDelete(expr.expression, this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.name));
-            }
             return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
                 { value: key, target: T_STRING, node: expr.name },
             ]));
         }
         if (ts.isElementAccessExpression(expr)) {
-            const recvType = this.expressionDeclaredOrCurrentType(expr.expression);
-            const mapped = this.prepareType(mapTsType(expr.expression, recvType, this.checker));
             const recv = this.emitExpr(expr.expression);
             const key = this.emitExpr(expr.argumentExpression);
-            if (key.ty.kind === "symbol") {
-                return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_symbol_prop", T_BOOLEAN, [
-                    { value: recv, target: T_VALUE, node: expr.expression },
-                    { value: key, target: T_SYMBOL, node: expr.argumentExpression },
-                ]));
-            }
-            if (key.ty.kind === "value") {
-                return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_computed_prop", T_BOOLEAN, [
-                    { value: recv, target: T_VALUE, node: expr.expression },
-                    { value: key, target: T_VALUE, node: expr.argumentExpression },
-                ]));
-            }
-            if (mapped.kind === "array") {
-                return finishPropertyDelete(expr.expression, this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression));
-            }
-            return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_prop", T_BOOLEAN, [
+            return finishPropertyDelete(expr.expression, this.emitSequencedCall("tsc_value_delete_computed_prop", T_BOOLEAN, [
                 { value: recv, target: T_VALUE, node: expr.expression },
-                { value: key, target: T_STRING, node: expr.argumentExpression },
+                { value: key, target: T_VALUE, node: expr.argumentExpression },
             ]));
         }
         unsupported(del, "delete currently supports dynamic property/element access only");
@@ -53956,37 +53950,8 @@ class Emitter {
         return this.wellKnownSymbolName(expr) === "asyncIterator";
     }
 
-    private isSymbolAsyncDisposeExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) === "asyncDispose";
-    }
-
-    private isSymbolDisposeExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) === "dispose";
-    }
-
-    private isSymbolUnscopablesExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) === "unscopables";
-    }
-
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
         return this.wellKnownSymbolName(expr) !== null;
-    }
-
-    private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
-        let current: ts.Expression = expr;
-        while (
-            ts.isParenthesizedExpression(current) ||
-            ts.isAsExpression(current) ||
-            ts.isTypeAssertionExpression(current) ||
-            ts.isSatisfiesExpression(current) ||
-            ts.isNonNullExpression(current)
-        ) {
-            current = current.expression;
-        }
-        return ts.isPropertyAccessExpression(current) &&
-            ts.isIdentifier(current.expression) &&
-            current.name.text === "prototype" &&
-            this.isUnshadowedGlobalIdentifier(current.expression, "Array");
     }
 
     private objectFieldType(
@@ -54011,76 +53976,11 @@ class Emitter {
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
     }
 
-    private emitObjectFromEntries(
-        call: ts.CallExpression,
-        arg: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const targetTsType =
-            this.checker.getContextualType(call) ??
-            this.checker.getTypeAtLocation(call);
-        const target = mapTsType(call, targetTsType, this.checker);
-        if (target.kind !== "class") {
-            unsupported(
-                call,
-                "Object.fromEntries needs a contextual named interface/class target",
-            );
-        }
-
-        let entries = this.emitExpr(arg);
-        if (entries.ty.kind === "map") {
-            entries = this.emitMapEntriesArray(arg, entries, "Object.fromEntries(Map)");
-        }
-        if (entries.ty.kind !== "array" || entries.ty.elem?.kind !== "entry") {
-            unsupported(arg, "Object.fromEntries expects Object.entries-style tuples");
-        }
-        if ((entries.ty.elem.key ?? T_STRING).kind !== "string") {
-            unsupported(arg, "Object.fromEntries expects string-key entries");
-        }
-        const entryValueType = entries.ty.elem.elem ?? T_VOID;
-        const props = this.objectProperties(targetTsType);
-        const valueType = this.homogeneousObjectPropertyType(
-            call,
-            props,
-            "Object.fromEntries",
-        );
-        if (!sameCType(entryValueType, valueType)) {
-            unsupported(
-                arg,
-                `Object.fromEntries value type ${entryValueType.c} does not match target field type ${valueType.c}`,
-            );
-        }
-
-        const obj = this.freshTemp("_of_obj");
-        const arr = this.freshTemp("_of_arr");
-        const idx = this.freshTemp("_of_i");
-        const entry = this.freshTemp("_of_entry");
-        const pieces: string[] = [
-            `${target.c} ${obj} = (${target.c})TSC_GC_MALLOC(sizeof(${target.className!}_t))`,
-            `${obj}->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(target, call)}`,
-        ];
-        for (const p of props) {
-            const name = p.getName();
-            pieces.push(
-                this.nativeFieldStore(obj, target.className!, name, valueType, this.zeroValue(valueType)),
-            );
-        }
-        const assigns = props
-            .map((p) => {
-                const name = p.getName();
-                return `if (tsc_str_eq(${this.objectEntryKeyValue(entry, T_STRING, call)}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${this.nativeFieldStore(obj, target.className!, name, valueType, this.objectEntryValue(entry, valueType, call))}`;
-            })
-            .join("; ");
-        pieces.push(
-            `for (size_t ${idx} = 0; ${idx} < ${arr}->len; ${idx}++) { ${entries.ty.elem.c} ${entry} = TSC_ARR(${entries.ty.elem.c}, ${arr}, ${idx}); ${assigns}; }`,
-        );
-        pieces.push(obj);
-        return this.emitSequencedExpr(target, [{ value: entries, node: arg }, ...ignored], ([entriesC]) =>
-            `({ tsc_array_t* ${arr} = ${entriesC}; ${pieces.join("; ")}; })`,
-        );
-    }
-
     private emitObjectCall(call: ts.CallExpression, name: string): EmitResult {
+        if (name === "fromEntries") {
+            return this.emitDynamicNamedPropertyCall(call,
+                this.emitExpr((call.expression as ts.PropertyAccessExpression).expression), name, false);
+        }
         const args = call.arguments;
         if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
         const arg = args[0]!;
@@ -54186,26 +54086,6 @@ class Emitter {
                 { value: right, target: T_VALUE, node: args[1]! },
                 ...ignored,
             ], ([l, r]) => `tsc_value_object_is(${l}, ${r})`);
-        }
-        if (name === "fromEntries") {
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            const entries = this.emitExpr(arg);
-            const declaredDynamic = ts.isIdentifier(arg) && (
-                this.identifierDeclaredType(arg)?.kind === "value" ||
-                this.identifierHasDynamicAnnotation(arg)
-            );
-            if (
-                entries.ty.kind === "value" ||
-                declaredDynamic ||
-                (entries.ty.kind === "array" && entries.ty.elem?.kind === "value")
-            ) {
-                const dynamicEntries: EmitResult = declaredDynamic ? { c: entries.c, ty: T_VALUE } : entries;
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: dynamicEntries, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([e]) => `tsc_value_object_from_entries(${e})`);
-            }
-            return this.emitObjectFromEntries(call, arg, ignored);
         }
         if (name === "getPrototypeOf") {
             if (args.length < 1) unsupported(call, "Object.getPrototypeOf expects object");
@@ -54694,39 +54574,6 @@ class Emitter {
         const type = this.checker.getTypeAtLocation(this.unwrapTransparentExpression(expr));
         return type.getSymbol()?.getName() === "SuppressedError" ||
             type.aliasSymbol?.getName() === "SuppressedError";
-    }
-
-    private emitTypedArrayDeleteProperty(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        key: EmitResult,
-        keyExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "array") unsupported(objExpr, "typed array delete on non-array");
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([arrC, keyC]) => {
-            const out = this.freshTemp("_adel");
-            const idx = this.freshTemp("_adel_i");
-            const pieces = [
-                `bool ${out} = true`,
-                `if (tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6))) { ` +
-                    `${out} = false; ` +
-                `} else { ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
-                        `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
-                            `if (!${arrC}->sealed && !${arrC}->frozen) tsc_array_mark_hole(${arrC}, ${idx}); ` +
-                            `${out} = !${arrC}->sealed && !${arrC}->frozen; break; } ` +
-                    `} ` +
-                `}`,
-                out,
-            ];
-            return `({ ${pieces.join("; ")}; })`;
-        });
     }
 
     private typedObjectPropertyNames(tsType: ts.Type, ty: CType): string[] {
@@ -56177,197 +56024,26 @@ class Emitter {
             const ty = this.moduleNamespaceMemberType(ea);
             return { c: moduleNsMember, ty };
         }
-        const rawRecv = precomputedReceiver ?? this.emitExpr(ea.expression);
-        const recv: EmitResult = rawRecv.ty.kind === "function"
-            ? { c: this.coerce(rawRecv, T_VALUE, ea.expression), ty: T_VALUE }
-            : rawRecv;
-        const isOpt = !!ea.questionDotToken;
-        const isArrayPrototypeReceiver = this.isStaticArrayPrototypeExpression(ea.expression);
-        if (isArrayPrototypeReceiver && this.isSymbolIteratorExpression(ea.argumentExpression)) {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_symbol_iterator_method(${value})`,
-            );
-        }
-        if (this.isSymbolIteratorExpression(ea.argumentExpression) && recv.ty.kind === "array") {
-            return this.emitSequencedExpr(T_VALUE, [{ value: recv }], ([array]) =>
-                `tsc_value_get_symbol_prop(${this.boxObjectIdentity(array!, recv.ty, ea.expression)}, tsc_symbol_iterator())`);
-        }
-        if (this.isSymbolIteratorExpression(ea.argumentExpression) && recv.ty.kind === "value") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_iterator())`,
-            );
-        }
-        if (this.isSymbolAsyncIteratorExpression(ea.argumentExpression) && recv.ty.kind === "value") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_async_iterator())`,
-            );
-        }
-        if (this.isSymbolAsyncDisposeExpression(ea.argumentExpression) && recv.ty.kind === "value") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_async_dispose())`,
-            );
-        }
-        if (this.isSymbolDisposeExpression(ea.argumentExpression) && recv.ty.kind === "value") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_dispose())`,
-            );
-        }
-        if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_symbol_unscopables(${value})`,
-            );
-        }
-        if (this.isSymbolUnscopablesExpression(ea.argumentExpression) && (recv.ty.kind === "value" || recv.ty.kind === "array")) {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_unscopables())`,
-            );
-        }
-        if (recv.ty.kind === "array") {
-            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            const et = recv.ty.elem!;
-            return this.emitSequencedExpr(et, [
-                { value: recv, node: ea.expression },
-                { value: idx, target: T_VALUE, node: ea.argumentExpression },
-            ], ([array, key]) => {
-                const object = this.boxObjectIdentity(array!, recv.ty, ea.expression);
-                const value = this.coerce({ c: `tsc_value_get_computed_prop(${object}, ${key})`, ty: T_VALUE }, et, ea);
-                return isOpt ? `${array} != NULL ? ${value} : ${this.zeroValue(et)}` : value;
+        const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        if (recv.ty.kind === "array" || recv.ty.kind === "entry" || recv.ty.kind === "string" ||
+            recv.ty.kind === "value" || recv.ty.kind === "function" ||
+            recv.ty.kind === "number" || recv.ty.kind === "boolean" ||
+            recv.ty.kind === "bigint" || recv.ty.kind === "symbol" ||
+            this.ordinaryNativeOwners.has(recv.ty.kind)) {
+            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: recv, target: T_VALUE, node: ea.expression },
+            ], ([object]) => {
+                // The saved receiver remains rooted while a computed key is
+                // evaluated. Optional access skips that entire evaluation.
+                const access = this.emitSequencedCall("tsc_value_get_computed_prop", T_VALUE, [
+                    { value: { c: object!, ty: T_VALUE }, target: T_VALUE, node: ea.expression },
+                    { value: key, target: T_VALUE, node: ea.argumentExpression },
+                ]).c;
+                return ea.questionDotToken
+                    ? `tsc_value_is_nullish(${object}) ? tsc_value_undefined() : ${access}`
+                    : access;
             });
-        }
-        if (recv.ty.kind === "entry") {
-            if (!ts.isNumericLiteral(ea.argumentExpression)) {
-                unsupported(ea.argumentExpression, "Object.entries tuple index must be 0 or 1");
-            }
-            const idx = Number(ea.argumentExpression.text);
-            const tv = this.freshTemp("_entry");
-            if (idx === 0) {
-                const keyType = recv.ty.key ?? T_STRING;
-                return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryKeyValue(tv, keyType, ea)}; })`,
-                    ty: keyType,
-                };
-            }
-            if (idx === 1) {
-                const valueType = recv.ty.elem ?? T_VOID;
-                return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryValue(tv, valueType, ea)}; })`,
-                    ty: valueType,
-                };
-            }
-            unsupported(ea.argumentExpression, "Object.entries tuple index must be 0 or 1");
-        }
-        if (recv.ty.kind === "string") {
-            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            if (idx.ty.kind !== "number") {
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, node: ea.expression },
-                        { value: idx, target: T_VALUE, node: ea.argumentExpression },
-                    ],
-                    ([string, key]) => isOpt
-                        ? `${string} != NULL ? ` +
-                            `tsc_value_get_computed_prop(tsc_value_string(${string}), ${key}) : ` +
-                            "tsc_value_undefined()"
-                        : `tsc_value_get_computed_prop(tsc_value_string(${string}), ${key})`,
-                );
-            }
-            if (isOpt) {
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, { value: idx }],
-                    ([obj, index]) => `${obj} != NULL ? tsc_str_char_at(${obj}, ${index}) : ${this.zeroValue(T_STRING)}`,
-                );
-            }
-            return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
-        }
-        if (this.ordinaryNativeOwners.has(recv.ty.kind)) {
-            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: recv, target: T_VALUE, node: ea.expression },
-                { value: key, target: T_VALUE, node: ea.argumentExpression },
-            ], ([owner, property]) => isOpt
-                ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : tsc_value_get_computed_prop(${owner}, ${property})`
-                : `tsc_value_get_computed_prop(${owner}, ${property})`);
-        }
-        if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
-            const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: recv, target: T_VALUE, node: ea.expression },
-                { value: key, target: T_VALUE, node: ea.argumentExpression },
-            ], ([number, property]) => `tsc_value_get_computed_prop(${number}, ${property})`);
-        }
-        if (recv.ty.kind === "value") {
-            const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            if (isOpt) {
-                let accessKind: "index" | "prop" | "symbol" | "computed";
-                if (idx.ty.kind === "number") {
-                    accessKind = "index";
-                } else if (idx.ty.kind === "string") {
-                    accessKind = "prop";
-                } else if (idx.ty.kind === "symbol") {
-                    accessKind = "symbol";
-                } else if (idx.ty.kind === "value") {
-                    accessKind = "computed";
-                } else {
-                    unsupported(ea.argumentExpression, "computed optional key cannot be represented");
-                }
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: recv }, { value: idx }],
-                    ([obj, index]) => {
-                        const access = accessKind === "index"
-                            ? `tsc_value_get_index(${obj}, ${index})`
-                            : accessKind === "prop"
-                                ? `tsc_value_get_prop(${obj}, ${index})`
-                                : accessKind === "symbol"
-                                    ? `tsc_value_get_symbol_prop(${obj}, ${index})`
-                                    : `tsc_value_get_computed_prop(${obj}, ${index})`;
-                        return `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : ${access}`;
-                    },
-                );
-            }
-            if (idx.ty.kind === "number") {
-                return { c: `tsc_value_get_index(${recv.c}, ${idx.c})`, ty: T_VALUE };
-            }
-            if (idx.ty.kind === "string") {
-                const cache = this.freshTemp("_prop_cache");
-                return {
-                    c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, ${idx.c}, &${cache}); })`,
-                    ty: T_VALUE,
-                };
-            }
-            if (idx.ty.kind === "symbol") {
-                return {
-                    c: `tsc_value_get_symbol_prop(${recv.c}, ${idx.c})`,
-                    ty: T_VALUE,
-                };
-            }
-            if (idx.ty.kind === "value") {
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [
-                        { value: recv, target: T_VALUE, node: ea.expression },
-                        { value: idx, target: T_VALUE, node: ea.argumentExpression },
-                    ],
-                    ([object, key]) => `tsc_value_get_computed_prop(${object}, ${key})`,
-                );
-            }
-            unsupported(ea.argumentExpression, "computed property key cannot be represented");
         }
         unsupported(ea, `index access on ${recv.ty.c}`);
     }

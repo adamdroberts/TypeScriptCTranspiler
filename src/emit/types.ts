@@ -390,14 +390,9 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (parts.length > 1) return T_VALUE;
     }
 
-    const tupleElems = getTupleElementTypes(t, checker);
-    if (tupleElems) {
-        if (tupleElems.length !== 2) {
-            unsupported(node, "only 2-element tuples are supported");
-        }
-        const keyType = mapTsType(node, tupleElems[0]!, checker);
-        return entryType(mapTsType(node, tupleElems[1]!, checker), keyType);
-    }
+    // A source tuple is an ordinary value List. Its annotations describe
+    // positions without selecting a physical pair or limiting cardinality.
+    if (checker.isTupleType(t)) return arrayType(T_VALUE);
 
     // Array<T> / T[]
     const arrayElem = getArrayElementType(t);
@@ -710,16 +705,4 @@ export function getArrayElementType(t: ts.Type): ts.Type | undefined {
         for (const base of current.getBaseTypes() ?? []) work.push(base);
     }
     return undefined;
-}
-
-function getTupleElementTypes(
-    t: ts.Type,
-    checker: ts.TypeChecker,
-): readonly ts.Type[] | undefined {
-    const tupleAwareChecker = checker as ts.TypeChecker & {
-        isTupleType?: (type: ts.Type) => boolean;
-    };
-    if (!tupleAwareChecker.isTupleType?.(t)) return undefined;
-    const tr = t as ts.TypeReference;
-    return tr.typeArguments ?? checker.getTypeArguments(tr);
 }

@@ -250,6 +250,45 @@ static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t
     return state->accumulator;
 }
 
+/* Object.fromEntries consumes the same captured Iterator Record as other
+ * iterable consumers. Entry shape does not select a layout: ordinary Get
+ * supplies both positional values through native owner codecs when needed. */
+tsc_value_t tsc_value_object_from_entries(tsc_value_t entries) {
+    void* volatile entries_root = tsc_value_gc_root(entries);
+    if (tsc_value_is_nullish(entries))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.fromEntries requires an iterable"));
+    tsc_value_t output = tsc_value_object(tsc_object_new());
+    void* volatile output_root = tsc_value_gc_root(output);
+    tsc_sync_iterator_t* iterator = TSC_GC_MALLOC(sizeof(*iterator));
+    *iterator = tsc_sync_iterator_open(entries);
+    for (;;) {
+        tsc_value_t entry;
+        // IteratorStepValue failures propagate directly. Entry validation,
+        // property Gets and the adder close with incoming throw precedence.
+        if (!tsc_sync_iterator_step(iterator, &entry)) break;
+        void* volatile entry_root = tsc_value_gc_root(entry);
+        TSC_TRY_FRAME(frame);
+        tsc_try_push(&frame);
+        if (setjmp(frame.jb) != 0) {
+            tsc_value_t error = tsc_current_error_value();
+            tsc_try_pop();
+            tsc_sync_iterator_close_abrupt(iterator, error);
+        }
+        if (!tsc_value_is_object(entry))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.fromEntries entry is not an object"));
+        tsc_value_t key = tsc_value_get_prop(entry, tsc_str_from_lit("0", 1));
+        void* volatile key_root = tsc_value_gc_root(key);
+        tsc_value_t value = tsc_value_get_prop(entry, tsc_str_from_lit("1", 1));
+        void* volatile value_root = tsc_value_gc_root(value);
+        if (!tsc_value_create_data_property(output, key, value))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.fromEntries property could not be created"));
+        tsc_try_pop();
+        (void)entry_root; (void)key_root; (void)value_root;
+    }
+    (void)entries_root; (void)output_root;
+    return output;
+}
+
 typedef struct tsc_keyed_group {
     tsc_value_t key;
     void* key_root;

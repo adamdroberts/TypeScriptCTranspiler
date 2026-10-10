@@ -94,11 +94,13 @@ test("Array native boundaries preserve identity, aliases, metadata and getter or
 
 test("incompatible native Array layouts fail closed without invoking element coercion", async () => {
     const program = `const host: any = globalThis;
-        function native(values: number[]): any { return values; }
+        class Boundary { native(values: number[]): any { return values; } }
+        const boundary = new Boundary();
         let calls = 0;
-        const value: any = { valueOf() { calls++; return 1; } };
+        const value: any = {};
+        Object.defineProperty(value, "valueOf", { value: function () { calls++; return 1; } });
         const source: any[] = [value], alias: any = source;
-        try { native(source); } catch (error: any) { host.print(error.name + ":" + error.message); }
+        try { boundary.native(source); } catch (error: any) { host.print(error.name + ":" + error.message); }
         host.print("unchanged:" + calls + ":" + Object.is(source[0], value) + ":" + Object.is(alias, source));
     `;
     const expected = "TypeError:Array cannot preserve identity through this native element representation\nunchanged:0:true:true\n";
