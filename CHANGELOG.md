@@ -273,6 +273,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Lower dynamic base constructors through canonical formals and invocation records, retaining actual arguments, receiver, class callee and newTarget; initialize base fields before defaults and configure strict arguments before parameter evaluation.
+
 - Initialize dynamic class fields and static blocks through one retained ordered element list, with GC roots, lexical captures, suspension and class name inference before static definitions.
 
 - Share immutable inner class-name cells across native declarations and dynamic definitions, retaining TDZ, outer binding independence, captures and suspension.

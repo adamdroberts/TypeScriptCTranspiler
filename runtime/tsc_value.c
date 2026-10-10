@@ -438,6 +438,8 @@ tsc_value_t tsc_value_function_named_kind(
     id->func_prototype_initialized = false;
     id->construct = construct;
     id->class_elements = NULL;
+    id->class_constructor_body = tsc_value_undefined();
+    id->class_constructor_body_root = NULL;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
@@ -3488,11 +3490,57 @@ tsc_value_t tsc_value_get_prototype_from_constructor(
     return prototype;
 }
 
+static tsc_value_t tsc_value_apply_with_activation(
+    tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
+    tsc_value_t callee, tsc_value_t new_target
+);
+
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
+    return tsc_value_apply_with_activation(fn, this_arg, args, fn, tsc_value_undefined());
+}
+
+void tsc_value_class_set_constructor_body(tsc_value_t constructor, tsc_value_t body) {
+    if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION ||
+        !value_is_box(body) || value_tag(body) != TSC_VALUE_TAG_FUNCTION)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor body requires callable owners"));
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile body_root = tsc_value_gc_root(body);
+    (void)constructor_root;
+    (void)body_root;
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    tsc_function_identity_t* body_identity = (tsc_function_identity_t*)value_ptr(body);
+    identity->class_constructor_body = body;
+    identity->class_constructor_body_root = tsc_value_gc_root(body);
+    identity->length = body_identity->length;
+    if (!tsc_value_define_property_desc(constructor, tsc_str_from_lit("length", 6),
+            tsc_value_num(body_identity->length), true, false, true, false, true, true, true))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor length definition failed"));
+}
+
+tsc_value_t tsc_value_class_construct_body(tsc_value_t constructor, tsc_value_t receiver, tsc_array_t* arguments) {
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    (void)constructor_root;
+    (void)receiver_root;
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    tsc_value_t new_target = tsc_value_current_new_target();
+    void* volatile target_root = tsc_value_gc_root(new_target);
+    (void)target_root;
+    tsc_value_class_initialize_elements(constructor, receiver, false);
+    if (tsc_value_is_undefined(identity->class_constructor_body)) return tsc_value_undefined();
+    return tsc_value_apply_with_activation(identity->class_constructor_body, receiver,
+        tsc_value_array(arguments), constructor, new_target);
+}
+
+static tsc_value_t tsc_value_apply_with_activation(
+    tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
+    tsc_value_t callee, tsc_value_t new_target
+) {
     // The canonical invocation owns its encoded operands across argument-list
     // materialization and arbitrary user callbacks, including native callers.
     void* volatile invocation_roots[] = {
-        tsc_value_gc_root(fn), tsc_value_gc_root(this_arg), tsc_value_gc_root(args)
+        tsc_value_gc_root(fn), tsc_value_gc_root(this_arg), tsc_value_gc_root(args),
+        tsc_value_gc_root(callee), tsc_value_gc_root(new_target)
     };
     (void)invocation_roots;
     if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
@@ -3557,8 +3605,8 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     ) {
         tsc_callee_frame_t frame = {
             .prev = value_current_callee,
-            .value = fn,
-            .new_target = tsc_value_undefined(),
+            .value = callee,
+            .new_target = new_target,
         };
         value_current_callee = &frame;
         tsc_value_t result = ident->code.generic(ident->env, this_arg, list);

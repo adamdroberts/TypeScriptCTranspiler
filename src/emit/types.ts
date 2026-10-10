@@ -231,7 +231,7 @@ export function hasCanonicalValueFormals(node: ts.Node): boolean {
  * Arrow functions retain their separate lexical activation binding. */
 export function hasImplicitValueThis(node: ts.Node): boolean {
     if (isOrdinaryObjectMember(node) || isOrdinaryClassMember(node)) return true;
-    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.body &&
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isConstructorDeclaration(node)) && node.body &&
         !node.getSourceFile().isDeclarationFile) return true;
     if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
     return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) ||

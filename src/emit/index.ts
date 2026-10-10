@@ -341,7 +341,8 @@ type ClosureLikeDeclaration =
     | ts.FunctionExpression
     | ts.MethodDeclaration
     | ts.GetAccessorDeclaration
-    | ts.SetAccessorDeclaration;
+    | ts.SetAccessorDeclaration
+    | ts.ConstructorDeclaration;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
 type CommonJsObjectAssignExportEntry =
     | ts.PropertyAssignment
@@ -720,7 +721,7 @@ class Emitter {
     private nativeClassNameEnvironments = new WeakMap<ts.ClassDeclaration, Map<ts.Symbol, ClosureEnvBinding>>();
     private classComputedMemberKeys = new Map<ts.ComputedPropertyName, string>();
     private classComputedInstanceFieldStorageKeys = new Map<ts.PropertyDeclaration, string>();
-    private defaultClassConstructAdapter: string | null = null;
+    private classConstructAdapter: string | null = null;
     private classElementInitializers = new WeakMap<ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration, ts.MethodDeclaration>();
     private classElementInitializerOwners = new WeakMap<ts.MethodDeclaration, ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration>();
     private classFieldNameScopes: Map<ts.Expression, string>[] = [];
@@ -23099,7 +23100,7 @@ class Emitter {
                  * method through the same enclosing capture-cell collection;
                  * member cardinality never changes the lowering shape. */
                 for (const member of node.members) {
-                    if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body) {
+                    if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member) || ts.isConstructorDeclaration(member)) && member.body) {
                         addClosureCaptures(member, node);
                     }
                     if (ts.isPropertyDeclaration(member) && member.initializer || ts.isClassStaticBlockDeclaration(member)) {
@@ -23674,6 +23675,7 @@ class Emitter {
     private isNonValueIdentifier(id: ts.Identifier): boolean {
         const p = id.parent;
         if (!p) return false;
+        if (ts.isMetaProperty(p)) return true;
         if (ts.isPropertyAccessExpression(p) && p.name === id) return true;
         if (ts.isPropertyAssignment(p) && p.name === id && !ts.isShorthandPropertyAssignment(p)) return true;
         if (ts.isMethodDeclaration(p) && p.name === id) return true;
@@ -25263,7 +25265,13 @@ class Emitter {
         this.argumentValueTypeScopes.push(parameterTypes);
         this.cellScopes.push(capturedCells);
         if (formalPlans) this.formalParameterScopes.push(formalPlans);
-        if (ctor && formalPlans) this.emitSourceFormalParameterInitialization(this.defs, ctor, rawParameterNames, formalPlans);
+        const baseReceiver = ctor && !baseName ? { c: "self", ty: classType(name) } : null;
+        if (baseReceiver) {
+            this.functionThisStack.push(baseReceiver);
+            this.functionActivationBindings.push(new Map<ArrowLexicalCaptureKind, EmitResult>([
+                ["this", baseReceiver], ["new-target", { c: "tsc_value_current_new_target()", ty: T_VALUE }],
+            ]));
+        }
         const typeChain = this.classTypeChain(cd);
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         for (const field of this.classOwnInstanceFields(cd)) {
@@ -25272,6 +25280,7 @@ class Emitter {
             );
         }
         if (!baseName) this.defs.line(`${name}_fields(self);`);
+        if (ctor && formalPlans) this.emitSourceFormalParameterInitialization(this.defs, ctor, rawParameterNames, formalPlans);
         for (const field of this.classOwnInstanceFields(cd)) {
             if (field.parameter && ts.isIdentifier(field.parameter.name)) {
                 const symbol = this.symbolForIdentifier(field.parameter.name);
@@ -25296,6 +25305,10 @@ class Emitter {
             this.defs.line(`${name}_fields(self);`);
         }
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
+        if (baseReceiver) {
+            this.functionActivationBindings.pop();
+            this.functionThisStack.pop();
+        }
         if (formalPlans) this.formalParameterScopes.pop();
         this.cellScopes.pop();
         this.argumentValueTypeScopes.pop();
@@ -25879,11 +25892,23 @@ class Emitter {
         definition: ts.ClassLikeDeclaration, constructor: string, prototype: string, nativeStorage: boolean,
     ): string[] {
         const pieces: string[] = [];
+        const bodyDeclaration = !nativeStorage ? definition.members.find(ts.isConstructorDeclaration) : undefined;
+        if (bodyDeclaration) {
+            if (!this.isSupportedDynamicConstructor(bodyDeclaration))
+                unsupported(bodyDeclaration, "class element requires the canonical initialization plan");
+            const type = this.sourceFunctionValueType(bodyDeclaration);
+            const body = this.coerce(this.emitClosureExpression(bodyDeclaration,
+                functionType(type.params ?? [], T_VALUE, T_VALUE, type.restIndex)), T_VALUE, bodyDeclaration);
+            const value = this.freshTemp("_class_constructor_body"), root = this.freshTemp("_class_constructor_body_root");
+            pieces.push(`tsc_value_t ${value} = ${body}`, `void* volatile ${root} = tsc_value_gc_root(${value})`,
+                `(void)${root}`, `tsc_value_class_set_constructor_body(${constructor}, ${value})`);
+        }
         for (const member of definition.members) {
             const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
                 ts.isSetAccessorDeclaration(member)) && !!member.body;
             const field = ts.isPropertyDeclaration(member);
             const block = ts.isClassStaticBlockDeclaration(member);
+            if (ts.isConstructorDeclaration(member)) continue;
             if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
                 unsupported(member, "class element requires the canonical initialization plan");
             }
@@ -26740,7 +26765,8 @@ class Emitter {
                     return this.isSupportedLocalFunctionDeclaration(node);
                 }
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node) && !ts.isMethodDeclaration(node) &&
-                    !ts.isGetAccessorDeclaration(node) && !ts.isSetAccessorDeclaration(node)) return false;
+                    !ts.isGetAccessorDeclaration(node) && !ts.isSetAccessorDeclaration(node) &&
+                    !ts.isConstructorDeclaration(node)) return false;
                 for (const capture of this.collectClosureCaptures(node)) {
                     const definition = capture.symbol.declarations?.find(declaration =>
                         ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration));
@@ -31998,29 +32024,31 @@ class Emitter {
             !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 ts.isClassStaticBlockDeclaration(member) ||
+                ts.isConstructorDeclaration(member) && this.isSupportedDynamicConstructor(member) ||
                 ts.isPropertyDeclaration(member) && !ts.isPrivateIdentifier(member.name) ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && !!member.body);
     }
 
-    private ensureDefaultClassConstructAdapter(): string {
-        if (this.defaultClassConstructAdapter) {
-            return this.defaultClassConstructAdapter;
+    private isSupportedDynamicConstructor(constructor: ts.ConstructorDeclaration): boolean {
+        return !!constructor.body && !constructor.parameters.some(parameter =>
+            ts.isParameterPropertyDeclaration(parameter, constructor));
+    }
+
+    private ensureClassConstructAdapter(): string {
+        if (this.classConstructAdapter) {
+            return this.classConstructAdapter;
         }
-        const name = "tsc_default_class_construct";
-        this.defaultClassConstructAdapter = name;
+        const name = "tsc_class_construct";
+        this.classConstructAdapter = name;
         const signature =
             `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
         this.protos.line(`${signature};`);
         const body = new CBuf();
         body.open(signature);
         body.line("(void)env;");
-        body.line("(void)args;");
-        body.line("tsc_value_class_initialize_elements(tsc_value_current_callee(), this_arg, false);");
-        /* Ordinary [[Construct]] keeps the receiver when a base constructor
-         * returns a primitive.  One shared adapter therefore implements the
-         * default constructor algorithm; the fresh environment pointer below
-         * supplies the per-evaluation function identity. */
-        body.line("return tsc_value_undefined();");
+        /* Default and explicit base constructors use one retained body slot
+         * and the same instance-element initialization/invocation algorithm. */
+        body.line("return tsc_value_class_construct_body(tsc_value_current_callee(), this_arg, args);");
         body.close();
         body.line();
         this.closureDefs.write(body.toString());
@@ -32100,7 +32128,7 @@ class Emitter {
             unsupported(expression, "class expression decorators are not supported by dynamic class definition");
         }
 
-        const adapter = this.ensureDefaultClassConstructAdapter();
+        const adapter = this.ensureClassConstructAdapter();
         const identity = this.freshTemp("_class_expression_identity");
         const constructor = this.freshTemp("_class_expression_constructor");
         const constructorRoot = this.freshTemp("_class_expression_constructor_root");
@@ -48765,14 +48793,7 @@ class Emitter {
             case "entry":
                 return `tsc_value_array((${r.c}).pair)`;
             case "function": {
-                const sourceFunction = ts.isExpression(node)
-                    ? this.functionLikeForExpression(node)
-                    : ts.isFunctionDeclaration(node) ||
-                        ts.isMethodDeclaration(node) ||
-                        ts.isGetAccessorDeclaration(node) ||
-                        ts.isSetAccessorDeclaration(node)
-                        ? node
-                        : null;
+                const sourceFunction = this.sourceFunctionForCallableNode(node);
                 const length = sourceFunction
                     ? this.javaScriptFunctionLength(sourceFunction)
                     : (r.ty.params ?? []).length;
@@ -49002,19 +49023,19 @@ class Emitter {
         return false;
     }
 
+    private sourceFunctionForCallableNode(node: ts.Node): ts.FunctionLikeDeclaration | null {
+        if (ts.isExpression(node)) return this.functionLikeForExpression(node);
+        return ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) ||
+            ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ||
+            ts.isConstructorDeclaration(node) ? node : null;
+    }
+
     private ensureDynamicFunctionAdapter(node: ts.Node, type: CType): string {
         if (type.kind !== "function" || !type.closureName || !type.ret) {
             unsupported(node, "dynamic function boxing requires a function value");
         }
         this.prepareType(type);
-        const sourceFunction = ts.isExpression(node)
-            ? this.functionLikeForExpression(node)
-            : ts.isFunctionDeclaration(node) ||
-                ts.isMethodDeclaration(node) ||
-                ts.isGetAccessorDeclaration(node) ||
-                ts.isSetAccessorDeclaration(node)
-                ? node
-                : null;
+        const sourceFunction = this.sourceFunctionForCallableNode(node);
         const createsActivation = !!sourceFunction &&
             hasImplicitValueThis(sourceFunction);
         const normalizesSloppyThis = createsActivation &&
@@ -49041,6 +49062,7 @@ class Emitter {
         if (createsActivation) {
             buf.line("tsc_call_activation_t activation;");
             buf.line("tsc_call_activation_push(&activation, args, this_arg, tsc_value_current_callee());");
+            if (!normalizesSloppyThis) buf.line("tsc_call_activation_configure(true, NULL);");
         }
         const callArgs: string[] = ["fn->env"];
         if (type.thisParam) {
