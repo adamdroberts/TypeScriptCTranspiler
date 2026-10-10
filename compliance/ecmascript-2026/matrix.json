@@ -2879,7 +2879,9 @@
           "tests/property/locale-invocation.property.test.ts",
           "tests/property/date-static-invocation.property.test.ts",
           "tests/property/date-utc-calendar.property.test.ts",
-          "tests/property/date-now.property.test.ts"
+          "tests/property/date-now.property.test.ts",
+          "tests/property/date-instance-invocation.property.test.ts",
+          "tests/property/ordinary-native-owner-result.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2897,12 +2899,14 @@
           "locale_ordinary_invocation",
           "date_static_invocation",
           "date_utc_calendar",
-          "date_now_time_value"
+          "date_now_time_value",
+          "date_instance_invocation"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
           "stdlib/lib.core.d.ts#Number",
-          "stdlib/lib.core.d.ts#DateConstructor"
+          "stdlib/lib.core.d.ts#DateConstructor",
+          "stdlib/lib.core.d.ts#Date"
         ],
         "implementation": [
           "runtime/tsc_builtin.c",

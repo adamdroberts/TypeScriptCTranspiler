@@ -1,0 +1,1 @@
+{"description":"Typed Date methods use ordinary lookup, capture time values before coercion and share the exact UTC calendar kernel"}

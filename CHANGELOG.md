@@ -1,5 +1,7 @@
 # Changelog
 
+- Share ordinary Date instance lookup and pre-coercion time snapshots, migrate UTC setters to the exact calendar kernel and remove direct method/purity predecessors. Share Date/Buffer owner admission and a source fact worklist for inferred result/alias storage; verify Node and pinned year semantics, retained owners, deep source dependencies and typed/suspended consumers.
+
 - Return integral current UTC milliseconds from the shared Date clock and verify native values against independent execution-time host bounds. Bind exact UTC/now clauses to reciprocal properties, typed cases, one generated retained-owner argument List and reviewed metadata, while retaining full Date and signed host/report gaps.
 
 - Replace UTC machine calendar fields with exact Gregorian month/year normalization, a representability search for first-day time values, and explicit binary64 MakeTime/MakeDate rounding. Preserve truncation, legitimate negative timestamps, cancellation and TimeClip boundaries; verify independent Gregorian/Node properties, deep retention and typed native E2E in both memory modes.

@@ -17020,70 +17020,157 @@ double tsc_date_set_time(tsc_date_t* d, double ms) {
     return d->ms;
 }
 
-double tsc_date_set_utc_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
-    if (!d) return NAN;
-    double provided[] = { a, b, c, e };
-    for (int i = 0; i < arg_count && i < 4; i++) {
-        if (!isfinite(provided[i])) {
-            d->ms = NAN;
-            return NAN;
-        }
+/* Every calendar integer remains exact until an explicit Number operation.
+ * Reuse the shared nearest/even integer-to-binary64 codec rather than GMP's
+ * truncating mpz_get_d conversion. */
+static double date_integer_number(const mpz_t integer) {
+    tsc_bigint_t number;
+    mpz_init_set(number.value, integer);
+    double result = tsc_bigint_to_number(&number);
+    mpz_clear(number.value);
+    return result;
+}
+
+static double date_day_from_year(double year) {
+    mpz_t y, days, quotient;
+    mpz_inits(y, days, quotient, NULL);
+    mpz_set_d(y, year);
+    mpz_sub_ui(days, y, 1970);
+    mpz_mul_ui(days, days, 365);
+    const unsigned long offsets[] = {1969, 1901, 1601};
+    const unsigned long divisors[] = {4, 100, 400};
+    for (size_t index = 0; index < sizeof(divisors) / sizeof(divisors[0]); index++) {
+        mpz_sub_ui(quotient, y, offsets[index]);
+        mpz_fdiv_q_ui(quotient, quotient, divisors[index]);
+        if (index == 1) mpz_sub(days, days, quotient);
+        else mpz_add(days, days, quotient);
     }
-    if (isnan(d->ms) && part != 0) return NAN;
-    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
-    double seconds_double = floor(base_ms / 1000.0);
-    time_t seconds = (time_t)seconds_double;
+    double result = date_integer_number(days);
+    mpz_clears(y, days, quotient, NULL);
+    return result;
+}
+
+/* Explicit stores preserve each ECMAScript binary64 rounding point, including
+ * release builds on targets that otherwise contract multiplication/addition. */
+static double date_number_add(double left, double right) {
+    volatile double result = left + right;
+    return result;
+}
+
+static double date_number_multiply(double left, double right) {
+    volatile double result = left * right;
+    return result;
+}
+
+static uint64_t date_number_order(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits >> 63 ? ~bits : bits ^ UINT64_C(0x8000000000000000);
+}
+
+static double date_number_from_order(uint64_t order) {
+    uint64_t bits = order >> 63 ? order ^ UINT64_C(0x8000000000000000) : ~order;
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static double date_make_day(double year, double month, double date) {
+    if (!isfinite(year) || !isfinite(month) || !isfinite(date)) return NAN;
+    mpz_t m, quotient, y;
+    mpz_inits(m, quotient, y, NULL);
+    mpz_set_d(m, trunc(month));
+    /* Mathematical floor/modulo precede conversion to Number. A rounded
+     * binary64 division by twelve is not this operation at large magnitudes. */
+    unsigned long normalized_month = mpz_fdiv_q_ui(quotient, m, 12);
+    double normalized_year = date_number_add(trunc(year), date_integer_number(quotient));
+    mpz_clears(m, quotient, NULL);
+    if (!isfinite(normalized_year)) { mpz_clear(y); return NAN; }
+    mpz_set_d(y, normalized_year);
+    bool leap = mpz_divisible_ui_p(y, 400) ||
+        (mpz_divisible_ui_p(y, 4) && !mpz_divisible_ui_p(y, 100));
+    mpz_clear(y);
+    const unsigned short month_starts[] = {0,31,59,90,120,151,181,212,243,273,304,334};
+    double month_start = month_starts[normalized_month] + (leap && normalized_month >= 2 ? 1 : 0);
+    double year_day = date_day_from_year(normalized_year);
+    double year_start = date_number_multiply(year_day, 86400000.0);
+    double next_year = fabs(normalized_year) < 9007199254740992.0
+        ? normalized_year + 1.0 : nextafter(normalized_year, INFINITY);
+    double next_start = isfinite(next_year)
+        ? date_number_multiply(date_day_from_year(next_year), 86400000.0) : INFINITY;
+    if (year_start == INFINITY || next_start == -INFINITY || year_start >= next_start) return NAN;
+
+    /* YearFromTime(t)==y iff TimeFromYear(y)<=t<TimeFromYear(next integral
+     * Number). Within that interval Day(t)-DayFromYear(y) is monotone. Search
+     * the complete finite Number order for the first month-day witness; this
+     * proves representability without a C integer/year bound or assuming an
+     * ideal calendar midnight is representable at every binary64 magnitude. */
+    uint64_t lower = date_number_order(isfinite(year_start) ? year_start : -DBL_MAX);
+    uint64_t upper = date_number_order(isfinite(next_start) ? next_start : DBL_MAX);
+    while (lower < upper) {
+        uint64_t middle = lower + (upper - lower) / 2;
+        double time = date_number_from_order(middle);
+        double within_year = date_number_add(floor(time / 86400000.0), -year_day);
+        if (within_year < month_start) lower = middle + 1;
+        else upper = middle;
+    }
+    /* Time values are integral Numbers. The first integral value at or above
+     * the lower-bound witness is sufficient because the predicate is monotone. */
+    double witness = ceil(date_number_from_order(lower));
+    double day = floor(witness / 86400000.0);
+    if (witness < year_start || witness >= next_start ||
+        date_number_add(day, -year_day) != month_start) return NAN;
+    return date_number_add(date_number_add(day, trunc(date)), -1.0);
+}
+
+static double date_make_time(double hours, double minutes, double seconds, double ms) {
+    if (!isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) return NAN;
+    double result = date_number_add(date_number_multiply(trunc(hours), 3600000.0),
+        date_number_multiply(trunc(minutes), 60000.0));
+    result = date_number_add(result, date_number_multiply(trunc(seconds), 1000.0));
+    return date_number_add(result, trunc(ms));
+}
+
+static double date_make_date(double day, double time) {
+    if (!isfinite(day) || !isfinite(time)) return NAN;
+    double result = date_number_add(date_number_multiply(day, 86400000.0), time);
+    return isfinite(result) ? result : NAN;
+}
+
+double tsc_date_set_utc_part(tsc_date_t* d, double base_ms, int part, double a, double b, double c, double e, int arg_count) {
+    if (!d || part < 0 || part > 6) return NAN;
+    /* Non-year setters return without writing when their captured time is
+     * invalid, even if conversion hooks have since mutated the receiver. */
+    if (isnan(base_ms)) {
+        if (part != 0) return NAN;
+        base_ms = 0.0;
+    }
+    time_t seconds = (time_t)floor(base_ms / 1000.0);
     struct tm tm;
-    if (!gmtime_r(&seconds, &tm)) {
-        d->ms = NAN;
-        return NAN;
+    if (!gmtime_r(&seconds, &tm)) return NAN;
+    double millis = fmod(base_ms, 1000.0);
+    if (millis < 0.0) millis += 1000.0;
+    double components[] = { (double)tm.tm_year + 1900.0, tm.tm_mon,
+        tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, millis };
+    const double provided[] = { a, b, c, e };
+    const size_t component_count = sizeof(components) / sizeof(components[0]);
+    const size_t provided_count = sizeof(provided) / sizeof(provided[0]);
+    for (size_t index = 0; index < provided_count && index < (size_t)arg_count &&
+        (size_t)part + index < component_count; index++) {
+        components[(size_t)part + index] = provided[index];
     }
-    double rem = fmod(base_ms, 1000.0);
-    if (rem < 0) rem += 1000.0;
-    int millis = (int)floor(rem);
-
-    switch (part) {
-        case 0:
-            tm.tm_year = (int)a - 1900;
-            if (arg_count > 1) tm.tm_mon = (int)b;
-            if (arg_count > 2) tm.tm_mday = (int)c;
-            break;
-        case 1:
-            tm.tm_mon = (int)a;
-            if (arg_count > 1) tm.tm_mday = (int)b;
-            break;
-        case 2:
-            tm.tm_mday = (int)a;
-            break;
-        case 3:
-            tm.tm_hour = (int)a;
-            if (arg_count > 1) tm.tm_min = (int)b;
-            if (arg_count > 2) tm.tm_sec = (int)c;
-            if (arg_count > 3) millis = (int)e;
-            break;
-        case 4:
-            tm.tm_min = (int)a;
-            if (arg_count > 1) tm.tm_sec = (int)b;
-            if (arg_count > 2) millis = (int)c;
-            break;
-        case 5:
-            tm.tm_sec = (int)a;
-            if (arg_count > 1) millis = (int)b;
-            break;
-        case 6:
-            millis = (int)a;
-            break;
-        default:
-            return NAN;
-    }
-
-    time_t t = timegm(&tm);
-    d->ms = date_time_clip(((double)t) * 1000.0 + (double)millis);
+    double day = part <= 2 ? date_make_day(components[0], components[1], components[2])
+        : floor(base_ms / 86400000.0);
+    double time = date_make_time(components[3], components[4], components[5], components[6]);
+    d->ms = date_time_clip(date_make_date(day, time));
     return d->ms;
 }
 
-double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, double c, double e, int arg_count) {
+double tsc_date_set_local_part(tsc_date_t* d, double base_ms, int part, double a, double b, double c, double e, int arg_count) {
     if (!d) return NAN;
+    bool invalid_base = isnan(base_ms);
+    if (invalid_base && part != 0) return NAN;
+    if (invalid_base) base_ms = 0.0;
     double provided[] = { a, b, c, e };
     for (int i = 0; i < arg_count && i < 4; i++) {
         if (!isfinite(provided[i])) {
@@ -17091,12 +17178,10 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
             return NAN;
         }
     }
-    if (isnan(d->ms) && part != 0) return NAN;
-    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
     double seconds_double = floor(base_ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
-    if (!localtime_r(&seconds, &tm)) {
+    if (!(invalid_base ? gmtime_r(&seconds, &tm) : localtime_r(&seconds, &tm))) {
         d->ms = NAN;
         return NAN;
     }
@@ -17149,7 +17234,7 @@ double tsc_date_set_local_part(tsc_date_t* d, int part, double a, double b, doub
     return d->ms;
 }
 
-double tsc_date_set_legacy_year(tsc_date_t* d, double year) {
+double tsc_date_set_legacy_year(tsc_date_t* d, double base_ms, double year) {
     if (!d) return NAN;
     if (!isfinite(year)) {
         d->ms = NAN;
@@ -17158,11 +17243,12 @@ double tsc_date_set_legacy_year(tsc_date_t* d, double year) {
     int y = (int)year;
     if (y >= 0 && y <= 99) y += 1900;
 
-    double base_ms = isnan(d->ms) ? 0.0 : d->ms;
+    bool invalid_base = isnan(base_ms);
+    if (invalid_base) base_ms = 0.0;
     double seconds_double = floor(base_ms / 1000.0);
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
-    if (!localtime_r(&seconds, &tm)) {
+    if (!(invalid_base ? gmtime_r(&seconds, &tm) : localtime_r(&seconds, &tm))) {
         d->ms = NAN;
         return NAN;
     }
@@ -17283,123 +17369,6 @@ double tsc_date_parse(const tsc_str_t* text) {
     double result = ((double)t) * 1000.0 + (double)ms;
     if (has_time) result -= (double)offset_minutes * 60000.0;
     return date_time_clip(result);
-}
-
-/* Every calendar integer remains exact until an explicit Number operation.
- * Reuse the shared nearest/even integer-to-binary64 codec rather than GMP's
- * truncating mpz_get_d conversion. */
-static double date_integer_number(const mpz_t integer) {
-    tsc_bigint_t number;
-    mpz_init_set(number.value, integer);
-    double result = tsc_bigint_to_number(&number);
-    mpz_clear(number.value);
-    return result;
-}
-
-static double date_day_from_year(double year) {
-    mpz_t y, days, quotient;
-    mpz_inits(y, days, quotient, NULL);
-    mpz_set_d(y, year);
-    mpz_sub_ui(days, y, 1970);
-    mpz_mul_ui(days, days, 365);
-    const unsigned long offsets[] = {1969, 1901, 1601};
-    const unsigned long divisors[] = {4, 100, 400};
-    for (size_t index = 0; index < sizeof(divisors) / sizeof(divisors[0]); index++) {
-        mpz_sub_ui(quotient, y, offsets[index]);
-        mpz_fdiv_q_ui(quotient, quotient, divisors[index]);
-        if (index == 1) mpz_sub(days, days, quotient);
-        else mpz_add(days, days, quotient);
-    }
-    double result = date_integer_number(days);
-    mpz_clears(y, days, quotient, NULL);
-    return result;
-}
-
-/* Explicit stores preserve each ECMAScript binary64 rounding point, including
- * release builds on targets that otherwise contract multiplication/addition. */
-static double date_number_add(double left, double right) {
-    volatile double result = left + right;
-    return result;
-}
-
-static double date_number_multiply(double left, double right) {
-    volatile double result = left * right;
-    return result;
-}
-
-static uint64_t date_number_order(double value) {
-    uint64_t bits;
-    memcpy(&bits, &value, sizeof(bits));
-    return bits >> 63 ? ~bits : bits ^ UINT64_C(0x8000000000000000);
-}
-
-static double date_number_from_order(uint64_t order) {
-    uint64_t bits = order >> 63 ? order ^ UINT64_C(0x8000000000000000) : ~order;
-    double value;
-    memcpy(&value, &bits, sizeof(value));
-    return value;
-}
-
-static double date_make_day(double year, double month, double date) {
-    if (!isfinite(year) || !isfinite(month) || !isfinite(date)) return NAN;
-    mpz_t m, quotient, y;
-    mpz_inits(m, quotient, y, NULL);
-    mpz_set_d(m, trunc(month));
-    /* Mathematical floor/modulo precede conversion to Number. A rounded
-     * binary64 division by twelve is not this operation at large magnitudes. */
-    unsigned long normalized_month = mpz_fdiv_q_ui(quotient, m, 12);
-    double normalized_year = date_number_add(trunc(year), date_integer_number(quotient));
-    mpz_clears(m, quotient, NULL);
-    if (!isfinite(normalized_year)) { mpz_clear(y); return NAN; }
-    mpz_set_d(y, normalized_year);
-    bool leap = mpz_divisible_ui_p(y, 400) ||
-        (mpz_divisible_ui_p(y, 4) && !mpz_divisible_ui_p(y, 100));
-    mpz_clear(y);
-    const unsigned short month_starts[] = {0,31,59,90,120,151,181,212,243,273,304,334};
-    double month_start = month_starts[normalized_month] + (leap && normalized_month >= 2 ? 1 : 0);
-    double year_day = date_day_from_year(normalized_year);
-    double year_start = date_number_multiply(year_day, 86400000.0);
-    double next_year = fabs(normalized_year) < 9007199254740992.0
-        ? normalized_year + 1.0 : nextafter(normalized_year, INFINITY);
-    double next_start = isfinite(next_year)
-        ? date_number_multiply(date_day_from_year(next_year), 86400000.0) : INFINITY;
-    if (year_start == INFINITY || next_start == -INFINITY || year_start >= next_start) return NAN;
-
-    /* YearFromTime(t)==y iff TimeFromYear(y)<=t<TimeFromYear(next integral
-     * Number). Within that interval Day(t)-DayFromYear(y) is monotone. Search
-     * the complete finite Number order for the first month-day witness; this
-     * proves representability without a C integer/year bound or assuming an
-     * ideal calendar midnight is representable at every binary64 magnitude. */
-    uint64_t lower = date_number_order(isfinite(year_start) ? year_start : -DBL_MAX);
-    uint64_t upper = date_number_order(isfinite(next_start) ? next_start : DBL_MAX);
-    while (lower < upper) {
-        uint64_t middle = lower + (upper - lower) / 2;
-        double time = date_number_from_order(middle);
-        double within_year = date_number_add(floor(time / 86400000.0), -year_day);
-        if (within_year < month_start) lower = middle + 1;
-        else upper = middle;
-    }
-    /* Time values are integral Numbers. The first integral value at or above
-     * the lower-bound witness is sufficient because the predicate is monotone. */
-    double witness = ceil(date_number_from_order(lower));
-    double day = floor(witness / 86400000.0);
-    if (witness < year_start || witness >= next_start ||
-        date_number_add(day, -year_day) != month_start) return NAN;
-    return date_number_add(date_number_add(day, trunc(date)), -1.0);
-}
-
-static double date_make_time(double hours, double minutes, double seconds, double ms) {
-    if (!isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) return NAN;
-    double result = date_number_add(date_number_multiply(trunc(hours), 3600000.0),
-        date_number_multiply(trunc(minutes), 60000.0));
-    result = date_number_add(result, date_number_multiply(trunc(seconds), 1000.0));
-    return date_number_add(result, trunc(ms));
-}
-
-static double date_make_date(double day, double time) {
-    if (!isfinite(day) || !isfinite(time)) return NAN;
-    double result = date_number_add(date_number_multiply(day, 86400000.0), time);
-    return isfinite(result) ? result : NAN;
 }
 
 double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {

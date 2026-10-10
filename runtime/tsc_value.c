@@ -6721,8 +6721,8 @@ static int date_numeric_arguments(
     int maximum,
     double values[4]
 ) {
-    int count = args ? (int)args->len : 0;
-    if (count > maximum) count = maximum;
+    const size_t actual_count = args ? args->len : 0;
+    int count = actual_count > (size_t)maximum ? maximum : (int)actual_count;
     if (count == 0) count = 1;
     for (int index = 0; index < count; index++) {
         values[index] = tsc_value_to_number(date_argument(args, (size_t)index));
@@ -6766,6 +6766,7 @@ static tsc_value_t date_prototype_method_apply(
         return date_prototype_to_json(this_arg);
     }
     tsc_date_t* date = date_this_value(this_arg, descriptor->name);
+    const double captured_time = date->ms;
     switch (descriptor->operation) {
         case TSC_DATE_METHOD_TIME:
             return tsc_value_num(tsc_date_get_time(date));
@@ -6791,13 +6792,13 @@ static tsc_value_t date_prototype_method_apply(
             return tsc_value_num(
                 descriptor->operation == TSC_DATE_METHOD_SET_UTC_PART
                     ? tsc_date_set_utc_part(
-                        date,
+                        date, captured_time,
                         descriptor->part,
                         values[0], values[1], values[2], values[3],
                         count
                     )
                     : tsc_date_set_local_part(
-                        date,
+                        date, captured_time,
                         descriptor->part,
                         values[0], values[1], values[2], values[3],
                         count
@@ -6806,7 +6807,7 @@ static tsc_value_t date_prototype_method_apply(
         }
         case TSC_DATE_METHOD_SET_LEGACY_YEAR:
             return tsc_value_num(tsc_date_set_legacy_year(
-                date,
+                date, captured_time,
                 tsc_value_to_number(date_argument(args, 0))
             ));
         case TSC_DATE_METHOD_STRING:

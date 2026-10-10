@@ -544,6 +544,11 @@ export function emitProgram(
 }
 
 class Emitter {
+    /* One owner admission collection governs ordinary calls, member reads and
+     * the physical result facts propagated into inferred binding storage. */
+    private readonly ordinaryNativeOwnerKinds: ReadonlySet<CType["kind"]> = new Set(["date", "buffer"]);
+    private readonly ordinaryNativeOwnerResultFacts = new Map<ts.Node, boolean>();
+
     public diagnostics: string[] = [];
     private structDecls = new CBuf();
     /** File-scope variable declarations (one per module-level const/let). */
@@ -1331,6 +1336,9 @@ class Emitter {
         expr: ts.Expression,
         seenConsts = new Set<ts.Symbol>(),
     ): boolean {
+        // Ordinary calls and their inferred aliases have actual tagged results.
+        // Reuse their graph fact before the older scalar purity predictors.
+        if (this.expressionHasOrdinaryNativeOwnerResult(expr)) return false;
         while (
             ts.isParenthesizedExpression(expr) ||
             ts.isAsExpression(expr) ||
@@ -1642,9 +1650,6 @@ class Emitter {
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1839,9 +1844,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
@@ -3224,9 +3226,6 @@ class Emitter {
                     return true;
                 }
                 break;
-        }
-        if (this.isSideEffectFreeDateMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
         }
         if (this.isSideEffectFreeURLMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
@@ -7129,9 +7128,6 @@ class Emitter {
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -7223,9 +7219,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeDateStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
@@ -8146,74 +8139,6 @@ class Emitter {
                 ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
                 : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
-    }
-
-    private isSideEffectFreeDateMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeFreshDateOperand(recv, seenConsts)) return false;
-        const allArgsPure = (): boolean =>
-            Array.from(args).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        switch (method) {
-            case "getTime":
-            case "valueOf":
-            case "getUTCFullYear":
-            case "getUTCMonth":
-            case "getUTCDate":
-            case "getUTCDay":
-            case "getUTCHours":
-            case "getUTCMinutes":
-            case "getUTCSeconds":
-            case "getUTCMilliseconds":
-            case "getFullYear":
-            case "getYear":
-            case "getMonth":
-            case "getDate":
-            case "getDay":
-            case "getHours":
-            case "getMinutes":
-            case "getSeconds":
-            case "getMilliseconds":
-            case "getTimezoneOffset":
-            case "toString":
-            case "toLocaleString":
-            case "toLocaleDateString":
-            case "toLocaleTimeString":
-            case "toGMTString":
-            case "toUTCString":
-            case "toDateString":
-            case "toTimeString":
-                return allArgsPure();
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreeDateStringMethodCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
-            return false;
-        }
-        const method = expr.expression.name.text;
-        const stringMethods = new Set([
-            "toString",
-            "toLocaleString",
-            "toLocaleDateString",
-            "toLocaleTimeString",
-            "toGMTString",
-            "toUTCString",
-            "toDateString",
-            "toTimeString",
-        ]);
-        return stringMethods.has(method) &&
-            this.isSideEffectFreeDateMethodCall(expr.expression.expression, method, expr.arguments, seenConsts);
     }
 
     private isSideEffectFreeFreshDateOperand(
@@ -21434,50 +21359,44 @@ class Emitter {
         return ty;
     }
 
-    private requireBindingSpecifier(id: ts.Identifier, seen: Set<ts.Node> = new Set()): string | null {
-        const resolveInitializer = (
-            initializer: ts.Expression,
-            owner: ts.Node,
-            followIdentifierAlias: boolean,
-        ): string | null => {
-            if (seen.has(owner)) return null;
-            seen.add(owner);
-            const unwrapped = this.unwrapTransparentExpression(initializer);
-            const direct = this.requireCallSpecifier(unwrapped);
-            const resolved = direct ?? (
-                followIdentifierAlias && ts.isIdentifier(unwrapped)
-                    ? this.requireBindingSpecifier(unwrapped, seen)
-                    : null
-            );
-            seen.delete(owner);
-            return resolved;
+    private requireBindingSpecifier(id: ts.Identifier): string | null {
+        const pending: ts.Identifier[] = [id];
+        const owners = new Set<ts.Node>();
+        const initializer = (expression: ts.Expression, owner: ts.Node, followAlias: boolean): string | null => {
+            if (owners.has(owner)) return null;
+            owners.add(owner);
+            const current = this.unwrapTransparentExpression(expression);
+            const direct = this.requireCallSpecifier(current);
+            if (direct) return direct;
+            if (followAlias && ts.isIdentifier(current)) pending.push(current);
+            return null;
         };
-        const sym = this.symbolForIdentifier(id);
-        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
-            const isConst = ts.isVariableDeclarationList(decl.parent) &&
-                (ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) !== 0;
-            const spec = resolveInitializer(decl.initializer, decl, isConst);
-            if (spec) return spec;
-        }
-        if (decl && ts.isParameter(decl)) {
-            const arg = this.commonJsIifeParameterArgument(decl);
-            if (arg) {
-                const spec = resolveInitializer(arg, decl, true);
-                if (spec) return spec;
+        while (pending.length > 0) {
+            const current = pending.pop()!;
+            const symbol = this.symbolForIdentifier(current);
+            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+            if (declaration) {
+                if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+                    const isConst = ts.isVariableDeclarationList(declaration.parent) &&
+                        (ts.getCombinedNodeFlags(declaration.parent) & ts.NodeFlags.Const) !== 0;
+                    const direct = initializer(declaration.initializer, declaration, isConst);
+                    if (direct) return direct;
+                } else if (ts.isParameter(declaration)) {
+                    const argument = this.commonJsIifeParameterArgument(declaration);
+                    const direct = argument ? initializer(argument, declaration, true) : null;
+                    if (direct) return direct;
+                }
+                // A resolved binding has one owner. Replaying it through the
+                // name fallback both crossed scopes and doubled every alias.
+                continue;
             }
-        }
-        for (const stmt of id.getSourceFile().statements) {
-            if (!ts.isVariableStatement(stmt)) continue;
-            for (const fallbackDecl of stmt.declarationList.declarations) {
-                if (
-                    ts.isIdentifier(fallbackDecl.name) &&
-                    fallbackDecl.name.text === id.text &&
-                    fallbackDecl.initializer
-                ) {
-                    const isConst = (ts.getCombinedNodeFlags(stmt.declarationList) & ts.NodeFlags.Const) !== 0;
-                    const spec = resolveInitializer(fallbackDecl.initializer, fallbackDecl, isConst);
-                    if (spec) return spec;
+            for (const statement of current.getSourceFile().statements) {
+                if (!ts.isVariableStatement(statement)) continue;
+                for (const fallback of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(fallback.name) || fallback.name.text !== current.text || !fallback.initializer) continue;
+                    const isConst = (ts.getCombinedNodeFlags(statement.declarationList) & ts.NodeFlags.Const) !== 0;
+                    const direct = initializer(fallback.initializer, fallback, isConst);
+                    if (direct) return direct;
                 }
             }
         }
@@ -23538,6 +23457,10 @@ class Emitter {
         if (storageType?.kind !== "value" || this.isJavaScriptSourceFile(id.getSourceFile())) {
             return null;
         }
+        const symbol = this.symbolForIdentifier(id);
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (declaration && ts.isVariableDeclaration(declaration) && !declaration.type &&
+            declaration.initializer && this.expressionHasOrdinaryNativeOwnerResult(declaration.initializer)) return null;
         const lexical = this.localLexicalMetadataForSymbol(this.symbolForIdentifier(id));
         if (lexical && ts.isVariableDeclaration(lexical.declaration) &&
             this.isForOfLexicalDeclaration(lexical.declaration)) {
@@ -23848,6 +23771,8 @@ class Emitter {
         base: CType,
     ): CType {
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
+        if (!declaration.type && declaration.initializer &&
+            this.expressionHasOrdinaryNativeOwnerResult(declaration.initializer)) return T_VALUE;
         if (this.isForOfLexicalDeclaration(declaration)) return T_VALUE;
         if (this.isDirectScopeLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
@@ -23858,6 +23783,61 @@ class Emitter {
             return T_VALUE;
         }
         return this.variableStorageType(base);
+    }
+
+    private expressionHasOrdinaryNativeOwnerResult(expression: ts.Expression): boolean {
+        const known = this.ordinaryNativeOwnerResultFacts.get(expression);
+        if (known !== undefined) return known;
+        const pending: ts.Node[] = [expression];
+        const seen = new Set<ts.Node>();
+        const dependents = new Map<ts.Node, ts.Node[]>();
+        const positive = new Set<ts.Node>();
+        const propagate: ts.Node[] = [];
+        const admitPositive = (node: ts.Node): void => {
+            if (!positive.has(node)) { positive.add(node); propagate.push(node); }
+        };
+        while (pending.length > 0) {
+            const node = pending.pop()!;
+            if (seen.has(node)) continue;
+            seen.add(node);
+            const cached = this.ordinaryNativeOwnerResultFacts.get(node);
+            if (cached !== undefined) {
+                if (cached) admitPositive(node);
+                continue;
+            }
+            if (ts.isFunctionLike(node)) continue;
+            if (ts.isCallExpression(node)) {
+                const callee = this.unwrapTransparentExpression(node.expression);
+                if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
+                    const receiver = this.prepareType(mapType(callee.expression, this.checker));
+                    if (this.ordinaryNativeOwnerKinds.has(receiver.kind)) {
+                        admitPositive(node);
+                        continue;
+                    }
+                }
+            }
+            const dependency = (child: ts.Node): void => {
+                const parents = dependents.get(child);
+                if (parents) parents.push(node);
+                else dependents.set(child, [node]);
+                pending.push(child);
+            };
+            if (ts.isIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer && !declaration.type) {
+                    dependency(declaration.initializer);
+                }
+            }
+            ts.forEachChild(node, dependency);
+        }
+        // Least fixed point on the complete reachable dependency graph handles
+        // aliases and cycles without recursion or repeated predecessor scans.
+        while (propagate.length > 0) {
+            for (const parent of dependents.get(propagate.pop()!) ?? []) admitPositive(parent);
+        }
+        for (const node of seen) this.ordinaryNativeOwnerResultFacts.set(node, positive.has(node));
+        return positive.has(expression);
     }
 
     private typeIncludesDirectSwitchClass(node: ts.Node): boolean {
@@ -42940,11 +42920,10 @@ class Emitter {
             return this.emitUrlMethod(call, recv, memberName);
         if (recv.ty.kind === "urlsearchparams")
             return this.emitUrlSearchParamsMethod(call, recv, memberName);
-        if (recv.ty.kind === "date")
-            return this.emitDateMethod(call, recv, memberName);
+
         if (recv.ty.kind === "error")
             return this.emitErrorMethod(call, recv, memberName);
-        if (recv.ty.kind === "buffer")
+        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind))
             return this.emitDynamicNamedPropertyCall(call, recv, memberName,
                 ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         if (recv.ty.kind === "textencoder")
@@ -48760,229 +48739,6 @@ class Emitter {
                 `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
             );
         });
-    }
-
-    private dateIgnoredArgSpecs(recv: EmitResult, args: readonly ts.Expression[]): SequencedCallArg[] {
-        return [
-            { value: recv },
-            ...Array.from(args, (arg) => ({ value: this.emitExpr(arg), node: arg })),
-        ];
-    }
-
-    private emitDateMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "getTime":
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_get_time(${date})`,
-                );
-            case "setTime": {
-                const arg = call.arguments[0];
-                if (!arg) unsupported(call, "Date.setTime expects one numeric timestamp");
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: this.emitExpr(arg), target: T_NUMBER, node: arg },
-                    ...Array.from(call.arguments.slice(1), (extra) => ({ value: this.emitExpr(extra), node: extra })),
-                ];
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    specs,
-                    ([date, ms]) => `tsc_date_set_time(${date}, ${ms})`,
-                );
-            }
-            case "setUTCFullYear":
-            case "setUTCMonth":
-            case "setUTCDate":
-            case "setUTCHours":
-            case "setUTCMinutes":
-            case "setUTCSeconds":
-            case "setUTCMilliseconds": {
-                const ranges: Record<string, [number, number, number]> = {
-                    setUTCFullYear: [0, 1, 3],
-                    setUTCMonth: [1, 1, 2],
-                    setUTCDate: [2, 1, 1],
-                    setUTCHours: [3, 1, 4],
-                    setUTCMinutes: [4, 1, 3],
-                    setUTCSeconds: [5, 1, 2],
-                    setUTCMilliseconds: [6, 1, 1],
-                };
-                const [part, minArgs, maxArgs] = ranges[method]!;
-                if (call.arguments.length < minArgs) {
-                    unsupported(call, `Date.${method} expects ${minArgs === maxArgs ? minArgs : `${minArgs} to ${maxArgs}`} numeric args`);
-                }
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                for (let i = 0; i < call.arguments.length; i++) {
-                    const arg = call.arguments[i]!;
-                    const value = this.emitExpr(arg);
-                    specs.push({ value, target: i < maxArgs ? T_NUMBER : undefined, node: arg });
-                }
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const date = vals[0]!;
-                    const args = vals.slice(1, 1 + maxArgs);
-                    while (args.length < 4) args.push("0.0");
-                    return `tsc_date_set_utc_part(${date}, ${part}, ${args.join(", ")}, ${Math.min(call.arguments.length, maxArgs)})`;
-                });
-            }
-            case "setFullYear":
-            case "setMonth":
-            case "setDate":
-            case "setHours":
-            case "setMinutes":
-            case "setSeconds":
-            case "setMilliseconds": {
-                const localSetters: Record<string, { part: number; min: number; max: number }> = {
-                    setFullYear: { part: 0, min: 1, max: 3 },
-                    setMonth: { part: 1, min: 1, max: 2 },
-                    setDate: { part: 2, min: 1, max: 1 },
-                    setHours: { part: 3, min: 1, max: 4 },
-                    setMinutes: { part: 4, min: 1, max: 3 },
-                    setSeconds: { part: 5, min: 1, max: 2 },
-                    setMilliseconds: { part: 6, min: 1, max: 1 },
-                };
-                const config = localSetters[method]!;
-                if (call.arguments.length < config.min) {
-                    unsupported(call, `Date.${method} expects ${config.min === config.max ? config.min : `${config.min} to ${config.max}`} numeric args`);
-                }
-                const specs: { value: EmitResult; target?: CType; node?: ts.Expression }[] = [{ value: recv }];
-                for (let i = 0; i < call.arguments.length; i++) {
-                    const arg = call.arguments[i]!;
-                    const value = this.emitExpr(arg);
-                    specs.push({ value, target: i < config.max ? T_NUMBER : undefined, node: arg });
-                }
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const date = vals[0]!;
-                    const args = vals.slice(1, 1 + config.max);
-                    while (args.length < 4) args.push("0.0");
-                    return `tsc_date_set_local_part(${date}, ${config.part}, ${args.join(", ")}, ${Math.min(call.arguments.length, config.max)})`;
-                });
-            }
-            case "getUTCFullYear":
-            case "getUTCMonth":
-            case "getUTCDate":
-            case "getUTCDay":
-            case "getUTCHours":
-            case "getUTCMinutes":
-            case "getUTCSeconds":
-            case "getUTCMilliseconds": {
-                const part = {
-                    getUTCFullYear: 0,
-                    getUTCMonth: 1,
-                    getUTCDate: 2,
-                    getUTCDay: 3,
-                    getUTCHours: 4,
-                    getUTCMinutes: 5,
-                    getUTCSeconds: 6,
-                    getUTCMilliseconds: 7,
-                }[method]!;
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_get_utc_part(${date}, ${part})`,
-                );
-            }
-            case "getFullYear":
-            case "getYear":
-            case "getMonth":
-            case "getDate":
-            case "getDay":
-            case "getHours":
-            case "getMinutes":
-            case "getSeconds":
-            case "getMilliseconds": {
-                const part = {
-                    getFullYear: 0,
-                    getYear: 0,
-                    getMonth: 1,
-                    getDate: 2,
-                    getDay: 3,
-                    getHours: 4,
-                    getMinutes: 5,
-                    getSeconds: 6,
-                    getMilliseconds: 7,
-                }[method]!;
-                return this.emitSequencedExpr(T_NUMBER, this.dateIgnoredArgSpecs(recv, call.arguments), ([date]) => {
-                    const value = `tsc_date_get_local_part(${date}, ${part})`;
-                    return method === "getYear" ? `(${value} - 1900.0)` : value;
-                });
-            }
-            case "setYear": {
-                const arg = call.arguments[0];
-                if (!arg) unsupported(call, "Date.setYear expects one numeric year");
-                return this.emitSequencedExpr(T_NUMBER, [
-                    { value: recv },
-                    { value: this.emitExpr(arg), target: T_NUMBER, node: arg },
-                    ...Array.from(call.arguments.slice(1), (extra) => ({ value: this.emitExpr(extra), node: extra })),
-                ], ([date, year]) => `tsc_date_set_legacy_year(${date}, ${year!})`);
-            }
-            case "getTimezoneOffset":
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_get_timezone_offset(${date})`,
-                );
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_string(${date})`,
-                );
-            case "toLocaleString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_locale_string(${date})`,
-                );
-            case "toLocaleDateString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_locale_date_string(${date})`,
-                );
-            case "toLocaleTimeString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_locale_time_string(${date})`,
-                );
-            case "toISOString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_iso_string(${date})`,
-                );
-            case "toGMTString":
-            case "toUTCString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_utc_string(${date})`,
-                );
-            case "toDateString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_date_string(${date})`,
-                );
-            case "toTimeString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_time_string(${date})`,
-                );
-            case "toJSON":
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    this.dateIgnoredArgSpecs(recv, call.arguments),
-                    ([date]) => `tsc_date_to_json(${date})`,
-                );
-        }
-        unsupported(call, `Date method .${method}`);
     }
 
     private emitErrorMethod(
@@ -57285,7 +57041,7 @@ class Emitter {
                     return { c: `tsc_event_cancelable(${recv.c})`, ty: T_BOOLEAN };
             }
         }
-        if (recv.ty.kind === "buffer") {
+        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind)) {
             return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
                 ([owner]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
@@ -57675,7 +57431,7 @@ class Emitter {
             }
             return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
         }
-        if (recv.ty.kind === "buffer") {
+        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind)) {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: ea.expression },

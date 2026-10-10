@@ -1,0 +1,9 @@
+snapshot 946688400000 946688400000
+invalid true 0
+lookup 42 get|arg|call
+order 29312
+truncate -1
+result string boxed
+alias string boxed boxed
+retained 946688400000
+suspended 946688400000
