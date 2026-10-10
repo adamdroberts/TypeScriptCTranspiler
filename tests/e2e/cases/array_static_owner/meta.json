@@ -1,0 +1,1 @@
+{"description":"Array constructor and callable aliases share mutable ordinary method owners, actual element values, live iterable consumption and suspended source-module cells."}

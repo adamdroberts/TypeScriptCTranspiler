@@ -1328,7 +1328,8 @@
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
-        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist",
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
       ]
     },
     {
@@ -1790,6 +1791,14 @@
     },
     {
       "kind": "property",
+      "id": "tests/property/array-static-owner.property.test.ts",
+      "targets": [
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/array-static-factory.property.test.ts",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
@@ -1821,7 +1830,7 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#canSpecializeArrayStaticFactoryCall",
+      "id": "src/emit/index.ts#expressionHasOrdinaryNativeOwnerResult",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
       ]

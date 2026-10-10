@@ -2035,37 +2035,8 @@ class Emitter {
         ) {
             return true;
         }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "isArray" &&
-            call.arguments.length === 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Array")
-        ) {
-            return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "of" &&
-            this.isUnshadowedGlobalIdentifier(recv, "Array")
-        ) {
-            return call.arguments.every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "from" &&
-            this.isUnshadowedGlobalIdentifier(recv, "Array")
-        ) {
-            if (call.arguments.length === 1) {
-                return this.isSideEffectFreeArraySpreadOperand(call.arguments[0]!, seenConsts);
-            }
-            return call.arguments.length >= 2 &&
-                call.arguments.length <= 3 &&
-                this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
-                (!call.arguments[2] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2], seenConsts));
-        }
+        // Array constructor methods are mutable ordinary properties.
+        if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Array")) return false;
         // Every Number static call observes a mutable ordinary property.
         if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Number")) return false;
         // Date statics are mutable ordinary methods, including unused calls.
@@ -23938,6 +23909,8 @@ class Emitter {
                 if (cached) admitPositive(node);
                 continue;
             }
+            // Annotation syntax cannot create an ordinary runtime owner.
+            if (ts.isTypeNode(node)) continue;
             const dependency = (child: ts.Node): void => {
                 const parents = dependents.get(child);
                 if (parents) parents.push(node);
@@ -23949,6 +23922,8 @@ class Emitter {
             // and results. The existing dependency graph carries that ABI to
             // retained owners, aliases, aggregates and source call sites.
             if (hasCanonicalValueFormals(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
+                this.isUnshadowedGlobalIdentifier(node, "Array")) admitPositive(node);
             if (ts.isElementAccessExpression(node)) {
                 const receivers = [this.checker.getTypeAtLocation(node.expression)];
                 const receiverTypes = new Set<ts.Type>();
@@ -41846,17 +41821,6 @@ class Emitter {
         return `({ ${steps.join("; ")}; })`;
     }
 
-    private canSpecializeArrayStaticFactoryCall(
-        call: ts.CallExpression,
-        receiver: ts.Expression,
-        memberName: string,
-    ): boolean {
-        return (memberName === "from" || memberName === "of") &&
-            !this.isJavaScriptSourceFile(call.getSourceFile()) &&
-            ts.isIdentifier(receiver) &&
-            this.isUnshadowedGlobalIdentifier(receiver, "Array");
-    }
-
     private emitMethodCall(
         call: ts.CallExpression,
         pa: ts.PropertyAccessExpression,
@@ -42767,89 +42731,11 @@ class Emitter {
         if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
         }
-        if (memberName === "of" && this.canSpecializeArrayStaticFactoryCall(call, recvExpr, memberName)) {
-            const callType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-            if (callType.kind !== "array") unsupported(call, "Array.of result must be an array");
-            const et = callType.elem!;
-            const av = this.freshTemp("_array_of");
-            const pieces: string[] = [
-                `tsc_array_t* ${av} = tsc_array_new(sizeof(${et.c}), ${Math.max(1, call.arguments.length)})`,
-            ];
-            for (const arg of call.arguments) {
-                if (ts.isSpreadElement(arg)) {
-                    const source = this.emitExpr(arg.expression);
-                    if (source.ty.kind === "value") {
-                        if (et.kind !== "value") unsupported(arg, "dynamic Array.of spread requires an any[] result");
-                        pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(${this.coerce(source, T_VALUE, arg.expression)}))`);
-                        continue;
-                    }
-                    if (source.ty.kind === "string") {
-                        if (et.kind !== "string") unsupported(arg, "string Array.of spread requires a string[] result");
-                        pieces.push(`tsc_array_append(${av}, tsc_str_chars(${source.c}))`);
-                        continue;
-                    }
-                    if (source.ty.kind !== "array" || !source.ty.elem) unsupported(arg, "Array.of spread expects an array, string, or dynamic iterable");
-                    const src = this.freshTemp("_array_of_spread_src");
-                    const idx = this.freshTemp("_array_of_spread_i");
-                    const value = this.freshTemp("_array_of_spread_value");
-                    const elem = source.ty.elem;
-                    if (sameCType(elem, et) && elem.kind !== "value") {
-                        pieces.push(`tsc_array_append(${av}, ${source.c})`);
-                    } else if (sameCType(elem, et) && et.kind === "value") {
-                        pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(tsc_value_array(${source.c})))`);
-                    } else {
-                        const current = elem.kind === "value"
-                            ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
-                            : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                        const coerced = this.coerce(current, et, arg.expression);
-                        pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ${et.c} ${value} = ${coerced}; tsc_array_push_raw(${av}, &${value}); } }`);
-                    }
-                    continue;
-                }
-                const value = this.emitExpr(arg);
-                const tmp = this.freshTemp("_array_of_el");
-                pieces.push(`${et.c} ${tmp} = ${this.coerce(value, et, arg)}`);
-                pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
-            }
-            pieces.push(av);
-            return { c: `({ ${pieces.join("; ")}; })`, ty: callType };
-        }
-        if (memberName === "from" && this.canSpecializeArrayStaticFactoryCall(call, recvExpr, memberName)) {
-            // Array.from(arrayLike) — array copy for typed and dynamic arrays.
-            const a = call.arguments[0];
-            if (!a) unsupported(call, "Array.from needs an argument");
-            const mapfn = call.arguments[1];
-            if (mapfn && !this.isUndefinedExpression(mapfn)) {
-                return this.emitArrayFromWithMapper(call, a, mapfn, call.arguments[2], undefined, call.arguments.slice(3));
-            }
-            return this.emitArrayFromWithoutMapper(call, a, undefined, mapfn ? call.arguments.slice(1) : []);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Array") && memberName === "fromAsync") {
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Array")) {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
-        }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "isArray") {
-            // Type-guard: in typed mode, we can answer statically.
-            const a = call.arguments[0];
-            if (!a) unsupported(call, "Array.isArray needs an argument");
-            const r = this.emitExpr(a);
-            if (r.ty.kind === "value") {
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: r, target: T_VALUE, node: a },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ],
-                    ([value]) => `tsc_value_is_array(${value})`,
-                );
-            }
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [{ value: r, node: a }, ...this.ignoredArgumentSpecs(call.arguments, 1)],
-                () => r.ty.kind === "array" ? "true" : "false",
-            );
         }
 
         const recv = this.emitExpr(recvExpr);
@@ -43741,175 +43627,6 @@ class Emitter {
         method: string,
     ): EmitResult {
         return this.emitDynamicNamedPropertyCall(call, recv, method, false);
-    }
-
-    private emitArrayFromWithMapper(
-        call: ts.CallExpression,
-        itemsArg: ts.Expression,
-        mapfnArg: ts.Expression,
-        thisArg: ts.Expression | undefined,
-        resultArrayType?: CType,
-        ignoredArgs: readonly ts.Expression[] = [],
-    ): EmitResult {
-        const callType = resultArrayType
-            ? this.prepareType(resultArrayType)
-            : this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (callType.kind !== "array" || !callType.elem)
-            unsupported(call, "Array.from(items, mapfn) result must be an array");
-        const u = callType.elem;
-
-        const items = this.emitExpr(itemsArg);
-        const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
-        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        if (items.ty.kind === "string") {
-            return this.emitArrayFromMapperStringSource(call, items, mapfnArg, u, thisArgValue, thisArg, ignored);
-        }
-        if (!resultArrayType && (items.ty.kind === "value" || items.ty.kind === "array" || items.ty.kind === "buffer")) {
-            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
-        }
-        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map")
-            unsupported(itemsArg, "Array.from(items, mapfn) currently supports typed array, Map<K, V>, Set, dynamic, or string sources");
-        const t = items.ty.kind === "map" ? entryType(items.ty.elem!, items.ty.key!) : items.ty.elem!;
-        const sourceArray = (source: string) => {
-            if (items.ty.kind === "set") return `tsc_set_values(${source})`;
-            if (items.ty.kind === "map") return this.mapEntriesArrayExpr(itemsArg, source, items.ty).c;
-            return source;
-        };
-
-        return this.emitSequencedExpr(callType, [
-            { value: items },
-            { value: this.emitExpr(mapfnArg), target: T_VALUE, node: mapfnArg },
-            ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
-            ...ignored,
-        ], ([itemsExpr, callbackValue, thisArgExpr]) => {
-            const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
-            const src = this.freshTemp("_af_src");
-            const out = this.freshTemp("_af_out");
-            const iv = this.freshTemp("_af_i");
-            const item = this.freshTemp("_af_item");
-            const mapped = this.freshTemp("_af_mapped");
-            const itemExpr = t.kind === "value"
-                ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
-                : `TSC_ARR(${t.c}, ${src}, ${iv})`;
-            const itemValueSource = t.kind !== "value" && canBoxArrayFindElement(t)
-                ? { c: `tsc_value_get_index(${this.coerce({ c: src, ty: arrayType(t) }, T_VALUE, itemsArg)}, (double)${iv})`, ty: T_VALUE }
-                : undefined;
-            const body = this.bindArrayFromCallback(mapfnArg, t, item, iv, callbackThisArg, callbackValue!, itemValueSource);
-            const mappedC = this.coerce(body, u, mapfnArg);
-            return (
-                `({ if (!tsc_value_is_callable(${callbackValue})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `${t.c} ${item} = ${itemExpr}; ` +
-                `${u.c} ${mapped} = ${mappedC}; ` +
-                `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
-            );
-        });
-    }
-
-    private emitArrayFromMapperStringSource(
-        call: ts.CallExpression,
-        items: EmitResult,
-        mapfnArg: ts.Expression,
-        u: CType,
-        thisArgValue: EmitResult | null,
-        thisArg: ts.Expression | undefined,
-        ignored: readonly SequencedCallArg[],
-    ): EmitResult {
-        // String source: walk one code point per iteration via tsc_str_chars.
-        const callType = arrayType(u);
-        return this.emitSequencedExpr(callType, [
-            { value: items },
-            { value: this.emitExpr(mapfnArg), target: T_VALUE, node: mapfnArg },
-            ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
-            ...ignored,
-        ], ([s, callbackValue, thisArgExpr]) => {
-            const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
-            const src = this.freshTemp("_afs_src");
-            const out = this.freshTemp("_afs_out");
-            const iv = this.freshTemp("_afs_i");
-            const item = this.freshTemp("_afs_item");
-            const mapped = this.freshTemp("_afs_mapped");
-            const itemExpr = `TSC_ARR(tsc_str_t*, ${src}, ${iv})`;
-            const body = this.bindArrayFromCallback(mapfnArg, T_STRING, item, iv, callbackThisArg, callbackValue!);
-            const mappedC = this.coerce(body, u, mapfnArg);
-            return (
-                `({ if (!tsc_value_is_callable(${callbackValue})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `tsc_str_t* ${item} = ${itemExpr}; ` +
-                `${u.c} ${mapped} = ${mappedC}; ` +
-                `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
-            );
-        });
-    }
-
-    private bindArrayFromCallback(
-        cb: ts.Expression,
-        t: CType,
-        itemTemp: string,
-        indexTemp: string,
-        callbackThisArg: string,
-        callbackValue: string,
-        itemValueSource?: EmitResult,
-    ): EmitResult {
-        return this.emitCallbackApplication(callbackValue, callbackThisArg, [
-            itemValueSource ?? { c: itemTemp, ty: t },
-            { c: `(double)${indexTemp}`, ty: T_NUMBER },
-        ], cb);
-    }
-
-    private emitArrayFromWithoutMapper(
-        call: ts.CallExpression,
-        itemsArg: ts.Expression,
-        resultArrayType?: CType,
-        ignoredArgs: readonly ts.Expression[] = [],
-    ): EmitResult {
-        const r = this.emitExpr(itemsArg);
-        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        if (!resultArrayType && (r.ty.kind === "value" || r.ty.kind === "array" || r.ty.kind === "buffer")) {
-            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE }, "from", false);
-        }
-        if (r.ty.kind === "string") {
-            return this.emitSequencedExpr(
-                resultArrayType ?? arrayType(T_STRING),
-                [{ value: r, target: T_STRING, node: itemsArg }, ...ignored],
-                ([s]) => `tsc_str_chars(${s})`,
-            );
-        }
-        if (r.ty.kind === "set") {
-            const elem = r.ty.elem ?? T_VALUE;
-            return this.emitSequencedExpr(
-                resultArrayType ?? arrayType(elem),
-                [{ value: r, node: itemsArg }, ...ignored],
-                ([set]) => `tsc_set_values(${set})`,
-            );
-        }
-        if (r.ty.kind === "map") {
-            const entryArrayType = resultArrayType ?? arrayType(entryType(r.ty.elem!, r.ty.key!));
-            return this.emitSequencedExpr(
-                entryArrayType,
-                [{ value: r, node: itemsArg }, ...ignored],
-                ([map]) => this.mapEntriesArrayExpr(itemsArg, map, r.ty, "Array.from(Map)").c,
-            );
-        }
-        if (r.ty.kind !== "array")
-            unsupported(itemsArg, "Array.from on non-array");
-        return this.emitSequencedExpr(
-            resultArrayType ?? r.ty,
-            [{ value: r, node: itemsArg }, ...ignored],
-            ([arr]) => {
-                if (r.ty.elem?.kind !== "value") return `tsc_array_slice(${arr}, 0, (double)${arr}->len)`;
-                const src = this.freshTemp("_array_from_src");
-                const out = this.freshTemp("_array_from_out");
-                const iv = this.freshTemp("_array_from_i");
-                const value = this.freshTemp("_array_from_value");
-                return `({ tsc_array_t* const ${src} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${src}->len ? ${src}->len : 1); ` +
-                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                    `tsc_value_t ${value} = tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(tsc_value_t, ${src}, ${iv}) : tsc_value_undefined(); ` +
-                    `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
-            },
-        );
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {

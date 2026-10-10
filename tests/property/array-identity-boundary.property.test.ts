@@ -94,7 +94,7 @@ test("Array native boundaries preserve identity, aliases, metadata and getter or
 
 test("incompatible native Array layouts fail closed without invoking element coercion", async () => {
     const program = `const host: any = globalThis;
-        class Boundary { native(values: number[]): any { return values; } }
+        class Boundary { native(values: globalThis.Array<number>): any { return values; } }
         const boundary = new Boundary();
         let calls = 0;
         const value: any = {};
