@@ -6962,9 +6962,7 @@ static tsc_value_t date_constructor_construct(
     tsc_array_t* args
 ) {
     (void)env;
-    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("Date constructor receiver is not an object", 42));
-    }
+    (void)receiver;
     tsc_date_t* date;
     if (!args || args->len == 0) {
         date = tsc_date_new_now();
@@ -6981,11 +6979,19 @@ static tsc_value_t date_constructor_construct(
             values[4], values[5], values[6]
         ));
     }
-    tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
+    // Date computes and clips its time value before OrdinaryCreateFromConstructor.
+    tsc_date_t* volatile date_root = date;
+    (void)date_root;
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(
+        tsc_value_current_new_target(), TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE
+    );
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
+    (void)prototype_root;
+    tsc_object_t* object = tsc_object_new_with_prototype(prototype);
     object->class_ptr = date;
     object->is_date = true;
     date->object = object;
-    return receiver;
+    return tsc_value_object(object);
 }
 
 static void date_intrinsic_initialize(void) {
@@ -7008,6 +7014,7 @@ static void date_intrinsic_initialize(void) {
         );
         tsc_function_identity_t* constructor_identity =
             (tsc_function_identity_t*)value_ptr(date_constructor);
+        constructor_identity->construct_allocates_receiver = false;
         constructor_identity->construct_default_prototype =
             TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE;
         tsc_function_identity_set_own_prototype(constructor_identity, prototype);

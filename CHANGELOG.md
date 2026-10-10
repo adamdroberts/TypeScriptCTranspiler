@@ -1,5 +1,7 @@
 # Changelog
 
+- Share typed Date entry calls, construction, global/typeof lookup and inferred actual results with ordinary rooted invocation. Remove direct/pure Date predecessors, allocate after prescribed conversion/prototype lookup, and verify mutable/invalid/missing owners, deep actual Lists and suspended typed construction in both memory modes.
+
 - Parse Date text through one semantic field record and the shared Number calendar kernel. Support optional fields, expanded years, absent-offset defaults, 24:00, TimeClip and runtime-produced civil/ISO roundtrips; delete machine-calendar normalization and verify coercion, deep retention and typed E2E in both memory modes.
 
 - Share Date year sign/magnitude formatting for prescribed ISO expanded years and civil minimum padding. Verify TimeClip boundaries, independent sign/width partitions, fixed offsets, deep retention and typed E2E in both memory modes.

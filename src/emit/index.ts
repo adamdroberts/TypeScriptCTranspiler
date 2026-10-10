@@ -544,9 +544,12 @@ export function emitProgram(
 }
 
 class Emitter {
-    /* One owner admission collection governs ordinary calls, member reads and
-     * the physical result facts propagated into inferred binding storage. */
-    private readonly ordinaryNativeOwnerKinds: ReadonlySet<CType["kind"]> = new Set(["date", "buffer"]);
+    /* One owner collection governs calls, construction, member/global reads,
+     * purity and physical result facts propagated into inferred storage. */
+    private readonly ordinaryNativeOwners = new Map<CType["kind"], {
+        readonly globalConstructor?: string;
+        readonly constructorType?: string;
+    }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor"}], ["buffer", {}]]);
     private readonly ordinaryNativeOwnerResultFacts = new Map<ts.Node, boolean>();
 
     public diagnostics: string[] = [];
@@ -7302,12 +7305,6 @@ class Emitter {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
-        if (name === "Date") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                Array.from(call.arguments).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
         const osExport = this.namedImportExportName(callee, ["os", "node:os"]);
         if (osExport !== null) {
             return this.isSideEffectFreeOsCall(osExport, call.arguments, seenConsts);
@@ -7460,7 +7457,6 @@ class Emitter {
         if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(ctorExpr, name)) {
             if (!this.isUnshadowedGlobalIdentifier(ctorExpr, name)) return false;
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
-            if (name === "Date") return this.isSideEffectFreeDateConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
             if (name === "URLSearchParams") return this.isSideEffectFreeURLSearchParamsConstructorArgs(args, seenConsts);
@@ -8123,38 +8119,6 @@ class Emitter {
         return ts.isIdentifier(recv) &&
             this.isStreamModuleIdentifier(recv) &&
             this.isSideEffectFreeStreamCall(method, args, seenConsts);
-    }
-
-    private isSideEffectFreeDateConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length === 0) return true;
-        if (args.length === 1) {
-            return this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
-                this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts);
-        }
-        return Array.from(args).every((arg, index) =>
-            index < 7
-                ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
-                : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-        );
-    }
-
-    private isSideEffectFreeFreshDateOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Date")
-        ) {
-            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshDateOperand(init, seenConsts);
     }
 
     private isSideEffectFreeAggregateErrorConstructorArgs(
@@ -13474,10 +13438,11 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): string | null {
+        if (this.expressionHasOrdinaryNativeOwnerResult(expr)) return null;
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
             if (new Set([
-                "Array", "BigInt", "Boolean", "Date", "Error", "EvalError", "Function",
+                "Array", "BigInt", "Boolean", "Error", "EvalError", "Function",
                 "Number", "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
                 "RegExp", "String", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
                 "URIError",
@@ -23785,6 +23750,25 @@ class Emitter {
         return this.variableStorageType(base);
     }
 
+    private ordinaryNativeGlobalConstructor(expression: ts.Expression): string | null {
+        const value = this.unwrapTransparentExpression(expression);
+        if (!ts.isIdentifier(value)) return null;
+        for (const owner of this.ordinaryNativeOwners.values()) {
+            if (owner.globalConstructor && this.isUnshadowedGlobalIdentifier(value, owner.globalConstructor))
+                return owner.globalConstructor;
+        }
+        return null;
+    }
+
+    private hasOrdinaryNativeConstructorType(expression: ts.Expression): boolean {
+        const symbol = this.checker.getTypeAtLocation(expression).getSymbol();
+        if (!symbol || !(symbol.declarations ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile)) return false;
+        for (const owner of this.ordinaryNativeOwners.values()) {
+            if (owner.constructorType === symbol.getName()) return true;
+        }
+        return false;
+    }
+
     private expressionHasOrdinaryNativeOwnerResult(expression: ts.Expression): boolean {
         const known = this.ordinaryNativeOwnerResultFacts.get(expression);
         if (known !== undefined) return known;
@@ -23806,11 +23790,16 @@ class Emitter {
                 continue;
             }
             if (ts.isFunctionLike(node)) continue;
+            if ((ts.isIdentifier(node) && this.ordinaryNativeGlobalConstructor(node)) ||
+                ((ts.isCallExpression(node) || ts.isNewExpression(node)) && this.hasOrdinaryNativeConstructorType(node.expression))) {
+                admitPositive(node);
+                continue;
+            }
             if (ts.isCallExpression(node)) {
                 const callee = this.unwrapTransparentExpression(node.expression);
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     const receiver = this.prepareType(mapType(callee.expression, this.checker));
-                    if (this.ordinaryNativeOwnerKinds.has(receiver.kind)) {
+                    if (this.ordinaryNativeOwners.has(receiver.kind)) {
                         admitPositive(node);
                         continue;
                     }
@@ -34948,7 +34937,6 @@ class Emitter {
     ): boolean {
         return this.isSideEffectFreeFreshRegExpOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshDateOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshURLOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
@@ -36288,8 +36276,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Proxy")) {
                 return { c: "tsc_proxy_constructor_value()", ty: T_VALUE };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Date")) {
-                return { c: "tsc_date_constructor_value()", ty: T_VALUE };
+            const ordinaryConstructor = this.ordinaryNativeGlobalConstructor(expr);
+            if (ordinaryConstructor) {
+                return { c: `tsc_environment_reference_get(${this.stringLit(ordinaryConstructor)})`, ty: T_VALUE };
             }
             const errorConstructorKind = this.errorConstructorRuntimeKind(expr.text);
             if (
@@ -36634,6 +36623,7 @@ class Emitter {
         if (ts.isIdentifier(to.expression) && (
             this.test262ScriptGlobalBindingName(to.expression) ||
             this.isSourceGlobalReference(to.expression) ||
+            this.ordinaryNativeGlobalConstructor(to.expression) ||
             this.isUnresolvedParameterScopeReference(to.expression)
         )) {
             return {
@@ -36821,7 +36811,8 @@ class Emitter {
     private emitTypeofEquals(expr: ts.Expression, expected: string): string {
         if (ts.isIdentifier(expr) && (
             this.test262ScriptGlobalBindingName(expr) ||
-            this.isSourceGlobalReference(expr)
+            this.isSourceGlobalReference(expr) ||
+            this.ordinaryNativeGlobalConstructor(expr)
         )) {
             return `tsc_str_eq(` +
                 `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
@@ -39618,9 +39609,8 @@ class Emitter {
         if (name === "RegExp" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
         }
-        if (name === "Date") {
-            const specs = Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg }));
-            return this.emitSequencedExpr(T_STRING, specs, () => "tsc_date_to_string(tsc_date_new_now())");
+        if (this.ordinaryNativeGlobalConstructor(calleeId)) {
+            return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         }
         if (name === "AggregateError" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitAggregateErrorConstructor(call);
@@ -42925,7 +42915,7 @@ class Emitter {
 
         if (recv.ty.kind === "error")
             return this.emitErrorMethod(call, recv, memberName);
-        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind))
+        if (this.ordinaryNativeOwners.has(recv.ty.kind))
             return this.emitDynamicNamedPropertyCall(call, recv, memberName,
                 ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         if (recv.ty.kind === "textencoder")
@@ -56138,6 +56128,9 @@ class Emitter {
             this.functionSourcePaths.has(path.resolve(n.getSourceFile().fileName)) && this.isSourceGlobalReference(ctorExpr)) {
             return this.emitDynamicValueConstruct(n, this.emitExpr(ctorExpr));
         }
+        if (this.ordinaryNativeGlobalConstructor(ctorExpr)) {
+            return this.emitDynamicValueConstruct(n, this.emitExpr(ctorExpr));
+        }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Proxy")) {
             const args = n.arguments ?? [];
             if (args.length < 2) unsupported(n, "new Proxy expects target and handler");
@@ -56483,33 +56476,6 @@ class Emitter {
                 this.ignoredArgumentSpecs(n.arguments ?? [], 0),
                 () => "tsc_abort_controller_new()",
             );
-        }
-        if (cls === "Date") {
-            const args = n.arguments ?? [];
-            if (args.length === 0) return { c: "tsc_date_new_now()", ty: T_DATE };
-            if (args.length >= 2) {
-                const emitted = args.map((arg) => this.emitExpr(arg));
-                return this.emitSequencedExpr(
-                    T_DATE,
-                    emitted.map((value, i) => ({ value, target: i < 7 ? T_NUMBER : undefined, node: args[i] })),
-                    (vals) => {
-                        const all = [
-                            vals[0]!,
-                            vals[1]!,
-                            vals[2] ?? "1",
-                            vals[3] ?? "0",
-                            vals[4] ?? "0",
-                            vals[5] ?? "0",
-                            vals[6] ?? "0",
-                        ];
-                        return `tsc_date_from_ms(tsc_date_local(${all.join(", ")}))`;
-                    },
-                );
-            }
-            const value = this.emitExpr(args[0]!);
-            return this.emitSequencedCall("tsc_date_from_value", T_DATE, [
-                { value, target: T_VALUE, node: args[0]! },
-            ]);
         }
         if (cls === "AggregateError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
             return this.emitAggregateErrorConstructor(n);
@@ -57043,7 +57009,7 @@ class Emitter {
                     return { c: `tsc_event_cancelable(${recv.c})`, ty: T_BOOLEAN };
             }
         }
-        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind)) {
+        if (this.ordinaryNativeOwners.has(recv.ty.kind)) {
             return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
                 ([owner]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
@@ -57433,7 +57399,7 @@ class Emitter {
             }
             return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
         }
-        if (this.ordinaryNativeOwnerKinds.has(recv.ty.kind)) {
+        if (this.ordinaryNativeOwners.has(recv.ty.kind)) {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: ea.expression },
