@@ -2885,7 +2885,8 @@
           "tests/property/date-local-calendar.property.test.ts",
           "tests/property/date-year-text.property.test.ts",
           "tests/property/date-text-parse.property.test.ts",
-          "tests/property/date-entry-invocation.property.test.ts"
+          "tests/property/date-entry-invocation.property.test.ts",
+          "tests/property/ordinary-native-source-flow.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2908,7 +2909,8 @@
           "date_local_calendar",
           "date_year_text",
           "date_text_parse",
-          "date_entry_invocation"
+          "date_entry_invocation",
+          "ordinary_native_source_flow"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [

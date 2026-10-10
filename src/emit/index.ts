@@ -49,6 +49,7 @@ import {
     T_VALUE,
     T_VOID,
     withTypeBindings,
+    withSourceTypeProjection,
 } from "./types";
 import { mangleIdent, mangleQualifiedIdent } from "./mangle";
 import { nativeTypeName, type NativeTypeDeclaration } from "./native-type-identity";
@@ -540,7 +541,7 @@ export function emitProgram(
     options: EmitProgramOptions = {},
 ): EmittedProgram {
     const em = new Emitter(checker, graph, options);
-    return em.run();
+    return withSourceTypeProjection((node, type) => em.sourceTypeProjection(node, type), () => em.run());
 }
 
 class Emitter {
@@ -23769,7 +23770,31 @@ class Emitter {
         return false;
     }
 
-    private expressionHasOrdinaryNativeOwnerResult(expression: ts.Expression): boolean {
+    public sourceTypeProjection(node: ts.Node, type: ts.Type): CType | null {
+        if (ts.isFunctionLike(node) && "body" in node && node.body && !node.type) {
+            const signature = this.checker.getSignatureFromDeclaration(node);
+            if (signature?.getReturnType() === type && this.expressionHasOrdinaryNativeOwnerResult(node)) {
+                return this.isAsyncDeclaration(node) ? promiseType(T_VALUE) : T_VALUE;
+            }
+        }
+        if (ts.isCallExpression(node)) {
+            const signature = this.checker.getResolvedSignature(node);
+            const declaration = signature?.getDeclaration();
+            if (declaration && ts.isFunctionLike(declaration) && !declaration.type &&
+                "body" in declaration && declaration.body && signature?.getReturnType() === type &&
+                this.expressionHasOrdinaryNativeOwnerResult(declaration)) {
+                return this.isAsyncDeclaration(declaration) ? promiseType(T_VALUE) : T_VALUE;
+            }
+        }
+        if (((ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) && !node.type && node.initializer &&
+            this.expressionHasOrdinaryNativeOwnerResult(node.initializer)) ||
+            ((ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) &&
+                this.expressionHasOrdinaryNativeOwnerResult(node)) ||
+            (ts.isAwaitExpression(node) && this.expressionHasOrdinaryNativeOwnerResult(node))) return T_VALUE;
+        return null;
+    }
+
+    private expressionHasOrdinaryNativeOwnerResult(expression: ts.Node): boolean {
         const known = this.ordinaryNativeOwnerResultFacts.get(expression);
         if (known !== undefined) return known;
         const pending: ts.Node[] = [expression];
@@ -23789,13 +23814,36 @@ class Emitter {
                 if (cached) admitPositive(node);
                 continue;
             }
-            if (ts.isFunctionLike(node)) continue;
+            const dependency = (child: ts.Node): void => {
+                const parents = dependents.get(child);
+                if (parents) parents.push(node);
+                else dependents.set(child, [node]);
+                pending.push(child);
+            };
+            if (ts.isFunctionLike(node)) {
+                if (!node.type && "body" in node && node.body) {
+                    if (!ts.isBlock(node.body)) dependency(node.body);
+                    else {
+                        const statements: ts.Node[] = [node.body];
+                        while (statements.length) {
+                            const statement = statements.pop()!;
+                            if (ts.isFunctionLike(statement) || ts.isClassLike(statement)) continue;
+                            if (ts.isReturnStatement(statement)) {
+                                if (statement.expression) dependency(statement.expression);
+                            } else ts.forEachChild(statement, child => { statements.push(child); });
+                        }
+                    }
+                }
+                continue;
+            }
             if ((ts.isIdentifier(node) && this.ordinaryNativeGlobalConstructor(node)) ||
                 ((ts.isCallExpression(node) || ts.isNewExpression(node)) && this.hasOrdinaryNativeConstructorType(node.expression))) {
                 admitPositive(node);
                 continue;
             }
             if (ts.isCallExpression(node)) {
+                const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
+                if (declaration && !declaration.getSourceFile().isDeclarationFile) dependency(declaration);
                 const callee = this.unwrapTransparentExpression(node.expression);
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     const receiver = this.prepareType(mapType(callee.expression, this.checker));
@@ -23805,17 +23853,13 @@ class Emitter {
                     }
                 }
             }
-            const dependency = (child: ts.Node): void => {
-                const parents = dependents.get(child);
-                if (parents) parents.push(node);
-                else dependents.set(child, [node]);
-                pending.push(child);
-            };
             if (ts.isIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
                 const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-                if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer && !declaration.type) {
-                    dependency(declaration.initializer);
+                if (declaration && !declaration.getSourceFile().isDeclarationFile) {
+                    if ((ts.isVariableDeclaration(declaration) || ts.isPropertyDeclaration(declaration)) && declaration.initializer && !declaration.type)
+                        dependency(declaration.initializer);
+                    else if (ts.isFunctionLike(declaration)) dependency(declaration);
                 }
             }
             ts.forEachChild(node, dependency);
@@ -55108,7 +55152,7 @@ class Emitter {
             const sym = candidate.getProperty(fieldName);
             if (!sym) continue;
             const decl = sym.valueDeclaration ?? sym.getDeclarations()?.[0] ?? objectNode;
-            return mapTsType(fieldNode, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker);
+            return mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker);
         }
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
     }
@@ -57112,7 +57156,7 @@ class Emitter {
             };
             // Inferred JavaScript property types are not a storage guarantee:
             // mutable properties such as lastIndex may hold arbitrary values.
-            if (this.isJavaScriptSourceFile(pa.getSourceFile())) return value;
+            if (this.isJavaScriptSourceFile(pa.getSourceFile()) || this.expressionHasOrdinaryNativeOwnerResult(pa)) return value;
             const propertyType = this.checker.getTypeAtLocation(pa);
             if (propertyType.isUnion() && propertyType.types.some(part =>
                 !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))
@@ -57210,7 +57254,7 @@ class Emitter {
         const sym = this.checker.getSymbolAtLocation(pa.name);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!sym || !decl) return null;
-        return this.prepareType(mapTsType(pa.name, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
+        return this.prepareType(mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
     }
 
     private enumConstantValue(pa: ts.PropertyAccessExpression): number | string | undefined {

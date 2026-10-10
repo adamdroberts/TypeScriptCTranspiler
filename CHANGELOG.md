@@ -1,5 +1,7 @@
 # Changelog
 
+- Preserve actual ordinary Date/Buffer results across inferred function, closure, field, aggregate and awaited ABI slots through one source graph and scoped type projection. Verify independent Type/identity/effect partitions, deep source dependencies and typed module E2E in both memory modes.
+
 - Share typed Date entry calls, construction, global/typeof lookup and inferred actual results with ordinary rooted invocation. Remove direct/pure Date predecessors, allocate after prescribed conversion/prototype lookup, and verify mutable/invalid/missing owners, deep actual Lists and suspended typed construction in both memory modes.
 
 - Parse Date text through one semantic field record and the shared Number calendar kernel. Support optional fields, expanded years, absent-offset defaults, 24:00, TimeClip and runtime-produced civil/ISO roundtrips; delete machine-calendar normalization and verify coercion, deep retention and typed E2E in both memory modes.

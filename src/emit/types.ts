@@ -67,6 +67,17 @@ export type TypeBindings = Map<string, CType>;
 
 const typeBindingStack: TypeBindings[] = [];
 
+type SourceTypeProjection = (node: ts.Node, type: ts.Type) => CType | null;
+const sourceTypeProjections: SourceTypeProjection[] = [];
+let projectingSourceType = false;
+
+/** Keep physical source facts scoped to one emitter, including recursive
+ * collection/callable mapping and nested generic binding contexts. */
+export function withSourceTypeProjection<T>(projection: SourceTypeProjection, fn: () => T): T {
+    sourceTypeProjections.push(projection);
+    try { return fn(); } finally { sourceTypeProjections.pop(); }
+}
+
 export function withTypeBindings<T>(
     bindings: TypeBindings,
     fn: () => T,
@@ -279,6 +290,13 @@ export function mapType(node: ts.Node, checker: ts.TypeChecker): CType {
 }
 
 export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): CType {
+    const projection = sourceTypeProjections.at(-1);
+    if (projection && !projectingSourceType) {
+        projectingSourceType = true;
+        let projected: CType | null;
+        try { projected = projection(node, t); } finally { projectingSourceType = false; }
+        if (projected) return projected;
+    }
     const boundTypeParam = lookupTypeBinding(t, checker);
     if (boundTypeParam) return boundTypeParam;
     if (t.flags & ts.TypeFlags.TypeParameter) return T_VALUE;
@@ -421,7 +439,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         });
         const restIndex = callSig.getParameters().findIndex(param =>
             !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken);
-        return functionType(params, mapTsType(node, callSig.getReturnType(), checker), thisParamType, restIndex);
+        return functionType(params, mapTsType(callSig.getDeclaration() ?? node, callSig.getReturnType(), checker), thisParamType, restIndex);
     }
 
     // Map<K, V>
