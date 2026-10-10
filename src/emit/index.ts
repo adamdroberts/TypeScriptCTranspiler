@@ -552,6 +552,7 @@ class Emitter {
         readonly constructorType?: string;
     }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor"}], ["buffer", {}]]);
     private readonly ordinaryNativeOwnerResultFacts = new Map<ts.Node, boolean>();
+    private ordinaryNativeOwnerInputs: Map<ts.Node, Set<ts.Node>> | null = null;
 
     public diagnostics: string[] = [];
     private structDecls = new CBuf();
@@ -23425,8 +23426,7 @@ class Emitter {
         }
         const symbol = this.symbolForIdentifier(id);
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-        if (declaration && ts.isVariableDeclaration(declaration) && !declaration.type &&
-            declaration.initializer && this.expressionHasOrdinaryNativeOwnerResult(declaration.initializer)) return null;
+        if (declaration && this.expressionHasOrdinaryNativeOwnerResult(declaration)) return null;
         const lexical = this.localLexicalMetadataForSymbol(this.symbolForIdentifier(id));
         if (lexical && ts.isVariableDeclaration(lexical.declaration) &&
             this.isForOfLexicalDeclaration(lexical.declaration)) {
@@ -23737,8 +23737,7 @@ class Emitter {
         base: CType,
     ): CType {
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
-        if (!declaration.type && declaration.initializer &&
-            this.expressionHasOrdinaryNativeOwnerResult(declaration.initializer)) return T_VALUE;
+        if (this.expressionHasOrdinaryNativeOwnerResult(declaration)) return T_VALUE;
         if (this.isForOfLexicalDeclaration(declaration)) return T_VALUE;
         if (this.isDirectScopeLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
@@ -23771,30 +23770,138 @@ class Emitter {
     }
 
     public sourceTypeProjection(node: ts.Node, type: ts.Type): CType | null {
-        if (ts.isFunctionLike(node) && "body" in node && node.body && !node.type) {
-            const signature = this.checker.getSignatureFromDeclaration(node);
-            if (signature?.getReturnType() === type && this.expressionHasOrdinaryNativeOwnerResult(node)) {
-                return this.isAsyncDeclaration(node) ? promiseType(T_VALUE) : T_VALUE;
-            }
-        }
-        if (ts.isCallExpression(node)) {
-            const signature = this.checker.getResolvedSignature(node);
+        const result = (signature: ts.Signature | undefined): CType | null => {
             const declaration = signature?.getDeclaration();
-            if (declaration && ts.isFunctionLike(declaration) && !declaration.type &&
+            if (declaration && ts.isFunctionLike(declaration) &&
                 "body" in declaration && declaration.body && signature?.getReturnType() === type &&
                 this.expressionHasOrdinaryNativeOwnerResult(declaration)) {
                 return this.isAsyncDeclaration(declaration) ? promiseType(T_VALUE) : T_VALUE;
             }
+            return null;
+        };
+        if (ts.isFunctionLike(node) && "body" in node && node.body) {
+            const projected = result(this.checker.getSignatureFromDeclaration(node));
+            if (projected) return projected;
         }
-        if (((ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) && !node.type && node.initializer &&
-            this.expressionHasOrdinaryNativeOwnerResult(node.initializer)) ||
+        if (ts.isCallExpression(node)) {
+            const projected = result(this.checker.getResolvedSignature(node));
+            if (projected) return projected;
+        } else if (ts.isExpression(node)) {
+            // Callback adapters also map a retained callable expression's
+            // result. Resolve its source signature, just like direct calls.
+            for (const signature of this.checker.getTypeAtLocation(node).getCallSignatures()) {
+                const projected = result(signature);
+                if (projected) return projected;
+            }
+        }
+        const slot = ts.isIdentifier(node) && type === this.checker.getTypeAtLocation(node)
+            ? this.symbolForIdentifier(node)?.valueDeclaration ?? node : node;
+        if (ts.isParameter(slot) && this.expressionHasOrdinaryNativeOwnerResult(slot))
+            return slot.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
+        if (((ts.isVariableDeclaration(slot) || ts.isPropertyDeclaration(slot) || ts.isPropertySignature(slot) ||
+                ts.isPropertyAssignment(slot) || ts.isBindingElement(slot)) && this.expressionHasOrdinaryNativeOwnerResult(slot)) ||
             ((ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) &&
                 this.expressionHasOrdinaryNativeOwnerResult(node)) ||
             (ts.isAwaitExpression(node) && this.expressionHasOrdinaryNativeOwnerResult(node))) return T_VALUE;
         return null;
     }
 
+    /** One source-tree pass supplies non-child edges to the same fact graph.
+     * Alias owners share their write domain; actual argument Lists conservatively
+     * supply every formal slot, including spreads and rest parameters. */
+    private ordinaryNativeSourceInputs(): Map<ts.Node, Set<ts.Node>> {
+        if (this.ordinaryNativeOwnerInputs) return this.ordinaryNativeOwnerInputs;
+        const inputs = this.ordinaryNativeOwnerInputs = new Map<ts.Node, Set<ts.Node>>();
+        const declarationFor = (expression: ts.Expression): ts.Node | undefined => {
+            const target = this.unwrapTransparentExpression(expression);
+            let symbol = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
+            if (!symbol && ts.isElementAccessExpression(target) && ts.isStringLiteralLike(target.argumentExpression))
+                symbol = this.checker.getTypeAtLocation(target.expression).getProperty(target.argumentExpression.text);
+            if (symbol && (symbol.flags & ts.SymbolFlags.Alias)) symbol = this.checker.getAliasedSymbol(symbol);
+            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+            return declaration && !declaration.getSourceFile().isDeclarationFile ? declaration : undefined;
+        };
+        const input = (owner: ts.Node | undefined, value: ts.Node): void => {
+            if (!owner) return;
+            let values = inputs.get(owner);
+            if (!values) inputs.set(owner, values = new Set());
+            values.add(value);
+        };
+        const write = (target: ts.Expression, value: ts.Node): void => {
+            const targets = [target];
+            while (targets.length) {
+                const reference = this.unwrapTransparentExpression(targets.pop()!);
+                if (ts.isArrayLiteralExpression(reference)) {
+                    for (const element of reference.elements)
+                        if (!ts.isOmittedExpression(element)) targets.push(ts.isSpreadElement(element) ? element.expression : element);
+                } else if (ts.isObjectLiteralExpression(reference)) {
+                    for (const property of reference.properties) {
+                        if (ts.isPropertyAssignment(property)) targets.push(property.initializer);
+                        else if (ts.isShorthandPropertyAssignment(property)) targets.push(property.name);
+                        else if (ts.isSpreadAssignment(property)) targets.push(property.expression);
+                    }
+                } else if (ts.isBinaryExpression(reference) && reference.operatorToken.kind === ts.SyntaxKind.EqualsToken) targets.push(reference.left);
+                else {
+                    input(declarationFor(reference), value);
+                    if (ts.isElementAccessExpression(reference) || ts.isPropertyAccessExpression(reference)) {
+                        input(declarationFor(reference.expression), value);
+                        if (ts.isElementAccessExpression(reference) && !declarationFor(reference)) {
+                            for (const property of this.checker.getTypeAtLocation(reference.expression).getProperties()) {
+                                const declaration = property.valueDeclaration ?? property.declarations?.[0];
+                                if (declaration && !declaration.getSourceFile().isDeclarationFile &&
+                                    (ts.isPropertyDeclaration(declaration) || ts.isPropertySignature(declaration) || ts.isPropertyAssignment(declaration))) input(declaration, value);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        const callableInputs = (expression: ts.Expression, values: readonly ts.Expression[]): void => {
+            for (const signature of this.checker.getTypeAtLocation(expression).getCallSignatures()) {
+                const declaration = signature.getDeclaration();
+                if (declaration && !declaration.getSourceFile().isDeclarationFile && ts.isFunctionLike(declaration))
+                    for (const parameter of declaration.parameters) for (const value of values) input(parameter, value);
+            }
+        };
+        const pending: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
+        while (pending.length) {
+            const node = pending.pop()!;
+            if (ts.isVariableDeclaration(node) && node.initializer) {
+                // Reverse the owner-alias edge as well as the read edge. A
+                // later write through either name must choose a shared codec.
+                input(declarationFor(node.initializer), node);
+                const value = this.unwrapTransparentExpression(node.initializer);
+                if (ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) input(value, node);
+            }
+            if (ts.isBindingElement(node)) {
+                let owner: ts.Node = node.parent;
+                while (ts.isArrayBindingPattern(owner) || ts.isObjectBindingPattern(owner) || ts.isBindingElement(owner)) owner = owner.parent;
+                if ((ts.isVariableDeclaration(owner) || ts.isParameter(owner)) && owner.initializer)
+                    input(node, owner.initializer);
+            }
+            if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) write(node.left, node.right);
+            if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+                const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
+                if (declaration && !declaration.getSourceFile().isDeclarationFile && ts.isFunctionLike(declaration)) {
+                    for (const parameter of declaration.parameters) for (const argument of node.arguments ?? [])
+                        input(parameter, ts.isSpreadElement(argument) ? argument.expression : argument);
+                }
+                const callee = this.unwrapTransparentExpression(node.expression);
+                const values = Array.from(node.arguments ?? [], argument => ts.isSpreadElement(argument) ? argument.expression : argument);
+                if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
+                    for (const argument of node.arguments ?? []) input(declarationFor(callee.expression), argument);
+                    callableInputs(callee.expression, values);
+                    values.push(callee.expression);
+                }
+                for (const argument of node.arguments ?? []) callableInputs(ts.isSpreadElement(argument) ? argument.expression : argument, values);
+            }
+            ts.forEachChild(node, child => { pending.push(child); });
+        }
+        return inputs;
+    }
+
     private expressionHasOrdinaryNativeOwnerResult(expression: ts.Node): boolean {
+        const sourceInputs = this.ordinaryNativeSourceInputs();
         const known = this.ordinaryNativeOwnerResultFacts.get(expression);
         if (known !== undefined) return known;
         const pending: ts.Node[] = [expression];
@@ -23821,7 +23928,7 @@ class Emitter {
                 pending.push(child);
             };
             if (ts.isFunctionLike(node)) {
-                if (!node.type && "body" in node && node.body) {
+                if ("body" in node && node.body) {
                     if (!ts.isBlock(node.body)) dependency(node.body);
                     else {
                         const statements: ts.Node[] = [node.body];
@@ -23836,6 +23943,7 @@ class Emitter {
                 }
                 continue;
             }
+            for (const value of sourceInputs.get(node) ?? []) dependency(value);
             if ((ts.isIdentifier(node) && this.ordinaryNativeGlobalConstructor(node)) ||
                 ((ts.isCallExpression(node) || ts.isNewExpression(node)) && this.hasOrdinaryNativeConstructorType(node.expression))) {
                 admitPositive(node);
@@ -23857,9 +23965,7 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(node);
                 const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
                 if (declaration && !declaration.getSourceFile().isDeclarationFile) {
-                    if ((ts.isVariableDeclaration(declaration) || ts.isPropertyDeclaration(declaration)) && declaration.initializer && !declaration.type)
-                        dependency(declaration.initializer);
-                    else if (ts.isFunctionLike(declaration)) dependency(declaration);
+                    dependency(declaration);
                 }
             }
             ts.forEachChild(node, dependency);

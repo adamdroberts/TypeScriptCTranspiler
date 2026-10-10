@@ -20,6 +20,13 @@ function subject(observation=false,noGc=false):string {
         function record(){return {value:declared()};}
         function collection(){return [relay()];}
         class Owner { value=declared(); read(){return this.value;} get result(){return this.value;} }
+        class MutableOwner { value:number=0; other:number=0; echo(value:number):number{this.value=value;return this.value;} }
+        function keyed():'value'|'other'{return 'value';}
+        interface Slot {value:number;}
+        function identity(value:number):number{return value;}
+        const annotatedClosure=(value:number):number=>value;
+        function annotatedReturn():number{return date.getTime();}
+        function rest(...values:number[]):number{return values[0];}
         function byteResult(){return bytes.readUInt8();}
         const byteClosure=()=>byteResult();
         async function suspended(){await Promise.resolve(0);return declared();}
@@ -31,11 +38,22 @@ function subject(observation=false,noGc=false):string {
             Object.defineProperty(Date.prototype,'getTime',{value:()=>expected,writable:true,configurable:true});
             Object.defineProperty(Object.getPrototypeOf(bytes),'readUInt8',{value:()=>expected,writable:true,configurable:true});
             const owner=new Owner(),literal={value:declared()},array=[relay()],selected=true?record():literal;
-            const actuals=[declared(),closure(),relay(),owner.value,owner.read(),owner.result,literal.value,array[0],selected.value,record().value,collection()[0],byteResult(),byteClosure()];
+            const direct:number=declared();let binding:number=0;binding=declared();
+            const mutable=new MutableOwner();mutable.value=declared();
+            const slot:Slot={value:0};slot.value=declared();
+            const recordSlot={value:0};recordSlot.value=declared();
+            const slots:number[]=[0],slotAlias=slots;slotAlias[0]=declared();slots.push(declared());
+            const spreadValues=[declared(),72];
+            const [destructured]=spreadValues;const {value:destructuredRecord}=recordSlot;
+            mutable[keyed()]=declared();if(mutable.other!==0)throw new Error('computed-write-target');
+            const viaCall=identity.call(null,declared()),viaApply=identity.apply(null,[declared()]),bound=identity.bind(null,declared());
+            const reflected=Reflect.apply(identity,null,[declared()]),mapped=slots.map(identity);
+            const actuals=[declared(),closure(),relay(),owner.value,owner.read(),owner.result,literal.value,array[0],selected.value,record().value,collection()[0],byteResult(),byteClosure(),
+                direct,binding,mutable.value,mutable.echo(declared()),slot.value,recordSlot.value,slots[0],slots[1],identity(declared()),annotatedClosure(declared()),annotatedReturn(),rest(...spreadValues),viaCall,viaApply,bound(),reflected,mapped[0],destructured,destructuredRecord];
             collect();
-            for(const actual of actuals)if(!Object.is(actual,expected)||typeof actual!==typeof expected)throw new Error('source-flow:${index}:'+typeof actual);
+            let position=0;for(const actual of actuals){if(!Object.is(actual,expected)||typeof actual!==typeof expected)throw new Error('source-flow:${index}:'+position+':'+typeof actual);position++;}
             const awaited=await suspended();collect();if(!Object.is(awaited,expected)||typeof awaited!==typeof expected)throw new Error('awaited-source-flow:${index}');
-            if(scalar()!==42)throw new Error('unrelated-return');report('partition:${index}',true);}`);
+            if(scalar()!==42||identity(42)!==42||annotatedClosure(41)+1!==42)throw new Error('unrelated-return');report('partition:${index}',true);}`);
     }
     lines.push(`expected={deep:true};Object.defineProperty(Date.prototype,'getTime',{value:()=>expected,writable:true,configurable:true});
         const deep=retained512();collect();if(!Object.is(deep,expected))throw new Error('deep-source-flow');
@@ -48,7 +66,7 @@ function subject(observation=false,noGc=false):string {
     return lines.join('\n');
 }
 
-test('ordinary native results retain actual values across inferred source ABI slots',async()=>{
+test('ordinary native results retain actual values across source ABI slots, writes and actual arguments',async()=>{
     const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-source-flow-'));
     try {
         const referenceFile=path.join(temporary,'reference.cjs');

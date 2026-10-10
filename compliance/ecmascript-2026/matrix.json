@@ -2910,7 +2910,8 @@
           "date_year_text",
           "date_text_parse",
           "date_entry_invocation",
-          "ordinary_native_source_flow"
+          "ordinary_native_source_flow",
+          "ordinary_native_slot_flow"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [

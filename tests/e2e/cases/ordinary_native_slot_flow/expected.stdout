@@ -1,0 +1,7 @@
+annotations true true true
+slots true true true true
+array true true true
+arguments true true true
+patterns true true 0
+reflective true true true true
+numeric 42 42
