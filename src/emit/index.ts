@@ -717,6 +717,7 @@ class Emitter {
     private valueFunctionAdapters = new Map<string, string>();
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
+    private nativeClassNameEnvironments = new WeakMap<ts.ClassDeclaration, Map<ts.Symbol, ClosureEnvBinding>>();
     private classComputedMemberKeys = new Map<ts.ComputedPropertyName, string>();
     private classComputedInstanceFieldStorageKeys = new Map<ts.PropertyDeclaration, string>();
     private defaultClassConstructAdapter: string | null = null;
@@ -20653,6 +20654,10 @@ class Emitter {
     }
 
     private localLexicalReferenceForIdentifier(id: ts.Identifier): LocalLexicalReference | null {
+        const inner = this.classNameBindingForIdentifier(id);
+        if (inner) return { type: inner.type, name: inner.lexicalName!, immutable: true,
+            value: `(*${inner.ptr})`, initialized: `(*${inner.initializedPtr})`,
+            gcRoot: inner.rootPtr ? `(*${inner.rootPtr})` : null };
         const symbol = this.symbolForIdentifier(id);
         const metadata = this.localLexicalMetadataForSymbol(symbol);
         if (!symbol || !metadata) return null;
@@ -20731,7 +20736,7 @@ class Emitter {
     ): { id: ts.Identifier; reference: LocalLexicalReference } | null {
         const target = this.unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
-        if (this.environmentShadowReferenceName(target)) return null;
+        if (!this.classNameBindingForIdentifier(target) && this.environmentShadowReferenceName(target)) return null;
         const raw = this.checker.getSymbolAtLocation(target);
         if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
         const reference = this.localLexicalReferenceForIdentifier(target);
@@ -22074,9 +22079,8 @@ class Emitter {
     ): ModuleLexicalBindingPlan[] {
         const prepared = this.moduleLexicalBindingsBySource.get(sf);
         if (prepared) return prepared;
-        const resourceOnly = !this.isJavaScriptSourceFile(sf);
-        if ((!ts.isExternalModule(sf) && !this.isCommonJsSourceFile(sf)) ||
-            this.isTest262ScriptSourceFile(sf)) return [];
+        const moduleSource = ts.isExternalModule(sf) || this.isCommonJsSourceFile(sf);
+        if (this.isTest262ScriptSourceFile(sf)) return [];
 
         const plans: ModuleLexicalBindingPlan[] = [];
         const addPlan = (
@@ -22104,7 +22108,6 @@ class Emitter {
         for (const statement of sf.statements) {
             if (this.isAmbientDeclaration(statement)) continue;
             if (ts.isClassDeclaration(statement)) {
-                if (resourceOnly) continue;
                 // Class declarations create mutable lexical bindings. Their
                 // values remain uninitialized until ClassDefinitionEvaluation
                 // completes, including static elements and decorators.
@@ -22113,7 +22116,7 @@ class Emitter {
                 }
                 continue;
             }
-            if (!ts.isVariableStatement(statement)) continue;
+            if (!moduleSource || !ts.isVariableStatement(statement)) continue;
             const flags = statement.declarationList.flags;
             if ((flags & ts.NodeFlags.BlockScoped) === 0) continue;
             for (const declaration of statement.declarationList.declarations) {
@@ -23406,6 +23409,13 @@ class Emitter {
         const captures = new Map<ts.Symbol, ClosureCapture>();
         const captureReference = (node: ts.Identifier, sym = this.symbolForIdentifier(node)): void => {
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            const innerClassName = this.classNameBindingForIdentifier(node);
+            if (sym && innerClassName) {
+                captures.set(sym, { symbol: sym, type: T_VALUE,
+                    field: `${mangleIdent(node.text)}_${captures.size}`,
+                    lexical: { name: innerClassName.lexicalName!, immutable: true } });
+                return;
+            }
             if (
                 sym &&
                 decl &&
@@ -25187,6 +25197,12 @@ class Emitter {
     }
 
     private emitClassBodies(cd: ts.ClassDeclaration): void {
+        this.closureEnvScopes.push(this.nativeClassNameEnvironment(cd));
+        try { this.emitNativeClassBodies(cd); }
+        finally { this.closureEnvScopes.pop(); }
+    }
+
+    private emitNativeClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = nativeTypeName(cd);
         const baseName = this.baseClassName(cd);
@@ -25302,6 +25318,12 @@ class Emitter {
 
     private emitClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
+        this.closureEnvScopes.push(this.nativeClassNameEnvironment(cd));
+        try { this.emitNativeClassStaticInitializers(buf, cd); }
+        finally { this.closureEnvScopes.pop(); }
+    }
+
+    private emitNativeClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
         buf.line(`(void)(${this.classConstructorValue(cd, true).c});`);
         const constructor = this.classConstructorValue(cd);
         this.functionThisStack.push(constructor);
@@ -25836,6 +25858,7 @@ class Emitter {
             definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
         }
         definitions.push(...this.emitClassElementDefinitions(cd, "_class_constructor", "_class_prototype", true));
+        definitions.push(...this.initializeClassNameEnvironment(this.nativeClassNameEnvironment(cd), "_class_constructor"));
         return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
     }
 
@@ -31925,6 +31948,63 @@ class Emitter {
         return name;
     }
 
+    /** One inner Environment Record per class evaluation. Native declarations
+     * have static duration; dynamic definitions allocate escaping cells. Both
+     * use the same binding and initialization projection. */
+    private createClassNameEnvironment(
+        definition: ts.ClassLikeDeclaration, storage: string[], native = false,
+    ): Map<ts.Symbol, ClosureEnvBinding> {
+        const environment = new Map<ts.Symbol, ClosureEnvBinding>();
+        const symbol = definition.name ? this.symbolForIdentifier(definition.name) : undefined;
+        if (!symbol) return environment;
+        const cell = this.freshTemp("_class_name_cell");
+        const root = this.freshTemp("_class_name_root_cell");
+        const initialized = this.freshTemp("_class_name_initialized_cell");
+        if (native) {
+            this.globalDecls.line(`static volatile tsc_value_t ${cell};`);
+            this.globalDecls.line(`static void* ${root};`);
+            this.globalDecls.line(`static bool ${initialized};`);
+        } else {
+            storage.push(`volatile tsc_value_t* ${cell} = TSC_GC_MALLOC(sizeof(tsc_value_t))`,
+                `void** ${root} = TSC_GC_MALLOC(sizeof(void*))`,
+                `bool* ${initialized} = TSC_GC_MALLOC(sizeof(bool))`,
+                `*${cell} = tsc_value_undefined()`, `*${root} = NULL`, `*${initialized} = false`);
+        }
+        environment.set(symbol, { type: T_VALUE, ptr: native ? `(&${cell})` : cell,
+            rootPtr: native ? `(&${root})` : root,
+            initializedPtr: native ? `(&${initialized})` : initialized,
+            lexicalName: definition.name!.text, immutable: true,
+            creationScope: this.argumentValueScopes.at(-1) });
+        return environment;
+    }
+
+    private nativeClassNameEnvironment(definition: ts.ClassDeclaration): Map<ts.Symbol, ClosureEnvBinding> {
+        let environment = this.nativeClassNameEnvironments.get(definition);
+        if (!environment) {
+            environment = this.createClassNameEnvironment(definition, [], true);
+            this.nativeClassNameEnvironments.set(definition, environment);
+        }
+        return environment;
+    }
+
+    private initializeClassNameEnvironment(
+        environment: ReadonlyMap<ts.Symbol, ClosureEnvBinding>, constructor: string,
+    ): string[] {
+        return [...environment.values()].flatMap(binding => [
+            `*${binding.ptr} = ${constructor}`, `*${binding.rootPtr} = tsc_value_gc_root(*${binding.ptr})`,
+            `*${binding.initializedPtr} = true`,
+        ]);
+    }
+
+    private classNameBindingForIdentifier(id: ts.Identifier): ClosureEnvBinding | null {
+        const symbol = this.symbolForIdentifier(id);
+        const declaration = symbol?.declarations?.find(declaration =>
+            ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration));
+        if (!declaration || !this.isNodeWithin(id, declaration)) return null;
+        const binding = this.closureEnvBindingForSymbol(symbol);
+        return binding?.immutable && binding.initializedPtr ? binding : null;
+    }
+
     /** ClassDefinitionEvaluation for the dynamic base/default-constructor
      * partition.  Every supported method enters one source-ordered member
      * collection and is materialized as a closure on the constructor or its
@@ -31956,30 +32036,14 @@ class Emitter {
             `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
             `(void)${prototypeRoot}`,
         ];
-        // The class's inner name is an immutable, initially uninitialized
-        // Environment Record binding. It belongs to this evaluation, rather
-        // than the mutable outer declaration cell or an enclosing activation.
-        const inner = new Map<ts.Symbol, ClosureEnvBinding>();
-        const symbol = expression.name ? this.symbolForIdentifier(expression.name) : undefined;
-        const cell = this.freshTemp("_class_name_cell");
-        const root = this.freshTemp("_class_name_root_cell");
-        const initialized = this.freshTemp("_class_name_initialized_cell");
-        if (symbol) {
-            pieces.push(`volatile tsc_value_t* ${cell} = TSC_GC_MALLOC(sizeof(tsc_value_t))`,
-                `void** ${root} = TSC_GC_MALLOC(sizeof(void*))`,
-                `bool* ${initialized} = TSC_GC_MALLOC(sizeof(bool))`,
-                `*${cell} = tsc_value_undefined()`, `*${root} = NULL`, `*${initialized} = false`);
-            inner.set(symbol, { type: T_VALUE, ptr: cell, rootPtr: root,
-                initializedPtr: initialized, lexicalName: expression.name!.text, immutable: true,
-                creationScope: this.argumentValueScopes.at(-1) });
-        }
+        const inner = this.createClassNameEnvironment(expression, pieces);
         this.closureEnvScopes.push(inner);
         try {
             pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype, false));
         } finally {
             this.closureEnvScopes.pop();
         }
-        if (symbol) pieces.push(`*${cell} = ${constructor}`, `*${root} = tsc_value_gc_root(*${cell})`, `*${initialized} = true`);
+        pieces.push(...this.initializeClassNameEnvironment(inner, constructor));
         pieces.push(constructor);
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
@@ -32733,12 +32797,10 @@ class Emitter {
                 }
                 return { c: `tsc_value_get_prop(${owner.c}, ${this.stringLit(imported.name)})`, ty: T_VALUE };
             }
-            const classBinding = this.symbolForIdentifier(expr)?.declarations?.find(ts.isClassDeclaration);
-            if (classBinding && !this.isDirectScopeLexicalDeclaration(classBinding) && this.isNodeWithin(expr, classBinding) &&
-                !classBinding.heritageClauses?.some(clause => this.isNodeWithin(expr, clause))) {
-                // ClassDefinitionEvaluation initializes the inner class name
-                // before its static elements; the outer binding stays in TDZ.
-                return this.classConstructorValue(classBinding);
+            const innerClassName = this.classNameBindingForIdentifier(expr);
+            if (innerClassName) {
+                const reference = this.localLexicalReferenceForIdentifier(expr)!;
+                return { c: this.localLexicalRead(reference), ty: reference.type };
             }
 
             const evalShadow = this.environmentShadowReferenceName(expr);
@@ -33107,7 +33169,7 @@ class Emitter {
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
-        if (ts.isIdentifier(to.expression) && (
+        if (ts.isIdentifier(to.expression) && !this.classNameBindingForIdentifier(to.expression) && (
             this.test262ScriptGlobalBindingName(to.expression) ||
             this.isSourceGlobalReference(to.expression) ||
             this.ordinaryNativeGlobalConstructor(to.expression) ||
@@ -33422,6 +33484,7 @@ class Emitter {
     }
 
     private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
+        if (this.classNameBindingForIdentifier(id)) return null;
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         const referenceName = this.test262HostGlobalBindingName(id) ??
             (this.isSourceGlobalReference(id) ? id.text : null);

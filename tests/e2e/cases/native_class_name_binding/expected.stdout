@@ -1,0 +1,5 @@
+static-inner-name:true
+instance-inner-name:true
+async-inner-name:true
+generator-inner-name:true
+async-generator-inner-name:true
