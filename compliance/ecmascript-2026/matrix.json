@@ -2892,7 +2892,8 @@
           "tests/property/number-power-round.property.test.ts",
           "tests/property/bigint-owner.property.test.ts",
           "tests/property/math-sum-precise.property.test.ts",
-          "tests/property/math-intrinsic-owner.property.test.ts"
+          "tests/property/math-intrinsic-owner.property.test.ts",
+          "tests/property/number-binary-formats.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2922,7 +2923,8 @@
           "number_power_round",
           "bigint_owner",
           "math_sum_precise",
-          "math_intrinsic_owner"
+          "math_intrinsic_owner",
+          "number_binary_formats"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
@@ -2943,10 +2945,11 @@
           "runtime/tsc_builtin.c#tsc_number_exponentiate", "runtime/tsc_builtin.c#tsc_math_round", "src/emit/index.ts#emitAssignment", "runtime/tsc_value.c#value_numeric_binary",
           "runtime/tsc_value.c#tsc_value_to_bigint", "runtime/tsc_value.c#tsc_value_to_index", "runtime/tsc_value.c#tsc_bigint_constructor_value", "runtime/tsc_builtin.c#tsc_bigint_try_from_str", "runtime/tsc_builtin.c#tsc_bigint_as_n",
           "runtime/tsc_builtin.c#tsc_math_sum_precise", "runtime/tsc_builtin.c#tsc_bigint_to_number_scaled", "runtime/tsc_iterator.c#tsc_sync_iterator_step", "runtime/tsc_iterator.c#tsc_sync_iterator_close_with_error",
-          "runtime/tsc_value.c#tsc_builtin_math", "runtime/tsc_builtin.c#tsc_math_random_initialize", "runtime/tsc_builtin.c#tsc_math_random"
+          "runtime/tsc_value.c#tsc_builtin_math", "runtime/tsc_builtin.c#tsc_math_random_initialize", "runtime/tsc_builtin.c#tsc_math_random",
+          "runtime/tsc_builtin.c#bigint_round_binary_format", "runtime/tsc_builtin.c#number_exact_integer", "runtime/tsc_builtin.c#tsc_math_f16round", "runtime/tsc_builtin.c#tsc_math_fround", "src/emit/index.ts#emitResultExpression"
         ]
       },
-      "knownGaps": ["Ordinary Realm Math calls consume actual values and ordered conversion. Math.sumPrecise uses one IteratorRecord, exact GMP accumulation and one shared scaled binary64 rounding; property and E2E evidence cover semantic partitions. Math object/tag/method/constant descriptors and per-Realm random streams have independent metadata and metamorphic schedule evidence. General numerical accuracy, remaining numeric metadata and exact reciprocal/signed coverage remain incomplete.",
+      "knownGaps": ["Ordinary Realm Math calls consume actual values and ordered conversion. Math.sumPrecise uses one IteratorRecord, exact GMP accumulation and one shared scaled binary64 rounding; property and E2E evidence cover semantic partitions. Math object/tag/method/constant descriptors and per-Realm random streams have independent metadata and metamorphic schedule evidence. Math.f16round/fround and exact binary64 conversion share one descriptor-driven ties-to-even significand kernel with independent midpoint/normal/subnormal/overflow evidence. Float16Array/DataView, general approximation accuracy, remaining numeric metadata and exact reciprocal/signed coverage remain incomplete.",
         "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding; now shares an integral UTC clock. Both exact intrinsic clauses bind reciprocal property, generated actual-List stress, declaration and implementation evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
       ]
     },

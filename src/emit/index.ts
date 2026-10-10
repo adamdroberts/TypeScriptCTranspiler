@@ -32489,7 +32489,7 @@ class Emitter {
             const overrides = new Map<ts.Expression, EmitResult>();
             let completionRoot: string | null = null;
             if (r.expression) {
-                const expression = this.emitExpr(r.expression);
+                const expression = this.emitResultExpression(r.expression, ret);
                 const deferredResolution = this.asyncFunctionStack.length > 0 ||
                     this.asyncAwaitContinuationReturnTargets.length > 0;
                 const type = deferredResolution ? expression.ty : ret;
@@ -32533,7 +32533,7 @@ class Emitter {
                 buf.line("return;");
                 return;
             }
-            const expr = this.emitExpr(r.expression);
+            const expr = this.emitResultExpression(r.expression, ret);
             const returnedType = this.prepareType(expr.ty);
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 buf.line(`${expr.c};`);
@@ -32565,7 +32565,7 @@ class Emitter {
                     return;
                 }
             }
-            const expr = this.emitExpr(r.expression);
+            const expr = this.emitResultExpression(r.expression, ret);
             if (expr.ty.kind === "promise") {
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
                 return;
@@ -32580,7 +32580,7 @@ class Emitter {
             return;
         }
         if (this.emitTailCallReturn(buf, r.expression)) return;
-        const expr = this.emitExpr(r.expression);
+        const expr = this.emitResultExpression(r.expression, ret);
         const coerced = this.coerce(expr, ret, r.expression);
         buf.line(`return ${coerced};`);
     }
@@ -38164,7 +38164,7 @@ class Emitter {
                                 if (isAsync && this.containsAwaitInFunctionBody(fnBody)) {
                                     unsupported(fnBody, "async suspension expression is not supported by the canonical CFG");
                                 }
-                                const r = this.emitExpr(fnBody);
+                                const r = this.emitResultExpression(fnBody, ret);
                                 if (isAsync) {
                                     if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
                                     else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
@@ -48744,6 +48744,14 @@ class Emitter {
         if (ts.isIdentifier(expr)) return this.isUnshadowedGlobalIdentifier(expr, "undefined");
         return ts.isVoidExpression(expr) &&
             this.isSideEffectFreeTopLevelConstInitializer(expr.expression);
+    }
+
+    private emitResultExpression(expression: ts.Expression, resultType: CType): EmitResult {
+        // Ordinary source activations retain actual aggregate results. The
+        // same rule covers expression bodies, ReturnStatement completions and
+        // promise resolution without requiring an anonymous native layout.
+        return resultType.kind === "value" || resultType.kind === "promise" && resultType.elem?.kind === "value"
+            ? this.emitOrdinaryObjectExpression(expression) : this.emitExpr(expression);
     }
 
     private emitOrdinaryObjectExpression(expression: ts.Expression): EmitResult {

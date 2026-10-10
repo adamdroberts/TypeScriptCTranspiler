@@ -322,6 +322,7 @@ double tsc_number_exponentiate(double base, double exponent);
 double tsc_math_sign(double x);
 double tsc_math_imul(double a, double b);
 double tsc_math_clz32(double x);
+/* Direct binary64-to-target ties-to-even rounding through the shared format kernel. */
 double tsc_math_fround(double x);
 double tsc_math_f16round(double x);
 

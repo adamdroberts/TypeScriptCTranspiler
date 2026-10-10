@@ -118,13 +118,14 @@ typedef struct tsc_str {
 | `tsc_string_to_number` | `(const tsc_str_t*) -> double` | Complete-input StringNumericLiteral conversion after ECMAScript trimming, with locale-stable decimal parsing and exact arbitrary-length binary/octal/hex rounding. |
 | `tsc_math_random` | `() -> double` | `Math.random()`, exact nonnegative 53-bit samples in [0, 1) from the creation Realm's retained Weyl/SplitMix64 progression; other Realms cannot advance it. |
 | `tsc_math_sum_precise` | `(tsc_value_t items) -> double` | One rooted synchronous IteratorRecord, exact finite GMP accumulation in 2^-1074 units, Number-only validation and prescribed IteratorClose error precedence. |
-| `tsc_bigint_to_number_scaled` | `(const tsc_bigint_t*, int binary_scale) -> double` | One ties-to-even binary64 rounding of an exact integer times 2^binary_scale, including subnormal, carry and overflow boundaries. Existing BigInt conversion delegates with scale zero. |
+| `tsc_bigint_to_number_scaled` | `(const tsc_bigint_t*, int binary_scale) -> double` | The binary64 format descriptor selects one ties-to-even rounding of an exact integer times 2^binary_scale, including subnormal, carry and overflow boundaries. Existing BigInt conversion delegates with scale zero. |
 | `tsc_math_round` | `(double) -> double` | Preserves integral inputs and signed zero; rounds from the lower integer with ties toward positive infinity, avoiding x + 0.5 rounding. |
 | `tsc_number_exponentiate` | `(double base, double exponent) -> double` | Shared Number::exponentiate for Math.pow and numeric operators; prescribed exceptional values and integral parity precede the approximated finite pow result. |
 | `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
 | `tsc_math_imul` | `(double, double) -> double` | `Math.imul`, using JS ToInt32 coercion and signed 32-bit result wrapping. |
 | `tsc_math_clz32` | `(double) -> double` | `Math.clz32`, using JS ToUint32 coercion. |
-| `tsc_math_fround` | `(double) -> double` | `Math.fround`, rounded through C `float` and returned as `double`. |
+| `tsc_math_fround` | `(double) -> double` | `Math.fround`, direct roundTiesToEven to the binary32 descriptor in the shared exact integer/significand kernel; represented exactly as binary64 afterward. |
+| `tsc_math_f16round` | `(double) -> double` | Direct roundTiesToEven to the binary16 descriptor, including subnormal, signed zero and finite/overflow boundaries, without a binary32 intermediate. |
 
 Math creation installs the actual Symbol.toStringTag descriptor and initializes its retained pseudorandom state before publishing the namespace. Borrowed built-in functions enter their creation Realm through the shared activation.
 

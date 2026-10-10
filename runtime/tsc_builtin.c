@@ -496,83 +496,28 @@ double tsc_math_clz32(double x) {
     return count;
 }
 
-double tsc_math_fround(double x) {
-    return (double)(float)x;
+typedef enum { TSC_BINARY16, TSC_BINARY32, TSC_BINARY64 } tsc_binary_format_kind_t;
+typedef struct {
+    int precision;
+    int min_subnormal_exponent;
+    int max_exponent;
+} tsc_binary_format_t;
+
+/* Precision and exponent limits describe the representation, rather than
+ * a separate conversion implementation for each target format. */
+static const tsc_binary_format_t binary_formats[] = {
+    [TSC_BINARY16] = { 11, -24, 15 },
+    [TSC_BINARY32] = { 24, -149, 127 },
+    [TSC_BINARY64] = { 53, -1074, 1023 },
+};
+static double number_round_binary_format(double number, const tsc_binary_format_t* format);
+
+double tsc_math_fround(double number) {
+    return number_round_binary_format(number, &binary_formats[TSC_BINARY32]);
 }
 
-double tsc_math_f16round(double x) {
-    union { float f; uint32_t u; } in;
-    in.f = (float)x;
-
-    uint32_t f32 = in.u;
-    uint32_t sign = (f32 >> 16) & 0x8000u;
-    uint32_t exp = (f32 >> 23) & 0xffu;
-    uint32_t mant = f32 & 0x7fffffu;
-    uint32_t f16;
-
-    if (exp == 0xffu) {
-        f16 = sign | 0x7c00u | (mant ? 0x0200u : 0u);
-    } else {
-        int32_t exp16 = (int32_t)exp - 127 + 15;
-        if (exp16 >= 0x1f) {
-            f16 = sign | 0x7c00u;
-        } else if (exp16 <= 0) {
-            if (exp16 < -10) {
-                f16 = sign;
-            } else {
-                mant |= 0x800000u;
-                uint32_t shift = (uint32_t)(14 - exp16);
-                uint32_t halfMant = mant >> shift;
-                uint32_t roundBit = (mant >> (shift - 1u)) & 1u;
-                uint32_t sticky = mant & ((1u << (shift - 1u)) - 1u);
-                if (roundBit && (sticky || (halfMant & 1u))) halfMant++;
-                f16 = sign | halfMant;
-            }
-        } else {
-            uint32_t halfExp = (uint32_t)exp16 << 10;
-            uint32_t halfMant = mant >> 13;
-            uint32_t roundBit = (mant >> 12) & 1u;
-            uint32_t sticky = mant & 0xfffu;
-            if (roundBit && (sticky || (halfMant & 1u))) {
-                halfMant++;
-                if (halfMant == 0x400u) {
-                    halfMant = 0;
-                    halfExp += 0x400u;
-                    if (halfExp >= 0x7c00u) {
-                        f16 = sign | 0x7c00u;
-                        goto decode;
-                    }
-                }
-            }
-            f16 = sign | halfExp | halfMant;
-        }
-    }
-
-decode:
-    sign = (f16 & 0x8000u) << 16;
-    exp = (f16 >> 10) & 0x1fu;
-    mant = f16 & 0x03ffu;
-    uint32_t out;
-    if (exp == 0x1fu) {
-        out = sign | 0x7f800000u | (mant ? (mant << 13) : 0u);
-    } else if (exp == 0u) {
-        if (mant == 0u) {
-            out = sign;
-        } else {
-            int32_t e = -14;
-            while ((mant & 0x0400u) == 0u) {
-                mant <<= 1;
-                e--;
-            }
-            mant &= 0x03ffu;
-            out = sign | ((uint32_t)(e + 127) << 23) | (mant << 13);
-        }
-    } else {
-        out = sign | ((exp - 15u + 127u) << 23) | (mant << 13);
-    }
-    union { uint32_t u; float f; } result;
-    result.u = out;
-    return (double)result.f;
+double tsc_math_f16round(double number) {
+    return number_round_binary_format(number, &binary_formats[TSC_BINARY16]);
 }
 
 /* ---------------- BigInt (GMP-backed) ---------------- */
@@ -691,22 +636,24 @@ tsc_bigint_t* tsc_bigint_as_n(const tsc_bigint_t* value, double bits, bool is_si
     return result;
 }
 
-/* Round an exact integer times a power of two once, to binary64. The
- * quotient and discarded-bit predicates cover normal and subnormal values
- * without a separately rounded intermediate floating-point operation. */
-double tsc_bigint_to_number_scaled(const tsc_bigint_t* value, int binary_scale) {
+/* Round an exact integer times a power of two once to the target format.
+ * Guard/sticky/parity predicates select one ties-to-even significand;
+ * the descriptor selects its quantum and overflow boundary. */
+static double bigint_round_binary_format(const tsc_bigint_t* value, int binary_scale,
+    const tsc_binary_format_t* format) {
     if (!value || mpz_sgn(value->value) == 0) return 0.0;
     const int sign = mpz_sgn(value->value);
     mpz_t magnitude;
     mpz_init(magnitude);
     mpz_abs(magnitude, value->value);
     const size_t bit_length = mpz_sizeinbase(magnitude, 2);
-    if (binary_scale >= 1024 || bit_length > (size_t)(1024LL - binary_scale)) {
+    const long long overflow_exponent = (long long)format->max_exponent + 1;
+    if (binary_scale >= overflow_exponent || bit_length > (size_t)(overflow_exponent - binary_scale)) {
         mpz_clear(magnitude);
         return sign < 0 ? -INFINITY : INFINITY;
     }
-    long long shift = bit_length > 53 ? (long long)bit_length - 53 : 0;
-    const long long quantum_shift = -1074LL - binary_scale;
+    long long shift = bit_length > (size_t)format->precision ? (long long)bit_length - format->precision : 0;
+    const long long quantum_shift = (long long)format->min_subnormal_exponent - binary_scale;
     if (shift < quantum_shift) shift = quantum_shift;
     mpz_t significand;
     mpz_init(significand);
@@ -715,10 +662,39 @@ double tsc_bigint_to_number_scaled(const tsc_bigint_t* value, int binary_scale) 
         (mpz_scan1(magnitude, 0) < (mp_bitcnt_t)shift - 1 || mpz_odd_p(significand))) {
         mpz_add_ui(significand, significand, 1);
     }
-    const double rounded = ldexp(mpz_get_d(significand), (int)(shift + binary_scale));
+    const long long result_exponent = (long long)mpz_sizeinbase(significand, 2) - 1 + shift + binary_scale;
+    const double rounded = mpz_sgn(significand) && result_exponent > format->max_exponent
+        ? INFINITY : ldexp(mpz_get_d(significand), (int)(shift + binary_scale));
     mpz_clear(significand);
     mpz_clear(magnitude);
     return sign < 0 ? -rounded : rounded;
+}
+
+double tsc_bigint_to_number_scaled(const tsc_bigint_t* value, int binary_scale) {
+    return bigint_round_binary_format(value, binary_scale, &binary_formats[TSC_BINARY64]);
+}
+
+/* Extract the exact signed integer significand and scale of finite binary64.
+ * Both source Number conversion and exact summation borrow this decoder. */
+static int number_exact_integer(tsc_bigint_t* integer, double number) {
+    uint64_t bits;
+    memcpy(&bits, &number, sizeof(bits));
+    unsigned exponent = (unsigned)((bits >> 52) & UINT64_C(0x7ff));
+    uint64_t mantissa = bits & UINT64_C(0xfffffffffffff);
+    if (exponent) mantissa |= UINT64_C(0x10000000000000);
+    mpz_import(integer->value, 1, 1, sizeof(mantissa), 0, 0, &mantissa);
+    if (signbit(number)) mpz_neg(integer->value, integer->value);
+    return exponent ? (int)exponent - 1075 : -1074;
+}
+
+static double number_round_binary_format(double number, const tsc_binary_format_t* format) {
+    if (!isfinite(number) || number == 0.0) return number;
+    tsc_bigint_t exact;
+    mpz_init(exact.value);
+    int scale = number_exact_integer(&exact, number);
+    double rounded = bigint_round_binary_format(&exact, scale, format);
+    mpz_clear(exact.value);
+    return rounded;
 }
 
 double tsc_bigint_to_number(const tsc_bigint_t* value) {
@@ -766,15 +742,9 @@ double tsc_math_sum_precise(tsc_value_t items) {
                 else state = state == PLUS_INFINITY ? NOT_A_NUMBER : MINUS_INFINITY;
             } else if (!(number == 0.0 && signbit(number)) && (state == MINUS_ZERO || state == FINITE)) {
                 state = FINITE;
-                uint64_t bits;
-                memcpy(&bits, &number, sizeof(bits));
-                unsigned exponent = (unsigned)((bits >> 52) & UINT64_C(0x7ff));
-                uint64_t mantissa = bits & UINT64_C(0xfffffffffffff);
-                if (exponent) mantissa |= UINT64_C(0x10000000000000);
-                mpz_import(owner->term->value, 1, 1, sizeof(mantissa), 0, 0, &mantissa);
-                if (exponent) mpz_mul_2exp(owner->term->value, owner->term->value, exponent - 1);
-                if (signbit(number)) mpz_sub(owner->sum->value, owner->sum->value, owner->term->value);
-                else mpz_add(owner->sum->value, owner->sum->value, owner->term->value);
+                int scale = number_exact_integer(owner->term, number);
+                mpz_mul_2exp(owner->term->value, owner->term->value, (mp_bitcnt_t)(scale + 1074));
+                mpz_add(owner->sum->value, owner->sum->value, owner->term->value);
             }
         }
         count++;
