@@ -1,5 +1,7 @@
 # Changelog
 
+- Share typed object-member formal initialization with canonical source argument values and the binding tree. Preserve evaluated defaults, nested/rest patterns, TDZ, mapped arguments, retained scope cells and suspension; verify independent Node semantics and typed module E2E in both memory modes.
+
 - Share typed object member receiver activation and inferred actual results with ordinary callable/value worklists. Preserve accessors, borrowed/bound calls, lexical arrows and suspended owners; emit native type forwards before callable structs and verify independent Node semantics plus typed source E2E in both memory modes.
 
 - Lower suspended binding and assignment patterns through the shared tree and resumable worklist. Retain real Iterator Records, saved References, normalized Symbol/source keys, actual defaults and nested close completions; remove indexed/direct-write predecessors and verify native semantics and typed module E2E in both memory modes.

@@ -208,15 +208,28 @@ function explicitThisParameter(node: ts.Node): ts.ParameterDeclaration | null {
     return null;
 }
 
+/** Object-literal syntax owns ordinary methods and accessor closures. */
+export function isOrdinaryObjectMember(node: ts.Node): node is ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration {
+    return (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node)) && !!node.parent && ts.isObjectLiteralExpression(node.parent);
+}
+
+/** Source formal syntax owns one value ABI for ordinary object members and
+ * JavaScript functions. Native class and external callback conventions keep
+ * their separate physical adapters. */
+export function hasCanonicalValueFormals(node: ts.Node): boolean {
+    return isOrdinaryObjectMember(node) ||
+        ts.isFunctionLike(node) && /\.[cm]?jsx?$/i.test(node.getSourceFile().fileName);
+}
+
 /** Ordinary object members and JavaScript functions receive the actual
  * runtime `this` even when the structural signature omits a this symbol.
  * Arrow functions retain their separate lexical activation binding. */
 export function hasImplicitValueThis(node: ts.Node): boolean {
-    const member = ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
-        ts.isSetAccessorDeclaration(node);
-    if (member && node.parent && ts.isObjectLiteralExpression(node.parent)) return true;
+    if (isOrdinaryObjectMember(node)) return true;
     if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
-    return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || member;
+    return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) ||
+        ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
 }
 
 /** Convert CType.kind to the tsc_key_kind_t enum used in runtime. */
@@ -425,6 +438,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             } else if (hasImplicitValueThis(signatureDeclaration)) {
                 thisParamType = T_VALUE;
             }
+        }
+        const sourceOwner = callSig.getDeclaration();
+        if (sourceOwner && isOrdinaryObjectMember(sourceOwner)) {
+            const parameters = sourceOwner.parameters.filter(parameter => !isThisParameter(parameter));
+            const async = ts.getModifiers(sourceOwner)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+            return functionType(parameters.map(parameter => parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE),
+                async && !('asteriskToken' in sourceOwner && sourceOwner.asteriskToken) ? promiseType(T_VALUE) : T_VALUE,
+                thisParamType, parameters.findIndex(parameter => !!parameter.dotDotDotToken));
         }
         const params = callSig.getParameters().map((param) => {
             const decl = param.valueDeclaration ?? node;

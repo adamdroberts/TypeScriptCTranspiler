@@ -15,7 +15,9 @@ import {
     entryType,
     functionType,
     getArrayElementType,
+    hasCanonicalValueFormals,
     hasImplicitValueThis,
+    isOrdinaryObjectMember,
     keyKindOf,
     mapType,
     mapTsType,
@@ -404,7 +406,7 @@ interface LocalLexicalReference {
  * collection.  The source parameter supplies an argument value; every bound
  * name, regardless of pattern width or depth, is initialized through the same
  * recursive BindingInitialization algorithm. */
-interface JavaScriptFormalBindingPlan {
+interface SourceFormalBindingPlan {
     readonly symbol: ts.Symbol;
     readonly identifier: ts.Identifier;
     readonly value: string;
@@ -681,10 +683,10 @@ class Emitter {
      * and the same identifier/capture operations. */
     private lexicalBindingScopes: Map<ts.Symbol, LocalLexicalBindingPlan>[] = [];
     private sourceEnvironmentFiles = new WeakMap<ts.SourceFile, boolean>();
-    /** Runtime parameter environments for non-simple JavaScript formal lists.
+    /** Runtime parameter environments for non-simple source formal lists.
      * These are separate from CaseBlock environments but expose the same
      * value/TDZ/root contract to identifier reads, writes, and captures. */
-    private formalParameterScopes: Map<ts.Symbol, JavaScriptFormalBindingPlan>[] = [];
+    private formalParameterScopes: Map<ts.Symbol, SourceFormalBindingPlan>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private asyncContinuationCellScopes = new WeakMap<Map<ts.Symbol, string>, Map<ts.Symbol, string>>();
     private argumentValueTypeScopes: Map<ts.Symbol, CType>[] = [];
@@ -19773,8 +19775,8 @@ class Emitter {
     }
 
     private closureDeclarationCType(fn: ClosureLikeDeclaration): CType {
-        if (this.isJavaScriptSourceFile(fn.getSourceFile())) {
-            return this.javaScriptFunctionValueType(fn);
+        if (hasCanonicalValueFormals(fn)) {
+            return this.sourceFunctionValueType(fn);
         }
         const sig = this.checker.getSignatureFromDeclaration(fn);
         if (!sig) unsupported(fn, "could not resolve closure signature");
@@ -20362,7 +20364,7 @@ class Emitter {
         while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
         if ((ts.isFunctionExpression(expr) || ts.isArrowFunction(expr)) &&
             this.isJavaScriptSourceFile(expr.getSourceFile())) {
-            return this.javaScriptFunctionValueType(expr);
+            return this.sourceFunctionValueType(expr);
         }
         if (
             (ts.isObjectLiteralExpression(expr) && this.isUntypedJsObjectLiteral(expr)) ||
@@ -23118,7 +23120,7 @@ class Emitter {
         return ts.isIdentifier(name) ? this.checker.getSymbolAtLocation(name) : undefined;
     }
 
-    private javaScriptParameterListIsSimple(
+    private sourceParameterListIsSimple(
         owner: { readonly parameters: readonly ts.ParameterDeclaration[] },
     ): boolean {
         return owner.parameters.every((parameter) =>
@@ -23132,12 +23134,12 @@ class Emitter {
     /** Find the single FormalParameters tree that owns a binding declaration.
      * Walking parents, rather than recognizing generated pattern shapes,
      * keeps nested BindingElements on the same semantic path. */
-    private javaScriptFormalParameterForDeclaration(
+    private sourceFormalParameterForDeclaration(
         declaration: ts.Node,
     ): ts.ParameterDeclaration | null {
         for (let current: ts.Node | undefined = declaration; current; current = current.parent) {
             if (ts.isParameter(current)) {
-                return this.isJavaScriptSourceFile(current.getSourceFile()) ? current : null;
+                return hasCanonicalValueFormals(current.parent) && !this.isThisParameter(current) ? current : null;
             }
             if (current !== declaration &&
                 (ts.isFunctionLike(current) || ts.isSourceFile(current))) return null;
@@ -23145,7 +23147,7 @@ class Emitter {
         return null;
     }
 
-    private javaScriptFormalBindingIdentifier(
+    private sourceFormalBindingIdentifier(
         declaration: ts.Declaration,
     ): ts.Identifier | null {
         if (ts.isParameter(declaration) && ts.isIdentifier(declaration.name)) {
@@ -23176,13 +23178,13 @@ class Emitter {
             this.isDirectScopeLexicalDeclaration(symbolDeclaration)
                 ? symbolDeclaration as NamedScopeLexicalDeclaration
                 : null;
-        const formalParameter = this.javaScriptFormalParameterForDeclaration(symbolDeclaration);
+        const formalParameter = this.sourceFormalParameterForDeclaration(symbolDeclaration);
         const formalOwner = formalParameter && ts.isFunctionLike(formalParameter.parent)
             ? formalParameter.parent
             : null;
         const formalIdentifier = formalParameter && formalOwner &&
-            !this.javaScriptParameterListIsSimple(formalOwner)
-            ? this.javaScriptFormalBindingIdentifier(symbolDeclaration)
+            !this.sourceParameterListIsSimple(formalOwner)
+            ? this.sourceFormalBindingIdentifier(symbolDeclaration)
             : null;
         if (formalParameter && formalIdentifier) {
             return {
@@ -23281,7 +23283,7 @@ class Emitter {
 
     private formalParameterBindingForSymbol(
         symbol: ts.Symbol | undefined,
-    ): JavaScriptFormalBindingPlan | null {
+    ): SourceFormalBindingPlan | null {
         if (!symbol) return null;
         for (let index = this.formalParameterScopes.length - 1; index >= 0; index--) {
             const binding = this.formalParameterScopes[index]!.get(symbol);
@@ -23520,7 +23522,27 @@ class Emitter {
         }
         const globalRoot = this.globalDynamicRoots.get(sym);
         if (globalRoot) return `&${globalRoot}`;
+        const declaration = sym.valueDeclaration ?? sym.declarations?.[0];
+        if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) &&
+            !declaration.getSourceFile().isDeclarationFile && this.isTopLevelValueDeclaration(declaration)) {
+            const storage = this.symbolStorageTypes.get(sym) ?? this.variableDeclarationStorageType(declaration,
+                this.variableStorageType(this.prepareType(mapType(declaration, this.checker))));
+            if (storage.kind === "value")
+                return `&${this.ensureGlobalDynamicRoot(sym, this.declaredName(declaration.name))}`;
+        }
         return null;
+    }
+
+    /** Function bodies can be emitted before their source globals. One symbol
+     * owns one root plan regardless of which declaration/read/write requests
+     * it first; module initialization and every later store reuse that plan. */
+    private ensureGlobalDynamicRoot(symbol: ts.Symbol, name: string): string {
+        const existing = this.globalDynamicRoots.get(symbol);
+        if (existing) return existing;
+        const root = this.freshTemp(`_${name}_global_gc_root`);
+        this.globalDecls.line(`static void* volatile ${root};`);
+        this.globalDynamicRoots.set(symbol, root);
+        return root;
     }
 
     private emitLocalDynamicRoot(
@@ -23788,7 +23810,7 @@ class Emitter {
             const declaration = signature?.getDeclaration();
             if (declaration && ts.isFunctionLike(declaration) &&
                 "body" in declaration && declaration.body && signature?.getReturnType() === type &&
-                this.expressionHasOrdinaryNativeOwnerResult(declaration)) {
+                (hasCanonicalValueFormals(declaration) || this.expressionHasOrdinaryNativeOwnerResult(declaration))) {
                 return this.isAsyncDeclaration(declaration) && !this.isGeneratorDeclaration(declaration)
                     ? promiseType(T_VALUE) : T_VALUE;
             }
@@ -23811,6 +23833,8 @@ class Emitter {
         }
         const slot = ts.isIdentifier(node) && type === this.checker.getTypeAtLocation(node)
             ? this.symbolForIdentifier(node)?.valueDeclaration ?? node : node;
+        const formal = this.sourceFormalParameterForDeclaration(slot);
+        if (formal) return slot === formal && formal.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
         if (ts.isParameter(slot) && this.expressionHasOrdinaryNativeOwnerResult(slot))
             return slot.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
         if (((ts.isVariableDeclaration(slot) || ts.isPropertyDeclaration(slot) || ts.isPropertySignature(slot) ||
@@ -23818,6 +23842,10 @@ class Emitter {
             ((ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) &&
                 this.expressionHasOrdinaryNativeOwnerResult(node)) ||
             (ts.isAwaitExpression(node) && this.expressionHasOrdinaryNativeOwnerResult(node))) return T_VALUE;
+        const callableOwner = type.getCallSignatures()[0]?.getDeclaration();
+        if (callableOwner && ts.isFunctionLike(callableOwner) && "body" in callableOwner &&
+            callableOwner.body && hasCanonicalValueFormals(callableOwner))
+            return this.sourceFunctionValueType(callableOwner);
         return null;
     }
 
@@ -23881,6 +23909,17 @@ class Emitter {
         const pending: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
         while (pending.length) {
             const node = pending.pop()!;
+            if (isOrdinaryObjectMember(node) && node.body && ts.isBlock(node.body)) {
+                const formals = new Map<string, ts.ParameterDeclaration>();
+                for (const parameter of node.parameters) {
+                    if (this.isThisParameter(parameter)) continue;
+                    for (const identifier of this.test262BindingNames(parameter.name)) formals.set(identifier.text, parameter);
+                }
+                for (const [symbol, declaration] of this.functionBodyVariableBindings(node.body)) {
+                    const formal = formals.get(symbol.getName());
+                    if (formal) input(declaration, formal);
+                }
+            }
             if (ts.isVariableDeclaration(node) && node.initializer) {
                 // Reverse the owner-alias edge as well as the read edge. A
                 // later write through either name must choose a shared codec.
@@ -23942,6 +23981,11 @@ class Emitter {
                 else dependents.set(child, [node]);
                 pending.push(child);
             };
+            // The semantic owner, rather than checker annotations or observed
+            // calls, determines the value domain of ordinary member formals
+            // and results. The existing dependency graph carries that ABI to
+            // retained owners, aliases, aggregates and source call sites.
+            if (isOrdinaryObjectMember(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
             if (node.kind === ts.SyntaxKind.ThisKeyword) {
                 for (let owner: ts.Node | undefined = node.parent; owner; owner = owner.parent) {
                     if (ts.isClassLike(owner)) break;
@@ -24472,7 +24516,7 @@ class Emitter {
             if (declaration.getSourceFile() !== sf) continue;
             this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
             this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
-            const callable = this.emitFunctionDeclarationReferenceClosure(declaration,this.javaScriptFunctionValueType(declaration));
+            const callable = this.emitFunctionDeclarationReferenceClosure(declaration,this.sourceFunctionValueType(declaration));
             instantiation.line(`${binding.cName} = ${this.coerce(callable,T_VALUE,declaration)};`);
             instantiation.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
             if (declaration.name) add(declaration.name.text,binding.cName,binding.gcRoot,"NULL",true,false);
@@ -25031,7 +25075,7 @@ class Emitter {
                 // Script evaluation instantiates fresh source owners. AOT code
                 // can be reused by eval/another Realm without reusing a prior
                 // callable's parse-unit or creation context.
-                const type = this.javaScriptFunctionValueType(declaration);
+                const type = this.sourceFunctionValueType(declaration);
                 const closure = this.emitFunctionReferenceClosure(name, type, "evaluation");
                 const value = this.coerce(closure, T_VALUE, name);
                 buf.line(
@@ -25084,7 +25128,7 @@ class Emitter {
                 declaration.name,
             )
             : (() => {
-                const type = this.javaScriptFunctionValueType(declaration);
+                const type = this.sourceFunctionValueType(declaration);
                 const closure = this.emitFunctionDeclarationReferenceClosure(declaration, type);
                 return this.coerce(closure, T_VALUE, declaration.name);
             })();
@@ -25409,11 +25453,11 @@ class Emitter {
         return true;
     }
 
-    /** JavaScript source syntax, rather than TypeScript's contextual/inferred
+    /** Canonical source formal syntax, rather than TypeScript's contextual/inferred
      * signature, defines the runtime call ABI.  In particular the checker may
      * synthesize a rest parameter for `arguments` use; admitting that symbol
      * here would make a finite inferred tuple alter ECMAScript arity. */
-    private javaScriptFunctionValueType(fn: ts.FunctionLikeDeclaration): CType {
+    private sourceFunctionValueType(fn: ts.FunctionLikeDeclaration): CType {
         const runtimeParams = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
         const params = runtimeParams.map((parameter) => this.prepareType(
                 parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE,
@@ -25421,7 +25465,9 @@ class Emitter {
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
         const ret = isAsync && !isGenerator ? promiseType(T_VALUE) : T_VALUE;
-        const thisType = hasImplicitValueThis(fn) ? T_VALUE : undefined;
+        const signature = isOrdinaryObjectMember(fn) && !this.isJavaScriptSourceFile(fn.getSourceFile())
+            ? this.checker.getSignatureFromDeclaration(fn) : null;
+        const thisType = signature ? this.signatureThisType(signature, fn) : hasImplicitValueThis(fn) ? T_VALUE : undefined;
         return this.prepareType(functionType(params, ret, thisType ?? undefined,
             runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
@@ -25614,10 +25660,10 @@ class Emitter {
             if (this.isModuleBindingSymbol(symbol)) return;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
             const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-            const parameter = declaration ? this.javaScriptFormalParameterForDeclaration(declaration) : null;
+            const parameter = declaration ? this.sourceFormalParameterForDeclaration(declaration) : null;
             const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
             captures.set(symbol, { type: T_VALUE, cellName, rootCellName: `${cellName}__gc_root`,
-                ...(lexical || parameter && ts.isFunctionLike(owner) && !this.javaScriptParameterListIsSimple(owner)
+                ...(lexical || parameter && ts.isFunctionLike(owner) && !this.sourceParameterListIsSimple(owner)
                     ? { initializedCellName: `${cellName}__initialized` } : {}) });
         };
         const addClosureCaptures = (closure: ClosureLikeDeclaration): void => {
@@ -25673,10 +25719,41 @@ class Emitter {
             ts.forEachChild(parameter, visit);
         }
         visit(body);
+        // A body var that repeats a formal needs binding storage even when
+        // no closure captures it. Simple formals share the binding; parameter
+        // expressions retain a separate body binding copied at body entry.
+        if (ts.isFunctionLike(owner) && hasCanonicalValueFormals(owner) && ts.isBlock(body)) {
+            const formals = new Map<string, ts.Symbol>();
+            for (const parameter of owner.parameters) {
+                if (this.isThisParameter(parameter)) continue;
+                for (const identifier of this.test262BindingNames(parameter.name)) {
+                    const symbol = this.symbolForIdentifier(identifier);
+                    if (symbol) formals.set(identifier.text, symbol);
+                }
+            }
+            const simple = this.sourceParameterListIsSimple(owner);
+            const cellFor = (symbol: ts.Symbol, formal: boolean): CaptureCell => {
+                const existing = captures.get(symbol);
+                if (existing) return existing;
+                const cellName = this.cellNameForCapture(symbol, mangleIdent(symbol.getName()));
+                const cell: CaptureCell = { type: T_VALUE, cellName,
+                    rootCellName: `${cellName}__gc_root`,
+                    ...(!simple && formal ? { initializedCellName: `${cellName}__initialized` } : {}) };
+                captures.set(symbol, cell);
+                return cell;
+            };
+            for (const symbol of this.functionBodyVariableBindings(body).keys()) {
+                const formal = formals.get(symbol.getName());
+                if (!formal) continue;
+                const parameterCell = cellFor(formal, true);
+                if (simple) captures.set(symbol, parameterCell);
+                else cellFor(symbol, false);
+            }
+        }
         // Non-simple async formals retain their initialized state beyond the
         // entry frame. Feed every BoundName into the existing cell collection.
         if (ts.isFunctionLike(owner) && this.isAsyncDeclaration(owner) &&
-            !this.javaScriptParameterListIsSimple(owner) && this.isJavaScriptSourceFile(owner.getSourceFile())) {
+            !this.sourceParameterListIsSimple(owner) && hasCanonicalValueFormals(owner)) {
             for (const parameter of owner.parameters) for (const identifier of this.test262BindingNames(parameter.name)) {
                 const symbol = this.symbolForIdentifier(identifier);
                 if (!symbol || captures.has(symbol)) continue;
@@ -25703,7 +25780,7 @@ class Emitter {
          * distinct symbols; alias them to one physical retained cell. A
          * parameter expression instead requires separate environments. */
         if (ts.isFunctionLike(owner) && ts.isBlock(body) &&
-            this.javaScriptParameterListIsSimple(owner)) {
+            this.sourceParameterListIsSimple(owner)) {
             const parameters = new Map(owner.parameters.flatMap(parameter =>
                 ts.isIdentifier(parameter.name) ? [[parameter.name.text, parameter] as const] : []));
             for (const declaration of directLexicalDeclarations(body.statements)) {
@@ -25875,7 +25952,7 @@ class Emitter {
     }
 
     private functionHasMappedArgumentsObject(fn: ts.FunctionLikeDeclaration): boolean {
-        if (!this.isJavaScriptSourceFile(fn.getSourceFile()) ||
+        if (!hasCanonicalValueFormals(fn) ||
             this.functionHasStrictThisBinding(fn) ||
             !this.functionUsesOwnArgumentsObject(fn)) {
             return false;
@@ -25945,7 +26022,7 @@ class Emitter {
                     ? T_VALUE
                     : this.prepareType(mapTsType(decl,
                         this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
-                const formalParameter = this.javaScriptFormalParameterForDeclaration(decl);
+                const formalParameter = this.sourceFormalParameterForDeclaration(decl);
                 const existingStorageType = this.scopedTypeForSymbol(sym) ??
                     this.symbolStorageTypes.get(sym);
                 /* A lexical Environment Record is a runtime language
@@ -26096,7 +26173,7 @@ class Emitter {
     }
 
     private emitSourceFunctionEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration,
-        plans: ReadonlyMap<ts.Symbol, JavaScriptFormalBindingPlan>): void {
+        plans: ReadonlyMap<ts.Symbol, SourceFormalBindingPlan>): void {
         if (!this.sourceEnvironmentEnabled(fn.getSourceFile())) return;
         const scope = this.freshTemp("_function_environment");
         buffer.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
@@ -26120,6 +26197,10 @@ class Emitter {
             }
         }
         return false;
+    }
+
+    private functionHasSeparateParameterBodyBindings(fn: ts.FunctionLikeDeclaration): boolean {
+        return hasCanonicalValueFormals(fn) && this.parameterListContainsExpression(fn);
     }
 
     private emitSourceBodyEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration): void {
@@ -29028,7 +29109,7 @@ class Emitter {
         return this.collectParamInfos(ps).map((p) => `${p.type.c} ${p.name}`);
     }
 
-    private javaScriptFormalRawParameterName(
+    private sourceFormalRawParameterName(
         parameter: ts.ParameterDeclaration,
         index: number,
     ): string {
@@ -29106,16 +29187,16 @@ class Emitter {
         for (let index = 0; index < ps.length; index++) {
             const p = ps[index]!;
             if (this.isThisParameter(p)) continue;
-            const javaScript = this.isJavaScriptSourceFile(p.getSourceFile());
-            if (!ts.isIdentifier(p.name) && !javaScript) {
+            const canonical = hasCanonicalValueFormals(p.parent);
+            if (!ts.isIdentifier(p.name) && !canonical) {
                 unsupported(p, "parameter destructuring");
             }
-            const pt = javaScript
+            const pt = canonical
                 ? this.prepareType(p.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
                 : this.prepareType(mapType(p, this.checker));
             infos.push({
-                name: javaScript
-                    ? this.javaScriptFormalRawParameterName(p, index)
+                name: canonical
+                    ? this.sourceFormalRawParameterName(p, index)
                     : mangleIdent((p.name as ts.Identifier).text),
                 type: pt,
             });
@@ -29127,7 +29208,7 @@ class Emitter {
      * collection. Raw argument slots are rooted before any allocation; bound
      * names are then represented uniformly as value/root/initialization
      * records, independent of pattern cardinality. */
-    private emitJavaScriptFormalBindingStorage(
+    private emitSourceFormalBindingStorage(
         buf: CBuf,
         fn: ts.FunctionLikeDeclaration,
         rawParameterNames: readonly string[],
@@ -29135,12 +29216,12 @@ class Emitter {
         argumentScope: Map<ts.Symbol, string>,
         argumentTypeScope: Map<ts.Symbol, CType>,
         outerBindings: ReadonlyMap<ts.Symbol, ClosureEnvBinding> = this.closureEnvScopes.at(-1) ?? new Map(),
-    ): Map<ts.Symbol, JavaScriptFormalBindingPlan> {
+    ): Map<ts.Symbol, SourceFormalBindingPlan> {
         const parameters = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
         if (parameters.length !== rawParameterNames.length) {
-            throw new Error("JavaScript formal parameter ABI does not match its canonical collection");
+            throw new Error("source formal parameter ABI does not match its canonical collection");
         }
-        const simple = this.javaScriptParameterListIsSimple(fn);
+        const simple = this.sourceParameterListIsSimple(fn);
         const rawRoots = new Map<ts.ParameterDeclaration, string>();
         for (let index = 0; index < parameters.length; index++) {
             const parameter = parameters[index]!;
@@ -29150,14 +29231,14 @@ class Emitter {
             rawRoots.set(parameter, root);
         }
 
-        const plans = new Map<ts.Symbol, JavaScriptFormalBindingPlan>();
+        const plans = new Map<ts.Symbol, SourceFormalBindingPlan>();
         for (let index = 0; index < parameters.length; index++) {
             const parameter = parameters[index]!;
             const rawName = rawParameterNames[index]!;
             const direct = ts.isIdentifier(parameter.name) ? parameter.name : null;
             for (const identifier of this.test262BindingNames(parameter.name)) {
                 const symbol = this.symbolForIdentifier(identifier);
-                if (!symbol) unsupported(identifier, "unresolved JavaScript formal binding");
+                if (!symbol) unsupported(identifier, "unresolved source formal binding");
                 if (plans.has(symbol)) continue;
                 let cell = capturedCells.get(symbol);
                 if (!cell && (this.isGeneratorDeclaration(fn) || this.isAsyncDeclaration(fn))) {
@@ -29170,7 +29251,7 @@ class Emitter {
                     capturedCells.set(symbol, cell);
                 }
                 if (cell && (cell.type.kind !== "value" || !cell.rootCellName)) {
-                    unsupported(identifier, "JavaScript formal capture requires canonical dynamic value storage");
+                    unsupported(identifier, "source formal capture requires canonical dynamic value storage");
                 }
 
                 let value: string;
@@ -29179,7 +29260,7 @@ class Emitter {
                 const usesRawValue = direct === identifier && !parameter.dotDotDotToken;
                 if (cell) {
                     if (!simple && !cell.initializedCellName) {
-                        unsupported(identifier, "non-simple JavaScript formal capture requires TDZ state");
+                        unsupported(identifier, "non-simple source formal capture requires TDZ state");
                     }
                     this.emitCaptureCellInitialization(
                         buf,
@@ -29206,7 +29287,7 @@ class Emitter {
                         buf.line(`bool ${initialized} = false;`);
                     }
                 }
-                const plan: JavaScriptFormalBindingPlan = {
+                const plan: SourceFormalBindingPlan = {
                     symbol,
                     identifier,
                     value,
@@ -29234,11 +29315,11 @@ class Emitter {
     /** FunctionDeclarationInstantiation consumes the ordered parameter
      * collection once. Every identifier, object pattern, array pattern,
      * default, and rest value reaches the same BindingInitialization leaf. */
-    private emitJavaScriptFormalParameterInitialization(
+    private emitSourceFormalParameterInitialization(
         buf: CBuf,
         fn: ts.FunctionLikeDeclaration,
         rawParameterNames: readonly string[],
-        plans: ReadonlyMap<ts.Symbol, JavaScriptFormalBindingPlan>,
+        plans: ReadonlyMap<ts.Symbol, SourceFormalBindingPlan>,
     ): void {
         const parameters = fn.parameters.filter((parameter) => !this.isThisParameter(parameter));
         for (let index = 0; index < parameters.length; index++) {
@@ -29255,7 +29336,7 @@ class Emitter {
                 (target, identifier, value) => {
                     const symbol = this.symbolForIdentifier(identifier);
                     const plan = symbol ? plans.get(symbol) : undefined;
-                    if (!plan) unsupported(identifier, "missing JavaScript formal binding plan");
+                    if (!plan) unsupported(identifier, "missing source formal binding plan");
                     target.line(`${plan.value} = ${value};`);
                     target.line(`${plan.gcRoot} = tsc_value_gc_root(${plan.value});`);
                     if (plan.initialized) target.line(`${plan.initialized} = true;`);
@@ -29447,8 +29528,8 @@ class Emitter {
         const parameterTypeScope = new Map<ts.Symbol, CType>();
         const runtimeParameters = fd.parameters.filter((parameter) => !this.isThisParameter(parameter));
         const rawParameterNames = this.collectParamInfos(fd.parameters).map((parameter) => parameter.name);
-        const javaScriptFormalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
-            ? this.emitJavaScriptFormalBindingStorage(
+        const sourceFormalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
+            ? this.emitSourceFormalBindingStorage(
                 this.defs,
                 fd,
                 rawParameterNames,
@@ -29457,7 +29538,7 @@ class Emitter {
                 parameterTypeScope,
             )
             : null;
-        if (!javaScriptFormalPlans) for (const parameter of fd.parameters) {
+        if (!sourceFormalPlans) for (const parameter of fd.parameters) {
             if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
             const symbol = this.symbolForIdentifier(parameter.name);
             if (!symbol) continue;
@@ -29471,13 +29552,13 @@ class Emitter {
         this.returnStack.push(returnType);
         this.argumentValueScopes.push(parameterValueScope);
         this.argumentValueTypeScopes.push(parameterTypeScope);
-        if (javaScriptFormalPlans) this.formalParameterScopes.push(javaScriptFormalPlans);
+        if (sourceFormalPlans) this.formalParameterScopes.push(sourceFormalPlans);
         this.cellScopes.push(capturedCells);
         if (thisType) {
             this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
         }
         const tailCtx = fd.name && capturedCells.size === 0 && !thisType && !this.sourceEnvironmentEnabled(fd.getSourceFile()) &&
-            (!javaScriptFormalPlans || this.javaScriptParameterListIsSimple(fd))
+            (!sourceFormalPlans || this.sourceParameterListIsSimple(fd))
             ? {
                 name: this.declaredName(fd.name),
                 label: this.freshTemp("_tail"),
@@ -29488,12 +29569,12 @@ class Emitter {
             this.tailFunctionStack.push(tailCtx);
             this.defs.line(`${tailCtx.label}: __attribute__((unused));`);
         }
-        if (javaScriptFormalPlans) {
-            this.emitJavaScriptFormalParameterInitialization(
+        if (sourceFormalPlans) {
+            this.emitSourceFormalParameterInitialization(
                 this.defs,
                 fd,
                 rawParameterNames,
-                javaScriptFormalPlans,
+                sourceFormalPlans,
             );
             this.emitCallActivationConfiguration(this.defs, fd, capturedCells);
         } else {
@@ -29510,7 +29591,7 @@ class Emitter {
             if (tailCtx) this.tailFunctionStack.pop();
             if (thisType) this.functionThisStack.pop();
             this.cellScopes.pop();
-            if (javaScriptFormalPlans) this.formalParameterScopes.pop();
+            if (sourceFormalPlans) this.formalParameterScopes.pop();
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
             this.returnStack.pop();
@@ -29591,7 +29672,7 @@ class Emitter {
             for (const capture of this.collectClosureCaptures(owner as ClosureLikeDeclaration)) retainClosureCapture(capture.symbol);
         const localParams: AsyncAwaitContinuationParam[] = [];
         const bodyAliases = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
-        if (owner && this.javaScriptParameterListIsSimple(owner)) {
+        if (owner && this.sourceParameterListIsSimple(owner)) {
             const parametersByCell = new Map(params.flatMap(parameter => {
                 const cell = this.currentFunctionCellForSymbol(parameter.symbol);
                 return cell ? [[cell, parameter] as const] : [];
@@ -31477,12 +31558,13 @@ class Emitter {
                 buf.line(`${env}->${param.field}_gc_root = tsc_value_gc_root(${env}->${param.field});`);
             }
         }
-        const separateBody = !!owner && this.sourceEnvironmentEnabled(body.getSourceFile()) && this.parameterListContainsExpression(owner);
+        const separateBody = !!owner && this.functionHasSeparateParameterBodyBindings(owner);
         const bodyVariables = separateBody ? this.functionBodyVariableBindings(body) : new Map<ts.Symbol, ts.Declaration>();
         for (const param of params) if (bodyVariables.has(param.symbol) && param.cell) {
             emitCfgCellAllocation(buf,param,env,cfgFieldValue(param,env),"true");
-            buf.line(`tsc_environment_alias_variable(&(tsc_environment_binding_ref_t){ ` +
-                `${this.stringLit(param.symbol.getName())}, ${env}->${param.field}, false, false, false });`);
+            if (this.sourceEnvironmentEnabled(body.getSourceFile()))
+                buf.line(`tsc_environment_alias_variable(&(tsc_environment_binding_ref_t){ ` +
+                    `${this.stringLit(param.symbol.getName())}, ${env}->${param.field}, false, false, false });`);
         }
         for (const local of localParams) {
             if (local.cell) {
@@ -31561,7 +31643,7 @@ class Emitter {
         const parameterTypes = new Map<ts.Symbol, CType>();
         const rawParameterNames = this.collectParamInfos(fd.parameters).map(parameter => parameter.name);
         const formalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
-            ? this.emitJavaScriptFormalBindingStorage(this.defs, fd, rawParameterNames,
+            ? this.emitSourceFormalBindingStorage(this.defs, fd, rawParameterNames,
                 capturedCells, parameterValues, parameterTypes) : null;
         this.argumentValueScopes.push(parameterValues);
         this.argumentValueTypeScopes.push(parameterTypes);
@@ -31576,7 +31658,7 @@ class Emitter {
         try {
             this.emitAsyncFunctionBoundary(this.defs, true, () => {
                 if (formalPlans) {
-                    this.emitJavaScriptFormalParameterInitialization(this.defs, fd, rawParameterNames, formalPlans);
+                    this.emitSourceFormalParameterInitialization(this.defs, fd, rawParameterNames, formalPlans);
                 } else {
                     this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
                 }
@@ -31746,8 +31828,8 @@ class Emitter {
         const parameterValues = new Map<ts.Symbol, string>();
         const parameterTypes = new Map<ts.Symbol, CType>();
         const rawNames = this.collectParamInfos(runtimeParams).map(parameter => parameter.name);
-        const formalPlans = this.isJavaScriptSourceFile(fn.getSourceFile())
-            ? this.emitJavaScriptFormalBindingStorage(buf, fn, rawNames, capturedCells, parameterValues, parameterTypes) : null;
+        const formalPlans = hasCanonicalValueFormals(fn)
+            ? this.emitSourceFormalBindingStorage(buf, fn, rawNames, capturedCells, parameterValues, parameterTypes) : null;
         this.argumentValueScopes.push(parameterValues);
         this.argumentValueTypeScopes.push(parameterTypes);
         if (formalPlans) this.formalParameterScopes.push(formalPlans);
@@ -31756,7 +31838,7 @@ class Emitter {
         if (thisParam) this.functionThisStack.push(thisParam);
         const previousDynamicRoots = this.beginAsyncDynamicRootScope(buf, runtimeParams);
         try {
-            if (formalPlans) this.emitJavaScriptFormalParameterInitialization(buf, fn, rawNames, formalPlans);
+            if (formalPlans) this.emitSourceFormalParameterInitialization(buf, fn, rawNames, formalPlans);
             else this.emitCapturedParameterCells(buf, runtimeParams, capturedCells);
             this.emitCallActivationConfiguration(buf, fn, capturedCells);
             if (!this.emitAsyncControlFlowGraphContinuation(buf, fn.body, runtimeParams, thisParam, this.isAsyncDeclaration(fn) ? "async-generator" : "generator"))
@@ -31907,7 +31989,7 @@ class Emitter {
     } {
         const name = this.functionDeclarationCName(fd);
         const sourceType = this.isJavaScriptSourceFile(fd.getSourceFile())
-            ? this.javaScriptFunctionValueType(fd) : null;
+            ? this.sourceFunctionValueType(fd) : null;
         const sig = sourceType ? null : this.checker.getSignatureFromDeclaration(fd);
         if (!sourceType && !sig) unsupported(fd, "could not resolve function signature");
         const retCt = sourceType?.ret ?? this.prepareType(mapTsType(fd, sig!.getReturnType(), this.checker));
@@ -32212,12 +32294,7 @@ class Emitter {
             this.globalDecls.line(`static ${ct.c} ${name};`);
             let dynamicRoot: string | null = null;
             if (sym && ct.kind === "value") {
-                dynamicRoot = this.freshTemp(`_${name}_global_gc_root`);
-                // The collector discovers this slot by scanning static data;
-                // the generated C never reads it directly, so make the store
-                // observable to prevent dead-store elimination.
-                this.globalDecls.line(`static void* volatile ${dynamicRoot};`);
-                this.globalDynamicRoots.set(sym, dynamicRoot);
+                dynamicRoot = this.ensureGlobalDynamicRoot(sym, name);
             }
             if (d.initializer) {
                 const r = this.emitExpr(d.initializer);
@@ -34482,7 +34559,7 @@ class Emitter {
             const fn = functionBody.parent as ts.FunctionLikeDeclaration;
             const cells = this.cellScopes.at(-1);
             const formals = this.formalParameterScopes.at(-1);
-            const separate = this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.parameterListContainsExpression(fn);
+            const separate = this.functionHasSeparateParameterBodyBindings(fn);
             const bindings = this.functionBodyVariableBindings(functionBody);
             for (const [symbol, declaration] of bindings) {
                 const cell = cells?.get(symbol);
@@ -35587,7 +35664,7 @@ class Emitter {
                     const parameter = owner && ts.isFunctionLike(owner) ? owner.parameters.find(parameter =>
                         ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text) : undefined;
                     const sharedParameter = parameter &&
-                        this.javaScriptParameterListIsSimple(parameter.parent) &&
+                        this.sourceParameterListIsSimple(parameter.parent) &&
                         this.currentFunctionCellForSymbol(this.checker.getSymbolAtLocation(parameter.name)) === cell;
                     if (!sharedParameter) this.emitCaptureCellInitialization(
                         buf, cell, "tsc_value_undefined()", false,
@@ -36532,7 +36609,7 @@ class Emitter {
                 }
                 if (ts.isFunctionDeclaration(commonJsDefaultImport)) {
                     const type = this.isJavaScriptSourceFile(commonJsDefaultImport.getSourceFile())
-                        ? this.javaScriptFunctionValueType(commonJsDefaultImport)
+                        ? this.sourceFunctionValueType(commonJsDefaultImport)
                         : this.prepareType(mapType(expr, this.checker));
                     return this.emitFunctionReferenceClosure(expr, type);
                 }
@@ -36600,7 +36677,7 @@ class Emitter {
             const scopedTy = this.identifierScopedType(expr);
             const sourceJavaScriptFunction = this.javaScriptFunctionLikeForExpression(expr);
             const sourceTy = sourceJavaScriptFunction
-                ? this.javaScriptFunctionValueType(sourceJavaScriptFunction)
+                ? this.sourceFunctionValueType(sourceJavaScriptFunction)
                 : this.prepareType(mapType(expr, this.checker));
             const ty = scopedTy ?? sourceTy;
             const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
@@ -36640,7 +36717,7 @@ class Emitter {
                 const physicalType = symbol && declaration && ts.isFunctionDeclaration(declaration) &&
                     !this.isGenericFunction(declaration)
                     ? this.isJavaScriptSourceFile(declaration.getSourceFile())
-                        ? this.javaScriptFunctionValueType(declaration)
+                        ? this.sourceFunctionValueType(declaration)
                         : this.prepareType(mapTsType(declaration,
                             this.checker.getTypeOfSymbolAtLocation(symbol, declaration), this.checker))
                     : ty;
@@ -40967,20 +41044,20 @@ class Emitter {
         if (!javascript && !sig) unsupported(fn, "could not resolve closure signature");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
-            if (!this.isJavaScriptSourceFile(fn.getSourceFile()) &&
+            if (!hasCanonicalValueFormals(fn) &&
                 !this.isSupportedInlineClosureParameter(p)) {
                 unsupported(p, "unsupported closure parameter shape");
             }
-            if (!this.isJavaScriptSourceFile(fn.getSourceFile()) &&
+            if (!hasCanonicalValueFormals(fn) &&
                 p.initializer && !this.isSupportedInlineClosureDefault(p)) {
                 unsupported(p, "default closure parameters currently require a literal initializer");
             }
-            return this.isJavaScriptSourceFile(fn.getSourceFile())
+            return hasCanonicalValueFormals(fn)
                 ? this.prepareType(p.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
                 : this.prepareType(mapType(p, this.checker));
         });
-        const type = this.isJavaScriptSourceFile(fn.getSourceFile())
-            ? this.javaScriptFunctionValueType(fn)
+        const type = hasCanonicalValueFormals(fn)
+            ? this.sourceFunctionValueType(fn)
             : this.prepareType(functionType(
                 params,
                 this.prepareType(mapTsType(fn, sig!.getReturnType(), this.checker)),
@@ -41133,12 +41210,12 @@ class Emitter {
         const envParam = this.freshTemp("_envp");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const paramNames = runtimeParams.map((p, i) =>
-            this.isJavaScriptSourceFile(fn.getSourceFile())
-                ? this.javaScriptFormalRawParameterName(p, i)
+            hasCanonicalValueFormals(fn)
+                ? this.sourceFormalRawParameterName(p, i)
                 : ts.isIdentifier(p.name) ? mangleIdent(p.name.text) : `_param${i}`,
         );
         const paramDecls = runtimeParams.map((p, i) => {
-            if (!this.isJavaScriptSourceFile(fn.getSourceFile()) &&
+            if (!hasCanonicalValueFormals(fn) &&
                 !this.isSupportedInlineClosureParameter(p)) {
                 unsupported(p, "unsupported closure parameter shape");
             }
@@ -41183,9 +41260,9 @@ class Emitter {
         const argumentScope = new Map<ts.Symbol, string>();
         const argumentTypeScope = new Map<ts.Symbol, CType>();
         const capturedCells = this.capturedCellsFor(fn);
-        const javaScriptFormalPlans = this.isJavaScriptSourceFile(fn.getSourceFile()) &&
+        const sourceFormalPlans = hasCanonicalValueFormals(fn) &&
             !this.isGeneratorDeclaration(fn)
-            ? this.emitJavaScriptFormalBindingStorage(
+            ? this.emitSourceFormalBindingStorage(
                 body,
                 fn,
                 paramNames,
@@ -41195,7 +41272,7 @@ class Emitter {
                 envBindings,
             )
             : null;
-        if (!javaScriptFormalPlans) for (let i = 0; i < runtimeParams.length; i++) {
+        if (!sourceFormalPlans) for (let i = 0; i < runtimeParams.length; i++) {
             const parameter = runtimeParams[i]!;
             const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
             const emitter = this;
@@ -41364,7 +41441,7 @@ class Emitter {
         this.closureEnvScopes.push(envBindings);
         this.argumentValueScopes.push(argumentScope);
         this.argumentValueTypeScopes.push(argumentTypeScope);
-        if (javaScriptFormalPlans) this.formalParameterScopes.push(javaScriptFormalPlans);
+        if (sourceFormalPlans) this.formalParameterScopes.push(sourceFormalPlans);
         // A closure implementation is emitted recursively at its creation
         // site, but executes as a distinct ECMAScript function.  Do not let
         // the enclosing function's control context reinterpret this body's
@@ -41409,12 +41486,12 @@ class Emitter {
                     : null;
                 try {
                     this.emitAsyncFunctionBoundary(body, isAsync, () => {
-                        if (javaScriptFormalPlans) {
-                            this.emitJavaScriptFormalParameterInitialization(
+                        if (sourceFormalPlans) {
+                            this.emitSourceFormalParameterInitialization(
                                 body,
                                 fn,
                                 paramNames,
-                                javaScriptFormalPlans,
+                                sourceFormalPlans,
                             );
                             this.emitCallActivationConfiguration(body, fn, capturedCells);
                         } else {
@@ -41436,7 +41513,7 @@ class Emitter {
                                 }
                                 this.emitStmtList(body, fnBody.statements);
                                 if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
-                                else if (this.isJavaScriptSourceFile(fn.getSourceFile()) && ret.kind !== "void" && ret.kind !== "never") {
+                                else if (hasCanonicalValueFormals(fn) && ret.kind !== "void" && ret.kind !== "never") {
                                     body.line(`return ${this.zeroValue(ret)};`);
                                 }
                             }
@@ -41483,7 +41560,7 @@ class Emitter {
             this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;
             this.asyncFunctionStack = outerAsyncFunctionStack;
             this.functionActivationBindings = outerFunctionActivationBindings;
-            if (javaScriptFormalPlans) this.formalParameterScopes.pop();
+            if (sourceFormalPlans) this.formalParameterScopes.pop();
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
             this.closureEnvScopes.pop();
@@ -50286,7 +50363,7 @@ class Emitter {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
         const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
-            ? this.javaScriptFunctionValueType(info.fn)
+            ? this.sourceFunctionValueType(info.fn)
             : null;
         const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
         const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);
@@ -50304,7 +50381,7 @@ class Emitter {
         const sig = this.checker.getSignatureFromDeclaration(info.fn);
         if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
         const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
-            ? this.javaScriptFunctionValueType(info.fn)
+            ? this.sourceFunctionValueType(info.fn)
             : null;
         const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
         const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);

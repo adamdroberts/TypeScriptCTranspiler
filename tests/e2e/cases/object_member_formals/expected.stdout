@@ -1,0 +1,9 @@
+default true true 0
+actual true true 1
+pattern true 17 true true
+capture true
+scope 17 true
+native 7 true
+async true
+generator true false true true
+effects 6
