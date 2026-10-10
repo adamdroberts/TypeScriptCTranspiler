@@ -686,6 +686,8 @@ void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
 tsc_value_t tsc_call_receiver(void);
 tsc_value_t tsc_call_arguments(void);
 tsc_value_t tsc_value_current_callee(void);
+tsc_value_t tsc_value_current_home_object(void);
+tsc_value_t tsc_value_function_with_home_object(tsc_value_t function, tsc_value_t home_object);
 tsc_value_t tsc_value_current_new_target(void);
 void* tsc_value_callee_checkpoint(void);
 void tsc_value_callee_restore(void* checkpoint);

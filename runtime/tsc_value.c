@@ -440,6 +440,8 @@ tsc_value_t tsc_value_function_named_kind(
     id->class_elements = NULL;
     id->class_constructor_body = tsc_value_undefined();
     id->class_constructor_body_root = NULL;
+    id->home_object = tsc_value_undefined();
+    id->home_object_root = NULL;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
@@ -3515,6 +3517,23 @@ void tsc_value_class_set_constructor_body(tsc_value_t constructor, tsc_value_t b
     if (!tsc_value_define_property_desc(constructor, tsc_str_from_lit("length", 6),
             tsc_value_num(body_identity->length), true, false, true, false, true, true, true))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor length definition failed"));
+}
+
+tsc_value_t tsc_value_function_with_home_object(tsc_value_t function, tsc_value_t home_object) {
+    if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION ||
+        !tsc_value_is_object(home_object))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("method requires a callable and home object"));
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(function);
+    identity->home_object = home_object;
+    identity->home_object_root = tsc_value_gc_root(home_object);
+    return function;
+}
+
+tsc_value_t tsc_value_current_home_object(void) {
+    tsc_value_t function = tsc_value_current_callee();
+    if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION)
+        return tsc_value_undefined();
+    return ((tsc_function_identity_t*)value_ptr(function))->home_object;
 }
 
 tsc_value_t tsc_value_class_construct_body(tsc_value_t constructor, tsc_value_t receiver, tsc_array_t* arguments) {

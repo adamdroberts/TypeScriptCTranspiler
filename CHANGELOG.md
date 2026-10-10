@@ -273,6 +273,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Retain callable home objects and separate super receivers through canonical property References, lexical arrows and suspended operation graphs; preserve the pinned 2026 normalized ReferencedName across reads and writes.
+
 - Lower dynamic base constructors through canonical formals and invocation records, retaining actual arguments, receiver, class callee and newTarget; initialize base fields before defaults and configure strict arguments before parameter evaluation.
 
 - Initialize dynamic class fields and static blocks through one retained ordered element list, with GC roots, lexical captures, suspension and class name inference before static definitions.

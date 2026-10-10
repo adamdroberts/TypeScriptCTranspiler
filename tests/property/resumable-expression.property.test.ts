@@ -44,10 +44,12 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
         return values[reference.key] = key(values[reference.key]);
     };
     const get = (reference: ResumableReference): any => reference.kind === "binding"
-        ? environment[reference.identifier.text] : values[reference.base][propertyKey(reference)];
+        ? environment[reference.identifier.text] : Reflect.get(values[reference.base], propertyKey(reference),
+            reference.receiver === undefined ? values[reference.base] : values[reference.receiver]);
     const set = (reference: ResumableReference, value: any): void => {
         if (reference.kind === "binding") environment[reference.identifier.text] = value;
-        else Reflect.set(values[reference.base], propertyKey(reference), value);
+        else Reflect.set(values[reference.base], propertyKey(reference), value,
+            reference.receiver === undefined ? values[reference.base] : values[reference.receiver]);
     };
     let pc = plan.entry;
     for (;;) {
@@ -84,6 +86,8 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
                 result = new Function("left", "right", `return left ${spelling.slice(0, -1)} right;`)(values[op.left], values[op.right]);
             } else if (op.kind === "arguments" || op.kind === "array") result = [];
             else if (op.kind === "object") result = {};
+            else if (op.kind === "super-this") result = environment.thisValue;
+            else if (op.kind === "super-base") result = Object.getPrototypeOf(environment.homeObject);
             else if (op.kind === "call") result = op.construct
                 ? Reflect.construct(values[op.callee], values[op.arguments])
                 : Reflect.apply(values[op.callee], op.receiver === null ? undefined : values[op.receiver], values[op.arguments]);
@@ -204,9 +208,32 @@ test("one worklist retains a deep expression tree without recursive lowering", (
 });
 
 test("unrepresented suspending operations fail closed with a stable diagnostic", () => {
-    const result = planResumableExpression(parse('super.method(yield 1)'));
+    const result = planResumableExpression(parse('object.#method(yield 1)'));
     expect(result.kind).toBe("unsupported");
     if (result.kind !== "unsupported") throw new Error("unrepresented operation was admitted");
     expect(result.failure.message).toBe("resumable expression requires a canonical operation");
     expect(ts.isPropertyAccessExpression(result.failure.node)).toBeTrue();
+});
+
+
+test("super References retain the actual receiver, captured base and normalized name", () => {
+    const effects: string[] = [], receiver = {}, base = {first: 2, second: 30}, homeObject = Object.create(base);
+    let conversions = 0;
+    const key = {[Symbol.toPrimitive]() { effects.push("key"); return conversions++ === 0 ? "first" : "second"; }};
+    const env = {thisValue: receiver, homeObject, key, right: 3, effects};
+    const result = execute(graph("super[key] += yield right"), env);
+    expect(result.next().value).toBe(3);
+    Object.setPrototypeOf(homeObject, {first: 99});
+    expect(result.next(4)).toEqual({value: 6, done: true});
+    expect(receiver).toEqual({first: 6});
+    expect(base).toEqual({first: 2, second: 30});
+    expect(effects).toEqual(["key"]);
+});
+
+
+test("a parenthesized optional callee evaluates suspended arguments before failing", () => {
+    const invocation = execute(graph("(absent?.method)(yield 1)"), {absent: null});
+    expect(invocation.next()).toEqual({value: 1, done: false});
+    expect(() => invocation.next(2)).toThrow(TypeError);
+    expect(execute(graph("absent?.method(yield 1)"), {absent: null}).next()).toEqual({value: undefined, done: true});
 });

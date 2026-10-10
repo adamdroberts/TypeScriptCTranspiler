@@ -191,6 +191,8 @@ typedef struct tsc_function_identity {
     tsc_realm_t* realm;
     tsc_parse_unit_t* parse_unit;
     tsc_environment_t* lexical_environment;
+    tsc_value_t home_object;
+    void* home_object_root;
     /* OrdinaryCreateFromConstructor resolves this intrinsic in newTarget's
      * Realm whenever newTarget.prototype is not an Object. */
     tsc_intrinsic_default_prototype_kind_t construct_default_prototype;

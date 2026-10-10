@@ -6,11 +6,13 @@ export type ResumableExpressionTarget = number;
 export type ResumableReference =
     | { readonly kind: "binding"; readonly identifier: ts.Identifier }
     | { readonly kind: "property"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression;
-        readonly base: ResumableValueSlot; readonly key: ResumableValueSlot };
+        readonly base: ResumableValueSlot; readonly key: ResumableValueSlot; readonly receiver?: ResumableValueSlot };
 
 type ValueOperation =
     | { readonly kind: "evaluate"; readonly expression: ts.Expression;
         readonly inputs: readonly { readonly expression: ts.Expression; readonly slot: ResumableValueSlot }[] }
+    | { readonly kind: "super-this"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression }
+    | { readonly kind: "super-base"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression }
     | { readonly kind: "copy"; readonly source: ResumableValueSlot }
     | { readonly kind: "undefined" }
     | { readonly kind: "property-key"; readonly source: ResumableValueSlot }
@@ -119,12 +121,15 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         if (!ts.isPropertyAccessExpression(current) && !ts.isElementAccessExpression(current)) {
             reject(current); return complete;
         }
-        if (current.questionDotToken && chainExit === undefined || current.expression.kind === ts.SyntaxKind.SuperKeyword ||
+        if (current.questionDotToken && chainExit === undefined ||
             ts.isPropertyAccessExpression(current) && ts.isPrivateIdentifier(current.name)) {
             reject(current); return complete;
         }
         const base = value(current.expression), key = value(current);
-        const next = consumer({ kind: "property", node: current, base, key });
+        const superReference = current.expression.kind === ts.SyntaxKind.SuperKeyword;
+        const receiver = superReference ? value(current.expression) : undefined;
+        const reference: ResumableReference = { kind: "property", node: current, base, key, receiver };
+        const next = superReference ? operation({ kind: "super-base", node: current }, base, consumer(reference)) : consumer(reference);
         let keyEntry: number;
         if (ts.isPropertyAccessExpression(current)) {
             keyEntry = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(current.name.text), inputs: [] }, key, next);
@@ -134,7 +139,8 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         }
         if (current.questionDotToken) keyEntry = put({ kind: "branch", id: reserve(), source: base,
             mode: "nullish", yes: chainExit!, no: keyEntry });
-        return build(current.expression, base, keyEntry, chainExit);
+        return superReference ? operation({ kind: "super-this", node: current }, receiver!, keyEntry)
+            : build(current.expression, base, keyEntry, chainExit);
     };
 
     const buildOrdered = (children: readonly { expression: ts.Expression; slot: number }[], next: number): number => {
@@ -176,24 +182,14 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                 yes: skip, no: argumentsEntry });
         }
         if (!targetIsProperty) return build(targetExpression, callee, argumentsEntry, ts.isOptionalChain(node) ? skip : undefined);
-        if (target.expression.kind === ts.SyntaxKind.SuperKeyword ||
-            ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {
-            reject(target); return complete;
-        }
-        const key = value(target);
-        let get = operation({ kind: "get", reference: { kind: "property", node: target, base: receiver!, key } }, callee, argumentsEntry);
-        if (ts.isPropertyAccessExpression(target)) {
-            get = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(target.name.text), inputs: [] }, key, get);
-        } else {
-            const raw = value(target.argumentExpression);
-            get = build(target.argumentExpression, raw, copy(raw, key, get));
-        }
         const calleeExit = ts.isOptionalChain(node) && !ts.isParenthesizedExpression(targetExpression)
             ? skip : operation({ kind: "undefined" }, callee, argumentsEntry);
-        if (target.questionDotToken) {
-            get = put({ kind: "branch", id: reserve(), source: receiver!, mode: "nullish", yes: calleeExit, no: get });
-        }
-        return build(target.expression, receiver!, get, calleeExit);
+        return buildReference(target, reference => {
+            if (reference.kind !== "property") throw new Error("property call requires a property Reference");
+            const get = operation({ kind: "get", reference }, callee, argumentsEntry);
+            return copy(reference.receiver ?? reference.base, receiver!, get);
+        }, calleeExit);
+
     };
 
     const buildLiteral = (node: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression, output: number, next: number): number => {
