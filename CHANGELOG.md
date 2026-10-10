@@ -1,5 +1,7 @@
 # Changelog
 
+- Share typed object member receiver activation and inferred actual results with ordinary callable/value worklists. Preserve accessors, borrowed/bound calls, lexical arrows and suspended owners; emit native type forwards before callable structs and verify independent Node semantics plus typed source E2E in both memory modes.
+
 - Lower suspended binding and assignment patterns through the shared tree and resumable worklist. Retain real Iterator Records, saved References, normalized Symbol/source keys, actual defaults and nested close completions; remove indexed/direct-write predecessors and verify native semantics and typed module E2E in both memory modes.
 
 - Project ordinary destructuring assignments onto the shared binding tree and retained Reference leaves. Preserve evaluation/default/rest/close ordering, strict and immutable write errors, actual values and source identity; verify independent Node semantics, deep assignment and typed E2E in both memory modes.

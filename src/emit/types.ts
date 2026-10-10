@@ -208,18 +208,15 @@ function explicitThisParameter(node: ts.Node): ts.ParameterDeclaration | null {
     return null;
 }
 
-/**
- * JavaScript ordinary functions always have a runtime `this` binding even
- * when TypeScript's structural call signature omits a synthetic this symbol.
- * Arrow functions are deliberately excluded because their binding is lexical.
- */
-export function hasImplicitJavaScriptThis(node: ts.Node): boolean {
-    if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
-    return ts.isFunctionDeclaration(node) ||
-        ts.isFunctionExpression(node) ||
-        ts.isMethodDeclaration(node) ||
-        ts.isGetAccessorDeclaration(node) ||
+/** Ordinary object members and JavaScript functions receive the actual
+ * runtime `this` even when the structural signature omits a this symbol.
+ * Arrow functions retain their separate lexical activation binding. */
+export function hasImplicitValueThis(node: ts.Node): boolean {
+    const member = ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
         ts.isSetAccessorDeclaration(node);
+    if (member && node.parent && ts.isObjectLiteralExpression(node.parent)) return true;
+    if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
+    return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || member;
 }
 
 /** Convert CType.kind to the tsc_key_kind_t enum used in runtime. */
@@ -425,7 +422,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 if (thisParamType && thisParamType.kind !== "value" && thisParamType.kind !== "class" && thisParamType.kind !== "eventemitter" && thisParamType.kind !== "eventtarget") {
                     unsupported(decl, "function this parameters are currently supported only as any/unknown, class instances, EventEmitter, or EventTarget");
                 }
-            } else if (hasImplicitJavaScriptThis(signatureDeclaration)) {
+            } else if (hasImplicitValueThis(signatureDeclaration)) {
                 thisParamType = T_VALUE;
             }
         }

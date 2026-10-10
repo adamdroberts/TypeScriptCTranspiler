@@ -1,0 +1,6 @@
+own 23 true
+borrow 29 23 true
+arrow true
+native 42
+retained true true true
+generator true false true true

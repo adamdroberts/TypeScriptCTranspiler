@@ -1,0 +1,1 @@
+{"description":"Typed object member closures retain their actual receivers across accessors, borrowed calls, lexical arrows and suspension, including explicit native receiver ABI dependencies through source modules."}

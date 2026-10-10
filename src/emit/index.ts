@@ -15,7 +15,7 @@ import {
     entryType,
     functionType,
     getArrayElementType,
-    hasImplicitJavaScriptThis,
+    hasImplicitValueThis,
     keyKindOf,
     mapType,
     mapTsType,
@@ -599,6 +599,7 @@ class Emitter {
     private genericCounter = 0;
     private genericSpecializations = new Map<string, string>();
     private functionTypes = new Set<string>();
+    private nativeTypeForwards = new Set<string>();
     private closureCounter = 0;
     private functionRefAdapters = new Map<string, string>();
     private functionRefClosureStatics = new Map<string, string>();
@@ -781,6 +782,9 @@ class Emitter {
 
     private prepareType(type: CType): CType {
         switch (type.kind) {
+            case "class":
+                if (type.className) this.nativeTypeForwards.add(type.className);
+                break;
             case "array":
             case "entry":
             case "set":
@@ -797,6 +801,7 @@ class Emitter {
                 if (type.elem) this.prepareType(type.elem);
                 break;
             case "function":
+                if (type.thisParam) this.prepareType(type.thisParam);
                 for (const param of type.params ?? []) this.prepareType(param);
                 if (type.ret) this.prepareType(type.ret);
                 this.ensureFunctionType(type);
@@ -14630,6 +14635,9 @@ class Emitter {
         );
         out.line('#include "tsc_runtime.h"');
         out.line();
+        for (const name of this.nativeTypeForwards)
+            out.line(`typedef struct ${name}_t ${name}_t;`);
+        if (this.nativeTypeForwards.size) out.line();
         if (this.structDecls.toString().length > 0) {
             out.write(this.structDecls.toString());
             out.line();
@@ -14972,22 +14980,20 @@ class Emitter {
             this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
             this.emitTopLevelLexicalInitializationStateInstantiation(instantiationBuf, sf);
             this.emitSourceModuleEnvironment(instantiationBuf, initBuf, sf);
-            // Pass A: struct forward-decls + typedefs for classes & interfaces.
+            // Named source types join the same dependency collection as
+            // callable parameter, receiver and result types. All forwards
+            // precede every generated struct, independent of emission order.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
-                    this.structDecls.line(
-                        `typedef struct ${nativeTypeName(inner)}_t ${nativeTypeName(inner)}_t;`,
-                    );
+                    this.nativeTypeForwards.add(nativeTypeName(inner));
                 }
                 if (inner && ts.isInterfaceDeclaration(inner) && inner.name) {
-                    this.structDecls.line(
-                        `typedef struct ${nativeTypeName(inner)}_t ${nativeTypeName(inner)}_t;`,
-                    );
+                    this.nativeTypeForwards.add(nativeTypeName(inner));
                 }
             }
             for (const classExpr of commonJsClassExpressions) {
                 if (!classExpr.name) unsupported(classExpr, "CommonJS module.exports class default requires a named class expression");
-                this.structDecls.line(`typedef struct ${nativeTypeName(classExpr)}_t ${nativeTypeName(classExpr)}_t;`);
+                this.nativeTypeForwards.add(nativeTypeName(classExpr));
             }
             // Pass B: struct bodies.
             for (const inner of statements) {
@@ -23783,7 +23789,8 @@ class Emitter {
             if (declaration && ts.isFunctionLike(declaration) &&
                 "body" in declaration && declaration.body && signature?.getReturnType() === type &&
                 this.expressionHasOrdinaryNativeOwnerResult(declaration)) {
-                return this.isAsyncDeclaration(declaration) ? promiseType(T_VALUE) : T_VALUE;
+                return this.isAsyncDeclaration(declaration) && !this.isGeneratorDeclaration(declaration)
+                    ? promiseType(T_VALUE) : T_VALUE;
             }
             return null;
         };
@@ -23935,6 +23942,20 @@ class Emitter {
                 else dependents.set(child, [node]);
                 pending.push(child);
             };
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                for (let owner: ts.Node | undefined = node.parent; owner; owner = owner.parent) {
+                    if (ts.isClassLike(owner)) break;
+                    if (!ts.isFunctionLike(owner) || ts.isArrowFunction(owner)) continue;
+                    if ((ts.isMethodDeclaration(owner) || ts.isGetAccessorDeclaration(owner) ||
+                        ts.isSetAccessorDeclaration(owner)) && ts.isComputedPropertyName(owner.name) &&
+                        this.isNodeWithin(node, owner.name)) continue;
+                    if (owner.parent && ts.isObjectLiteralExpression(owner.parent) &&
+                        hasImplicitValueThis(owner) && !this.explicitThisParameter(owner) &&
+                        !this.checker.getSignatureFromDeclaration(owner as ts.SignatureDeclaration)?.thisParameter)
+                        admitPositive(node);
+                    break;
+                }
+            }
             if (ts.isFunctionLike(node)) {
                 if ("body" in node && node.body) {
                     if (!ts.isBlock(node.body)) dependency(node.body);
@@ -25400,7 +25421,7 @@ class Emitter {
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
         const ret = isAsync && !isGenerator ? promiseType(T_VALUE) : T_VALUE;
-        const thisType = hasImplicitJavaScriptThis(fn) ? T_VALUE : undefined;
+        const thisType = hasImplicitValueThis(fn) ? T_VALUE : undefined;
         return this.prepareType(functionType(params, ret, thisType ?? undefined,
             runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
@@ -25870,8 +25891,7 @@ class Emitter {
         fn: ts.FunctionLikeDeclaration,
         capturedCells: ReadonlyMap<ts.Symbol, CaptureCell>,
     ): void {
-        if (!this.isJavaScriptSourceFile(fn.getSourceFile()) ||
-            ts.isArrowFunction(fn) ||
+        if (!hasImplicitValueThis(fn) ||
             !this.functionUsesOwnArgumentsObject(fn)) return;
         const strict = this.functionHasStrictThisBinding(fn);
         if (!this.functionHasMappedArgumentsObject(fn)) {
@@ -29025,7 +29045,7 @@ class Emitter {
     private signatureThisType(sig: ts.Signature, node: ts.Node): CType | null {
         if ((ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) &&
             isStatic(node)) return T_VALUE;
-        if (hasImplicitJavaScriptThis(node)) return T_VALUE;
+        if (this.isJavaScriptSourceFile(node.getSourceFile()) && hasImplicitValueThis(node)) return T_VALUE;
         const thisParam = sig.thisParameter;
         let ty: CType | null = null;
         if (thisParam) {
@@ -29039,7 +29059,7 @@ class Emitter {
             const explicit = this.explicitThisParameter(node);
             if (explicit) {
                 ty = this.prepareType(mapType(explicit, this.checker));
-            } else if (hasImplicitJavaScriptThis(node)) {
+            } else if (hasImplicitValueThis(node)) {
                 ty = T_VALUE;
             }
         }
@@ -29069,7 +29089,7 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         const source = decl && ts.isVariableDeclaration(decl) && decl.initializer ? decl.initializer : decl;
         if (source && this.isJavaScriptSourceFile(source.getSourceFile()))
-            return hasImplicitJavaScriptThis(source) ? T_VALUE : null;
+            return hasImplicitValueThis(source) ? T_VALUE : null;
         const sig = this.checker.getTypeAtLocation(id).getCallSignatures()[0];
         if (!sig) return null;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
@@ -58510,8 +58530,7 @@ class Emitter {
                 ? node
                 : null;
         const createsActivation = !!sourceFunction &&
-            this.isJavaScriptSourceFile(sourceFunction.getSourceFile()) &&
-            !ts.isArrowFunction(sourceFunction);
+            hasImplicitValueThis(sourceFunction);
         const normalizesSloppyThis = createsActivation &&
             !!sourceFunction &&
             !this.functionHasStrictThisBinding(sourceFunction);
