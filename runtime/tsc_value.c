@@ -9054,6 +9054,10 @@ tsc_value_t tsc_builtin_math(void) {
                     false
                 );
             }
+            (void)tsc_value_define_symbol_property_desc(tsc_value_object(built),
+                tsc_symbol_to_string_tag(), tsc_value_string(tsc_str_from_lit("Math", 4)),
+                true, false, true, false, true, true, true);
+            tsc_math_random_initialize();
             state->math = built;
             math = built;
         }

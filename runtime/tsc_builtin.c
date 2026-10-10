@@ -389,8 +389,31 @@ double tsc_parse_int(const tsc_str_t* s, double radix) {
     return negative && result == 0.0 ? -0.0 : result;
 }
 
+typedef struct { uint64_t position; } tsc_math_random_state_t;
+static const char math_random_realm_state_key = 0;
+static uint64_t math_random_realm_sequence = 0;
+
+/* Math creation assigns one distinct seed to its Realm. The full-period
+ * Weyl progression and bijective SplitMix64 mixer distribute 53-bit samples
+ * on [0, 1); another Realm cannot advance this retained progression. */
+void tsc_math_random_initialize(void) {
+    tsc_runtime_lock();
+    if (!tsc_realm_state_get(&math_random_realm_state_key)) {
+        tsc_math_random_state_t* state = TSC_GC_MALLOC(sizeof(*state));
+        state->position = splitmix64_mix(++math_random_realm_sequence);
+        tsc_realm_state_set(&math_random_realm_state_key, state);
+    }
+    tsc_runtime_unlock();
+}
+
 double tsc_math_random(void) {
-    return (double)rand() / ((double)RAND_MAX + 1.0);
+    tsc_math_random_initialize();
+    tsc_runtime_lock();
+    tsc_math_random_state_t* state = tsc_realm_state_get(&math_random_realm_state_key);
+    state->position += UINT64_C(0x9e3779b97f4a7c15);
+    uint64_t sample = splitmix64_mix(state->position) >> 11;
+    tsc_runtime_unlock();
+    return (double)sample * 0x1p-53;
 }
 
 double tsc_math_round(double x) {

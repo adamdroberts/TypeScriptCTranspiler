@@ -1205,6 +1205,7 @@ declare const Infinity: number;
 declare const undefined: undefined;
 
 interface Math {
+    readonly [Symbol.toStringTag]: string;
     readonly PI: number;
     readonly E: number;
     readonly LN2: number;

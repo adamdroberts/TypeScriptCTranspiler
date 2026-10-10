@@ -88,6 +88,8 @@ struct tsc_realm {
 tsc_realm_t* tsc_realm_new(void);
 void* tsc_realm_state_get(const void* key);
 void tsc_realm_state_set(const void* key, void* value);
+/* Initialize the random stream when the owning Math intrinsic is created. */
+void tsc_math_random_initialize(void);
 
 _Static_assert(TSC_VALUE_TAG_SYMBOL < 16, "dynamic value tags must fit the NaN-box tag field");
 
