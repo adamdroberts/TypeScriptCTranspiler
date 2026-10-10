@@ -14,6 +14,8 @@ interface ImportCallOptions {
 
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
+    readonly [Symbol.toStringTag]: string;
+    [Symbol.toPrimitive](hint?: any, ...ignored: any[]): symbol;
     readonly description: string | undefined;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
@@ -25,9 +27,9 @@ interface SymbolConstructor {
     readonly matchAll: unique symbol;
     readonly search: unique symbol;
     readonly replace: unique symbol;
-    (description?: string, ...ignored: any[]): symbol;
-    for(key: string, ...ignored: any[]): symbol;
-    keyFor(sym: symbol, ...ignored: any[]): string | undefined;
+    (description?: any, ...ignored: any[]): symbol;
+    for(key: any, ...ignored: any[]): symbol;
+    keyFor(sym: any, ...ignored: any[]): string | undefined;
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
     readonly asyncDispose: symbol;

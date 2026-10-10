@@ -150,7 +150,7 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
 
 // These ordinary global owners share Realm References, member calls and the
 // canonical source-value dependency graph independently of method signatures.
-const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean"]);
+const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean", "Symbol"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -669,6 +669,7 @@ class Emitter {
     private valueFunctionAdapters = new Map<string, string>();
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
+    private classComputedMemberKeys = new Map<ts.ComputedPropertyName, string>();
     private defaultClassConstructAdapter: string | null = null;
     private nativeObjectValueInitializers = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
@@ -1381,8 +1382,7 @@ class Emitter {
                     ORDINARY_OBJECT_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     (ts.isIdentifier(expr.expression.expression) &&
                         ORDINARY_REALM_GLOBAL_OWNERS.has(expr.expression.expression.text)))) return false;
-            return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
-                this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
+            return this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveObjectValueOfCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveMethodCall(expr, seenConsts) ||
@@ -1462,15 +1462,6 @@ class Emitter {
                 return true;
             }
             if (this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts)) {
-                return true;
-            }
-            if (this.isSideEffectFreeSymbolDescriptionRead(expr, seenConsts)) {
-                return true;
-            }
-            if (this.isSideEffectFreeWellKnownSymbolRead(expr)) {
-                return true;
-            }
-            if (false) {
                 return true;
             }
             if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
@@ -1590,12 +1581,6 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1633,9 +1618,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -1752,12 +1734,6 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1792,9 +1768,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -2114,25 +2087,6 @@ class Emitter {
                         value >= 0 &&
                         value <= 0x10ffff;
                 });
-            }
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Symbol")
-        ) {
-            if (method === "for") {
-                return call.arguments.length >= 1 &&
-                    this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
-                    Array.from(call.arguments).slice(1).every((arg) =>
-                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                    );
-            }
-            if (method === "keyFor") {
-                return call.arguments.length === 1 &&
-                    (
-                        this.isSideEffectFreeFreshSymbolOperand(call.arguments[0]!, seenConsts) ||
-                        this.isSideEffectFreeWellKnownSymbolRead(call.arguments[0]!)
-                    );
             }
         }
         if (
@@ -6485,12 +6439,6 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -6525,9 +6473,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -6578,12 +6523,6 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeSymbolStringDescriptionRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -6618,9 +6557,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -6734,18 +6670,6 @@ class Emitter {
                     (
                         this.isSideEffectFreePrimitiveNumberCoercion(errorArgs[0]!, seenConsts) &&
                         errorArgs.slice(1).every((arg) =>
-                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                        )
-                    )
-                );
-        }
-        if (name === "Symbol") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                (
-                    call.arguments.length === 0 ||
-                    (
-                        this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
-                        Array.from(call.arguments).slice(1).every((arg) =>
                             this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                         )
                     )
@@ -8041,19 +7965,7 @@ class Emitter {
         if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeSymbolDescriptionRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeSymbolStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeWellKnownSymbolRead(unwrapped)) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeProcessPrimitiveMetadataRead(unwrapped)) {
@@ -8117,7 +8029,6 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             (
-                unwrapped.expression.text === "Symbol" ||
                 unwrapped.expression.text === "Date" ||
                 unwrapped.expression.text === "parseInt" ||
                 unwrapped.expression.text === "parseFloat" ||
@@ -9140,9 +9051,6 @@ class Emitter {
             unwrapped.name.text === "length" &&
             this.isSideEffectFreeLengthOperand(unwrapped.expression, seenConsts)
         ) {
-            return true;
-        }
-        if (false) {
             return true;
         }
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
@@ -11269,68 +11177,6 @@ class Emitter {
             );
     }
 
-    private isSideEffectFreeSymbolDescriptionRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
-        return this.isSideEffectFreeFreshSymbolOperand(expr.expression, seenConsts) ||
-            this.isSideEffectFreeWellKnownSymbolRead(expr.expression);
-    }
-
-    private isSideEffectFreeSymbolStringDescriptionRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isPropertyAccessExpression(expr) || expr.name.text !== "description") return false;
-        const recv = this.unwrapSideEffectFreeStaticExpression(expr.expression);
-        if (this.isSideEffectFreeWellKnownSymbolRead(recv)) return true;
-        if (
-            ts.isCallExpression(recv) &&
-            ts.isIdentifier(recv.expression) &&
-            this.isUnshadowedGlobalIdentifier(recv.expression, "Symbol") &&
-            recv.arguments.length >= 1 &&
-            this.isSideEffectFreeStringCoercion(recv.arguments[0]!, seenConsts) &&
-            Array.from(recv.arguments).slice(1).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            )
-        ) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(recv, seenConsts);
-        return !!init && this.isSideEffectFreeSymbolStringDescriptionRead(
-            ts.factory.createPropertyAccessExpression(init, "description"),
-            seenConsts,
-        );
-    }
-
-    private isSideEffectFreeSymbolStringMethodCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-            return !!init && this.isSideEffectFreeSymbolStringMethodCall(init, seenConsts);
-        }
-        const method = unwrapped.expression.name.text;
-        return (
-            method === "toString" ||
-            method === "toLocaleString"
-        ) &&
-            (
-                this.isSideEffectFreeFreshSymbolOperand(unwrapped.expression.expression, seenConsts) ||
-                this.isSideEffectFreeWellKnownSymbolRead(unwrapped.expression.expression)
-            ) &&
-            Array.from(unwrapped.arguments).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-    }
-
-    private isSideEffectFreeWellKnownSymbolRead(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) !== null;
-    }
-
     private isSideEffectFreeProcessPrimitiveMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
         if (!this.isUnshadowedGlobalIdentifier(expr.expression, "process")) return false;
@@ -11859,22 +11705,6 @@ class Emitter {
             recv.name.text === "EventEmitter" &&
             ts.isIdentifier(recv.expression) &&
             this.isEventsModuleIdentifier(recv.expression);
-    }
-
-    private isSideEffectFreeFreshSymbolOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const recv = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(recv) &&
-            ts.isIdentifier(recv.expression) &&
-            this.isUnshadowedGlobalIdentifier(recv.expression, "Symbol")
-        ) {
-            return this.isSideEffectFreeGlobalCall(recv, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(recv, seenConsts);
-        return !!init && this.isSideEffectFreeFreshSymbolOperand(init, seenConsts);
     }
 
     private isSideEffectFreeFreshRegExpOperand(
@@ -12610,7 +12440,7 @@ class Emitter {
             if (new Set([
                 "Array", "Error", "EvalError", "Function",
                 "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
-                "RegExp", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
+                "RegExp", "SuppressedError", "SyntaxError", "TypeError",
                 "URIError",
             ]).has(unwrapped.text)) {
                 return "function";
@@ -12988,9 +12818,6 @@ class Emitter {
             ts.isNumericLiteral(unwrapped) ||
             ts.isBigIntLiteral(unwrapped)
         ) {
-            return true;
-        }
-        if (this.isSupportedWellKnownSymbolExpression(unwrapped)) {
             return true;
         }
         if (
@@ -25849,12 +25676,20 @@ class Emitter {
 
     private classMemberPropertyKey(name: ts.PropertyName): { publicName: string; propertyKey: string } {
         if (ts.isPrivateIdentifier(name)) unsupported(name, "class member key is outside the canonical definition plan");
-        const symbol = ts.isComputedPropertyName(name) ? this.wellKnownSymbolName(name.expression) : null;
-        const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name);
+        if (ts.isComputedPropertyName(name)) {
+            const symbol = this.wellKnownSymbolName(name.expression);
+            const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name) ?? `[computed:${name.pos}]`;
+            let key = this.classComputedMemberKeys.get(name);
+            if (!key) {
+                key = this.freshTemp("_class_computed_key");
+                this.classComputedMemberKeys.set(name, key);
+                this.protos.line(`static tsc_str_t* ${key};`);
+            }
+            return { publicName, propertyKey: key };
+        }
+        const publicName = this.staticPropertyName(name);
         if (publicName === null) unsupported(name, "class member key is outside the canonical definition plan");
-        return { publicName, propertyKey: symbol
-            ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
-            : this.stringLit(publicName) };
+        return { publicName, propertyKey: this.stringLit(publicName) };
     }
 
     private nativeInstanceFieldDescriptors(cd: ts.ClassDeclaration): { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; type: CType }[] {
@@ -26016,7 +25851,14 @@ class Emitter {
             if (!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) || !member.body) continue;
             const { propertyKey: key } = this.classMemberPropertyKey(member.name);
             const target = isStatic(member) ? "_class_constructor" : "_class_prototype";
-            const value = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
+            if (ts.isComputedPropertyName(member.name)) {
+                const evaluated = this.emitExpr(member.name.expression);
+                definitions.push(`${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, member.name.expression)})`);
+            }
+            const closure = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
+            const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
+            const value = ts.isComputedPropertyName(member.name)
+                ? `tsc_value_function_with_property_name(${closure}, ${key}, ${prefix})` : closure;
             if (ts.isMethodDeclaration(member)) {
                 definitions.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
             } else {
@@ -30896,23 +30738,6 @@ class Emitter {
             : null;
     }
 
-    private findSymbolIteratorMethod(
-        cd: ts.ClassDeclaration,
-    ): { owner: ts.ClassDeclaration; method: ts.MethodDeclaration } | null {
-        for (const m of cd.members) {
-            if (
-                ts.isMethodDeclaration(m) &&
-                !isStatic(m) &&
-                ts.isComputedPropertyName(m.name) &&
-                this.isSymbolIteratorExpression(m.name.expression)
-            ) {
-                return { owner: cd, method: m };
-            }
-        }
-        const base = this.baseClassDecl(cd);
-        return base ? this.findSymbolIteratorMethod(base) : null;
-    }
-
     private forOfBindingValueWithDefault(
         element: ts.BindingElement,
         value: EmitResult,
@@ -33385,9 +33210,6 @@ class Emitter {
                 this.isUnshadowedGlobalIdentifier(expr, expr.text)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
-                return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
-            }
             if (this.isUnshadowedGlobalIdentifier(expr, "Proxy")) {
                 return { c: "tsc_proxy_constructor_value()", ty: T_VALUE };
             }
@@ -34795,84 +34617,20 @@ class Emitter {
 
         if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
 
-        const left = this.emitExpr(bin.left);
-        const right = this.emitExpr(bin.right);
+        const left = op === ts.SyntaxKind.InKeyword ? this.emitOrdinaryObjectExpression(bin.left) : this.emitExpr(bin.left);
+        const right = op === ts.SyntaxKind.InKeyword ? this.emitOrdinaryObjectExpression(bin.right) : this.emitExpr(bin.right);
 
         if (op === ts.SyntaxKind.CommaToken) {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
 
         switch (op) {
-            case ts.SyntaxKind.InKeyword: {
-                if (right.ty.kind === "class") {
-                    return this.emitTypedObjectHasOwn(
-                        bin.right,
-                        right,
-                        bin.left,
-                        this.checker.getTypeAtLocation(bin.right),
-                        "in",
-                    );
-                }
-                if (right.ty.kind === "array") {
-                    if (this.isSupportedWellKnownSymbolExpression(bin.left) || left.ty.kind === "symbol") {
-                        return this.emitSequencedExpr(T_BOOLEAN, [
-                            { value: right },
-                            { value: left, target: T_SYMBOL, node: bin.left },
-                        ], ([array, key]) => `tsc_value_has_symbol_prop(tsc_value_array(${array}), ${key})`);
-                    }
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: right },
-                        { value: left, target: T_STRING, node: bin.left },
-                    ], ([array, key]) => `tsc_value_has_prop(tsc_value_array(${array}), ${key})`);
-                }
-                if (right.ty.kind === "buffer") {
-                    return this.emitBufferPropertyKeyCheck(bin.right, right, bin.left, true);
-                }
-                if (right.ty.kind !== "value") {
-                    unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
-                }
-                if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: left, target: T_SYMBOL, node: bin.left },
-                            { value: right, target: T_VALUE, node: bin.right },
-                        ],
-                        ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
-                    );
-                }
-                if (left.ty.kind === "symbol") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: left, target: T_SYMBOL, node: bin.left },
-                            { value: right, target: T_VALUE, node: bin.right },
-                        ],
-                        ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
-                    );
-                }
-                if (left.ty.kind === "value") {
-                    return this.emitSequencedExpr(
-                        T_BOOLEAN,
-                        [
-                            { value: left, target: T_VALUE, node: bin.left },
-                            { value: right, target: T_VALUE, node: bin.right },
-                        ],
-                        ([key, obj]) => `tsc_value_has_computed_prop(${obj}, ${key})`,
-                    );
-                }
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: left, target: T_STRING, node: bin.left },
-                        { value: right, target: T_VALUE, node: bin.right },
-                    ],
-                    ([key, obj]) => {
-                        const cache = this.freshTemp("_cache");
-                        return `({ static tsc_prop_cache_t ${cache}; tsc_value_has_prop_cached(${obj}, ${key}, &${cache}); })`;
-                    },
-                );
-            }
+            case ts.SyntaxKind.InKeyword:
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: left, target: T_VALUE, node: bin.left },
+                    { value: right, target: T_VALUE, node: bin.right },
+                ], ([key, object]) => `tsc_value_in(${key}, ${object})`);
+
             case ts.SyntaxKind.MinusToken:
             case ts.SyntaxKind.AsteriskToken:
             case ts.SyntaxKind.SlashToken: {
@@ -35062,7 +34820,7 @@ class Emitter {
         if (!ts.isIdentifier(bin.left)) return null;
         const reference = this.sourceReferencePlan(bin.left);
         if (!reference) return null;
-        const rhs = this.emitExpr(bin.right);
+        const rhs = this.emitOrdinaryObjectExpression(bin.right);
         const value = this.coerce(rhs, T_VALUE, bin.right);
         if (op === ts.SyntaxKind.EqualsToken) {
             return { c: reference.set(value), ty: T_VALUE };
@@ -35268,7 +35026,7 @@ class Emitter {
 
         const lhsC = this.emitLvalue(bin.left);
         const lhsType = this.storageType(bin.left);
-        const rhs = this.emitExpr(bin.right);
+        const rhs = this.emitResultExpression(bin.right, lhsType);
 
         if (op === ts.SyntaxKind.EqualsToken) {
             const coerced = this.coerce(rhs, lhsType, bin.right);
@@ -36263,61 +36021,6 @@ class Emitter {
         }
         if (ts.isElementAccessExpression(call.expression)) {
             const argument = call.expression.argumentExpression;
-            if (argument && this.isSymbolIteratorExpression(argument)) {
-                const recv = this.emitExpr(call.expression.expression);
-                if (recv.ty.kind === "map" || recv.ty.kind === "set" || recv.ty.kind === "value") {
-                    return this.emitSequencedExpr(T_VALUE,
-                        [{ value: recv, target: T_VALUE, node: call.expression.expression }],
-                        ([value]) => this.emitDynamicValueCall(call,
-                            { c: `tsc_value_get_symbol_prop(${value}, tsc_symbol_iterator())`, ty: T_VALUE },
-                            { c: value!, ty: T_VALUE }).c);
-                }
-                if (recv.ty.kind === "array") {
-                    return this.emitSequencedExpr(
-                        recv.ty,
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([arr]) => arr!,
-                    );
-                } else if (recv.ty.kind === "string") {
-                    return this.emitSequencedExpr(
-                        arrayType(T_STRING),
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([str]) => `tsc_str_chars(${str!})`,
-                    );
-                } else if (recv.ty.kind === "urlsearchparams") {
-                    return this.emitSequencedExpr(
-                        arrayType(entryType(T_STRING, T_STRING)),
-                        [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                        ([params]) => `tsc_url_search_params_entries(${params!})`,
-                    );
-                } else if (recv.ty.kind === "class") {
-                    const cd = this.classDeclForExpression(call.expression.expression);
-                    if (cd) {
-                        const found = this.findSymbolIteratorMethod(cd);
-                        if (found) {
-                            const { owner, method } = found;
-                            const sig = this.checker.getSignatureFromDeclaration(method);
-                            if (sig) {
-                                const ret = mapTsType(method, sig.getReturnType(), this.checker);
-                                return this.emitSequencedCall(
-                                    `${nativeTypeName(owner)}_${this.classMethodCName(method.name)}`,
-                                    ret,
-                                    [
-                                        {
-                                            value: recv,
-                                            pass: (tmp) => nativeTypeName(owner) === recv.ty.className
-                                                ? tmp
-                                                : `((${nativeTypeName(owner)}_t*)${tmp})`,
-                                        },
-                                        ...this.ignoredArgumentSpecs(call.arguments, 0),
-                                    ],
-                                );
-                            }
-                        }
-                    }
-                }
-                unsupported(call.expression, `[Symbol.iterator]() call on type ${recv.ty.kind}`);
-            }
             if (!argument) unsupported(call.expression, "computed method call requires a property key");
             return this.emitDynamicComputedPropertyCall(call, call.expression);
         }
@@ -36384,9 +36087,6 @@ class Emitter {
         }
         if (name === "Array") {
             return this.emitDynamicValueCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE });
-        }
-        if (name === "Symbol") {
-            return this.emitSymbolConstructor(call);
         }
         if (name === "Promise" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE });
@@ -39374,9 +39074,6 @@ class Emitter {
         ) {
             return this.emitStringStatic(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Symbol") {
-            return this.emitSymbolStatic(call, memberName);
-        }
         if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Promise")) {
             return this.emitPromiseStatic(call, memberName);
         }
@@ -39431,7 +39128,7 @@ class Emitter {
         if (recv.ty.kind === "bigint")
             return this.emitDynamicNamedPropertyCall(call, recv, memberName, !!pa.questionDotToken);
         if (recv.ty.kind === "symbol")
-            return this.emitSymbolMethod(call, recv, memberName);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName, ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         if (recv.ty.kind === "map")
             return this.emitMapMethod(call, recv, memberName);
         if (recv.ty.kind === "set")
@@ -44071,75 +43768,6 @@ class Emitter {
         unsupported(call, `Boolean method .${method}`);
     }
 
-    private emitSymbolConstructor(call: ts.CallExpression): EmitResult {
-        const specs: SequencedCallArg[] = [];
-        const hasDescription = !!call.arguments[0] && !this.isUndefinedExpression(call.arguments[0]);
-        if (hasDescription) {
-            const desc = this.emitExpr(call.arguments[0]);
-            specs.push({ value: desc, target: T_STRING, node: call.arguments[0] });
-        }
-        specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
-        return this.emitSequencedExpr(T_SYMBOL, specs, (vals) =>
-            `tsc_symbol_new(${hasDescription ? vals[0]! : "NULL"})`,
-        );
-    }
-
-    private emitSymbolStatic(call: ts.CallExpression, name: string): EmitResult {
-        switch (name) {
-            case "for": {
-                if (call.arguments.length < 1) unsupported(call, "Symbol.for expects at least 1 arg");
-                const key = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedExpr(
-                    T_SYMBOL,
-                    [
-                        { value: key, target: T_STRING, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ],
-                    ([value]) => `tsc_symbol_for(${value})`,
-                );
-            }
-            case "keyFor": {
-                if (call.arguments.length < 1) unsupported(call, "Symbol.keyFor expects at least 1 arg");
-                const sym = this.emitExpr(call.arguments[0]!);
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [
-                        { value: sym, target: T_SYMBOL, node: call.arguments[0]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 1),
-                    ],
-                    ([value]) => `tsc_symbol_key_for(${value})`,
-                );
-            }
-        }
-        unsupported(call, `Symbol.${name}`);
-    }
-
-    private emitSymbolMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "toLocaleString":
-                return this.emitDynamicNamedPropertyCall(call, recv, method,
-                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-            case "toString": {
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                    ([value]) => `tsc_symbol_to_string(${value})`,
-                );
-            }
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_SYMBOL,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                    ([value]) => value,
-                );
-        }
-        unsupported(call, `Symbol method .${method}`);
-    }
-
     private emitClassMethodCall(call: ts.CallExpression, receiver: EmitResult, name: string): EmitResult {
         return this.emitDynamicNamedPropertyCall(call, receiver, name, false);
     }
@@ -48362,7 +47990,7 @@ class Emitter {
         if (!ts.isMethodDeclaration(declaration) && !ts.isGetAccessorDeclaration(declaration) &&
             !ts.isSetAccessorDeclaration(declaration)) return null;
         const symbol = ts.isComputedPropertyName(name) ? this.wellKnownSymbolName(name.expression) : null;
-        const key = symbol ?? this.staticPropertyName(name);
+        const key = ts.isComputedPropertyName(name) ? `computed:${name.pos}` : this.staticPropertyName(name);
         if (key === null) return null;
         return mangleQualifiedIdent(["native-member", isStatic(declaration) ? "static" : "instance",
             kind, symbol === null ? "string" : "symbol", key]);
@@ -48383,23 +48011,6 @@ class Emitter {
         return Object.prototype.hasOwnProperty.call(WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS, name)
             ? name as WellKnownSymbolName
             : null;
-    }
-
-    private wellKnownSymbolRuntimeCall(expr: ts.Expression): string | null {
-        const name = this.wellKnownSymbolName(expr);
-        return name === null ? null : `${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[name]}()`;
-    }
-
-    private isSymbolIteratorExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) === "iterator";
-    }
-
-    private isSymbolAsyncIteratorExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) === "asyncIterator";
-    }
-
-    private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
-        return this.wellKnownSymbolName(expr) !== null;
     }
 
     private objectFieldType(
@@ -49487,8 +49098,6 @@ class Emitter {
                     }
                 }
             }
-            const wellKnownSymbol = this.wellKnownSymbolRuntimeCall(pa);
-            if (wellKnownSymbol) return { c: wellKnownSymbol, ty: T_SYMBOL };
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
         if (this.isProcessEnvObject(pa.expression)) {

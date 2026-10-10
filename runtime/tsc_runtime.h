@@ -978,6 +978,10 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_diagnostic_string(tsc_value_t v);
 tsc_str_t* tsc_value_to_string_coercion(tsc_value_t v);
 tsc_value_t tsc_value_to_property_key(tsc_value_t v);
+/* Ordinary ToPropertyKey followed by the canonical String/Symbol key encoding. */
+tsc_str_t* tsc_value_to_internal_property_key(tsc_value_t v);
+/* SetFunctionName for a newly defined method using its evaluated key. */
+tsc_value_t tsc_value_function_with_property_name(tsc_value_t function, const tsc_str_t* key, const tsc_str_t* prefix);
 tsc_value_t tsc_value_prepare_property_reference(tsc_value_t base, tsc_value_t name);
 tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
@@ -1098,6 +1102,8 @@ bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
 bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key);
+/* Ordered in operator: validate RHS before ordinary ToPropertyKey/HasProperty. */
+bool tsc_value_in(tsc_value_t key, tsc_value_t object);
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key);
 bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key);

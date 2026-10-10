@@ -333,65 +333,34 @@ static bool value_proxy_chain_is_array(tsc_value_t v) {
 static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key);
 static tsc_array_t* value_string_iterator_values(const tsc_str_t* src);
 
-static tsc_str_t* value_object_to_string_tag_override(tsc_value_t v) {
-    if (!value_is_box(v)) return NULL;
-    tsc_value_tag_t tag = value_tag(v);
-    if (
-        tag != TSC_VALUE_TAG_OBJECT &&
-        tag != TSC_VALUE_TAG_ARRAY &&
-        tag != TSC_VALUE_TAG_FUNCTION
-    ) {
-        return NULL;
+tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t value) {
+    if (tsc_value_is_undefined(value)) return tsc_str_from_lit("[object Undefined]", 18);
+    if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_NULL) return tsc_str_from_lit("[object Null]", 13);
+    tsc_value_t object = tsc_value_to_object(value);
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)object_root;
+    /* The builtin brand precedes the observable @@toStringTag Get. Proxy
+     * internal slots do not forward, while IsArray and IsCallable do. */
+    const char* builtin_tag = "Object";
+    if (tsc_value_is_array(object)) builtin_tag = "Array";
+    else {
+        tsc_object_t* owner = value_is_box(object) && value_tag(object) == TSC_VALUE_TAG_OBJECT
+            ? (tsc_object_t*)value_ptr(object) : NULL;
+        if (owner && owner->is_arguments) builtin_tag = "Arguments";
+        else if (tsc_value_is_callable(object)) builtin_tag = "Function";
+        else if (owner && owner->is_error) builtin_tag = "Error";
+        else if (owner && owner->has_primitive_value && owner->primitive_kind == TSC_PRIMITIVE_BOOLEAN) builtin_tag = "Boolean";
+        else if (owner && owner->has_primitive_value && owner->primitive_kind == TSC_PRIMITIVE_NUMBER) builtin_tag = "Number";
+        else if (owner && owner->has_primitive_value && owner->primitive_kind == TSC_PRIMITIVE_STRING) builtin_tag = "String";
+        else if (owner && owner->is_date) builtin_tag = "Date";
+        else if (owner && owner->is_regexp) builtin_tag = "RegExp";
     }
-    tsc_value_t custom_tag = tsc_value_get_prop(
-        v,
-        value_known_symbol_internal_key(tsc_symbol_to_string_tag())
-    );
-    if (value_is_box(custom_tag) && value_tag(custom_tag) == TSC_VALUE_TAG_STRING) {
-        tsc_str_t* text = (tsc_str_t*)value_ptr(custom_tag);
-        return tsc_str_concat(
-            tsc_str_concat(tsc_str_from_lit("[object ", 8), text),
-            tsc_str_from_lit("]", 1)
-        );
-    }
-    return NULL;
-}
-
-tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
-    if (!value_is_box(v)) return tsc_str_from_lit("[object Number]", 15);
-    tsc_str_t* custom_tag = value_object_to_string_tag_override(v);
-    if (custom_tag) return custom_tag;
-    switch (value_tag(v)) {
-        case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("[object Function]", 17);
-        case TSC_VALUE_TAG_UNDEFINED: return tsc_str_from_lit("[object Undefined]", 18);
-        case TSC_VALUE_TAG_NULL: return tsc_str_from_lit("[object Null]", 13);
-        case TSC_VALUE_TAG_FALSE:
-        case TSC_VALUE_TAG_TRUE: return tsc_str_from_lit("[object Boolean]", 16);
-        case TSC_VALUE_TAG_STRING: return tsc_str_from_lit("[object String]", 15);
-        case TSC_VALUE_TAG_BIGINT: return tsc_str_from_lit("[object BigInt]", 15);
-        case TSC_VALUE_TAG_SYMBOL: return tsc_str_from_lit("[object Symbol]", 15);
-        case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
-        case TSC_VALUE_TAG_OBJECT: {
-            tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-            if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
-            }
-            if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
-            if (value_proxy_chain_is_array(v)) return tsc_str_from_lit("[object Array]", 14);
-            if (o && o->has_primitive_value) {
-                if (o->primitive_kind == TSC_PRIMITIVE_BOOLEAN) return tsc_str_from_lit("[object Boolean]", 16);
-                if (o->primitive_kind == TSC_PRIMITIVE_NUMBER) return tsc_str_from_lit("[object Number]", 15);
-                if (o->primitive_kind == TSC_PRIMITIVE_STRING) return tsc_str_from_lit("[object String]", 15);
-                if (o->primitive_kind == TSC_PRIMITIVE_BIGINT) return tsc_str_from_lit("[object BigInt]", 15);
-                if (o->primitive_kind == TSC_PRIMITIVE_SYMBOL) return tsc_str_from_lit("[object Symbol]", 15);
-            }
-            if (o && o->is_date) return tsc_str_from_lit("[object Date]", 13);
-            if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
-            if (o && o->is_arguments) return tsc_str_from_lit("[object Arguments]", 18);
-            return tsc_str_from_lit("[object Object]", 15);
-        }
-    }
-    return tsc_str_from_lit("[object Object]", 15);
+    tsc_value_t custom_tag = tsc_value_get_symbol_prop(object, tsc_symbol_to_string_tag());
+    tsc_str_t* tag = value_is_box(custom_tag) && value_tag(custom_tag) == TSC_VALUE_TAG_STRING
+        ? (tsc_str_t*)value_ptr(custom_tag) : tsc_str_from_cstr(builtin_tag);
+    void* volatile tag_root = tag;
+    (void)tag_root;
+    return tsc_str_concat(tsc_str_concat(tsc_str_from_lit("[object ", 8), tag), tsc_str_from_lit("]", 1));
 }
 
 bool tsc_value_is_array(tsc_value_t v) {
@@ -5420,6 +5389,15 @@ bool tsc_value_set_computed_prop_receiver(
     return tsc_value_set_prop_receiver(v, (tsc_str_t*)value_ptr(key), value, receiver);
 }
 
+bool tsc_value_in(tsc_value_t key, tsc_value_t object) {
+    void* volatile key_root = tsc_value_gc_root(key);
+    void* volatile object_root = tsc_value_gc_root(object);
+    (void)key_root;
+    (void)object_root;
+    if (!tsc_value_is_object(object)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("in right operand must be an object"));
+    return tsc_value_has_computed_prop(object, key);
+}
+
 bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key) {
     key = tsc_value_to_property_key(key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
@@ -7261,6 +7239,29 @@ tsc_value_t tsc_value_to_property_key(tsc_value_t value) {
         return primitive;
     }
     return tsc_value_string(tsc_value_to_string(primitive));
+}
+
+tsc_str_t* tsc_value_to_internal_property_key(tsc_value_t value) {
+    tsc_value_t key = tsc_value_to_property_key(value);
+    void* volatile key_root = tsc_value_gc_root(key);
+    (void)key_root;
+    return value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL
+        ? tsc_symbol_property_key((tsc_symbol_t*)value_ptr(key))
+        : (tsc_str_t*)value_ptr(key);
+}
+
+tsc_value_t tsc_value_function_with_property_name(tsc_value_t function, const tsc_str_t* key, const tsc_str_t* prefix) {
+    void* volatile function_root = tsc_value_gc_root(function);
+    void* volatile key_root = (void*)key;
+    (void)function_root;
+    (void)key_root;
+    tsc_symbol_t* symbol = tsc_property_key_symbol(key);
+    tsc_str_t* name = symbol
+        ? symbol->description ? tsc_str_concat(tsc_str_concat(tsc_str_from_lit("[", 1), symbol->description), tsc_str_from_lit("]", 1)) : tsc_str_from_lit("", 0)
+        : (tsc_str_t*)key;
+    if (prefix) name = tsc_str_concat(tsc_str_concat(prefix, tsc_str_from_lit(" ", 1)), name);
+    (void)tsc_value_define_property_desc(function, tsc_str_from_lit("name", 4), tsc_value_string(name), true, false, true, false, true, true, true);
+    return function;
 }
 
 static bool abstract_bigint_number_equal(tsc_value_t bigint, tsc_value_t number) {

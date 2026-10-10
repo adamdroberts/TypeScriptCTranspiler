@@ -23,5 +23,5 @@ console.log("ignored:", Object.getOwnPropertySymbols(dynamicObject, mark("a"), m
 try {
     console.log(Object.getOwnPropertySymbols(null as any).length);
 } catch (e) {
-    console.log("null:", e);
+    console.log("null:", e instanceof TypeError);
 }

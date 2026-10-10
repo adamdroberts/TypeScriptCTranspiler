@@ -1,3 +1,5 @@
+`symbol-owner.property.test.ts` checks Symbol constructor/registry/prototype owners, descriptors, mutable global/callee/results, saved callees through suspension, and source computed String/Symbol keys against independent consumers. Its shared object-brand partition checks primitive boxing, ordinary tag getters, non-string/deleted tags, abrupt completions and proxy brand ordering. JavaScriptCore agrees with the pinned ToObject/Get receiver semantics; Node independently verifies the preceding Symbol partitions but currently supplies a primitive tag-getter receiver. One deep retained-owner graph and typed/erased CLI/observation profiles run with forced collection and allocation-only execution. This proves enabled semantic partitions independently of fixture cardinalities; full clause and class-definition claims remain open.
+
 # Property evidence
 
 Add compact semantic-partition specifications as `*.property.test.ts`. `run.ts` discovers every such file recursively and fails when none exist, so an empty suite cannot satisfy the ECMAScript claim gate.

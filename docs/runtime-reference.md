@@ -1,3 +1,5 @@
+Source Symbol uses ordinary Realm bindings and descriptors, including mutable well-known-property reads and actual typed results. Object.prototype.toString boxes primitives, computes its builtin brand before ordinary @@toStringTag Get, and uses Object fallback for untagged BigInt/Symbol wrappers. The shared in operator validates its RHS before key conversion; computed class method keys and their names retain the evaluated String/Symbol identity.
+
 Source Number/String/Boolean construction obtains the actual Realm binding and retains its callee and argument List. The shared primitive descriptor defers receiver allocation: conversion completes before newTarget.prototype lookup. One wrapper initializer is shared with Object boxing; String's raw Symbol exception applies only to calls, and its constructed exotic indices/length come from the canonical UTF-16 code-unit collection.
 
 # Runtime reference
@@ -720,6 +722,10 @@ The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed
 | `tsc_function_set_source_callback` | `(tsc_function_source_callback_t) -> void` | Register the compilation-wide finite source dispatcher used in every Realm. |
 | `tsc_function_create_from_source` | `(tsc_dynamic_function_kind_t, tsc_value_t (*)(void), tsc_str_t*, tsc_str_t*) -> tsc_value_t` | Resolve actual newTarget/fallback in its Realm, allocate a fresh kind-specific function and retain anonymous SourceText. |
 | `tsc_value_function_with_source` | `(tsc_value_t, tsc_str_t*) -> tsc_value_t` | Retain available definition text in the canonical callable owner without changing ordinary properties or identity. |
+| `tsc_value_to_internal_property_key` | `(tsc_value_t) -> tsc_str_t*` | Ordinary ToPropertyKey and canonical String/Symbol descriptor-key encoding, evaluated once at class member definition. |
+| `tsc_value_function_with_property_name` | `(tsc_value_t, const tsc_str_t*, const tsc_str_t*) -> tsc_value_t` | Set the callable name from the evaluated property key and optional accessor prefix. |
+| `tsc_value_in` | `(tsc_value_t, tsc_value_t) -> bool` | Validate the actual object RHS before ordinary key conversion and HasProperty. |
+| `tsc_value_object_to_string_tag` | `(tsc_value_t) -> tsc_str_t*` | ToObject, builtin-brand selection, then ordinary @@toStringTag Get and String-only override. |
 
 ## Adding a new runtime function
 
