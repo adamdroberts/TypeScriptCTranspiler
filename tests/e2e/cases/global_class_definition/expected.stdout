@@ -1,0 +1,7 @@
+module:true
+base-field,base-body,derived-field,derived-body
+prototype:true
+default:true
+new-target:true
+commonjs:true
+typed-subclass:true

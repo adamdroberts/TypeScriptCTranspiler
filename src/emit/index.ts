@@ -1290,6 +1290,27 @@ class Emitter {
             ts.isSetAccessorDeclaration(member);
     }
 
+    private isCanonicalClassDeclaration(declaration: ts.ClassDeclaration): boolean {
+        const pending: ts.ClassDeclaration[] = [declaration];
+        const seen = new Set<ts.ClassDeclaration>();
+        while (pending.length) {
+            const current = pending.pop()!;
+            if (seen.has(current) || this.isAmbientDeclaration(current)) continue;
+            seen.add(current);
+            if (this.isJavaScriptSourceFile(current.getSourceFile())) return true;
+            for (const clause of current.heritageClauses ?? []) {
+                if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+                for (const heritage of clause.types) {
+                    const expression = this.unwrapTransparentExpression(heritage.expression);
+                    if (!ts.isIdentifier(expression)) continue;
+                    const base = this.classDeclForConstructorIdentifier(expression);
+                    if (base) pending.push(base);
+                }
+            }
+        }
+        return false;
+    }
+
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
         if (this.isTest262ScriptGlobalLexicalDeclaration(cd)) return true;
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
@@ -13828,7 +13849,7 @@ class Emitter {
             // callable parameter, receiver and result types. All forwards
             // precede every generated struct, independent of emission order.
             for (const inner of statements) {
-                if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner)) {
+                if (inner && ts.isClassDeclaration(inner) && inner.name && this.shouldEmitClassDeclaration(inner) && !this.isCanonicalClassDeclaration(inner)) {
                     this.nativeTypeForwards.add(nativeTypeName(inner));
                 }
                 if (inner && ts.isInterfaceDeclaration(inner) && inner.name) {
@@ -13837,7 +13858,7 @@ class Emitter {
             }
             // Pass B: struct bodies.
             for (const inner of statements) {
-                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner) && !this.isCanonicalClassDeclaration(inner)) {
                     this.emitClassStruct(inner);
                 }
                 if (inner && ts.isInterfaceDeclaration(inner))
@@ -13854,7 +13875,7 @@ class Emitter {
                 ) {
                     this.emitFunctionPrototype(inner);
                 }
-                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner) && !this.isCanonicalClassDeclaration(inner)) {
                     this.emitClassPrototypes(inner);
                 }
             }
@@ -13875,7 +13896,7 @@ class Emitter {
                 ) {
                     this.emitFunctionBody(inner);
                 }
-                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
+                if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner) && !this.isCanonicalClassDeclaration(inner)) {
                     this.emitClassBodies(inner);
                 }
             }
@@ -13904,6 +13925,13 @@ class Emitter {
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
                     if (!this.shouldEmitClassDeclaration(inner)) continue;
+                    if (this.isCanonicalClassDeclaration(inner)) {
+                        const value = this.emitClassDefinitionValue(inner);
+                        if (!this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner, value) &&
+                            !this.emitModuleClassLexicalInitializer(initBuf, inner, value))
+                            unsupported(inner, "class declaration requires a canonical lexical binding");
+                        continue;
+                    }
                     this.emitClassStaticInitializers(initBuf, inner);
                     const metadata = this.classHasDecorators(inner)
                         ? this.freshTemp("_decorator_metadata")
@@ -21472,7 +21500,7 @@ class Emitter {
             const symbol = current.getSymbol() ?? current.aliasSymbol;
             if (symbol?.declarations?.some((candidate) =>
                 ts.isClassDeclaration(candidate) &&
-                this.isSupportedScopeClassDeclaration(candidate))) {
+                (this.isCanonicalClassDeclaration(candidate) || this.isSupportedScopeClassDeclaration(candidate)))) {
                 return true;
             }
         }
@@ -22201,13 +22229,14 @@ class Emitter {
     private emitModuleClassLexicalInitializer(
         buf: CBuf,
         declaration: ts.ClassDeclaration,
+        constructorValue?: EmitResult,
     ): boolean {
         const binding = this.moduleLexicalBindingForDeclaration(declaration) ??
             this.moduleDefaultExportBindings.get(declaration);
         if (!binding) return false;
-        const value = this.classHasDecorators(declaration)
+        const value = constructorValue ?? (this.classHasDecorators(declaration)
             ? this.classDecoratorValue(declaration)
-            : this.classConstructorValue(declaration);
+            : this.classConstructorValue(declaration));
         buf.line(`${binding.cName} = ${this.coerce(value, T_VALUE, declaration)};`);
         buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
         buf.line(`${binding.initialized} = true;`);
@@ -22834,11 +22863,12 @@ class Emitter {
     private emitTest262ScriptGlobalClassLexicalInitializer(
         buf: CBuf,
         declaration: ts.ClassDeclaration,
+        constructorValue?: EmitResult,
     ): boolean {
         if (!this.isTest262ScriptGlobalLexicalDeclaration(declaration)) return false;
-        const value = this.classHasDecorators(declaration)
+        const value = constructorValue ?? (this.classHasDecorators(declaration)
             ? this.classDecoratorValue(declaration)
-            : this.classConstructorValue(declaration);
+            : this.classConstructorValue(declaration));
         buf.line(
             `${this.isTest262EvalSourceFile(declaration.getSourceFile()) ? "tsc_environment_binding_initialize" : "tsc_global_lexical_initialize"}(${this.test262GlobalBindingKey(declaration.name.text)}, ` +
             `${this.coerce(value, T_VALUE, declaration)});`,
@@ -25854,6 +25884,17 @@ class Emitter {
     }
 
     private classConstructorValue(cd: ts.ClassDeclaration, initializeMembers = false): EmitResult {
+        if (this.isCanonicalClassDeclaration(cd)) {
+            const binding = this.moduleLexicalBindingForDeclaration(cd);
+            if (binding) return { c: this.moduleLexicalRead(binding), ty: T_VALUE };
+            const exported = this.moduleDefaultExportBindings.get(cd);
+            if (exported) return { c: this.moduleDefaultExportRead(exported), ty: T_VALUE };
+            if (this.isTest262ScriptGlobalLexicalDeclaration(cd)) return {
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(cd.name.text)})`, ty: T_VALUE,
+            };
+            unsupported(cd, "class declaration requires a canonical lexical binding");
+        }
+
         if (!cd.name) unsupported(cd, "class constructor value requires a named class");
         const className = nativeTypeName(cd);
         const runtimeName = this.classRuntimeName(cd);
@@ -32049,7 +32090,8 @@ class Emitter {
                 ts.isClassStaticBlockDeclaration(member) ||
                 ts.isConstructorDeclaration(member) && this.isSupportedDynamicConstructor(member) ||
                 ts.isPropertyDeclaration(member) && !ts.isPrivateIdentifier(member.name) ||
-                (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && !!member.body);
+                (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) &&
+                    !ts.isPrivateIdentifier(member.name) && !!member.body);
     }
 
     private isSupportedDynamicConstructor(constructor: ts.ConstructorDeclaration): boolean {
@@ -32135,18 +32177,12 @@ class Emitter {
         return binding?.immutable && binding.initializedPtr ? binding : null;
     }
 
-    /** ClassDefinitionEvaluation for the dynamic base/default-constructor
-     * partition.  Every supported method enters one source-ordered member
-     * collection and is materialized as a closure on the constructor or its
-     * prototype.  Other element families remain one stable fail-closed
-     * boundary until they join this same definition plan. */
+    /** ClassDefinitionEvaluation uses one source-ordered element collection
+     * for JavaScript declarations, local declarations and class expressions.
+     * Unrepresented elements fail closed at this shared boundary. */
     private emitClassDefinitionValue(expression: ts.ClassLikeDeclaration): EmitResult {
-        if (expression.typeParameters?.length) {
-            unsupported(expression, "class expression type parameters are not supported by dynamic class definition");
-        }
-        if (this.classHasDecorators(expression)) {
-            unsupported(expression, "class expression decorators are not supported by dynamic class definition");
-        }
+        if (!this.isSupportedDynamicClassDefinition(expression))
+            unsupported(expression, "class element requires the canonical initialization plan");
 
         const adapter = this.ensureClassConstructAdapter();
         const identity = this.freshTemp("_class_expression_identity");
@@ -34247,7 +34283,7 @@ class Emitter {
         const classDeclaration = ts.isIdentifier(bin.right)
             ? this.classDeclForConstructorIdentifier(bin.right)
             : null;
-        if (!classDeclaration) {
+        if (!classDeclaration || this.isCanonicalClassDeclaration(classDeclaration)) {
             const right = this.emitExpr(bin.right);
             if (right.ty.kind !== "function" && right.ty.kind !== "value") {
                 unsupported(bin.right, "instanceof right side must be a callable dynamic constructor");
@@ -34295,7 +34331,8 @@ class Emitter {
 
     private staticClassReceiver(expr: ts.Expression): ts.ClassDeclaration | null {
         if (!ts.isIdentifier(expr)) return null;
-        return this.classDeclForConstructorIdentifier(expr);
+        const declaration = this.classDeclForConstructorIdentifier(expr);
+        return declaration && !this.isCanonicalClassDeclaration(declaration) ? declaration : null;
     }
 
     private isLogicalAssignmentOperator(op: ts.SyntaxKind): boolean {
@@ -47208,6 +47245,7 @@ class Emitter {
             const constructed = this.emitDynamicValueConstruct(n, {
                 c: this.coerce(constructor, T_VALUE, n.expression), ty: T_VALUE,
             });
+            if (this.isCanonicalClassDeclaration(targetClassDecl)) return constructed;
             const native = classType(nativeTypeName(targetClassDecl));
             return { c: this.coerce(constructed, native, n), ty: native };
         }

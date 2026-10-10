@@ -273,6 +273,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Route JavaScript class declarations and their consumers through the shared canonical class-definition and constructor-environment algorithms.
+
 - Lower dynamic class heritage and derived construction through retained Function Environment Records, live superclass lookup and actual argument Lists; keep this uninitialized through escaped/suspended arrows and attach native base receivers before initialization.
 
 - Retain callable home objects and separate super receivers through canonical property References, lexical arrows and suspended operation graphs; preserve the pinned 2026 normalized ReferencedName across reads and writes.
