@@ -1,0 +1,7 @@
+identity: true true
+awaited: true
+borrowed: true
+spread: 1 2 3
+resumed: source import
+format ok 3 4 4.5 %
+single %% %s

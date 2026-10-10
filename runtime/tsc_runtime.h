@@ -1673,6 +1673,11 @@ bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b);
 /* ------------- console ------------- */
 void tsc_console_log_n(size_t n, ...);
 void tsc_console_error_n(size_t n, ...);
+tsc_value_t tsc_console_owner_value(void);
+tsc_value_t tsc_console_module_value(bool namespace_object);
+tsc_value_t tsc_console_module_export_value(tsc_str_t* name);
+void tsc_console_write_values(bool error, tsc_array_t* arguments);
+bool tsc_test262_capture_console(tsc_str_t* text);
 
 /* Test262 native-host observation boundary. Linked only for conformance runs. */
 void tsc_test262_begin(void);

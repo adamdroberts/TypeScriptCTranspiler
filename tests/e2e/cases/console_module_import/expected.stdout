@@ -3,4 +3,4 @@ named info 1
 alias log
 alias info 3
 namespace 2
-default ok
+default [ 'ok' ]

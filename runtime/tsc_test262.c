@@ -83,6 +83,13 @@ static void test262_capture_print_args(tsc_array_t* args) {
     tsc_jsonbuf_byte(&g_test262_stdout, '\n');
 }
 
+bool tsc_test262_capture_console(tsc_str_t* text) {
+    if(!g_test262_started)return false;
+    if(text)tsc_jsonbuf_append(&g_test262_stdout,text->data,text->len);
+    tsc_jsonbuf_byte(&g_test262_stdout,'\n');
+    return true;
+}
+
 static tsc_value_t test262_host_print(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;

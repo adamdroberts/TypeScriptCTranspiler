@@ -1,3 +1,4 @@
+import { consoleOperations } from "../console-operations";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
@@ -20351,13 +20352,6 @@ class Emitter {
             this.isTimersPromisesModuleIdentifier(expr.expression);
     }
 
-    private isConsoleModuleIdentifier(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && (
-            this.isNamespaceImportFrom(expr, ["console", "node:console"]) ||
-            this.isDefaultImportFrom(expr, ["console", "node:console"])
-        );
-    }
-
     private isBufferModuleIdentifier(expr: ts.Expression): boolean {
         return ts.isIdentifier(expr) && (
             this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
@@ -21935,7 +21929,7 @@ class Emitter {
                 else for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) names.push(element.name);
             }
             for (const name of names) {
-                const nativeOwner = this.importedUrlOwner(name);
+                const nativeOwner = this.importedHostModuleOwner(name);
                 if (nativeOwner) {
                     const value = this.freshTemp("_module_native_binding"), root = this.freshTemp("_module_native_root");
                     this.globalDecls.line("static tsc_value_t " + value + ";");
@@ -33068,8 +33062,8 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
-            const importedUrlOwner = this.importedUrlOwner(expr);
-            if (importedUrlOwner) return importedUrlOwner;
+            const importedHostModuleOwner = this.importedHostModuleOwner(expr);
+            if (importedHostModuleOwner) return importedHostModuleOwner;
             if (this.isRuntimeGlobalReference(expr) ||
                 this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) && this.isSourceGlobalReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
@@ -34746,21 +34740,26 @@ class Emitter {
             this.isDefaultImportFrom(expr, ["url", "node:url"])
         );
     }
-    private importedUrlOwner(expression: ts.Expression): EmitResult | null {
+    private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
         const expr = this.unwrapTransparentExpression(expression);
-        if (ts.isIdentifier(expr)) {
-            if (this.isNamespaceImportFrom(expr, ["url", "node:url"])) return { c: "tsc_url_module_value(true)", ty: T_VALUE };
-            if (this.isDefaultImportFrom(expr, ["url", "node:url"])) return { c: "tsc_url_module_value(false)", ty: T_VALUE };
-            for (const name of ["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"])
-                if (this.isNamedImportFrom(expr, ["url", "node:url"], name))
-                    return { c: "tsc_url_module_export_value(" + this.stringLit(name) + ")", ty: T_VALUE };
+        const modules = [
+            { names: ["url", "node:url"], value: "tsc_url_module_value", export: "tsc_url_module_export_value", members: new Set(["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"]) },
+            { names: ["console", "node:console"], value: "tsc_console_module_value", export: "tsc_console_module_export_value", members: consoleOperations },
+        ];
+        if (ts.isIdentifier(expr)) for (const owner of modules) {
+            if (this.isNamespaceImportFrom(expr, owner.names)) return { c: owner.value + "(true)", ty: T_VALUE };
+            if (this.isDefaultImportFrom(expr, owner.names)) return { c: owner.value + "(false)", ty: T_VALUE };
+            const name = this.namedImportExportName(expr, owner.names);
+            if (name && owner.members.has(name)) return { c: owner.export + "(" + this.stringLit(name) + ")", ty: T_VALUE };
+            if (name) unsupported(expr, "ambient host export requires an ordinary runtime owner");
         }
-        if (ts.isPropertyAccessExpression(expr) && this.isUrlModuleIdentifier(expr.expression)) {
-            const owner = this.importedUrlOwner(expr.expression)!;
-            return { c: "tsc_value_get_prop(" + owner.c + ", " + this.stringLit(expr.name.text) + ")", ty: T_VALUE };
+        if (ts.isPropertyAccessExpression(expr)) {
+            const owner = this.importedHostModuleOwner(expr.expression);
+            if (owner) return { c: "tsc_value_get_prop(" + owner.c + ", " + this.stringLit(expr.name.text) + ")", ty: T_VALUE };
         }
         return null;
     }
+
 
 
     private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
@@ -35564,7 +35563,7 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
-        if (this.importedUrlOwner(calleeId)) return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
+        if (this.importedHostModuleOwner(calleeId)) return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         if (this.isRuntimeGlobalReference(calleeId) ||
             this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) && this.isSourceGlobalReference(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
@@ -35604,11 +35603,6 @@ class Emitter {
         }
         if (name === "clearTimeout" || name === "clearInterval") {
             return this.emitClearTimerCall(call, "tsc_clear_timeout");
-        }
-        const consoleNamed = ["log", "error", "warn", "info"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["console", "node:console"], exported));
-        if (consoleNamed) {
-            return this.emitConsole(call, consoleNamed);
         }
         const bufferBase64Named = ["atob", "btoa"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], exported));
@@ -37605,7 +37599,7 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
-        if (this.importedUrlOwner(recvExpr))
+        if (this.importedHostModuleOwner(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
@@ -37706,13 +37700,6 @@ class Emitter {
 
         if (this.isBufferModuleIdentifier(recvExpr) && memberName === "transcode") {
             return this.emitBufferTranscodeCall(call);
-        }
-
-        if (
-            this.isConsoleModuleIdentifier(recvExpr) &&
-            (memberName === "log" || memberName === "error" || memberName === "warn" || memberName === "info")
-        ) {
-            return this.emitConsole(call, memberName);
         }
 
         if (this.isStreamModuleIdentifier(recvExpr)) {
@@ -37987,19 +37974,6 @@ class Emitter {
         // method surface. Native ABI selection belongs to their value adapters.
         if (this.staticClassReceiver(recvExpr)) {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
-        }
-
-        if (
-            (
-                ts.isIdentifier(recvExpr) &&
-                recvExpr.text === "console"
-            ) &&
-            (memberName === "log" ||
-                memberName === "error" ||
-                memberName === "warn" ||
-                memberName === "info")
-        ) {
-            return this.emitConsole(call, memberName);
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -46817,21 +46791,6 @@ class Emitter {
         return args.slice(start).map((arg) => ({ value: this.emitExpr(arg), node: arg }));
     }
 
-    private emitConsole(call: ts.CallExpression, which: string): EmitResult {
-        // console.warn and console.error both write to stderr in Node;
-        // console.info and console.log both write to stdout.
-        const fn =
-            which === "error" || which === "warn"
-                ? "tsc_console_error_n"
-                : "tsc_console_log_n";
-        const specs: SequencedCallArg[] = [];
-        for (const a of call.arguments) {
-            const r = this.emitExpr(a);
-            specs.push({ value: r, stringify: true, node: a });
-        }
-        return this.emitSequencedCall(fn, T_VOID, specs, [call.arguments.length.toString()]);
-    }
-
     private emitProcessExit(call: ts.CallExpression): EmitResult {
         if (call.arguments.length === 0) {
             return { c: `tsc_process_exit(0)`, ty: T_VOID };
@@ -46939,8 +46898,8 @@ class Emitter {
                 ([optionsC]) => `tsc_net_socket_address_new(${optionsC})`,
             );
         }
-        const importedUrlOwner = this.importedUrlOwner(n.expression);
-        if (importedUrlOwner) return this.emitDynamicValueConstruct(n, importedUrlOwner);
+        const importedHostModuleOwner = this.importedHostModuleOwner(n.expression);
+        if (importedHostModuleOwner) return this.emitDynamicValueConstruct(n, importedHostModuleOwner);
         const ctorExpr = this.unwrapTransparentExpression(n.expression);
         if (!ts.isIdentifier(ctorExpr)) {
             const ctor = this.emitExpr(n.expression);
@@ -47391,8 +47350,8 @@ class Emitter {
                 : `tsc_value_private_get(${base}, ${key})`);
         }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
-        const importedUrlOwner = this.importedUrlOwner(pa);
-        if (importedUrlOwner) return importedUrlOwner;
+        const importedHostModuleOwner = this.importedHostModuleOwner(pa);
+        if (importedHostModuleOwner) return importedHostModuleOwner;
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };

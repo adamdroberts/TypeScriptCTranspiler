@@ -293,6 +293,10 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Retain boxed URL constructor results and publication temporaries across allocation; retain ordinary prototypes in the shared object allocator.
+
+- Share console runtime owners, bound imported methods and suspended actual-List calls; use lazy primitive formatting, descriptor inspection and native-observation stdout capture.
+
 - Share ordered class-definition stages across ordinary and suspended heritage/computed-key evaluation; retain inner-name TDZ storage with the constructor.
 
 - Route JavaScript class declarations and their consumers through the shared canonical class-definition and constructor-environment algorithms.

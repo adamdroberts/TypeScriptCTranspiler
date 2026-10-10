@@ -1,4 +1,4 @@
 hello world
-num=42 bool=true obj=[array]
+num=42 bool=true obj=[ 1, 2, [length]: 2 ]
 leftovers one two 3
-percent % done
+percent %% done

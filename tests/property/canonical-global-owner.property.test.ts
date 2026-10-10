@@ -23,7 +23,8 @@ function subject(profile:boolean,noGc:boolean):string {
  }`;}).join('\n');
  return `// @ts-nocheck
  export {};
- function emit(value:any):void{${profile?'output':'console.log'}(value);}
+ const consoleOutput=console.log;
+ function emit(value:any):void{${profile?'output':'consoleOutput'}(value);}
  function check(value:boolean,label:string):void{if(!value)throw label;emit(label+':true');}
  function collect():void{${profile&&!noGc?'collectHook();':''}}
  const host=globalThis;const output=host.print,collectHook=${profile&&!noGc?'host.$262.gc':'undefined'};

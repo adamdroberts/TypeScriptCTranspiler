@@ -53,6 +53,7 @@ tsc_shape_t* tsc_shape_get_root(void) {
 static uint64_t g_object_id_counter = 0;
 
 static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
     tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
     o->is_abort_signal = false;
     o->is_event_emitter = false;
@@ -100,6 +101,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->arguments_parameter_cells = NULL;
     o->prototype = prototype;
     o->prototype_gc_root = tsc_value_gc_root(prototype);
+    (void)prototype_root;
     o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
     if (g_shape_diagnostics_enabled) {
         fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);

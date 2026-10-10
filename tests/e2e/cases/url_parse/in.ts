@@ -10,7 +10,7 @@ console.log("search:", u.search);
 console.log("hash:", u.hash);
 console.log("origin:", u.origin);
 console.log("typeof:", typeof u);
-console.log("string:", u);
+console.log("string:", String(u));
 
 const v = new URL("http://site.test");
 console.log("pathname:", v.pathname);

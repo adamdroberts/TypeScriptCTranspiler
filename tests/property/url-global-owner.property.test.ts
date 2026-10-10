@@ -84,7 +84,7 @@ test('URL host owners use ordinary References and one live parameter list',async
    expect({mode,noGc,profile,exitCode:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({mode,noGc,profile,exitCode:0,diagnostics:''});
    const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,GC_FREE_SPACE_DIVISOR:'100'}});
    expect({mode,noGc,profile,exitCode:native.exitCode,stderr:native.stderr.toString()}).toEqual({mode,noGc,profile,exitCode:0,stderr:''});
-   const observation=profile?parseHostObservation(JSON.parse(native.stdout.toString())):null;if(observation)expect(observation.kind).toBe('normal');
+   const observation=profile?parseHostObservation(JSON.parse(native.stdout.toString())):null;if(observation)expect({mode,noGc,observationKind:observation.kind,...(observation.kind==='normal'?{}:{observation})}).toEqual({mode,noGc,observationKind:'normal'});
    expect(observation?observation.stdout:native.stdout.toString()).toBe(reference.stdout.toString());
   }
  }finally{await fs.rm(temporary,{recursive:true,force:true})}

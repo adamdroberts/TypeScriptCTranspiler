@@ -2,7 +2,10 @@
   "schemaVersion": 1,
   "id": "tsc2c-native-test262-v1",
   "description": "Non-delegating native Test262 execution profile. It prepares runner-owned generated-C/native artifacts and is deliberately ineligible until every remaining host hook and language-semantic gap is implemented.",
-  "command": ["bun", "tests/test262/native-host.ts"],
+  "command": [
+    "bun",
+    "tests/test262/native-host.ts"
+  ],
   "implementationFiles": [
     "bun.lock",
     "compliance/ecmascript-2026/evidence-registry.json",
@@ -21,6 +24,7 @@
     "runtime/tsc_map_set.c",
     "runtime/tsc_node.c",
     "runtime/tsc_url_owner.c",
+    "runtime/tsc_console_owner.c",
     "runtime/tsc_node_embed.cc",
     "runtime/tsc_object.c",
     "runtime/tsc_promise.c",
@@ -91,10 +95,16 @@
     "tests/test262/render-matrix.ts",
     "tests/test262/run.ts",
     "tests/test262/self.test.ts",
-    "tests/test262/spec-catalog.ts"
+    "tests/test262/spec-catalog.ts",
+    "runtime/tsc_console_methods.def",
+    "src/console-operations.ts"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
-  "environmentAllowlist": ["HOME", "PATH", "TMPDIR"],
+  "environmentAllowlist": [
+    "HOME",
+    "PATH",
+    "TMPDIR"
+  ],
   "claimEligible": false,
   "semanticDelegation": false,
   "capabilities": {

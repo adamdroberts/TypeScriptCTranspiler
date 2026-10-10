@@ -7787,50 +7787,155 @@ void console_write_str(FILE* f, const tsc_str_t* s) {
     if (s && s->len > 0) fwrite(s->data, 1, s->len, f);
 }
 
-void console_write(FILE* f, size_t n, va_list ap) {
-    if (n == 0) {
-        fputc('\n', f);
-        return;
+static tsc_str_t* console_number(double value) {
+    return value == 0 && signbit(value) ? tsc_str_from_lit("-0",2) : tsc_str_from_num(value);
+}
+typedef struct console_inspect_frame {
+    tsc_value_t value;
+    void* root;
+    void* descriptor_root;
+    struct console_inspect_frame* parent;
+    tsc_array_t* keys;
+    size_t next, written;
+    int depth;
+    bool array, opened;
+} console_inspect_frame_t;
+static void console_inspect_append(tsc_jsonbuf_t* output,const char* text) {
+    tsc_jsonbuf_append(output,text,strlen(text));
+}
+static void console_inspect_quote(tsc_jsonbuf_t* output,tsc_str_t* text) {
+    tsc_jsonbuf_byte(output,'\'');
+    for(size_t index=0;text&&index<text->len;++index) {
+        unsigned char byte=text->data[index];
+        if(byte=='\''||byte=='\\')tsc_jsonbuf_byte(output,'\\');
+        if(byte=='\n')console_inspect_append(output,"\\n");
+        else if(byte=='\r')console_inspect_append(output,"\\r");
+        else if(byte=='\t')console_inspect_append(output,"\\t");
+        else tsc_jsonbuf_byte(output,byte);
     }
-    tsc_str_t** args = (tsc_str_t**)calloc(n, sizeof(tsc_str_t*));
-    for (size_t i = 0; i < n; i++) args[i] = va_arg(ap, tsc_str_t*);
-
-    const tsc_str_t* fmt = args[0];
-    size_t next = 1;
-    if (fmt) {
-        for (size_t i = 0; i < fmt->len; i++) {
-            char ch = fmt->data[i];
-            if (ch != '%' || i + 1 >= fmt->len) {
-                fputc(ch, f);
-                continue;
-            }
-            char spec = fmt->data[++i];
-            if (spec == '%') {
-                fputc('%', f);
-            } else if (
-                spec == 's' || spec == 'd' || spec == 'i' ||
-                spec == 'f' || spec == 'o' || spec == 'O'
-            ) {
-                if (next < n) {
-                    console_write_str(f, args[next++]);
+    tsc_jsonbuf_byte(output,'\'');
+}
+/* An explicit descriptor worklist keeps container traversal independent of
+ * source shape. Accessors are displayed without invoking user code. */
+static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
+    tsc_jsonbuf_t output;tsc_jsonbuf_init(&output);
+    console_inspect_frame_t* frame=TSC_GC_MALLOC(sizeof(*frame));
+    memset(frame,0,sizeof(*frame));frame->value=value;frame->root=tsc_value_gc_root(value);frame->depth=depth;
+    while(frame) {
+        if(!frame->opened) {
+            frame->array=tsc_value_is_array(frame->value);
+            bool object=tsc_value_is_object(frame->value)&&value_tag(frame->value)!=TSC_VALUE_TAG_FUNCTION;
+            if(!frame->array&&!object) {
+                if(value_is_box(frame->value)&&value_tag(frame->value)==TSC_VALUE_TAG_STRING)
+                    console_inspect_quote(&output,value_ptr(frame->value));
+                else if(value_is_box(frame->value)&&value_tag(frame->value)==TSC_VALUE_TAG_FUNCTION) {
+                    tsc_str_t* name=tsc_value_to_string(tsc_value_get_prop(frame->value,tsc_str_from_lit("name",4)));
+                    console_inspect_append(&output,"[Function");
+                    if(name&&name->len){console_inspect_append(&output,": ");tsc_jsonbuf_append(&output,name->data,name->len);}
+                    tsc_jsonbuf_byte(&output,']');
                 } else {
-                    fputc('%', f);
-                    fputc(spec, f);
+                    tsc_str_t* text=!value_is_box(frame->value)?console_number(tsc_value_to_number(frame->value)):tsc_value_to_explicit_string(frame->value);
+                    if(text)tsc_jsonbuf_append(&output,text->data,text->len);
+                    if(value_is_box(frame->value)&&value_tag(frame->value)==TSC_VALUE_TAG_BIGINT)tsc_jsonbuf_byte(&output,'n');
                 }
-            } else if (spec == 'c') {
-                if (next < n) next++;
-            } else {
-                fputc('%', f);
-                fputc(spec, f);
+                frame=frame->parent;continue;
             }
+            bool circular=false;
+            for(console_inspect_frame_t* ancestor=frame->parent;ancestor;ancestor=ancestor->parent)
+                if(ancestor->value==frame->value){circular=true;break;}
+            if(circular||frame->depth<0) {
+                console_inspect_append(&output,circular?"[Circular]":frame->array?"[Array]":"[Object]");
+                frame=frame->parent;continue;
+            }
+            frame->keys=tsc_reflect_own_keys(frame->value);frame->opened=true;
+            tsc_jsonbuf_byte(&output,frame->array?'[':'{');
+        }
+        if(frame->next>=frame->keys->len) {
+            if(frame->written)tsc_jsonbuf_byte(&output,' ');
+            tsc_jsonbuf_byte(&output,frame->array?']':'}');frame=frame->parent;continue;
+        }
+        tsc_value_t key=TSC_ARR(tsc_value_t,frame->keys,frame->next++);
+        tsc_value_t descriptor=tsc_value_get_own_property_computed_descriptor(frame->value,key);
+        frame->descriptor_root=tsc_value_gc_root(descriptor);
+        if(!tsc_value_is_object(descriptor))continue;
+        bool enumerable=tsc_value_is_truthy(tsc_value_get_prop(descriptor,tsc_str_from_lit("enumerable",10)));
+        if(!hidden&&!enumerable)continue;
+        if(frame->written++)console_inspect_append(&output,", ");else tsc_jsonbuf_byte(&output,' ');
+        tsc_str_t* name=tsc_value_to_explicit_string(key);
+        bool indexed=frame->array&&name&&name->len;
+        for(size_t index=0;indexed&&index<name->len;++index)indexed=name->data[index]>='0'&&name->data[index]<='9';
+        if(!indexed) {
+            if(!enumerable)tsc_jsonbuf_byte(&output,'[');
+            if(name)tsc_jsonbuf_append(&output,name->data,name->len);
+            if(!enumerable)tsc_jsonbuf_byte(&output,']');
+            console_inspect_append(&output,": ");
+        }
+        if(tsc_value_has_own_prop(descriptor,tsc_str_from_lit("get",3))) {
+            bool getter=!tsc_value_is_undefined(tsc_value_get_prop(descriptor,tsc_str_from_lit("get",3)));
+            bool setter=!tsc_value_is_undefined(tsc_value_get_prop(descriptor,tsc_str_from_lit("set",3)));
+            console_inspect_append(&output,getter?(setter?"[Getter/Setter]":"[Getter]"):"[Setter]");continue;
+        }
+        console_inspect_frame_t* child=TSC_GC_MALLOC(sizeof(*child));memset(child,0,sizeof(*child));
+        child->value=tsc_value_get_prop(descriptor,tsc_str_from_lit("value",5));child->root=tsc_value_gc_root(child->value);
+        child->parent=frame;child->depth=frame->depth-1;frame=child;
+    }
+    return tsc_str_from_lit(output.data,output.len);
+}
+static tsc_str_t* console_argument_text(tsc_value_t value,char specifier) {
+    bool numeric=specifier=='d'||specifier=='i'||specifier=='f';
+    if(value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_SYMBOL)
+        return numeric?tsc_str_from_lit("NaN",3):tsc_value_to_explicit_string(value);
+    if(value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_BIGINT) {
+        tsc_str_t* text=tsc_value_to_explicit_string(value);
+        return specifier=='f'?console_number(tsc_parse_float(text)):tsc_str_concat(text,tsc_str_from_lit("n",1));
+    }
+    if(numeric) {
+        if(specifier=='d')return console_number(tsc_value_to_number(value));
+        tsc_str_t* text=tsc_value_to_string_coercion(value);
+        return console_number(specifier=='i'?tsc_parse_int(text,10):tsc_parse_float(text));
+    }
+    if(specifier=='o'||specifier=='O'||tsc_value_is_array(value)||tsc_value_is_object(value)||
+       (value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_FUNCTION))
+        return console_inspect(value,specifier=='o',specifier=='s'?0:specifier=='o'?4:2);
+    if(!value_is_box(value))return console_number(tsc_value_to_number(value));
+    return tsc_value_to_explicit_string(value);
+}
+static tsc_str_t* console_render_strings(tsc_array_t* arguments,tsc_array_t* values,bool format) {
+    tsc_jsonbuf_t output;tsc_jsonbuf_init(&output);
+    size_t count=values?values->len:arguments?arguments->len:0,next=0;
+    if(count) {
+        tsc_str_t* first=values?console_argument_text(TSC_ARR(tsc_value_t,values,0),0):TSC_ARR(tsc_str_t*,arguments,0);next=1;
+        for(size_t index=0;first&&index<first->len;++index) {
+            char ch=first->data[index];
+            if(!format||ch!='%'||index+1>=first->len){tsc_jsonbuf_byte(&output,ch);continue;}
+            char spec=first->data[++index];
+            if(spec=='%'){tsc_jsonbuf_byte(&output,'%');continue;}
+            bool placeholder=spec=='s'||spec=='d'||spec=='i'||spec=='f'||spec=='o'||spec=='O'||spec=='c';
+            if(placeholder&&next<count) {
+                if(spec!='c') {
+                    tsc_str_t* value=values?console_argument_text(TSC_ARR(tsc_value_t,values,next),spec):TSC_ARR(tsc_str_t*,arguments,next);
+                    if(value)tsc_jsonbuf_append(&output,value->data,value->len);
+                }
+                ++next;
+            } else {tsc_jsonbuf_byte(&output,'%');tsc_jsonbuf_byte(&output,spec);}
         }
     }
-    for (size_t i = next; i < n; i++) {
-        fputc(' ', f);
-        console_write_str(f, args[i]);
+    for(size_t index=next;index<count;++index) {
+        tsc_str_t* value=values?console_argument_text(TSC_ARR(tsc_value_t,values,index),0):TSC_ARR(tsc_str_t*,arguments,index);
+        tsc_jsonbuf_byte(&output,' ');if(value)tsc_jsonbuf_append(&output,value->data,value->len);
     }
-    free(args);
-    fputc('\n', f);
+    return tsc_str_from_lit(output.data,output.len);
+}
+void console_write(FILE* stream,size_t count,va_list arguments) {
+    tsc_array_t* strings=tsc_array_new(sizeof(tsc_str_t*),count);
+    for(size_t index=0;index<count;++index){tsc_str_t* value=va_arg(arguments,tsc_str_t*);tsc_array_push_raw(strings,&value);}
+    console_write_str(stream,console_render_strings(strings,NULL,count>1));fputc('\n',stream);
+}
+void tsc_console_write_values(bool error,tsc_array_t* arguments) {
+    bool format=arguments&&arguments->len>1&&value_is_box(TSC_ARR(tsc_value_t,arguments,0))&&value_tag(TSC_ARR(tsc_value_t,arguments,0))==TSC_VALUE_TAG_STRING;
+    tsc_str_t* text=tsc_str_to_well_formed(console_render_strings(NULL,arguments,format));
+    if(!error&&tsc_test262_capture_console(text))return;
+    FILE* stream=error?stderr:stdout;console_write_str(stream,text);fputc('\n',stream);
 }
 
 void tsc_console_log_n(size_t n, ...) {

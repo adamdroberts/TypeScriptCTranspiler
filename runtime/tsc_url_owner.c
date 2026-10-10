@@ -250,8 +250,10 @@ static tsc_value_t url_constructor_construct(void* env, tsc_value_t receiver, ts
     } else {
         tsc_url_search_params_t* params=tsc_url_search_params_new(key(""));params_initialize(params,argument(args,0));result=tsc_value_url_search_params(params);
     }
+    void* volatile result_root=tsc_value_gc_root(result);
     tsc_value_t prototype=tsc_value_get_prototype_from_constructor(tsc_value_current_new_target(),descriptor->prototype);
-    (void)tsc_value_object_set_prototype_of(result,prototype);return result;
+    (void)tsc_value_object_set_prototype_of(result,prototype);
+    (void)result_root;return result;
 }
 static url_realm_state_t* url_realm_state(void) {
     url_realm_state_t* state=tsc_realm_state_get(&url_realm_key);if(state)return state;
@@ -268,11 +270,16 @@ static url_realm_state_t* url_realm_state(void) {
     for(size_t index=0;index<sizeof(url_members)/sizeof(url_members[0]);++index) {
         const url_member_t* member=&url_members[index];tsc_value_t object=member->is_static?state->constructors[member->owner]:state->prototypes[member->owner];
         tsc_str_t* name=key(member->name);tsc_value_t function=tsc_value_function_named_kind(url_member_apply,NULL,(void*)member,member->length,member->getter?tsc_str_concat(key("get "),name):name,TSC_FUNCTION_IDENTITY_BUILTIN);
+        void* volatile function_root=tsc_value_gc_root(function);
         if(member->getter) {
-            tsc_value_t descriptor=tsc_value_object(tsc_object_new());define_value(descriptor,key("get"),function,true);
+            tsc_value_t descriptor=tsc_value_object(tsc_object_new());
+            void* volatile descriptor_root=tsc_value_gc_root(descriptor);
+            define_value(descriptor,key("get"),function,true);
             if(member->writable)define_value(descriptor,key("set"),tsc_value_function_named_kind(url_setter,NULL,(void*)member,1,tsc_str_concat(key("set "),name),TSC_FUNCTION_IDENTITY_BUILTIN),true);
             define_value(descriptor,key("enumerable"),tsc_value_bool(true),true);define_value(descriptor,key("configurable"),tsc_value_bool(true),true);(void)tsc_value_define_property_descriptor(object,name,descriptor);
+            (void)descriptor_root;
         } else define_value(object,name,function,true);
+        (void)function_root;
     }
     tsc_value_t entries=tsc_value_get_prop(state->prototypes[PARAMS_OWNER],key("entries"));define_value(state->prototypes[PARAMS_OWNER],tsc_symbol_property_key(tsc_symbol_iterator()),entries,true);
     state->iterator_prototype=tsc_value_object(tsc_object_new_with_prototype(tsc_iterator_prototype_value()));state->iterator_root=tsc_value_gc_root(state->iterator_prototype);

@@ -1,0 +1,5 @@
+/* name, stderr: one collection for native members and source admission. */
+TSC_CONSOLE_METHOD(log, false)
+TSC_CONSOLE_METHOD(error, true)
+TSC_CONSOLE_METHOD(warn, true)
+TSC_CONSOLE_METHOD(info, false)
