@@ -2099,13 +2099,8 @@ class Emitter {
         }
         // Every Number static call observes a mutable ordinary property.
         if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Number")) return false;
-        if (
-            ts.isIdentifier(recv) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Date") &&
-            this.isSideEffectFreeDateStaticCall(method, call.arguments, seenConsts)
-        ) {
-            return true;
-        }
+        // Date statics are mutable ordinary methods, including unused calls.
+        if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Date")) return false;
         if (
             ts.isIdentifier(recv) &&
             (method === "resolve" || method === "reject") &&
@@ -2489,33 +2484,6 @@ class Emitter {
         ) {
             return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts);
-        }
-        return false;
-    }
-
-    private isSideEffectFreeDateStaticCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (method === "now") {
-            return Array.from(args).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        }
-        if (method === "parse") {
-            if (args.length === 0) return true;
-            return this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                Array.from(args).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (method === "UTC") {
-            return Array.from(args).every((arg, index) =>
-                index < 7
-                    ? this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts)
-                    : this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
         }
         return false;
     }
@@ -40203,9 +40171,7 @@ class Emitter {
                 const isNumberParser =
                     (method === "parseInt" || method === "parseFloat") &&
                     node.arguments.length >= 1 && node.arguments.length <= 2;
-                const isDateStaticCall =
-                    (method === "parse" && node.arguments.length === 1) ||
-                    (method === "UTC" && node.arguments.length <= 7);
+                const isDateStaticCall = new Set(["now", "parse", "UTC"]).has(method);
                 const isStringStaticCall = method === "fromCharCode" || method === "fromCodePoint";
                 const isArrayStaticCall =
                     (method === "isArray" && node.arguments.length === 1) ||
@@ -42768,28 +42734,9 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
             return this.emitQueryStringCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Date") {
-            if (memberName === "now") {
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    Array.from(call.arguments, (arg) => ({ value: this.emitExpr(arg), node: arg })),
-                    () => "tsc_date_now()",
-                );
-            }
-            if (memberName === "parse") {
-                const arg = call.arguments[0];
-                if (!arg) return { c: "NAN", ty: T_NUMBER };
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    Array.from(call.arguments, (current, index) => ({
-                        value: this.emitExpr(current),
-                        target: index === 0 ? T_STRING : undefined,
-                        node: current,
-                    })),
-                    ([text]) => `tsc_date_parse(${text})`,
-                );
-            }
-            if (memberName === "UTC") return this.emitDateStaticUtc(call);
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Date")) {
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName,
+                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
         }
         if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "RegExp")) {
             return this.emitDynamicNamedPropertyCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE }, memberName, false);
@@ -49036,24 +48983,6 @@ class Emitter {
                 );
         }
         unsupported(call, `Date method .${method}`);
-    }
-
-    private emitDateStaticUtc(call: ts.CallExpression): EmitResult {
-        const args = call.arguments;
-        const defaults = ["NAN", "0.0", "1.0", "0.0", "0.0", "0.0", "0.0"];
-        const specs: SequencedCallArg[] = [];
-        for (let i = 0; i < args.length; i++) {
-            const arg = args[i]!;
-            const value = this.emitExpr(arg);
-            specs.push({ value, target: i < 7 ? T_NUMBER : undefined, node: arg });
-        }
-        return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-            const all = vals.slice(0, 7);
-            while (all.length < 7) {
-                all.push(defaults[all.length]!);
-            }
-            return `tsc_date_utc(${all.join(", ")})`;
-        });
     }
 
     private emitErrorMethod(

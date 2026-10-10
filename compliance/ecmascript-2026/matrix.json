@@ -2760,7 +2760,8 @@
           "tests/property/number-shortest-string.property.test.ts",
           "tests/property/number-call-boundary.property.test.ts",
           "tests/property/number-decimal-format.property.test.ts",
-          "tests/property/locale-invocation.property.test.ts"
+          "tests/property/locale-invocation.property.test.ts",
+          "tests/property/date-static-invocation.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2774,16 +2775,19 @@
           "number_shortest_string",
           "number_call_boundary",
           "number_decimal_rounding",
-          "locale_ordinary_invocation"
+          "locale_ordinary_invocation",
+          "date_static_invocation"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
-          "stdlib/lib.core.d.ts#Number"
+          "stdlib/lib.core.d.ts#Number",
+          "stdlib/lib.core.d.ts#DateConstructor"
         ],
         "implementation": [
           "runtime/tsc_builtin.c",
           "runtime/tsc_string.c",
           "runtime/tsc_value.c",
+          "runtime/tsc_node.c",
           "src/emit/index.ts"
         ]
       },

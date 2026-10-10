@@ -1,5 +1,7 @@
 # Changelog
 
+- Share ordinary Date static lookup and actual argument Lists with one presence-sensitive UTC default/coercion collection. Remove direct now/parse/UTC lowering and static purity bypasses; verify Node semantic partitions, deep retained arguments, typed defaults and awaited calls in both memory modes.
+
 - Retain native class static descriptors in one constructor owner. Share ordinary method/accessor closures, actual receivers and formals, boxed fields, static block cells and inherited lookup; remove static C storage/adapters and direct descriptor bypasses. Share rooted ordinary/suspended Reference-name preparation and repair compound GetValue/RHS order. Verify independent Node and pinned-key partitions, retained-owner stress and typed E2E in both memory modes.
 
 - Key the canonical finite Function-source graph by semantic kind and share parsing, conversion, dispatch and fresh allocation across ordinary/generator/async/async-generator constructors. Add Realm-owned intrinsic constructor/prototype links, descriptors/tags, newTarget fallback and anonymous SourceText; close mutable alias/source-method facts with one worklist. Preserve source-owner mutations, reject contextual Yield identifiers in shared static semantics, accept manifest kinds and align the gated bridge. Complete Object prototype constructor identity before typed inherited reads; verify grammar/owner stress and native E2E in both memory modes.

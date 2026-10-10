@@ -6878,8 +6878,12 @@ static tsc_value_t date_static_method_apply(
             date_argument(args, 0)
         )));
     }
-    double values[7] = { NAN, NAN, 1.0, 0.0, 0.0, 0.0, 0.0 };
-    size_t count = args && args->len < 7 ? args->len : 7;
+    /* One semantic parameter/default collection consumes the actual argument
+     * List. Presence alone selects a default; explicit undefined is converted. */
+    double values[] = { NAN, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0 };
+    const size_t parameter_count = sizeof(values) / sizeof(values[0]);
+    const size_t argument_count = args ? args->len : 0;
+    const size_t count = argument_count < parameter_count ? argument_count : parameter_count;
     for (size_t index = 0; index < count; index++) {
         values[index] = tsc_value_to_number(date_argument(args, index));
     }
