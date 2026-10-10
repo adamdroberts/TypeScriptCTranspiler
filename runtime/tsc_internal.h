@@ -194,8 +194,6 @@ typedef struct tsc_function_identity {
     tsc_intrinsic_default_prototype_kind_t construct_default_prototype;
     bool is_html_dda;
     bool extensible;
-    bool sealed;
-    bool frozen;
     /* Most ECMAScript constructors expose an own `prototype` and allocate an
      * ordinary receiver before running [[Construct]].  Exotic constructors
      * such as %Proxy% do neither, so represent those semantics explicitly

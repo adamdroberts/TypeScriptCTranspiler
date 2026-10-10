@@ -7437,8 +7437,6 @@ tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* e
     entry->parse_unit = unit;
     entry->lexical_environment = environment;
     entry->extensible = true;
-    entry->sealed = false;
-    entry->frozen = false;
     entry->func_prototype_writable = true;
     tsc_function_identity_set_prototype(entry, tsc_function_default_prototype());
     tsc_function_identity_set_own_prototype(entry, tsc_value_undefined());
@@ -7466,8 +7464,6 @@ tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* e
     entry->parse_unit = unit;
     entry->lexical_environment = environment;
     entry->extensible = true;
-    entry->sealed = false;
-    entry->frozen = false;
     entry->func_prototype_writable = true;
     tsc_function_identity_set_prototype(entry, tsc_function_default_prototype());
     tsc_function_identity_set_own_prototype(entry, tsc_value_undefined());

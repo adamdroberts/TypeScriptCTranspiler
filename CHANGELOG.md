@@ -1,3 +1,5 @@
+- Share rooted SetIntegrityLevel/TestIntegrityLevel descriptor worklists across objects, Arrays, callables and Proxies. Delete cached state and trap probes, preserve actual own-key invariants and abrupt partial mutations, and verify independent semantic properties plus imported-owner E2E in both memory modes.
+
 # Changelog
 
 - Share Array instance member calls with ordinary mutable callee owners and actual argument Lists. Convert ordinary native-array writes to rooted actual-value storage, delete emitter method/callback/comparator loops, and preserve empty results, live properties and operation-specific integrity errors; verify independent semantics and imported module E2E in both memory modes.

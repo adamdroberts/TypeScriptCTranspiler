@@ -463,8 +463,6 @@ tsc_value_t tsc_value_function_named_kind(
     id->lexical_environment = environment;
     id->construct_default_prototype = TSC_INTRINSIC_DEFAULT_OBJECT_PROTOTYPE;
     id->extensible = true;
-    id->sealed = false;
-    id->frozen = false;
     id->func_prototype_writable = true;
     tsc_function_identity_set_prototype(id, tsc_function_default_prototype());
     tsc_function_identity_set_own_prototype(id, tsc_value_undefined());
@@ -3978,7 +3976,6 @@ bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value)
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_ARRAY) return false;
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
     if (a->es != sizeof(tsc_value_t) && !a->unbox_element) return false;
-    if (a->frozen) return false;
     tsc_str_t* key = tsc_str_from_int((int64_t)idx);
     bool exists = idx < a->len && tsc_array_index_present(a, idx);
     if (!exists && a->props && tsc_object_has_own(a->props, key)) exists = true;
@@ -4056,7 +4053,7 @@ static bool array_define_length_desc(tsc_array_t* array, tsc_value_t value, bool
         length = uint_length;
     }
     size_t old_length = array->len;
-    bool current_writable = !array->frozen && array->length_writable;
+    bool current_writable = array->length_writable;
     if ((has_enumerable && enumerable) || (has_configurable && configurable) ||
         (!current_writable && has_writable && writable)) return false;
     if (!current_writable) return !has_value || length == old_length;
@@ -4084,7 +4081,7 @@ static bool array_define_length_desc(tsc_array_t* array, tsc_value_t value, bool
 }
 
 bool tsc_value_array_set_length(tsc_array_t* array, tsc_value_t value) {
-    if (!array || array->frozen || !array->length_writable) return false;
+    if (!array || !array->length_writable) return false;
     return array_define_length_desc(array, value, true, false, false, false, false, false, false);
 }
 
@@ -4113,7 +4110,7 @@ static bool tsc_value_define_function_metadata_desc(const tsc_function_identity_
     } else if (str_lit_eq(key, "prototype")) {
         tsc_function_identity_t* mutable_fn = (tsc_function_identity_t*)fn;
         current = tsc_function_own_prototype(mutable_fn, value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)mutable_fn));
-        current_writable = !fn->frozen && fn->func_prototype_writable;
+        current_writable = fn->func_prototype_writable;
     } else {
         return false;
     }
@@ -4156,19 +4153,17 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
                 return ok;
             }
             bool exists = tsc_array_index_present(a, idx);
-            bool current_writable = !a->frozen;
+            bool current_writable = true;
             bool current_enumerable = true;
-            bool current_configurable = !a->sealed && !a->frozen;
+            bool current_configurable = true;
             bool next_writable = has_writable ? writable : (exists ? current_writable : false);
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
             if (exists) {
                 if (next_writable == current_writable && next_enumerable == current_enumerable && next_configurable == current_configurable) {
                     if (!has_value) return true;
-                    if (a->frozen) return tsc_value_object_is(value, tsc_value_get_index(v, (double)idx));
                     return tsc_value_set_array_own_index(v, idx, value);
                 }
-                if (a->frozen) return false;
                 tsc_value_t current = tsc_value_get_index(v, (double)idx);
                 bool props_extensible = a->props->extensible;
                 a->props->extensible = true;
@@ -4596,11 +4591,9 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
                 has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
             bool exists = tsc_array_index_present(a, idx);
             if (exists) {
-                bool current_configurable = !a->sealed && !a->frozen;
+                bool current_configurable = true;
                 bool next_configurable = has_configurable ? configurable : current_configurable;
                 bool next_enumerable = has_enumerable ? enumerable : true;
-                if (!current_configurable) return false;
-                if (a->frozen) return false;
                 bool props_extensible = a->props->extensible;
                 if (!side_exists) a->props->extensible = true;
                 bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, next_enumerable, true, next_configurable, true);
@@ -5010,7 +5003,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
             return tsc_value_set_prototype_of(v, value);
         }
         if (str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(fn)) {
-            if (fn->frozen || !fn->func_prototype_writable) return false;
+            if (!fn->func_prototype_writable) return false;
             tsc_function_identity_set_own_prototype(fn, value);
             return true;
         }
@@ -5082,11 +5075,10 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
             return tsc_object_set_receiver(a->props, key, value, receiver);
         size_t index;
         if (tsc_str_is_length_key(key)) {
-            if (a->frozen || !a->length_writable) return false;
+            if (!a->length_writable) return false;
             return value_set_receiver_own_data(receiver, key, value);
         }
         if (tsc_str_array_index(key, &index) && tsc_array_index_present(a, index)) {
-            if (a->frozen) return false;
             return value_set_receiver_own_data(receiver, key, value);
         }
         if (tsc_value_is_object(a->prototype))
@@ -5355,7 +5347,6 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
             return true;
         }
         if (dense) {
-            if (a->sealed || a->frozen) return false;
             tsc_array_mark_hole(a, idx);
             memset((char*)a->data + idx * a->es, 0, a->es);
         }
@@ -5502,75 +5493,49 @@ bool tsc_reflect_prevent_extensions(tsc_value_t v) {
     return tsc_value_prevent_extensions(v);
 }
 
-bool tsc_value_seal(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_object_seal((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        a->extensible = false;
-        a->sealed = true;
-        return tsc_object_seal(a->props);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
-        fn->extensible = false;
-        fn->sealed = true;
-        return tsc_object_seal(fn->props);
-    }
-    return true;
-}
-
-bool tsc_value_freeze(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_object_freeze((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        a->extensible = false;
-        a->sealed = true;
-        a->frozen = true;
-        return tsc_object_freeze(a->props);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
-        fn->extensible = false;
-        fn->sealed = true;
-        fn->frozen = true;
-        return tsc_object_freeze(fn->props);
+/* SetIntegrityLevel and TestIntegrityLevel project the same actual own-key
+ * List and descriptor owners across objects, arrays, callables and Proxies. */
+static bool value_set_integrity_level(tsc_value_t object, bool frozen) {
+    if (!tsc_value_is_object(object)) return true;
+    void* volatile object_root = tsc_value_gc_root(object); (void)object_root;
+    if (!tsc_value_prevent_extensions(object)) return false;
+    tsc_array_t* volatile keys = tsc_value_raw_own_keys(object);
+    for (size_t index = 0; index < keys->len; ++index) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, index);
+        bool data = false;
+        if (frozen) {
+            tsc_value_t descriptor = tsc_value_get_own_property_descriptor(object, key);
+            void* volatile descriptor_root = tsc_value_gc_root(descriptor); (void)descriptor_root;
+            if (tsc_value_is_undefined(descriptor)) continue;
+            data = tsc_value_has_own_prop(descriptor, tsc_str_from_lit("value", 5));
+        }
+        if (!tsc_value_define_property_desc(object, key, tsc_value_undefined(), false,
+            false, data, false, false, false, true))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Integrity operation could not define a property"));
     }
     return true;
 }
 
-bool tsc_value_is_sealed(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_object_is_sealed((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
-        return a->sealed && tsc_object_is_sealed(a->props);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        return fn->sealed && tsc_object_is_sealed(fn->props);
+static bool value_test_integrity_level(tsc_value_t object, bool frozen) {
+    if (!tsc_value_is_object(object)) return true;
+    void* volatile object_root = tsc_value_gc_root(object); (void)object_root;
+    if (tsc_value_is_extensible(object)) return false;
+    tsc_array_t* volatile keys = tsc_value_raw_own_keys(object);
+    for (size_t index = 0; index < keys->len; ++index) {
+        tsc_value_t descriptor = tsc_value_get_own_property_descriptor(object, TSC_ARR(tsc_str_t*, keys, index));
+        void* volatile descriptor_root = tsc_value_gc_root(descriptor); (void)descriptor_root;
+        if (tsc_value_is_undefined(descriptor)) continue;
+        if (tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("configurable", 12)))) return false;
+        if (frozen && tsc_value_has_own_prop(descriptor, tsc_str_from_lit("value", 5)) &&
+            tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("writable", 8)))) return false;
     }
     return true;
 }
 
-bool tsc_value_is_frozen(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_object_is_frozen((tsc_object_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
-        return a->frozen && tsc_object_is_frozen(a->props);
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* fn = (const tsc_function_identity_t*)value_ptr(v);
-        return fn->frozen && tsc_object_is_frozen(fn->props);
-    }
-    return true;
-}
+bool tsc_value_seal(tsc_value_t object) { return value_set_integrity_level(object, false); }
+bool tsc_value_freeze(tsc_value_t object) { return value_set_integrity_level(object, true); }
+bool tsc_value_is_sealed(tsc_value_t object) { return value_test_integrity_level(object, false); }
+bool tsc_value_is_frozen(tsc_value_t object) { return value_test_integrity_level(object, true); }
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
     tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 0);
@@ -5652,16 +5617,16 @@ tsc_value_t value_descriptor_from_array_index(const tsc_array_t* src, size_t idx
         : TSC_ARR(tsc_value_t, src, idx);
     void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
     tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(!src->frozen));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(true));
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(!src->sealed && !src->frozen));
+    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
     return tsc_value_object(desc);
 }
 
 tsc_value_t value_descriptor_from_array_length(const tsc_array_t* src) {
     tsc_object_t* desc = tsc_object_new();
     tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_num((double)(src ? src->len : 0)));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(src ? (!src->frozen && src->length_writable) : true));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(src ? (src->length_writable) : true));
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
     tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
     return tsc_value_object(desc);
@@ -5715,7 +5680,7 @@ tsc_value_t value_descriptor_from_function_prototype(const tsc_function_identity
         ? value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)mutable_fn)
         : tsc_value_undefined();
     tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_function_own_prototype(mutable_fn, fn_value));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(fn ? (!fn->frozen && fn->func_prototype_writable) : false));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(fn ? (fn->func_prototype_writable) : false));
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
     tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
     return tsc_value_object(desc);

@@ -1,0 +1,5 @@
+manual: true true true
+transparent: preventExtensions;ownKeys;
+freeze: value:writable|configurable;accessor:configurable;Symbol(owner):writable|configurable;
+state: true true true
+retained: true true 4000|length

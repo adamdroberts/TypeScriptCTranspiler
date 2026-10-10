@@ -1500,8 +1500,6 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->cap = 0;
         proto->es = sizeof(tsc_value_t);
         proto->extensible = true;
-        proto->sealed = false;
-        proto->frozen = false;
         /* Array.prototype is itself an Array exotic object with writable length. */
         proto->length_writable = true;
         proto->value_storage = true;
@@ -1600,8 +1598,6 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->cap = initial_cap;
     a->es = elem_size;
     a->extensible = true;
-    a->sealed = false;
-    a->frozen = false;
     a->length_writable = true;
     a->value_storage = false;
     a->prototype = tsc_array_default_prototype();
@@ -1624,8 +1620,6 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->cap = initial_cap;
     a->es = elem_size;
     a->extensible = true;
-    a->sealed = false;
-    a->frozen = false;
     a->length_writable = true;
     a->value_storage = false;
     a->prototype = tsc_array_default_prototype();

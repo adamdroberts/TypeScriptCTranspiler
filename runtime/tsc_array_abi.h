@@ -26,8 +26,6 @@ typedef struct tsc_array {
     size_t cap;
     size_t es;
     bool extensible;
-    bool sealed;
-    bool frozen;
     bool length_writable;
     /* Ordinary writes publish actual values; native views may subsequently
      * borrow the same owner only through an exact representation check. */

@@ -42,7 +42,7 @@ try {
     Reflect.construct(ArrowValue, []);
     console.log("arrow construct:", "ok");
 } catch (err: any) {
-    console.log("arrow construct:", err);
+    console.log("arrow construct:", err instanceof TypeError);
 }
 console.log("function own:", Object.hasOwn(first, "length"), Object.hasOwn(first, "name"), Object.hasOwn(first, "prototype"), Object.keys(first).length, names.length, names[0], names[1], names[2], ownKeys.length, ownKeys[0], ownKeys[1], ownKeys[2]);
 console.log("length desc:", lengthDesc.value, lengthDesc.writable, lengthDesc.enumerable, lengthDesc.configurable);
@@ -84,7 +84,7 @@ try {
     Object.defineProperty(zeroLength, "length", { value: -0, writable: false, enumerable: false, configurable: false });
     console.log("function length samevalue object:", "ok");
 } catch (err: any) {
-    console.log("function length samevalue object:", err);
+    console.log("function length samevalue object:", err instanceof TypeError);
 }
 
 const sealed: any = Sealed as any;
@@ -147,7 +147,7 @@ const proxyGet: any = new Proxy(proxyGetTarget, { get: badGet as any });
 try {
     console.log("proxy function get length:", Reflect.get(proxyGet, "length"));
 } catch (err: any) {
-    console.log("proxy function get length:", err);
+    console.log("proxy function get length:", err instanceof TypeError);
 }
 
 const proxySetTarget: any = ProxySet as any;
@@ -155,7 +155,7 @@ const proxySet: any = new Proxy(proxySetTarget, { set: trueSet as any });
 try {
     console.log("proxy function set length:", Reflect.set(proxySet, "length", 9));
 } catch (err: any) {
-    console.log("proxy function set length:", err);
+    console.log("proxy function set length:", err instanceof TypeError);
 }
 
 const proxyDescriptorTarget: any = ProxyDescriptor as any;
@@ -164,7 +164,7 @@ try {
     const badNameDesc: any = Reflect.getOwnPropertyDescriptor(proxyDescriptor, "name");
     console.log("proxy function desc name:", badNameDesc.value);
 } catch (err: any) {
-    console.log("proxy function desc name:", err);
+    console.log("proxy function desc name:", err instanceof TypeError);
 }
 
 const proxyMissingKeysTarget: any = ProxyKeys as any;
@@ -172,7 +172,7 @@ const proxyMissingKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: missi
 try {
     console.log("proxy function keys missing:", Reflect.ownKeys(proxyMissingKeys).length);
 } catch (err: any) {
-    console.log("proxy function keys missing:", err);
+    console.log("proxy function keys missing:", err instanceof TypeError);
 }
 const proxyCompleteKeys: any = new Proxy(proxyMissingKeysTarget, { ownKeys: completeKeys as any });
 console.log("proxy function keys complete:", Reflect.ownKeys(proxyCompleteKeys).length);
@@ -183,7 +183,7 @@ const proxyExtraKeys: any = new Proxy(proxyExtraKeysTarget, { ownKeys: extraKeys
 try {
     console.log("proxy function keys extra:", Reflect.ownKeys(proxyExtraKeys).length);
 } catch (err: any) {
-    console.log("proxy function keys extra:", err);
+    console.log("proxy function keys extra:", err instanceof TypeError);
 }
 
 const proxyHasTarget: any = ProxyHas as any;
@@ -191,7 +191,7 @@ const proxyHas: any = new Proxy(proxyHasTarget, { has: falseHas as any });
 try {
     console.log("proxy function has length:", Reflect.has(proxyHas, "length"));
 } catch (err: any) {
-    console.log("proxy function has length:", err);
+    console.log("proxy function has length:", err instanceof TypeError);
 }
 console.log("proxy function has missing:", Reflect.has(proxyHas, "missing"));
 
@@ -200,12 +200,12 @@ const proxyDefine: any = new Proxy(proxyDefineTarget, { defineProperty: trueDefi
 try {
     console.log("proxy function define same:", Reflect.defineProperty(proxyDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }));
 } catch (err: any) {
-    console.log("proxy function define same:", err);
+    console.log("proxy function define same:", err instanceof TypeError);
 }
 try {
     console.log("proxy function define changed:", Reflect.defineProperty(proxyDefine, "length", { value: 9 }));
 } catch (err: any) {
-    console.log("proxy function define changed:", err);
+    console.log("proxy function define changed:", err instanceof TypeError);
 }
 
 const proxyDeleteTarget: any = ProxyDelete as any;
@@ -213,6 +213,6 @@ const proxyDelete: any = new Proxy(proxyDeleteTarget, { deleteProperty: trueDele
 try {
     console.log("proxy function delete length:", Reflect.deleteProperty(proxyDelete, "length"));
 } catch (err: any) {
-    console.log("proxy function delete length:", err);
+    console.log("proxy function delete length:", err instanceof TypeError);
 }
 console.log("proxy function delete missing:", Reflect.deleteProperty(proxyDelete, "missing"));
