@@ -1,4 +1,5 @@
-import {classDefinitionPlan,classDefinitionEvaluationExpressions,sourceClassDefinition} from './class-definition';
+import { definitionEvaluationChildren } from "./module-evaluation";
+import {classDefinitionPlan,sourceClassDefinition} from './class-definition';
 import ts from "typescript";
 import { normalizeAssignmentTarget } from "./binding-tree";
 
@@ -272,7 +273,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         const anchor = reserve();
         worklist.push(() => {
             const node = transparent(source);
-            if (ts.isClassExpression(node) && suspending.get(source)) {
+            if (ts.isClassExpression(node) && (suspending.get(source) || ts.isClassDeclaration(ts.getOriginalNode(node)))) {
                 const definition=sourceClassDefinition(node);
                 classDefinitions.push({definition,owner:output});
                 let entry=next;
@@ -429,9 +430,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
     const sourceWorklist: { node: ts.Node; expanded: boolean }[] = [{ node: expression, expanded: false }];
     while (sourceWorklist.length) {
         const item = sourceWorklist.pop()!, node = item.node;
-        if (ts.isFunctionLike(node)) { suspending.set(node, false); continue; }
-        const children:ts.Node[]=ts.isClassLike(node)?[...classDefinitionEvaluationExpressions(node)]:[];
-        if(!ts.isClassLike(node))ts.forEachChild(node,child=>{children.push(child)});
+        const children = definitionEvaluationChildren(node);
         if (!item.expanded) {
             sourceWorklist.push({ node, expanded: true });
             for(const child of children)sourceWorklist.push({node:child,expanded:false});

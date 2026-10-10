@@ -108,7 +108,7 @@ export interface CompileResult {
 }
 
 const RUNTIME_SOURCES = [
-    "tsc_core.c", "tsc_environment.c",
+    "tsc_core.c", "tsc_environment.c", "tsc_module.c",
     "tsc_value.c",
     "tsc_iterator.c",
     "tsc_string.c",

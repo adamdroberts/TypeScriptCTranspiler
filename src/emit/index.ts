@@ -1,4 +1,6 @@
-import {classDefinitionPlan,classDefinitionEvaluationExpressions} from './class-definition';
+import { moduleRequestKey } from "../module-request";
+import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
+import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { runtimeGlobalBindings } from "../global-bindings";
@@ -639,6 +641,9 @@ class Emitter {
     private genericDefs = new CBuf();
     /** Per-source-record evaluation and Module instantiation bodies. */
     private modInits = new Map<string, CBuf>();
+    private modAsyncInits = new Map<string, CBuf>();
+    private moduleRuntimeIndices: Map<string, number> | null = null;
+    private moduleAwaitFlags = new WeakMap<ts.SourceFile, boolean>();
     private modInstantiations = new Map<string, CBuf>();
     /** ScriptEvaluation carries one UpdateEmpty completion slot through the
      * complete statement tree. Module evaluators use the same return ABI but
@@ -1291,6 +1296,21 @@ class Emitter {
             ts.isSetAccessorDeclaration(member);
     }
 
+    private moduleRuntimeIndex(moduleId: string): number {
+        this.moduleRuntimeIndices ??= new Map(this.graph.emitOrder.map((id, index) => [id, index]));
+        const index = this.moduleRuntimeIndices.get(moduleId);
+        if (index === undefined) throw new Error(`Module ${moduleId} is absent from the retained graph`);
+        return index;
+    }
+
+    private sourceHasTopLevelAwait(source: ts.SourceFile): boolean {
+        const prepared = this.moduleAwaitFlags.get(source);
+        if (prepared !== undefined) return prepared;
+        const result = moduleHasTopLevelAwait(source);
+        this.moduleAwaitFlags.set(source, result);
+        return result;
+    }
+
     private isCanonicalClassDeclaration(declaration: ts.ClassDeclaration): boolean {
         const pending: ts.ClassDeclaration[] = [declaration];
         const seen = new Set<ts.ClassDeclaration>();
@@ -1298,7 +1318,7 @@ class Emitter {
             const current = pending.pop()!;
             if (seen.has(current) || this.isAmbientDeclaration(current)) continue;
             seen.add(current);
-            if (this.isJavaScriptSourceFile(current.getSourceFile())) return true;
+            if (this.isJavaScriptSourceFile(current.getSourceFile()) || this.sourceHasTopLevelAwait(current.getSourceFile())) return true;
             for (const clause of current.heritageClauses ?? []) {
                 if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
                 for (const heritage of clause.types) {
@@ -13234,7 +13254,7 @@ class Emitter {
         }
         for (const modId of emitOrder) {
             const sf = this.graph.modules.get(modId)?.sf;
-            if (!sf || !this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) continue;
+            if (!sf || (!this.isJavaScriptSourceFile(sf) && !this.sourceHasTopLevelAwait(sf)) || !ts.isExternalModule(sf)) continue;
             for (const declaration of sf.statements) {
                 if (
                     !ts.isClassDeclaration(declaration) ||
@@ -13271,6 +13291,7 @@ class Emitter {
                 startupPending.push(dependency);
         }
         const startupOrder = this.graph.topoOrder.filter(id => startup.has(id));
+        const evaluationRoots = this.graph.initializationModuleIds;
         this.prepareAnonymousDefaultClasses(emitOrder);
         const nativeOwners: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
         const reservedFieldNames = new Set<string>();
@@ -13366,17 +13387,25 @@ class Emitter {
         }
         for (const modId of emitOrder) {
             out.line(`static bool mod_instantiated_${modId} = false;`);
-            out.line(`static int mod_state_${modId} = 0;`);
-            out.line(`static tsc_value_t mod_error_${modId};`);
-            out.line(`static void* volatile mod_error_root_${modId} = NULL;`);
+            if (this.isCommonJsSourceFile(this.graph.modules.get(modId)!.sf)) {
+                out.line(`static int mod_state_${modId} = 0;`);
+                out.line(`static tsc_value_t mod_error_${modId};`);
+                out.line(`static void* volatile mod_error_root_${modId} = NULL;`);
+            }
         }
         out.line();
         // Forward declarations for mod_inits and user functions.
         for (const modId of emitOrder) {
             out.line(`static void mod_instantiate_${modId}(void);`);
             out.line(`static void mod_init_${modId}(void);`);
+            out.line(`static tsc_value_t mod_evaluate_${modId}(void);`);
+            if (this.modAsyncInits.has(modId)) out.line(`static tsc_promise_t* mod_execute_async_${modId}(void);`);
+            if (this.isCommonJsSourceFile(this.graph.modules.get(modId)!.sf))
+                out.line(`static tsc_value_t mod_graph_execute_${modId}(void);`);
         }
         out.line();
+        out.line("static tsc_module_graph_t* mod_runtime_graph(void);");
+        out.line("static tsc_promise_t* mod_runtime_evaluation(size_t index);");
         if (this.protos.toString().length > 0) {
             out.write(this.protos.toString());
             out.line();
@@ -13406,6 +13435,11 @@ class Emitter {
             out.line("}");
             out.line();
         }
+        for (const [modId, body] of this.modAsyncInits) {
+            out.line(`static tsc_promise_t* mod_execute_async_${modId}(void) {`);
+            out.write(body.toString());
+            out.line("}"); out.line();
+        }
         // Reusable source-record evaluators. Ordinary startup/dynamic Module
         // evaluation wraps these in the cached state machine below; AOT
         // evalScript invokes a Script evaluator directly on every call.
@@ -13423,6 +13457,13 @@ class Emitter {
         // Cached startup and Module evaluation function bodies.
         for (const modId of emitOrder) {
             if (!this.modInits.has(modId)) continue;
+            if (!this.isCommonJsSourceFile(this.graph.modules.get(modId)!.sf)) {
+                out.line(`static void mod_init_${modId}(void) {`);
+                out.line(`    tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)});`);
+                out.line("    if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion));");
+                out.line("}"); out.line();
+                continue;
+            }
             out.line(`static void mod_init_${modId}(void) {`);
             out.line(`    if (mod_state_${modId} == 2) return;`);
             out.line(`    if (mod_state_${modId} == 3) tsc_throw_value(mod_error_${modId});`);
@@ -13451,6 +13492,33 @@ class Emitter {
             out.line("}");
             out.line();
         }
+        for (const modId of emitOrder) if (this.isCommonJsSourceFile(this.graph.modules.get(modId)!.sf)) {
+            out.line(`static tsc_value_t mod_graph_execute_${modId}(void) {`);
+            out.line(`    mod_init_${modId}();`);
+            out.line("    return tsc_value_undefined();"); out.line("}");
+        }
+        for (const modId of emitOrder) {
+            const info = this.graph.modules.get(modId)!;
+            const requests = info.moduleRequests.flatMap(request => {
+                const target = info.resolvedModuleRequests.get(moduleRequestKey(request));
+                return target ? [this.moduleRuntimeIndex(target)] : [];
+            });
+            if (requests.length) out.line(`static const size_t mod_requests_${modId}[] = { ${requests.join(", ")} };`);
+        }
+        out.line("static const tsc_module_definition_t mod_definitions[] = {");
+        for (const modId of emitOrder) {
+            const info = this.graph.modules.get(modId)!;
+            const count = info.moduleRequests.filter(request => info.resolvedModuleRequests.has(moduleRequestKey(request))).length;
+            const execute = this.isCommonJsSourceFile(info.sf) ? `mod_graph_execute_${modId}` : `mod_evaluate_${modId}`;
+            out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)} },`);
+        }
+        out.line("};");
+        out.line("static tsc_module_graph_t* mod_retained_graph;");
+        out.line("static tsc_module_graph_t* mod_runtime_graph(void) {");
+        out.line("    if (!mod_retained_graph) mod_retained_graph = tsc_module_graph_new(mod_definitions, sizeof(mod_definitions) / sizeof(mod_definitions[0]));");
+        out.line("    return mod_retained_graph;"); out.line("}");
+        out.line("static tsc_promise_t* mod_runtime_evaluation(size_t index) {");
+        out.line("    return tsc_module_evaluate(mod_runtime_graph(), index);"); out.line("}"); out.line();
         const evalScriptEntries = this.options.test262Observation?.evalScriptEntries ?? [];
         if (evalScriptEntries.length > 0) {
             out.line("static tsc_value_t test262_eval_script_dispatch(tsc_str_t* source) {");
@@ -13589,7 +13657,7 @@ class Emitter {
                 out.line("        }");
                 out.line("    }");
             }
-            for (const [index, modId] of startupOrder.entries()) {
+            for (const [index, modId] of evaluationRoots.entries()) {
                 const origin = setupIds.has(modId)
                     ? "setup-script"
                     : modId === testId
@@ -13614,6 +13682,8 @@ class Emitter {
             out.line("        tsc_try_push(&_test262_event_frame);");
             out.line("        if (setjmp(_test262_event_frame.jb) == 0) {");
             out.line("            tsc_run_event_loop();");
+            for (const modId of evaluationRoots)
+                out.line(`            { tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)}); if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion)); if (tsc_promise_is_pending(completion)) return 13; }`);
             out.line("            tsc_try_pop();");
             out.line("        } else {");
             out.line("            tsc_try_pop();");
@@ -13626,10 +13696,10 @@ class Emitter {
             for (const modId of this.graph.topoOrder) {
                 out.line(`    mod_instantiate_${modId}();`);
             }
-            for (const modId of startupOrder) {
-                out.line(`    mod_init_${modId}();`);
-            }
+            for (const modId of evaluationRoots) out.line(`    mod_init_${modId}();`);
             out.line("    tsc_run_event_loop();");
+            for (const modId of evaluationRoots)
+                out.line(`    { tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)}); if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion)); if (tsc_promise_is_pending(completion)) return 13; }`);
         }
         out.line("    return 0;");
         out.line("}");
@@ -13920,6 +13990,45 @@ class Emitter {
             // Pass E: top-level statements. VariableStatements are split into
             // file-scope declarations + in-mod_init assignments so that other
             // top-level functions (including lifted arrows) can reference them.
+            if (this.sourceHasTopLevelAwait(sf)) {
+                if (this.isCommonJsSourceFile(sf) || this.isTest262ScriptSourceFile(sf))
+                    unsupported(sf, "top-level await requires a Module source record");
+                const environment = new Map<ts.Symbol, ClosureEnvBinding>();
+                const addBinding = (symbol: ts.Symbol, value: string, root: string, initialized?: string, immutable = false): void => {
+                    environment.set(symbol, { type: T_VALUE, ptr: `&${value}`, rootPtr: `&${root}`,
+                        initializedPtr: initialized ? `&${initialized}` : undefined,
+                        lexicalName: symbol.getName(), immutable });
+                };
+                for (const binding of this.collectModuleVarBindings(sf))
+                    addBinding(binding.symbol, binding.cName, binding.gcRoot);
+                for (const binding of this.collectModuleLexicalBindings(sf))
+                    addBinding(binding.symbol, binding.cName, binding.gcRoot, binding.initialized, binding.immutable);
+                for (const [declaration, binding] of this.moduleFunctionDeclarations)
+                    if (declaration.getSourceFile() === sf && declaration.name) {
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        if (symbol) addBinding(symbol, binding.cName, binding.gcRoot);
+                    }
+                const runtimeStatements = statements.filter(statement => !this.isAmbientDeclaration(statement) &&
+                    !ts.isFunctionDeclaration(statement) && !ts.isImportDeclaration(statement) &&
+                    !ts.isImportEqualsDeclaration(statement) && !ts.isExportDeclaration(statement) &&
+                    !ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement));
+                const body = ts.factory.createBlock(runtimeStatements, true);
+                ts.setTextRange(body, sf);
+                Object.assign(body, { parent: sf });
+                const continuation = new CBuf(); continuation.indent = 1;
+                continuation.write(initBuf.toString());
+                this.closureEnvScopes.push(environment);
+                try {
+                    if (!this.emitAsyncControlFlowGraphContinuation(continuation, body, [],
+                        { c: "tsc_value_undefined()", ty: T_VALUE }, "async", sf))
+                        unsupported(sf, "Module evaluation requires the canonical continuation graph");
+                } finally { this.closureEnvScopes.pop(); }
+                this.modAsyncInits.set(modId, continuation);
+                const evaluator = new CBuf(); evaluator.indent = 1;
+                evaluator.line(`return tsc_value_promise(mod_execute_async_${modId}());`);
+                this.modInits.set(modId, evaluator);
+                return;
+            }
             this.emitResourceScope(initBuf, sf, this.directResourceDeclarations(statements), () => {
             for (const inner of statements) {
                 if (!inner) continue;
@@ -18109,7 +18218,7 @@ class Emitter {
         return this.prepareType(mapType(expr, this.checker));
     }
 
-    private emitDefaultExportAssignment(buf: CBuf, stmt: ts.ExportAssignment): void {
+    private emitDefaultExportAssignment(buf: CBuf, stmt: ts.ExportAssignment, retainedValue?: EmitResult): void {
         const cName = this.defaultExportCName(stmt);
         const ty = this.defaultExportAssignmentCType(stmt);
         const moduleBinding = this.moduleDefaultExportBindings.get(stmt);
@@ -18117,7 +18226,7 @@ class Emitter {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const value = this.emitExpr(stmt.expression);
+        const value = retainedValue ?? this.emitExpr(stmt.expression);
         buf.line(`${cName} = ${this.coerce(value, ty, stmt.expression)};`);
         if (moduleBinding) {
             buf.line(`${moduleBinding.gcRoot} = tsc_value_gc_root(${moduleBinding.cName});`);
@@ -22082,7 +22191,7 @@ class Emitter {
     }
 
     private moduleVariableUsesCanonicalBindings(declaration: ts.VariableDeclaration): boolean {
-        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) || this.resourceDeclarationHint(declaration) !== null) return true;
+        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) || this.sourceHasTopLevelAwait(declaration.getSourceFile()) || this.resourceDeclarationHint(declaration) !== null) return true;
         if (ts.isIdentifier(declaration.name)) return false;
         // Native Node module aliases have a separate AOT owner admission. Their
         // value factories must join ordinary GetValue before replacing those
@@ -22250,7 +22359,7 @@ class Emitter {
     ): ModuleDefaultExportBindingPlan | null {
         const prepared = this.moduleDefaultExportBindingBySource.get(sf);
         if (prepared !== undefined) return prepared;
-        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf)) {
+        if ((!this.isJavaScriptSourceFile(sf) && !this.sourceHasTopLevelAwait(sf)) || !ts.isExternalModule(sf)) {
             this.moduleDefaultExportBindingBySource.set(sf, null);
             return null;
         }
@@ -26833,10 +26942,13 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         protocol: "async" | "generator" | "async-generator" = "async",
+        moduleSource?: ts.SourceFile,
     ): boolean {
         const generator = protocol !== "async", asyncGenerator = protocol === "async-generator";
         const graph = planAsyncControlFlowGraph(body, {
             suspensionKind: protocol,
+            instantiatedRoot: !!moduleSource,
+            isModuleDefaultClass: node => this.anonymousDefaultClassDeclarations.has(node),
             isSupportedNestedFunction: (node) => {
                 if (ts.isFunctionDeclaration(node)) {
                     if (this.isSupportedLexicalFunctionDeclaration(node)) return true;
@@ -26856,7 +26968,8 @@ class Emitter {
                 return true;
             },
             isSupportedNestedClass: (node) => ts.isClassDeclaration(node)
-                ? this.isSupportedScopeClassDeclaration(node) : this.isSupportedDynamicClassDefinition(node),
+                ? this.isSupportedScopeClassDeclaration(node) || !!moduleSource && node.parent === moduleSource && this.isSupportedDynamicClassDefinition(node)
+                : this.isSupportedDynamicClassDefinition(node),
         });
         if (!graph || (protocol === "generator" && graph.asyncIteratorCount > 0)) return false;
         const owner = ts.isFunctionLike(body.parent) && "body" in body.parent
@@ -26890,6 +27003,10 @@ class Emitter {
             ts.forEachChild(node, visitClosureCaptures);
         };
         visitClosureCaptures(body);
+        if (moduleSource) for (const [symbol, binding] of this.closureEnvScopes.at(-1) ?? []) {
+            const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+            if (declaration?.getSourceFile() === moduleSource) retainClosureCapture(symbol);
+        }
         if (owner && this.sourceEnvironmentEnabled(body.getSourceFile()))
             for (const capture of this.collectClosureCaptures(owner as ClosureLikeDeclaration)) retainClosureCapture(capture.symbol);
         const localParams: AsyncAwaitContinuationParam[] = [];
@@ -27238,9 +27355,12 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(declaration.name);
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
+            } else if (stateNode.kind === "module-export") {
+                if (!moduleSource || !expressionResultTypes[stateNode.valueSlot]) return false;
             } else if (stateNode.kind === "sync" && ts.isClassDeclaration(stateNode.statement)) {
                 const declaration = stateNode.statement;
-                if (!this.isSupportedScopeClassDeclaration(declaration)) return false;
+                if (!declaration.name || !this.isSupportedScopeClassDeclaration(declaration) &&
+                    !(moduleSource && declaration.parent === moduleSource && this.isSupportedDynamicClassDefinition(declaration))) return false;
                 const symbol = this.symbolForIdentifier(declaration.name);
                 if (!symbol || !fieldBySymbol.has(symbol)) return false;
             } else if (stateNode.kind === "iterator-init") {
@@ -28116,7 +28236,8 @@ class Emitter {
                         }
                     } else if (ts.isClassDeclaration(stateNode.statement)) {
                         const declaration = stateNode.statement;
-                        if (!this.isSupportedScopeClassDeclaration(declaration)) return false;
+                        if (!declaration.name || !this.isSupportedScopeClassDeclaration(declaration) &&
+                            !(moduleSource && declaration.parent === moduleSource && this.isSupportedDynamicClassDefinition(declaration))) return false;
                         const symbol = this.symbolForIdentifier(declaration.name);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local) return false;
@@ -28334,6 +28455,11 @@ class Emitter {
                         callback.line("state->awaiting = false;");
                     } else callback.line(`tsc_dispose_resources_sync(${capability}, ${completion});`);
                     callback.line(`${capability} = NULL;`);
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "module-export") {
+                    const value: EmitResult = { c: `state->expression_result_${stateNode.valueSlot}`, ty: T_VALUE };
+                    if (ts.isExportAssignment(stateNode.statement)) this.emitDefaultExportAssignment(callback, stateNode.statement, value);
+                    else if (!this.emitModuleClassLexicalInitializer(callback, stateNode.statement, value)) return false;
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "expression-complete") {
                     const syncScope = new Map<ts.Expression, EmitResult>();
@@ -29051,10 +29177,8 @@ class Emitter {
         const pending:ts.Node[]=[node];
         while(pending.length){
             const current=pending.pop()!;
-            if(current!==node&&ts.isFunctionLike(current))continue;
-            if(ts.isClassLike(current)){pending.push(...classDefinitionEvaluationExpressions(current));continue;}
             if(ts.isAwaitExpression(current))return true;
-            ts.forEachChild(current,child=>{pending.push(child)});
+            for (const child of definitionEvaluationChildren(current)) pending.push(child);
         }
         return false;
     }
@@ -35462,7 +35586,7 @@ class Emitter {
         if (this.isCommonJsSourceFile(info.sf)) return this.commonJsModuleValue(info, true);
         const json = this.jsonModuleBindings.get(info.sf);
         const value = json ? json.cName : `${this.ensureModuleNamespacePlan(info).factory}()`;
-        return { c: `({ mod_instantiate_${info.moduleId}(); mod_init_${info.moduleId}(); ${value}; })`, ty: T_VALUE };
+        return { c: `({ mod_instantiate_${info.moduleId}(); tsc_module_require_sync(mod_runtime_graph(), ${this.moduleRuntimeIndex(info.moduleId)}); ${value}; })`, ty: T_VALUE };
     }
 
     private emitFiniteCommonJsRequireDispatch(call: ts.CallExpression, specs: string[]): EmitResult {
@@ -35955,7 +36079,17 @@ class Emitter {
         const adapter = this.freshTemp("tsc_dynamic_import_job");
         const stateType = `${adapter}_state_t`;
         const body = new CBuf();
-        body.line(`typedef struct { tsc_promise_t* promise; tsc_str_t* specifier; tsc_dynamic_import_attribute_type_t attributes; } ${stateType};`);
+        body.line(`typedef struct { tsc_promise_t* promise; tsc_promise_t* evaluation; tsc_value_t (*namespace)(void); tsc_str_t* specifier; tsc_dynamic_import_attribute_type_t attributes; } ${stateType};`);
+        body.open(`static void ${adapter}_settle(void* opaque)`);
+        body.line(`${stateType}* state = (${stateType}*)opaque;`);
+        body.line("if (tsc_promise_is_rejected(state->evaluation)) { tsc_promise_reject_in_place(state->promise, tsc_promise_reason(state->evaluation)); return; }");
+        body.line(`TSC_TRY_FRAME(${adapter}_settle_frame);`);
+        body.line(`tsc_try_push(&${adapter}_settle_frame);`);
+        body.open(`if (setjmp(${adapter}_settle_frame.jb) == 0)`);
+        body.line("tsc_promise_resolve_into(state->promise, state->namespace());");
+        body.line("tsc_try_pop();"); body.close(" else {"); body.indent++;
+        body.line("tsc_value_t reason = tsc_current_error_value();"); body.line("tsc_try_pop();");
+        body.line("tsc_promise_reject_in_place(state->promise, reason);"); body.close(); body.close(); body.line();
         body.open(`static void ${adapter}(void* opaque)`);
         body.line(`${stateType}* state = (${stateType}*)opaque;`);
         body.line(`TSC_TRY_FRAME(${adapter}_frame);`);
@@ -35977,10 +36111,9 @@ class Emitter {
             for (const moduleId of initializationOrder) {
                 body.line(`mod_instantiate_${moduleId}();`);
             }
-            for (const moduleId of initializationOrder) {
-                body.line(`mod_init_${moduleId}();`);
-            }
-            body.line(`tsc_promise_fulfill_in_place(state->promise, ${namespace.factory}());`);
+            body.line(`state->evaluation = mod_runtime_evaluation(${this.moduleRuntimeIndex(target.moduleId)});`);
+            body.line(`state->namespace = ${namespace.factory};`);
+            body.line(`if (tsc_promise_is_pending(state->evaluation)) tsc_promise_add_callback(state->evaluation, ${adapter}_settle, state); else tsc_queue_microtask(${adapter}_settle, state);`);
             body.close();
         }
         if (emittedBranch) body.open("else");

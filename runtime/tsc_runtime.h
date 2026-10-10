@@ -1262,6 +1262,17 @@ tsc_value_t tsc_value_object_group_by(tsc_value_t items, tsc_value_t callback);
 struct tsc_map* tsc_value_map_group_by(tsc_value_t items, tsc_value_t callback,
     const tsc_group_by_map_layout_t* layout);
 
+typedef struct tsc_module_graph tsc_module_graph_t;
+typedef struct {
+    tsc_value_t (*execute)(void);
+    const size_t* requests;
+    size_t request_count;
+    bool has_tla;
+} tsc_module_definition_t;
+tsc_module_graph_t* tsc_module_graph_new(const tsc_module_definition_t* definitions, size_t count);
+tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index);
+void tsc_module_require_sync(tsc_module_graph_t* graph, size_t index);
+
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
 tsc_promise_t* tsc_promise_resolve_buffer(tsc_buffer_t* value);

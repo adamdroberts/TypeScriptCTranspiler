@@ -302,6 +302,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Retained Module Record evaluation with top-level await, iterative DFS/SCC scheduling, shared binding cells and dynamic import completion.
+
 - Resumed class declarations and expressions retain immutable inner names; continuation state retains all formal bound names, including patterns/rest, and anonymous defaults infer their binding names.
 
 - Local base/default classes in ordinary function, block and switch scopes share expression definition, retained capture cells and immutable inner names; unsupported initialization remains a stable diagnostic.

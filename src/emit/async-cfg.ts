@@ -1,4 +1,5 @@
-import {classDefinitionEvaluationExpressions,classExpressionFromDeclaration} from './class-definition';
+import { definitionEvaluationChildren } from "./module-evaluation";
+import {classExpressionFromDeclaration} from './class-definition';
 import ts from "typescript";
 import { normalizeAssignmentTarget } from "./binding-tree";
 import { planResumableExpression, type ResumableExpressionState, type ResumableClassDefinition } from "./resumable-expression";
@@ -102,6 +103,13 @@ type AsyncBindingOperation =
     };
 
 type AsyncControlFlowStateCore =
+    | {
+        readonly kind: "module-export";
+        readonly id: number;
+        readonly statement: ts.ExportAssignment | ts.ClassDeclaration;
+        readonly valueSlot: number;
+        readonly next: AsyncControlFlowTarget;
+    }
     | {
         readonly kind: "resumable-expression";
         readonly id: number;
@@ -344,6 +352,8 @@ export interface AsyncControlFlowGraph {
 
 export interface AsyncControlFlowPlannerOptions {
     readonly suspensionKind?: "async" | "generator" | "async-generator";
+    readonly instantiatedRoot?: boolean;
+    readonly isModuleDefaultClass?: (node: ts.ClassDeclaration) => boolean;
     readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
     readonly isSupportedNestedClass?: (node: ts.ClassLikeDeclaration) => boolean;
 }
@@ -406,10 +416,8 @@ export function planAsyncControlFlowGraph(
         const worklist = [node];
         while (worklist.length) {
             const current = worklist.pop()!;
-            if (ts.isFunctionLike(current)) continue;
-            if(ts.isClassLike(current)){worklist.push(...classDefinitionEvaluationExpressions(current));continue;}
             if (ts.isAwaitExpression(current) || includeYield && ts.isYieldExpression(current)) return true;
-            ts.forEachChild(current, child => { worklist.push(child); });
+            for (const child of definitionEvaluationChildren(current)) worklist.push(child);
         }
         return false;
     };
@@ -934,6 +942,7 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
     ): AsyncControlFlowTarget => {
         const entry = buildSequence(block.statements, next, context);
+        if (block === body && options.instantiatedRoot) return entry;
         const lexical = directLexicalDeclarations(block.statements);
         const bindings = lexical.map((declaration) => declaration.name);
         const functions = lexical.filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
@@ -1684,6 +1693,18 @@ export function planAsyncControlFlowGraph(
             const sequence = buildExpressionSequence(statement.expression, null, next, context);
             if (sequence) return sequence;
         }
+        if (options.instantiatedRoot &&
+            (ts.isExportAssignment(statement) && !statement.isExportEquals ||
+                ts.isClassDeclaration(statement) && (!statement.name || options.isModuleDefaultClass?.(statement)))) {
+            const expression = ts.isExportAssignment(statement) ? statement.expression : classExpressionFromDeclaration(statement);
+            const valueSlot = expressionResults.push(expression) - 1;
+            operationResultSlots.add(valueSlot);
+            const completed = setState({ kind: "module-export", id: reserve(), statement, valueSlot, next }, context.exceptionTarget);
+            const sequence = buildExpressionSequence(expression, null, completed, context, null, null, valueSlot);
+            if (sequence) return sequence;
+            supported = false;
+            return next;
+        }
         if(ts.isClassDeclaration(statement)&&statement.name&&containsAwait(statement)&&options.isSupportedNestedClass?.(statement)){
             const sequence=buildExpressionSequence(classExpressionFromDeclaration(statement),statement.name,next,context);
             if(sequence)return sequence;
@@ -1743,6 +1764,9 @@ export function planAsyncControlFlowGraph(
                 if (state.operation.kind === "default-test") {
                     targets.push(state.operation.defaultTarget);
                 }
+                break;
+            case "module-export":
+                targets.push(state.next);
                 break;
             case "expression-complete":
                 if (state.branch) {
