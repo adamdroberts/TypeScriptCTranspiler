@@ -1,3 +1,5 @@
+- Share typed and JavaScript class instance members with ordinary prototype descriptors, callable activation and actual values. Delete native method/accessor adapters, preserve inherited and mutable owners, and route numeric consumers through shared Realm Math calls and ordered ToNumber; verify independent properties and imported-owner E2E in both memory modes.
+
 - Evaluate CommonJS exports through one retained module record and ordinary source binding/value operations. Share actual require results, cached/cyclic/retried evaluation, wrapper mutations and argument discovery; delete export materializers and verify independent semantics plus imported-owner E2E in both memory modes.
 
 - Share ordinary Realm Object/Reflect global References, static calls, aliases and actual results with the canonical source-value worklist. Retain argument owners across typed reads, delete static assign/predicate/purity predecessors, root shared assign/prototype kernels, declare Object construction, and verify independent semantics plus imported-owner E2E in both memory modes.

@@ -116,6 +116,8 @@ typedef struct tsc_str {
 | `tsc_parse_float` | `(const tsc_str_t*) -> double` | Length-driven `parseFloat` decimal/Infinity-prefix scan with ECMAScript leading whitespace, partial parsing, signed zero, and `NaN` on failure. |
 | `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Length-driven `parseInt` digit scan with ECMAScript leading whitespace, ToInt32 radix inference/validation, exact GMP accumulation, and binary64 rounding. |
 | `tsc_string_to_number` | `(const tsc_str_t*) -> double` | Complete-input StringNumericLiteral conversion after ECMAScript trimming, with locale-stable decimal parsing and exact arbitrary-length binary/octal/hex rounding. |
+Source Math calls obtain the actual Realm global and descriptor-backed callee, evaluate one rooted actual argument List, and enter the existing intrinsic descriptor dispatcher. ToNumber occurs inside the operation; binary arguments convert in order and min/max complete all conversions before NaN disposition. Native class boxing retains the class prototype and defines native field data handles; source instance methods and accessors live as ordinary closures on the prototype and use actual receivers and formals.
+
 | `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
 | `tsc_math_round` | `(double) -> double` | `Math.round()`, preserving JavaScript negative zero. |
 | `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
@@ -712,6 +714,6 @@ The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed
 
 1. Declare in `runtime/tsc_runtime.h` under an appropriate section.
 2. Implement in `runtime/tsc_runtime.c`.
-3. Teach the emitter to call it — through the ordinary Array method registry or an applicable `emitStringMethod`, `emitMathCall`, or native dispatcher in `src/emit/index.ts`.
+3. Teach the emitter to call it — through the ordinary Array method registry or an applicable `emitStringMethod` or native dispatcher in `src/emit/index.ts`.
 4. If it exposes a new TS API, also add the TS declaration in `stdlib/lib.core.d.ts` so the type checker accepts user code using it.
 5. Add an e2e case under `tests/e2e/cases/<feature>/` — see [`testing.md`](testing.md).

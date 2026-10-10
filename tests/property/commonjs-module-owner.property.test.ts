@@ -35,6 +35,7 @@ function sources(strict:boolean):Map<string,string>{
  ['retry.cjs',`${directive}globalThis.ownerRuns++;exports.run=globalThis.ownerRuns;if(globalThis.ownerRuns===1)throw globalThis.ownerMarker;module.exports={run:globalThis.ownerRuns};`],
  ['vars.cjs',`${directive}var exports;var module;var require;var __filename;var __dirname;const original=exports,saved=require;require=function(...actual){return [globalThis.ownerMarker,actual.length];};exports.mutable=require('ignored',undefined,17);require=saved;exports.local=saved('./local.cjs');exports.loadedDuring=module.loaded;exports.record=module;exports.pathsAgree=module.filename===__filename&&module.path===__dirname;exports.original=original;`],
  ['shadow.cjs',`${directive}function require(value){return globalThis.ownerMarker;}module.exports=require('./local.cjs');`],
+ ['typed-owner.ts',`// @ts-nocheck\n${directive}module.exports.value=globalThis.ownerMarker;module.exports.original=exports;module.exports.receiver=this;exports.read=()=>globalThis.ownerMarker;`],
  ['wrapper.cjs',`${directive}const original=exports,record=module;module={exports:{token:23}};exports={token:29};original.read=()=>[module.exports.token,exports.token,record.exports===original,this===original];`],
  ]);
 }
@@ -63,6 +64,7 @@ function subject(profile:boolean,noGc:boolean):string{return `// @ts-nocheck
  const retried=require('./retry.cjs');check(retried.run===2&&retried===require('./retry.cjs')&&(globalThis as any).ownerRuns===2,'failed-require-retries-and-success-caches');
  const vars=require('./vars.cjs');check(vars===vars.original&&vars.mutable[0]===(globalThis as any).ownerMarker&&vars.mutable[1]===3&&vars.local.marker===value.marker&&!vars.loadedDuring&&vars.record.loaded&&vars.pathsAgree,'wrapper-var-redeclarations-and-mutable-require');
  check(require('./shadow.cjs')===(globalThis as any).ownerMarker,'same-name-source-function-shadows-wrapper');
+ const typedOwner=require('./typed-owner.ts');check(typedOwner.value===(globalThis as any).ownerMarker&&typedOwner.original===typedOwner&&typedOwner.receiver===typedOwner&&typedOwner.read()===(globalThis as any).ownerMarker,'required-script-source-shares-commonjs-record');
  const wrapper=require('./wrapper.cjs'),observed=wrapper.read();check(observed[0]===23&&observed[1]===29&&observed[2]&&observed[3],'mutable-wrapper-bindings-and-published-record');
  const lazy=require('./lazy.cjs');check(lazy===require('./lazy.cjs')&&(globalThis as any).ownerTrace==='V;L;A;G;CA;CB;Z;','late-actual-require-evaluation');
  async function suspended():Promise<void>{const owner=require('./value.cjs'),callee=owner.method;const first=owner.marker;await Promise.resolve();check(callee.call(owner,first,undefined,owner.marker),'retained-module-callee-through-suspension');}suspended();
@@ -87,7 +89,7 @@ test('CommonJS projects actual source values from one retained cached module rec
      ...(profile?{test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/commonjs-module-owner.js#'+(strict?'strict':'sloppy'),setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
     expect({exitCode:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({exitCode:0,diagnostics:''});
     const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,GC_FREE_SPACE_DIVISOR:'100'}});
-    expect({exitCode:native.exitCode,stderr:native.stderr.toString(),stdout:native.exitCode?native.stdout.toString():''}).toEqual({exitCode:0,stderr:'',stdout:''});const observation=profile?parseHostObservation(JSON.parse(native.stdout.toString())):null;if(observation)expect(observation).toMatchObject({kind:'normal'});
+    expect({strict,typed,profile,noGc,exitCode:native.exitCode,stderr:native.stderr.toString(),stdout:native.exitCode?native.stdout.toString():''}).toEqual({strict,typed,profile,noGc,exitCode:0,stderr:'',stdout:''});const observation=profile?parseHostObservation(JSON.parse(native.stdout.toString())):null;if(observation)expect(observation).toMatchObject({kind:'normal'});
     expect((observation?observation.stdout??'':native.stdout.toString()).trimEnd().split('\n')).toEqual(expected);
    }
   }

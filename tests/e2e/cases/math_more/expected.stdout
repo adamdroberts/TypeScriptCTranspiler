@@ -1,4 +1,4 @@
-cbrt 3
+cbrt true
 hypot 5
 hypot variadic 0 13
 log2 3

@@ -8913,7 +8913,7 @@ static const tsc_math_constant_t math_constants[] = {
 
 static double math_argument(const tsc_array_t* args, size_t index) {
     return index < args->len
-        ? tsc_value_as_num(TSC_ARR(tsc_value_t, args, index))
+        ? tsc_value_to_number(TSC_ARR(tsc_value_t, args, index))
         : NAN;
 }
 
@@ -8924,7 +8924,9 @@ static tsc_value_t math_intrinsic_apply(void* env, tsc_value_t this_arg, tsc_arr
         return tsc_value_num(intrinsic->implementation.unary(math_argument(args, 0)));
     }
     if (intrinsic->kind == TSC_MATH_BINARY) {
-        return tsc_value_num(intrinsic->implementation.binary(math_argument(args, 0), math_argument(args, 1)));
+        double first = math_argument(args, 0);
+        double second = math_argument(args, 1);
+        return tsc_value_num(intrinsic->implementation.binary(first, second));
     }
     if (intrinsic->kind == TSC_MATH_RANDOM) {
         return tsc_value_num(tsc_math_random());
@@ -8937,12 +8939,17 @@ static tsc_value_t math_intrinsic_apply(void* env, tsc_value_t this_arg, tsc_arr
         return tsc_value_num(result);
     }
     double result = intrinsic->kind == TSC_MATH_MIN ? INFINITY : -INFINITY;
+    bool any_nan = false;
     for (size_t index = 0; index < args->len; index++) {
         double value = math_argument(args, index);
-        if (isnan(value)) return tsc_value_num(NAN);
-        result = intrinsic->kind == TSC_MATH_MIN ? fmin(result, value) : fmax(result, value);
+        if (isnan(value)) { any_nan = true; continue; }
+        if (value == 0.0 && result == 0.0) {
+            bool negative = intrinsic->kind == TSC_MATH_MIN
+                ? signbit(value) || signbit(result) : signbit(value) && signbit(result);
+            result = negative ? -0.0 : 0.0;
+        } else result = intrinsic->kind == TSC_MATH_MIN ? fmin(result, value) : fmax(result, value);
     }
-    return tsc_value_num(result);
+    return tsc_value_num(any_nan ? NAN : result);
 }
 
 typedef struct {

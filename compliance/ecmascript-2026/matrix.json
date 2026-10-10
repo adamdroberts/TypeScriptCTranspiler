@@ -2807,8 +2807,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary functions", "arrows and methods", "classes and private state", "generators", "async functions", "async generators"],
-      "localEvidence": {"property": ["tests/property/source-callable-formals.property.test.ts", "tests/property/object-member-formals.property.test.ts", "tests/property/object-member-activation.property.test.ts", "tests/property/suspending-binding-tree.property.test.ts", "tests/property/class-static-owner.property.test.ts", "tests/property/arrow-function.property.test.ts", "tests/property/resource-syntax.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["source_callable_formals", "object_member_formals", "object_member_activation", "suspending_binding_tree", "class_static_descriptor_owner", "function_closures", "generic_function_values", "classes"], "negativeDiagnostics": ["resource_context_syntax_diagnostic"], "declarationSurface": [], "implementation": ["src/emit/async-cfg.ts", "src/emit/resumable-expression.ts", "src/emit/index.ts#classConstructorValue", "src/emit/index.ts#emitClassStaticInitializers", "src/emit/index.ts#emitClosureExpression", "src/emit/types.ts", "runtime/tsc_value.c#tsc_value_prepare_property_reference", "src/function-static-semantics.ts", "src/control-static-semantics.ts", "src/ecmascript-source.ts"]},
-      "knownGaps": ["ArrowFunction lexical super plus remaining object metadata/private-environment/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete."]
+      "localEvidence": {"property": ["tests/property/source-callable-formals.property.test.ts", "tests/property/object-member-formals.property.test.ts", "tests/property/object-member-activation.property.test.ts", "tests/property/suspending-binding-tree.property.test.ts", "tests/property/class-static-owner.property.test.ts", "tests/property/arrow-function.property.test.ts", "tests/property/resource-syntax.property.test.ts", "tests/property/class-instance-owner.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["source_callable_formals", "object_member_formals", "object_member_activation", "suspending_binding_tree", "class_static_descriptor_owner", "function_closures", "generic_function_values", "classes", "class_instance_owner"], "negativeDiagnostics": ["resource_context_syntax_diagnostic"], "declarationSurface": [], "implementation": ["src/emit/async-cfg.ts", "src/emit/resumable-expression.ts", "src/emit/index.ts#classConstructorValue", "src/emit/index.ts#emitClassStaticInitializers", "src/emit/index.ts#emitClosureExpression", "src/emit/types.ts", "runtime/tsc_value.c#tsc_value_prepare_property_reference", "src/function-static-semantics.ts", "src/control-static-semantics.ts", "src/ecmascript-source.ts", "src/emit/index.ts#ensureNativeObjectValueInitializer", "src/emit/types.ts#isOrdinaryClassMember"]},
+      "knownGaps": ["Complete class constructor/instance-field/newTarget/return, arbitrary local/heritage/computed definition, inner-name/HomeObject/super/private semantics and remaining function-kind/intrinsic/eval partitions require canonical lowering and exact reciprocal evidence."]
     },
     {
       "id": "scripts-modules",
@@ -2887,7 +2887,8 @@
           "tests/property/date-year-text.property.test.ts",
           "tests/property/date-text-parse.property.test.ts",
           "tests/property/date-entry-invocation.property.test.ts",
-          "tests/property/ordinary-native-source-flow.property.test.ts"
+          "tests/property/ordinary-native-source-flow.property.test.ts",
+          "tests/property/class-instance-owner.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2912,7 +2913,8 @@
           "date_text_parse",
           "date_entry_invocation",
           "ordinary_native_source_flow",
-          "ordinary_native_slot_flow"
+          "ordinary_native_slot_flow",
+          "class_instance_owner"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
@@ -2925,10 +2927,12 @@
           "runtime/tsc_string.c",
           "runtime/tsc_value.c",
           "runtime/tsc_node.c",
-          "src/emit/index.ts"
+          "src/emit/index.ts",
+          "src/emit/index.ts#isRuntimeGlobalReference",
+          "runtime/tsc_value.c#math_intrinsic_apply"
         ]
       },
-      "knownGaps": [
+      "knownGaps": ["Ordinary Realm Math calls now consume actual values and ordered conversion. Full Math intrinsic metadata, numerical-accuracy partitions and exact reciprocal evidence remain incomplete.",
         "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding; now shares an integral UTC clock. Both exact intrinsic clauses bind reciprocal property, generated actual-List stress, declaration and implementation evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
       ]
     },

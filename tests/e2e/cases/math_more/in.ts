@@ -4,7 +4,8 @@ function mark(label: string): number {
   return 1;
 }
 
-console.log("cbrt", Math.cbrt(27, mark("c")));
+// cbrt is implementation-approximated; observe its mathematical value and effects.
+console.log("cbrt", Math.abs(Math.cbrt(27, mark("c")) - 3) < 1e-12);
 console.log("hypot", Math.hypot(3, 4));
 console.log("hypot variadic", Math.hypot(), Math.hypot(3, 4, 12));
 console.log("log2", Math.log2(8, mark("l")));

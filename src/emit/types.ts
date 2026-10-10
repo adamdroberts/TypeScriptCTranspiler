@@ -214,21 +214,27 @@ export function isOrdinaryObjectMember(node: ts.Node): node is ts.MethodDeclarat
         ts.isSetAccessorDeclaration(node)) && !!node.parent && ts.isObjectLiteralExpression(node.parent);
 }
 
-/** Source formal syntax owns one value ABI for ordinary object members and
- * JavaScript functions. Native class and external callback conventions keep
- * their separate physical adapters. */
+/** Source class members share the ordinary callable/formal representation. */
+export function isOrdinaryClassMember(node: ts.Node): node is ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration {
+    return (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) &&
+        !!node.parent && ts.isClassLike(node.parent) && !!node.body && !node.getSourceFile().isDeclarationFile;
+}
+
+/** Source formal syntax owns one value ABI for ordinary functions and
+ * object/class members. Constructors and external callbacks retain their
+ * separate physical adapters where applicable. */
 export function hasCanonicalValueFormals(node: ts.Node): boolean {
-    return isOrdinaryObjectMember(node) ||
+    return isOrdinaryObjectMember(node) || isOrdinaryClassMember(node) ||
         (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
             !!node.body && !node.getSourceFile().isDeclarationFile ||
         ts.isFunctionLike(node) && /\.[cm]?jsx?$/i.test(node.getSourceFile().fileName);
 }
 
-/** Ordinary object members and JavaScript functions receive the actual
+/** Ordinary object/class members and source functions receive the actual
  * runtime `this` even when the structural signature omits a this symbol.
  * Arrow functions retain their separate lexical activation binding. */
 export function hasImplicitValueThis(node: ts.Node): boolean {
-    if (isOrdinaryObjectMember(node)) return true;
+    if (isOrdinaryObjectMember(node) || isOrdinaryClassMember(node)) return true;
     if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.body &&
         !node.getSourceFile().isDeclarationFile) return true;
     if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;

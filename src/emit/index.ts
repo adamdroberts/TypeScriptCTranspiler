@@ -150,7 +150,7 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
 
 // These ordinary global owners share Realm References, member calls and the
 // canonical source-value dependency graph independently of method signatures.
-const ORDINARY_OBJECT_GLOBAL_OWNERS = new Set(["Object", "Reflect"]);
+const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -671,7 +671,6 @@ class Emitter {
     private classConstructorValueAdapters = new Map<string, string>();
     private defaultClassConstructAdapter: string | null = null;
     private nativeObjectValueInitializers = new Map<string, string>();
-    private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
     private decoratorAddInitializerAdapter: string | null = null;
@@ -1381,7 +1380,7 @@ class Emitter {
                 (ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     ORDINARY_OBJECT_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     (ts.isIdentifier(expr.expression.expression) &&
-                        ORDINARY_OBJECT_GLOBAL_OWNERS.has(expr.expression.expression.text)))) return false;
+                        ORDINARY_REALM_GLOBAL_OWNERS.has(expr.expression.expression.text)))) return false;
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
@@ -2070,13 +2069,6 @@ class Emitter {
         ) {
             return this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
                 this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            this.isSideEffectFreeMathCall(method, call.arguments, seenConsts) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Math")
-        ) {
-            return true;
         }
         if (
             ts.isIdentifier(recv) &&
@@ -3941,10 +3933,6 @@ class Emitter {
             return Number.isFinite(value) ? value : null;
         }
         if (ts.isCallExpression(unwrapped)) {
-            if (ts.isPropertyAccessExpression(unwrapped.expression)) {
-                const val = this.sideEffectFreeMathCallValue(unwrapped, seenConsts);
-                if (val !== null) return val;
-            }
             let isParseCall = false;
             let which: "parseInt" | "parseFloat" | undefined = undefined;
             if (ts.isIdentifier(unwrapped.expression)) {
@@ -8282,15 +8270,6 @@ class Emitter {
         ) {
             return true;
         }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Math") &&
-            this.isSideEffectFreeMathCall(unwrapped.expression.name.text, unwrapped.arguments, seenConsts)
-        ) {
-            return true;
-        }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreePrimitivePromiseResolveValue(init, seenConsts);
     }
@@ -11406,21 +11385,6 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
         const recv = expr.expression;
         const name = expr.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "Math")) {
-            switch (name) {
-                case "PI":
-                case "E":
-                case "LN2":
-                case "LN10":
-                case "LOG2E":
-                case "LOG10E":
-                case "SQRT2":
-                case "SQRT1_2":
-                    return true;
-                default:
-                    return false;
-            }
-        }
         if (this.isUnshadowedGlobalIdentifier(recv, "Number")) {
             switch (name) {
                 case "EPSILON":
@@ -12816,7 +12780,7 @@ class Emitter {
             ]).has(unwrapped.text)) {
                 return "function";
             }
-            if (new Set(["Atomics", "Intl", "JSON", "Math", "Reflect"]).has(unwrapped.text)) {
+            if (new Set(["Atomics", "Intl", "JSON", "Reflect"]).has(unwrapped.text)) {
                 return "object";
             }
         }
@@ -12903,138 +12867,6 @@ class Emitter {
         return init ? this.sideEffectFreeTypeofString(init, seenConsts) : null;
     }
 
-    private sideEffectFreeMathCallValue(
-        expr: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): number | null {
-        if (!ts.isPropertyAccessExpression(expr.expression)) return null;
-        const recv = expr.expression.expression;
-        const method = expr.expression.name.text;
-        if (!ts.isIdentifier(recv) || !this.isUnshadowedGlobalIdentifier(recv, "Math")) return null;
-
-        if (method === "abs") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.abs(arg);
-            }
-        }
-        if (method === "floor") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.floor(arg);
-            }
-        }
-        if (method === "ceil") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.ceil(arg);
-            }
-        }
-        if (method === "trunc") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.trunc(arg);
-            }
-        }
-        if (method === "min") {
-            const args: number[] = [];
-            for (const argExpr of expr.arguments) {
-                const argVal = this.sideEffectFreeNumericLiteralSameValueZeroValue(argExpr, seenConsts);
-                if (argVal === null) return null;
-                args.push(argVal);
-            }
-            return Math.min(...args);
-        }
-        if (method === "max") {
-            const args: number[] = [];
-            for (const argExpr of expr.arguments) {
-                const argVal = this.sideEffectFreeNumericLiteralSameValueZeroValue(argExpr, seenConsts);
-                if (argVal === null) return null;
-                args.push(argVal);
-            }
-            return Math.max(...args);
-        }
-        if (method === "sign") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (Number.isNaN(arg) || arg === 0 || !Number.isFinite(arg)) return null;
-            if (this.sideEffectFreeTypeofString(expr.arguments[0]!, seenConsts) !== "number") return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.sign(arg);
-            }
-        }
-        if (method === "round") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.round(arg);
-            }
-        }
-        if (method === "sqrt") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.sqrt(arg);
-            }
-        }
-        if (method === "cbrt") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.cbrt(arg);
-            }
-        }
-        if (method === "clz32") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.clz32(arg);
-            }
-        }
-        if (method === "pow") {
-            if (expr.arguments.length < 2) return null;
-            const base = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (base === null) return null;
-            const exponent = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[1]!, seenConsts);
-            if (exponent === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
-                return Math.pow(base, exponent);
-            }
-        }
-        if (method === "fround") {
-            if (expr.arguments.length < 1) return null;
-            const arg = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (arg === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) {
-                return Math.fround(arg);
-            }
-        }
-        if (method === "imul") {
-            if (expr.arguments.length < 2) return null;
-            const left = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[0]!, seenConsts);
-            if (left === null) return null;
-            const right = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr.arguments[1]!, seenConsts);
-            if (right === null) return null;
-            if (this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 2, seenConsts)) {
-                return Math.imul(left, right);
-            }
-        }
-        return null;
-    }
-
     private sideEffectFreePrimitiveNumberValue(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -13051,13 +12883,6 @@ class Emitter {
                 seenConsts,
             );
             if (arrayLength !== null) return arrayLength;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression)
-        ) {
-            const val = this.sideEffectFreeMathCallValue(unwrapped, seenConsts);
-            if (val !== null) return val;
         }
         if (
             ts.isCallExpression(unwrapped) &&
@@ -13162,20 +12987,6 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression)
-        ) {
-            const recv = unwrapped.expression.expression;
-            const method = unwrapped.expression.name.text;
-            if (
-                ts.isIdentifier(recv) &&
-                this.isUnshadowedGlobalIdentifier(recv, "Math") &&
-                (method === "abs" || method === "floor" || method === "ceil" || method === "trunc" || method === "min" || method === "max" || method === "sign")
-            ) {
-                return unwrapped.arguments.every((arg) => this.isSideEffectFreePrimitiveNumberCoercion(arg, seenConsts));
-            }
-        }
         switch (unwrapped.kind) {
             case ts.SyntaxKind.TrueKeyword:
             case ts.SyntaxKind.FalseKeyword:
@@ -13636,23 +13447,6 @@ class Emitter {
         return !!init && this.isSideEffectFreeNonStringPrimitiveObjectOperand(init, seenConsts);
     }
 
-    private isSideEffectFreeMathCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (method === "random") return false;
-        const supported = new Set([
-            "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
-            "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
-            "f16round", "fround", "hypot", "imul", "log", "log1p", "log2", "log10", "max",
-            "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
-            "tanh", "trunc",
-        ]);
-        return supported.has(method) &&
-            args.every((arg) => this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts));
-    }
-
     private isUnshadowedGlobalIdentifier(id: ts.Identifier, name: string): boolean {
         if (id.text !== name) return false;
         if (
@@ -13736,7 +13530,7 @@ class Emitter {
         if (!this.isOutOfBandIdentifier(id)) return false;
         const descriptor = runtimeGlobalBindings.get(id.text);
         if (descriptor && (this.isJavaScriptSourceFile(id.getSourceFile()) || descriptor.mutableValue ||
-            ORDINARY_OBJECT_GLOBAL_OWNERS.has(id.text))) return true;
+            ORDINARY_REALM_GLOBAL_OWNERS.has(id.text))) return true;
         // A free JS name has no physical C slot. Resolve its actual property
         // against the Realm global record, including missing-name semantics.
         if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
@@ -14336,7 +14130,8 @@ class Emitter {
         }
         // Observation Scripts keep their explicit parse ownership. A require
         // edge creates a CommonJS wrapper, rather than another global Script.
-        const commonJs = this.isJavaScriptSourceFile(source) && !this.isJsonSourceFile(source) && !ts.isExternalModule(source) &&
+        const commonJs = (this.isJavaScriptSourceFile(source) || this.commonJsRequireSources.has(source)) &&
+            !this.isJsonSourceFile(source) && !ts.isExternalModule(source) &&
             !this.test262ScriptEntryPaths.has(path.resolve(source.fileName)) && !this.isTest262EvalSourceFile(source) &&
             !this.functionSourcePaths.has(path.resolve(source.fileName)) &&
             (!this.options.test262Observation || this.commonJsRequireSources.has(source));
@@ -20168,7 +19963,10 @@ class Emitter {
             const selected = this.functionDeclarationsForBody(bindingOwner.body).get(id.text);
             if (selected) sym = this.checker.getSymbolAtLocation(selected.name);
         }
-        if (sym && this.isCommonJsSourceFile(id.getSourceFile()) &&
+        // Checker CommonJS inference can alias an ordinary require initializer
+        // to an export RHS. A source variable/parameter still owns its binding
+        // independently of the input language or the inferred export shape.
+        if (sym &&
             (sym.declarations ?? []).some(declaration =>
                 (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration)) &&
                 this.test262BindingNames(declaration.name).some(name => name.text === id.text))) return sym;
@@ -23741,13 +23539,13 @@ class Emitter {
                 addClosureCaptures(node);
                 return;
             }
-            if (node !== owner && ts.isClassExpression(node)) {
+            if (node !== owner && ts.isClassLike(node)) {
                 /* ClassDefinitionEvaluation creates each method closure while
-                 * the class expression is evaluated.  Feed every supported
+                 * the class definition is evaluated. Feed every supported
                  * method through the same enclosing capture-cell collection;
                  * member cardinality never changes the lowering shape. */
                 for (const member of node.members) {
-                    if (ts.isMethodDeclaration(member) && member.body) {
+                    if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body) {
                         addClosureCaptures(member);
                     }
                 }
@@ -24559,50 +24357,10 @@ class Emitter {
 
     private emitClassPrototypes(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = nativeTypeName(cd);
-        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
-            | ts.ConstructorDeclaration
-            | undefined;
-        const ctorParams = this.collectParams(ctor?.parameters ?? []);
-        const initParams = [`${name}_t* self`, ...ctorParams];
-        this.protos.line(
-            `static inline void ${name}_init(${initParams.join(", ")});`,
-        );
-        this.protos.line(
-            `static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"});`,
-        );
-        for (const m of cd.members) {
-            if (isStatic(m)) { if (m.name) this.classMemberPropertyKey(m.name); continue; }
-            if (ts.isMethodDeclaration(m)) {
-                if (this.isGenericMethod(m)) continue;
-                const methodName = this.classMethodCName(m.name);
-                if (!methodName) unsupported(m, "computed method names");
-                const sig = this.checker.getSignatureFromDeclaration(m);
-                if (!sig) unsupported(m, "could not resolve method signature");
-                const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
-                this.protos.line(
-                    `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"});`,
-                );
-            } else if (ts.isGetAccessorDeclaration(m)) {
-                const accessorName = this.classAccessorCName(m.name, "get");
-                if (!accessorName) unsupported(m, "computed accessor names");
-                const sig = this.checker.getSignatureFromDeclaration(m);
-                if (!sig) unsupported(m, "could not resolve getter signature");
-                const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = [`${name}_t* self`];
-                this.protos.line(
-                    `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
-                );
-            } else if (ts.isSetAccessorDeclaration(m)) {
-                const accessorName = this.classAccessorCName(m.name, "set");
-                if (!accessorName) unsupported(m, "computed accessor names");
-                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
-                this.protos.line(
-                    `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
-                );
-            }
-        }
+        const name = nativeTypeName(cd), ctor = cd.members.find(ts.isConstructorDeclaration);
+        const parameters = this.collectParams(ctor?.parameters ?? []);
+        this.protos.line(`static inline void ${name}_init(${[`${name}_t* self`, ...parameters].join(", ")});`);
+        this.protos.line(`static inline ${name}_t* ${name}_new(${parameters.length ? parameters.join(", ") : "void"});`);
     }
 
     private classConstructorInitializesAllFields(cd: ts.ClassDeclaration): boolean {
@@ -25843,21 +25601,18 @@ class Emitter {
             }
             if (ts.isMethodDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceMethodDecoratorReplacementName(cd, m)};`);
-                this.ensureClassInstanceMethodDecoratorAdapter(cd, m);
             }
             if (ts.isGetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
             }
             if (ts.isGetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceGetterDecoratorReplacementName(cd, m)};`);
-                this.ensureClassInstanceGetterDecoratorAdapter(cd, m);
             }
             if (ts.isSetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
             }
             if (ts.isSetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceSetterDecoratorReplacementName(cd, m)};`);
-                this.ensureClassInstanceSetterDecoratorAdapter(cd, m);
             }
         }
         this.defs.line();
@@ -25945,117 +25700,6 @@ class Emitter {
         this.defs.close();
         this.defs.line();
 
-        for (const m of cd.members) {
-            if (isStatic(m)) continue;
-            if (ts.isMethodDeclaration(m) && m.body) {
-                if (this.isGenericMethod(m)) continue;
-                const methodName = this.classMethodCName(m.name);
-                if (!methodName) unsupported(m, "computed method names");
-                const sig = this.checker.getSignatureFromDeclaration(m);
-                if (!sig) unsupported(m, "could not resolve method signature");
-                const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
-                this.defs.open(
-                    `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"})`,
-                );
-                const isAsync = this.isAsyncDeclaration(m);
-                const isGenerator = this.isGeneratorDeclaration(m);
-                const mappedRet = this.prepareType(ret);
-                if (isAsync && !isGenerator) {
-                    this.validateImmediateAsyncFunction(m);
-                    if (mappedRet.kind !== "promise") {
-                        unsupported(m, "async methods must return Promise<T>");
-                    }
-                }
-                this.currentClass = name;
-                if (isGenerator) {
-                    try {
-                        this.emitGeneratorFunctionLikeBody(
-                            this.defs,
-                            m,
-                            mappedRet,
-                            m.parameters,
-                            this.capturedCellsFor(m),
-                            { c: "self", ty: classType(name) },
-                        );
-                    } finally {
-                        this.currentClass = null;
-                    }
-                } else {
-                    const capturedCells = this.capturedCellsFor(m);
-                    this.returnStack.push(mappedRet);
-                    if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
-                    this.cellScopes.push(capturedCells);
-                    const previousDynamicRoots = isAsync
-                        ? this.beginAsyncDynamicRootScope(this.defs, m.parameters)
-                        : null;
-                    try {
-                        this.emitAsyncFunctionBoundary(this.defs, isAsync, () => {
-                            const methodBody = m.body!;
-                            this.emitCapturedParameterCells(this.defs, m.parameters, capturedCells);
-                            const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
-                                this.defs,
-                                methodBody,
-                                m.parameters,
-                                { c: "self", ty: classType(name) },
-                            );
-                            if (!handledAsyncAwait) {
-                                if (isAsync && this.containsAwaitInFunctionBody(methodBody)) {
-                                    unsupported(methodBody, "async suspension graph is not supported by the canonical CFG");
-                                }
-                                this.emitStmtList(this.defs, methodBody.statements);
-                                if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-                            }
-                        });
-                    } finally {
-                        if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
-                        this.cellScopes.pop();
-                        if (isAsync) this.asyncFunctionStack.pop();
-                        this.returnStack.pop();
-                        this.currentClass = null;
-                    }
-                }
-                this.defs.close();
-                this.defs.line();
-            } else if (ts.isGetAccessorDeclaration(m) && m.body) {
-                const accessorName = this.classAccessorCName(m.name, "get");
-                if (!accessorName) unsupported(m, "computed accessor names");
-                const sig = this.checker.getSignatureFromDeclaration(m);
-                if (!sig) unsupported(m, "could not resolve getter signature");
-                const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = [`${name}_t* self`];
-                this.defs.open(
-                    `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
-                );
-                this.currentClass = name;
-                this.returnStack.push(ret);
-                try {
-                    this.emitStmtList(this.defs, m.body.statements);
-                } finally {
-                    this.returnStack.pop();
-                    this.currentClass = null;
-                }
-                this.defs.close();
-                this.defs.line();
-            } else if (ts.isSetAccessorDeclaration(m) && m.body) {
-                const accessorName = this.classAccessorCName(m.name, "set");
-                if (!accessorName) unsupported(m, "computed accessor names");
-                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
-                this.defs.open(
-                    `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
-                );
-                this.currentClass = name;
-                this.returnStack.push(T_VOID);
-                try {
-                    this.emitStmtList(this.defs, m.body.statements);
-                } finally {
-                    this.returnStack.pop();
-                    this.currentClass = null;
-                }
-                this.defs.close();
-                this.defs.line();
-            }
-        }
     }
 
     private emitClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
@@ -26350,8 +25994,9 @@ class Emitter {
                     buf.line(`(void)(${result});`);
                 }
             }
-            if (isStatic(member)) {
-                const target = this.classConstructorValue(cd).c;
+            if (isStatic(member) || !ts.isPropertyDeclaration(member)) {
+                const constructor = this.classConstructorValue(cd).c;
+                const target = isStatic(member) ? constructor : `tsc_value_get_prop(${constructor}, ${this.stringLit("prototype")})`;
                 const key = this.stringLit(memberName);
                 if (ts.isPropertyDeclaration(member)) {
                     const list = this.classFieldDecoratorInitializersName(cd, member);
@@ -26361,12 +26006,14 @@ class Emitter {
                         `true, true, true, true, true, true, true)) ` +
                         `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"));`);
                 } else if (ts.isMethodDeclaration(member)) {
-                    buf.line(`(void)tsc_value_define_property_desc(${target}, ${key}, ${this.classStaticMethodDecoratorValue(cd, member).c}, ` +
+                    const value = isStatic(member) ? this.classStaticMethodDecoratorValue(cd, member) : this.classInstanceMethodDecoratorValue(cd, member);
+                    buf.line(`(void)tsc_value_define_property_desc(${target}, ${key}, ${value.c}, ` +
                         `true, true, true, false, true, true, true);`);
                 } else {
                     const getter = ts.isGetAccessorDeclaration(member);
-                    const value = getter ? this.classStaticGetterDecoratorValue(cd, member).c
-                        : this.classStaticSetterDecoratorValue(cd, member as ts.SetAccessorDeclaration).c;
+                    const value = isStatic(member)
+                        ? getter ? this.classStaticGetterDecoratorValue(cd, member).c : this.classStaticSetterDecoratorValue(cd, member as ts.SetAccessorDeclaration).c
+                        : getter ? this.classInstanceGetterDecoratorValue(cd, member).c : this.classInstanceSetterDecoratorValue(cd, member as ts.SetAccessorDeclaration).c;
                     buf.line(`(void)tsc_value_object_define_${getter ? "getter" : "setter"}(${target}, ${key}, ${value});`);
                 }
             }
@@ -26396,131 +26043,15 @@ class Emitter {
         };
     }
 
-    private nativeClassMethodValueCallee(owner: ts.ClassDeclaration, member: ts.MethodDeclaration): string {
-        if (!owner.name) unsupported(owner, "native method values require a named owner");
-        const memberName = this.classMethodCName(member.name);
-        if (!memberName) unsupported(member, "native class member key is outside the static key plan");
-        if (!this.isGenericMethod(member)) return `${nativeTypeName(owner)}_${memberName}`;
-        const erased = new Map((member.typeParameters ?? []).map(parameter => [parameter.name.text, T_VALUE]));
-        return this.ensureGenericMethodSpecialization(member, nativeTypeName(owner), erased);
-    }
-
     private classInstanceMethodDecoratorValue(
         cd: ts.ClassDeclaration,
         member: ts.MethodDeclaration,
     ): EmitResult {
         const replacement = this.classInstanceMethodDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassInstanceMethodDecoratorAdapter(cd, member);
-        return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
-            ty: T_VALUE,
-        };
-    }
-
-    private ensureClassInstanceMethodDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.MethodDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated instance methods require a named class");
-        if (isStatic(member)) unsupported(member, "instance method decorator adapter requires an instance method");
-        const methodName = this.classMethodCName(member.name);
-        if (!methodName) unsupported(member, "computed instance method names");
-        const name = `${nativeTypeName(cd)}_${methodName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const sig = this.checker.getSignatureFromDeclaration(member);
-        if (!sig) unsupported(member, "could not resolve instance method signature");
-        const params = sig.getParameters();
-        const paramTypes = params.map((param) => {
-            const decl = param.valueDeclaration;
-            if (!decl || !ts.isParameter(decl)) {
-                unsupported(member, "instance method decorator parameter declaration unavailable");
-            }
-            return this.prepareType(mapTsType(
-                decl,
-                this.checker.getTypeOfSymbolAtLocation(param, member),
-                this.checker,
-            ));
-        });
-        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
-        const callArgs: string[] = ["self"];
-        for (let i = 0; i < paramTypes.length; i++) {
-            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
-            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
-        }
-        const call = `${this.nativeClassMethodValueCallee(cd, member)}(${callArgs.join(", ")})`;
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`${call};`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = ${call};`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensureClassInstanceMethodValueAdapter(
-        owner: ts.ClassDeclaration,
-        member: ts.MethodDeclaration,
-    ): string {
-        if (!owner.name) unsupported(owner, "class method value adapters require a named class");
-        if (isStatic(member)) unsupported(member, "class method value adapters require an instance method");
-        const methodName = this.classMethodCName(member.name);
-        if (!methodName) unsupported(member, "computed instance method names");
-        const key = `${nativeTypeName(owner)}.${methodName}`;
-        const existing = this.classInstanceMethodValueAdapters.get(key);
-        if (existing) return existing;
-        const name = `${nativeTypeName(owner)}_${methodName}_dynamic_value`;
-        this.classInstanceMethodValueAdapters.set(key, name);
-        const sig = this.checker.getSignatureFromDeclaration(member);
-        if (!sig) unsupported(member, "could not resolve instance method signature");
-        const params = sig.getParameters();
-        const paramTypes = params.map((param) => {
-            const decl = param.valueDeclaration;
-            if (!decl || !ts.isParameter(decl)) {
-                unsupported(member, "instance method value parameter declaration unavailable");
-            }
-            return this.prepareType(mapTsType(
-                decl,
-                this.checker.getTypeOfSymbolAtLocation(param, member),
-                this.checker,
-            ));
-        });
-        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${nativeTypeName(owner)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(owner)), member)};`);
-        const callArgs: string[] = ["self"];
-        for (let i = 0; i < paramTypes.length; i++) {
-            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
-            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
-        }
-        const call = `${this.nativeClassMethodValueCallee(owner, member)}(${callArgs.join(", ")})`;
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`${call};`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = ${call};`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
+        const { propertyKey: key } = this.classMemberPropertyKey(member.name);
+        const prototype = `tsc_value_get_prop(${this.classConstructorValue(cd).c}, ${this.stringLit("prototype")})`;
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${prototype}, ${key}), ${this.stringLit("value")})`;
+        return { c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`, ty: T_VALUE };
     }
 
     private classMemberPropertyKey(name: ts.PropertyName): { publicName: string; propertyKey: string } {
@@ -26533,43 +26064,17 @@ class Emitter {
             : this.stringLit(publicName) };
     }
 
-    private classInstanceMembersForValueBox(cd: ts.ClassDeclaration): {
-        publicName: string; propertyKey: string; owner: ts.ClassDeclaration;
-        member: { kind: "method"; method: ts.MethodDeclaration } |
-            { kind: "accessor"; get?: ts.GetAccessorDeclaration; set?: ts.SetAccessorDeclaration } |
-            { kind: "field"; type: CType };
-    }[] {
-        type Member = ReturnType<Emitter["classInstanceMembersForValueBox"]>[number];
-        const members = new Map<string, Member>(), chain: ts.ClassDeclaration[] = [];
-        const seen = new Set<ts.ClassDeclaration>();
+    private nativeInstanceFieldDescriptors(cd: ts.ClassDeclaration): { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; type: CType }[] {
+        const chain: ts.ClassDeclaration[] = [], seen = new Set<ts.ClassDeclaration>();
         for (let owner: ts.ClassDeclaration | null = cd; owner; owner = this.baseClassDecl(owner)) {
             if (seen.has(owner)) unsupported(owner, "native class inheritance requires an acyclic owner graph");
             seen.add(owner); chain.push(owner);
         }
-        for (const owner of chain.reverse()) {
-            for (const declaration of owner.members) {
-                if (isStatic(declaration) || !(ts.isMethodDeclaration(declaration) ||
-                    ts.isGetAccessorDeclaration(declaration) || ts.isSetAccessorDeclaration(declaration))) continue;
-                if (!declaration.body) continue;
-                const { publicName, propertyKey } = this.classMemberPropertyKey(declaration.name);
-                if (ts.isMethodDeclaration(declaration)) {
-                    members.set(propertyKey, { publicName, propertyKey, owner, member: { kind: "method", method: declaration } });
-                } else {
-                    const previous = members.get(propertyKey);
-                    const accessor = previous?.owner === owner && previous.member.kind === "accessor"
-                        ? previous.member : { kind: "accessor" as const };
-                    if (ts.isGetAccessorDeclaration(declaration)) accessor.get = declaration;
-                    else accessor.set = declaration;
-                    members.set(propertyKey, { publicName, propertyKey, owner, member: accessor });
-                }
-            }
-            for (const field of this.classOwnInstanceFields(owner)) {
-                const propertyKey = `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`;
-                members.set(propertyKey, { publicName: field.name, propertyKey, owner,
-                    member: { kind: "field", type: this.prepareType(field.type) } });
-            }
+        const fields = new Map<string, { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; type: CType }>();
+        for (const owner of chain.reverse()) for (const field of this.classOwnInstanceFields(owner)) {
+            fields.set(field.name, { publicName: field.name, propertyKey: this.stringLit(field.name), owner, type: this.prepareType(field.type) });
         }
-        return [...members.values()];
+        return [...fields.values()];
     }
 
     private ensureClassInstanceFieldGetterAdapter(
@@ -26641,27 +26146,15 @@ class Emitter {
         const definitions: string[] = [];
         const members = nativeInterface ? this.interfaceFields(nativeInterface).map(field => ({
             publicName: field.name, propertyKey: `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`,
-            owner: nativeInterface!, member: { kind: "field" as const, type: field.type },
-        })) : this.classInstanceMembersForValueBox(cd);
-        for (const { publicName, propertyKey, owner, member } of members) {
-            if (member.kind === "method") {
-                const method = member.method, adapter = this.ensureClassInstanceMethodValueAdapter(owner as ts.ClassDeclaration, method);
-                const sig = this.checker.getSignatureFromDeclaration(method);
-                const length = sig?.getParameters().length ?? method.parameters.length;
-                definitions.push(`tsc_object_define(${obj}, ${propertyKey}, ` +
-                    `${this.withCallableSourceText(`tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}))`, method)}, true, false, true)`);
-            } else if (member.kind === "field") {
-                const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, member.type);
-                const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, member.type);
-                definitions.push(`tsc_object_define_native_data(${obj}, ${propertyKey}, ${getter}, ${setter}, true)`);
-            } else {
-                const getter = member.get ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceGetterDecoratorAdapter(owner as ts.ClassDeclaration, member.get)}, NULL, 0.0, ${this.stringLit("get " + publicName)})`, member.get) : "tsc_value_undefined()";
-                const setter = member.set ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceSetterDecoratorAdapter(owner as ts.ClassDeclaration, member.set)}, NULL, 1.0, ${this.stringLit("set " + publicName)})`, member.set) : "tsc_value_undefined()";
-                if (member.get) definitions.push(`tsc_value_object_define_getter(tsc_value_object(${obj}), ${propertyKey}, ${getter})`);
-                if (member.set) definitions.push(`tsc_value_object_define_setter(tsc_value_object(${obj}), ${propertyKey}, ${setter})`);
-                definitions.push(`tsc_value_define_property_desc(tsc_value_object(${obj}), ${propertyKey}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
-            }
+            owner: nativeInterface!, type: field.type,
+        })) : this.nativeInstanceFieldDescriptors(cd);
+        for (const { publicName, propertyKey, owner, type: fieldType } of members) {
+            const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, fieldType);
+            const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, fieldType);
+            definitions.push(`tsc_object_define_native_data(${obj}, ${propertyKey}, ${getter}, ${setter}, true)`);
         }
+        if (!nativeInterface) definitions.push(`if (!tsc_value_set_prototype_of(tsc_value_object(${obj}), tsc_value_get_prop(${this.classConstructorValue(cd).c}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
+
         const buf = new CBuf();
         buf.open(signature);
         buf.line("(void)object;");
@@ -26717,40 +26210,29 @@ class Emitter {
             `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, ` +
             `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
         if (!initializeMembers) return { c: constructor, ty: T_VALUE };
-        const staticDefinitions: string[] = [];
+        const definitions: string[] = [];
         const base = this.baseClassDecl(cd);
-        if (base) staticDefinitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${this.classConstructorValue(base).c})) ` +
-            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
-        for (const member of cd.members) {
-            if (!isStatic(member)) continue;
-            if (ts.isPropertyDeclaration(member) || ts.isClassStaticBlockDeclaration(member)) continue;
-            if (!member.name) unsupported(member, "class member key is outside the canonical definition plan");
-            const { publicName: propertyName, propertyKey: key } = this.classMemberPropertyKey(member.name);
-            if (ts.isMethodDeclaration(member)) {
-                const methodValue = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
-                staticDefinitions.push(
-                    `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${methodValue}, ` +
-                    `true, true, true, false, true, true, true)) ` +
-                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static method definition failed"))`,
-                );
-                continue;
-            }
-            if (ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
-                const kind = ts.isGetAccessorDeclaration(member) ? "get" : "set";
-                const value = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
-                staticDefinitions.push(`tsc_value_object_define_${kind === "get" ? "getter" : "setter"}(_class_constructor, ${key}, ${value})`);
-                staticDefinitions.push(`tsc_value_define_property_desc(_class_constructor, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
-                continue;
-            }
-
+        if (base) {
+            const parent = this.classConstructorValue(base).c;
+            definitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${parent})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
+            definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
         }
-        return {
-            c: staticDefinitions.length === 0
-                ? constructor
-                : `({ tsc_value_t _class_constructor = ${constructor}; ` +
-                    `${staticDefinitions.join("; ")}; _class_constructor; })`,
-            ty: T_VALUE,
-        };
+        // One source-ordered member collection defines constructor and prototype
+        // descriptors. Every callable borrows ordinary activation and formals.
+        for (const member of cd.members) {
+            if (!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) || !member.body) continue;
+            const { propertyKey: key } = this.classMemberPropertyKey(member.name);
+            const target = isStatic(member) ? "_class_constructor" : "_class_prototype";
+            const value = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
+            if (ts.isMethodDeclaration(member)) {
+                definitions.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
+            } else {
+                const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
+                definitions.push(`tsc_value_object_define_${kind}(${target}, ${key}, ${value})`);
+                definitions.push(`tsc_value_define_property_desc(${target}, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
+            }
+        }
+        return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
     }
 
     private classRuntimeName(cd: ts.ClassDeclaration): string {
@@ -26778,46 +26260,10 @@ class Emitter {
         member: ts.GetAccessorDeclaration,
     ): EmitResult {
         const replacement = this.classInstanceGetterDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassInstanceGetterDecoratorAdapter(cd, member);
-        return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
-            ty: T_VALUE,
-        };
-    }
-
-    private ensureClassInstanceGetterDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.GetAccessorDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated instance getters require a named class");
-        if (isStatic(member)) unsupported(member, "instance getter decorator adapter requires an instance getter");
-        const accessorName = this.classAccessorCName(member.name, "get");
-        if (!accessorName) unsupported(member, "computed instance getter names");
-        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const sig = this.checker.getSignatureFromDeclaration(member);
-        if (!sig) unsupported(member, "could not resolve instance getter signature");
-        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("(void)args;");
-        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
-        const call = `${nativeTypeName(cd)}_${accessorName}(self)`;
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`${call};`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = ${call};`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
+        const { propertyKey: key } = this.classMemberPropertyKey(member.name);
+        const prototype = `tsc_value_get_prop(${this.classConstructorValue(cd).c}, ${this.stringLit("prototype")})`;
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${prototype}, ${key}), ${this.stringLit("get")})`;
+        return { c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`, ty: T_VALUE };
     }
 
     private classStaticSetterDecoratorValue(
@@ -26839,41 +26285,10 @@ class Emitter {
         member: ts.SetAccessorDeclaration,
     ): EmitResult {
         const replacement = this.classInstanceSetterDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassInstanceSetterDecoratorAdapter(cd, member);
-        return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
-            ty: T_VALUE,
-        };
-    }
-
-    private ensureClassInstanceSetterDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.SetAccessorDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated instance setters require a named class");
-        if (isStatic(member)) unsupported(member, "instance setter decorator adapter requires an instance setter");
-        const accessorName = this.classAccessorCName(member.name, "set");
-        if (!accessorName) unsupported(member, "computed instance setter names");
-        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const param = member.parameters[0];
-        if (!param) unsupported(member, "setter must have a value parameter");
-        const paramType = this.prepareType(mapType(param, this.checker));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        buf.line(`${nativeTypeName(cd)}_t* self = ${this.coerce({ c: "this_arg", ty: T_VALUE }, classType(nativeTypeName(cd)), member)};`);
-        const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
-        buf.line(`${nativeTypeName(cd)}_${accessorName}(self, ${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
-        buf.line("return tsc_value_undefined();");
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
+        const { propertyKey: key } = this.classMemberPropertyKey(member.name);
+        const prototype = `tsc_value_get_prop(${this.classConstructorValue(cd).c}, ${this.stringLit("prototype")})`;
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${prototype}, ${key}), ${this.stringLit("set")})`;
+        return { c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`, ty: T_VALUE };
     }
 
     private classDecoratorContext(
@@ -34263,9 +33678,6 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Math")) {
-                return { c: "tsc_builtin_math()", ty: T_VALUE };
-            }
             if (this.isUnshadowedGlobalIdentifier(expr, "JSON")) {
                 return { c: "tsc_builtin_json()", ty: T_VALUE };
             }
@@ -35459,7 +34871,8 @@ class Emitter {
             (!ts.isIdentifier(operand.name) || this.namespaceMemberName(operand.name))) return null;
         const recvExpr = operand.expression;
         const rawRecv = this.emitExpr(recvExpr);
-        const recv = ["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind)
+        const recv = (["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind) ||
+            rawRecv.ty.kind === "class" && !!this.findClassDecl(rawRecv.ty.className!))
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE } : rawRecv;
         if (recv.ty.kind !== "value") return null;
         const keyExpr = ts.isElementAccessExpression(operand) ? operand.argumentExpression : null;
@@ -35906,214 +35319,6 @@ class Emitter {
         return this.classDeclForConstructorIdentifier(expr);
     }
 
-    private classAccessorForPropertyAccess(
-        pa: ts.PropertyAccessExpression,
-        kind: "get",
-    ): { owner: string; decl: ts.GetAccessorDeclaration } | null;
-    private classAccessorForPropertyAccess(
-        pa: ts.PropertyAccessExpression,
-        kind: "set",
-    ): { owner: string; decl: ts.SetAccessorDeclaration } | null;
-    private classAccessorForPropertyAccess(
-        pa: ts.PropertyAccessExpression,
-        kind: "get" | "set",
-    ): { owner: string; decl: ts.GetAccessorDeclaration | ts.SetAccessorDeclaration } | null {
-        const sym = this.checker.getSymbolAtLocation(pa.name);
-        let decl: ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | undefined;
-        for (const candidate of sym?.declarations ?? []) {
-            if (kind === "get" && ts.isGetAccessorDeclaration(candidate)) {
-                decl = candidate;
-                break;
-            }
-            if (kind === "set" && ts.isSetAccessorDeclaration(candidate)) {
-                decl = candidate;
-                break;
-            }
-        }
-        if (!decl || !decl.parent || !ts.isClassDeclaration(decl.parent) || !decl.parent.name) {
-            return null;
-        }
-        return { owner: nativeTypeName(decl.parent), decl };
-    }
-
-    private emitClassAccessorGet(
-        pa: ts.PropertyAccessExpression,
-        accessor: { owner: string; decl: ts.GetAccessorDeclaration },
-        recv: EmitResult | null,
-    ): EmitResult {
-        const name = this.classAccessorCName(accessor.decl.name, "get");
-        if (!name) unsupported(accessor.decl, "computed accessor names");
-        const sig = this.checker.getSignatureFromDeclaration(accessor.decl);
-        if (!sig) unsupported(accessor.decl, "could not resolve getter signature");
-        const ret = this.mapRuntimeType(accessor.decl, sig.getReturnType());
-        const callee = `${accessor.owner}_${name}`;
-        if (!recv || recv.ty.kind !== "class" || !recv.ty.className) {
-            unsupported(pa.expression, "class getter receiver must be a class instance");
-        }
-        const pass = (tmp: string): string =>
-            accessor.owner === recv.ty.className ? tmp : `((${accessor.owner}_t*)${tmp})`;
-        if (pa.questionDotToken) {
-            return this.emitSequencedExpr(
-                ret,
-                [{ value: recv }],
-                ([obj]) => `${obj} != NULL ? ${callee}(${pass(obj!)}) : ${this.zeroValue(ret)}`,
-            );
-        }
-        if (this.classMemberHasDecorators(accessor.decl)) {
-            return this.emitDecoratedInstanceGetterAccess(pa, accessor.decl, recv, callee, ret, pass);
-        }
-        return this.emitSequencedCall(callee, ret, [{ value: recv, pass }]);
-    }
-
-    private emitDecoratedInstanceGetterAccess(
-        pa: ts.PropertyAccessExpression,
-        getter: ts.GetAccessorDeclaration,
-        recv: EmitResult,
-        callee: string,
-        ret: CType,
-        pass: (tmp: string) => string,
-    ): EmitResult {
-        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
-            unsupported(getter, "decorated instance getter requires a containing class");
-        }
-        return this.emitSequencedExpr(ret, [{ value: recv, pass }], ([obj]) =>
-            this.decoratedInstanceGetterReadExpr(pa, getter, obj!, callee, ret),
-        );
-    }
-
-    private decoratedInstanceGetterReadExpr(
-        node: ts.Expression,
-        getter: ts.GetAccessorDeclaration,
-        obj: string,
-        callee: string,
-        ret: CType,
-    ): string {
-        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
-            unsupported(getter, "decorated instance getter requires a containing class");
-        }
-        const classDecl = getter.parent;
-        if (!classDecl.name) unsupported(getter, "decorated instance getter requires a named class");
-        const replacement = this.classInstanceGetterDecoratorReplacementName(classDecl, getter);
-        const thisArg = this.coerce({ c: obj, ty: classType(nativeTypeName(classDecl)) }, T_VALUE, node);
-        const fn = this.freshTemp("_getter_replacement");
-        const out = this.freshTemp("_getter_result");
-        const av = this.freshTemp("_getter_args");
-        const applied = {
-            c: `tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}))`,
-            ty: T_VALUE,
-        };
-        return (
-            `({ tsc_value_t ${fn} = ${replacement}; ` +
-            `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
-            `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(${obj}); } ` +
-            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-            `${out} = ${this.coerce(applied, ret, node)}; } ` +
-            `${out}; })`
-        );
-    }
-
-    private decoratedInstanceSetterCallExpr(
-        node: ts.Expression,
-        setter: ts.SetAccessorDeclaration,
-        callee: string,
-        obj: string,
-        paramType: CType,
-        assigned: string,
-    ): string {
-        if (!setter.parent || !ts.isClassDeclaration(setter.parent)) {
-            unsupported(setter, "decorated instance setter requires a containing class");
-        }
-        const classDecl = setter.parent;
-        if (!classDecl.name) unsupported(setter, "decorated instance setter requires a named class");
-        const replacement = this.classInstanceSetterDecoratorReplacementName(classDecl, setter);
-        const thisArg = this.coerce({ c: obj, ty: classType(nativeTypeName(classDecl)) }, T_VALUE, node);
-        const fn = this.freshTemp("_setter_replacement");
-        const av = this.freshTemp("_setter_args");
-        return (
-            `({ tsc_value_t ${fn} = ${replacement}; ` +
-            `if (tsc_value_is_undefined(${fn})) { ${callee}(${obj}, ${assigned}); } ` +
-            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-            `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
-            `(void)tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av})); } })`
-        );
-    }
-
-    private emitClassAccessorAssignment(
-        bin: ts.BinaryExpression,
-        op: ts.SyntaxKind,
-    ): EmitResult | null {
-        if (!ts.isPropertyAccessExpression(bin.left)) {
-            return null;
-        }
-        const left = bin.left;
-        const accessor = this.classAccessorForPropertyAccess(left, "set");
-        if (!accessor || isStatic(accessor.decl)) return null;
-        const param = accessor.decl.parameters[0];
-        if (!param) unsupported(accessor.decl, "setter must have a value parameter");
-        const paramType = this.prepareType(mapType(param, this.checker));
-        const rhs = this.emitExpr(bin.right);
-        const name = this.classAccessorCName(accessor.decl.name, "set");
-        if (!name) unsupported(accessor.decl, "computed accessor names");
-        const callee = `${accessor.owner}_${name}`;
-        const getter = op === ts.SyntaxKind.EqualsToken
-            ? null
-            : this.classAccessorForPropertyAccess(left, "get");
-        if (op !== ts.SyntaxKind.EqualsToken && !getter) {
-            unsupported(left, "compound accessor assignment requires a matching getter");
-        }
-        const getterName = getter ? this.classAccessorCName(getter.decl.name, "get") : null;
-        if (getter && !getterName) unsupported(getter.decl, "computed accessor names");
-        const getterSig = getter ? this.checker.getSignatureFromDeclaration(getter.decl) : null;
-        if (getter && !getterSig) unsupported(getter.decl, "could not resolve getter signature");
-        const getterType = getter && getterSig
-            ? this.mapRuntimeType(getter.decl, getterSig.getReturnType())
-            : null;
-        const recv = this.emitExpr(left.expression);
-        if (recv.ty.kind !== "class" || !recv.ty.className) {
-            return null;
-        }
-        const pass = (tmp: string): string =>
-            accessor.owner === recv.ty.className ? tmp : `((${accessor.owner}_t*)${tmp})`;
-        return this.emitSequencedExpr(
-            paramType,
-            [
-                { value: recv, pass },
-                { value: rhs, target: paramType, node: bin.right },
-            ],
-            ([obj, value]) => {
-                const setCall = (assigned: string): string =>
-                    this.classMemberHasDecorators(accessor.decl)
-                        ? this.decoratedInstanceSetterCallExpr(left, accessor.decl, callee, obj!, paramType, assigned)
-                        : `${callee}(${obj}, ${assigned})`;
-                if (!getter || !getterName || !getterType) {
-                    return `({ ${setCall(value!)}; ${value}; })`;
-                }
-                const cur = this.freshTemp("_accessor_cur");
-                const next = this.freshTemp("_accessor_next");
-                const getCallee = `${getter.owner}_${getterName}`;
-                const getCall = !isStatic(getter.decl) && this.classMemberHasDecorators(getter.decl)
-                    ? this.decoratedInstanceGetterReadExpr(left, getter.decl, obj!, getCallee, getterType)
-                    : `${getCallee}(${obj})`;
-                const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
-                if (this.isLogicalAssignmentOperator(op)) {
-                    return `({ ${paramType.c} ${cur} = ${current}; ` +
-                        this.classAccessorLogicalAssignmentValue(
-                            op,
-                            paramType,
-                            cur,
-                            value!,
-                            next,
-                            setCall,
-                            left,
-                        ) +
-                        `; })`;
-                }
-                const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
-                return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${setCall(next)}; ${next}; })`;
-            },
-        );
-    }
-
     private isLogicalAssignmentOperator(op: ts.SyntaxKind): boolean {
         return op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
             op === ts.SyntaxKind.BarBarEqualsToken ||
@@ -36395,9 +35600,6 @@ class Emitter {
 
         const dynamicPropertyAssignment = this.emitDynamicPropertyAssignment(bin, op);
         if (dynamicPropertyAssignment) return dynamicPropertyAssignment;
-
-        const classAccessorAssignment = this.emitClassAccessorAssignment(bin, op);
-        if (classAccessorAssignment) return classAccessorAssignment;
 
         const nativeFieldAssignment = this.emitRootedNativeFieldAssignment(bin, op);
         if (nativeFieldAssignment) return nativeFieldAssignment;
@@ -36731,7 +35933,8 @@ class Emitter {
             (!ts.isIdentifier(left.name) || this.namespaceMemberName(left.name))) return null;
         const recvExpr = left.expression;
         const rawRecv = this.emitExpr(recvExpr);
-        const recv = ["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind)
+        const recv = (["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind) ||
+            rawRecv.ty.kind === "class" && !!this.findClassDecl(rawRecv.ty.className!))
             ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE } : rawRecv;
         if (recv.ty.kind !== "value") return null;
         const keyExpr = ts.isElementAccessExpression(left) ? left.argumentExpression : null;
@@ -38163,14 +37366,7 @@ class Emitter {
                 const isPureBuiltinCall = isGlobalStringCall || isGlobalPrimitiveCoercionCall || isGlobalNumericCall || (
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
-                    ((receiver.text === "Math" && new Set([
-                        "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
-                        "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
-                        "f16round", "fround", "hypot", "imul", "log", "log1p", "log2", "log10",
-                        "max", "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
-                        "tanh", "trunc",
-                    ]).has(method)) ||
-                        (receiver.text === "Number" && (isNumberPredicate || isNumberParser)) ||
+                    ((receiver.text === "Number" && (isNumberPredicate || isNumberParser)) ||
                         (receiver.text === "Date" && isDateStaticCall) ||
                         (receiver.text === "String" && isStringStaticCall) ||
                         (receiver.text === "Array" && isArrayStaticCall) ||
@@ -39747,7 +38943,7 @@ class Emitter {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
 
         if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
-            (ts.isIdentifier(recvExpr) && ORDINARY_OBJECT_GLOBAL_OWNERS.has(recvExpr.text) &&
+            (ts.isIdentifier(recvExpr) && ORDINARY_REALM_GLOBAL_OWNERS.has(recvExpr.text) &&
                 this.isUnshadowedGlobalIdentifier(recvExpr, recvExpr.text))) {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
@@ -40567,9 +39763,6 @@ class Emitter {
             memberName === "hrtime"
         ) {
             return this.emitProcessModuleCall(call, "hrtime");
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Math")) {
-            return this.emitMathCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
             return this.emitCryptoCall(call, memberName);
@@ -45504,267 +44697,8 @@ class Emitter {
         unsupported(call, `BigInt.${method}`);
     }
 
-    private emitClassMethodCall(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const recvCls = recv.ty.className!;
-        const sig = this.checker.getResolvedSignature(call);
-        if (!sig) unsupported(call, "unresolved method signature");
-        // If the method is inherited from a base class, use the base class's
-        // name (not the receiver's) so we emit the defined function.
-        let owningCls = recvCls;
-        const mdecl = sig.getDeclaration();
-        if (mdecl && mdecl.parent && ts.isClassDeclaration(mdecl.parent) && mdecl.parent.name) {
-            owningCls = nativeTypeName(mdecl.parent);
-        }
-        const genericMethod = this.genericMethodDeclaration(sig);
-        const erasedGenericClassMethod =
-            !genericMethod &&
-            mdecl &&
-            ts.isMethodDeclaration(mdecl) &&
-            mdecl.parent &&
-            ts.isClassDeclaration(mdecl.parent) &&
-            !!mdecl.parent.typeParameters?.length;
-        const genericBindings = genericMethod
-            ? this.genericBindingsForCall(call, genericMethod, sig)
-            : null;
-        const ret = erasedGenericClassMethod && ts.isMethodDeclaration(mdecl) && mdecl.type
-            ? this.prepareType(mapTsType(mdecl.type, this.checker.getTypeFromTypeNode(mdecl.type), this.checker))
-            : genericBindings
-            ? withTypeBindings(genericBindings, () =>
-                mapTsType(call, sig.getReturnType(), this.checker),
-            )
-            : mapTsType(call, sig.getReturnType(), this.checker);
-        if (!mdecl || !ts.isMethodDeclaration(mdecl)) {
-            unsupported(call, "native class method requires a canonical member declaration");
-        }
-        const physicalMethod = this.classMethodCName(mdecl.name);
-        if (!physicalMethod) unsupported(mdecl, "native class member key is outside the static key plan");
-        const callee = genericMethod && genericBindings
-            ? this.ensureGenericMethodSpecialization(genericMethod, owningCls, genericBindings)
-            : `${owningCls}_${physicalMethod}`;
-        // Pass self cast to the owning-class type so the signature matches.
-        const specs: SequencedCallArg[] = [
-            {
-                value: recv,
-                pass: (tmp) => owningCls === recvCls ? tmp : `((${owningCls}_t*)${tmp})`,
-            },
-        ];
-        const params = sig.getParameters();
-        if (
-            !erasedGenericClassMethod &&
-            call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
-            !this.signatureHasRestParameter(params)
-        ) {
-            return this.emitStaticSpreadCall(call, callee, ret, params, [], specs);
-        }
-        if (erasedGenericClassMethod && ts.isMethodDeclaration(mdecl)) {
-            if (
-                call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
-                !mdecl.parameters.some((param) => !!param.dotDotDotToken)
-            ) {
-                const paramTypes = mdecl.parameters.map((param) => this.prepareType(mapType(param, this.checker)));
-                return this.emitSpreadCallWithParamTypes(call, callee, ret, paramTypes, [], specs);
-            }
-            for (let i = 0; i < call.arguments.length; i++) {
-                const arg = call.arguments[i]!;
-                if (ts.isSpreadElement(arg)) unsupported(arg, "spread call into generic class method");
-                const param = mdecl.parameters[i];
-                const r = this.emitExpr(arg);
-                specs.push({
-                    value: r,
-                    target: param ? this.prepareType(mapType(param, this.checker)) : r.ty,
-                    node: arg,
-                });
-            }
-        } else {
-            specs.push(...this.callSpecsFromSignature(call, call.arguments, params));
-        }
-        if (
-            mdecl &&
-            ts.isMethodDeclaration(mdecl) &&
-            !isStatic(mdecl) &&
-            this.classMemberHasDecorators(mdecl)
-        ) {
-            return this.emitDecoratedInstanceMethodCall(call, mdecl, callee, ret, specs);
-        }
-        return this.emitSequencedCall(callee, ret, specs);
-    }
-
-    private emitDecoratedInstanceMethodCall(
-        call: ts.CallExpression,
-        method: ts.MethodDeclaration,
-        callee: string,
-        ret: CType,
-        specs: readonly SequencedCallArg[],
-    ): EmitResult {
-        if (!method.parent || !ts.isClassDeclaration(method.parent)) {
-            unsupported(method, "decorated instance method requires a containing class");
-        }
-        const classDecl = method.parent;
-        if (!classDecl.name) unsupported(method, "decorated instance method requires a named class");
-        const receiverType = classType(nativeTypeName(classDecl));
-        const replacement = this.classInstanceMethodDecoratorReplacementName(classDecl, method);
-        return this.emitSequencedExpr(ret, specs, (args) => {
-            const fn = this.freshTemp("_method_replacement");
-            const av = this.freshTemp("_method_args");
-            const pieces: string[] = [
-                `tsc_value_t ${fn} = ${replacement};`,
-                `if (tsc_value_is_undefined(${fn})) {`,
-            ];
-            const originalCall = `${callee}(${args.join(", ")})`;
-            const thisArg = this.coerce({ c: args[0]!, ty: receiverType }, T_VALUE, call.expression);
-            const methodArgs = args.slice(1);
-            const methodSpecs = specs.slice(1);
-            if (ret.kind === "void" || ret.kind === "never") {
-                pieces.push(`${originalCall};`);
-                pieces.push(`} else {`);
-                pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, methodArgs.length)});`);
-                methodArgs.forEach((arg, index) => {
-                    const spec = methodSpecs[index]!;
-                    const argType = spec.target ?? spec.value.ty;
-                    pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
-                });
-                pieces.push(`(void)tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}));`);
-                pieces.push(`}`);
-                return `({ ${pieces.join(" ")} })`;
-            }
-            const out = this.freshTemp("_method_result");
-            pieces.splice(1, 0, `${ret.c} ${out} = ${this.zeroValue(ret)};`);
-            pieces.push(`${out} = ${originalCall};`);
-            pieces.push(`} else {`);
-            pieces.push(`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, methodArgs.length)});`);
-            methodArgs.forEach((arg, index) => {
-                const spec = methodSpecs[index]!;
-                const argType = spec.target ?? spec.value.ty;
-                pieces.push(`tsc_array_push_value(${av}, ${this.coerce({ c: arg, ty: argType }, T_VALUE, spec.node ?? call)});`);
-            });
-            const applied = {
-                c: `tsc_value_apply_function(${fn}, ${thisArg}, tsc_value_array(${av}))`,
-                ty: T_VALUE,
-            };
-            pieces.push(`${out} = ${this.coerce(applied, ret, call)};`);
-            pieces.push(`}`);
-            pieces.push(out);
-            return `({ ${pieces.join(" ")}; })`;
-        });
-    }
-
-    private emitMathCall(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        const one = (build: (x: string) => string): EmitResult => {
-            const specs: SequencedCallArg[] = [];
-            if (args[0]) {
-                const value = this.emitExpr(args[0]);
-                requireNumber(args[0], value.ty);
-                specs.push({ value, target: T_NUMBER, node: args[0] });
-            }
-            specs.push(...this.ignoredArgumentSpecs(args, 1));
-            return this.emitSequencedExpr(
-                T_NUMBER,
-                specs,
-                ([x]) => build(x ?? "NAN"),
-            );
-        };
-        const two = (build: (a: string, b: string) => string): EmitResult => {
-            const specs: SequencedCallArg[] = [];
-            for (const argument of args.slice(0, 2)) {
-                const value = this.emitExpr(argument);
-                requireNumber(argument, value.ty);
-                specs.push({ value, target: T_NUMBER, node: argument });
-            }
-            specs.push(...this.ignoredArgumentSpecs(args, 2));
-            return this.emitSequencedExpr(
-                T_NUMBER,
-                specs,
-                ([x, y]) => build(x ?? "NAN", y ?? "NAN"),
-            );
-        };
-        switch (name) {
-            case "floor": return one((x) => `floor(${x})`);
-            case "ceil": return one((x) => `ceil(${x})`);
-            case "round": return one((x) => `tsc_math_round(${x})`);
-            case "abs": return one((x) => `fabs(${x})`);
-            case "clz32": return one((x) => `tsc_math_clz32(${x})`);
-            case "fround": return one((x) => `tsc_math_fround(${x})`);
-            case "f16round": return one((x) => `tsc_math_f16round(${x})`);
-            case "cbrt": return one((x) => `cbrt(${x})`);
-            case "sqrt": return one((x) => `sqrt(${x})`);
-            case "pow": return two((a, b) => `pow(${a}, ${b})`);
-            case "imul": return two((a, b) => `tsc_math_imul(${a}, ${b})`);
-            case "hypot": {
-                if (args.length === 0) return { c: "0.0", ty: T_NUMBER };
-                const specs = args.map((a) => {
-                    const r = this.emitExpr(a);
-                    requireNumber(a, r.ty);
-                    return { value: r, target: T_NUMBER, node: a };
-                });
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const anyInf = vals.map((v) => `isinf(${v})`).join(" || ");
-                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
-                    const sumSquares = vals.map((v) => `((${v}) * (${v}))`).join(" + ");
-                    return `((${anyInf}) ? INFINITY : ((${anyNaN}) ? NAN : sqrt(${sumSquares})))`;
-                });
-            }
-            case "min": {
-                if (args.length === 0) return { c: `INFINITY`, ty: T_NUMBER };
-                const specs = args.map((a) => {
-                    const r = this.emitExpr(a);
-                    requireNumber(a, r.ty);
-                    return { value: r, target: T_NUMBER, node: a };
-                });
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    let e = vals[0]!;
-                    for (let i = 1; i < vals.length; i++) e = `fmin(${e}, ${vals[i]})`;
-                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
-                    return `((${anyNaN}) ? NAN : ${e})`;
-                });
-            }
-            case "max": {
-                if (args.length === 0) return { c: `(-INFINITY)`, ty: T_NUMBER };
-                const specs = args.map((a) => {
-                    const r = this.emitExpr(a);
-                    requireNumber(a, r.ty);
-                    return { value: r, target: T_NUMBER, node: a };
-                });
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    let e = vals[0]!;
-                    for (let i = 1; i < vals.length; i++) e = `fmax(${e}, ${vals[i]})`;
-                    const anyNaN = vals.map((v) => `isnan(${v})`).join(" || ");
-                    return `((${anyNaN}) ? NAN : ${e})`;
-                });
-            }
-            case "log": return one((x) => `log(${x})`);
-            case "log1p": return one((x) => `log1p(${x})`);
-            case "log2": return one((x) => `log2(${x})`);
-            case "log10": return one((x) => `log10(${x})`);
-            case "sin": return one((x) => `sin(${x})`);
-            case "asin": return one((x) => `asin(${x})`);
-            case "cos": return one((x) => `cos(${x})`);
-            case "acos": return one((x) => `acos(${x})`);
-            case "tan": return one((x) => `tan(${x})`);
-            case "sinh": return one((x) => `sinh(${x})`);
-            case "cosh": return one((x) => `cosh(${x})`);
-            case "tanh": return one((x) => `tanh(${x})`);
-            case "atan": return one((x) => `atan(${x})`);
-            case "asinh": return one((x) => `asinh(${x})`);
-            case "acosh": return one((x) => `acosh(${x})`);
-            case "atanh": return one((x) => `atanh(${x})`);
-            case "atan2": return two((a, b) => `atan2(${a}, ${b})`);
-            case "exp": return one((x) => `exp(${x})`);
-            case "expm1": return one((x) => `expm1(${x})`);
-            case "random":
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    this.ignoredArgumentSpecs(args, 0),
-                    () => `tsc_math_random()`,
-                );
-            case "trunc": return one((x) => `trunc(${x})`);
-            case "sign": return one((x) => `tsc_math_sign(${x})`);
-        }
-        unsupported(call, `Math.${name}`);
+    private emitClassMethodCall(call: ts.CallExpression, receiver: EmitResult, name: string): EmitResult {
+        return this.emitDynamicNamedPropertyCall(call, receiver, name, false);
     }
 
     private emitFsCall(call: ts.CallExpression, name: string): EmitResult {
@@ -51058,19 +49992,6 @@ class Emitter {
             ) {
                 return { c: "tsc_array_prototype()", ty: arrayType(T_VALUE) };
             }
-            if (this.isUnshadowedGlobalIdentifier(pa.expression, "Math")) {
-                const name = pa.name.text;
-                switch (name) {
-                    case "PI": return { c: `((double)M_PI)`, ty: T_NUMBER };
-                    case "E": return { c: `((double)M_E)`, ty: T_NUMBER };
-                    case "LN2": return { c: `((double)M_LN2)`, ty: T_NUMBER };
-                    case "LN10": return { c: `((double)M_LN10)`, ty: T_NUMBER };
-                    case "LOG2E": return { c: `((double)M_LOG2E)`, ty: T_NUMBER };
-                    case "LOG10E": return { c: `((double)M_LOG10E)`, ty: T_NUMBER };
-                    case "SQRT2": return { c: `((double)M_SQRT2)`, ty: T_NUMBER };
-                    case "SQRT1_2": return { c: `((double)M_SQRT1_2)`, ty: T_NUMBER };
-                }
-            }
             if (
                 (this.isEventEmitterConstructorIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners") ||
                 (this.isEventsModuleIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners")
@@ -51431,9 +50352,9 @@ class Emitter {
             }
         }
         if (recv.ty.kind === "class") {
-            const getter = this.classAccessorForPropertyAccess(pa, "get");
-            if (getter && !isStatic(getter.decl)) {
-                return this.emitClassAccessorGet(pa, getter, recv);
+            if (this.findClassDecl(recv.ty.className!)) {
+                return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
+                    ([owner]) => `${isOpt ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, ${this.stringLit(pa.name.text)})`);
             }
             const type = this.propertyDeclaredType(pa) ?? mapType(pa, this.checker);
             if (isOpt) {
