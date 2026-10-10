@@ -720,6 +720,6 @@ The embedded Node bridge is linked only when `--unsafe-eval` or manifest-allowed
 
 1. Declare in `runtime/tsc_runtime.h` under an appropriate section.
 2. Implement in `runtime/tsc_runtime.c`.
-3. Teach the emitter to call it — typically by adding a `case` inside `emitArrayMethod`, `emitStringMethod`, `emitMathCall`, or similar dispatchers in `src/emit/index.ts`.
+3. Teach the emitter to call it — through the ordinary Array method registry or an applicable `emitStringMethod`, `emitMathCall`, or native dispatcher in `src/emit/index.ts`.
 4. If it exposes a new TS API, also add the TS declaration in `stdlib/lib.core.d.ts` so the type checker accepts user code using it.
 5. Add an e2e case under `tests/e2e/cases/<feature>/` — see [`testing.md`](testing.md).

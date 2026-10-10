@@ -706,6 +706,7 @@ typedef struct {
     bool runtime_parse;
 } tsc_template_site_t;
 tsc_array_t* tsc_template_object(const tsc_template_site_t* site);
+void tsc_array_use_value_storage(tsc_array_t* array);
 tsc_array_t* tsc_array_set_value_codec(
     tsc_array_t* array,
     tsc_array_box_element_fn box_element,

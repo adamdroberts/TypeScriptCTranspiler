@@ -26,6 +26,9 @@ typedef struct tsc_array {
     bool sealed;
     bool frozen;
     bool length_writable;
+    /* Ordinary writes publish actual values; native views may subsequently
+     * borrow the same owner only through an exact representation check. */
+    bool value_storage;
     tsc_value_t prototype;
     tsc_object_t* props;
     tsc_object_t* holes;

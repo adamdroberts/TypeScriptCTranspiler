@@ -1610,6 +1610,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->frozen = false;
         /* Array.prototype is itself an Array exotic object with writable length. */
         proto->length_writable = true;
+        proto->value_storage = true;
         proto->prototype = tsc_value_object_prototype();
         proto->props = tsc_object_new();
         proto->holes = NULL;
@@ -1707,6 +1708,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->sealed = false;
     a->frozen = false;
     a->length_writable = true;
+    a->value_storage = false;
     a->prototype = tsc_array_default_prototype();
     a->props = tsc_object_new();
     a->holes = NULL;
@@ -1729,6 +1731,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->sealed = false;
     a->frozen = false;
     a->length_writable = true;
+    a->value_storage = false;
     a->prototype = tsc_array_default_prototype();
     a->props = tsc_object_new();
     a->holes = NULL;
@@ -1768,6 +1771,7 @@ tsc_array_t* tsc_array_set_value_codec(
     if (!array || !box_element || !unbox_element) {
         tsc_panic("array value codec must be complete");
     }
+    if (array->value_storage) return array;
     if (
         (array->box_element && array->box_element != box_element) ||
         (array->unbox_element && array->unbox_element != unbox_element)
@@ -1777,6 +1781,35 @@ tsc_array_t* tsc_array_set_value_codec(
     array->box_element = box_element;
     array->unbox_element = unbox_element;
     return array;
+}
+
+/* An ordinary write stores its actual value without invoking a native unbox
+ * adapter. One retained owner changes its storage through a codec worklist;
+ * identity, properties, holes, descriptors, prototypes and iterators survive. */
+void tsc_array_use_value_storage(tsc_array_t* array) {
+    if (array->value_storage) return;
+    if (!array->box_element) {
+        if (array->es != sizeof(tsc_value_t))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array requires an ordinary value codec"));
+        array->value_storage = true;
+        return;
+    }
+    if (array->cap > SIZE_MAX / sizeof(tsc_value_t))
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Array value storage is too large"));
+    tsc_value_t* values = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(tsc_value_t)) : NULL;
+    void** roots = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(void*)) : NULL;
+    if (roots) memset(roots, 0, array->cap * sizeof(void*));
+    for (size_t index = 0; index < array->len; ++index) {
+        values[index] = tsc_array_index_present(array, index)
+            ? array->box_element((const char*)array->data + index * array->es) : tsc_value_undefined();
+        roots[index] = tsc_value_gc_root(values[index]);
+    }
+    array->data = values;
+    array->value_roots = roots;
+    array->es = sizeof(tsc_value_t);
+    array->box_element = NULL;
+    array->unbox_element = NULL;
+    array->value_storage = true;
 }
 
 static bool array_native_has_tag(tsc_value_t value, uint64_t tag) {
@@ -1860,6 +1893,7 @@ tsc_array_t* tsc_array_require_native_representation(
     array->es = element_size;
     array->box_element = box_element;
     array->unbox_element = unbox_element;
+    array->value_storage = false;
     /* Native cells contain scanned pointers rather than hidden NaN payloads.
      * Old buffers can still be borrowed by a surrounding native operation;
      * the collector reclaims them once those borrowers have returned. */
@@ -2217,6 +2251,7 @@ tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double del
     tsc_array_t* out = tsc_array_new(a->es, new_len > 0 ? new_len : 1);
     out->box_element = a->box_element;
     out->unbox_element = a->unbox_element;
+    out->value_storage = a->value_storage;
     if (at > 0) {
         memcpy(out->data, a->data, (size_t)at * a->es);
         out->len = (size_t)at;
@@ -2300,6 +2335,7 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     tsc_array_t* r = tsc_array_new(a->es, n > 0 ? n : 1);
     r->box_element = a->box_element;
     r->unbox_element = a->unbox_element;
+    r->value_storage = a->value_storage;
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
     if (a->holes) {

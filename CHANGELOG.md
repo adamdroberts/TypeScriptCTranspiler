@@ -1,5 +1,7 @@
 # Changelog
 
+- Share Array instance member calls with ordinary mutable callee owners and actual argument Lists. Convert ordinary native-array writes to rooted actual-value storage, delete emitter method/callback/comparator loops, and preserve empty results, live properties and operation-specific integrity errors; verify independent semantics and imported module E2E in both memory modes.
+
 - Share Array constructor member calls and aliases with ordinary mutable owners and actual value Lists. Delete typed factory snapshots, element coercion and static predicate/purity shortcuts; exclude annotations from owner facts and verify Node semantics plus module E2E in both memory modes.
 
 - Resolve captured bindings through the innermost active continuation cell. Preserve shared reads, writes, roots and nested owners across async and generator resumption; verify independent Node semantics, deep retention and source-module E2E in both memory modes.
