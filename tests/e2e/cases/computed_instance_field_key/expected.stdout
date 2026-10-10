@@ -1,0 +1,4 @@
+instance-symbol-name:true
+literal-key-field:true
+inherited-computed-field:true
+instance-field-write:true

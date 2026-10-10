@@ -715,6 +715,7 @@ class Emitter {
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
     private classComputedMemberKeys = new Map<ts.ComputedPropertyName, string>();
+    private classComputedInstanceFieldStorageKeys = new Map<ts.PropertyDeclaration, string>();
     private defaultClassConstructAdapter: string | null = null;
     private nativeObjectValueInitializers = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
@@ -13230,8 +13231,16 @@ class Emitter {
         const startupOrder = this.graph.topoOrder.filter(id => startup.has(id));
         this.prepareAnonymousDefaultClasses(emitOrder);
         const nativeOwners: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
+        const reservedFieldNames = new Set<string>();
+        const computedInstanceFields: ts.PropertyDeclaration[] = [];
         while (nativeOwners.length > 0) {
             const node = nativeOwners.pop()!;
+            if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) {
+                reservedFieldNames.add(node.text);
+            }
+            if (ts.isPropertyDeclaration(node) && !isStatic(node) && ts.isComputedPropertyName(node.name)) {
+                computedInstanceFields.push(node);
+            }
             if (ts.isClassLike(node) || ts.isInterfaceDeclaration(node)) {
                 if (ts.isInterfaceDeclaration(node)) {
                     const declarations = this.checker.getSymbolAtLocation(node.name)?.getDeclarations() ?? [];
@@ -13244,6 +13253,15 @@ class Emitter {
                 this.nativeTypeDeclarations.set(name, node);
             }
             ts.forEachChild(node, child => { nativeOwners.push(child); });
+        }
+        // Physical storage belongs to the declaration, independently of its
+        // evaluated public key. Distinct keys must never alias one value cell.
+        for (const field of computedInstanceFields) {
+            let storage: string;
+            do { storage = this.freshTemp("_class_field_storage"); }
+            while (reservedFieldNames.has(storage));
+            reservedFieldNames.add(storage);
+            this.classComputedInstanceFieldStorageKeys.set(field, storage);
         }
         // Binding identities must exist before any importer is emitted. Source
         // file order is not dependency order, so derive every module plan in
@@ -23750,7 +23768,7 @@ class Emitter {
         const fields = new Map<string, { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }>();
         for (const m of cd.members) {
             if (!ts.isPropertyDeclaration(m) || isStatic(m)) continue;
-            const fieldName = this.classInstanceDefinitionKey(m);
+            const fieldName = this.classInstanceFieldStorageKey(m);
             fields.set(fieldName, { name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
         }
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
@@ -25059,9 +25077,14 @@ class Emitter {
         return value !== null && Number.isSafeInteger(value) ? value : null;
     }
 
-    private classInstanceDefinitionKey(member: ts.PropertyDeclaration): string {
+    private classInstanceFieldStorageKey(member: ts.PropertyDeclaration): string {
         if (ts.isPrivateIdentifier(member.name))
             unsupported(member.name, "class field requires a canonical definition key");
+        if (ts.isComputedPropertyName(member.name)) {
+            const storage = this.classComputedInstanceFieldStorageKeys.get(member);
+            if (!storage) unsupported(member.name, "class field requires a canonical definition key");
+            return storage;
+        }
         const key = this.staticPropertyName(member.name);
         if (key === null) unsupported(member.name, "class field requires a canonical definition key");
         return key;
@@ -25069,6 +25092,7 @@ class Emitter {
 
     private emitClassInstanceFieldDefinition(
         buf: CBuf, cd: ts.ClassDeclaration, field: string, type: CType, value: string,
+        propertyKey: string = this.stringLit(field),
     ): void {
         const name = nativeTypeName(cd);
         const initialize = this.ensureNativeObjectValueInitializer(classType(name), cd);
@@ -25081,7 +25105,7 @@ class Emitter {
             buf.line(`(void)${root};`);
         }
         buf.line(`if (!tsc_object_define_native_data(tsc_native_object_owner_get(&self->__tsc_object_owner, self, ${initialize}), ` +
-            `${this.stringLit(field)}, ${getter}, ${setter}, true)) ` +
+            `${propertyKey}, ${getter}, ${setter}, true)) ` +
             `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class field definition failed"));`);
         buf.line(`${this.nativeFieldStore("self", name, field, type, stored)};`);
     }
@@ -25104,7 +25128,8 @@ class Emitter {
         try {
             for (const member of cd.members) {
                 if (!ts.isPropertyDeclaration(member) || isStatic(member)) continue;
-                const field = this.classInstanceDefinitionKey(member);
+                const field = this.classInstanceFieldStorageKey(member);
+                const { propertyKey } = this.classMemberPropertyKey(member.name);
                 const type = this.prepareType(mapType(member, this.checker));
                 const initial = this.emitClassFieldInitializer(member);
                 let value = this.coerce(initial, type, member);
@@ -25112,7 +25137,7 @@ class Emitter {
                     value = this.coerce({ c: `tsc_decorator_apply_field_initializers(${this.classFieldDecoratorInitializersName(cd, member)}, ${this.coerce({ c: value, ty: type }, T_VALUE, member)})`, ty: T_VALUE }, type, member);
                     this.ensureDecoratorApplyFieldInitializersHelper();
                 }
-                this.emitClassInstanceFieldDefinition(this.defs, cd, field, type, value);
+                this.emitClassInstanceFieldDefinition(this.defs, cd, field, type, value, propertyKey);
             }
         } finally {
             this.currentClass = previousClass;
@@ -48104,7 +48129,7 @@ class Emitter {
                     source.ty.kind === "boolean" ||
                     source.ty.kind === "bigint" ||
                     source.ty.kind === "symbol";
-                if (source.ty.kind === "class") {
+                if (source.ty.kind === "class" && !this.findClassDecl(source.ty.className!)) {
                     for (const sourceProp of this.objectProperties(sourceTsType)) {
                         const targetField = targetByName.get(sourceProp.getName());
                         if (!targetField) continue;
@@ -48124,7 +48149,7 @@ class Emitter {
                     }
                     continue;
                 }
-                if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string") {
+                if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string" || source.ty.kind === "class") {
                     const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, prop.expression);
                     for (const targetField of targetFields) {
                         const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
