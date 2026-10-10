@@ -302,6 +302,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Preserve admitted enum member constants as scalar reads in canonical source-value and continuation contexts.
+
 - Retained Realm owners for first-class host base64 functions, including actual global mutation and saved callees through suspension.
 
 - Retained Module Record evaluation with top-level await, iterative DFS/SCC scheduling, shared binding cells and dynamic import completion.

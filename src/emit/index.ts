@@ -47834,17 +47834,17 @@ class Emitter {
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
-        if (this.expressionHasCanonicalSourceValue(pa.expression) || ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
-            const receiver = precomputedReceiver ?? this.emitExpr(pa.expression);
-            return this.emitSequencedExpr(T_VALUE, [{value: receiver, target: T_VALUE, node: pa.expression}],
-                ([value]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${value}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
-        }
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };
         }
         if (typeof enumValue === "string") {
             return { c: this.stringLit(enumValue), ty: T_STRING };
+        }
+        if (this.expressionHasCanonicalSourceValue(pa.expression) || ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
+            const receiver = precomputedReceiver ?? this.emitExpr(pa.expression);
+            return this.emitSequencedExpr(T_VALUE, [{value: receiver, target: T_VALUE, node: pa.expression}],
+                ([value]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${value}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
         }
         const fsConst = this.fsNumericConstantValue(pa.name.text);
         if (
