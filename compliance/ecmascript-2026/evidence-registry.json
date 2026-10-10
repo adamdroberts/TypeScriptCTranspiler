@@ -260,15 +260,6 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#emitStringStatic",
-      "targets": [
-        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
-        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
-        "sec-string.raw#generic-template-raw-worklist"
-      ]
-    },
-    {
-      "kind": "implementation",
       "id": "src/emit/index.ts#emitSpreadCallArgumentList",
       "targets": [
         "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
@@ -1487,7 +1478,10 @@
       "id": "src/emit/index.ts#emitCall",
       "targets": [
         "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
-        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist",
+        "sec-string.fromcharcode#ordered-touint16-code-unit-worklist",
+        "sec-string.fromcodepoint#ordered-tonumber-code-point-worklist",
+        "sec-string.raw#generic-template-raw-worklist"
       ]
     },
     {

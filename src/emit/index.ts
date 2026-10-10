@@ -148,9 +148,6 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
     "keys", "values", "entries", "forEach", "reduce", "reduceRight",
 ]);
 
-// These ordinary global owners share Realm References, member calls and the
-// canonical source-value dependency graph independently of method signatures.
-const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean", "Symbol", "Array"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -1381,7 +1378,7 @@ class Emitter {
                 (ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     ORDINARY_OBJECT_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     (ts.isIdentifier(expr.expression.expression) &&
-                        ORDINARY_REALM_GLOBAL_OWNERS.has(expr.expression.expression.text)))) return false;
+                        runtimeGlobalBindings.has(expr.expression.expression.text)))) return false;
             return this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveObjectValueOfCall(expr, seenConsts) ||
@@ -1977,7 +1974,7 @@ class Emitter {
             return true;
         }
         // Ordinary Realm owners expose mutable properties and global bindings.
-        if (ts.isIdentifier(recv) && ORDINARY_REALM_GLOBAL_OWNERS.has(recv.text) && this.isUnshadowedGlobalIdentifier(recv, recv.text)) return false;
+        if (ts.isIdentifier(recv) && runtimeGlobalBindings.has(recv.text) && this.isUnshadowedGlobalIdentifier(recv, recv.text)) return false;
         // Date statics are mutable ordinary methods, including unused calls.
         if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Date")) return false;
         if (
@@ -6488,6 +6485,7 @@ class Emitter {
     ): boolean {
         const callee = this.unwrapTransparentExpression(call.expression);
         if (!ts.isIdentifier(callee)) return false;
+        if (this.isRuntimeGlobalReference(callee)) return false;
         const name = callee.text;
         if (name === "parseInt" || name === "parseFloat") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
@@ -6591,6 +6589,7 @@ class Emitter {
         expr: ts.NewExpression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
+        if (ts.isIdentifier(expr.expression) && this.isRuntimeGlobalReference(expr.expression)) return false;
         const ctorExpr = this.unwrapTransparentExpression(expr.expression);
         if (!ts.isIdentifier(ctorExpr)) return false;
         const name = ctorExpr.text;
@@ -12971,9 +12970,7 @@ class Emitter {
 
     private isRuntimeGlobalReference(id: ts.Identifier): boolean {
         if (!this.isOutOfBandIdentifier(id)) return false;
-        const descriptor = runtimeGlobalBindings.get(id.text);
-        if (descriptor && (this.isJavaScriptSourceFile(id.getSourceFile()) || descriptor.mutableValue ||
-            ORDINARY_REALM_GLOBAL_OWNERS.has(id.text))) return true;
+        if (runtimeGlobalBindings.has(id.text)) return true;
         // A free JS name has no physical C slot. Resolve its actual property
         // against the Realm global record, including missing-name semantics.
         if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
@@ -21013,6 +21010,7 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
+        const symbol = this.symbolForBindingName(declaration.name);
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
         if (this.expressionHasOrdinaryNativeOwnerResult(declaration)) return T_VALUE;
         if (this.isIterationDeclaration(declaration)) return T_VALUE;
@@ -21024,6 +21022,7 @@ class Emitter {
              * inference into another declaration. */
             return T_VALUE;
         }
+        if (base.c === "double" && symbol && this.intSymbols.has(symbol)) return T_NUMBER_INT;
         return this.variableStorageType(base);
     }
 
@@ -23331,18 +23330,6 @@ class Emitter {
                     : ts.isVariableDeclaration(decl)
                         ? this.variableDeclarationStorageType(decl, declaredType)
                         : declaredType);
-                /* Top-level TypeScript variables are physically planned
-                 * after function bodies. Mirror the one integer-storage
-                 * decision here so dispatch capture descriptors never
-                 * reinterpret an int64_t slot as a double slot. */
-                if (!existingStorageType &&
-                    this.dispatchCaptureClone &&
-                    ts.isVariableDeclaration(decl) &&
-                    this.isTopLevelValueDeclaration(decl) &&
-                    type.c === "double" &&
-                    this.intSymbols.has(sym)) {
-                    type = T_NUMBER_INT;
-                }
                 const field = `${mangleIdent(node.text)}_${captures.size}`;
                 captures.set(sym, {
                     symbol: sym,
@@ -29100,10 +29087,8 @@ class Emitter {
                 : this.variableStorageType(this.prepareType(mapType(d, this.checker)));
             const baseCt = this.variableDeclarationStorageType(d, inferredCt);
 
-            // If this number is provably integer-shape, store as int64_t.
-            // C's implicit conversion handles boundaries (calls, etc.).
-            const useInt = baseCt.c === "double" && sym !== undefined && this.intSymbols.has(sym);
-            const ct = useInt ? T_NUMBER_INT : baseCt;
+            const ct = baseCt;
+            const useInt = ct.kind === "number" && ct.c === "int64_t";
             if (sym) this.symbolStorageTypes.set(sym, ct);
 
             const lit = isConst && d.initializer
@@ -29741,15 +29726,7 @@ class Emitter {
             // A planned cell owns the physical layout. Initializer inference
             // must never allocate one C type and initialize it as another.
             ct = cell?.type ?? this.variableDeclarationStorageType(d, ct);
-            // Int-shape specialization: when the symbol is provably integer
-            // and would otherwise be `double`, store as `int64_t`. Closures
-            // (cell-allocated) keep the original double type — capture cells
-            // need a stable layout.
-            const useInt = !cell &&
-                ct.c === "double" &&
-                sym !== undefined &&
-                this.intSymbols.has(sym);
-            if (useInt) ct = T_NUMBER_INT;
+            const useInt = ct.kind === "number" && ct.c === "int64_t";
             if (sym) this.symbolStorageTypes.set(sym, ct);
             if (r) {
                 const coerced = useInt && r.ty.kind === "number"
@@ -32973,19 +32950,6 @@ class Emitter {
                 this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) && this.isSourceGlobalReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
             }
-            // Built-in global identifiers.
-            if (this.isUnshadowedGlobalIdentifier(expr, "Promise")) {
-                return { c: "tsc_promise_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Map")) {
-                return { c: "tsc_map_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Set")) {
-                return { c: "tsc_set_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "RegExp")) {
-                return { c: "tsc_regexp_constructor_value()", ty: T_VALUE };
-            }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 if (this.options.test262Observation) {
                     return {
@@ -32995,36 +32959,14 @@ class Emitter {
                 }
                 return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
-                return { c: "tsc_function_constructor_value()", ty: T_VALUE };
-            }
             if ((expr.text === "parseInt" || expr.text === "parseFloat") &&
                 this.isUnshadowedGlobalIdentifier(expr, expr.text)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Proxy")) {
-                return { c: "tsc_proxy_constructor_value()", ty: T_VALUE };
             }
             const ordinaryConstructor = this.ordinaryNativeGlobalConstructor(expr);
             if (ordinaryConstructor) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(ordinaryConstructor)})`, ty: T_VALUE };
             }
-            const errorConstructorKind = this.errorConstructorRuntimeKind(expr.text);
-            if (
-                errorConstructorKind &&
-                this.isUnshadowedGlobalIdentifier(expr, expr.text)
-            ) {
-                return {
-                    c: `tsc_error_constructor_value(${errorConstructorKind})`,
-                    ty: T_VALUE,
-                };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "JSON")) {
-                return { c: "tsc_builtin_json()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "NaN")) return { c: "((double)NAN)", ty: T_NUMBER };
-            if (this.isUnshadowedGlobalIdentifier(expr, "Infinity")) return { c: "((double)INFINITY)", ty: T_NUMBER };
-            if (this.isUnshadowedGlobalIdentifier(expr, "undefined")) return { c: "NULL", ty: T_VOID };
             if (expr.text === "__filename") {
                 return { c: this.stringLit(expr.getSourceFile().fileName), ty: T_STRING };
             }
@@ -35792,22 +35734,6 @@ class Emitter {
             return this.emitCommonJsRequireCall(call, spec);
         }
 
-        if (
-            ts.isPropertyAccessExpression(call.expression) &&
-            ts.isIdentifier(call.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(call.expression.expression, "Proxy") &&
-            call.expression.name.text === "revocable"
-        ) {
-            if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
-            const target = this.emitExpr(call.arguments[0]!);
-            const handler = this.emitExpr(call.arguments[1]!);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: target, target: T_VALUE, node: call.arguments[0]! },
-                { value: handler, target: T_VALUE, node: call.arguments[1]! },
-                ...this.ignoredArgumentSpecs(call.arguments, 2),
-            ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
-        }
-
         if (ts.isPropertyAccessExpression(call.expression)) {
             return this.emitMethodCall(call, call.expression);
         }
@@ -35859,11 +35785,6 @@ class Emitter {
         if (name === "eval" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitUnsafeEvalCall(call);
         }
-        if (name === "Function" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitDynamicValueCall(call, {
-                c: `tsc_environment_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
-            });
-        }
         if (name === "structuredClone") {
             if (call.arguments.length < 1) unsupported(call, "structuredClone expects at least 1 arg");
             const arg = call.arguments[0]!;
@@ -35874,41 +35795,8 @@ class Emitter {
                 ...ignored,
             ], ([input]) => `tsc_structured_clone(${input})`);
         }
-        if (name === "parseInt" || name === "parseFloat") {
-            return this.emitParseNumber(call, name);
-        }
-        if (name === "Promise" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitDynamicValueCall(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE });
-        }
-        if ((name === "Map" || name === "Set") && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitDynamicValueCall(call, { c: name === "Map"
-                ? "tsc_map_constructor_value()" : "tsc_set_constructor_value()", ty: T_VALUE });
-        }
-        if (name === "RegExp" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitDynamicValueCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
-        }
         if (this.ordinaryNativeGlobalConstructor(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
-        }
-        if (name === "AggregateError" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitAggregateErrorConstructor(call);
-        }
-        if (name === "SuppressedError" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitSuppressedErrorConstructor(call);
-        }
-        if (this.isErrorConstructorName(name) && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitErrorConstructor(call, name);
-        }
-        if (name === "encodeURI" || name === "encodeURIComponent" || name === "decodeURI" || name === "decodeURIComponent") {
-            return this.emitGlobalUriFunction(call, name);
-        }
-        if (name === "isNaN") {
-            if (call.arguments.length < 1) return { c: "true", ty: T_BOOLEAN };
-            return this.emitGlobalNumberPredicate(call, "isNaN");
-        }
-        if (name === "isFinite") {
-            if (call.arguments.length < 1) return { c: "false", ty: T_BOOLEAN };
-            return this.emitGlobalNumberPredicate(call, "isFinite");
         }
         if (name === "btoa" || name === "atob") {
             return this.emitBase64Call(call, name);
@@ -37993,7 +37881,7 @@ class Emitter {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
 
         if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
-            (ts.isIdentifier(recvExpr) && ORDINARY_REALM_GLOBAL_OWNERS.has(recvExpr.text) &&
+            (ts.isIdentifier(recvExpr) && runtimeGlobalBindings.has(recvExpr.text) &&
                 this.isUnshadowedGlobalIdentifier(recvExpr, recvExpr.text))) {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
@@ -38817,9 +38705,6 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
             return this.emitCryptoCall(call, memberName);
         }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "JSON")) {
-            return this.emitJsonCall(call, memberName);
-        }
         if (this.isUrlConstructorExpression(recvExpr)) {
             if (memberName === "canParse") {
                 if (call.arguments.length < 1) unsupported(call, "URL.canParse expects input and optional base");
@@ -38845,40 +38730,6 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
             return this.emitQueryStringCall(call, memberName);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Date")) {
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName,
-                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "RegExp")) {
-            return this.emitDynamicNamedPropertyCall(call, { c: "tsc_regexp_constructor_value()", ty: T_VALUE }, memberName, false);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Number")) {
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName,
-                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-        }
-        if (
-            ts.isIdentifier(recvExpr) &&
-            this.isUnshadowedGlobalIdentifier(recvExpr, "String")
-        ) {
-            return this.emitStringStatic(call, memberName);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Promise")) {
-            return this.emitPromiseStatic(call, memberName);
-        }
-        if (
-            ts.isIdentifier(recvExpr) &&
-            this.isUnshadowedGlobalIdentifier(recvExpr, "Proxy")
-        ) {
-            if (memberName !== "revocable") unsupported(call, `Proxy.${memberName}`);
-            if (call.arguments.length < 2) unsupported(call, "Proxy.revocable expects target and handler");
-            const target = this.emitExpr(call.arguments[0]!);
-            const handler = this.emitExpr(call.arguments[1]!);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: target, target: T_VALUE, node: call.arguments[0]! },
-                { value: handler, target: T_VALUE, node: call.arguments[1]! },
-                ...this.ignoredArgumentSpecs(call.arguments, 2),
-            ], ([t, h]) => `tsc_proxy_revocable(${t}, ${h})`);
         }
         if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
@@ -39753,12 +39604,6 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "FinalizationRegistry");
         }
         unsupported(call, `FinalizationRegistry method .${method}`);
-    }
-
-    private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
-        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        const dynamic = this.emitDynamicMethod(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE }, method);
-        return { c: this.coerce(dynamic, mapped, call), ty: mapped };
     }
 
     private emitPromiseMethod(call: ts.CallExpression, recv: EmitResult, method: string): EmitResult {
@@ -43336,82 +43181,6 @@ class Emitter {
         }
     }
 
-    private emitErrorConstructor(call: ts.CallExpression | ts.NewExpression, name: string): EmitResult {
-        const args = call.arguments ?? [];
-        const nameLit = `tsc_str_from_lit("${name}", ${name.length})`;
-        const hasMessage = !!args[0] && !this.isUndefinedExpression(args[0]);
-        const hasCauseOptions = !!args[1] && !this.isUndefinedExpression(args[1]);
-        const specs: SequencedCallArg[] = [
-            { value: { c: nameLit, ty: T_STRING } },
-        ];
-        if (hasMessage) {
-            specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
-        } else {
-            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
-        }
-        if (hasCauseOptions) {
-            specs.push({ value: this.emitErrorCauseOption(args[1]), target: T_VALUE, node: args[1] });
-        }
-        for (const arg of args.slice(2)) {
-            specs.push({ value: this.emitExpr(arg), node: arg });
-        }
-        return this.emitSequencedExpr(T_ERROR, specs, ([nameC, messageC, causeC]) =>
-            hasCauseOptions
-                ? `tsc_error_new_named_cause(${nameC}, ${messageC}, ${causeC})`
-                : `tsc_error_new_named(${nameC}, ${messageC})`,
-        );
-    }
-
-    private emitAggregateErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
-        const args = call.arguments ?? [];
-        if (args.length < 1) unsupported(call, "AggregateError expects errors, optional message, and options");
-        const hasMessage = !!args[1] && !this.isUndefinedExpression(args[1]);
-        const hasCauseOptions = !!args[2] && !this.isUndefinedExpression(args[2]);
-        const errors = this.emitExpr(args[0]!);
-        const specs: SequencedCallArg[] = [
-            { value: errors, target: arrayType(T_VALUE), node: args[0]! },
-        ];
-        if (hasMessage) {
-            const message = this.emitExpr(args[1]);
-            specs.push({ value: message, target: T_STRING, node: args[1] });
-        } else {
-            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
-        }
-        if (hasCauseOptions) {
-            specs.push({ value: this.emitErrorCauseOption(args[2]), target: T_VALUE, node: args[2] });
-        }
-        for (const arg of args.slice(3)) {
-            specs.push({ value: this.emitExpr(arg), node: arg });
-        }
-        return this.emitSequencedExpr(T_ERROR, specs, ([errorsC, messageC, causeC]) =>
-            hasCauseOptions
-                ? `tsc_aggregate_error_new_cause(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'}, ${causeC})`
-                : `tsc_aggregate_error_new(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'})`,
-        );
-    }
-
-    private emitSuppressedErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
-        const args = call.arguments ?? [];
-        if (args.length < 2) unsupported(call, "SuppressedError expects error, suppressed, optional message");
-        const error = this.emitExpr(args[0]!);
-        const suppressed = this.emitExpr(args[1]!);
-        const specs: SequencedCallArg[] = [
-            { value: error, target: T_VALUE, node: args[0]! },
-            { value: suppressed, target: T_VALUE, node: args[1]! },
-        ];
-        if (args[2] && !this.isUndefinedExpression(args[2])) {
-            specs.push({ value: this.emitExpr(args[2]), target: T_STRING, node: args[2] });
-        } else {
-            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
-        }
-        for (const arg of args.slice(3)) {
-            specs.push({ value: this.emitExpr(arg), node: arg });
-        }
-        return this.emitSequencedExpr(T_ERROR, specs, ([errorC, suppressedC, messageC]) =>
-            `tsc_suppressed_error_new(${errorC}, ${suppressedC}, ${messageC})`,
-        );
-    }
-
     private emitErrorCauseOption(options: ts.Expression): EmitResult {
         const cur = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (!ts.isObjectLiteralExpression(cur)) {
@@ -43444,24 +43213,6 @@ class Emitter {
 
         }
         unsupported(call, `string method .${method} (Phase 2)`);
-    }
-
-    private emitStringStatic(call: ts.CallExpression, name: string): EmitResult {
-        if (name !== "raw" && name !== "fromCharCode" && name !== "fromCodePoint") {
-            unsupported(call, `String.${name}`);
-        }
-        const constructor = this.freshTemp("_string_constructor");
-        const functionValue = this.freshTemp("_string_static");
-        const argumentsTemp = this.freshTemp("_string_arguments");
-        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
-        const key = this.stringLit(name);
-        return {
-            c: `({ tsc_value_t ${constructor} = tsc_string_constructor_value(); ` +
-                `tsc_value_t ${functionValue} = tsc_value_get_prop(${constructor}, ${key}); ` +
-                `tsc_array_t* ${argumentsTemp} = ${argumentsList.c}; ` +
-                `tsc_value_apply_function(${functionValue}, ${constructor}, tsc_value_array(${argumentsTemp})); })`,
-            ty: T_VALUE,
-        };
     }
 
     private emitNumberMethod(
@@ -47934,28 +47685,6 @@ class Emitter {
         return args.slice(start).map((arg) => ({ value: this.emitExpr(arg), node: arg }));
     }
 
-    private emitParseNumber(
-        call: ts.CallExpression,
-        which: "parseInt" | "parseFloat",
-    ): EmitResult {
-        if (call.arguments.length < 1) return { c: "NAN", ty: T_NUMBER };
-        const r = this.emitExpr(call.arguments[0]!);
-        const fn = which === "parseInt" ? "tsc_parse_int" : "tsc_parse_float";
-        const specs: SequencedCallArg[] = [
-            { value: r, target: T_STRING, node: call.arguments[0]! },
-        ];
-        specs.push(...this.ignoredArgumentSpecs(call.arguments, which === "parseInt" ? 2 : 1));
-        if (which === "parseFloat") {
-            return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]})`);
-        }
-        if (call.arguments.length >= 2) {
-            const radix = this.emitExpr(call.arguments[1]!);
-            specs.splice(1, 0, { value: radix, target: T_NUMBER, node: call.arguments[1]! });
-            return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, ${args[1]})`);
-        }
-        return this.emitSequencedExpr(T_NUMBER, specs, (args) => `${fn}(${args[0]}, 0)`);
-    }
-
     private emitConsole(call: ts.CallExpression, which: string): EmitResult {
         // console.warn and console.error both write to stderr in Node;
         // console.info and console.log both write to stdout.
@@ -48156,31 +47885,6 @@ class Emitter {
         if (this.ordinaryNativeGlobalConstructor(ctorExpr)) {
             return this.emitDynamicValueConstruct(n, this.emitExpr(ctorExpr));
         }
-        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Proxy")) {
-            const args = n.arguments ?? [];
-            if (args.length < 2) unsupported(n, "new Proxy expects target and handler");
-            const target = this.emitExpr(args[0]!);
-            const handler = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: target, target: T_VALUE, node: args[0]! },
-                { value: handler, target: T_VALUE, node: args[1]! },
-                ...this.ignoredArgumentSpecs(args, 2),
-            ], ([t, h]) => `tsc_proxy_new(${t}, ${h})`);
-        }
-        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "RegExp")) {
-            return this.emitDynamicValueConstruct(n, { c: "tsc_regexp_constructor_value()", ty: T_VALUE });
-        }
-        if (this.isJavaScriptSourceFile(n.getSourceFile()) &&
-            (this.isUnshadowedGlobalIdentifier(ctorExpr, "Map") ||
-                this.isUnshadowedGlobalIdentifier(ctorExpr, "Set"))) {
-            return this.emitDynamicValueConstruct(n, { c: ctorExpr.text === "Map"
-                ? "tsc_map_constructor_value()" : "tsc_set_constructor_value()", ty: T_VALUE });
-        }
-        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
-            return this.emitDynamicValueConstruct(n, {
-                c: `tsc_environment_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
-            });
-        }
         if (this.functionValueIsConstructable(ctorExpr)) {
             const functionValue = this.emitExpr(n.expression);
             if (functionValue.ty.kind === "function" || functionValue.ty.kind === "value") {
@@ -48274,17 +47978,6 @@ class Emitter {
                 const length = hasLength ? vals[index++]! : "0.0";
                 return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
             });
-        }
-        // Typed and dynamic constructors consume the same actual Iterator
-        // Record. Native storage is an identity-preserving final projection.
-        if (cls === "Map" || cls === "Set") {
-            const mapped = mapTsType(n, this.checker.getTypeAtLocation(n), this.checker);
-            if (mapped.kind !== (cls === "Map" ? "map" : "set"))
-                unsupported(n, "Collection result storage cannot represent its elements");
-            const constructed = this.emitDynamicValueConstruct(n, {
-                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(cls)})`, ty: T_VALUE,
-            });
-            return { c: this.coerce(constructed, mapped, n), ty: mapped };
         }
         if (cls === "WeakMap") {
             const ty = this.checker.getTypeAtLocation(n);
@@ -48448,13 +48141,6 @@ class Emitter {
                 ([_v]) => `((void)${_v!}, tsc_finregistry_new())`,
             );
         }
-        if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Promise")) {
-            const mapped = this.prepareType(mapTsType(n, this.checker.getTypeAtLocation(n), this.checker));
-            if (mapped.kind !== "promise") unsupported(n, "new Promise<T>() result must be Promise<T>");
-            return this.emitSequencedCall("tsc_promise_new_executor", mapped, [
-                { value: this.emitSpreadCallArgumentList(n.arguments ?? []), node: n },
-            ]);
-        }
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
                 T_EVENT_EMITTER,
@@ -48490,15 +48176,6 @@ class Emitter {
                 this.ignoredArgumentSpecs(n.arguments ?? [], 0),
                 () => "tsc_abort_controller_new()",
             );
-        }
-        if (cls === "AggregateError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
-            return this.emitAggregateErrorConstructor(n);
-        }
-        if (cls === "SuppressedError" && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
-            return this.emitSuppressedErrorConstructor(n);
-        }
-        if (this.isErrorConstructorName(cls) && this.isUnshadowedGlobalIdentifier(ctorExpr, cls)) {
-            return this.emitErrorConstructor(n, cls);
         }
         if (cls === "URL") return this.emitUrlConstructor(n);
         if (cls === "URLSearchParams") return this.emitUrlSearchParamsConstructor(n);
@@ -48817,12 +48494,6 @@ class Emitter {
         }
 
         if (ts.isIdentifier(pa.expression)) {
-            if (
-                pa.name.text === "prototype" &&
-                this.isUnshadowedGlobalIdentifier(pa.expression, "Object")
-            ) {
-                return { c: "tsc_value_object_prototype()", ty: T_VALUE };
-            }
             if (
                 (this.isEventEmitterConstructorIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners") ||
                 (this.isEventsModuleIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners")

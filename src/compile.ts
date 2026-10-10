@@ -39,7 +39,6 @@ import {
     loadRuntimeCodeManifest,
     parseAotEvalConstant,
     runtimeCodeManifestHasEval,
-    runtimeCodeManifestHasFunctions,
     type RuntimeCodeManifest,
 } from "./runtime-code-aot";
 import {
@@ -131,10 +130,6 @@ const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";
 const UNKNOWN_EVAL_AOT_MESSAGE =
     "unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
-const UNKNOWN_FUNCTION_AOT_MESSAGE =
-    "unknown Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
-const UNKNOWN_NEW_FUNCTION_AOT_MESSAGE =
-    "unknown new Function() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
 
 interface PermanentLimitDiagnostic {
     node: ts.Node;
@@ -272,21 +267,6 @@ function permanentLimitDiagnostics(
                                 message: UNKNOWN_EVAL_AOT_MESSAGE,
                             });
                         }
-                    } else if (expr.text === "Function" && isUnshadowedGlobalBindingIdentifier(expr, checker)) {
-                        const body = functionConstructorBodyText(node);
-                        const canDispatchRuntimeManifest =
-                            body === null &&
-                            !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode));
-                        if (
-                            !opts.unsafeEval &&
-                            !canAotCompileFunctionConstructor(node) &&
-                            !canDispatchRuntimeManifest
-                        ) {
-                            diagnostics.push({
-                                node,
-                                message: UNKNOWN_FUNCTION_AOT_MESSAGE,
-                            });
-                        }
                     } else if (expr.text === "require") {
                         const spec = commonJsRequireSpecifierArgument(node,new Set(),new Set());
                         const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
@@ -351,26 +331,6 @@ function permanentLimitDiagnostics(
                     }
                 }
             } else if (
-                ts.isNewExpression(node) &&
-                ts.isIdentifier(node.expression) &&
-                node.expression.text === "Function" &&
-                isUnshadowedGlobalBindingIdentifier(node.expression, checker)
-            ) {
-                const body = functionConstructorBodyText(node);
-                const canDispatchRuntimeManifest =
-                    body === null &&
-                    !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode));
-                if (
-                    !opts.unsafeEval &&
-                    !canAotCompileFunctionConstructor(node) &&
-                    !canDispatchRuntimeManifest
-                ) {
-                    diagnostics.push({
-                        node,
-                        message: UNKNOWN_NEW_FUNCTION_AOT_MESSAGE,
-                    });
-                }
-            } else if (
                 ts.isIdentifier(node) &&
                 node.text === "eval" && !opts.test262Observation &&
                 !opts.unsafeEval &&
@@ -378,7 +338,7 @@ function permanentLimitDiagnostics(
             ) {
                 diagnostics.push({
                     node,
-                    message: node.text === "eval" ? UNKNOWN_EVAL_AOT_MESSAGE : UNKNOWN_FUNCTION_AOT_MESSAGE,
+                    message: UNKNOWN_EVAL_AOT_MESSAGE,
                 });
             }
             ts.forEachChild(node, visit);
@@ -557,27 +517,6 @@ function canAotCompileEvalCall(call: ts.CallExpression): boolean {
     if (call.arguments.length === 0) return true;
     const source = call.arguments[0] ? runtimeCodeStringText(call.arguments[0]!) : null;
     return source !== null && parseAotEvalConstant(source) !== null;
-}
-
-function canAotCompileFunctionConstructor(call: ts.CallExpression | ts.NewExpression): boolean {
-    return (call.arguments ?? []).every(argument => !ts.isSpreadElement(argument) &&
-        staticStringExpressionTexts(argument).length > 0);
-}
-
-function functionConstructorBodyText(call: ts.CallExpression | ts.NewExpression): string | null {
-    const args = call.arguments ?? [];
-    if (args.length === 0) return "";
-    const bodyArg = functionConstructorBodyArg(call);
-    return bodyArg ? runtimeCodeStringText(bodyArg) : null;
-}
-
-function functionConstructorBodyArg(call: ts.CallExpression | ts.NewExpression): ts.Expression | null {
-    const args = call.arguments ?? [];
-    if (args.length < 1) return null;
-    for (let i = 0; i < args.length - 1; i++) {
-        if (runtimeCodeStringText(args[i]!) === null) return null;
-    }
-    return args[args.length - 1]!;
 }
 
 function runtimeCodeStringText(expr: ts.Expression): string | null {

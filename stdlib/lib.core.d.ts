@@ -506,6 +506,7 @@ interface MapConstructor {
     new <K, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): Map<K, V>;
     new <K, V>(entries: Map<K, V>, ...ignored: any[]): Map<K, V>;
     new <K, V>(): Map<K, V>;
+    new <K, V>(entries?: any, ...ignored: any[]): Map<K, V>;
     groupBy<T, K>(items: T[], callbackfn: (value: T, index: number) => K, ...ignored: any[]): Map<K, T[]>;
     groupBy<T, K>(items: Set<T>, callbackfn: (value: T, index: number) => K, ...ignored: any[]): Map<K, T[]>;
     groupBy<MK, MV, K>(items: Map<MK, MV>, callbackfn: (value: ObjectEntry<MV, MK>, index: number) => K, ...ignored: any[]): Map<K, ObjectEntry<MV, MK>[]>;
@@ -541,6 +542,7 @@ interface SetConstructor {
     new <T>(values: T[], ...ignored: any[]): Set<T>;
     new <T>(values: Set<T>, ...ignored: any[]): Set<T>;
     new <T>(): Set<T>;
+    new <T>(values?: any, ...ignored: any[]): Set<T>;
 }
 declare var Set: SetConstructor;
 
@@ -771,52 +773,52 @@ interface ErrorOptions {
     cause?: any;
 }
 interface ErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): Error;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): Error;
+    new (message?: any, options?: any, ...ignored: any[]): Error;
+    (message?: any, options?: any, ...ignored: any[]): Error;
 }
 declare var Error: ErrorConstructor;
 interface TypeError extends Error {}
 interface TypeErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): TypeError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): TypeError;
+    new (message?: any, options?: any, ...ignored: any[]): TypeError;
+    (message?: any, options?: any, ...ignored: any[]): TypeError;
 }
 declare var TypeError: TypeErrorConstructor;
 interface RangeError extends Error {}
 interface RangeErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): RangeError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): RangeError;
+    new (message?: any, options?: any, ...ignored: any[]): RangeError;
+    (message?: any, options?: any, ...ignored: any[]): RangeError;
 }
 declare var RangeError: RangeErrorConstructor;
 interface SyntaxError extends Error {}
 interface SyntaxErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): SyntaxError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): SyntaxError;
+    new (message?: any, options?: any, ...ignored: any[]): SyntaxError;
+    (message?: any, options?: any, ...ignored: any[]): SyntaxError;
 }
 declare var SyntaxError: SyntaxErrorConstructor;
 interface ReferenceError extends Error {}
 interface ReferenceErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): ReferenceError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): ReferenceError;
+    new (message?: any, options?: any, ...ignored: any[]): ReferenceError;
+    (message?: any, options?: any, ...ignored: any[]): ReferenceError;
 }
 declare var ReferenceError: ReferenceErrorConstructor;
 interface EvalError extends Error {}
 interface EvalErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): EvalError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): EvalError;
+    new (message?: any, options?: any, ...ignored: any[]): EvalError;
+    (message?: any, options?: any, ...ignored: any[]): EvalError;
 }
 declare var EvalError: EvalErrorConstructor;
 interface URIError extends Error {}
 interface URIErrorConstructor {
-    new (message?: string, options?: ErrorOptions, ...ignored: any[]): URIError;
-    (message?: string, options?: ErrorOptions, ...ignored: any[]): URIError;
+    new (message?: any, options?: any, ...ignored: any[]): URIError;
+    (message?: any, options?: any, ...ignored: any[]): URIError;
 }
 declare var URIError: URIErrorConstructor;
 interface AggregateError extends Error {
     errors: any[];
 }
 interface AggregateErrorConstructor {
-    new(errors: any[], message?: string, options?: ErrorOptions, ...ignored: any[]): AggregateError;
-    (errors: any[], message?: string, options?: ErrorOptions, ...ignored: any[]): AggregateError;
+    new(errors: any[], message?: any, options?: any, ...ignored: any[]): AggregateError;
+    (errors: any[], message?: any, options?: any, ...ignored: any[]): AggregateError;
 }
 declare var AggregateError: AggregateErrorConstructor;
 interface SuppressedError extends Error {
@@ -824,8 +826,8 @@ interface SuppressedError extends Error {
     suppressed: any;
 }
 interface SuppressedErrorConstructor {
-    new(error: any, suppressed: any, message?: string, ...ignored: any[]): SuppressedError;
-    (error: any, suppressed: any, message?: string, ...ignored: any[]): SuppressedError;
+    new(error: any, suppressed: any, message?: any, ...ignored: any[]): SuppressedError;
+    (error: any, suppressed: any, message?: any, ...ignored: any[]): SuppressedError;
 }
 declare var SuppressedError: SuppressedErrorConstructor;
 
@@ -1099,15 +1101,15 @@ declare module "node:process" {
     export default defaultProcess;
 }
 
-declare function parseInt(value: any, radix?: number, ...ignored: any[]): number;
-declare function parseFloat(value: any, ...ignored: any[]): number;
+declare function parseInt(value?: any, radix?: any, ...ignored: any[]): number;
+declare function parseFloat(value?: any, ...ignored: any[]): number;
 declare function structuredClone<T>(value: T, ...ignored: any[]): T;
-declare function encodeURI(uri: string | number | boolean, ...ignored: any[]): string;
-declare function encodeURIComponent(uriComponent: string | number | boolean, ...ignored: any[]): string;
-declare function decodeURI(encodedURI: string, ...ignored: any[]): string;
-declare function decodeURIComponent(encodedURIComponent: string, ...ignored: any[]): string;
-declare function isNaN(value: any, ...ignored: any[]): boolean;
-declare function isFinite(value: any, ...ignored: any[]): boolean;
+declare function encodeURI(value?: any, ...ignored: any[]): string;
+declare function encodeURIComponent(value?: any, ...ignored: any[]): string;
+declare function decodeURI(value?: any, ...ignored: any[]): string;
+declare function decodeURIComponent(value?: any, ...ignored: any[]): string;
+declare function isNaN(value?: any, ...ignored: any[]): boolean;
+declare function isFinite(value?: any, ...ignored: any[]): boolean;
 declare function btoa(value: string, ...ignored: any[]): string;
 declare function atob(value: string, ...ignored: any[]): string;
 declare function queueMicrotask(callback: (this: any) => void, ...ignored: any[]): void;
@@ -1257,10 +1259,10 @@ interface Math {
 declare const Math: Math;
 
 interface JSON {
-    stringify(value: unknown, replacer?: any, space?: any): string;
-    parse(text: string, reviver?: any): unknown;
+    stringify(value?: any, replacer?: any, space?: any, ...ignored: any[]): any;
+    parse(text?: any, reviver?: any, ...ignored: any[]): any;
 }
-declare const JSON: JSON;
+declare var JSON: JSON;
 
 interface OSSignals {
     readonly SIGHUP: number;
