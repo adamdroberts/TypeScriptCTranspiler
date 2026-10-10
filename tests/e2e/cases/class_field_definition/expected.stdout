@@ -1,0 +1,4 @@
+field-presence:true
+field-owner:true
+empty-field:true
+derived-field:true

@@ -21285,6 +21285,8 @@ class Emitter {
                     ts.isVariableDeclarationList(node.parent) &&
                     !(node.parent.flags & ts.NodeFlags.BlockScoped)) &&
                 !this.isAmbientDeclaration(node)) admitPositive(node);
+            if (ts.isPropertyDeclaration(node) && ts.isClassLike(node.parent) &&
+                !isStatic(node) && !this.isAmbientDeclaration(node)) admitPositive(node);
             if (ts.isBinaryExpression(node) && (SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) ||
                     SOURCE_BINARY_NUMERIC_OPERATIONS.has(node.operatorToken.kind)) ||
                 ts.isPrefixUnaryExpression(node) && (SOURCE_PREFIX_NUMERIC_OPERATIONS.has(node.operator) ||
@@ -23745,15 +23747,11 @@ class Emitter {
     }
 
     private classOwnInstanceFields(cd: ts.ClassDeclaration): { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }[] {
-        const fields: { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }[] = [];
-        const seen = new Set<string>();
+        const fields = new Map<string, { name: string; type: CType; initializer?: ts.Expression; parameter?: ts.ParameterDeclaration }>();
         for (const m of cd.members) {
             if (!ts.isPropertyDeclaration(m) || isStatic(m)) continue;
-            const fieldName = this.staticPropertyName(m.name);
-            if (!fieldName)
-                unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-            seen.add(fieldName);
-            fields.push({ name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
+            const fieldName = this.classInstanceDefinitionKey(m);
+            fields.set(fieldName, { name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
         }
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
@@ -23762,13 +23760,11 @@ class Emitter {
             if (!ts.isParameterPropertyDeclaration(parameter, ctor!)) continue;
             if (!ts.isIdentifier(parameter.name)) unsupported(parameter, "native parameter property requires an identifier binding");
             if (this.baseClassDecl(cd)) unsupported(parameter, "derived parameter properties require the canonical class initialization plan");
-            if (!seen.has(parameter.name.text)) {
-                seen.add(parameter.name.text);
-                fields.push({ name: parameter.name.text, type: mapType(parameter, this.checker), parameter });
+            if (!fields.has(parameter.name.text)) {
+                fields.set(parameter.name.text, { name: parameter.name.text, type: mapType(parameter, this.checker), parameter });
             }
         }
-        if (!this.isJavaScriptSourceFile(cd.getSourceFile())) return fields;
-        if (!ctor?.body) return fields;
+        if (!this.isJavaScriptSourceFile(cd.getSourceFile()) || !ctor?.body) return [...fields.values()];
         const visit = (n: ts.Node): void => {
             if (n !== ctor.body && ts.isFunctionLike(n)) return;
             if (
@@ -23778,15 +23774,14 @@ class Emitter {
                 n.left.expression.kind === ts.SyntaxKind.ThisKeyword
             ) {
                 const fieldName = n.left.name.text;
-                if (!seen.has(fieldName)) {
-                    seen.add(fieldName);
-                    fields.push({ name: fieldName, type: T_VALUE });
+                if (!fields.has(fieldName)) {
+                    fields.set(fieldName, { name: fieldName, type: T_VALUE });
                 }
             }
             ts.forEachChild(n, visit);
         };
         visit(ctor.body);
-        return fields;
+        return [...fields.values()];
     }
 
     private baseClassName(cd: ts.ClassDeclaration): string | null {
@@ -25064,6 +25059,71 @@ class Emitter {
         return value !== null && Number.isSafeInteger(value) ? value : null;
     }
 
+    private classInstanceDefinitionKey(member: ts.PropertyDeclaration): string {
+        if (ts.isPrivateIdentifier(member.name))
+            unsupported(member.name, "class field requires a canonical definition key");
+        const key = this.staticPropertyName(member.name);
+        if (key === null) unsupported(member.name, "class field requires a canonical definition key");
+        return key;
+    }
+
+    private emitClassInstanceFieldDefinition(
+        buf: CBuf, cd: ts.ClassDeclaration, field: string, type: CType, value: string,
+    ): void {
+        const name = nativeTypeName(cd);
+        const initialize = this.ensureNativeObjectValueInitializer(classType(name), cd);
+        const getter = this.ensureClassInstanceFieldGetterAdapter(cd, field, type);
+        const setter = this.ensureClassInstanceFieldSetterAdapter(cd, field, type);
+        const stored = this.freshTemp("_field_value"), root = this.freshTemp("_field_value_gc_root");
+        buf.line(`${type.c} ${stored} = ${value};`);
+        if (type.kind === "value") {
+            buf.line(`void* volatile ${root} = tsc_value_gc_root(${stored});`);
+            buf.line(`(void)${root};`);
+        }
+        buf.line(`if (!tsc_object_define_native_data(tsc_native_object_owner_get(&self->__tsc_object_owner, self, ${initialize}), ` +
+            `${this.stringLit(field)}, ${getter}, ${setter}, true)) ` +
+            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class field definition failed"));`);
+        buf.line(`${this.nativeFieldStore("self", name, field, type, stored)};`);
+    }
+
+    private emitClassInstanceInitializers(cd: ts.ClassDeclaration): void {
+        const name = nativeTypeName(cd);
+        const previousClass = this.currentClass, previousBase = this.currentBaseClass;
+        const initialize = this.ensureNativeObjectValueInitializer(classType(name), cd);
+        this.defs.open(`static inline void ${name}_fields(${name}_t* self)`);
+        this.defs.line(`self->__tsc_type = "${escapeCString(this.classTypeChain(cd))}";`);
+        const owner = this.freshTemp("_field_owner");
+        this.defs.line(`tsc_object_t* volatile ${owner} = tsc_native_object_owner_get(&self->__tsc_object_owner, self, ${initialize});`);
+        const receiver = { c: `tsc_value_object(${owner})`, ty: T_VALUE };
+        this.functionThisStack.push(receiver);
+        this.functionActivationBindings.push(new Map<ArrowLexicalCaptureKind, EmitResult>([
+            ["this", receiver], ["new-target", { c: "tsc_value_undefined()", ty: T_VALUE }],
+        ]));
+        this.currentClass = name;
+        this.currentBaseClass = this.baseClassName(cd);
+        try {
+            for (const member of cd.members) {
+                if (!ts.isPropertyDeclaration(member) || isStatic(member)) continue;
+                const field = this.classInstanceDefinitionKey(member);
+                const type = this.prepareType(mapType(member, this.checker));
+                const initial = member.initializer ? this.emitExpr(member.initializer) : { c: "tsc_value_undefined()", ty: T_VALUE };
+                let value = this.coerce(initial, type, member);
+                if (this.classMemberHasDecorators(member)) {
+                    value = this.coerce({ c: `tsc_decorator_apply_field_initializers(${this.classFieldDecoratorInitializersName(cd, member)}, ${this.coerce({ c: value, ty: type }, T_VALUE, member)})`, ty: T_VALUE }, type, member);
+                    this.ensureDecoratorApplyFieldInitializersHelper();
+                }
+                this.emitClassInstanceFieldDefinition(this.defs, cd, field, type, value);
+            }
+        } finally {
+            this.currentClass = previousClass;
+            this.currentBaseClass = previousBase;
+            this.functionActivationBindings.pop();
+            this.functionThisStack.pop();
+        }
+        this.defs.close();
+        this.defs.line();
+    }
+
     private emitClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = nativeTypeName(cd);
@@ -25101,6 +25161,8 @@ class Emitter {
         }
         this.defs.line();
 
+        this.emitClassInstanceInitializers(cd);
+
         // ClassName_init: runs ctor body + initializers on a pre-allocated self.
         const initParams = [`${name}_t* self`, ...ctorParams];
         this.defs.open(`static inline void ${name}_init(${initParams.join(", ")})`);
@@ -25123,39 +25185,12 @@ class Emitter {
                 `${this.nativeFieldStore("self", name, field.name, field.type, "tsc_value_undefined()")};`,
             );
         }
-        // Instance field initializers (only emitted if base hasn't run them; for
-        // subclasses, super(...) call triggers base's own init which would run
-        // base's field initializers — here we emit own-fields.).
-        for (const m of cd.members) {
-            if (
-                ts.isPropertyDeclaration(m) &&
-                m.initializer &&
-                !isStatic(m)
-            ) {
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName)
-                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                const init = this.emitExpr(m.initializer);
-                const pt = mapType(m, this.checker);
-                let value = this.coerce(init, pt, m.initializer);
-                if (this.classMemberHasDecorators(m)) {
-                    const transformed = {
-                        c: `tsc_decorator_apply_field_initializers(${this.classFieldDecoratorInitializersName(cd, m)}, ${this.coerce({ c: value, ty: pt }, T_VALUE, m.initializer)})`,
-                        ty: T_VALUE,
-                    };
-                    value = this.coerce(transformed, pt, m.initializer);
-                    this.ensureDecoratorApplyFieldInitializersHelper();
-                }
-                this.defs.line(
-                    `${this.nativeFieldStore("self", name, fieldName, pt, value)};`,
-                );
-            }
-        }
+        if (!baseName) this.defs.line(`${name}_fields(self);`);
         for (const field of this.classOwnInstanceFields(cd)) {
             if (field.parameter && ts.isIdentifier(field.parameter.name)) {
                 const symbol = this.symbolForIdentifier(field.parameter.name);
                 const value = symbol && formalPlans?.get(symbol)?.value || mangleIdent(field.parameter.name.text);
-                this.defs.line(`${this.nativeFieldStore("self", name, field.name, field.type, value)};`);
+                this.emitClassInstanceFieldDefinition(this.defs, cd, field.name, field.type, value);
             }
         }
         if (ctor && ctor.body) {
@@ -25172,6 +25207,7 @@ class Emitter {
         } else if (baseName) {
             // Default implicit super() when no ctor and base exists.
             this.defs.line(`${baseName}_init((${baseName}_t*)self);`);
+            this.defs.line(`${name}_fields(self);`);
         }
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         if (formalPlans) this.formalParameterScopes.pop();
@@ -25572,19 +25608,6 @@ class Emitter {
         return { publicName, propertyKey: this.stringLit(publicName) };
     }
 
-    private nativeInstanceFieldDescriptors(cd: ts.ClassDeclaration): { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; type: CType }[] {
-        const chain: ts.ClassDeclaration[] = [], seen = new Set<ts.ClassDeclaration>();
-        for (let owner: ts.ClassDeclaration | null = cd; owner; owner = this.baseClassDecl(owner)) {
-            if (seen.has(owner)) unsupported(owner, "native class inheritance requires an acyclic owner graph");
-            seen.add(owner); chain.push(owner);
-        }
-        const fields = new Map<string, { publicName: string; propertyKey: string; owner: ts.ClassDeclaration; type: CType }>();
-        for (const owner of chain.reverse()) for (const field of this.classOwnInstanceFields(owner)) {
-            fields.set(field.name, { publicName: field.name, propertyKey: this.stringLit(field.name), owner, type: this.prepareType(field.type) });
-        }
-        return [...fields.values()];
-    }
-
     private ensureClassInstanceFieldGetterAdapter(
         owner: ts.ClassDeclaration | ts.InterfaceDeclaration,
         publicName: string,
@@ -25655,7 +25678,7 @@ class Emitter {
         const members = nativeInterface ? this.interfaceFields(nativeInterface).map(field => ({
             publicName: field.name, propertyKey: `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`,
             owner: nativeInterface!, type: field.type,
-        })) : this.nativeInstanceFieldDescriptors(cd);
+        })) : [];
         for (const { publicName, propertyKey, owner, type: fieldType } of members) {
             const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, fieldType);
             const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, fieldType);
@@ -35016,7 +35039,8 @@ class Emitter {
             const sig = this.checker.getResolvedSignature(call);
             if (!sig) unsupported(call, "unresolved super signature");
             specs.push(...this.callSpecsFromSignature(call, call.arguments, sig.getParameters()));
-            return this.emitSequencedCall(`${base}_init`, T_VOID, specs, [`(${base}_t*)self`]);
+            const initialize = this.emitSequencedCall(`${base}_init`, T_VOID, specs, [`(${base}_t*)self`]);
+            return { c: `({ ${initialize.c}; ${this.currentClass}_fields(self); })`, ty: T_VOID };
         }
 
         if (ts.isIdentifier(call.expression) && this.commonJsWrapperBindingName(call.expression) === "require")
