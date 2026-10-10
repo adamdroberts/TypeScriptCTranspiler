@@ -840,7 +840,6 @@ class Emitter {
             case "array":
             case "entry":
             case "set":
-            case "weakset":
             case "weakref":
             case "finregistry":
             case "promise":
@@ -848,7 +847,6 @@ class Emitter {
                 if (type.elem) this.prepareType(type.elem);
                 break;
             case "map":
-            case "weakmap":
                 if (type.key) this.prepareType(type.key);
                 if (type.elem) this.prepareType(type.elem);
                 break;
@@ -21480,8 +21478,6 @@ class Emitter {
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||
-            type.kind === "weakmap" ||
-            type.kind === "weakset" ||
             type.kind === "weakref" ||
             type.kind === "finregistry" ||
             type.kind === "regexp" ||
@@ -33504,8 +33500,6 @@ class Emitter {
             case "class":
             case "map":
             case "set":
-            case "weakmap":
-            case "weakset":
             case "weakref":
             case "finregistry":
             case "promise":
@@ -35077,7 +35071,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -35152,7 +35146,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -37435,14 +37429,13 @@ class Emitter {
         switch (type.kind) {
             case "array":
             case "set":
-            case "weakset":
             case "weakref":
             case "finregistry":
             case "promise":
                 return `${type.kind}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "entry":
+                return `${type.kind}_${type.key ? this.typeKey(type.key) : "void"}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "map":
-            case "weakmap":
                 return `${type.kind}_${type.key ? this.typeKey(type.key) : "void"}_${type.elem ? this.typeKey(type.elem) : "void"}`;
             case "class":
                 return `class_${type.className ?? type.c}`;
@@ -38452,10 +38445,6 @@ class Emitter {
             return this.emitMapMethod(call, recv, memberName);
         if (recv.ty.kind === "set")
             return this.emitSetMethod(call, recv, memberName);
-        if (recv.ty.kind === "weakmap")
-            return this.emitWeakMapMethod(call, recv, memberName);
-        if (recv.ty.kind === "weakset")
-            return this.emitWeakSetMethod(call, recv, memberName);
         if (recv.ty.kind === "weakref")
             return this.emitWeakRefMethod(call, recv, memberName);
         if (recv.ty.kind === "finregistry")
@@ -38994,142 +38983,6 @@ class Emitter {
                 return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Set");
         }
         unsupported(call, `Set method .${method}`);
-    }
-
-    private emitWeakMapMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const k = recv.ty.key!;
-        const v = recv.ty.elem!;
-        const args = call.arguments;
-        if (k.kind === "value" && v.kind === "value") {
-            const mt = this.freshTemp("_weak_map");
-            switch (method) {
-                case "set": {
-                    const key = this.emitExpr(args[0]!);
-                    const value = this.emitExpr(args[1]!);
-                    const kc = this.coerce(key, T_VALUE, args[0]!);
-                    const vc = this.coerce(value, T_VALUE, args[1]!);
-                    const kt = this.freshTemp("_wk");
-                    const vt = this.freshTemp("_wv");
-                    return {
-                        c:
-                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
-                            `if (!tsc_value_is_weak_key(${kt})) tsc_throw_str(tsc_str_from_cstr("WeakMap key must be an object")); ` +
-                            `tsc_value_t ${vt} = ${vc}; tsc_map_set_raw(${mt}, &${kt}, &${vt}); ${mt}; })`,
-                        ty: recv.ty,
-                    };
-                }
-                case "get": {
-                    const key = this.emitExpr(args[0]!);
-                    const kc = this.coerce(key, T_VALUE, args[0]!);
-                    const kt = this.freshTemp("_wk");
-                    const vt = this.freshTemp("_wv");
-                    return {
-                        c:
-                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
-                            `tsc_value_t ${vt} = tsc_value_undefined(); ` +
-                            `if (tsc_value_is_weak_key(${kt})) tsc_map_get_raw(${mt}, &${kt}, &${vt}); ${vt}; })`,
-                        ty: v,
-                    };
-                }
-                case "has": {
-                    const key = this.emitExpr(args[0]!);
-                    const kc = this.coerce(key, T_VALUE, args[0]!);
-                    const kt = this.freshTemp("_wk");
-                    return {
-                        c:
-                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
-                            `tsc_value_is_weak_key(${kt}) && tsc_map_has_raw(${mt}, &${kt}); })`,
-                        ty: T_BOOLEAN,
-                    };
-                }
-                case "delete": {
-                    const key = this.emitExpr(args[0]!);
-                    const kc = this.coerce(key, T_VALUE, args[0]!);
-                    const kt = this.freshTemp("_wk");
-                    return {
-                        c:
-                            `({ tsc_map_t* const ${mt} = ${recv.c}; tsc_value_t ${kt} = ${kc}; ` +
-                            `tsc_value_is_weak_key(${kt}) && tsc_map_delete_raw(${mt}, &${kt}); })`,
-                        ty: T_BOOLEAN,
-                    };
-                }
-            }
-        }
-        switch (method) {
-            case "set":
-            case "get":
-            case "has":
-            case "delete":
-                return this.emitMapMethod(call, recv, method);
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakMap");
-        }
-        unsupported(call, `WeakMap method .${method}`);
-    }
-
-    private emitWeakSetMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const e = recv.ty.elem!;
-        const args = call.arguments;
-        if (e.kind === "value") {
-            const st = this.freshTemp("_weak_set");
-            switch (method) {
-                case "add": {
-                    const value = this.emitExpr(args[0]!);
-                    const vc = this.coerce(value, T_VALUE, args[0]!);
-                    const vt = this.freshTemp("_wv");
-                    return {
-                        c:
-                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
-                            `if (!tsc_value_is_weak_key(${vt})) tsc_throw_str(tsc_str_from_cstr("WeakSet value must be an object")); ` +
-                            `tsc_set_add_raw(${st}, &${vt}); ${st}; })`,
-                        ty: recv.ty,
-                    };
-                }
-                case "has": {
-                    const value = this.emitExpr(args[0]!);
-                    const vc = this.coerce(value, T_VALUE, args[0]!);
-                    const vt = this.freshTemp("_wv");
-                    return {
-                        c:
-                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
-                            `tsc_value_is_weak_key(${vt}) && tsc_set_has_raw(${st}, &${vt}); })`,
-                        ty: T_BOOLEAN,
-                    };
-                }
-                case "delete": {
-                    const value = this.emitExpr(args[0]!);
-                    const vc = this.coerce(value, T_VALUE, args[0]!);
-                    const vt = this.freshTemp("_wv");
-                    return {
-                        c:
-                            `({ tsc_set_t* const ${st} = ${recv.c}; tsc_value_t ${vt} = ${vc}; ` +
-                            `tsc_value_is_weak_key(${vt}) && tsc_set_delete_raw(${st}, &${vt}); })`,
-                        ty: T_BOOLEAN,
-                    };
-                }
-            }
-        }
-        switch (method) {
-            case "add":
-            case "has":
-            case "delete":
-                return this.emitSetMethod(call, recv, method);
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "WeakSet");
-        }
-        unsupported(call, `WeakSet method .${method}`);
     }
 
     private emitWeakRefMethod(
@@ -47030,125 +46883,6 @@ class Emitter {
                 return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
             });
         }
-        if (cls === "WeakMap") {
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "weakmap")
-                unsupported(n, "new WeakMap() requires <K, V> type parameters");
-            const args = n.arguments ?? [];
-            const k = mapped.key!;
-            const v = mapped.elem!;
-            if (k.kind !== "value") requireWeakObjectKey(n, k, "WeakMap");
-            if (args.length >= 1) {
-                const entries = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (entries.ty.kind === "value" && k.kind === "value" && v.kind === "value") {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: entries, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([source]) => `tsc_value_weak_map_constructor_entries(${source})`);
-                }
-                if (entries.ty.kind === "map") {
-                    if (
-                        !entries.ty.key ||
-                        !entries.ty.elem ||
-                        !sameCType(entries.ty.key, k) ||
-                        !sameCType(entries.ty.elem, v)
-                    ) {
-                        unsupported(args[0]!, "new WeakMap(entries) expects entries whose key/value types match the WeakMap");
-                    }
-                    return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
-                        const map = this.freshTemp("_weak_map_init");
-                        const idx = this.freshTemp("_i");
-                        const keyPtr = this.freshTemp("_key");
-                        const valuePtr = this.freshTemp("_value");
-                        return (
-                            `({ tsc_map_t* const ${source}_src = ${source}; ` +
-                            `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
-                            `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
-                            `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
-                            `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
-                            `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
-                        );
-                    });
-                }
-                const entryElem = entries.ty.kind === "array" ? entries.ty.elem : undefined;
-                if (!entryElem || entryElem.kind !== "entry") {
-                    unsupported(args[0]!, "new WeakMap(entries) expects entry tuples or a Map whose key/value types match the WeakMap");
-                }
-                const entryKeyType = entryElem.key ?? T_STRING;
-                if (!sameCType(entryKeyType, k)) {
-                    unsupported(args[0]!, `new WeakMap(entries) key type ${entryKeyType.c} does not match WeakMap key type ${k.c}`);
-                }
-                const entryValueType = entryElem.elem ?? T_VOID;
-                if (!sameCType(entryValueType, v)) {
-                    unsupported(args[0]!, `new WeakMap(entries) value type ${entryValueType.c} does not match WeakMap value type ${v.c}`);
-                }
-                return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
-                    const map = this.freshTemp("_weak_map_init");
-                    const idx = this.freshTemp("_i");
-                    const entry = this.freshTemp("_entry");
-                    const key = this.freshTemp("_key");
-                    const value = this.freshTemp("_value");
-                    return (
-                        `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
-                        `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
-                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k, n)}; ` +
-                        `${v.c} ${value} = ${this.objectEntryValue(entry, v, n)}; ` +
-                        `tsc_map_set_raw(${map}, &${key}, &${value}); } ${map}; })`
-                    );
-                });
-            }
-            return {
-                c: `tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, 0)`,
-                ty: mapped,
-            };
-        }
-        if (cls === "WeakSet") {
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "weakset")
-                unsupported(n, "new WeakSet() requires <T> type parameter");
-            const args = n.arguments ?? [];
-            const e = mapped.elem!;
-            if (e.kind !== "value") requireWeakObjectKey(n, e, "WeakSet");
-            if (args.length >= 1) {
-                const values = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (values.ty.kind === "value" && e.kind === "value") {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: values, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([source]) => `tsc_value_weak_set_constructor_values(${source})`);
-                }
-                if (
-                    (values.ty.kind !== "array" && values.ty.kind !== "set") ||
-                    !values.ty.elem ||
-                    !sameCType(values.ty.elem, e)
-                ) {
-                    unsupported(args[0]!, "new WeakSet(values) expects an array or Set whose element type matches the WeakSet");
-                }
-                return this.emitSequencedExpr(mapped, [{ value: values, node: args[0]! }, ...ignored], ([source]) => {
-                    const set = this.freshTemp("_weak_set_init");
-                    const src = this.freshTemp("_weak_set_src");
-                    const idx = this.freshTemp("_i");
-                    const value = this.freshTemp("_value");
-                    const sourceArray = values.ty.kind === "set" ? `tsc_set_values(${source})` : source;
-                    return (
-                        `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
-                        `tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${src}->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
-                        `${e.c} ${value} = TSC_ARR(${e.c}, ${src}, ${idx}); ` +
-                        `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
-                    );
-                });
-            }
-            return {
-                c: `tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, 0)`,
-                ty: mapped,
-            };
-        }
         if (cls === "WeakRef") {
             const target = n.arguments?.[0];
             if (!target) unsupported(n, "new WeakRef() expects target");
@@ -48365,8 +48099,6 @@ class Emitter {
         if (r.ty.kind === "symbol") return `tsc_symbol_to_string(${r.c})`;
         if (r.ty.kind === "boolean") return `tsc_str_from_bool(${r.c})`;
         if (r.ty.kind === "array") return `tsc_str_from_lit("[array]", 7)`;
-        if (r.ty.kind === "weakmap") return `tsc_str_from_lit("[object WeakMap]", 16)`;
-        if (r.ty.kind === "weakset") return `tsc_str_from_lit("[object WeakSet]", 16)`;
         if (r.ty.kind === "weakref") return `tsc_str_from_lit("[object WeakRef]", 16)`;
         if (r.ty.kind === "finregistry") return `tsc_str_from_lit("[object FinalizationRegistry]", 29)`;
         if (r.ty.kind === "promise") return `tsc_str_from_lit("[object Promise]", 16)`;
@@ -48539,7 +48271,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -49213,8 +48945,6 @@ function isWeakObjectKey(t: CType): boolean {
         "class",
         "map",
         "set",
-        "weakmap",
-        "weakset",
         "weakref",
         "finregistry",
         "promise",
@@ -49235,7 +48965,7 @@ function isWeakObjectKey(t: CType): boolean {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "weakref", "finregistry", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
     ];
     return pointerKinds.includes(t.kind);
 }
@@ -49246,7 +48976,6 @@ function sameCType(a: CType, b: CType): boolean {
     if (
         a.kind === "array" ||
         a.kind === "set" ||
-        a.kind === "weakset" ||
         a.kind === "weakref" ||
         a.kind === "finregistry" ||
         a.kind === "promise"
@@ -49258,7 +48987,7 @@ function sameCType(a: CType, b: CType): boolean {
         if (!a.key || !b.key || !a.elem || !b.elem) return false;
         return sameCType(a.key, b.key) && sameCType(a.elem, b.elem);
     }
-    if (a.kind === "map" || a.kind === "weakmap") {
+    if (a.kind === "map") {
         if (!a.key || !b.key || !a.elem || !b.elem) return false;
         return sameCType(a.key, b.key) && sameCType(a.elem, b.elem);
     }

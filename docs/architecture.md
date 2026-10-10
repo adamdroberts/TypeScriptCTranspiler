@@ -1,3 +1,5 @@
+Weak collection owners project runtime/tsc_weak_collections.def into constructor/member descriptors. Native entries retain encoded keys/values; decoded roots belong to actual call/constructor temporaries. The GC mark-end dependency index and heap worklist enforce collection-and-key conditional reachability, including ephemeron chains and cycles. Collector scratch storage uses mmap rather than the suspended-thread allocator; initialization is serialized for threaded builds, and dead registry nodes are unlinked before sweeping.
+
 Console integration exposed a GC lifetime regression in retained URL construction. URL constructor results now keep a decoded owner root across newTarget prototype lookup; member publication also anchors callable/descriptor temporaries, and the shared object allocator anchors an encoded prototype across allocation. The descriptor-inspection worklist retains decoded value and descriptor roots. These repairs preserve ordinary ownership rather than adding source-shape cases.
 
 Console host owners project runtime/tsc_console_methods.def into bound per-Realm methods and source import admission. Global/default references and named module export cells enter the shared Reference/actual-List path, including suspension. The console formatter consumes that List lazily; structured values use a descriptor worklist rather than AST-specific formatting. Test262 native observation captures the ordinary stdout writer only after profile initialization.
@@ -363,8 +365,8 @@ The typed emitter prefers specialized C types and uses a NaN-boxed dynamic value
 | `T[]` / `Array<T>` | `tsc_array_t*` | dynamic array, element type known at emit |
 | `Map<K, V>` | `tsc_map_t*` | type-erased runtime; key kind tag chooses compare fn |
 | `Set<T>` | `tsc_set_t*` | same |
-| `WeakMap<K, V>` | `tsc_map_t*` | pointer-key map without iteration API |
-| `WeakSet<T>` | `tsc_set_t*` | pointer-key set without iteration API |
+| `WeakMap<K, V>` | `tsc_value_t` | ordinary owner of encoded weak entries and conditional value edges |
+| `WeakSet<T>` | `tsc_value_t` | ordinary owner using the shared weak-entry representation |
 | `WeakRef<T>` | `tsc_weakref_t*` | typed target pointer wrapper |
 | `RegExp` | `tsc_regexp_t*` | ECMAScript AST, continuation graph, and UTF-16 offsets |
 | `(args) => ret` | `tsc_fn_*_t*` | typed closure value with generated `{fn, env}` struct; function-scope captures use GC-managed ref cells |

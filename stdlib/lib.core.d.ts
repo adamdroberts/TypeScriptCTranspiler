@@ -546,9 +546,12 @@ interface SetConstructor {
 }
 declare var Set: SetConstructor;
 
-interface WeakMap<K extends object, V> {
+type WeakKey = object | symbol;
+interface WeakMap<K extends WeakKey, V> {
     get(key: K): V | undefined;
     set(key: K, value: V): this;
+    getOrInsert(key: K, defaultValue: V): V;
+    getOrInsertComputed(key: K, callback: (key: K) => V): V;
     has(key: K): boolean;
     delete(key: K): boolean;
     toLocaleString(...ignored: any[]): string;
@@ -556,13 +559,11 @@ interface WeakMap<K extends object, V> {
     valueOf(...ignored: any[]): WeakMap<K, V>;
 }
 interface WeakMapConstructor {
-    new <K extends object, V>(entries: ObjectEntry<V, K>[], ...ignored: any[]): WeakMap<K, V>;
-    new <K extends object, V>(entries: Map<K, V>, ...ignored: any[]): WeakMap<K, V>;
-    new <K extends object, V>(): WeakMap<K, V>;
+    new <K extends WeakKey, V>(entries?: Iterable<ObjectEntry<V, K>> | null, ...ignored: any[]): WeakMap<K, V>;
+    readonly prototype: WeakMap<WeakKey, any>;
 }
 declare var WeakMap: WeakMapConstructor;
-
-interface WeakSet<T extends object> {
+interface WeakSet<T extends WeakKey> {
     add(value: T): this;
     has(value: T): boolean;
     delete(value: T): boolean;
@@ -571,9 +572,8 @@ interface WeakSet<T extends object> {
     valueOf(...ignored: any[]): WeakSet<T>;
 }
 interface WeakSetConstructor {
-    new <T extends object>(values: T[], ...ignored: any[]): WeakSet<T>;
-    new <T extends object>(values: Set<T>, ...ignored: any[]): WeakSet<T>;
-    new <T extends object>(): WeakSet<T>;
+    new <T extends WeakKey>(values?: Iterable<T> | null, ...ignored: any[]): WeakSet<T>;
+    readonly prototype: WeakSet<WeakKey>;
 }
 declare var WeakSet: WeakSetConstructor;
 

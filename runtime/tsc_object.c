@@ -71,6 +71,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->async_from_sync_iterator = NULL;
     o->is_date = false;
     o->is_regexp = false;
+    o->is_weak_collection = false;
     o->is_map = false;
     o->is_set = false;
     o->is_error = false;

@@ -15,8 +15,6 @@ export type CTypeKind =
     | "class"
     | "map"
     | "set"
-    | "weakmap"
-    | "weakset"
     | "weakref"
     | "finregistry"
     | "promise"
@@ -124,14 +122,6 @@ export function mapType_(key: CType, value: CType): CType {
 
 export function setType(elem: CType): CType {
     return { kind: "set", c: "tsc_set_t*", elem: collectionKeyType(elem) };
-}
-
-export function weakMapType(key: CType, value: CType): CType {
-    return { kind: "weakmap", c: "tsc_map_t*", key: collectionCellType(key), elem: collectionCellType(value) };
-}
-
-export function weakSetType(elem: CType): CType {
-    return { kind: "weakset", c: "tsc_set_t*", elem: collectionCellType(elem) };
 }
 
 export function weakRefType(elem: CType): CType {
@@ -487,25 +477,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             }
             return setType(T_VALUE);
         }
-        if (sym?.getName() === "WeakMap") {
-            const tr = t as ts.TypeReference;
-            const ta = tr.typeArguments;
-            if (ta && ta.length >= 2) {
-                return weakMapType(
-                    mapTsType(node, ta[0]!, checker),
-                    mapTsType(node, ta[1]!, checker),
-                );
-            }
-            return weakMapType(T_VALUE, T_VALUE);
-        }
-        if (sym?.getName() === "WeakSet") {
-            const tr = t as ts.TypeReference;
-            const ta = tr.typeArguments;
-            if (ta && ta.length >= 1) {
-                return weakSetType(mapTsType(node, ta[0]!, checker));
-            }
-            return weakSetType(T_VALUE);
-        }
+        if (sym?.getName() === "WeakMap" || sym?.getName() === "WeakSet") return T_VALUE;
         if (sym?.getName() === "WeakRef") {
             const tr = t as ts.TypeReference;
             const ta = tr.typeArguments;
@@ -646,10 +618,6 @@ function typeNamePart(t: CType): string {
             return `map_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "set":
             return `set_${t.elem ? typeNamePart(t.elem) : "void"}`;
-        case "weakmap":
-            return `weakmap_${t.key ? typeNamePart(t.key) : "void"}_${t.elem ? typeNamePart(t.elem) : "void"}`;
-        case "weakset":
-            return `weakset_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "weakref":
             return `weakref_${t.elem ? typeNamePart(t.elem) : "void"}`;
         case "finregistry":

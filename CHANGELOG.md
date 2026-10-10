@@ -293,6 +293,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Replace strong weak-collection aliases with ordinary WeakMap/WeakSet owners, conditional GC entry graphs, iterator constructors, weak symbol keys and target computed insertion methods.
+
 - Retain boxed URL constructor results and publication temporaries across allocation; retain ordinary prototypes in the shared object allocator.
 
 - Share console runtime owners, bound imported methods and suspended actual-List calls; use lazy primitive formatting, descriptor inspection and native-observation stdout capture.

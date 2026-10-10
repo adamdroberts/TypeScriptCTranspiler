@@ -151,6 +151,8 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_URL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_URL_SEARCH_PARAMS_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
@@ -290,6 +292,7 @@ struct tsc_object {
     tsc_iterator_record_t* async_from_sync_iterator;
     bool is_date;
     bool is_regexp;
+    bool is_weak_collection;
     bool is_map;
     bool is_set;
     bool is_error;
