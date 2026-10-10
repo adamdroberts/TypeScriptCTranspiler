@@ -34,7 +34,7 @@ type AsyncBindingAssignmentTarget =
 
 type AsyncBindingObjectRestExclusion =
     | { readonly kind: "name"; readonly name: ts.PropertyName }
-    | { readonly kind: "staged"; readonly key: AsyncBindingStagedExpression };
+    | { readonly kind: "value"; readonly valueSlot: number };
 
 type AsyncBindingOperation =
     | {
@@ -43,9 +43,15 @@ type AsyncBindingOperation =
             | { readonly kind: "expression-result"; readonly resultSlot: number }
             | { readonly kind: "exception"; readonly node: ts.Node };
         readonly valueSlot: number;
+        readonly preserveSource?: boolean;
     }
     | {
         readonly kind: "check";
+        readonly valueSlot: number;
+    }
+    | {
+        readonly kind: "property-key";
+        readonly key: AsyncBindingStagedExpression;
         readonly valueSlot: number;
     }
     | {
@@ -53,20 +59,18 @@ type AsyncBindingOperation =
         readonly sourceSlot: number;
         readonly valueSlot: number;
         readonly name: ts.PropertyName | null;
-        readonly key: AsyncBindingStagedExpression | null;
+        readonly keySlot: number | null;
         readonly releaseKey: boolean;
     }
     | {
-        readonly kind: "element";
+        readonly kind: "iterator-open";
         readonly sourceSlot: number;
-        readonly valueSlot: number;
-        readonly index: number;
+        readonly slot: number;
     }
     | {
-        readonly kind: "array-rest";
-        readonly sourceSlot: number;
-        readonly valueSlot: number;
-        readonly startIndex: number;
+        readonly kind: "iterator-step" | "iterator-rest";
+        readonly slot: number;
+        readonly valueSlot: number | null;
     }
     | {
         readonly kind: "object-rest";
@@ -89,6 +93,7 @@ type AsyncBindingOperation =
         readonly identifier: ts.Identifier;
         readonly assignmentTarget: AsyncBindingAssignmentTarget | null;
         readonly valueSlot: number;
+        readonly initialize: boolean;
     }
     | {
         readonly kind: "release";
@@ -416,6 +421,9 @@ export function planAsyncControlFlowGraph(
             if (ts.isTypeNode(current)) return;
             if (ts.isFunctionLike(current)) {
                 if (options.isSupportedNestedFunction?.(current)) return;
+                // Creating an object member does not execute or suspend its
+                // body. The ordinary closure owner captures the active cells.
+                if (current.parent && ts.isObjectLiteralExpression(current.parent)) return;
                 found = true;
                 return;
             }
@@ -513,7 +521,29 @@ export function planAsyncControlFlowGraph(
                 next,
             }, context.exceptionTarget);
             const targets = new Map(graph.states.map(operation => [operation.id, target(reserve())]));
+            const bindingContinuations = new Set(graph.states.flatMap(operation =>
+                operation.kind === "binding" ? [operation.next] : []));
             for (const operation of graph.states) {
+                if (operation.kind === "binding") {
+                    const completed = setState({
+                        kind: "expression-complete", id: reserve(), expression: operation.node,
+                        sourceResultSlot: slots[operation.source]!, assignment: null, completion: null, branch: null,
+                        resultSlot: slots[operation.output]!, next: targets.get(operation.next)!,
+                    }, context.exceptionTarget);
+                    const bound = buildBindingFromValueSlot(
+                        operation.binding, completed, context, operation.assignmentTargets, false,
+                    );
+                    if (!bound) return null;
+                    setState({
+                        kind: "binding-op", id: targets.get(operation.id)!.id,
+                        operation: {
+                            kind: "source", source: { kind: "expression-result", resultSlot: slots[operation.source]! },
+                            valueSlot: bound.valueSlot, preserveSource: true,
+                        },
+                        next: bound.entry,
+                    }, context.exceptionTarget);
+                    continue;
+                }
                 if (operation.kind === "suspend") {
                     if (operation.suspension !== "await" && options.suspensionKind !== "generator" && options.suspensionKind !== "async-generator") return null;
                     awaitCount++;
@@ -522,7 +552,7 @@ export function planAsyncControlFlowGraph(
                     ? [operation.yes, operation.no] : [operation.next];
                 const edges = new Map(edgeIds.map(id => [id, targets.get(id)!]));
                 setState({ kind: "resumable-expression", id: targets.get(operation.id)!.id,
-                    operation, entry: operation.id === graph.entry, slots, targets: edges, next: edgeIds.length ? targets.get(edgeIds[0]!)! : completeTarget,
+                    operation, entry: operation.id === graph.entry || bindingContinuations.has(operation.id), slots, targets: edges, next: edgeIds.length ? targets.get(edgeIds[0]!)! : completeTarget,
                     returnTarget: operation.kind === "suspend" ? context.returnTarget : null }, context.exceptionTarget);
             }
             return targets.get(graph.entry)!;
@@ -627,6 +657,17 @@ export function planAsyncControlFlowGraph(
         return buildBindingStagedExpression(target.receiver, entry, context);
     };
 
+    const bindingAssignmentTargets = new Map<ts.Identifier, AsyncBindingAssignmentTarget | null>();
+    const bindingAssignmentTarget = (
+        identifier: ts.Identifier,
+        targets: ReadonlyMap<ts.Identifier, ts.Expression>,
+    ): AsyncBindingAssignmentTarget | null => {
+        if (bindingAssignmentTargets.has(identifier)) return bindingAssignmentTargets.get(identifier)!;
+        const plan = planBindingAssignmentTarget(targets.get(identifier));
+        bindingAssignmentTargets.set(identifier, plan);
+        return plan;
+    };
+
     const buildBindingIdentifier = (
         identifier: ts.Identifier,
         valueSlot: number,
@@ -634,9 +675,10 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
+        initialize = true,
     ): AsyncControlFlowTarget | null => {
         const targetNode = assignmentTargets.get(identifier);
-        const assignmentTarget = planBindingAssignmentTarget(targetNode);
+        const assignmentTarget = bindingAssignmentTarget(identifier,assignmentTargets);
         if (targetNode && !assignmentTarget) return null;
         const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
         const assign = buildBindingOperation({
@@ -644,6 +686,7 @@ export function planAsyncControlFlowGraph(
             identifier,
             assignmentTarget,
             valueSlot,
+            initialize,
         }, release, context);
         let entry = assign;
         if (initializer) {
@@ -666,9 +709,7 @@ export function planAsyncControlFlowGraph(
                 defaultTarget,
             }, assign, context);
         }
-        return assignmentTarget
-            ? buildBindingAssignmentPreparation(assignmentTarget, entry, context)
-            : entry;
+        return entry;
     };
 
     const buildBindingElement = (
@@ -677,6 +718,7 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
+        initialize = true,
     ): AsyncControlFlowTarget | null => {
         if (ts.isIdentifier(element.name)) {
             return buildBindingIdentifier(
@@ -686,6 +728,7 @@ export function planAsyncControlFlowGraph(
                 next,
                 context,
                 assignmentTargets,
+                initialize,
             );
         }
         const bound = buildBindingName(
@@ -694,6 +737,7 @@ export function planAsyncControlFlowGraph(
             next,
             context,
             assignmentTargets,
+            initialize,
         );
         if (!bound || !element.initializer) return bound;
         const resultSlot = expressionResults.push(element.initializer) - 1;
@@ -722,105 +766,112 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>,
+        initialize = true,
     ): AsyncControlFlowTarget | null => {
         if (ts.isIdentifier(binding)) {
-            return buildBindingIdentifier(
-                binding,
-                valueSlot,
-                null,
-                next,
-                context,
-                assignmentTargets,
+            const assigned = buildBindingIdentifier(
+                binding, valueSlot, null, next, context, assignmentTargets, initialize,
             );
+            if (!assigned) return null;
+            const reference = bindingAssignmentTarget(binding, assignmentTargets);
+            return reference ? buildBindingAssignmentPreparation(reference, assigned, context) : assigned;
         }
-        const objectProperties = new Map<ts.BindingElement, {
-            readonly name: ts.PropertyName | null;
-            readonly key: AsyncBindingStagedExpression | null;
-        }>();
-        const hasObjectRest = ts.isObjectBindingPattern(binding) &&
-            binding.elements.some((element) => !!element.dotDotDotToken);
-        if (ts.isObjectBindingPattern(binding)) {
-            for (const element of binding.elements) {
-                if (element.dotDotDotToken) continue;
-                const propertyName = element.propertyName ??
-                    (ts.isIdentifier(element.name) ? element.name : null);
-                if (!propertyName) return null;
-                objectProperties.set(element, ts.isComputedPropertyName(propertyName)
-                    ? {
-                        name: null,
-                        key: planBindingStagedExpression(propertyName.expression),
-                    }
-                    : { name: propertyName, key: null });
-            }
-        }
-        const objectRestExclusions: readonly AsyncBindingObjectRestExclusion[] =
-            [...objectProperties.values()].map((property) => property.key
-                ? { kind: "staged" as const, key: property.key }
-                : { kind: "name" as const, name: property.name! });
+        const array = ts.isArrayBindingPattern(binding);
         const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
-        let entry = release;
+        let protectedContext = context, entry = release, iteratorSlot = -1;
+        if (array) {
+            // Patterns and loops own the same Iterator Record collection.
+            // Nested closes unwind through their enclosing completion edges.
+            iteratorSlot = iteratorCount++;
+            entry = setState({
+                kind: "iterator-close", id: reserve(), slot: iteratorSlot,
+                completion: "normal", next: release,
+            }, context.exceptionTarget);
+            const closeThrow = setState({
+                kind: "iterator-close", id: reserve(), slot: iteratorSlot,
+                completion: "throw", next: context.exceptionTarget?.target ?? null,
+            }, context.exceptionTarget);
+            const closeReturn = setState({
+                kind: "iterator-close", id: reserve(), slot: iteratorSlot,
+                completion: "return", next: context.returnTarget,
+            }, context.exceptionTarget);
+            protectedContext = { ...context, exceptionTarget: { target: closeThrow }, returnTarget: closeReturn };
+        }
+        const properties = new Map<ts.BindingElement, {
+            name: ts.PropertyName | null;
+            key: AsyncBindingStagedExpression | null;
+            keySlot: number | null;
+        }>();
+        const hasRest = !array && binding.elements.some(element => ts.isBindingElement(element) && !!element.dotDotDotToken);
+        if (!array) for (const element of binding.elements) {
+            if (!ts.isBindingElement(element) || element.dotDotDotToken) continue;
+            const name = element.propertyName ?? (ts.isIdentifier(element.name) ? element.name : null);
+            if (!name) return null;
+            properties.set(element, ts.isComputedPropertyName(name)
+                ? { name: null, key: planBindingStagedExpression(name.expression), keySlot: bindingValueCount++ }
+                : { name, key: null, keySlot: null });
+        }
+        const exclusions: AsyncBindingObjectRestExclusion[] = [...properties.values()].map(property =>
+            property.keySlot !== null
+                ? { kind: "value", valueSlot: property.keySlot }
+                : { kind: "name", name: property.name! });
         for (let index = binding.elements.length - 1; index >= 0; index--) {
             const element = binding.elements[index];
-            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (!element || ts.isOmittedExpression(element)) {
+                if (array) entry = buildBindingOperation({
+                    kind: "iterator-step", slot: iteratorSlot, valueSlot: null,
+                }, entry, protectedContext);
+                continue;
+            }
             const childSlot = bindingValueCount++;
             const child = buildBindingElement(
-                element,
-                childSlot,
-                entry,
-                context,
-                assignmentTargets,
+                element, childSlot, entry, protectedContext, assignmentTargets, initialize,
             );
             if (!child) return null;
+            let obtain: AsyncControlFlowTarget;
             if (element.dotDotDotToken) {
-                if (index !== binding.elements.length - 1 || element.propertyName ||
-                    element.initializer) return null;
-                entry = ts.isArrayBindingPattern(binding)
-                    ? buildBindingOperation({
-                        kind: "array-rest",
-                        sourceSlot: valueSlot,
-                        valueSlot: childSlot,
-                        startIndex: index,
-                    }, child, context)
+                if (index !== binding.elements.length - 1 || element.propertyName || element.initializer) return null;
+                obtain = array
+                    ? buildBindingOperation({ kind: "iterator-rest", slot: iteratorSlot, valueSlot: childSlot }, child, protectedContext)
                     : buildBindingOperation({
-                        kind: "object-rest",
-                        sourceSlot: valueSlot,
-                        valueSlot: childSlot,
-                        exclusions: objectRestExclusions,
-                    }, child, context);
-                continue;
-            }
-            if (ts.isArrayBindingPattern(binding)) {
-                entry = buildBindingOperation({
-                    kind: "element",
-                    sourceSlot: valueSlot,
-                    valueSlot: childSlot,
-                    index,
-                }, child, context);
-                continue;
-            }
-            const propertyPlan = objectProperties.get(element);
-            if (!propertyPlan) return null;
-            const property = buildBindingOperation({
-                kind: "property",
-                sourceSlot: valueSlot,
-                valueSlot: childSlot,
-                name: propertyPlan.name,
-                key: propertyPlan.key,
-                releaseKey: !!propertyPlan.key && !hasObjectRest,
-            }, child, context);
-            if (propertyPlan.key) {
-                const keyEntry = buildBindingStagedExpression(
-                    propertyPlan.key,
-                    property,
-                    context,
-                );
-                if (!keyEntry) return null;
-                entry = keyEntry;
+                        kind: "object-rest", sourceSlot: valueSlot, valueSlot: childSlot, exclusions,
+                    }, child, protectedContext);
+            } else if (array) {
+                obtain = buildBindingOperation({
+                    kind: "iterator-step", slot: iteratorSlot, valueSlot: childSlot,
+                }, child, protectedContext);
             } else {
-                entry = property;
+                const property = properties.get(element);
+                if (!property) return null;
+                obtain = buildBindingOperation({
+                    kind: "property", sourceSlot: valueSlot, valueSlot: childSlot,
+                    name: property.name, keySlot: property.keySlot, releaseKey: property.keySlot !== null && !hasRest,
+                }, child, protectedContext);
             }
+            // Save the assignment Reference operands before obtaining its
+            // source value. Source computed names convert before that Reference.
+            const reference = ts.isIdentifier(element.name)
+                ? bindingAssignmentTarget(element.name, assignmentTargets) : null;
+            if (reference) {
+                const prepared = buildBindingAssignmentPreparation(reference, obtain, protectedContext);
+                if (!prepared) return null;
+                obtain = prepared;
+            }
+            const property = properties.get(element);
+            if (property?.key) {
+                const converted = buildBindingOperation({
+                    kind: "property-key", key: property.key, valueSlot: property.keySlot!,
+                }, obtain, protectedContext);
+                const keyed = buildBindingStagedExpression(property.key, converted, protectedContext);
+                if (!keyed) return null;
+                obtain = keyed;
+            }
+            entry = obtain;
         }
-        return buildBindingOperation({ kind: "check", valueSlot }, entry, context);
+        // A failed GetIterator cannot close an unacquired own record.
+        return array
+            ? buildBindingOperation({ kind: "iterator-open", sourceSlot: valueSlot, slot: iteratorSlot }, entry, context)
+            : buildBindingOperation({ kind: "check", valueSlot }, entry, context);
     };
 
     const buildBindingFromValueSlot = (
@@ -828,6 +879,7 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
         assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
+        initialize = true,
     ): { readonly entry: AsyncControlFlowTarget; readonly valueSlot: number } | null => {
         const valueSlot = bindingValueCount++;
         const bound = buildBindingName(
@@ -836,6 +888,7 @@ export function planAsyncControlFlowGraph(
             next,
             context,
             assignmentTargets,
+            initialize,
         );
         if (!bound) return null;
         return { entry: bound, valueSlot };
@@ -1214,7 +1267,7 @@ export function planAsyncControlFlowGraph(
             const bodyEntry = ts.isBlock(statement.statement)
                 ? buildLexicalBlock(statement.statement, bodyNext, iterationContext)
                 : buildSequence([statement.statement], bodyNext, iterationContext);
-            const bound = buildBindingFromValueSlot(binding, bodyEntry, iterationContext, assignmentTargets);
+            const bound = buildBindingFromValueSlot(binding, bodyEntry, iterationContext, assignmentTargets, ts.isVariableDeclarationList(statement.initializer));
             if (!bound) { supported = false; return bodyNext; }
             bindingValueSlot = bound.valueSlot;
             return bound.entry;

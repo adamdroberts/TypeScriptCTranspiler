@@ -1,0 +1,1 @@
+{"description":"Suspended array/object binding trees retain Iterator Records, computed keys, actual defaults and saved identifier/native field/accessor/index References through typed source module boundaries."}

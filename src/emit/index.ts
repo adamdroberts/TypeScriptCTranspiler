@@ -26021,6 +26021,11 @@ class Emitter {
             !this.isCapturableValueDeclaration(declaration) || this.test262ScriptGlobalBindingName(identifier)) return null;
         for (let node: ts.Node | undefined = identifier.parent; node; node = node.parent) {
             if (!ts.isFunctionLike(node) || !("body" in node)) continue;
+            // A computed member name is evaluated by the surrounding source
+            // activation, before the member closure exists.
+            if ((ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
+                ts.isSetAccessorDeclaration(node)) && ts.isComputedPropertyName(node.name) &&
+                this.isNodeWithin(identifier, node.name)) continue;
             return declaration === node || !this.isNodeWithin(declaration, node) ? identifier.text : null;
         }
         return null;
@@ -29728,7 +29733,24 @@ class Emitter {
                 if (ts.isCaseClause(clause)) collectSwitchValueTree(clause.expression);
             }
         }
-        const expressionSyncTypes = graph.expressionSyncs.map((expression) =>
+        const bindingBoxedSyncSlots = new Set<number>();
+        const bindingReferenceResultSlots = new Set<number>();
+        for (const state of graph.states) {
+            if (state.kind !== "binding-op") continue;
+            const operation = state.operation;
+            const operands = operation.kind === "property-key" ? [operation.key]
+                : operation.kind === "assign" && operation.assignmentTarget &&
+                    this.isJavaScriptSourceFile(operation.assignmentTarget.node.getSourceFile())
+                    ? operation.assignmentTarget.kind === "element"
+                        ? [operation.assignmentTarget.receiver, operation.assignmentTarget.index]
+                        : [operation.assignmentTarget.receiver]
+                    : [];
+            for (const operand of operands) {
+                (operand.storage === "sync" ? bindingBoxedSyncSlots : bindingReferenceResultSlots).add(operand.slot);
+            }
+        }
+        const expressionSyncTypes = graph.expressionSyncs.map((expression, slot) =>
+            bindingBoxedSyncSlots.has(slot) ||
             switchValueExpressionNodes.has(expression) ||
                 ts.isObjectLiteralExpression(expression) && this.isUntypedJsObjectLiteral(expression)
                 ? T_VALUE
@@ -29754,8 +29776,23 @@ class Emitter {
                 sourceExpressionResultSlots.add(state.sourceResultSlot);
             }
         }
+        // BindingInitialization consumes ECMAScript values. In particular an
+        // awaited default inferred as never/void still owns a runtime value
+        // slot, and rejection follows the enclosing IteratorClose edge.
+        const bindingValueResultSlots = new Set<number>();
+        for (const state of graph.states) {
+            if (state.kind === "binding-init") bindingValueResultSlots.add(state.resultSlot);
+            if (state.kind !== "binding-op") continue;
+            const operation = state.operation;
+            if (operation.kind === "source" && operation.source.kind === "expression-result")
+                bindingValueResultSlots.add(operation.source.resultSlot);
+            if (operation.kind === "default-apply") bindingValueResultSlots.add(operation.resultSlot);
+            if (operation.kind === "property-key" && operation.key.storage === "result")
+                bindingValueResultSlots.add(operation.key.slot);
+        }
         const expressionResultTypes = graph.expressionResults.map((expression, slot) =>
-            switchValueResultSlots.has(slot) || sourceExpressionResultSlots.has(slot) || graph.operationResultSlots.has(slot)
+            switchValueResultSlots.has(slot) || sourceExpressionResultSlots.has(slot) ||
+            bindingValueResultSlots.has(slot) || bindingReferenceResultSlots.has(slot) || graph.operationResultSlots.has(slot)
                 ? T_VALUE
                 : this.asyncAwaitContinuationStorageType(
                     expression,
@@ -29822,6 +29859,8 @@ class Emitter {
             return result;
         };
         const validateCfgAssignmentTarget = (target: ts.Expression): boolean => {
+            if (this.isJavaScriptSourceFile(target.getSourceFile()))
+                return ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target);
             if (ts.isPropertyAccessExpression(target)) {
                 const receiverType = this.prepareType(mapType(target.expression, this.checker));
                 if (receiverType.kind === "value") return true;
@@ -29841,16 +29880,18 @@ class Emitter {
         const validateCfgBinding = (
             name: ts.BindingName,
             assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression> = new Map(),
+            initialize = true,
         ): boolean => {
             if (ts.isIdentifier(name)) {
                 const assignmentTarget = assignmentTargets.get(name);
                 if (assignmentTarget) return validateCfgAssignmentTarget(assignmentTarget);
+                if (!initialize) return true;
                 const symbol = this.symbolForIdentifier(name);
                 return !!symbol && fieldBySymbol.has(symbol);
             }
             return name.elements.every((element) =>
                 !element || element.kind === ts.SyntaxKind.OmittedExpression ||
-                validateCfgBinding(element.name, assignmentTargets));
+                validateCfgBinding(element.name, assignmentTargets, initialize));
         };
         // Validate every emitter requirement before appending declarations so
         // a rejected graph fails closed without leaving partial C behind.
@@ -29880,7 +29921,8 @@ class Emitter {
                         return false;
                     }
                 }
-                if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets)) return false;
+                if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets,
+                    ts.isVariableDeclarationList(stateNode.statement.initializer))) return false;
             } else if (stateNode.kind === "expression-sync") {
                 const storageType = expressionSyncTypes[stateNode.slot];
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") return false;
@@ -29922,7 +29964,8 @@ class Emitter {
                         return false;
                     }
                 }
-                if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets)) return false;
+                if (!validateCfgBinding(stateNode.binding, stateNode.assignmentTargets,
+                    ts.isVariableDeclarationList(stateNode.statement.initializer))) return false;
             } else if (stateNode.kind === "iterator-next" || stateNode.kind === "async-iterator-next") {
                 if (stateNode.bindingValueSlot !== null &&
                     (stateNode.bindingValueSlot < 0 ||
@@ -29937,12 +29980,12 @@ class Emitter {
                 }
             } else if (stateNode.kind === "binding-op") {
                 const operation = stateNode.operation;
-                const valueSlots = operation.kind === "source" || operation.kind === "check" ||
-                    operation.kind === "default-test" || operation.kind === "default-apply" ||
-                    operation.kind === "assign" || operation.kind === "release"
-                    ? [operation.valueSlot]
-                    : [operation.sourceSlot, operation.valueSlot];
-                if (valueSlots.some((slot) => slot < 0 || slot >= graph.bindingValueCount)) {
+                const valueSlots = operation.kind === "iterator-open" ? [operation.sourceSlot]
+                    : operation.kind === "iterator-step" || operation.kind === "iterator-rest"
+                        ? operation.valueSlot === null ? [] : [operation.valueSlot]
+                    : operation.kind === "property" || operation.kind === "object-rest"
+                        ? [operation.sourceSlot, operation.valueSlot] : [operation.valueSlot];
+                if (valueSlots.some((slot) => slot === null || slot < 0 || slot >= graph.bindingValueCount)) {
                     return false;
                 }
                 if (operation.kind === "source" && operation.source.kind === "expression-result") {
@@ -29970,37 +30013,25 @@ class Emitter {
                             if (!storageType || storageType.kind === "void" ||
                                 storageType.kind === "never") return false;
                         }
-                    } else {
+                    } else if (operation.initialize) {
                         const symbol = this.symbolForIdentifier(operation.identifier);
                         if (!symbol || !fieldBySymbol.has(symbol)) return false;
                     }
                 }
+                if (operation.kind === "property-key") {
+                    const type = operation.key.storage === "sync"
+                        ? expressionSyncTypes[operation.key.slot] : expressionResultTypes[operation.key.slot];
+                    if (!type || type.kind === "void" || type.kind === "never") return false;
+                }
                 if (operation.kind === "property") {
-                    if ((operation.name === null) !== (operation.key !== null) ||
-                        (operation.releaseKey && !operation.key)) return false;
-                    if (operation.key) {
-                        const keyType = operation.key.storage === "sync"
-                            ? expressionSyncTypes[operation.key.slot]
-                            : expressionResultTypes[operation.key.slot];
-                        if (!keyType || (keyType.kind !== "number" && keyType.kind !== "string" &&
-                            keyType.kind !== "symbol")) return false;
-                    } else if (!operation.name || ts.isComputedPropertyName(operation.name)) return false;
+                    if ((operation.name === null) !== (operation.keySlot !== null) ||
+                        operation.releaseKey && operation.keySlot === null) return false;
+                    if (operation.keySlot !== null &&
+                        (operation.keySlot < 0 || operation.keySlot >= graph.bindingValueCount)) return false;
                 }
-                if (operation.kind === "array-rest" && operation.startIndex < 0) return false;
-                if (operation.kind === "object-rest") {
-                    for (const exclusion of operation.exclusions) {
-                        if (exclusion.kind === "name") {
-                            if (ts.isComputedPropertyName(exclusion.name)) return false;
-                            continue;
-                        }
-                        const keyType = exclusion.key.storage === "sync"
-                            ? expressionSyncTypes[exclusion.key.slot]
-                            : expressionResultTypes[exclusion.key.slot];
-                        if (!keyType || (keyType.kind !== "number" && keyType.kind !== "string")) {
-                            return false;
-                        }
-                    }
-                }
+                if (operation.kind === "object-rest") for (const exclusion of operation.exclusions)
+                    if (exclusion.kind === "value" &&
+                        (exclusion.valueSlot < 0 || exclusion.valueSlot >= graph.bindingValueCount)) return false;
 
             }
         }
@@ -30348,153 +30379,33 @@ class Emitter {
             ): void => {
                 const assignIdentifier = (identifier: ts.Identifier, value: EmitResult): void => {
                     const assignmentTarget = assignmentTargets.get(identifier);
-                    if (assignmentTarget) {
-                        const preparedTarget = preparedAssignmentTargets.get(identifier);
-                        const valueType = this.prepareType(value.ty);
-                        const valueTemp = this.freshTemp("_async_cfg_binding_assignment_value");
-                        callback.line(`${valueType.c} ${valueTemp} = ${value.c};`);
-                        const stagedValue: EmitResult = { c: valueTemp, ty: valueType };
-                        if (ts.isPropertyAccessExpression(assignmentTarget)) {
-                            const receiver = preparedTarget?.receiver ??
-                                this.emitExpr(assignmentTarget.expression);
-                            const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
-                            const receiverType = this.prepareType(receiver.ty);
-                            callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
-                            if (receiverType.kind === "class") {
-                                const accessor = this.classAccessorForPropertyAccess(assignmentTarget, "set");
-                                if (accessor) {
-                                    const parameter = accessor.decl.parameters[0];
-                                    if (!parameter) unsupported(accessor.decl, "setter must have a value parameter");
-                                    const parameterType = this.prepareType(mapType(parameter, this.checker));
-                                    const assigned = this.freshTemp("_async_cfg_binding_assignment_setter_value");
-                                    callback.line(
-                                        `${parameterType.c} ${assigned} = ` +
-                                        `${this.coerce(stagedValue, parameterType, assignmentTarget)};`,
-                                    );
-                                    const setterName = this.classAccessorCName(accessor.decl.name, "set");
-                                    if (!setterName) unsupported(accessor.decl, "computed accessor names");
-                                    const callee = `${accessor.owner}_${setterName}`;
-                                    const object = accessor.owner === receiverType.className
-                                        ? receiverTemp
-                                        : `((${accessor.owner}_t*)${receiverTemp})`;
-                                    const call = this.classMemberHasDecorators(accessor.decl)
-                                        ? this.decoratedInstanceSetterCallExpr(
-                                            assignmentTarget,
-                                            accessor.decl,
-                                            callee,
-                                            object,
-                                            parameterType,
-                                            assigned,
-                                        )
-                                        : `${callee}(${object}, ${assigned})`;
-                                    callback.line(`${call};`);
-                                    return;
-                                }
-                                const targetType = this.storageType(assignmentTarget);
-                                callback.line(
-                                    `${this.nativeFieldStore(receiverTemp, receiverType.className!, assignmentTarget.name.text, targetType,
-                                        this.coerce(stagedValue, targetType, assignmentTarget))};`,
-                                );
-                                return;
-                            }
-                            if (receiverType.kind !== "value") {
-                                unsupported(assignmentTarget, `${label} property assignment target is not writable`);
-                            }
-                            const property = assignmentTarget.name.text;
-                            callback.line(
-                                `tsc_value_set_prop(${receiverTemp}, ` +
-                                `tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}), ` +
-                                `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
-                            );
-                            return;
+                    if (assignmentTarget || !initializeLexical) {
+                        const target = assignmentTarget ?? identifier;
+                        const prepared = preparedAssignmentTargets.get(identifier);
+                        const overrides = new Map<ts.Expression, EmitResult>();
+                        if (prepared && (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))) {
+                            overrides.set(target.expression, prepared.receiver);
+                            if (ts.isElementAccessExpression(target) && prepared.index)
+                                overrides.set(target.argumentExpression, prepared.index);
                         }
-                        if (!ts.isElementAccessExpression(assignmentTarget)) {
-                            unsupported(assignmentTarget, `${label} assignment target is not writable`);
+                        const owner = ts.factory.createBinaryExpression(target, ts.SyntaxKind.EqualsToken, target);
+                        Object.assign(owner, { parent: target.parent });
+                        this.conditionValueScopes.push(overrides);
+                        try {
+                            const put = this.preparePatternAssignmentReference(callback, target, owner);
+                            callback.line(`(void)(${put(this.coerce(value, T_VALUE, target))});`);
+                        } finally {
+                            this.conditionValueScopes.pop();
                         }
-                        const receiver = preparedTarget?.receiver ??
-                            this.emitExpr(assignmentTarget.expression);
-                        const receiverType = this.prepareType(receiver.ty);
-                        const receiverTemp = this.freshTemp("_async_cfg_binding_assignment_receiver");
-                        callback.line(`${receiverType.c} ${receiverTemp} = ${receiver.c};`);
-                        const index = preparedTarget?.index ??
-                            this.emitExpr(assignmentTarget.argumentExpression);
-                        const indexType = this.prepareType(index.ty);
-                        const indexTemp = this.freshTemp("_async_cfg_binding_assignment_index");
-                        callback.line(`${indexType.c} ${indexTemp} = ${index.c};`);
-                        if (receiverType.kind === "value") {
-                            if (indexType.kind === "number") {
-                                callback.line(
-                                    `tsc_value_set_index(${receiverTemp}, ${indexTemp}, ` +
-                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
-                                );
-                            } else if (indexType.kind === "symbol") {
-                                callback.line(
-                                    `tsc_value_set_symbol_prop(${receiverTemp}, ${indexTemp}, ` +
-                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
-                                );
-                            } else if (indexType.kind === "value") {
-                                callback.line(
-                                    `tsc_value_set_computed_prop(${receiverTemp}, ${indexTemp}, ` +
-                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
-                                );
-                            } else {
-                                callback.line(
-                                    `tsc_value_set_prop(${receiverTemp}, ` +
-                                    `${this.coerce({ c: indexTemp, ty: indexType }, T_STRING, assignmentTarget.argumentExpression)}, ` +
-                                    `${this.coerce(stagedValue, T_VALUE, assignmentTarget)});`,
-                                );
-                            }
-                            return;
-                        }
-                        if (indexType.kind !== "number" ||
-                            (receiverType.kind !== "array" && receiverType.kind !== "buffer")) {
-                            unsupported(assignmentTarget, `${label} element assignment target is not writable`);
-                        }
-                        const elementType = receiverType.kind === "buffer" ? T_NUMBER : receiverType.elem!;
-                        const element = receiverType.kind === "buffer"
-                            ? `TSC_BUF(${receiverTemp}, (size_t)(${indexTemp}))`
-                            : `TSC_ARR(${elementType.c}, ${receiverTemp}, (size_t)(${indexTemp}))`;
-                        callback.line(`${element} = ${this.coerce(stagedValue, elementType, assignmentTarget)};`);
                         return;
                     }
                     const symbol = this.symbolForIdentifier(identifier);
                     const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                     if (!local) unsupported(identifier, `${label} binding is missing CFG storage`);
-                    emitCfgFieldAssignment(
-                        callback,
-                        local,
-                        value,
-                        identifier,
-                        "state",
-                        initializeLexical,
-                    );
+                    emitCfgFieldAssignment(callback, local, value, identifier, "state", true);
                 };
-                if (ts.isIdentifier(binding)) {
-                    assignIdentifier(binding, source);
-                    return;
-                }
-                if (!ts.isObjectBindingPattern(binding) && !ts.isArrayBindingPattern(binding)) {
-                    unsupported(binding, `${label} requires an identifier or binding pattern`);
-                }
-                const boxedSource = this.freshTemp("_async_cfg_binding_source");
-                callback.line(`tsc_value_t const ${boxedSource} = ${this.coerce(source, T_VALUE, binding)};`);
-                callback.line(`if (tsc_value_is_nullish(${boxedSource})) tsc_throw_str(tsc_str_from_cstr("Cannot destructure null or undefined"));`);
-                if (binding.elements.length === 0) return;
-                if (ts.isObjectBindingPattern(binding)) {
-                    this.emitDynamicObjectBindingsForOf(
-                        callback,
-                        binding,
-                        boxedSource,
-                        (descriptor, value) => assignIdentifier(descriptor.identifier, value),
-                    );
-                } else {
-                    this.emitDynamicArrayBindingPatternForOf(
-                        callback,
-                        binding,
-                        boxedSource,
-                        assignIdentifier,
-                    );
-                }
+                this.emitBindingInitialization(callback, binding, this.coerce(source, T_VALUE, binding),
+                    (output, identifier, value) => assignIdentifier(identifier, { c: value, ty: T_VALUE }));
             };
             const emitBindingValueAssignment = (
                 slot: number,
@@ -30551,43 +30462,6 @@ class Emitter {
                 }
                 return true;
             };
-            const bindingPropertyValue = (
-                source: string,
-                name: ts.PropertyName | null,
-                stagedKey: {
-                    readonly expression: ts.Expression;
-                    readonly storage: "sync" | "result";
-                    readonly slot: number;
-                } | null,
-            ): EmitResult | null => {
-                if (stagedKey) {
-                    const keyValue = bindingStagedValue(stagedKey);
-                    if (!keyValue) return null;
-                    const keyType = this.prepareType(keyValue.ty);
-                    const key = keyValue.c;
-                    if (keyType.kind === "number") {
-                        return { c: `tsc_value_get_index(${source}, ${key})`, ty: T_VALUE };
-                    }
-                    if (keyType.kind === "symbol") {
-                        return { c: `tsc_value_get_symbol_prop(${source}, ${key})`, ty: T_VALUE };
-                    }
-                    if (keyType.kind !== "string") return null;
-                    return { c: `tsc_value_get_prop(${source}, ${key})`, ty: T_VALUE };
-                }
-                if (!name) return null;
-                if (ts.isComputedPropertyName(name)) return null;
-                const key = ts.isIdentifier(name) || ts.isStringLiteralLike(name)
-                    ? name.text
-                    : ts.isNumericLiteral(name)
-                        ? String(Number(name.text))
-                        : null;
-                if (key === null) return null;
-                return {
-                    c: `tsc_value_get_prop(${source}, ` +
-                        `tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
-                    ty: T_VALUE,
-                };
-            };
             const operationLabels = new Set<number>();
             for (const state of graph.states) if (state.kind === "resumable-expression") {
                 for (const edge of state.targets.values()) operationLabels.add(edge.id);
@@ -30603,6 +30477,8 @@ class Emitter {
                 callback.line(`state->exception_pc = ${stateNode.exceptionTarget?.target.id ?? -1};`);
                 if (stateNode.kind === "resumable-expression") {
                     const operation = stateNode.operation;
+                    if (operation.kind === "binding")
+                        unsupported(operation.node, "resumable binding requires a canonical operation graph");
                     const read = (slot: number): string => `state->expression_result_${stateNode.slots[slot]}`;
                     const store = (slot: number, value: string): void => {
                         const field = `expression_result_${stateNode.slots[slot]}`;
@@ -31261,7 +31137,7 @@ class Emitter {
                                 c: `state->expression_result_${resultSlot}`,
                                 ty: storageType,
                             }, expression);
-                            if (!releaseExpressionResult(resultSlot)) return false;
+                            if (!operation.preserveSource && !releaseExpressionResult(resultSlot)) return false;
                         }
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "default-apply") {
@@ -31278,68 +31154,71 @@ class Emitter {
                     } else if (operation.kind === "check") {
                         callback.open(`if (tsc_value_is_nullish(state->binding_value_${operation.valueSlot}))`);
                         callback.line(
-                            `tsc_throw_str(tsc_str_from_cstr("Cannot destructure null or undefined"));`,
+                            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot destructure null or undefined"));`,
                         );
                         callback.close();
                         emitTransition(stateNode.next.id);
-                    } else if (operation.kind === "property") {
-                        const value = bindingPropertyValue(
-                            `state->binding_value_${operation.sourceSlot}`,
-                            operation.name,
-                            operation.key,
-                        );
-                        if (!value) return false;
-                        const keyNode = operation.name ?? operation.key?.expression ?? null;
-                        if (!keyNode) return false;
-                        emitBindingValueAssignment(operation.valueSlot, value, keyNode);
-                        if (operation.releaseKey && operation.key &&
-                            !releaseBindingStagedValue(operation.key)) return false;
-                        emitTransition(stateNode.next.id);
-                    } else if (operation.kind === "element") {
+                    } else if (operation.kind === "property-key") {
+                        const key = bindingStagedValue(operation.key);
+                        if (!key) return false;
                         emitBindingValueAssignment(operation.valueSlot, {
-                            c: `tsc_value_get_index(state->binding_value_${operation.sourceSlot}, ${operation.index}.0)`,
+                            c: `tsc_value_to_property_key(${this.coerce(key, T_VALUE, operation.key.expression)})`,
+                            ty: T_VALUE,
+                        }, operation.key.expression);
+                        if (!releaseBindingStagedValue(operation.key)) return false;
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "property") {
+                        const name = operation.name && this.staticPropertyName(operation.name);
+                        if (operation.keySlot === null && name === null) return false;
+                        const key = operation.keySlot !== null ? `state->binding_value_${operation.keySlot}`
+                            : `tsc_value_string(${this.stringLit(name!)})`;
+                        emitBindingValueAssignment(operation.valueSlot, {
+                            c: `tsc_value_get_computed_prop(state->binding_value_${operation.sourceSlot}, ${key})`,
                             ty: T_VALUE,
                         }, body);
+                        if (operation.releaseKey && operation.keySlot !== null) {
+                            callback.line(`state->binding_value_${operation.keySlot} = tsc_value_undefined();`);
+                            callback.line(`state->binding_value_${operation.keySlot}_gc_root = NULL;`);
+                        }
                         emitTransition(stateNode.next.id);
-                    } else if (operation.kind === "array-rest") {
-                        const rest = this.emitDynamicArrayRestForOf(
-                            callback,
-                            `state->binding_value_${operation.sourceSlot}`,
-                            operation.startIndex,
-                        );
-                        emitBindingValueAssignment(operation.valueSlot, rest, body);
+                    } else if (operation.kind === "iterator-open") {
+                        callback.line(`state->iterator_${operation.slot} = tsc_sync_iterator_open(state->binding_value_${operation.sourceSlot});`);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "iterator-step") {
+                        const value = this.freshTemp("_binding_iterator_value");
+                        callback.line(`tsc_value_t ${value} = tsc_value_undefined();`);
+                        callback.line(`(void)tsc_sync_iterator_step(&state->iterator_${operation.slot}, ${operation.valueSlot === null ? "NULL" : `&${value}`});`);
+                        if (operation.valueSlot !== null)
+                            emitBindingValueAssignment(operation.valueSlot, { c: value, ty: T_VALUE }, body);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "iterator-rest") {
+                        if (operation.valueSlot === null) return false;
+                        const array = this.freshTemp("_binding_iterator_rest");
+                        const value = this.freshTemp("_binding_iterator_value");
+                        callback.line(`tsc_array_t* volatile ${array} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+                        callback.line(`tsc_value_t ${value};`);
+                        callback.open(`while (tsc_sync_iterator_step(&state->iterator_${operation.slot}, &${value}))`);
+                        callback.line(`tsc_array_push_value(${array}, ${value});`);
+                        callback.close();
+                        emitBindingValueAssignment(operation.valueSlot, { c: `tsc_value_array(${array})`, ty: T_VALUE }, body);
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "object-rest") {
-                        const excluded: string[] = [];
+                        const excluded = this.freshTemp("_binding_excluded_keys");
+                        callback.line(`tsc_array_t* volatile ${excluded} = tsc_array_new(sizeof(tsc_value_t), 1);`);
                         for (const exclusion of operation.exclusions) {
-                            if (exclusion.kind === "name") {
-                                const name = ts.isIdentifier(exclusion.name) ||
-                                    ts.isStringLiteralLike(exclusion.name)
-                                    ? exclusion.name.text
-                                    : ts.isNumericLiteral(exclusion.name)
-                                        ? String(Number(exclusion.name.text))
-                                        : null;
-                                if (name === null) return false;
-                                excluded.push(
-                                    `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`,
-                                );
-                                continue;
-                            }
-                            const keyValue = bindingStagedValue(exclusion.key);
-                            if (!keyValue) return false;
-                            const keyType = this.prepareType(keyValue.ty);
-                            if (keyType.kind !== "number" && keyType.kind !== "string") return false;
-                            excluded.push(this.coerce(keyValue, T_STRING, exclusion.key.expression));
+                            const name = exclusion.kind === "name" ? this.staticPropertyName(exclusion.name) : null;
+                            if (exclusion.kind === "name" && name === null) return false;
+                            const key = exclusion.kind === "value" ? `state->binding_value_${exclusion.valueSlot}`
+                                : `tsc_value_string(${this.stringLit(name!)})`;
+                            callback.line(`tsc_array_push_value(${excluded}, ${key});`);
                         }
-                        const rest = this.emitDynamicObjectRestWithExcludedKeys(
-                            callback,
-                            `state->binding_value_${operation.sourceSlot}`,
-                            excluded,
-                        );
-                        emitBindingValueAssignment(operation.valueSlot, rest, body);
-                        for (const exclusion of operation.exclusions) {
-                            if (exclusion.kind === "staged" &&
-                                !releaseBindingStagedValue(exclusion.key)) return false;
+                        emitBindingValueAssignment(operation.valueSlot, {
+                            c: `tsc_value_copy_data_properties(state->binding_value_${operation.sourceSlot}, ${excluded})`,
+                            ty: T_VALUE,
+                        }, body);
+                        for (const exclusion of operation.exclusions) if (exclusion.kind === "value") {
+                            callback.line(`state->binding_value_${exclusion.valueSlot} = tsc_value_undefined();`);
+                            callback.line(`state->binding_value_${exclusion.valueSlot}_gc_root = NULL;`);
                         }
                         emitTransition(stateNode.next.id);
                     } else if (operation.kind === "default-test") {
@@ -31391,7 +31270,7 @@ class Emitter {
                             operation.assignmentTarget ? "iterator assignment" : "declaration",
                             assignmentTargets,
                             preparedAssignmentTargets,
-                            !operation.assignmentTarget,
+                            operation.initialize,
                         );
                         for (const staged of preparedSlots) {
                             if (!releaseBindingStagedValue(staged)) return false;

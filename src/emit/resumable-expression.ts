@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { normalizeAssignmentTarget } from "./binding-tree";
 
 export type ResumableValueSlot = number;
 export type ResumableExpressionTarget = number;
@@ -29,6 +30,10 @@ type ValueOperation =
     | { readonly kind: "object" };
 
 export type ResumableExpressionState =
+    | { readonly kind: "binding"; readonly id: number; readonly node: ts.BinaryExpression;
+        readonly binding: ts.BindingName; readonly assignmentTargets: ReadonlyMap<ts.Identifier, ts.Expression>;
+        readonly source: ResumableValueSlot; readonly output: ResumableValueSlot;
+        readonly next: ResumableExpressionTarget }
     | { readonly kind: "value"; readonly id: number; readonly operation: ValueOperation;
         readonly output: ResumableValueSlot; readonly next: ResumableExpressionTarget }
     | { readonly kind: "append"; readonly id: number; readonly target: ResumableValueSlot;
@@ -297,6 +302,18 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                     jump(anchor, build(node.left, left, branch)); return;
                 }
                 if (operator === ts.SyntaxKind.EqualsToken) {
+                    const target = transparent(node.left);
+                    if (ts.isArrayLiteralExpression(target) || ts.isObjectLiteralExpression(target)) {
+                        const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
+                        const binding = normalizeAssignmentTarget(target, assignmentTargets);
+                        if (!binding) { reject(node.left); return; }
+                        const right = value(node.right);
+                        const bind = put({
+                            kind: "binding", id: reserve(), node, binding, assignmentTargets,
+                            source: right, output, next,
+                        });
+                        jump(anchor, build(node.right, right, bind)); return;
+                    }
                     jump(anchor, buildReference(node.left, reference => {
                         const right = value(node.right);
                         const store = operation({ kind: "set", reference, source: right }, output, next);

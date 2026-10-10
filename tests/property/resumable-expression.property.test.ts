@@ -128,6 +128,8 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
         } else if (state.kind === "prototype") {
             const source = values[state.source];
             if (source === null || typeof source === "object" || typeof source === "function") Object.setPrototypeOf(values[state.target], source);
+        } else if (state.kind === "binding") {
+            throw new Error("binding operations require the canonical CFG projection");
         } else values[state.target] += `${values[state.source]}` + state.tail;
         pc = state.next;
     }
