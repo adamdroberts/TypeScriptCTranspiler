@@ -29,6 +29,8 @@ tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_array_t* tsc_array_new(size_t element_size, size_t initial_capacity);
 void tsc_array_push_raw(tsc_array_t* array, const void* value);
+tsc_array_t* tsc_array_own_indices(const tsc_array_t* array);
+tsc_value_t tsc_value_get_index(tsc_value_t value, double index);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
@@ -184,10 +186,13 @@ v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, 
         case TSC_VALUE_TAG_ARRAY: {
             tsc_array_t* array = static_cast<tsc_array_t*>(valuePtr(value));
             uint32_t length = array && array->len <= UINT32_MAX ? static_cast<uint32_t>(array->len) : 0;
-            v8::Local<v8::Array> out = v8::Array::New(isolate, static_cast<int>(length));
+            v8::Local<v8::Array> out = v8::Array::New(isolate);
+            out->Set(context, v8::String::NewFromUtf8Literal(isolate, "length"), v8::Number::New(isolate, length)).FromMaybe(false);
             if (!array || array->es != sizeof(tsc_value_t)) return out.As<v8::Value>();
-            for (uint32_t i = 0; i < length; i++) {
-                tsc_value_t item = static_cast<tsc_value_t*>(array->data)[i];
+            tsc_array_t* indices = tsc_array_own_indices(array);
+            for (size_t cursor = 0; cursor < indices->len; ++cursor) {
+                uint32_t i = static_cast<uint32_t>(static_cast<size_t*>(indices->data)[cursor]);
+                tsc_value_t item = tsc_value_get_index(value, i);
                 out->Set(context, i, toV8(isolate, context, item)).FromMaybe(false);
             }
             return out.As<v8::Value>();

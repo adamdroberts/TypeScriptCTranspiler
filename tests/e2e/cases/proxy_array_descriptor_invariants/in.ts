@@ -34,7 +34,7 @@ const hideLengthProxy: any = new Proxy(["x"], { getOwnPropertyDescriptor: hideDe
 try {
     console.log("hide length:", Reflect.getOwnPropertyDescriptor(hideLengthProxy, "length", mark("hide length"))?.value);
 } catch (err: any) {
-    console.log("hide length:", err);
+    console.log("hide length:", err instanceof TypeError);
 }
 
 const sealedTarget: any = ["s"];
@@ -43,7 +43,7 @@ const hideSealedProxy: any = new Proxy(sealedTarget, { getOwnPropertyDescriptor:
 try {
     console.log("hide sealed:", Object.getOwnPropertyDescriptor(hideSealedProxy, "0", mark("hide sealed"))?.value);
 } catch (err: any) {
-    console.log("hide sealed:", err);
+    console.log("hide sealed:", err instanceof TypeError);
 }
 
 const closedTarget: any = ["c"];
@@ -52,14 +52,14 @@ const newClosedProxy: any = new Proxy(closedTarget, { getOwnPropertyDescriptor: 
 try {
     console.log("new closed:", Reflect.getOwnPropertyDescriptor(newClosedProxy, "2", mark("new closed"))?.value);
 } catch (err: any) {
-    console.log("new closed:", err);
+    console.log("new closed:", err instanceof TypeError);
 }
 
 const lengthConfigProxy: any = new Proxy(["l"], { getOwnPropertyDescriptor: configurableLength as any });
 try {
     console.log("length configurable:", Object.getOwnPropertyDescriptor(lengthConfigProxy, "length", mark("length configurable"))?.configurable);
 } catch (err: any) {
-    console.log("length configurable:", err);
+    console.log("length configurable:", err instanceof TypeError);
 }
 
 const frozenTarget: any = ["f"];
@@ -68,7 +68,7 @@ const frozenLengthProxy: any = new Proxy(frozenTarget, { getOwnPropertyDescripto
 try {
     console.log("frozen length writable:", Reflect.getOwnPropertyDescriptor(frozenLengthProxy, "length", mark("frozen length writable"))?.writable);
 } catch (err: any) {
-    console.log("frozen length writable:", err);
+    console.log("frozen length writable:", err instanceof TypeError);
 }
 
 const realProxy: any = new Proxy(frozenTarget, { getOwnPropertyDescriptor: realDescriptor as any });

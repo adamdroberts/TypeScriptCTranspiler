@@ -421,7 +421,7 @@ interface ReflectConstructor {
     getOwnPropertyDescriptor(target: any, propertyKey: PropertyKey, ...ignored: any[]): any;
     has(target: any, propertyKey: PropertyKey, ...ignored: any[]): boolean;
     isExtensible(target: any, ...ignored: any[]): boolean;
-    ownKeys(target: any, ...ignored: any[]): string[];
+    ownKeys(target: any, ...ignored: any[]): (string | symbol)[];
     preventExtensions(target: any, ...ignored: any[]): boolean;
     set(target: any, propertyKey: PropertyKey, value: any, receiver?: any, ...ignored: any[]): boolean;
     setPrototypeOf(target: any, proto: any, ...ignored: any[]): boolean;

@@ -3762,7 +3762,6 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
                 if (a->es == sizeof(tsc_value_t)) return TSC_ARR(tsc_value_t, a, idx);
             }
         }
-        if (str_lit_eq(key, "__proto__")) return a->prototype;
         if (a->props && tsc_object_has_own(a->props, key)) {
             return tsc_object_get_receiver(a->props, key, v);
         }
@@ -3869,7 +3868,6 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
                 if (a->es == sizeof(tsc_value_t)) return TSC_ARR(tsc_value_t, a, idx);
             }
         }
-        if (str_lit_eq(key, "__proto__")) return a->prototype;
         if (a->props && tsc_object_has_own(a->props, key)) {
             return tsc_object_get_receiver(a->props, key, receiver);
         }
@@ -3986,23 +3984,17 @@ bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value)
     if (!exists && a->props && tsc_object_has_own(a->props, key)) exists = true;
     if (!exists && !a->extensible) return false;
     if (idx >= a->len && !a->length_writable) return false;
-    if (idx < a->len && a->props && tsc_object_has_own(a->props, key)) {
-        bool ok = tsc_object_set_receiver(a->props, key, value, v);
-        if (ok) tsc_array_clear_hole(a, idx);
-        return ok;
-    }
+    if (a->props && tsc_object_has_own(a->props, key))
+        return value_set_receiver_own_data(tsc_value_object(a->props), key, value);
     tsc_array_use_value_storage(a);
-    while (a->len < idx) {
-        tsc_array_reserve(a, a->len + 1);
-        memset((char*)a->data + a->len * a->es, 0, a->es);
-        a->len++;
-        tsc_array_mark_hole(a, a->len - 1);
-    }
-    if (idx == a->len) {
-        tsc_array_push_raw(a, &value);
-    } else {
-        tsc_array_clear_hole(a, idx);
+    if (idx <= a->dense_len) {
+        tsc_array_reserve(a, idx + 1);
         tsc_array_store_raw(a, idx, &value);
+        if (idx >= a->len) a->len = idx + 1;
+        tsc_array_clear_hole(a, idx);
+    } else {
+        if (!tsc_object_define(a->props, key, value, true, true, true)) return false;
+        if (idx >= a->len) a->len = idx + 1;
     }
     return true;
 }
@@ -4040,40 +4032,60 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
     return tsc_value_set_array_own_index(v, idx, value);
 }
 
-static bool array_length_to_size(tsc_value_t value, size_t* out) {
-    double raw = tsc_value_as_num(value);
-    if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw || raw > 4294967295.0) {
-        tsc_throw_str(tsc_str_from_cstr("RangeError: Invalid array length"));
+static void array_discard_dense_tail(tsc_array_t* array, size_t length) {
+    if (length >= array->dense_len) return;
+    size_t count = array->dense_len - length;
+    memset((char*)array->data + length * array->es, 0, count * array->es);
+    if (array->value_roots) memset(array->value_roots + length, 0, count * sizeof(void*));
+    array->dense_len = length;
+}
+
+/* ArraySetLength consumes one descriptor and one descending own-index List.
+ * ToUint32 and ToNumber are distinct, ordered conversions of the original. */
+static bool array_define_length_desc(tsc_array_t* array, tsc_value_t value, bool has_value,
+    bool writable, bool has_writable, bool enumerable, bool has_enumerable,
+    bool configurable, bool has_configurable) {
+    void* volatile array_root = array;
+    void* volatile value_root = tsc_value_gc_root(value);
+    size_t length = array->len;
+    if (has_value) {
+        uint32_t uint_length = tsc_to_uint32(tsc_value_to_number(value));
+        double number_length = tsc_value_to_number(value);
+        if ((double)uint_length != number_length)
+            tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Invalid array length"));
+        length = uint_length;
     }
-    *out = (size_t)raw;
+    size_t old_length = array->len;
+    bool current_writable = !array->frozen && array->length_writable;
+    if ((has_enumerable && enumerable) || (has_configurable && configurable) ||
+        (!current_writable && has_writable && writable)) return false;
+    if (!current_writable) return !has_value || length == old_length;
+    if (!has_value || length >= old_length) {
+        if (has_value) array->len = length;
+        if (has_writable && !writable) array->length_writable = false;
+        return true;
+    }
+    tsc_array_t* volatile indices = tsc_array_own_indices(array);
+    array->len = length;
+    for (size_t cursor = indices->len; cursor > 0; --cursor) {
+        size_t index = TSC_ARR(size_t, indices, cursor - 1);
+        if (index < length) break;
+        if (!tsc_value_delete_prop(tsc_value_array(array), tsc_str_from_int((int64_t)index))) {
+            array->len = index + 1;
+            array_discard_dense_tail(array, array->len);
+            if (has_writable && !writable) array->length_writable = false;
+            return false;
+        }
+    }
+    array_discard_dense_tail(array, length);
+    if (has_writable && !writable) array->length_writable = false;
+    (void)array_root; (void)value_root;
     return true;
 }
 
-bool tsc_value_array_set_length(tsc_array_t* a, tsc_value_t value) {
-    if (!a || (a->es != sizeof(tsc_value_t) && !a->unbox_element)) return false;
-    size_t len = 0;
-    array_length_to_size(value, &len);
-    if (a->frozen || !a->length_writable) return false;
-    if (a->sealed && len != a->len) return false;
-    if (len > a->len && !a->extensible) return false;
-    if (len < a->len && a->props) {
-        for (size_t i = a->len; i > len; i--) {
-            size_t idx = i - 1;
-            tsc_str_t* key = tsc_str_from_int((int64_t)idx);
-            if (tsc_object_has_own(a->props, key) && !tsc_object_delete(a->props, key)) {
-                a->len = idx + 1;
-                return false;
-            }
-        }
-    }
-    while (a->len < len) {
-        tsc_array_reserve(a, a->len + 1);
-        memset((char*)a->data + a->len * a->es, 0, a->es);
-        a->len++;
-        tsc_array_mark_hole(a, a->len - 1);
-    }
-    a->len = len;
-    return true;
+bool tsc_value_array_set_length(tsc_array_t* array, tsc_value_t value) {
+    if (!array || array->frozen || !array->length_writable) return false;
+    return array_define_length_desc(array, value, true, false, false, false, false, false, false);
 }
 
 tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
@@ -4132,30 +4144,16 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) {
-            bool current_writable = !a->frozen && a->length_writable;
-            bool next_writable = has_writable ? writable : current_writable;
-            bool next_enumerable = has_enumerable ? enumerable : false;
-            bool next_configurable = has_configurable ? configurable : false;
-            if (next_enumerable || next_configurable) return false;
-            if (!current_writable) {
-                if (next_writable) return false;
-                if (!has_value) return true;
-                size_t len = 0;
-                array_length_to_size(value, &len);
-                return len == a->len;
-            }
-            if (has_value && !tsc_value_array_set_length(a, value)) {
-                if (!next_writable) a->length_writable = false;
-                return false;
-            }
-            if (!next_writable) a->length_writable = false;
-            return true;
+            return array_define_length_desc(a, value, has_value, writable, has_writable,
+                enumerable, has_enumerable, configurable, has_configurable);
         }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
             bool side_exists = a->props && tsc_object_has_own(a->props, key);
             if (side_exists) {
-                return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+                bool ok = tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+                if (ok && has_value) tsc_array_use_value_storage(a);
+                return ok;
             }
             bool exists = tsc_array_index_present(a, idx);
             bool current_writable = !a->frozen;
@@ -4189,20 +4187,9 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             if (has_value && next_writable && next_enumerable && next_configurable) {
                 return tsc_value_set_array_own_index(v, idx, value);
             }
-            size_t old_len = a->len;
-            while (a->len <= idx) {
-                tsc_array_reserve(a, a->len + 1);
-                memset((char*)a->data + a->len * a->es, 0, a->es);
-                a->len++;
-                tsc_array_mark_hole(a, a->len - 1);
-            }
             bool ok = tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
-            if (ok) {
-                tsc_array_clear_hole(a, idx);
-                return true;
-            }
-            a->len = old_len;
-            return false;
+            if (ok && idx >= a->len) a->len = idx + 1;
+            return ok;
         }
         return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
@@ -4605,7 +4592,9 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
             bool side_exists = a->props && tsc_object_has_own(a->props, key);
-            bool exists = tsc_array_index_present(a, idx) || side_exists;
+            if (side_exists) return tsc_object_define_accessor(a->props, key, getter, getter_env,
+                has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+            bool exists = tsc_array_index_present(a, idx);
             if (exists) {
                 bool current_configurable = !a->sealed && !a->frozen;
                 bool next_configurable = has_configurable ? configurable : current_configurable;
@@ -4620,22 +4609,8 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
                 return ok;
             }
             if (!a->extensible || (idx >= a->len && !a->length_writable)) return false;
-            size_t old_len = a->len;
-            while (a->len < idx) {
-                tsc_array_reserve(a, a->len + 1);
-                memset((char*)a->data + a->len * a->es, 0, a->es);
-                a->len++;
-                tsc_array_mark_hole(a, a->len - 1);
-            }
-            if (idx == a->len) {
-                tsc_array_reserve(a, a->len + 1);
-                memset((char*)a->data + a->len * a->es, 0, a->es);
-                a->len++;
-                tsc_array_mark_hole(a, a->len - 1);
-            }
             bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
-            if (ok) tsc_array_clear_hole(a, idx);
-            else a->len = old_len;
+            if (ok && idx >= a->len) a->len = idx + 1;
             return ok;
         }
         return tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
@@ -5026,23 +5001,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        if (str_lit_eq(key, "__proto__")) {
-            if (!value_is_valid_prototype(value)) return true;
-            return tsc_value_set_prototype_of(v, value);
-        }
-        if (tsc_str_is_length_key(key)) return tsc_value_array_set_length(a, value);
-        size_t idx = 0;
-        if (tsc_str_array_index(key, &idx)) return tsc_value_set_index(v, (double)idx, value);
-        ssize_t side_idx = a->props ? object_find(a->props, key) : -1;
-        if (side_idx >= 0) {
-            const tsc_object_prop_t* prop = &a->props->props[(size_t)side_idx];
-            if (prop->accessor) {
-                return tsc_object_set_receiver(a->props, key, value, v);
-            }
-            return tsc_object_set(a->props, key, value);
-        }
-        return tsc_object_set(a->props, key, value);
+        return tsc_value_set_prop_receiver(v, key, value, v);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
@@ -5119,15 +5078,20 @@ bool tsc_value_set_prop_receiver(tsc_value_t v, tsc_str_t* key, tsc_value_t valu
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        ssize_t side_idx = a->props ? object_find(a->props, key) : -1;
-        if (side_idx >= 0) {
-            const tsc_object_prop_t* prop = &a->props->props[(size_t)side_idx];
-            if (!prop->accessor && receiver == v) {
-                return tsc_object_set(a->props, key, value);
-            }
+        if (a->props && tsc_object_has_own(a->props, key))
             return tsc_object_set_receiver(a->props, key, value, receiver);
+        size_t index;
+        if (tsc_str_is_length_key(key)) {
+            if (a->frozen || !a->length_writable) return false;
+            return value_set_receiver_own_data(receiver, key, value);
         }
-        return tsc_value_define_receiver_data(receiver, key, value);
+        if (tsc_str_array_index(key, &index) && tsc_array_index_present(a, index)) {
+            if (a->frozen) return false;
+            return value_set_receiver_own_data(receiver, key, value);
+        }
+        if (tsc_value_is_object(a->prototype))
+            return tsc_value_set_prop_receiver(a->prototype, key, value, receiver);
+        return value_set_receiver_own_data(receiver, key, value);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
@@ -5379,24 +5343,21 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         if (tsc_str_is_length_key(key)) return false;
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        size_t idx = 0;
-        bool is_index =
-            (a->es == sizeof(tsc_value_t) || a->box_element) &&
-            tsc_str_array_index(key, &idx) &&
-            idx < a->len;
+        size_t idx;
+        bool dense = tsc_str_array_index(key, &idx) && idx < a->dense_len &&
+            (!a->holes || !tsc_object_has_own(a->holes, key));
         if (a->props && tsc_object_has_own(a->props, key)) {
             if (!tsc_object_delete(a->props, key)) return false;
-            if (is_index) {
+            if (dense) {
                 tsc_array_mark_hole(a, idx);
                 memset((char*)a->data + idx * a->es, 0, a->es);
             }
             return true;
         }
-        if (is_index) {
+        if (dense) {
             if (a->sealed || a->frozen) return false;
             tsc_array_mark_hole(a, idx);
             memset((char*)a->data + idx * a->es, 0, a->es);
-            return true;
         }
         return true;
     }
@@ -5612,52 +5573,33 @@ bool tsc_value_is_frozen(tsc_value_t v) {
 }
 
 tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
-    size_t side_len = src && src->props ? src->props->len : 0;
-    size_t cap = (src ? src->len : 0) + (include_length ? 1 : 0) + side_len;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), cap ? cap : 1);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 0);
     if (!src) return out;
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_str_t* key = tsc_str_from_int((int64_t)i);
-        if (tsc_array_index_present(src, i) && (include_length || tsc_array_property_is_enumerable_key(src, key))) {
-            tsc_array_push_raw(out, &key);
-        }
+    tsc_array_t* indices = tsc_array_own_indices(src);
+    for (size_t cursor = 0; cursor < indices->len; ++cursor) {
+        tsc_str_t* key = tsc_str_from_int((int64_t)TSC_ARR(size_t, indices, cursor));
+        if (include_length || tsc_array_property_is_enumerable_key(src, key)) tsc_array_push_raw(out, &key);
     }
     if (include_length) {
         tsc_str_t* length = tsc_str_from_lit("length", 6);
         tsc_array_push_raw(out, &length);
     }
     tsc_array_t* side_keys = include_length ? tsc_object_own_keys_dyn(src->props) : tsc_object_keys_dyn(src->props);
-    for (size_t i = 0; i < side_keys->len; i++) {
+    for (size_t i = 0; i < side_keys->len; ++i) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
-        if (value_is_known_symbol_internal_key(key)) continue;
-        size_t idx = 0;
-        if (tsc_str_array_index(key, &idx) && idx < src->len) continue;
-        tsc_array_push_raw(out, &key);
+        size_t index;
+        if (!value_is_known_symbol_internal_key(key) && !tsc_str_array_index(key, &index))
+            tsc_array_push_raw(out, &key);
     }
     return out;
 }
 
 tsc_array_t* value_array_values(const tsc_array_t* src) {
-    size_t side_len = src && src->props ? src->props->len : 0;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len + side_len : 1);
-    if (!src || src->es != sizeof(tsc_value_t)) return out;
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_str_t* key = tsc_str_from_int((int64_t)i);
-        if (!tsc_array_property_is_enumerable_key(src, key)) continue;
-        tsc_value_t value = src->props && tsc_object_has_own(src->props, key)
-            ? tsc_object_get_receiver(src->props, key, tsc_value_array((tsc_array_t*)src))
-            : TSC_ARR(tsc_value_t, src, i);
-        tsc_array_push_raw(out, &value);
-    }
-    tsc_array_t* side_keys = tsc_object_keys_dyn(src->props);
-    for (size_t i = 0; i < side_keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
-        if (value_is_known_symbol_internal_key(key)) continue;
-        size_t idx = 0;
-        if (tsc_str_array_index(key, &idx) && idx < src->len) continue;
-        tsc_value_t value = tsc_object_get_receiver(src->props, key, tsc_value_array((tsc_array_t*)src));
-        tsc_array_push_raw(out, &value);
-    }
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), 0);
+    if (!src) return out;
+    tsc_array_t* keys = value_array_keys(src, false);
+    for (size_t cursor = 0; cursor < keys->len; ++cursor)
+        tsc_array_push_value(out, tsc_value_get_prop(tsc_value_array((tsc_array_t*)src), TSC_ARR(tsc_str_t*, keys, cursor)));
     return out;
 }
 
@@ -8355,16 +8297,20 @@ static tsc_value_t tsc_structured_clone_internal(tsc_value_t v, tsc_map_t* seen)
 
     if (tag == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* src_arr = (tsc_array_t*)value_ptr(v);
-        tsc_array_t* dst_arr = tsc_array_new(sizeof(tsc_value_t), src_arr->len);
+        tsc_array_t* dst_arr = tsc_array_new(sizeof(tsc_value_t), 0);
         tsc_value_t cloned_val = tsc_value_array(dst_arr);
 
         tsc_map_set_raw(seen, &v, &cloned_val);
 
         dst_arr->len = src_arr->len;
-        for (size_t i = 0; i < src_arr->len; i++) {
-            tsc_value_t elem = TSC_ARR(tsc_value_t, src_arr, i);
+        tsc_array_t* volatile keys = value_array_keys(src_arr, false);
+        for (size_t cursor = 0; cursor < keys->len; ++cursor) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, cursor);
+            tsc_value_t elem = tsc_value_get_prop(v, key);
+            void* volatile elem_root = tsc_value_gc_root(elem); (void)elem_root;
             tsc_value_t cloned = tsc_structured_clone_internal(elem, seen);
-            tsc_array_store_raw(dst_arr, i, &cloned);
+            if (!tsc_value_create_data_property(cloned_val, tsc_value_string(key), cloned))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cloned Array could not create a property"));
         }
         return cloned_val;
     }

@@ -125,9 +125,9 @@ typedef struct tsc_str {
 
 ## Arrays (`tsc_array_t`)
 
-Type-erased dynamic vector. Element size + kind known only to the emitter — the emitter generates the right access via the `TSC_ARR(T, arr, i)` macro.
+One Array owner retains logical length independently of an initialized native-cell prefix and ordinary indexed descriptors. The canonical own-index collection merges those representations in numeric order; holes do not allocate cells. Ordinary Get/Set/Define/Delete operations use that owner, while `TSC_ARR(T, arr, i)` accesses verified native storage.
 
-The canonical C/C++ layout is declared once in `runtime/tsc_array_abi.h`. It retains length/capacity/element width, integrity and length-writability flags, prototype/property/hole owners, element codecs, data and decoded value roots. Generator lifecycle and protocol state belong to ordinary generator owners, outside this Array ABI.
+The canonical C/C++ layout is declared once in `runtime/tsc_array_abi.h`. It retains logical length/native prefix/capacity/element width, integrity and length-writability flags, prototype/property/hole owners, element codecs, data and decoded value roots. Generator lifecycle and protocol state belong to ordinary generator owners, outside this Array ABI.
 
 
 | Symbol | Signature | Notes |
@@ -136,25 +136,17 @@ The canonical C/C++ layout is declared once in `runtime/tsc_array_abi.h`. It ret
 | `tsc_array_from_buf(es, src, n)` | `tsc_array_t*` | Copy `n` elements from `src`. |
 | `tsc_array_reserve(arr, cap)` | `void` | Grow capacity to at least `cap`. |
 | `tsc_array_push_raw(arr, &elem)` | `void` | Append; grows if needed. |
-| `tsc_array_pop_raw(arr)` | `void` | Decrement `len`. Caller reads the element first. |
-| `tsc_array_shift_raw(arr)` | `void` | Remove front (shifts remaining). |
 | `tsc_array_unshift_raw(arr, &elem)` | `void` | Prepend. |
-| `tsc_array_reverse(arr)` | `tsc_array_t*` | In-place. Returns the same array. |
-| `tsc_array_to_reversed(arr)` | `tsc_array_t*` | Reversed copy. Leaves the input unchanged. |
-| `tsc_array_fill(arr, &elem, start, end)` | `tsc_array_t*` | In-place range fill. Returns the same array. |
-| `tsc_array_copy_within(arr, target, start, end)` | `tsc_array_t*` | In-place overlapping copy. Returns the same array. |
-| `tsc_array_with(arr, index, &elem)` | `tsc_array_t*` | Non-mutating copy with one replaced element. Supports negative indices. |
-| `tsc_array_to_spliced(arr, start, delete_count, argc, items)` | `tsc_array_t*` | Non-mutating splice copy. `argc` preserves omitted-argument semantics. |
 | `tsc_array_slice(arr, start, end)` | `tsc_array_t*` | New array with copied range. |
 | `tsc_array_append(dst, src)` | `tsc_array_t*` | Append `src`'s elements to `dst`. |
-| `tsc_array_flat_once(outer, elem_size)` | `tsc_array_t*` | Flatten one homogeneous nested-array level. |
 | `tsc_array_length(arr)` | `double` | For `.length` property. |
+| `tsc_array_own_indices(arr)` | `tsc_array_t*` | Sorted List of actual own array indices; independent of virtual holes. |
 | `tsc_array_has_own_key(arr, key)` | `bool` | Own-property test for typed array indexes and `length`. |
 | `tsc_array_property_is_enumerable_key(arr, key)` | `bool` | Enumerable own-property test for typed array indexes. `length` is non-enumerable. |
 | `TSC_ARR(T, arr, i)` | lvalue | Macro for typed element access — `((T*)arr->data)[(size_t)i]`. |
 | `tsc_array_oob(arr, i)` | `void` | Placeholder bounds-check hook (silent today, planned to throw `RangeError`). |
 
-High-order methods like `.map`/`.filter`/`.reduce` are **not** runtime functions — they're expanded inline in the emitter (`emitArrayHof` in `src/emit/index.ts`).
+Array members use ordinary mutable property lookup and actual argument Lists. Realm prototype callables implement callback algorithms in the runtime; result-producing methods share the rooted Array species output record. ArraySetLength applies ordered ToUint32/ToNumber conversions and descending deletion over actual own indices, restoring the blocked index and requested writability on failure.
 
 `Object.entries` uses `tsc_object_entry_t` elements inside a normal `tsc_array_t`. The struct stores the string key plus one typed value slot (`num`, `boolean`, or `ptr`) chosen by the emitter for the homogeneous object field type.
 

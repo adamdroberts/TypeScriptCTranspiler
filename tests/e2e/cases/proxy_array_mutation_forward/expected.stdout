@@ -1,11 +1,11 @@
 set index: red|cyan cyan
 reflect set: true
-expanded: 4 undefined gold red|cyan|undefined|gold
+expanded: 4 undefined gold red|cyan|gold
 receiver set: true kept undefined
 reflect length: true
 truncated: 2 red|cyan
 define index: true red|green
-define expand: 4 undefined violet 0|1|2|3
+define expand: 4 undefined violet 0|1|3
 define length: true 2 red|green
 delete index: true undefined 2
 delete length: false

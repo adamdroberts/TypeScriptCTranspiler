@@ -110,12 +110,8 @@ static tsc_value_t array_create_with_length(double length) {
         );
     }
     const size_t count = (size_t)length;
-    tsc_array_t* array = tsc_array_new(sizeof(tsc_value_t), count);
-    const tsc_value_t undefined = tsc_value_undefined();
-    for (size_t index = 0; index < count; index++) {
-        tsc_array_push_raw(array, &undefined);
-        tsc_array_mark_hole(array, index);
-    }
+    tsc_array_t* array = tsc_array_new(sizeof(tsc_value_t), 0);
+    array->len = count;
     return tsc_value_array(array);
 }
 
@@ -748,7 +744,6 @@ static tsc_value_t array_proto_apply_callback(tsc_value_t callback, tsc_value_t 
         tsc_value_array(array_proto_callback_args(value, index, receiver))
     );
 }
-
 
 
 static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
@@ -1501,6 +1496,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_initializing = true;
         tsc_array_t* proto = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
         proto->len = 0;
+        proto->dense_len = 0;
         proto->cap = 0;
         proto->es = sizeof(tsc_value_t);
         proto->extensible = true;
@@ -1600,6 +1596,7 @@ tsc_array_t* tsc_array_prototype(void) {
 tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     tsc_array_t* a = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
     a->len = 0;
+    a->dense_len = 0;
     a->cap = initial_cap;
     a->es = elem_size;
     a->extensible = true;
@@ -1623,6 +1620,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     tsc_array_t* a = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
     a->len = 0;
+    a->dense_len = 0;
     a->cap = initial_cap;
     a->es = elem_size;
     a->extensible = true;
@@ -1645,7 +1643,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
 
 static void array_refresh_value_root(tsc_array_t* a, size_t index) {
     if (!a || a->es != sizeof(tsc_value_t) || !a->value_roots || index >= a->cap) return;
-    if (index >= a->len || !tsc_array_index_present(a, index)) {
+    if (index >= a->dense_len || index >= a->len || !tsc_array_index_present(a, index)) {
         a->value_roots[index] = NULL;
         return;
     }
@@ -1697,7 +1695,7 @@ void tsc_array_use_value_storage(tsc_array_t* array) {
     tsc_value_t* values = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(tsc_value_t)) : NULL;
     void** roots = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(void*)) : NULL;
     if (roots) memset(roots, 0, array->cap * sizeof(void*));
-    for (size_t index = 0; index < array->len; ++index) {
+    for (size_t index = 0; index < array->dense_len; ++index) {
         values[index] = tsc_array_index_present(array, index)
             ? array->box_element((const char*)array->data + index * array->es) : tsc_value_undefined();
         roots[index] = tsc_value_gc_root(values[index]);
@@ -1753,25 +1751,34 @@ tsc_array_t* tsc_array_require_native_representation(
     tsc_array_t* array = (tsc_array_t*)value_ptr(value);
     if (!box_element && !unbox_element) return array;
     if (!box_element || !unbox_element || !element_size) array_native_representation_failure();
-    if (array->es == element_size && array->box_element == box_element && array->unbox_element == unbox_element) return array;
-    if ((!fresh_literal && (array->box_element || array->unbox_element)) ||
+    bool same_codec = array->es == element_size && array->box_element == box_element && array->unbox_element == unbox_element;
+    if (same_codec && array->cap >= array->len) return array;
+    if ((!same_codec && !fresh_literal && (array->box_element || array->unbox_element)) ||
         (!array->box_element && array->es != sizeof(tsc_value_t))) {
         array_native_representation_failure();
     }
-    if (array->cap > SIZE_MAX / element_size) array_native_representation_failure();
-    void* volatile converted = array->cap ? TSC_GC_MALLOC(array->cap * element_size) : NULL;
-    if (converted) memset(converted, 0, array->cap * element_size);
+    size_t capacity = array->cap > array->len ? array->cap : array->len;
+    if (capacity > SIZE_MAX / element_size) array_native_representation_failure();
+    void* volatile converted = capacity ? TSC_GC_MALLOC(capacity * element_size) : NULL;
+    if (converted) memset(converted, 0, capacity * element_size);
+    tsc_array_t* volatile indices = tsc_array_own_indices(array);
     volatile bool supported = true;
     TSC_TRY_FRAME(conversion_frame);
     tsc_try_push(&conversion_frame);
     if (setjmp(conversion_frame.jb) == 0) {
-        for (size_t index = 0; index < array->len; index++) {
-            if (!tsc_array_index_present(array, index)) continue;
-            if (array->props && tsc_object_has_own(array->props, tsc_str_from_int((int64_t)index))) continue;
+        for (size_t cursor = 0; cursor < indices->len; ++cursor) {
+            size_t index = TSC_ARR(size_t, indices, cursor);
             tsc_value_t current;
-            const void* input = (const char*)array->data + index * array->es;
-            if (array->box_element) current = array->box_element(input);
-            else memcpy(&current, input, sizeof(current));
+            ssize_t side = object_find(array->props, tsc_str_from_int((int64_t)index));
+            if (side >= 0) {
+                const tsc_object_prop_t* property = &array->props->props[(size_t)side];
+                if (property->accessor) continue;
+                current = object_prop_data_value(array->props, property);
+            } else {
+                const void* input = (const char*)array->data + index * array->es;
+                if (array->box_element) current = array->box_element(input);
+                else memcpy(&current, input, sizeof(current));
+            }
             void* volatile current_gc_root = tsc_value_gc_root(current);
             void* output = (char*)converted + index * element_size;
             if (!array_native_element_kind_matches(current, kind) || !unbox_element(current, output) ||
@@ -1788,6 +1795,7 @@ tsc_array_t* tsc_array_require_native_representation(
     }
     if (!supported) array_native_representation_failure();
     array->data = converted;
+    array->cap = capacity;
     array->es = element_size;
     array->box_element = box_element;
     array->unbox_element = unbox_element;
@@ -1803,6 +1811,7 @@ tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n) {
     tsc_array_t* a = tsc_array_new(elem_size, n > 0 ? n : 1);
     if (n > 0) memcpy(a->data, src, n * elem_size);
     a->len = n;
+    a->dense_len = n;
     array_refresh_value_roots(a, 0, n);
     return a;
 }
@@ -1829,12 +1838,39 @@ bool tsc_str_array_index(const tsc_str_t* key, size_t* out) {
 
 bool tsc_array_index_present(const tsc_array_t* a, size_t index) {
     if (!a || index >= a->len) return false;
+    tsc_str_t* key = tsc_str_from_int((int64_t)index);
+    if (a->props && tsc_object_has_own(a->props, key)) return true;
+    if (index >= a->dense_len) return false;
     if (!a->holes) return true;
-    return !tsc_object_has_own(a->holes, tsc_str_from_int((int64_t)index));
+    return !tsc_object_has_own(a->holes, key);
+}
+
+static int array_compare_indices(const void* left, const void* right) {
+    size_t a = *(const size_t*)left, b = *(const size_t*)right;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/* One collection enumerates actual own indices, never the logical hole range. */
+tsc_array_t* tsc_array_own_indices(const tsc_array_t* a) {
+    tsc_array_t* indices = tsc_array_new(sizeof(size_t), 0);
+    if (!a) return indices;
+    for (size_t index = 0; index < a->dense_len && index < a->len; ++index) {
+        tsc_str_t* key = tsc_str_from_int((int64_t)index);
+        if (a->props && tsc_object_has_own(a->props, key)) continue;
+        if (!a->holes || !tsc_object_has_own(a->holes, key)) tsc_array_push_raw(indices, &index);
+    }
+    tsc_array_t* keys = tsc_object_own_keys_dyn(a->props);
+    for (size_t cursor = 0; cursor < keys->len; ++cursor) {
+        size_t index;
+        if (tsc_str_array_index(TSC_ARR(tsc_str_t*, keys, cursor), &index) && index < a->len)
+            tsc_array_push_raw(indices, &index);
+    }
+    if (indices->len > 1) qsort(indices->data, indices->len, sizeof(size_t), array_compare_indices);
+    return indices;
 }
 
 void tsc_array_mark_hole(tsc_array_t* a, size_t index) {
-    if (!a || index >= a->len) return;
+    if (!a || index >= a->dense_len) return;
     if (!a->holes) a->holes = tsc_object_new();
     (void)tsc_object_set(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true));
     if (a->value_roots) a->value_roots[index] = NULL;
@@ -1884,6 +1920,7 @@ void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
 void tsc_array_store_raw(tsc_array_t* a, size_t index, const void* elem) {
     if (!a || !elem || index >= a->cap) tsc_panic("array store index exceeds capacity");
     memcpy((char*)a->data + index * a->es, elem, a->es);
+    if (index >= a->dense_len) a->dense_len = index + 1;
     if (a->es == sizeof(tsc_value_t) && a->value_roots) {
         tsc_value_t value;
         memcpy(&value, elem, sizeof(value));
@@ -1898,37 +1935,6 @@ void tsc_array_push_raw(tsc_array_t* a, const void* elem) {
     a->len++;
 }
 
-void tsc_array_pop_raw(tsc_array_t* a) {
-    if (a->len > 0) {
-        tsc_array_clear_hole(a, a->len - 1);
-        if (a->value_roots) a->value_roots[a->len - 1] = NULL;
-        a->len--;
-    }
-}
-
-void tsc_array_shift_raw(tsc_array_t* a) {
-    if (a->len == 0) return;
-    tsc_object_t* shifted_holes = NULL;
-    if (a->holes && a->es == sizeof(tsc_value_t)) {
-        shifted_holes = tsc_object_new();
-        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
-        for (size_t i = 0; i < keys->len; i++) {
-            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-            size_t index = 0;
-            if (tsc_str_array_index(key, &index) && index > 0 && index < a->len) {
-                (void)tsc_object_set(
-                    shifted_holes,
-                    tsc_str_from_int((int64_t)(index - 1)),
-                    tsc_value_bool(true)
-                );
-            }
-        }
-    }
-    memmove(a->data, (char*)a->data + a->es, (a->len - 1) * a->es);
-    a->len--;
-    a->holes = shifted_holes;
-    array_refresh_value_roots(a, 0, a->len + 1);
-}
 
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
     tsc_object_t* shifted_holes = NULL;
@@ -1951,68 +1957,11 @@ void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
     memmove((char*)a->data + a->es, a->data, a->len * a->es);
     tsc_array_store_raw(a, 0, elem);
     a->len++;
+    a->dense_len = a->len;
     a->holes = shifted_holes;
     array_refresh_value_roots(a, 0, a->len);
 }
 
-tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
-    if (a->len < 2) return a;
-    if (!a->extensible && a->holes) {
-        for (size_t lower = 0; lower < a->len / 2; lower++) {
-            size_t upper = a->len - lower - 1;
-            bool lower_present = tsc_array_index_present(a, lower);
-            bool upper_present = tsc_array_index_present(a, upper);
-            if (!lower_present && upper_present) {
-                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not create lower array element"));
-            }
-            if (lower_present && !upper_present) {
-                tsc_array_mark_hole(a, lower);
-                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not create upper array element"));
-            }
-        }
-    }
-    tsc_object_t* reversed_holes = NULL;
-    if (a->holes) {
-        reversed_holes = tsc_object_new();
-        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
-        for (size_t i = 0; i < keys->len; i++) {
-            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-            size_t index = 0;
-            if (tsc_str_array_index(key, &index) && index < a->len) {
-                tsc_str_t* reversed = tsc_str_from_int((int64_t)(a->len - index - 1));
-                (void)tsc_object_set(reversed_holes, reversed, tsc_value_bool(true));
-            }
-        }
-    }
-    char* lo = (char*)a->data;
-    char* hi = lo + (a->len - 1) * a->es;
-    char tmp[256]; /* element size limit for stack swap; larger uses heap */
-    char* swap = a->es <= sizeof(tmp) ? tmp : (char*)TSC_GC_MALLOC(a->es);
-    while (lo < hi) {
-        memcpy(swap, lo, a->es);
-        memcpy(lo, hi, a->es);
-        memcpy(hi, swap, a->es);
-        lo += a->es;
-        hi -= a->es;
-    }
-    if (a->holes) a->holes = reversed_holes;
-    array_refresh_value_roots(a, 0, a->len);
-    return a;
-}
-
-tsc_array_t* tsc_array_to_reversed(const tsc_array_t* a) {
-    return tsc_array_reverse(tsc_array_slice(a, 0.0, (double)a->len));
-}
-
-int64_t array_strict_index(double value, int64_t len) {
-    if (isnan(value)) value = 0.0;
-    if (isinf(value)) tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
-    if (value < 0) value = (double)len + value;
-    if (value < 0 || value >= (double)len) {
-        tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
-    }
-    return (int64_t)value;
-}
 
 static void array_copy_holes_range(
     const tsc_array_t* src,
@@ -2029,196 +1978,6 @@ static void array_copy_holes_range(
     }
 }
 
-static tsc_object_t* array_spliced_holes(
-    const tsc_array_t* src,
-    size_t start,
-    size_t delete_count,
-    const tsc_array_t* items
-) {
-    if (!src || src->es != sizeof(tsc_value_t) || (!src->holes && (!items || !items->holes))) return NULL;
-    tsc_object_t* holes = tsc_object_new();
-    size_t insert_len = items ? items->len : 0;
-    size_t tail_start = start + delete_count;
-    size_t tail_len = src->len - tail_start;
-    if (src->holes) {
-        for (size_t i = 0; i < start; i++) {
-            if (!tsc_array_index_present(src, i)) {
-                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)i), tsc_value_bool(true));
-            }
-        }
-        for (size_t i = 0; i < tail_len; i++) {
-            if (!tsc_array_index_present(src, tail_start + i)) {
-                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)(start + insert_len + i)), tsc_value_bool(true));
-            }
-        }
-    }
-    if (items && items->holes) {
-        for (size_t i = 0; i < insert_len; i++) {
-            if (!tsc_array_index_present(items, i)) {
-                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)(start + i)), tsc_value_bool(true));
-            }
-        }
-    }
-    return holes;
-}
-
-tsc_array_t* tsc_array_with(const tsc_array_t* a, double index, const void* elem) {
-    int64_t at = array_strict_index(index, (int64_t)a->len);
-    tsc_array_t* copy = tsc_array_slice(a, 0.0, (double)a->len);
-    tsc_array_store_raw(copy, (size_t)at, elem);
-    tsc_array_clear_hole(copy, (size_t)at);
-    return copy;
-}
-
-int64_t array_range_index(double value, int64_t len, double fallback) {
-    double n = isnan(value) ? fallback : value;
-    if (isnan(n)) n = 0.0;
-    if (isinf(n)) return n < 0 ? 0 : len;
-    if (n < 0) n = (double)len + n;
-    if (n < 0) return 0;
-    if (n >= (double)len) return len;
-    return (int64_t)n;
-}
-
-tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
-    int64_t len = (int64_t)a->len;
-    int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);
-    int64_t del = 0;
-    if (argc == 1) {
-        del = len - at;
-    } else if (argc >= 2) {
-        double raw = isnan(delete_count) || delete_count < 0 ? 0.0 : delete_count;
-        if (isinf(raw)) raw = raw < 0 ? 0.0 : (double)(len - at);
-        del = (int64_t)raw;
-        if (del > len - at) del = len - at;
-    }
-
-    size_t insert_len = items ? items->len : 0;
-    if ((a->sealed || a->frozen) && (del > 0 || insert_len > 0)) {
-        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice cannot mutate a sealed or frozen array"));
-    }
-    size_t old_len = a->len;
-    size_t new_len = a->len - (size_t)del + insert_len;
-    if (new_len > a->len && !a->length_writable) {
-        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
-    }
-    if (new_len > a->len && !a->extensible) {
-        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
-    }
-
-    tsc_object_t* next_holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
-    tsc_array_t* removed = tsc_array_slice(a, (double)at, (double)(at + del));
-    size_t tail_start = (size_t)(at + del);
-    size_t tail_len = a->len - tail_start;
-    tsc_array_reserve(a, new_len > 0 ? new_len : 1);
-    if (insert_len != (size_t)del && tail_len > 0) {
-        memmove(
-            (char*)a->data + ((size_t)at + insert_len) * a->es,
-            (char*)a->data + tail_start * a->es,
-            tail_len * a->es
-        );
-    }
-    if (insert_len > 0) {
-        memcpy((char*)a->data + (size_t)at * a->es, items->data, insert_len * a->es);
-    }
-    a->holes = next_holes;
-    if (!a->length_writable) {
-        for (size_t i = new_len; i < old_len; i++) tsc_array_mark_hole(a, i);
-        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not update array-like length"));
-    }
-    a->len = new_len;
-    array_refresh_value_roots(a, 0, old_len > new_len ? old_len : new_len);
-    return removed;
-}
-
-tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
-    int64_t len = (int64_t)a->len;
-    int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);
-    int64_t del = 0;
-    if (argc == 1) {
-        del = len - at;
-    } else if (argc >= 2) {
-        double raw = isnan(delete_count) || delete_count < 0 ? 0.0 : delete_count;
-        if (isinf(raw)) raw = raw < 0 ? 0.0 : (double)(len - at);
-        del = (int64_t)raw;
-        if (del > len - at) del = len - at;
-    }
-
-    size_t insert_len = items ? items->len : 0;
-    size_t new_len = a->len - (size_t)del + insert_len;
-    tsc_array_t* out = tsc_array_new(a->es, new_len > 0 ? new_len : 1);
-    out->box_element = a->box_element;
-    out->unbox_element = a->unbox_element;
-    out->value_storage = a->value_storage;
-    if (at > 0) {
-        memcpy(out->data, a->data, (size_t)at * a->es);
-        out->len = (size_t)at;
-    }
-    if (insert_len > 0) {
-        memcpy((char*)out->data + out->len * out->es, items->data, insert_len * out->es);
-        out->len += insert_len;
-    }
-    size_t tail_start = (size_t)(at + del);
-    size_t tail_len = a->len - tail_start;
-    if (tail_len > 0) {
-        memcpy((char*)out->data + out->len * out->es, (char*)a->data + tail_start * a->es, tail_len * a->es);
-        out->len += tail_len;
-    }
-    out->holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
-    array_refresh_value_roots(out, 0, out->len);
-    return out;
-}
-
-tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, double end) {
-    int64_t len = (int64_t)a->len;
-    int64_t i0 = array_range_index(start, len, 0.0);
-    int64_t i1 = array_range_index(end, len, (double)len);
-    if (i1 < i0) i1 = i0;
-    for (int64_t i = i0; i < i1; i++) {
-        if (!tsc_array_index_present(a, (size_t)i) && !a->extensible) {
-            tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill could not create array element"));
-        }
-        tsc_array_store_raw(a, (size_t)i, elem);
-        tsc_array_clear_hole(a, (size_t)i);
-    }
-    return a;
-}
-
-tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, double end) {
-    int64_t len = (int64_t)a->len;
-    int64_t to = array_range_index(target, len, 0.0);
-    int64_t from = array_range_index(start, len, 0.0);
-    int64_t final = array_range_index(end, len, (double)len);
-    int64_t count = final - from;
-    int64_t room = len - to;
-    if (count > room) count = room;
-    if (count > 0) {
-        int64_t direction = 1;
-        if (from < to && to < from + count) {
-            direction = -1;
-            from += count - 1;
-            to += count - 1;
-        }
-        for (int64_t i = 0; i < count; i++, from += direction, to += direction) {
-            size_t source = (size_t)from;
-            size_t target = (size_t)to;
-            if (tsc_array_index_present(a, source)) {
-                if (!tsc_array_index_present(a, target) && !a->extensible) {
-                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not create array element"));
-                }
-                memmove((char*)a->data + target * a->es, (char*)a->data + source * a->es, a->es);
-                tsc_array_clear_hole(a, target);
-                array_refresh_value_root(a, target);
-            } else {
-                if (tsc_array_index_present(a, target) && (a->sealed || a->frozen)) {
-                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not delete array element"));
-                }
-                tsc_array_mark_hole(a, target);
-            }
-        }
-    }
-    return a;
-}
 
 tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     int64_t slen = (int64_t)a->len;
@@ -2236,6 +1995,7 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     r->value_storage = a->value_storage;
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
+    r->dense_len = n;
     if (a->holes) {
         for (size_t i = 0; i < n; i++) {
             if (!tsc_array_index_present(a, (size_t)i0 + i)) tsc_array_mark_hole(r, i);
@@ -2251,6 +2011,7 @@ tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src) {
     memcpy((char*)dst->data + dst->len * dst->es, src->data, src->len * src->es);
     size_t source_offset = dst->len;
     dst->len += src->len;
+    dst->dense_len = dst->len;
     array_copy_holes_range(src, 0, dst, source_offset, src->len);
     array_refresh_value_roots(dst, source_offset, src->len);
     return dst;
@@ -2271,19 +2032,6 @@ void tsc_array_append_actual_arguments(tsc_array_t* target, tsc_array_t* source)
     (void)target_root; (void)source_root;
 }
 
-tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
-    tsc_array_t* dst = tsc_array_new(elem_size, outer->len);
-    for (size_t i = 0; i < outer->len; i++) {
-        if (!tsc_array_index_present(outer, i)) continue;
-        tsc_array_t* inner = TSC_ARR(tsc_array_t*, outer, i);
-        if (!inner) continue;
-        for (size_t j = 0; j < inner->len; j++) {
-            if (!tsc_array_index_present(inner, j)) continue;
-            tsc_array_push_raw(dst, (const char*)inner->data + j * inner->es);
-        }
-    }
-    return dst;
-}
 
 double tsc_array_length(const tsc_array_t* a) {
     return (double)a->len;

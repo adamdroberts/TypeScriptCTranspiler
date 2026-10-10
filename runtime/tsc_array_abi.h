@@ -20,6 +20,9 @@ typedef enum {
 
 typedef struct tsc_array {
     size_t len;
+    /* Logical length is independent of the initialized native-cell prefix.
+     * Other own indices live in the ordinary descriptor collection. */
+    size_t dense_len;
     size_t cap;
     size_t es;
     bool extensible;

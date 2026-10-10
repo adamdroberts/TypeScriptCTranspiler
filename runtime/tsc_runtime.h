@@ -736,24 +736,15 @@ tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);
 void tsc_array_push_raw(tsc_array_t* a, const void* elem);
 void tsc_array_store_raw(tsc_array_t* a, size_t index, const void* elem);
-void tsc_array_pop_raw(tsc_array_t* a);
-void tsc_array_shift_raw(tsc_array_t* a);
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem);
-tsc_array_t* tsc_array_reverse(tsc_array_t* a); /* in-place */
-tsc_array_t* tsc_array_to_reversed(const tsc_array_t* a); /* copy */
-tsc_array_t* tsc_array_with(const tsc_array_t* a, double index, const void* elem); /* copy */
-tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items); /* in-place */
-tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items); /* copy */
-tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, double end); /* in-place */
-tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, double end); /* in-place */
 tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end);
 tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src);
 void tsc_array_append_actual_arguments(tsc_array_t* target, tsc_array_t* source);
-tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size);
 double tsc_array_length(const tsc_array_t* a);
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key);
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key);
 bool tsc_array_index_present(const tsc_array_t* a, size_t index);
+tsc_array_t* tsc_array_own_indices(const tsc_array_t* a);
 void tsc_array_mark_hole(tsc_array_t* a, size_t index);
 void tsc_array_clear_hole(tsc_array_t* a, size_t index);
 void tsc_array_oob(const tsc_array_t* a, double i);

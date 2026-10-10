@@ -50986,7 +50986,7 @@ class Emitter {
                 // Most user code just wants os.cpus().length, so this is fine.
                 return ret(
                     arrayType(T_NUMBER),
-                    `({ double _n = tsc_os_cpu_count(); tsc_array_t* _a = tsc_array_new(sizeof(double), (size_t)_n); _a->len = (size_t)_n; _a; })`,
+                    `({ double _n = tsc_os_cpu_count(); tsc_array_t* _a = tsc_array_new(sizeof(double), (size_t)_n); _a->len = (size_t)_n; _a->dense_len = _a->len; _a; })`,
                 );
             }
             case "networkInterfaces": {

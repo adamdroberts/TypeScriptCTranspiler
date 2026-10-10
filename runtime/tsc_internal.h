@@ -641,8 +641,6 @@ int64_t substr_count(double value, int64_t remaining);
 uint32_t split_limit_from_num(double limit);
 bool tsc_str_is_length_key(const tsc_str_t* key);
 bool tsc_str_array_index(const tsc_str_t* key, size_t* out);
-int64_t array_strict_index(double value, int64_t len);
-int64_t array_range_index(double value, int64_t len, double fallback);
 void object_reserve(tsc_object_t* o, size_t cap);
 ssize_t object_find(const tsc_object_t* o, const tsc_str_t* key);
 bool tsc_proxy_trap_is_callable(tsc_value_t trap);
@@ -654,8 +652,6 @@ const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);
 bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle);
 bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle);
-bool object_set_own_data(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
-bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);
 bool value_json_omits_object_property(tsc_value_t v);
 void jp_ws(json_parser_t* p);
 bool jp_lit(json_parser_t* p, const char* lit);

@@ -50,7 +50,7 @@ const getNoGetterProxy: any = new Proxy(getNoGetterTarget, { get: fakeGet as any
 try {
     console.log("get no getter:", Reflect.get(getNoGetterProxy, "acc"));
 } catch (err: any) {
-    console.log("get no getter:", err);
+    console.log("get no getter:", err instanceof TypeError);
 }
 
 const setNoSetterTarget: any = ["s"];
@@ -63,7 +63,7 @@ const setNoSetterProxy: any = new Proxy(setNoSetterTarget, { set: trueSet as any
 try {
     console.log("set no setter:", Reflect.set(setNoSetterProxy, "acc", "fake"));
 } catch (err: any) {
-    console.log("set no setter:", err);
+    console.log("set no setter:", err instanceof TypeError);
 }
 
 const defineDataTarget: any = ["d"];
@@ -77,7 +77,7 @@ const defineDataProxy: any = new Proxy(defineDataTarget, { defineProperty: trueD
 try {
     console.log("define data:", Reflect.defineProperty(defineDataProxy, "acc", { value: "fake" }));
 } catch (err: any) {
-    console.log("define data:", err);
+    console.log("define data:", err instanceof TypeError);
 }
 
 const defineGetterTarget: any = ["dg"];
@@ -91,7 +91,7 @@ const defineGetterProxy: any = new Proxy(defineGetterTarget, { defineProperty: t
 try {
     console.log("define getter:", Reflect.defineProperty(defineGetterProxy, "acc", { get: otherGetter }));
 } catch (err: any) {
-    console.log("define getter:", err);
+    console.log("define getter:", err instanceof TypeError);
 }
 
 const descriptorDataTarget: any = ["dd"];
@@ -106,7 +106,7 @@ try {
     const desc: any = Reflect.getOwnPropertyDescriptor(descriptorDataProxy, "acc");
     console.log("descriptor data:", desc.value);
 } catch (err: any) {
-    console.log("descriptor data:", err);
+    console.log("descriptor data:", err instanceof TypeError);
 }
 
 const descriptorGetterTarget: any = ["gd"];
@@ -121,7 +121,7 @@ try {
     const desc: any = Reflect.getOwnPropertyDescriptor(descriptorGetterProxy, "acc");
     console.log("descriptor getter:", desc.get === otherGetter);
 } catch (err: any) {
-    console.log("descriptor getter:", err);
+    console.log("descriptor getter:", err instanceof TypeError);
 }
 
 const descriptorMatchTarget: any = ["m"];
