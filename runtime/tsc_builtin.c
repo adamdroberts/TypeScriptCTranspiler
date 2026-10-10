@@ -596,36 +596,44 @@ tsc_bigint_t* tsc_bigint_from_lit(const char* lit) {
     return b;
 }
 
-tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s) {
-    char* c = cstr_dup(s);
-    tsc_bigint_t* b = bigint_alloc();
-    int base = 10;
-    const char* digits = bigint_digits_for(c, &base);
-    if (mpz_set_str(b->value, digits, base) != 0) {
-        tsc_throw_str(tsc_str_from_cstr("BigInt: invalid string"));
+tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* string) {
+    const tsc_str_t* input = tsc_str_trim(string);
+    tsc_bigint_t* result = bigint_alloc();
+    if (input->len == 0) return result;
+    size_t cursor = 0;
+    bool negative = false;
+    int32_t base = 10;
+    if (input->data[0] == '+' || input->data[0] == '-') {
+        negative = input->data[0] == '-';
+        cursor = 1;
+    } else if (input->len >= 2 && input->data[0] == '0') {
+        switch (input->data[1]) {
+            case 'b': case 'B': base = 2; break;
+            case 'o': case 'O': base = 8; break;
+            case 'x': case 'X': base = 16; break;
+            default: break;
+        }
+        if (base != 10) cursor = 2;
     }
-    return b;
+    size_t digits = 0;
+    cursor = accumulate_integer_digits(input, cursor, base, result->value, &digits);
+    if (digits == 0 || cursor != input->len) {
+        mpz_clear(result->value);
+        return NULL;
+    }
+    if (negative) mpz_neg(result->value, result->value);
+    return result;
 }
 
-tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* s) {
-    char* raw = cstr_dup(s);
-    char* start = raw;
-    while (isspace((unsigned char)*start)) start++;
-    char* end = start + strlen(start);
-    while (end > start && isspace((unsigned char)end[-1])) end--;
-    *end = '\0';
-    if (*start == '\0') start = "0";
-    tsc_bigint_t* b = bigint_alloc();
-    int base = 10;
-    const char* digits = bigint_digits_for(start, &base);
-    const bool valid = mpz_set_str(b->value, digits, base) == 0;
-    free(raw);
-    return valid ? b : NULL;
+tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* string) {
+    tsc_bigint_t* result = tsc_bigint_try_from_str(string);
+    if (!result) tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("Cannot convert String to a BigInt"));
+    return result;
 }
 
 tsc_bigint_t* tsc_bigint_from_num(double n) {
     if (isnan(n) || isinf(n) || floor(n) != n) {
-        tsc_throw_str(tsc_str_from_cstr("BigInt: number must be a finite integer"));
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt: number must be a finite integer"));
     }
     tsc_bigint_t* b = bigint_alloc();
     mpz_set_d(b->value, n);
@@ -636,6 +644,28 @@ tsc_bigint_t* tsc_bigint_from_bool(bool v) {
     tsc_bigint_t* b = bigint_alloc();
     mpz_set_ui(b->value, v ? 1u : 0u);
     return b;
+}
+
+/* Both fixed-width BigInt intrinsics borrow the same arbitrary-precision
+ * modular reduction. Large widths preserve an already representable input. */
+tsc_bigint_t* tsc_bigint_as_n(const tsc_bigint_t* value, double bits, bool is_signed) {
+    int sign = mpz_sgn(value->value);
+    size_t width = mpz_sizeinbase(value->value, 2);
+    if (sign == 0 || (is_signed && bits >= (double)width + 1.0) ||
+        (!is_signed && sign >= 0 && bits >= (double)width)) return (tsc_bigint_t*)value;
+    tsc_bigint_t* result = bigint_alloc();
+    if (bits == 0.0) return result;
+    if (bits >= (double)ULONG_MAX) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt width exceeds native storage"));
+    mp_bitcnt_t count = (mp_bitcnt_t)bits;
+    mpz_fdiv_r_2exp(result->value, value->value, count);
+    if (is_signed && mpz_tstbit(result->value, count - 1)) {
+        mpz_t modulus;
+        mpz_init_set_ui(modulus, 0);
+        mpz_setbit(modulus, count);
+        mpz_sub(result->value, result->value, modulus);
+        mpz_clear(modulus);
+    }
+    return result;
 }
 
 double tsc_bigint_to_number(const tsc_bigint_t* value) {
@@ -713,22 +743,22 @@ tsc_bigint_t* tsc_bigint_mul(const tsc_bigint_t* a, const tsc_bigint_t* b) {
 }
 
 tsc_bigint_t* tsc_bigint_div(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) == 0) tsc_throw_str(tsc_str_from_cstr("BigInt: division by zero"));
+    if (mpz_sgn(b->value) == 0) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt: division by zero"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_tdiv_q(r->value, a->value, b->value);
     return r;
 }
 
 tsc_bigint_t* tsc_bigint_mod(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) == 0) tsc_throw_str(tsc_str_from_cstr("BigInt: modulo by zero"));
+    if (mpz_sgn(b->value) == 0) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt: modulo by zero"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_tdiv_r(r->value, a->value, b->value);
     return r;
 }
 
 tsc_bigint_t* tsc_bigint_pow(const tsc_bigint_t* a, const tsc_bigint_t* b) {
-    if (mpz_sgn(b->value) < 0) tsc_throw_str(tsc_str_from_cstr("BigInt: negative exponent"));
-    if (!mpz_fits_ulong_p(b->value)) tsc_throw_str(tsc_str_from_cstr("BigInt: exponent too large"));
+    if (mpz_sgn(b->value) < 0) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt: negative exponent"));
+    if (!mpz_fits_ulong_p(b->value)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt: exponent too large"));
     tsc_bigint_t* r = bigint_alloc();
     mpz_pow_ui(r->value, a->value, mpz_get_ui(b->value));
     return r;
@@ -808,8 +838,10 @@ bool tsc_bigint_eq(const tsc_bigint_t* a, const tsc_bigint_t* b) {
 }
 
 tsc_str_t* tsc_bigint_to_string(const tsc_bigint_t* a, double radix) {
-    int base = isnan(radix) || radix == 0.0 ? 10 : (int)radix;
-    if (base < 2 || base > 36) tsc_throw_str(tsc_str_from_cstr("BigInt.toString: radix must be 2..36"));
+    double integer = isnan(radix) ? 0.0 : trunc(radix);
+    if (integer < 2.0 || integer > 36.0)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("BigInt.toString: radix must be 2..36"));
+    int base = (int)integer;
     char* raw = mpz_get_str(NULL, base, a->value);
     tsc_str_t* out = tsc_str_from_cstr(raw);
     free(raw);

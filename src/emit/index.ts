@@ -150,7 +150,7 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
 
 // These ordinary global owners share Realm References, member calls and the
 // canonical source-value dependency graph independently of method signatures.
-const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math"]);
+const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -6724,14 +6724,6 @@ class Emitter {
         if (cryptoExport !== null) {
             return this.isSideEffectFreeCryptoCall(cryptoExport, call.arguments, seenConsts);
         }
-        if (name === "BigInt") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                call.arguments.length >= 1 &&
-                this.isSideEffectFreeBigIntCoercion(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
         if (name === "RegExp") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
@@ -8166,7 +8158,6 @@ class Emitter {
                 unwrapped.expression.text === "String" ||
                 unwrapped.expression.text === "Number" ||
                 unwrapped.expression.text === "Boolean" ||
-                unwrapped.expression.text === "BigInt" ||
                 unwrapped.expression.text === "Symbol" ||
                 unwrapped.expression.text === "Date" ||
                 unwrapped.expression.text === "parseInt" ||
@@ -12773,7 +12764,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
             if (new Set([
-                "Array", "BigInt", "Boolean", "Error", "EvalError", "Function",
+                "Array", "Boolean", "Error", "EvalError", "Function",
                 "Number", "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
                 "RegExp", "String", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
                 "URIError",
@@ -12949,37 +12940,6 @@ class Emitter {
         }
         if (value === null) return null;
         return name === "isFinite" ? Number.isFinite(value) : Number.isNaN(value);
-    }
-
-    private isSideEffectFreeBigIntCoercion(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        switch (unwrapped.kind) {
-            case ts.SyntaxKind.TrueKeyword:
-            case ts.SyntaxKind.FalseKeyword:
-                return true;
-        }
-        if (ts.isBigIntLiteral(unwrapped)) return true;
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return /^[+-]?(?:0|[1-9][0-9]*)$/.test(unwrapped.text);
-        }
-        if (ts.isNumericLiteral(unwrapped)) {
-            const value = Number(unwrapped.text);
-            return Number.isFinite(value) && Number.isInteger(value);
-        }
-        if (
-            ts.isPrefixUnaryExpression(unwrapped) &&
-            (
-                unwrapped.operator === ts.SyntaxKind.PlusToken ||
-                unwrapped.operator === ts.SyntaxKind.MinusToken
-            )
-        ) {
-            return this.isSideEffectFreeBigIntCoercion(unwrapped.operand, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeBigIntCoercion(init, seenConsts);
     }
 
     private isSideEffectFreePrimitiveNumberCoercion(
@@ -32330,17 +32290,6 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): string | null {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "BigInt" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "BigInt") &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            return unwrapped.arguments.length === 0
-                ? null
-                : this.sideEffectFreeBigIntCoercionText(unwrapped.arguments[0]!, seenConsts);
-        }
         if (ts.isBigIntLiteral(unwrapped)) return unwrapped.text.toLowerCase();
         if (ts.isBinaryExpression(unwrapped)) {
             const left = this.sideEffectFreeBigIntLiteralText(unwrapped.left, seenConsts);
@@ -32413,31 +32362,6 @@ class Emitter {
             return -BigInt(body.slice(1));
         }
         return BigInt(body);
-    }
-
-    private sideEffectFreeBigIntCoercionText(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): string | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return "1n";
-        if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return "0n";
-        const text = this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts);
-        if (text !== null) return `${this.bigIntTextValue(text)}n`;
-        const number = this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrapped, seenConsts);
-        if (number !== null) {
-            return Number.isFinite(number) && Number.isInteger(number) ? `${BigInt(number)}n` : null;
-        }
-        const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
-        if (stringText !== null) {
-            try {
-                return `${BigInt(stringText)}n`;
-            } catch {
-                return null;
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreeBigIntCoercionText(init, seenConsts) : null;
     }
 
     private staticPrimitiveRelationalValue(
@@ -33654,9 +33578,6 @@ class Emitter {
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
                 return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "BigInt")) {
-                return { c: "tsc_bigint_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
                 return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
@@ -36654,9 +36575,6 @@ class Emitter {
         }
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
-        }
-        if (name === "BigInt") {
-            return this.emitBigIntConstructor(call);
         }
         if (name === "Boolean") {
             return this.emitBooleanConstructor(call);
@@ -39727,7 +39645,7 @@ class Emitter {
         if (recv.ty.kind === "string")
             return this.emitStringMethod(call, recv, memberName);
         if (recv.ty.kind === "bigint")
-            return this.emitBigIntMethod(call, recv, memberName);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName, !!pa.questionDotToken);
         if (recv.ty.kind === "symbol")
             return this.emitSymbolMethod(call, recv, memberName);
         if (recv.ty.kind === "map")
@@ -44489,71 +44407,6 @@ class Emitter {
                 );
         }
         unsupported(call, `Symbol method .${method}`);
-    }
-
-    private emitBigIntConstructor(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "BigInt expects at least 1 arg");
-        const arg = call.arguments[0]!;
-        const r = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        switch (r.ty.kind) {
-            case "bigint":
-                return this.emitSequencedExpr(T_BIGINT, [{ value: r }, ...ignored], ([value]) => value);
-            case "string":
-                return this.emitSequencedExpr(
-                    T_BIGINT,
-                    [{ value: r, target: T_STRING, node: arg }, ...ignored],
-                    ([value]) => `tsc_bigint_from_str(${value})`,
-                );
-            case "number":
-                return this.emitSequencedExpr(
-                    T_BIGINT,
-                    [{ value: r, target: T_NUMBER, node: arg }, ...ignored],
-                    ([value]) => `tsc_bigint_from_num(${value})`,
-                );
-            case "boolean":
-                return this.emitSequencedExpr(
-                    T_BIGINT,
-                    [{ value: r, target: T_BOOLEAN, node: arg }, ...ignored],
-                    ([value]) => `tsc_bigint_from_bool(${value})`,
-                );
-            default:
-                unsupported(arg, `BigInt cannot convert ${r.ty.c}`);
-        }
-    }
-
-    private emitBigIntMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "toLocaleString":
-                return this.emitDynamicNamedPropertyCall(call, recv, method,
-                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-            case "toString": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasRadix = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasRadix) {
-                    const radix = this.emitExpr(args[0]);
-                    requireNumber(args[0], radix.ty);
-                    specs.push({ value: radix, target: T_NUMBER, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(T_STRING, specs, (vals) => {
-                    const radix = hasRadix ? vals[1]! : "10.0";
-                    return `tsc_bigint_to_string(${vals[0]}, ${radix})`;
-                });
-            }
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    T_BIGINT,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([value]) => value,
-                );
-        }
-        unsupported(call, `BigInt.${method}`);
     }
 
     private emitClassMethodCall(call: ts.CallExpression, receiver: EmitResult, name: string): EmitResult {

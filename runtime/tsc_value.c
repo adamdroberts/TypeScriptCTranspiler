@@ -1397,6 +1397,13 @@ double tsc_value_to_integer_or_infinity(tsc_value_t value) {
     return isnan(number) || number == 0.0 ? 0.0 : trunc(number);
 }
 
+double tsc_value_to_index(tsc_value_t value) {
+    double index = tsc_value_to_integer_or_infinity(value);
+    if (index < 0.0 || index > 9007199254740991.0)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Index must be between 0 and 2^53 - 1"));
+    return index;
+}
+
 double tsc_value_to_length(tsc_value_t value) {
     double number = tsc_value_to_number(value);
     if (isnan(number) || number <= 0.0) return 0.0;
@@ -1956,6 +1963,11 @@ static tsc_value_t primitive_prototype(tsc_primitive_descriptor_t* descriptor) {
             if (descriptor->kind == TSC_PRIMITIVE_SYMBOL) {
                 symbol_prototype_install_intrinsics(tsc_value_object(prototype));
             }
+            if (descriptor->kind == TSC_PRIMITIVE_BIGINT) {
+                (void)tsc_value_define_symbol_property_desc(tsc_value_object(prototype), tsc_symbol_to_string_tag(),
+                    tsc_value_string(tsc_str_from_lit(descriptor->name, descriptor->name_len)),
+                    true, false, true, false, true, true, true);
+            }
             if (descriptor->kind == TSC_PRIMITIVE_NUMBER || descriptor->kind == TSC_PRIMITIVE_BIGINT) {
                 tsc_object_define(prototype, tsc_str_from_lit("toLocaleString", 14),
                     tsc_value_function_builtin_named(primitive_prototype_to_locale_string, descriptor,
@@ -2108,28 +2120,30 @@ tsc_value_t tsc_string_constructor_value(void) { return primitive_constructor_va
 tsc_value_t tsc_number_constructor_value(void) { return primitive_constructor_value(&primitive_number); }
 tsc_value_t tsc_boolean_constructor_value(void) { return primitive_constructor_value(&primitive_boolean); }
 
+static tsc_value_t value_to_bigint(tsc_value_t value, bool allow_number);
+
 static tsc_value_t bigint_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;
-    if (!args || args->len == 0) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert undefined to a BigInt"));
-    }
-    tsc_value_t input = TSC_ARR(tsc_value_t, args, 0);
-    if (value_is_box(input)) {
-        switch (value_tag(input)) {
-            case TSC_VALUE_TAG_BIGINT:
-                return input;
-            case TSC_VALUE_TAG_FALSE:
-                return tsc_value_bigint(tsc_bigint_from_bool(false));
-            case TSC_VALUE_TAG_TRUE:
-                return tsc_value_bigint(tsc_bigint_from_bool(true));
-            case TSC_VALUE_TAG_STRING:
-                return tsc_value_bigint(tsc_bigint_from_str((const tsc_str_t*)value_ptr(input)));
-            default:
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert value to a BigInt"));
-        }
-    }
-    return tsc_value_bigint(tsc_bigint_from_num(value_as_num(input)));
+    tsc_value_t input = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return value_to_bigint(input, true);
+}
+
+typedef struct { const char* name; bool is_signed; } tsc_bigint_width_intrinsic_t;
+static const tsc_bigint_width_intrinsic_t bigint_width_intrinsics[] = {
+    { "asIntN", true }, { "asUintN", false },
+};
+
+static tsc_value_t bigint_width_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    const tsc_bigint_width_intrinsic_t* intrinsic = (const tsc_bigint_width_intrinsic_t*)env;
+    tsc_value_t raw_bits = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    double bits = tsc_value_to_index(raw_bits);
+    tsc_value_t input = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_value_t integer = tsc_value_to_bigint(input);
+    void* volatile integer_root = tsc_value_gc_root(integer);
+    (void)integer_root;
+    return tsc_value_bigint(tsc_bigint_as_n(tsc_value_as_bigint(integer), bits, intrinsic->is_signed));
 }
 
 static tsc_value_t symbol_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -2201,6 +2215,14 @@ tsc_value_t tsc_bigint_constructor_value(void) {
         tsc_str_from_lit("BigInt", 6)
     );
     primitive_link_nonconstructable_constructor(&primitive_bigint, constructor);
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    (void)constructor_root;
+    for (size_t index = 0; index < sizeof(bigint_width_intrinsics) / sizeof(bigint_width_intrinsics[0]); index++) {
+        const tsc_bigint_width_intrinsic_t* intrinsic = &bigint_width_intrinsics[index];
+        tsc_str_t* name = tsc_str_from_cstr(intrinsic->name);
+        tsc_value_t method = tsc_value_function_builtin_named(bigint_width_apply, (void*)intrinsic, 2.0, name);
+        (void)tsc_value_define_property_desc(constructor, name, method, true, true, true, false, true, true, true);
+    }
     primitive_bigint.constructor = constructor;
     primitive_bigint.constructor_initialized = true;
     return constructor;
@@ -6358,6 +6380,25 @@ static tsc_value_t value_to_primitive_if_object(
 ) {
     return tsc_value_is_object(value) ? value_to_primitive(value, hint) : value;
 }
+
+static tsc_value_t value_to_bigint(tsc_value_t value, bool allow_number) {
+    void* volatile root = tsc_value_gc_root(value);
+    tsc_value_store_rooted(&value, &root, value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_NUMBER));
+    (void)root;
+    if (!value_is_box(value)) {
+        if (allow_number) return tsc_value_bigint(tsc_bigint_from_num(value_as_num(value)));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert Number to a BigInt"));
+    }
+    switch (value_tag(value)) {
+        case TSC_VALUE_TAG_BIGINT: return value;
+        case TSC_VALUE_TAG_FALSE: return tsc_value_bigint(tsc_bigint_from_bool(false));
+        case TSC_VALUE_TAG_TRUE: return tsc_value_bigint(tsc_bigint_from_bool(true));
+        case TSC_VALUE_TAG_STRING: return tsc_value_bigint(tsc_bigint_from_str((const tsc_str_t*)value_ptr(value)));
+        default: tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot convert value to a BigInt"));
+    }
+}
+
+tsc_value_t tsc_value_to_bigint(tsc_value_t value) { return value_to_bigint(value, false); }
 
 tsc_value_t tsc_value_to_numeric(tsc_value_t value) {
     tsc_value_t primitive = value_to_primitive_if_object(value, TSC_TO_PRIMITIVE_NUMBER);

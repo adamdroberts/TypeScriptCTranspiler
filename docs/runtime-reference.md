@@ -244,7 +244,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 
 ## BigInt (`tsc_bigint_t`)
 
-GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrappers around `mpz_t`; operators are emitted as runtime calls.
+GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrappers around `mpz_t`. Source constructor and prototype/static calls use actual Realm and descriptor owners. One rooted ToPrimitive conversion plan distinguishes constructor Number admission from ToBigInt; one complete-input StringIntegerLiteral parser serves conversion and non-throwing comparisons. Numeric failure objects preserve their standard classes.
 
 | Symbol | Signature | Purpose |
 |--------|-----------|---------|
@@ -252,6 +252,9 @@ GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrap
 | `tsc_bigint_from_str(s)` | `tsc_bigint_t*` | `BigInt(string)` |
 | `tsc_bigint_from_num(n)` | `tsc_bigint_t*` | `BigInt(number)`, finite integers only |
 | `tsc_bigint_from_bool(b)` | `tsc_bigint_t*` | `BigInt(boolean)` |
+| `tsc_value_to_bigint(value)` | `tsc_value_t` | Rooted ToPrimitive with Number hint, followed by ToBigInt; rejects Number input and preserves abrupt identity. |
+| `tsc_value_to_index(value)` | `double` | Ordered ToIntegerOrInfinity with the prescribed non-negative safe-integer range check. |
+| `tsc_bigint_as_n(value, bits, is_signed)` | `tsc_bigint_t*` | Shared GMP modular reduction for asIntN/asUintN; bits must be validated by ToIndex. Already fitting inputs avoid unnecessary allocation. |
 | `tsc_bigint_add/sub/mul/div/mod/pow(a, b)` | `tsc_bigint_t*` | BigInt arithmetic |
 | `tsc_bigint_cmp(a, b)` | `int` | Relational comparison |
 | `tsc_bigint_eq(a, b)` | `bool` | Equality comparison |

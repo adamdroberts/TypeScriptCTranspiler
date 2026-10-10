@@ -2,7 +2,7 @@ function invalidString(): string {
     try {
         return BigInt("not-a-bigint").toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof SyntaxError);
     }
 }
 
@@ -10,7 +10,7 @@ function invalidNumber(value: number): string {
     try {
         return BigInt(value).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -18,7 +18,7 @@ function divZero(): string {
     try {
         return (10n / 0n).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -26,7 +26,7 @@ function modZero(): string {
     try {
         return (10n % 0n).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -34,7 +34,7 @@ function negativeExponent(): string {
     try {
         return (2n ** (-1n)).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -42,7 +42,7 @@ function hugeExponent(): string {
     try {
         return (2n ** BigInt("18446744073709551616")).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -50,7 +50,7 @@ function invalidRadix(radix: number): string {
     try {
         return (255n).toString(radix);
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 

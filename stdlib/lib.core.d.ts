@@ -245,8 +245,10 @@ interface BigInt {
     valueOf(...ignored: any[]): bigint;
 }
 interface BigIntConstructor {
-    (value: string | number | boolean, ...ignored: any[]): bigint;
+    (value: any, ...ignored: any[]): bigint;
     readonly prototype: BigInt;
+    asIntN(bits: any, bigint: any, ...ignored: any[]): bigint;
+    asUintN(bits: any, bigint: any, ...ignored: any[]): bigint;
 }
 declare var BigInt: BigIntConstructor;
 interface IArguments {
