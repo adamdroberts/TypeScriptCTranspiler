@@ -123,7 +123,7 @@ test("class expressions derive constructor identity and method closures from one
     }
 }, 90_000);
 
-test("unsupported class-expression partitions fail at the shared definition boundary", async () => {
+test("unrepresented class initialization and local environments fail at their shared boundaries", async () => {
     const partitions = [
         {
             source: "class Base {}\nfunction make(): any { return class extends Base {}; }\nmake();\n",
@@ -134,8 +134,8 @@ test("unsupported class-expression partitions fail at the shared definition boun
             diagnostic: "class expression element is not supported by dynamic class definition",
         },
         {
-            source: "const key: any = 'method';\nfunction make(): any { return class { [key](): any { return 1; } }; }\nmake();\n",
-            diagnostic: "computed class expression methods are not supported by dynamic class definition",
+            source: '// @ts-nocheck\ntry { class C { static get ["prototype"]() { return 1; } } } catch (error) {}\n',
+            diagnostic: "referenced local class declarations are not supported yet",
         },
     ] as const;
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-class-expression-unsupported-"));

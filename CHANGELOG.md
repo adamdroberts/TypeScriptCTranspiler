@@ -288,6 +288,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share class-element key, callable-root and descriptor lowering across declarations and expressions, admitting computed public methods/accessors and preserving protected-descriptor failures; remove the separate expression method loop and verify independent Node and typed consumers in both memory modes.
+
 - Lower public computed instance fields through retained actual keys and declaration-owned value cells, preserving names, descriptors, inheritance and source order; remove the inferred-name gate and verify independent Node and imported typed consumers in both memory modes.
 
 - Computed static fields now evaluate and retain keys through the ordered class-element plan before static values; anonymous callables infer names from actual String/Symbol keys. Independent Node properties and imported consumers cover both memory modes.

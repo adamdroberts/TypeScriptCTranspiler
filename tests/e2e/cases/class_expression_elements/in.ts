@@ -1,0 +1,10 @@
+import { makeOwner, methodKey, accessorKey } from './owner';
+const label = Symbol('label');
+const Constructor = makeOwner(label);
+const owner = new Constructor();
+const descriptor = Object.getOwnPropertyDescriptor(Constructor.prototype, accessorKey)!;
+owner[accessorKey] = label;
+console.log('computed-method:' + (owner[methodKey]() === label && owner[methodKey].name === '[imported-method]'));
+console.log('computed-accessors:' + (owner[accessorKey] === label && descriptor.get!.name === 'get [imported-accessor]' && descriptor.set!.name === 'set [imported-accessor]' && !descriptor.enumerable));
+console.log('static-receiver:' + (Constructor[methodKey]() === Constructor));
+console.log('fresh-definition:' + (Constructor !== makeOwner(label)));

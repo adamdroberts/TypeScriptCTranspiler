@@ -1261,6 +1261,9 @@ class Emitter {
     }
 
     private staticClassMemberHasNoDefinitionSideEffects(member: ts.ClassElement): boolean {
+        // A complete member descriptor cannot replace the constructor's
+        // non-configurable own prototype. That abrupt completion is observable.
+        if (member.name && this.staticPropertyName(member.name) === "prototype") return false;
         if (ts.isPropertyDeclaration(member)) {
             return !member.initializer ||
                 this.isSideEffectFreeTopLevelConstInitializer(member.initializer);
@@ -25627,11 +25630,20 @@ class Emitter {
         return { c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`, ty: T_VALUE };
     }
 
-    private classMemberPropertyKey(name: ts.PropertyName): { publicName: string; propertyKey: string } {
+    private classMemberPublicName(name: ts.PropertyName): string {
         if (ts.isPrivateIdentifier(name)) unsupported(name, "class member key is outside the canonical definition plan");
         if (ts.isComputedPropertyName(name)) {
             const symbol = this.wellKnownSymbolName(name.expression);
-            const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name) ?? `[computed:${name.pos}]`;
+            return symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name) ?? `[computed:${name.pos}]`;
+        }
+        const publicName = this.staticPropertyName(name);
+        if (publicName === null) unsupported(name, "class member key is outside the canonical definition plan");
+        return publicName;
+    }
+
+    private classMemberPropertyKey(name: ts.PropertyName): { publicName: string; propertyKey: string } {
+        const publicName = this.classMemberPublicName(name);
+        if (ts.isComputedPropertyName(name)) {
             let key = this.classComputedMemberKeys.get(name);
             if (!key) {
                 key = this.freshTemp("_class_computed_key");
@@ -25640,8 +25652,6 @@ class Emitter {
             }
             return { publicName, propertyKey: key };
         }
-        const publicName = this.staticPropertyName(name);
-        if (publicName === null) unsupported(name, "class member key is outside the canonical definition plan");
         return { publicName, propertyKey: this.stringLit(publicName) };
     }
 
@@ -25791,31 +25801,51 @@ class Emitter {
             definitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${parent})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
             definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
         }
-        // Every admitted element participates in the same ordered key pass.
-        // Field values run later; their keys are already owned by this plan.
-        for (const member of cd.members) {
-            if (!(ts.isPropertyDeclaration(member) ||
-                (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body)) continue;
-            const { propertyKey: key } = this.classMemberPropertyKey(member.name);
-            if (ts.isComputedPropertyName(member.name)) {
-                const evaluated = this.emitExpr(member.name.expression);
-                definitions.push(`${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, member.name.expression)})`);
+        definitions.push(...this.emitClassElementDefinitions(cd, "_class_constructor", "_class_prototype"));
+        return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
+    }
+
+    private emitClassElementDefinitions(
+        definition: ts.ClassLikeDeclaration, constructor: string, prototype: string,
+    ): string[] {
+        const pieces: string[] = [];
+        for (const member of definition.members) {
+            const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
+                ts.isSetAccessorDeclaration(member)) && !!member.body;
+            const field = ts.isPropertyDeclaration(member);
+            if (ts.isClassExpression(definition) && !callable && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
+                unsupported(member, "class expression element is not supported by dynamic class definition");
+            }
+            if (!callable && !field) continue;
+            // Declaration fields retain their key for later initialization;
+            // expression methods borrow a local carrier owned by this definition.
+            const name = member.name!;
+            const publicName = this.classMemberPublicName(name);
+            let key = this.stringLit(publicName);
+            if (ts.isComputedPropertyName(name)) {
+                const retained = ts.isClassDeclaration(definition);
+                key = retained ? this.classMemberPropertyKey(name).propertyKey : this.freshTemp("_class_element_key");
+                const evaluated = this.emitExpr(name.expression);
+                pieces.push(`${retained ? "" : "tsc_str_t* const "}${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, name.expression)})`);
             }
             if (ts.isPropertyDeclaration(member)) continue;
-            const target = isStatic(member) ? "_class_constructor" : "_class_prototype";
-            const closure = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
-            const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
-            const value = ts.isComputedPropertyName(member.name)
-                ? `tsc_value_function_with_property_name(${closure}, ${key}, ${prefix})` : closure;
+            const target = isStatic(member) ? constructor : prototype;
+            const value = this.freshTemp("_class_element_value"), root = this.freshTemp("_class_element_value_root");
+            const closure = this.coerce(this.emitClosureExpression(member as ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration), T_VALUE, member);
+            pieces.push(`tsc_value_t ${value} = ${closure}`, `void* volatile ${root} = tsc_value_gc_root(${value})`, `(void)${root}`);
+            if (ts.isComputedPropertyName(name)) {
+                const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
+                pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
+            }
             if (ts.isMethodDeclaration(member)) {
-                definitions.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
+                pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
             } else {
                 const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
-                definitions.push(`tsc_value_object_define_${kind}(${target}, ${key}, ${value})`);
-                definitions.push(`tsc_value_define_property_desc(${target}, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
+                pieces.push(`if (!tsc_value_object_define_${kind}(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
+                pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
             }
         }
-        return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
+        return pieces;
     }
 
     private classRuntimeName(cd: ts.ClassDeclaration): string {
@@ -31878,21 +31908,6 @@ class Emitter {
             unsupported(expression, "class expression decorators are not supported by dynamic class definition");
         }
 
-        const methods: ts.MethodDeclaration[] = [];
-        for (const member of expression.members) {
-            if (member.kind === ts.SyntaxKind.SemicolonClassElement) continue;
-            if (!ts.isMethodDeclaration(member) || !member.body) {
-                unsupported(member, "class expression element is not supported by dynamic class definition");
-            }
-            if (ts.isPrivateIdentifier(member.name)) {
-                unsupported(member.name, "private class expression methods are not supported by dynamic class definition");
-            }
-            if (ts.isComputedPropertyName(member.name)) {
-                unsupported(member.name, "computed class expression methods are not supported by dynamic class definition");
-            }
-            methods.push(member);
-        }
-
         const adapter = this.ensureDefaultClassConstructAdapter();
         const identity = this.freshTemp("_class_expression_identity");
         const constructor = this.freshTemp("_class_expression_constructor");
@@ -31908,25 +31923,7 @@ class Emitter {
             `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
             `(void)${prototypeRoot}`,
         ];
-        for (const method of methods) {
-            const propertyName = this.staticPropertyName(method.name);
-            if (propertyName === null) {
-                unsupported(method.name, "class expression method name is not representable");
-            }
-            const closure = this.emitClosureExpression(method);
-            const methodValue = this.freshTemp("_class_expression_method");
-            const methodRoot = this.freshTemp("_class_expression_method_root");
-            const target = isStatic(method) ? constructor : prototype;
-            pieces.push(
-                `tsc_value_t ${methodValue} = ${this.coerce(closure, T_VALUE, method)}`,
-                `void* volatile ${methodRoot} = tsc_value_gc_root(${methodValue})`,
-                `(void)${methodRoot}`,
-                `if (!tsc_value_define_property_desc(${target}, ` +
-                    `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}), ` +
-                    `${methodValue}, true, true, true, false, true, true, true)) ` +
-                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`,
-            );
-        }
+        pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype));
         pieces.push(constructor);
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
@@ -48740,7 +48737,7 @@ class Emitter {
             ts.isSetAccessorDeclaration(current)
         ) {
             name = ts.isClassLike(current.parent)
-                ? this.classMemberPropertyKey(current.name).publicName
+                ? this.classMemberPublicName(current.name)
                 : this.staticPropertyName(current.name) ?? "";
             if (ts.isClassLike(current.parent) &&
                 (ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current))) {

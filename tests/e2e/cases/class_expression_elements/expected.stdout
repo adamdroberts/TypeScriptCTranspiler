@@ -1,0 +1,4 @@
+computed-method:true
+computed-accessors:true
+static-receiver:true
+fresh-definition:true
