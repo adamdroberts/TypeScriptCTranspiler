@@ -7353,8 +7353,14 @@ bool tsc_value_same_value_zero(tsc_value_t a, tsc_value_t b) {
 }
 
 int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
+    void* volatile a_root = tsc_value_gc_root(a);
+    void* volatile b_root = tsc_value_gc_root(b);
+    (void)a_root;
+    (void)b_root;
     a = value_to_primitive_if_object(a, TSC_TO_PRIMITIVE_NUMBER);
+    a_root = tsc_value_gc_root(a);
     b = value_to_primitive_if_object(b, TSC_TO_PRIMITIVE_NUMBER);
+    b_root = tsc_value_gc_root(b);
     if (
         value_is_box(a) && value_is_box(b) &&
         value_tag(a) == TSC_VALUE_TAG_STRING &&
@@ -7376,7 +7382,9 @@ int tsc_value_cmp(tsc_value_t a, tsc_value_t b) {
         return comparison < 0 ? -1 : comparison > 0 ? 1 : 0;
     }
     a = tsc_value_to_numeric(a);
+    a_root = tsc_value_gc_root(a);
     b = tsc_value_to_numeric(b);
+    b_root = tsc_value_gc_root(b);
     if (value_is_bigint(a) && value_is_bigint(b)) {
         int comparison = tsc_bigint_cmp(
             (const tsc_bigint_t*)value_ptr(a),

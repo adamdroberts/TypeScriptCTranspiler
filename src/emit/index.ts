@@ -175,11 +175,12 @@ type WellKnownSymbolName = keyof typeof WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS;
 /** Source operators and their assignment aliases share one numeric kernel
  * selection. References own evaluation/storage; runtime ToNumeric owns values. */
 interface SourceNumericOperation {
-    form: "binary" | "prefix" | "update";
+    form: "binary" | "prefix" | "update" | "relational";
     token: ts.SyntaxKind;
     assignment?: ts.SyntaxKind;
     kernel: string;
-    result: "value" | "number";
+    result: "value" | "number" | "boolean";
+    relation?: "<" | "<=" | ">" | ">=";
 }
 const SOURCE_NUMERIC_OPERATIONS: readonly SourceNumericOperation[] = [
     { form: "binary", token: ts.SyntaxKind.PlusToken, assignment: ts.SyntaxKind.PlusEqualsToken, kernel: "tsc_value_add", result: "value" },
@@ -199,15 +200,19 @@ const SOURCE_NUMERIC_OPERATIONS: readonly SourceNumericOperation[] = [
     { form: "prefix", token: ts.SyntaxKind.TildeToken, kernel: "tsc_value_bit_not", result: "value" },
     { form: "update", token: ts.SyntaxKind.PlusPlusToken, kernel: "tsc_value_inc", result: "value" },
     { form: "update", token: ts.SyntaxKind.MinusMinusToken, kernel: "tsc_value_dec", result: "value" },
+    { form: "relational", token: ts.SyntaxKind.LessThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<" },
+    { form: "relational", token: ts.SyntaxKind.LessThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<=" },
+    { form: "relational", token: ts.SyntaxKind.GreaterThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">" },
+    { form: "relational", token: ts.SyntaxKind.GreaterThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">=" },
 ];
 const SOURCE_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
     SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary")
         .flatMap(operation => [[operation.token, operation.kernel] as const,
             ...(operation.assignment === undefined ? [] : [[operation.assignment, operation.kernel] as const])]),
 );
-const SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
-    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary")
-        .map(operation => [operation.token, operation.kernel]),
+const SOURCE_BINARY_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
+    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary" || operation.form === "relational")
+        .map(operation => [operation.token, operation]),
 );
 const SOURCE_PREFIX_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
     SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "prefix")
@@ -21208,7 +21213,7 @@ class Emitter {
             if (ts.isBinaryExpression(node)) {
                 if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) write(node.left, node.right);
                 else if (SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) &&
-                    !SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind)) write(node.left, node);
+                    !SOURCE_BINARY_NUMERIC_OPERATIONS.has(node.operatorToken.kind)) write(node.left, node);
             }
             if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
                 SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) write(node.operand, node);
@@ -21273,7 +21278,8 @@ class Emitter {
             // Numeric results and PutValue share the actual value domain with
             // their source owners. An annotation cannot convert an update's
             // Number/BigInt result back to the predecessor storage type.
-            if (ts.isBinaryExpression(node) && SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) ||
+            if (ts.isBinaryExpression(node) && (SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) ||
+                    SOURCE_BINARY_NUMERIC_OPERATIONS.has(node.operatorToken.kind)) ||
                 ts.isPrefixUnaryExpression(node) && (SOURCE_PREFIX_NUMERIC_OPERATIONS.has(node.operator) ||
                     SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) ||
                 ts.isPostfixUnaryExpression(node) && SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) admitPositive(node);
@@ -33733,13 +33739,18 @@ class Emitter {
             const prefix = ts.isPrefixUnaryExpression(expression)
                 ? SOURCE_PREFIX_NUMERIC_OPERATIONS.get(expression.operator) : undefined;
             const operation = ts.isBinaryExpression(expression)
-                ? SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.get(expression.operatorToken.kind) : undefined;
+                ? SOURCE_BINARY_NUMERIC_OPERATIONS.get(expression.operatorToken.kind) : undefined;
             if (work.exit) {
                 if (prefix && ts.isPrefixUnaryExpression(expression)) {
                     stage(work.expression, { c: `${prefix.kernel}(${results.get(expression.operand)!.c})`,
                         ty: prefix.result === "number" ? T_NUMBER : T_VALUE });
                 } else if (ts.isBinaryExpression(expression) && operation) {
-                    stage(work.expression, { c: `${operation}(${results.get(expression.left)!.c}, ${results.get(expression.right)!.c})`, ty: T_VALUE });
+                    const call = `${operation.kernel}(${results.get(expression.left)!.c}, ${results.get(expression.right)!.c})`;
+                    if (operation.result === "boolean") {
+                        if (!operation.relation) unsupported(expression, "numeric expression is outside the canonical tree");
+                        const compared = this.freshTemp("_numeric_comparison");
+                        stage(work.expression, { c: `({ int ${compared} = ${call}; ${compared} != 2 && ${compared} ${operation.relation} 0; })`, ty: T_BOOLEAN });
+                    } else stage(work.expression, { c: call, ty: T_VALUE });
                 } else {
                     unsupported(expression, "numeric expression is outside the canonical tree");
                 }
@@ -33868,7 +33879,7 @@ class Emitter {
             if (typeofComparison) return typeofComparison;
         }
 
-        if (SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.has(op)) return this.emitNumericExpression(bin);
+        if (SOURCE_BINARY_NUMERIC_OPERATIONS.has(op)) return this.emitNumericExpression(bin);
 
         if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
 
@@ -33892,11 +33903,6 @@ class Emitter {
             case ts.SyntaxKind.ExclamationEqualsToken:
             case ts.SyntaxKind.ExclamationEqualsEqualsToken:
                 return this.emitEquality(bin, left, right, true);
-            case ts.SyntaxKind.LessThanToken:
-            case ts.SyntaxKind.LessThanEqualsToken:
-            case ts.SyntaxKind.GreaterThanToken:
-            case ts.SyntaxKind.GreaterThanEqualsToken:
-                return this.emitRelational(bin, left, right, op);
 
         }
         unsupported(bin, `binary operator ${ts.SyntaxKind[op]}`);
@@ -34735,60 +34741,6 @@ class Emitter {
             if (member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) hasUndefined = true;
         }
         return { hasNull, hasUndefined };
-    }
-
-    private emitRelational(
-        bin: ts.BinaryExpression,
-        left: EmitResult,
-        right: EmitResult,
-        op: ts.SyntaxKind,
-    ): EmitResult {
-        const cop =
-            op === ts.SyntaxKind.LessThanToken
-                ? "<"
-                : op === ts.SyntaxKind.LessThanEqualsToken
-                    ? "<="
-                    : op === ts.SyntaxKind.GreaterThanToken
-                        ? ">"
-                        : ">=";
-        if (left.ty.kind === "value" || right.ty.kind === "value") {
-            const tv = this.freshTemp("_cmp");
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: left, target: T_VALUE, node: bin.left },
-                    { value: right, target: T_VALUE, node: bin.right },
-                ],
-                ([lc, rc]) => `({ int ${tv} = tsc_value_cmp(${lc}, ${rc}); ${tv} != 2 && ${tv} ${cop} 0; })`,
-            );
-        }
-        if (left.ty.kind === "number" && right.ty.kind === "number") {
-            return { c: `(${left.c} ${cop} ${right.c})`, ty: T_BOOLEAN };
-        }
-        if (left.ty.kind === "string" && right.ty.kind === "string") {
-            return {
-                c: `(tsc_str_cmp(${left.c}, ${right.c}) ${cop} 0)`,
-                ty: T_BOOLEAN,
-            };
-        }
-        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-            return {
-                c: `(tsc_bigint_cmp(${left.c}, ${right.c}) ${cop} 0)`,
-                ty: T_BOOLEAN,
-            };
-        }
-        if (
-            left.ty.kind === "bigint" || right.ty.kind === "bigint" ||
-            left.ty.kind === "symbol" || right.ty.kind === "symbol"
-        ) {
-            const compared = this.emitDynamicBinary("tsc_value_cmp", T_NUMBER, bin, left, right);
-            const value = this.freshTemp("_bigint_cmp");
-            return {
-                c: `({ int ${value} = (int)(${compared.c}); ${value} != 2 && ${value} ${cop} 0; })`,
-                ty: T_BOOLEAN,
-            };
-        }
-        unsupported(bin, `relational ${cop} on ${left.ty.c} vs ${right.ty.c}`);
     }
 
     private emitDynamicBinary(
