@@ -20,6 +20,7 @@
     "runtime/tsc_iterator.c",
     "runtime/tsc_map_set.c",
     "runtime/tsc_node.c",
+    "runtime/tsc_url_owner.c",
     "runtime/tsc_node_embed.cc",
     "runtime/tsc_object.c",
     "runtime/tsc_promise.c",

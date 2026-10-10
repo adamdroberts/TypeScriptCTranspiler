@@ -151,6 +151,8 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_URL_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_URL_SEARCH_PARAMS_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_MAP_PROTOTYPE,
@@ -300,6 +302,7 @@ struct tsc_object {
     bool is_buffer;
     bool is_url;
     bool is_url_search_params;
+    bool is_url_search_params_iterator;
     bool is_array_buffer;
     bool is_data_view;
     bool is_text_encoder;

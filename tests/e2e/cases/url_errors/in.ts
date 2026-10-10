@@ -4,7 +4,7 @@ function invalidAbsolute(): string {
     try {
         return new URL("relative/path").href;
     } catch (err) {
-        return String(err);
+        return err instanceof TypeError ? "TypeError" : String(err);
     }
 }
 
@@ -12,7 +12,7 @@ function invalidBase(): string {
     try {
         return new URL("child", "relative/base").href;
     } catch (err) {
-        return String(err);
+        return err instanceof TypeError ? "TypeError" : String(err);
     }
 }
 
@@ -20,7 +20,7 @@ function nonFilePath(): string {
     try {
         return String(fs.existsSync(new URL("https://example.com/path")));
     } catch (err) {
-        return String(err);
+        return err instanceof TypeError ? "TypeError" : String(err);
     }
 }
 
@@ -28,7 +28,7 @@ function remoteFilePath(): string {
     try {
         return String(fs.existsSync(new URL("file://remote-host/tmp/file.txt")));
     } catch (err) {
-        return String(err);
+        return err instanceof TypeError ? "TypeError" : String(err);
     }
 }
 

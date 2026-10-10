@@ -2431,17 +2431,22 @@ tsc_str_t* tsc_url_resolve_base(const tsc_str_t* input, const tsc_str_t* base) {
     if (!base || !tsc_url_can_parse(base)) return NULL;
 
     tsc_url_t* b = tsc_url_new(base);
+    /* Relative references retain the full authority, including user info;
+     * origin intentionally excludes those credentials. */
+    size_t authority_start = find_byte(base->data, 0, base->len, ':') + 3;
+    tsc_str_t* authority = str_from_range(base->data, 0,
+        first_of_url_tail(base->data, authority_start, base->len));
     if (input->len >= 2 && input->data[0] == '/' && input->data[1] == '/') {
         return tsc_str_concat(b->protocol, input);
     }
     if (input->len > 0 && input->data[0] == '/') {
-        return tsc_str_concat(b->origin, input);
+        return tsc_str_concat(authority, input);
     }
     if (input->len > 0 && input->data[0] == '?') {
-        return tsc_str_concat(tsc_str_concat(b->origin, b->pathname), input);
+        return tsc_str_concat(tsc_str_concat(authority, b->pathname), input);
     }
     if (input->len > 0 && input->data[0] == '#') {
-        return tsc_str_concat(tsc_str_concat(tsc_str_concat(b->origin, b->pathname), b->search), input);
+        return tsc_str_concat(tsc_str_concat(tsc_str_concat(authority, b->pathname), b->search), input);
     }
 
     size_t slash = b->pathname->len;
@@ -2451,7 +2456,7 @@ tsc_str_t* tsc_url_resolve_base(const tsc_str_t* input, const tsc_str_t* base) {
     if (path->len == 0 || path->data[0] != '/') {
         path = tsc_str_concat(tsc_str_from_lit("/", 1), path);
     }
-    return tsc_str_concat(b->origin, path);
+    return tsc_str_concat(authority, path);
 }
 
 bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base) {
@@ -2524,6 +2529,10 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
     const char* d = input->data;
     size_t n = input->len;
     tsc_url_t* u = (tsc_url_t*)TSC_GC_MALLOC(sizeof(tsc_url_t));
+    u->object = NULL;
+    u->search_params = NULL;
+    u->username = tsc_str_from_lit("", 0);
+    u->password = tsc_str_from_lit("", 0);
     u->href = (tsc_str_t*)input;
     u->protocol = tsc_str_from_lit("", 0);
     u->host = tsc_str_from_lit("", 0);
@@ -2542,6 +2551,13 @@ tsc_url_t* tsc_url_new(const tsc_str_t* input) {
 
     size_t authority_start = scheme_colon + 3;
     size_t authority_end = first_of_url_tail(d, authority_start, n);
+    size_t user_end = find_byte(d, authority_start, authority_end, '@');
+    if (user_end != (size_t)-1) {
+        size_t password_start = find_byte(d, authority_start, user_end, ':');
+        u->username = str_from_range(d, authority_start, password_start == (size_t)-1 ? user_end : password_start);
+        if (password_start != (size_t)-1) u->password = str_from_range(d, password_start + 1, user_end);
+        authority_start = user_end + 1;
+    }
     u->host = str_from_range(d, authority_start, authority_end);
 
     size_t port_colon = find_byte(d, authority_start, authority_end, ':');
@@ -2672,6 +2688,8 @@ void tsc_url_search_params_append(tsc_url_search_params_t* params, const tsc_str
 
 tsc_url_search_params_t* tsc_url_search_params_new(const tsc_str_t* init) {
     tsc_url_search_params_t* params = (tsc_url_search_params_t*)TSC_GC_MALLOC(sizeof(tsc_url_search_params_t));
+    params->object = NULL;
+    params->owner_url = NULL;
     params->items = NULL;
     params->len = 0;
     params->cap = 0;
@@ -13468,6 +13486,7 @@ void tsc_fs_libuv_run_once(bool block) { (void)block; }
 #endif
 
 struct tsc_fs_stats {
+    tsc_object_t* object;
     double dev;
     double ino;
     double size;
@@ -13513,6 +13532,74 @@ void fs_kind_from_mode(mode_t mode, bool* is_file, bool* is_directory, bool* is_
     *is_socket = S_ISSOCK(mode);
 }
 
+/* Native filesystem results publish their declared members when a tagged
+ * Reference crosses the URL path boundary. The descriptor collection is also
+ * the single source of member identity and field projection. */
+typedef struct { const char* name; size_t offset; mode_t kind; bool date; } fs_stats_member_t;
+#define STATS_FIELD(name, field) {name, offsetof(tsc_fs_stats_t, field), 0, false}
+static const fs_stats_member_t fs_stats_members[] = {
+    STATS_FIELD("dev",dev), STATS_FIELD("mode",mode), STATS_FIELD("nlink",nlink),
+    STATS_FIELD("uid",uid), STATS_FIELD("gid",gid), STATS_FIELD("rdev",rdev),
+    STATS_FIELD("blksize",blksize), STATS_FIELD("ino",ino), STATS_FIELD("size",size),
+    STATS_FIELD("blocks",blocks), STATS_FIELD("atimeMs",atime_ms),
+    STATS_FIELD("mtimeMs",mtime_ms), STATS_FIELD("ctimeMs",ctime_ms), STATS_FIELD("birthtimeMs",birthtime_ms),
+    {"isDirectory",0,S_IFDIR,false},{"isFile",0,S_IFREG,false},
+    {"isBlockDevice",0,S_IFBLK,false},{"isCharacterDevice",0,S_IFCHR,false},
+    {"isSymbolicLink",0,S_IFLNK,false},{"isFIFO",0,S_IFIFO,false},{"isSocket",0,S_IFSOCK,false},
+    {"atime",0,0,true},{"mtime",0,0,true},{"ctime",0,0,true},{"birthtime",0,0,true},
+};
+#undef STATS_FIELD
+typedef struct { tsc_value_t prototype; void* prototype_root; } fs_stats_realm_t;
+static const char fs_stats_realm_key;
+static tsc_value_t fs_stats_check_mode(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)env;
+    tsc_value_t mode=tsc_value_bit_and(tsc_value_get_prop(receiver,tsc_str_from_lit("mode",4)),tsc_value_num(S_IFMT));
+    tsc_value_t kind=args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined();
+    return tsc_value_bool(tsc_value_eq(mode,kind));
+}
+static tsc_value_t fs_stats_member_apply(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)args;const fs_stats_member_t* member=env;
+    if(member->date) {
+        tsc_str_t* name=tsc_str_from_cstr(member->name);
+        tsc_str_t* milliseconds=tsc_str_concat(name,tsc_str_from_lit("Ms",2));
+        tsc_value_t value=tsc_value_date(tsc_date_from_ms(tsc_value_to_number(tsc_value_get_prop(receiver,milliseconds))));
+        (void)tsc_value_define_property_desc(receiver,name,value,true,true,true,true,true,true,true);
+        return value;
+    }
+    tsc_value_t method=tsc_value_get_prop(receiver,tsc_str_from_lit("_checkModeProperty",18));
+    tsc_value_t kind=tsc_value_num(member->kind);
+    return tsc_value_apply_function(method,receiver,tsc_value_array(tsc_array_from_buf(sizeof(tsc_value_t),&kind,1)));
+}
+tsc_value_t tsc_value_fs_stats(tsc_fs_stats_t* stats) {
+    if(!stats)return tsc_value_null();
+    if(stats->object)return tsc_value_object(stats->object);
+    fs_stats_realm_t* realm=tsc_realm_state_get(&fs_stats_realm_key);
+    if(!realm) {
+        realm=TSC_GC_MALLOC(sizeof(*realm));tsc_realm_state_set(&fs_stats_realm_key,realm);
+        realm->prototype=tsc_value_object(tsc_object_new());realm->prototype_root=tsc_value_gc_root(realm->prototype);
+        tsc_value_t method=tsc_value_function_named_kind(fs_stats_check_mode,NULL,NULL,1,tsc_str_from_lit("_checkModeProperty",18),TSC_FUNCTION_IDENTITY_BUILTIN);
+        (void)tsc_value_define_property_desc(realm->prototype,tsc_str_from_lit("_checkModeProperty",18),method,true,true,true,true,true,true,true);
+        for(size_t index=0;index<sizeof(fs_stats_members)/sizeof(fs_stats_members[0]);++index) {
+            const fs_stats_member_t* member=&fs_stats_members[index];if(!member->kind&&!member->date)continue;
+            tsc_str_t* name=tsc_str_from_cstr(member->name);
+            method=tsc_value_function_named_kind(fs_stats_member_apply,NULL,(void*)member,0,member->date?tsc_str_concat(tsc_str_from_lit("get ",4),name):name,TSC_FUNCTION_IDENTITY_BUILTIN);
+            if(member->date) {
+                tsc_value_t descriptor=tsc_value_object(tsc_object_new());
+                tsc_value_set_prop(descriptor,tsc_str_from_lit("get",3),method);tsc_value_set_prop(descriptor,tsc_str_from_lit("configurable",12),tsc_value_bool(true));
+                (void)tsc_value_define_property_descriptor(realm->prototype,name,descriptor);
+            } else (void)tsc_value_define_property_desc(realm->prototype,name,method,true,true,true,true,true,true,true);
+        }
+    }
+    stats->object=tsc_object_new_class(stats);stats->object->prototype=realm->prototype;stats->object->prototype_gc_root=realm->prototype_root;
+    tsc_value_t object=tsc_value_object(stats->object);
+    for(size_t index=0;index<sizeof(fs_stats_members)/sizeof(fs_stats_members[0]);++index) {
+        const fs_stats_member_t* member=&fs_stats_members[index];if(member->kind||member->date)continue;
+        tsc_value_t value=tsc_value_num(*(double*)((char*)stats+member->offset));
+        (void)tsc_value_define_property_desc(object,tsc_str_from_cstr(member->name),value,true,true,true,true,true,true,true);
+    }
+    return object;
+}
+
 double fs_timespec_to_ms(time_t sec, long nsec) {
     return ((double)sec * 1000.0) + ((double)nsec / 1000000.0);
 }
@@ -13550,6 +13637,7 @@ double fs_stat_birthtime_ms(const struct stat* st) {
 }
 
 void fs_stats_fill(tsc_fs_stats_t* out, const struct stat* st) {
+    out->object = NULL;
     out->dev = (double)st->st_dev;
     out->ino = (double)st->st_ino;
     out->size = (double)st->st_size;
@@ -13586,6 +13674,7 @@ static double fs_uv_timespec_to_ms(const tsc_uv_timespec_t* value) {
 }
 
 static void tsc_fs_stats_fill_uv(tsc_fs_stats_t* out, const tsc_uv_stat_t* st) {
+    out->object = NULL;
     out->dev = (double)st->st_dev;
     out->ino = (double)st->st_ino;
     out->size = (double)st->st_size;
@@ -13789,6 +13878,18 @@ bool tsc_fs_exists_sync(const tsc_str_t* path) {
     int r = stat(p, &st);
     free(p);
     return r == 0;
+}
+
+bool tsc_fs_exists_sync_value(tsc_value_t value) {
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb)) {
+        tsc_try_pop();
+        return false;
+    }
+    bool result = tsc_fs_exists_sync(tsc_url_file_path_value(value));
+    tsc_try_pop();
+    return result;
 }
 
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {

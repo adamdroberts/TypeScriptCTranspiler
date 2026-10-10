@@ -605,7 +605,7 @@ class Emitter {
         readonly globalConstructor?: string;
         readonly constructorType?: string;
         readonly instanceType: string;
-    }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor", instanceType:"Date"}], ["buffer", {instanceType:"Buffer"}]]);
+    }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor", instanceType:"Date"}], ["buffer", {instanceType:"Buffer"}], ["url", {globalConstructor:"URL", constructorType:"URLConstructor", instanceType:"URL"}], ["urlsearchparams", {globalConstructor:"URLSearchParams", constructorType:"URLSearchParamsConstructor", instanceType:"URLSearchParams"}]]);
     private readonly canonicalSourceValueFacts = new Map<ts.Node, boolean>();
     private canonicalSourceValueInputs: Map<ts.Node, Set<ts.Node>> | null = null;
     private ordinaryAggregateDepth = 0;
@@ -1533,9 +1533,6 @@ class Emitter {
             if (expr.name.text === "size") {
                 return this.isSideEffectFreeCollectionSizeOperand(expr.expression, seenConsts);
             }
-            if (this.isSideEffectFreeURLPropertyRead(expr, seenConsts)) {
-                return true;
-            }
             if (this.isSideEffectFreeErrorPropertyRead(expr, seenConsts)) {
                 return true;
             }
@@ -1692,9 +1689,6 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -1824,9 +1818,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
@@ -2006,9 +1997,6 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeURLMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -2081,15 +2069,6 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(recv, "Promise")
         ) {
             return this.isSideEffectFreePromiseTryCallbackOperand(call.arguments[0]!, seenConsts);
-        }
-        if (
-            this.isUrlConstructorExpression(recv) &&
-            method === "canParse" &&
-            call.arguments.length >= 1 &&
-            call.arguments.length <= 2
-        ) {
-            return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts) &&
-                (!call.arguments[1] || this.isSideEffectFreeStringCoercion(call.arguments[1], seenConsts));
         }
         if (this.isSideEffectFreeJsonStringifyCall(call, seenConsts)) {
             return true;
@@ -2188,10 +2167,6 @@ class Emitter {
             (
                 this.isUnshadowedGlobalIdentifier(recv, "Array") &&
                 method === "isArray"
-            ) ||
-            (
-                this.isUrlConstructorExpression(recv) &&
-                method === "canParse"
             ) ||
             (
                 this.isUnshadowedGlobalIdentifier(recv, "Object") &&
@@ -2909,9 +2884,6 @@ class Emitter {
                 }
                 break;
         }
-        if (this.isSideEffectFreeURLMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeErrorMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
@@ -2961,69 +2933,6 @@ class Emitter {
             index,
             seenConsts,
         ) !== "unsafe";
-    }
-
-    private isSideEffectFreeURLMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeFreshURLOperand(recv, seenConsts)) return false;
-        switch (method) {
-            case "hasOwnProperty":
-            case "propertyIsEnumerable":
-                return args.length >= 1 &&
-                    this.isSideEffectFreePropertyKeyCoercion(args[0]!, seenConsts) &&
-                    Array.from(args).slice(1).every((arg) =>
-                        this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                    );
-            case "toJSON":
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return Array.from(args).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreeFreshURLOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "URL")
-        ) {
-            return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshURLOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeURLPropertyRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isPropertyAccessExpression(expr)) return false;
-        const fields = new Set([
-            "href",
-            "protocol",
-            "host",
-            "hostname",
-            "port",
-            "pathname",
-            "search",
-            "hash",
-            "origin",
-        ]);
-        return fields.has(expr.name.text) &&
-            this.isSideEffectFreeFreshURLOperand(expr.expression, seenConsts);
     }
 
     private isSideEffectFreeBuiltinObjectPrototypeMethodCall(
@@ -6431,9 +6340,6 @@ class Emitter {
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -6513,9 +6419,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeToStringCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeHashDigestStringMethodCall(unwrapped, seenConsts)) {
@@ -6717,8 +6620,6 @@ class Emitter {
             if (!this.isUnshadowedGlobalIdentifier(ctorExpr, name)) return false;
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
-            if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
-            if (name === "URLSearchParams") return this.isSideEffectFreeURLSearchParamsConstructorArgs(args, seenConsts);
             if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
             if (name === "DataView") return this.isSideEffectFreeDataViewConstructorArgs(args, seenConsts);
             if (name === "Map") {
@@ -7583,37 +7484,6 @@ class Emitter {
             this.isSideEffectFreeFreshErrorOperand(expr.expression, seenConsts);
     }
 
-    private isSideEffectFreeURLConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length < 1 || args.length > 2) return false;
-        const input = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
-        if (input === null) return false;
-        let base: string | undefined;
-        if (args[1]) {
-            const baseText = this.sideEffectFreeStringLiteralText(args[1], seenConsts);
-            if (baseText === null) return false;
-            base = baseText;
-        }
-        try {
-            new URL(input, base);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    private isSideEffectFreeURLSearchParamsConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length === 0) return true;
-        if (args.length > 1) return false;
-        return this.isSideEffectFreeUndefinedValue(args[0]!, seenConsts) ||
-            this.isSideEffectFreeStringCoercion(args[0]!, seenConsts);
-    }
-
     private isSideEffectFreeMapConstructorSource(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -7871,9 +7741,6 @@ class Emitter {
             unwrapped.name.text === "size" &&
             this.isSideEffectFreeCollectionSizeOperand(unwrapped.expression, seenConsts)
         ) {
-            return true;
-        }
-        if (this.isSideEffectFreeURLPropertyRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeErrorStringPropertyRead(unwrapped, seenConsts)) {
@@ -22068,6 +21935,15 @@ class Emitter {
                 else for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) names.push(element.name);
             }
             for (const name of names) {
+                const nativeOwner = this.importedUrlOwner(name);
+                if (nativeOwner) {
+                    const value = this.freshTemp("_module_native_binding"), root = this.freshTemp("_module_native_root");
+                    this.globalDecls.line("static tsc_value_t " + value + ";");
+                    this.globalDecls.line("static void* volatile " + root + ";");
+                    instantiation.line(value + " = " + nativeOwner.c + "; " + root + " = tsc_value_gc_root(" + value + ");");
+                    add(name.text,value,root,"NULL",true,true);
+                    continue;
+                }
                 const json = this.jsonModuleBindingForImportIdentifier(name);
                 if (json) {
                     add(name.text,json.cName,json.gcRoot,"NULL",true,true);
@@ -30424,9 +30300,6 @@ class Emitter {
 
     private emitSyncIterationWithEnvironment(buf: CBuf, fos: ts.ForInStatement | ts.ForOfStatement): void {
         const iter = this.emitExpr(fos.expression);
-        // Native class boxing publishes the same ordinary method values and
-        // fields consumed by the canonical iterator record and binding cells.
-        if (ts.isForOfStatement(fos) && iter.ty.kind === "urlsearchparams") return this.emitUrlSearchParamsForOf(buf, fos, iter);
         this.emitOrdinarySyncIteration(buf, fos, iter);
     }
 
@@ -31323,69 +31196,6 @@ class Emitter {
         }
     }
 
-    private emitUrlSearchParamsForOf(
-        buf: CBuf,
-        fos: ts.ForOfStatement,
-        iter: EmitResult,
-    ): void {
-        const paramsVar = this.freshTemp("_u");
-        const idxVar = this.freshTemp("_i");
-
-        let keyName: string | undefined;
-        let valueName: string | undefined;
-        let bindingIsConst = false;
-        if (ts.isVariableDeclarationList(fos.initializer)) {
-            bindingIsConst =
-                (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
-            const d = fos.initializer.declarations[0];
-            if (!d || !ts.isArrayBindingPattern(d.name)) {
-                unsupported(
-                    fos.initializer,
-                    "URLSearchParams for-of binding must destructure as [key, value]",
-                );
-            }
-            const [keyEl, valueEl] = d.name.elements;
-            if (
-                !keyEl ||
-                !valueEl ||
-                !ts.isBindingElement(keyEl) ||
-                !ts.isBindingElement(valueEl) ||
-                !ts.isIdentifier(keyEl.name) ||
-                !ts.isIdentifier(valueEl.name)
-            ) {
-                unsupported(
-                    d.name,
-                    "URLSearchParams for-of binding must be [keyIdentifier, valueIdentifier]",
-                );
-            }
-            keyName = mangleIdent(keyEl.name.text);
-            valueName = mangleIdent(valueEl.name.text);
-        } else {
-            unsupported(
-                fos.initializer,
-                "URLSearchParams for-of assignment must use a const/let [key, value] binding",
-            );
-        }
-
-        const qual = bindingIsConst ? " const" : "";
-
-        buf.open("");
-        buf.line(`tsc_url_search_params_t* const ${paramsVar} = ${iter.c};`);
-        buf.open(
-            `for (size_t ${idxVar} = 0; ${idxVar} < ${paramsVar}->len; ${idxVar}++)`,
-        );
-        buf.line(`tsc_str_t*${qual} ${keyName} = ${paramsVar}->items[${idxVar}].name;`);
-        buf.line(`tsc_str_t*${qual} ${valueName} = ${paramsVar}->items[${idxVar}].value;`);
-        const labeledContinueTarget = this.directLabeledLoopName(fos)
-            ? this.freshTemp("_url_for_of_labeled_continue")
-            : null;
-        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
-        this.emitLoopStmtInBlock(buf, fos.statement);
-        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
-        buf.close();
-        buf.close();
-    }
-
 
     private emitBlock(buf: CBuf, b: ts.Block): void {
         buf.open("");
@@ -31905,7 +31715,6 @@ class Emitter {
     ): boolean {
         return this.isSideEffectFreeFreshRegExpOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshURLOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
@@ -33259,6 +33068,8 @@ class Emitter {
                     ty: T_VALUE,
                 };
             }
+            const importedUrlOwner = this.importedUrlOwner(expr);
+            if (importedUrlOwner) return importedUrlOwner;
             if (this.isRuntimeGlobalReference(expr) ||
                 this.functionSourcePaths.has(path.resolve(expr.getSourceFile().fileName)) && this.isSourceGlobalReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
@@ -34935,64 +34746,22 @@ class Emitter {
             this.isDefaultImportFrom(expr, ["url", "node:url"])
         );
     }
-
-    private isUrlConstructorExpression(expr: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expr);
-        if (ts.isIdentifier(unwrapped)) {
-            return unwrapped.text === "URL" ||
-                this.isNamedImportFrom(unwrapped, ["url", "node:url"], "URL");
+    private importedUrlOwner(expression: ts.Expression): EmitResult | null {
+        const expr = this.unwrapTransparentExpression(expression);
+        if (ts.isIdentifier(expr)) {
+            if (this.isNamespaceImportFrom(expr, ["url", "node:url"])) return { c: "tsc_url_module_value(true)", ty: T_VALUE };
+            if (this.isDefaultImportFrom(expr, ["url", "node:url"])) return { c: "tsc_url_module_value(false)", ty: T_VALUE };
+            for (const name of ["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"])
+                if (this.isNamedImportFrom(expr, ["url", "node:url"], name))
+                    return { c: "tsc_url_module_export_value(" + this.stringLit(name) + ")", ty: T_VALUE };
         }
-        return ts.isPropertyAccessExpression(unwrapped) &&
-            unwrapped.name.text === "URL" &&
-            this.isUrlModuleIdentifier(unwrapped.expression);
+        if (ts.isPropertyAccessExpression(expr) && this.isUrlModuleIdentifier(expr.expression)) {
+            const owner = this.importedUrlOwner(expr.expression)!;
+            return { c: "tsc_value_get_prop(" + owner.c + ", " + this.stringLit(expr.name.text) + ")", ty: T_VALUE };
+        }
+        return null;
     }
 
-    private isUrlSearchParamsConstructorExpression(expr: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expr);
-        if (ts.isIdentifier(unwrapped)) {
-            return unwrapped.text === "URLSearchParams" ||
-                this.isNamedImportFrom(unwrapped, ["url", "node:url"], "URLSearchParams");
-        }
-        return ts.isPropertyAccessExpression(unwrapped) &&
-            unwrapped.name.text === "URLSearchParams" &&
-            this.isUrlModuleIdentifier(unwrapped.expression);
-    }
-
-    private emitUrlModuleCall(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        switch (name) {
-            case "fileURLToPath": {
-                if (args.length < 1) unsupported(call, "url.fileURLToPath expects one URL or string argument");
-                const argNode = args[0]!;
-                const value = this.emitExpr(argNode);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (value.ty.kind === "url") {
-                    return this.emitSequencedExpr(T_STRING, [
-                        { value, target: T_URL, node: argNode },
-                        ...ignored,
-                    ], ([urlC]) => `tsc_url_file_path(${urlC})`);
-                }
-                if (value.ty.kind === "string") {
-                    return this.emitSequencedExpr(T_STRING, [
-                        { value, target: T_STRING, node: argNode },
-                        ...ignored,
-                    ], ([inputC]) => `tsc_url_file_url_to_path(${inputC})`);
-                }
-                unsupported(argNode, "url.fileURLToPath expects a URL object or string in this subset");
-            }
-            case "pathToFileURL": {
-                if (args.length < 1) unsupported(call, "url.pathToFileURL expects one string path");
-                const argNode = args[0]!;
-                const value = this.emitExpr(argNode);
-                return this.emitSequencedExpr(T_URL, [
-                    { value, target: T_STRING, node: argNode },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([pathC]) => `tsc_url_path_to_file_url(${pathC})`);
-            }
-            default:
-                unsupported(call, `url.${name}`);
-        }
-    }
 
     private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
         return (
@@ -35795,6 +35564,7 @@ class Emitter {
                 ty: T_VALUE,
             });
         }
+        if (this.importedUrlOwner(calleeId)) return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         if (this.isRuntimeGlobalReference(calleeId) ||
             this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) && this.isSourceGlobalReference(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
@@ -36032,11 +35802,6 @@ class Emitter {
             .find((exported) => this.isNamedImportFrom(calleeId, ["querystring", "node:querystring"], exported));
         if (querystringNamed) {
             return this.emitQueryStringCall(call, querystringNamed);
-        }
-        const urlNamed = ["fileURLToPath", "pathToFileURL"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["url", "node:url"], exported));
-        if (urlNamed) {
-            return this.emitUrlModuleCall(call, urlNamed);
         }
 
         if (!this.isDirectCallableIdentifier(call.expression)) {
@@ -37840,6 +37605,8 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
+        if (this.importedUrlOwner(recvExpr))
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (ts.isIdentifier(recvExpr) && this.isRuntimeGlobalReference(recvExpr))
@@ -38030,10 +37797,6 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
             return this.emitQueryStringCall(call, memberName);
-        }
-
-        if (ts.isIdentifier(recvExpr) && this.isUrlModuleIdentifier(recvExpr)) {
-            return this.emitUrlModuleCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
@@ -38670,26 +38433,6 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
             return this.emitCryptoCall(call, memberName);
         }
-        if (this.isUrlConstructorExpression(recvExpr)) {
-            if (memberName === "canParse") {
-                if (call.arguments.length < 1) unsupported(call, "URL.canParse expects input and optional base");
-                const input = this.emitExpr(call.arguments[0]!);
-                const baseArg = call.arguments[1];
-                if (baseArg && !this.isUndefinedExpression(baseArg)) {
-                    const base = this.emitExpr(baseArg);
-                    return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: input, target: T_STRING, node: call.arguments[0]! },
-                        { value: base, target: T_STRING, node: baseArg },
-                        ...this.ignoredArgumentSpecs(call.arguments, 2),
-                    ], ([inputC, baseC]) => `tsc_url_can_parse_base(${inputC}, ${baseC})`);
-                }
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: input, target: T_STRING, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, baseArg ? 2 : 1),
-                ], ([inputC]) => `tsc_url_can_parse(${inputC})`);
-            }
-            unsupported(call, `URL.${memberName}`);
-        }
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
         }
@@ -38757,10 +38500,6 @@ class Emitter {
             return this.emitHashMethod(call, recv, memberName);
         if (recv.ty.kind === "hmac")
             return this.emitHmacMethod(call, recv, memberName);
-        if (recv.ty.kind === "url")
-            return this.emitUrlMethod(call, recv, memberName);
-        if (recv.ty.kind === "urlsearchparams")
-            return this.emitUrlSearchParamsMethod(call, recv, memberName);
 
         if (recv.ty.kind === "error")
             return this.emitErrorMethod(call, recv, memberName);
@@ -42514,166 +42253,6 @@ class Emitter {
         unsupported(call, `${tag}.${method}`);
     }
 
-    private emitUrlMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        switch (method) {
-            case "toJSON":
-            case "toLocaleString":
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                    ([url]) => `${url}->href`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(call.arguments, 0)],
-                    ([url]) => url,
-                );
-        }
-        unsupported(call, `URL method .${method}`);
-    }
-
-    private emitUrlSearchParamsMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "append": {
-                if (args.length < 2) unsupported(call, "URLSearchParams.append expects name and value");
-                return this.emitSequencedExpr(T_VOID, [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ], ([params, name, value]) => `tsc_url_search_params_append(${params}, ${name}, ${value})`);
-            }
-            case "delete": {
-                if (args.length < 1) unsupported(call, "URLSearchParams.delete expects name");
-                const hasValue = args.length >= 2;
-                return this.emitSequencedExpr(T_VOID, [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    hasValue
-                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
-                        : { value: { c: "NULL", ty: T_STRING } },
-                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
-                ], ([params, name, value]) => `tsc_url_search_params_delete(${params}, ${name}, ${value})`);
-            }
-            case "get": {
-                if (args.length < 1) unsupported(call, "URLSearchParams.get expects name");
-                return this.emitSequencedExpr(T_STRING, [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_get(${params}, ${name})`);
-            }
-            case "getAll": {
-                if (args.length < 1) unsupported(call, "URLSearchParams.getAll expects name");
-                return this.emitSequencedExpr(arrayType(T_STRING), [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([params, name]) => `tsc_url_search_params_get_all(${params}, ${name})`);
-            }
-            case "has": {
-                if (args.length < 1) unsupported(call, "URLSearchParams.has expects name");
-                const hasValue = args.length >= 2;
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    hasValue
-                        ? { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! }
-                        : { value: { c: "NULL", ty: T_STRING } },
-                    ...this.ignoredArgumentSpecs(args, hasValue ? 2 : 1),
-                ], ([params, name, value]) => `tsc_url_search_params_has(${params}, ${name}, ${value})`);
-            }
-            case "set": {
-                if (args.length < 2) unsupported(call, "URLSearchParams.set expects name and value");
-                return this.emitSequencedExpr(T_VOID, [
-                    { value: recv },
-                    { value: this.emitExpr(args[0]!), target: T_STRING, node: args[0]! },
-                    { value: this.emitExpr(args[1]!), target: T_STRING, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ], ([params, name, value]) => `tsc_url_search_params_set(${params}, ${name}, ${value})`);
-            }
-            case "toLocaleString":
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => `tsc_url_search_params_to_string(${params})`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => params,
-                );
-            case "sort":
-                return this.emitSequencedExpr(
-                    T_VOID,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => `tsc_url_search_params_sort(${params!})`,
-                );
-
-            case "keys":
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => `tsc_url_search_params_keys(${params!})`,
-                );
-            case "values":
-                return this.emitSequencedExpr(
-                    arrayType(T_STRING),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => `tsc_url_search_params_values(${params!})`,
-                );
-            case "entries":
-                return this.emitSequencedExpr(
-                    arrayType(entryType(T_STRING, T_STRING)),
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([params]) => `tsc_url_search_params_entries(${params!})`,
-                );
-            case "forEach":
-                return this.emitUrlSearchParamsForEach(call, recv);
-        }
-        unsupported(call, `URLSearchParams method .${method}`);
-    }
-
-    private emitUrlSearchParamsForEach(call: ts.CallExpression, recv: EmitResult): EmitResult {
-        const args = call.arguments;
-        if (args.length < 1) unsupported(call, "URLSearchParams.forEach expects callback and optional thisArg");
-        const cb = args[0]!;
-        const specs: SequencedCallArg[] = [{ value: recv }, { value: this.emitExpr(cb), target: T_VALUE, node: cb }];
-        if (args[1]) {
-            specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
-        }
-        specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_VOID, specs, ([params, callback, thisArg]) => {
-            const callbackThisArg = thisArg ?? "tsc_value_undefined()";
-            const ut = this.freshTemp("_url_each");
-            const iv = this.freshTemp("_i");
-            const valueExpr = `${ut}->items[${iv}].value`;
-            const keyExpr = `${ut}->items[${iv}].name`;
-            const body = this.emitCallbackApplication(callback!, callbackThisArg, [
-                { c: valueExpr, ty: T_STRING }, { c: keyExpr, ty: T_STRING }, { c: ut, ty: recv.ty },
-            ], cb);
-            return (
-                `({ tsc_url_search_params_t* const ${ut} = ${params}; ` +
-                `if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${ut}->len; ${iv}++) ` +
-                `{ (void)(${body.c}); } (void)0; })`
-            );
-        });
-    }
-
     private emitErrorMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -42943,9 +42522,9 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.existsSync needs path");
                 const p = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    this.fsPathSpec(p, args[0]!, "fs.existsSync path"),
+                    { value: p, target: T_VALUE, node: args[0]! },
                     ...this.ignoredArgumentSpecs(args, 1),
-                ], ([path]) => `tsc_fs_exists_sync(${path!})`);
+                ], ([path]) => `tsc_fs_exists_sync_value(${path!})`);
             }
             case "accessSync": {
                 if (args.length < 1) unsupported(call, "fs.accessSync needs path and optional mode");
@@ -44489,6 +44068,9 @@ class Emitter {
     }
 
     private fsPathSpec(value: EmitResult, node: ts.Expression, label: string): SequencedCallArg {
+        if (value.ty.kind === "value") {
+            return { value, target: T_VALUE, node, pass: (tmp) => `tsc_url_file_path_value(${tmp})` };
+        }
         if (value.ty.kind === "url") {
             return { value, target: T_URL, node, pass: (tmp) => `tsc_url_file_path(${tmp})` };
         }
@@ -47325,52 +46907,6 @@ class Emitter {
         });
     }
 
-    private emitUrlConstructor(n: ts.NewExpression): EmitResult {
-        const input = n.arguments?.[0];
-        if (!input) unsupported(n, "new URL() expects input");
-        const r = this.emitExpr(input);
-        const args = n.arguments ?? [];
-        const base = n.arguments?.[1];
-        if (base) {
-            const b = this.emitExpr(base);
-            return this.emitSequencedExpr(
-                T_URL,
-                [
-                    { value: r, target: T_STRING, node: input },
-                    { value: b, target: T_STRING, node: base },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ],
-                ([inputC, baseC]) => `tsc_url_new_base(${inputC}, ${baseC})`,
-            );
-        }
-        return this.emitSequencedExpr(
-            T_URL,
-            [{ value: r, target: T_STRING, node: input }],
-            ([inputC]) => `tsc_url_new(${inputC})`,
-        );
-    }
-
-    private emitUrlSearchParamsConstructor(n: ts.NewExpression): EmitResult {
-        const args = n.arguments ?? [];
-        const input = args[0];
-        if (!input || this.isUndefinedExpression(input)) {
-            return this.emitSequencedExpr(
-                T_URL_SEARCH_PARAMS,
-                input ? this.ignoredArgumentSpecs(args, 1) : [],
-                () => "tsc_url_search_params_new(NULL)",
-            );
-        }
-        const value = this.emitExpr(input);
-        return this.emitSequencedExpr(
-            T_URL_SEARCH_PARAMS,
-            [
-                { value, target: T_STRING, node: input },
-                ...this.ignoredArgumentSpecs(args, 1),
-            ],
-            ([inputC]) => `tsc_url_search_params_new(${inputC})`,
-        );
-    }
-
     private emitNew(n: ts.NewExpression): EmitResult {
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -47403,12 +46939,8 @@ class Emitter {
                 ([optionsC]) => `tsc_net_socket_address_new(${optionsC})`,
             );
         }
-        if (this.isUrlConstructorExpression(n.expression)) {
-            return this.emitUrlConstructor(n);
-        }
-        if (this.isUrlSearchParamsConstructorExpression(n.expression)) {
-            return this.emitUrlSearchParamsConstructor(n);
-        }
+        const importedUrlOwner = this.importedUrlOwner(n.expression);
+        if (importedUrlOwner) return this.emitDynamicValueConstruct(n, importedUrlOwner);
         const ctorExpr = this.unwrapTransparentExpression(n.expression);
         if (!ts.isIdentifier(ctorExpr)) {
             const ctor = this.emitExpr(n.expression);
@@ -47737,8 +47269,6 @@ class Emitter {
                 () => "tsc_abort_controller_new()",
             );
         }
-        if (cls === "URL") return this.emitUrlConstructor(n);
-        if (cls === "URLSearchParams") return this.emitUrlSearchParamsConstructor(n);
         const classDecl = targetClassDecl ?? this.findClassDecl(cls);
         const classLike = classDecl ?? targetClassExpression;
         if (!classLike) {
@@ -47861,6 +47391,8 @@ class Emitter {
                 : `tsc_value_private_get(${base}, ${key})`);
         }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
+        const importedUrlOwner = this.importedUrlOwner(pa);
+        if (importedUrlOwner) return importedUrlOwner;
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };
@@ -48205,16 +47737,6 @@ class Emitter {
         if (recv.ty.kind === "set" && pa.name.text === "size") {
             return { c: `tsc_set_size(${recv.c})`, ty: T_NUMBER };
         }
-        if (recv.ty.kind === "urlsearchparams" && pa.name.text === "size") {
-            if (isOpt) {
-                const tv = this.freshTemp("_usp");
-                return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ((double)${tv}->len) : 0.0; })`,
-                    ty: T_NUMBER,
-                };
-            }
-            return { c: `((double)${recv.c}->len)`, ty: T_NUMBER };
-        }
         if (recv.ty.kind === "regexp") {
             return { c: `tsc_value_get_prop(tsc_value_regexp(${recv.c}), ${this.stringLit(pa.name.text)})`, ty: T_VALUE };
         }
@@ -48356,39 +47878,6 @@ class Emitter {
                 c: `({ ${recv.ty.c} ${tv} = ${recv.c}; (double)${tv}.pair->len; })`,
                 ty: T_NUMBER,
             };
-        }
-        if (recv.ty.kind === "url") {
-            const fields = [
-                "href",
-                "protocol",
-                "host",
-                "hostname",
-                "port",
-                "pathname",
-                "search",
-                "hash",
-                "origin",
-            ];
-            if (fields.includes(pa.name.text)) {
-                if (isOpt) {
-                    const tv = this.freshTemp("_ou");
-                    return {
-                        c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? ${tv}->${mangleIdent(pa.name.text)} : tsc_str_from_lit("", 0); })`,
-                        ty: T_STRING,
-                    };
-                }
-                return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty: T_STRING };
-            }
-            if (pa.name.text === "searchParams") {
-                if (isOpt) {
-                    const tv = this.freshTemp("_ou");
-                    return {
-                        c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${tv} != NULL ? tsc_url_search_params_new(${tv}->search) : tsc_url_search_params_new(NULL); })`,
-                        ty: T_URL_SEARCH_PARAMS,
-                    };
-                }
-                return { c: `tsc_url_search_params_new(${recv.c}->search)`, ty: T_URL_SEARCH_PARAMS };
-            }
         }
         if (recv.ty.kind === "error") {
             if (pa.name.text === "name") {
@@ -48926,8 +48415,8 @@ class Emitter {
         if (r.ty.kind === "event") return `tsc_str_from_lit("[object Event]", 14)`;
         if (r.ty.kind === "eventtarget") return `tsc_str_from_lit("[object EventTarget]", 20)`;
         if (r.ty.kind === "regexp") return `tsc_value_to_string(tsc_value_regexp(${r.c}))`;
-        if (r.ty.kind === "url") return `${r.c}->href`;
-        if (r.ty.kind === "urlsearchparams") return `tsc_url_search_params_to_string(${r.c})`;
+        if (r.ty.kind === "url" || r.ty.kind === "urlsearchparams")
+            return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;
         if (r.ty.kind === "error") return `tsc_error_to_string(${r.c})`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
@@ -49195,7 +48684,7 @@ class Emitter {
             case "event":
                 return `tsc_value_event(${r.c})`;
             case "fsstats":
-                return `tsc_value_class(${r.c})`;
+                return `tsc_value_fs_stats(${r.c})`;
             case "date":
                 return `tsc_value_date(${r.c})`;
             case "regexp":

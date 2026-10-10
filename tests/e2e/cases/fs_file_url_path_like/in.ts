@@ -8,11 +8,13 @@ fs.rmSync(root, { recursive: true, force: true });
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(file, "alpha");
 
-console.log("sync:", fs.existsSync(file), fs.readFileSync(file), fs.statSync(file).isFile());
-console.log("named:", readFileSync(file), fs.readdirSync(root).join(","));
+const stats = fs.statSync(file);
+console.log("sync:", fs.existsSync(file), fs.readFileSync(file, "utf8"), stats.isFile());
+console.log("stat owner:", stats.valueOf() === stats, Reflect.apply(stats.isFile, stats, []), Number.isFinite(stats.mtime.getTime()));
+console.log("named:", readFileSync(file, "utf8"), fs.readdirSync(root).join(","));
 
 renameSync(file, renamed);
-fs.promises.readFile(renamed).then((text: string): void => {
+fs.promises.readFile(renamed, "utf8").then((text: string): void => {
     console.log("promise read:", text);
     fs.rmSync(root, { recursive: true, force: true });
 });

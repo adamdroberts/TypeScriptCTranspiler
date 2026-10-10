@@ -419,10 +419,14 @@ tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_
 
 /* ------------- URL ------------- */
 typedef struct tsc_url {
+    struct tsc_object* object;
+    struct tsc_url_search_params* search_params;
     tsc_str_t* href;
     tsc_str_t* protocol;
     tsc_str_t* host;
     tsc_str_t* hostname;
+    tsc_str_t* username;
+    tsc_str_t* password;
     tsc_str_t* port;
     tsc_str_t* pathname;
     tsc_str_t* search;
@@ -434,10 +438,19 @@ typedef struct tsc_url_search_param {
     tsc_str_t* value;
 } tsc_url_search_param_t;
 typedef struct tsc_url_search_params {
+    struct tsc_object* object;
+    struct tsc_url* owner_url;
     tsc_url_search_param_t* items;
     size_t len;
     size_t cap;
 } tsc_url_search_params_t;
+tsc_value_t tsc_url_constructor_value(void);
+tsc_value_t tsc_url_search_params_constructor_value(void);
+tsc_value_t tsc_url_prototype_value(void);
+tsc_value_t tsc_url_search_params_prototype_value(void);
+tsc_str_t* tsc_url_file_path_value(tsc_value_t value);
+tsc_value_t tsc_url_module_value(bool namespace_object);
+tsc_value_t tsc_url_module_export_value(tsc_str_t* name);
 bool tsc_url_can_parse(const tsc_str_t* input);
 bool tsc_url_can_parse_base(const tsc_str_t* input, const tsc_str_t* base);
 tsc_url_t* tsc_url_new(const tsc_str_t* input);
@@ -1805,6 +1818,8 @@ void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_bu
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 bool tsc_fs_exists_sync(const tsc_str_t* path);
+bool tsc_fs_exists_sync_value(tsc_value_t value);
+tsc_value_t tsc_value_fs_stats(tsc_fs_stats_t* stats);
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path);
 tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size);
 tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path);

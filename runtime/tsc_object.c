@@ -81,6 +81,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_buffer = false;
     o->is_url = false;
     o->is_url_search_params = false;
+    o->is_url_search_params_iterator = false;
     o->is_array_buffer = false;
     o->is_data_view = false;
     o->is_text_encoder = false;

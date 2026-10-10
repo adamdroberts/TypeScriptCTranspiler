@@ -9,4 +9,5 @@ desc: undefined 0
 proto: false false
 reflect: 0 undefined
 integrity: true false false true
+reflect receiver: true
 reflect get: https://example.com:8443/a/b?x=1#frag undefined true false sljvpiELFIgxhH

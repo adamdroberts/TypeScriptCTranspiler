@@ -18,4 +18,7 @@ console.log("desc:", String(Object.getOwnPropertyDescriptor(u, "href")), Object.
 console.log("proto:", u.hasOwnProperty("href", mark("p")), u.propertyIsEnumerable("href", mark("i")));
 console.log("reflect:", Reflect.ownKeys(u).length, String(Reflect.getOwnPropertyDescriptor(u, "href")));
 console.log("integrity:", Object.isExtensible(u, mark("E")), Object.isSealed(u, mark("L")), Object.isFrozen(u, mark("F")), Reflect.isExtensible(u, mark("I")));
-console.log("reflect get:", Reflect.get(u, "href", {}, mark("g")), String(Reflect.get(u, "missing", mark("x"))), Reflect.has(u, "href", mark("h")), Reflect.has(u, "missing", mark("H")), seen);
+let incompatibleReceiver = false;
+try { Reflect.get(u, "href", {}, mark("g")); } catch (error) { incompatibleReceiver = error instanceof TypeError; }
+console.log("reflect receiver:", incompatibleReceiver);
+console.log("reflect get:", Reflect.get(u, "href", u), String(Reflect.get(u, "missing", mark("x"))), Reflect.has(u, "href", mark("h")), Reflect.has(u, "missing", mark("H")), seen);

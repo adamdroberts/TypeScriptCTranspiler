@@ -120,6 +120,7 @@ const RUNTIME_SOURCES = [
     "tsc_regexp.c",
     "tsc_regexp_api.c",
     "tsc_node.c",
+    "tsc_url_owner.c",
     "tsc_promise.c"
 ];
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];

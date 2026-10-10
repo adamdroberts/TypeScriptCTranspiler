@@ -61,8 +61,9 @@ tsc_str_t* tsc_value_diagnostic_string(tsc_value_t value) {
 }
 
 tsc_object_t* tsc_object_new_class(void* ptr) {
+    void* volatile class_gc_root = ptr;
     tsc_object_t* o = tsc_object_new();
-    o->class_ptr = ptr;
+    o->class_ptr = class_gc_root;
     return o;
 }
 
@@ -3557,6 +3558,10 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_URL_PROTOTYPE:
+            return tsc_url_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_URL_SEARCH_PARAMS_PROTOTYPE:
+            return tsc_url_search_params_prototype_value();
         case TSC_INTRINSIC_DEFAULT_REGEXP_PROTOTYPE:
             return tsc_regexp_prototype_value();
         case TSC_INTRINSIC_DEFAULT_PROMISE_PROTOTYPE:
@@ -9022,15 +9027,23 @@ tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {
 
 tsc_value_t tsc_value_url(tsc_url_t* url) {
     if (!url) return tsc_value_null();
+    if (url->object) return tsc_value_object(url->object);
     tsc_object_t* o = tsc_object_new_class(url);
     o->is_url = true;
+    o->prototype = tsc_url_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
+    url->object = o;
     return tsc_value_object(o);
 }
 
 tsc_value_t tsc_value_url_search_params(tsc_url_search_params_t* params) {
     if (!params) return tsc_value_null();
+    if (params->object) return tsc_value_object(params->object);
     tsc_object_t* o = tsc_object_new_class(params);
     o->is_url_search_params = true;
+    o->prototype = tsc_url_search_params_prototype_value();
+    o->prototype_gc_root = tsc_value_gc_root(o->prototype);
+    params->object = o;
     return tsc_value_object(o);
 }
 

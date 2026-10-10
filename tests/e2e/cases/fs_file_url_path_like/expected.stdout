@@ -1,4 +1,5 @@
 sync: true alpha true
+stat owner: true true true
 named: alpha source.txt
 after schedule: true
 promise read: alpha

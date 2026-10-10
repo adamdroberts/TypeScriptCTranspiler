@@ -1,3 +1,7 @@
+The shared native-object boxing helper now keeps a decoded payload root across allocation, fixing a reproduced GC lifetime failure in retained URL owners. Independent Node properties, dual-memory URL regressions and native-boxing neighbors pass; the pinned diagnostic observation was independently audited.
+
+URL and URLSearchParams now retain ordinary constructor/member identities through shared References, imported cells and suspension, with one live parameter list and cached searchParams ownership. Filesystem URL consumers accept boxed paths and publish tagged Stats members; invalid existsSync paths return false. Obsolete URL lowering and purity paths are removed. Complete host parser/API parity and full target coverage remain open.
+
 Removed obsolete expression_value_ generated-C expectations from expression CFG regressions. Node observations and native GC/no-GC behavior agree; runtime assertions remain unchanged and no language-coverage claim is promoted.
 
 Unchecked JavaScript reads, calls and construction use their canonical actual-value fact domain before checker inference; redundant source-formal inference edges are deleted, removing the deep source-alias stack failure. Empty observation plans no longer activate typed eval environments. Full target coverage remains open.

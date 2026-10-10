@@ -3099,17 +3099,17 @@ declare module "node:child_process" {
 }
 
 interface URL {
-    readonly href: string;
-    readonly protocol: string;
-    readonly host: string;
-    readonly hostname: string;
-    readonly username: string;
-    readonly password: string;
-    readonly port: string;
-    readonly pathname: string;
-    readonly search: string;
+    href: string;
+    protocol: string;
+    host: string;
+    hostname: string;
+    username: string;
+    password: string;
+    port: string;
+    pathname: string;
+    search: string;
     readonly searchParams: URLSearchParams;
-    readonly hash: string;
+    hash: string;
     readonly origin: string;
     toJSON(...ignored: any[]): string;
     toLocaleString(...ignored: any[]): string;
@@ -3133,14 +3133,14 @@ interface URLSearchParams {
     toLocaleString(...ignored: any[]): string;
     valueOf(...ignored: any[]): URLSearchParams;
     sort(...ignored: any[]): void;
-    keys(...ignored: any[]): string[];
-    values(...ignored: any[]): string[];
-    entries(...ignored: any[]): ObjectEntry<string, string>[];
+    keys(...ignored: any[]): IterableIterator<string>;
+    values(...ignored: any[]): IterableIterator<string>;
+    entries(...ignored: any[]): IterableIterator<[string, string]>;
     forEach(callback: (value: string, key: string, parent: URLSearchParams) => void, thisArg?: any, ...ignored: any[]): void;
     [Symbol.iterator](): IterableIterator<[string, string]>;
 }
 interface URLSearchParamsConstructor {
-    new (init?: string, ...ignored: any[]): URLSearchParams;
+    new (init?: string | Iterable<Iterable<string>> | { [name: string]: string }, ...ignored: any[]): URLSearchParams;
 }
 declare var URLSearchParams: URLSearchParamsConstructor;
 type URLPathLike = string | URL;
