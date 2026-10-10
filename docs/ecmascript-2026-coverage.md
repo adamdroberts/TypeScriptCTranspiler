@@ -675,7 +675,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-no-lineterminator-here-automatic-semicolon-insertion-list` — List of Grammar Productions with Optional Operands and “[no |LineTerminator| here]”: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Expressions** (`sec-ecmascript-language-expressions`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: evaluation order; references and calls; operators and coercion; assignment and destructuring; spread and optional chains.
-  - Linked local regression evidence: property: tests/property/tagged-template-site.property.test.ts, tests/property/eval-source-flow.property.test.ts, tests/property/suspended-eval-context.property.test.ts; E2E: call_arg_order, dynamic_ops, rest_spread, tagged_template_sites.
+  - Linked local regression evidence: property: tests/property/class-static-owner.property.test.ts, tests/property/tagged-template-site.property.test.ts, tests/property/eval-source-flow.property.test.ts, tests/property/suspended-eval-context.property.test.ts; E2E: class_static_descriptor_owner, call_arg_order, dynamic_ops, rest_spread, tagged_template_sites.
   - Known blockers: Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete.
   - [ ] `sec-ecmascript-language-expressions` — ECMAScript Language: Expressions: exact disposition and partitions missing.
   - [ ] `sec-identifiers` — Identifiers: exact disposition and partitions missing.
@@ -902,7 +902,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-debugger-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Functions and Classes** (`sec-ecmascript-language-functions-and-classes`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary functions; arrows and methods; classes and private state; generators; async functions; async generators.
-  - Linked local regression evidence: property: tests/property/arrow-function.property.test.ts, tests/property/resource-syntax.property.test.ts; generated regression: async-leading-await-chain; stress: arrow_formal_binding_tree, async-leading-await-chain; E2E: function_closures, generic_function_values, classes; negative: resource_context_syntax_diagnostic.
+  - Linked local regression evidence: property: tests/property/class-static-owner.property.test.ts, tests/property/arrow-function.property.test.ts, tests/property/resource-syntax.property.test.ts; generated regression: async-leading-await-chain; stress: arrow_formal_binding_tree, async-leading-await-chain; E2E: class_static_descriptor_owner, function_closures, generic_function_values, classes; negative: resource_context_syntax_diagnostic.
   - Known blockers: ArrowFunction lexical super plus remaining object metadata/private-environment/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete.
   - [ ] `sec-ecmascript-language-functions-and-classes` — ECMAScript Language: Functions and Classes: exact disposition and partitions missing.
   - [ ] `sec-parameter-lists` — Parameter Lists: exact disposition and partitions missing.

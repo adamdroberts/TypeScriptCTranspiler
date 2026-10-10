@@ -2670,7 +2670,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["evaluation order", "references and calls", "operators and coercion", "assignment and destructuring", "spread and optional chains"],
-      "localEvidence": { "property": ["tests/property/tagged-template-site.property.test.ts", "tests/property/eval-source-flow.property.test.ts", "tests/property/suspended-eval-context.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/source-value-flow.ts", "src/compile.ts" ] },
+      "localEvidence": { "property": ["tests/property/class-static-owner.property.test.ts", "tests/property/tagged-template-site.property.test.ts", "tests/property/eval-source-flow.property.test.ts", "tests/property/suspended-eval-context.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["class_static_descriptor_owner", "call_arg_order", "dynamic_ops", "rest_spread", "tagged_template_sites"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["src/emit/index.ts#emitDynamicPropertyAssignment", "src/emit/index.ts#emitDynamicPropertyUpdate", "runtime/tsc_value.c#tsc_value_prepare_property_reference", "src/source-value-flow.ts", "src/compile.ts" ] },
       "knownGaps": ["Private/super References, resumable destructuring assignments, native-module callable owners for suspending arguments, and complete class/with/Annex B eval environments remain incomplete."]
     },
     {
@@ -2690,7 +2690,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary functions", "arrows and methods", "classes and private state", "generators", "async functions", "async generators"],
-      "localEvidence": {"property": ["tests/property/arrow-function.property.test.ts", "tests/property/resource-syntax.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["function_closures", "generic_function_values", "classes"], "negativeDiagnostics": ["resource_context_syntax_diagnostic"], "declarationSurface": [], "implementation": ["src/emit/index.ts", "src/function-static-semantics.ts", "src/control-static-semantics.ts", "src/ecmascript-source.ts"]},
+      "localEvidence": {"property": ["tests/property/class-static-owner.property.test.ts", "tests/property/arrow-function.property.test.ts", "tests/property/resource-syntax.property.test.ts"], "generatedRegression": ["async-leading-await-chain"], "stress": ["arrow_formal_binding_tree", "async-leading-await-chain"], "e2e": ["class_static_descriptor_owner", "function_closures", "generic_function_values", "classes"], "negativeDiagnostics": ["resource_context_syntax_diagnostic"], "declarationSurface": [], "implementation": ["src/emit/index.ts#classConstructorValue", "src/emit/index.ts#emitClassStaticInitializers", "src/emit/index.ts#emitClosureExpression", "src/emit/types.ts", "runtime/tsc_value.c#tsc_value_prepare_property_reference", "src/function-static-semantics.ts", "src/control-static-semantics.ts", "src/ecmascript-source.ts"]},
       "knownGaps": ["ArrowFunction lexical super plus remaining object metadata/private-environment/eval-environment partitions are not yet exact-clause verified; general generator state machines, async generators, and remaining async suspension graphs are incomplete."]
     },
     {

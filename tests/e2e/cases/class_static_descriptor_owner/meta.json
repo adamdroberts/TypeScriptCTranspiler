@@ -1,0 +1,3 @@
+{
+  "description": "Static member initialization, reflection, actual receivers and mutable References retain one constructor descriptor owner"
+}

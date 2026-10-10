@@ -1,0 +1,8 @@
+initialization: initial:false|block:3:false|later true true
+descriptors: false true get value set value
+receivers: 30 true true
+setter: 31 3
+compound: 5 get|rhs|set:5|get
+retained: boxed true false
+deleted: undefined false
+recreated: true

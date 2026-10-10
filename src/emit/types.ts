@@ -288,6 +288,9 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         !declaration.getSourceFile().isDeclarationFile &&
         (ts.isClassLike(declaration) || ts.isInterfaceDeclaration(declaration)));
     if (nativeDeclaration && (ts.isClassLike(nativeDeclaration) || ts.isInterfaceDeclaration(nativeDeclaration))) {
+        // The constructor value owns static descriptors; an instance alone
+        // has the native aggregate layout. Keep typeof SourceClass boxed.
+        if (ts.isClassLike(nativeDeclaration) && t.getConstructSignatures().length > 0) return T_VALUE;
         return classType(nativeTypeName(nativeDeclaration));
     }
 

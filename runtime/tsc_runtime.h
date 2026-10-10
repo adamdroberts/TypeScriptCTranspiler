@@ -973,6 +973,7 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_diagnostic_string(tsc_value_t v);
 tsc_str_t* tsc_value_to_string_coercion(tsc_value_t v);
 tsc_value_t tsc_value_to_property_key(tsc_value_t v);
+tsc_value_t tsc_value_prepare_property_reference(tsc_value_t base, tsc_value_t name);
 tsc_str_t* tsc_value_to_explicit_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);

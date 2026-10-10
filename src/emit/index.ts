@@ -25459,7 +25459,7 @@ class Emitter {
         }
     }
 
-    private capturedCellsFor(owner: ts.FunctionLikeDeclaration | ts.SourceFile): Map<ts.Symbol, CaptureCell> {
+    private capturedCellsFor(owner: ts.FunctionLikeDeclaration | ts.SourceFile | ts.ClassStaticBlockDeclaration): Map<ts.Symbol, CaptureCell> {
         const cached = this.capturedCellsCache.get(owner);
         if (cached) return cached;
         const captures = new Map<ts.Symbol, CaptureCell>();
@@ -25479,7 +25479,7 @@ class Emitter {
             const parameter = declaration ? this.javaScriptFormalParameterForDeclaration(declaration) : null;
             const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
             captures.set(symbol, { type: T_VALUE, cellName, rootCellName: `${cellName}__gc_root`,
-                ...(lexical || parameter && !ts.isSourceFile(owner) && !this.javaScriptParameterListIsSimple(owner)
+                ...(lexical || parameter && ts.isFunctionLike(owner) && !this.javaScriptParameterListIsSimple(owner)
                     ? { initializedCellName: `${cellName}__initialized` } : {}) });
         };
         const addClosureCaptures = (closure: ClosureLikeDeclaration): void => {
@@ -25530,14 +25530,14 @@ class Emitter {
             if (node !== owner && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
             ts.forEachChild(node, visit);
         };
-        if (!ts.isSourceFile(owner)) for (const parameter of owner.parameters) {
+        if (ts.isFunctionLike(owner)) for (const parameter of owner.parameters) {
             for (const identifier of this.test262BindingNames(parameter.name)) addEnvironmentBinding(identifier);
             ts.forEachChild(parameter, visit);
         }
         visit(body);
         // Non-simple async formals retain their initialized state beyond the
         // entry frame. Feed every BoundName into the existing cell collection.
-        if (!ts.isSourceFile(owner) && this.isAsyncDeclaration(owner) &&
+        if (ts.isFunctionLike(owner) && this.isAsyncDeclaration(owner) &&
             !this.javaScriptParameterListIsSimple(owner) && this.isJavaScriptSourceFile(owner.getSourceFile())) {
             for (const parameter of owner.parameters) for (const identifier of this.test262BindingNames(parameter.name)) {
                 const symbol = this.symbolForIdentifier(identifier);
@@ -25547,7 +25547,7 @@ class Emitter {
                     rootCellName: `${cellName}__gc_root`, initializedCellName: `${cellName}__initialized` });
             }
         }
-        if (!ts.isSourceFile(owner) && this.functionHasMappedArgumentsObject(owner)) {
+        if (ts.isFunctionLike(owner) && this.functionHasMappedArgumentsObject(owner)) {
             for (const parameter of owner.parameters) {
                 if (this.isThisParameter(parameter) || !ts.isIdentifier(parameter.name)) continue;
                 const symbol = this.symbolForIdentifier(parameter.name);
@@ -25564,7 +25564,7 @@ class Emitter {
          * one environment binding. TypeScript may assign the declarations
          * distinct symbols; alias them to one physical retained cell. A
          * parameter expression instead requires separate environments. */
-        if (!ts.isSourceFile(owner) && ts.isBlock(body) &&
+        if (ts.isFunctionLike(owner) && ts.isBlock(body) &&
             this.javaScriptParameterListIsSimple(owner)) {
             const parameters = new Map(owner.parameters.flatMap(parameter =>
                 ts.isIdentifier(parameter.name) ? [[parameter.name.text, parameter] as const] : []));
@@ -26091,12 +26091,6 @@ class Emitter {
         return `tsc_value_native_field_store(&(${slot}), ${offset}, ${value})`;
     }
 
-    private nativeStaticFieldStore(owner: string, field: string, type: CType, value: string): string {
-        const slot = `${owner}_${mangleIdent(field)}`;
-        if (type.kind !== "value") return `(${slot} = ${value})`;
-        return `tsc_value_store_rooted(&${slot}, &${owner}_${this.nativeFieldRootName(field)}, ${value})`;
-    }
-
     private interfaceFields(id: ts.InterfaceDeclaration): {
         name: string;
         type: CType;
@@ -26300,18 +26294,8 @@ class Emitter {
         this.protos.line(
             `static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"});`,
         );
-        // Static field externs
         for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && isStatic(m)) {
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName)
-                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                const ft = mapType(m, this.checker);
-                this.protos.line(`extern ${ft.c} ${name}_${mangleIdent(fieldName)};`);
-                if (ft.kind === "value") this.protos.line(`static void* volatile ${name}_${this.nativeFieldRootName(fieldName)};`);
-            }
-        }
-        for (const m of cd.members) {
+            if (isStatic(m)) { if (m.name) this.classMemberPropertyKey(m.name); continue; }
             if (ts.isMethodDeclaration(m)) {
                 if (this.isGenericMethod(m)) continue;
                 const methodName = this.classMethodCName(m.name);
@@ -26319,9 +26303,7 @@ class Emitter {
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve method signature");
                 const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = isStatic(m)
-                    ? this.collectParams(m.parameters)
-                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.protos.line(
                     `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"});`,
                 );
@@ -26331,16 +26313,14 @@ class Emitter {
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve getter signature");
                 const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = isStatic(m) ? [] : [`${name}_t* self`];
+                const params = [`${name}_t* self`];
                 this.protos.line(
                     `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
                 );
             } else if (ts.isSetAccessorDeclaration(m)) {
                 const accessorName = this.classAccessorCName(m.name, "set");
                 if (!accessorName) unsupported(m, "computed accessor names");
-                const params = isStatic(m)
-                    ? this.collectParams(m.parameters)
-                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.protos.line(
                     `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"});`,
                 );
@@ -27574,19 +27554,8 @@ class Emitter {
             | undefined;
         const ctorParams = this.collectParams(ctor?.parameters ?? []);
 
-        // Static field storage (once per class, at file scope).
-        for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m) && isStatic(m)) {
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName)
-                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                const ft = mapType(m, this.checker);
-                this.defs.line(`${ft.c} ${name}_${mangleIdent(fieldName)};`);
-            }
-        }
         if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
             this.defs.line(`static tsc_value_t ${this.classDecoratorReplacementName(cd)};`);
-            this.ensureClassDecoratorAdapter(cd);
         }
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m) && this.classMemberHasDecorators(m)) {
@@ -27594,7 +27563,6 @@ class Emitter {
             }
             if (ts.isMethodDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticMethodDecoratorReplacementName(cd, m)};`);
-                this.ensureClassStaticMethodDecoratorAdapter(cd, m);
             }
             if (ts.isMethodDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceMethodDecoratorReplacementName(cd, m)};`);
@@ -27602,7 +27570,6 @@ class Emitter {
             }
             if (ts.isGetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
-                this.ensureClassStaticGetterDecoratorAdapter(cd, m);
             }
             if (ts.isGetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceGetterDecoratorReplacementName(cd, m)};`);
@@ -27610,7 +27577,6 @@ class Emitter {
             }
             if (ts.isSetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
-                this.ensureClassStaticSetterDecoratorAdapter(cd, m);
             }
             if (ts.isSetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
                 this.defs.line(`static tsc_value_t ${this.classInstanceSetterDecoratorReplacementName(cd, m)};`);
@@ -27703,6 +27669,7 @@ class Emitter {
         this.defs.line();
 
         for (const m of cd.members) {
+            if (isStatic(m)) continue;
             if (ts.isMethodDeclaration(m) && m.body) {
                 if (this.isGenericMethod(m)) continue;
                 const methodName = this.classMethodCName(m.name);
@@ -27710,9 +27677,7 @@ class Emitter {
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve method signature");
                 const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = isStatic(m)
-                    ? this.collectParams(m.parameters)
-                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.defs.open(
                     `static inline ${ret.c} ${name}_${methodName}(${params.length ? params.join(", ") : "void"})`,
                 );
@@ -27725,7 +27690,7 @@ class Emitter {
                         unsupported(m, "async methods must return Promise<T>");
                     }
                 }
-                if (!isStatic(m)) this.currentClass = name;
+                this.currentClass = name;
                 if (isGenerator) {
                     try {
                         this.emitGeneratorFunctionLikeBody(
@@ -27734,7 +27699,7 @@ class Emitter {
                             mappedRet,
                             m.parameters,
                             this.capturedCellsFor(m),
-                            isStatic(m) ? null : { c: "self", ty: classType(name) },
+                            { c: "self", ty: classType(name) },
                         );
                     } finally {
                         this.currentClass = null;
@@ -27755,7 +27720,7 @@ class Emitter {
                                 this.defs,
                                 methodBody,
                                 m.parameters,
-                                isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                { c: "self", ty: classType(name) },
                             );
                             if (!handledAsyncAwait) {
                                 if (isAsync && this.containsAwaitInFunctionBody(methodBody)) {
@@ -27781,11 +27746,11 @@ class Emitter {
                 const sig = this.checker.getSignatureFromDeclaration(m);
                 if (!sig) unsupported(m, "could not resolve getter signature");
                 const ret = this.mapRuntimeType(m, sig.getReturnType());
-                const params = isStatic(m) ? [] : [`${name}_t* self`];
+                const params = [`${name}_t* self`];
                 this.defs.open(
                     `static inline ${ret.c} ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
                 );
-                if (!isStatic(m)) this.currentClass = name;
+                this.currentClass = name;
                 this.returnStack.push(ret);
                 try {
                     this.emitStmtList(this.defs, m.body.statements);
@@ -27798,13 +27763,11 @@ class Emitter {
             } else if (ts.isSetAccessorDeclaration(m) && m.body) {
                 const accessorName = this.classAccessorCName(m.name, "set");
                 if (!accessorName) unsupported(m, "computed accessor names");
-                const params = isStatic(m)
-                    ? this.collectParams(m.parameters)
-                    : [`${name}_t* self`, ...this.collectParams(m.parameters)];
+                const params = [`${name}_t* self`, ...this.collectParams(m.parameters)];
                 this.defs.open(
                     `static inline void ${name}_${accessorName}(${params.length ? params.join(", ") : "void"})`,
                 );
-                if (!isStatic(m)) this.currentClass = name;
+                this.currentClass = name;
                 this.returnStack.push(T_VOID);
                 try {
                     this.emitStmtList(this.defs, m.body.statements);
@@ -27820,23 +27783,35 @@ class Emitter {
 
     private emitClassStaticInitializers(buf: CBuf, cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = nativeTypeName(cd);
-        for (const m of cd.members) {
-            if (ts.isPropertyDeclaration(m)) {
-                if (!isStatic(m)) continue;
-                const fieldName = this.staticPropertyName(m.name);
-                if (!fieldName)
-                    unsupported(m.name, "computed property names in class must resolve to a string or number literal");
-                const ft = mapType(m, this.checker);
-                const value = m.initializer
-                    ? this.coerce(this.emitExpr(m.initializer), ft, m.initializer)
-                    : this.zeroValue(ft);
-                buf.line(`${this.nativeStaticFieldStore(name, fieldName, ft, value)};`);
-                continue;
+        buf.line(`(void)(${this.classConstructorValue(cd, true).c});`);
+        const constructor = this.classConstructorValue(cd);
+        this.functionThisStack.push(constructor);
+        this.functionActivationBindings.push(new Map<ArrowLexicalCaptureKind, EmitResult>([
+            ["this", constructor], ["new-target", { c: "tsc_value_undefined()", ty: T_VALUE }],
+        ]));
+        try {
+            for (const m of cd.members) {
+                if (ts.isPropertyDeclaration(m)) {
+                    if (!isStatic(m)) continue;
+                    const { propertyKey } = this.classMemberPropertyKey(m.name);
+                    const initializer = m.initializer ? this.emitExpr(m.initializer) : null;
+                    const value = initializer
+                        ? this.boxObjectIdentity(initializer.c, initializer.ty, m.initializer!)
+                        : "tsc_value_undefined()";
+                    buf.line(`if (!tsc_value_define_property_desc(${constructor.c}, ${propertyKey}, ${value}, ` +
+                        `true, true, true, true, true, true, true)) ` +
+                        `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"));`);
+                    continue;
+                }
+                if (ts.isClassStaticBlockDeclaration(m)) {
+                    this.cellScopes.push(this.capturedCellsFor(m));
+                    try { this.emitStmt(buf, m.body); }
+                    finally { this.cellScopes.pop(); }
+                }
             }
-            if (ts.isClassStaticBlockDeclaration(m)) {
-                for (const stmt of m.body.statements) this.emitStmt(buf, stmt);
-            }
+        } finally {
+            this.functionActivationBindings.pop();
+            this.functionThisStack.pop();
         }
     }
 
@@ -28098,64 +28073,36 @@ class Emitter {
                     buf.line(`(void)(${result});`);
                 }
             }
-            if (ts.isPropertyDeclaration(member) && isStatic(member)) {
-                const list = this.classFieldDecoratorInitializersName(cd, member);
-                const fieldType = mapType(member, this.checker);
-                const current = {
-                    c: `${nativeTypeName(cd)}_${mangleIdent(memberName)}`,
-                    ty: fieldType,
-                };
-                const transformed = {
-                    c: `tsc_decorator_apply_field_initializers(${list}, ${this.coerce(current, T_VALUE, member)})`,
-                    ty: T_VALUE,
-                };
-                this.ensureDecoratorApplyFieldInitializersHelper();
-                buf.line(`${current.c} = ${this.coerce(transformed, fieldType, member)};`);
+            if (isStatic(member)) {
+                const target = this.classConstructorValue(cd).c;
+                const key = this.stringLit(memberName);
+                if (ts.isPropertyDeclaration(member)) {
+                    const list = this.classFieldDecoratorInitializersName(cd, member);
+                    this.ensureDecoratorApplyFieldInitializersHelper();
+                    buf.line(`if (!tsc_value_define_property_desc(${target}, ${key}, ` +
+                        `tsc_decorator_apply_field_initializers(${list}, tsc_value_get_prop(${target}, ${key})), ` +
+                        `true, true, true, true, true, true, true)) ` +
+                        `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"));`);
+                } else if (ts.isMethodDeclaration(member)) {
+                    buf.line(`(void)tsc_value_define_property_desc(${target}, ${key}, ${this.classStaticMethodDecoratorValue(cd, member).c}, ` +
+                        `true, true, true, false, true, true, true);`);
+                } else {
+                    const getter = ts.isGetAccessorDeclaration(member);
+                    const value = getter ? this.classStaticGetterDecoratorValue(cd, member).c
+                        : this.classStaticSetterDecoratorValue(cd, member as ts.SetAccessorDeclaration).c;
+                    buf.line(`(void)tsc_value_object_define_${getter ? "getter" : "setter"}(${target}, ${key}, ${value});`);
+                }
             }
         }
     }
 
     private classDecoratorValue(cd: ts.ClassDeclaration): EmitResult {
         const replacement = this.classDecoratorReplacementName(cd);
-        const adapter = this.ensureClassDecoratorAdapter(cd);
-        const length = cd.members.find(ts.isConstructorDeclaration)?.parameters.length ?? 0;
-        const runtimeName = this.classRuntimeName(cd);
         return {
             c: `({ tsc_value_t _decorator_current = ${replacement}; ` +
-                `tsc_value_is_undefined(_decorator_current) ? ` +
-                `tsc_value_function_class_named(${adapter}, NULL, ${length}.0, ` +
-                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})) : ` +
-                `_decorator_current; })`,
+                `tsc_value_is_undefined(_decorator_current) ? ${this.classConstructorValue(cd).c} : _decorator_current; })`,
             ty: T_VALUE,
         };
-    }
-
-    private ensureClassDecoratorAdapter(cd: ts.ClassDeclaration): string {
-        if (!cd.name) unsupported(cd, "decorated classes require a named class");
-        const className = nativeTypeName(cd);
-        const name = `${className}_class_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const ctor = cd.members.find(ts.isConstructorDeclaration);
-        const paramTypes = (ctor?.parameters ?? []).map((param) => this.prepareType(mapType(param, this.checker)));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("(void)this_arg;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        const callArgs: string[] = [];
-        for (let i = 0; i < paramTypes.length; i++) {
-            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
-            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, cd));
-        }
-        const call = `${className}_new(${callArgs.join(", ")})`;
-        buf.line(`return ${this.coerce({ c: call, ty: classType(className) }, T_VALUE, cd)};`);
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
     }
 
     private classStaticMethodDecoratorValue(
@@ -28163,9 +28110,11 @@ class Emitter {
         member: ts.MethodDeclaration,
     ): EmitResult {
         const replacement = this.classStaticMethodDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassStaticMethodDecoratorAdapter(cd, member);
+        const key = this.staticPropertyName(member.name);
+        if (key === null) unsupported(member, "class static member key is outside the canonical definition plan");
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${this.classConstructorValue(cd).c}, ${this.stringLit(key)}), ${this.stringLit('value')})`;
         return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`,
             ty: T_VALUE,
         };
     }
@@ -28177,58 +28126,6 @@ class Emitter {
         if (!this.isGenericMethod(member)) return `${nativeTypeName(owner)}_${memberName}`;
         const erased = new Map((member.typeParameters ?? []).map(parameter => [parameter.name.text, T_VALUE]));
         return this.ensureGenericMethodSpecialization(member, nativeTypeName(owner), erased);
-    }
-
-    private ensureClassStaticMethodDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.MethodDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated static methods require a named class");
-        if (!isStatic(member)) unsupported(member, "static method decorator adapter requires a static method");
-        const methodName = this.classMethodCName(member.name);
-        if (!methodName) unsupported(member, "computed static method names");
-        const name = `${nativeTypeName(cd)}_${methodName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const sig = this.checker.getSignatureFromDeclaration(member);
-        if (!sig) unsupported(member, "could not resolve static method signature");
-        const params = sig.getParameters();
-        const paramTypes = params.map((param) => {
-            const decl = param.valueDeclaration;
-            if (!decl || !ts.isParameter(decl)) {
-                unsupported(member, "static method decorator parameter declaration unavailable");
-            }
-            return this.prepareType(mapTsType(
-                decl,
-                this.checker.getTypeOfSymbolAtLocation(param, member),
-                this.checker,
-            ));
-        });
-        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("(void)this_arg;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        const callArgs: string[] = [];
-        for (let i = 0; i < paramTypes.length; i++) {
-            const raw = `(${i} < args->len ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`;
-            callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[i]!, member));
-        }
-        const call = `${this.nativeClassMethodValueCallee(cd, member)}(${callArgs.join(", ")})`;
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`${call};`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = ${call};`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
     }
 
     private classInstanceMethodDecoratorValue(
@@ -28349,6 +28246,16 @@ class Emitter {
         return name;
     }
 
+    private classMemberPropertyKey(name: ts.PropertyName): { publicName: string; propertyKey: string } {
+        if (ts.isPrivateIdentifier(name)) unsupported(name, "class member key is outside the canonical definition plan");
+        const symbol = ts.isComputedPropertyName(name) ? this.wellKnownSymbolName(name.expression) : null;
+        const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name);
+        if (publicName === null) unsupported(name, "class member key is outside the canonical definition plan");
+        return { publicName, propertyKey: symbol
+            ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
+            : this.stringLit(publicName) };
+    }
+
     private classInstanceMembersForValueBox(cd: ts.ClassDeclaration): {
         publicName: string; propertyKey: string; owner: ts.ClassDeclaration;
         member: { kind: "method"; method: ts.MethodDeclaration } |
@@ -28367,12 +28274,7 @@ class Emitter {
                 if (isStatic(declaration) || !(ts.isMethodDeclaration(declaration) ||
                     ts.isGetAccessorDeclaration(declaration) || ts.isSetAccessorDeclaration(declaration))) continue;
                 if (!declaration.body) continue;
-                const symbol = ts.isComputedPropertyName(declaration.name)
-                    ? this.wellKnownSymbolName(declaration.name.expression) : null;
-                const publicName = symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(declaration.name);
-                if (publicName === null) unsupported(declaration.name, "ordinary class member key is unavailable");
-                const propertyKey = symbol ? `tsc_symbol_property_key(${WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS[symbol]}())`
-                    : `tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)})`;
+                const { publicName, propertyKey } = this.classMemberPropertyKey(declaration.name);
                 if (ts.isMethodDeclaration(declaration)) {
                     members.set(propertyKey, { publicName, propertyKey, owner, member: { kind: "method", method: declaration } });
                 } else {
@@ -28501,7 +28403,7 @@ class Emitter {
             `tsc_value_object(tsc_native_object_owner_get(&${native}->__tsc_object_owner, ${native}, ${initialize})) : tsc_value_null(); })`;
     }
 
-    private classConstructorValue(cd: ts.ClassDeclaration): EmitResult {
+    private classConstructorValue(cd: ts.ClassDeclaration, initializeMembers = false): EmitResult {
         if (!cd.name) unsupported(cd, "class constructor value requires a named class");
         const className = nativeTypeName(cd);
         const runtimeName = this.classRuntimeName(cd);
@@ -28537,19 +28439,18 @@ class Emitter {
         const constructor = this.withCallableSourceText(
             `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, ` +
             `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
+        if (!initializeMembers) return { c: constructor, ty: T_VALUE };
         const staticDefinitions: string[] = [];
+        const base = this.baseClassDecl(cd);
+        if (base) staticDefinitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${this.classConstructorValue(base).c})) ` +
+            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
         for (const member of cd.members) {
             if (!isStatic(member)) continue;
-            const propertyName = member.name ? this.staticPropertyName(member.name) : null;
-            if (propertyName == null) continue;
-            const key = `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)})`;
+            if (ts.isPropertyDeclaration(member) || ts.isClassStaticBlockDeclaration(member)) continue;
+            if (!member.name) unsupported(member, "class member key is outside the canonical definition plan");
+            const { publicName: propertyName, propertyKey: key } = this.classMemberPropertyKey(member.name);
             if (ts.isMethodDeclaration(member)) {
-                const methodAdapter = this.ensureClassStaticMethodDecoratorAdapter(cd, member);
-                const methodLength = member.parameters.length;
-                const methodValue = this.classMemberHasDecorators(member)
-                    ? this.classStaticMethodDecoratorValue(cd, member).c
-                    : this.withCallableSourceText(`tsc_value_function_closure_named(${methodAdapter}, NULL, ${methodLength}.0, ` +
-                        `tsc_str_from_lit("${escapeCString(propertyName)}", ${utf8ByteLen(propertyName)}))`, member);
+                const methodValue = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
                 staticDefinitions.push(
                     `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${methodValue}, ` +
                     `true, true, true, false, true, true, true)) ` +
@@ -28557,16 +28458,14 @@ class Emitter {
                 );
                 continue;
             }
-            if (ts.isPropertyDeclaration(member)) {
-                const fieldType = this.prepareType(mapType(member, this.checker));
-                const fieldName = `${className}_${mangleIdent(propertyName)}`;
-                const fieldValue = this.coerce({ c: fieldName, ty: fieldType }, T_VALUE, member);
-                staticDefinitions.push(
-                    `if (!tsc_value_define_property_desc(_class_constructor, ${key}, ${fieldValue}, ` +
-                    `true, true, true, true, true, true, true)) ` +
-                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"))`,
-                );
+            if (ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
+                const kind = ts.isGetAccessorDeclaration(member) ? "get" : "set";
+                const value = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
+                staticDefinitions.push(`tsc_value_object_define_${kind === "get" ? "getter" : "setter"}(_class_constructor, ${key}, ${value})`);
+                staticDefinitions.push(`tsc_value_define_property_desc(_class_constructor, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
+                continue;
             }
+
         }
         return {
             c: staticDefinitions.length === 0
@@ -28588,46 +28487,13 @@ class Emitter {
         member: ts.GetAccessorDeclaration,
     ): EmitResult {
         const replacement = this.classStaticGetterDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassStaticGetterDecoratorAdapter(cd, member);
+        const key = this.staticPropertyName(member.name);
+        if (key === null) unsupported(member, "class static member key is outside the canonical definition plan");
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${this.classConstructorValue(cd).c}, ${this.stringLit(key)}), ${this.stringLit('get')})`;
         return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`,
             ty: T_VALUE,
         };
-    }
-
-    private ensureClassStaticGetterDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.GetAccessorDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated static getters require a named class");
-        if (!isStatic(member)) unsupported(member, "static getter decorator adapter requires a static getter");
-        const accessorName = this.classAccessorCName(member.name, "get");
-        if (!accessorName) unsupported(member, "computed static getter names");
-        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const sig = this.checker.getSignatureFromDeclaration(member);
-        if (!sig) unsupported(member, "could not resolve static getter signature");
-        const ret = this.prepareType(this.mapRuntimeType(member, sig.getReturnType()));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("(void)this_arg;");
-        buf.line("(void)args;");
-        const call = `${nativeTypeName(cd)}_${accessorName}()`;
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`${call};`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = ${call};`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, member)};`);
-        }
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
     }
 
     private classInstanceGetterDecoratorValue(
@@ -28682,41 +28548,13 @@ class Emitter {
         member: ts.SetAccessorDeclaration,
     ): EmitResult {
         const replacement = this.classStaticSetterDecoratorReplacementName(cd, member);
-        const adapter = this.ensureClassStaticSetterDecoratorAdapter(cd, member);
+        const key = this.staticPropertyName(member.name);
+        if (key === null) unsupported(member, "class static member key is outside the canonical definition plan");
+        const original = `tsc_value_get_prop(tsc_value_get_own_property_descriptor(${this.classConstructorValue(cd).c}, ${this.stringLit(key)}), ${this.stringLit('set')})`;
         return {
-            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? tsc_value_function_generic(${adapter}, NULL) : _decorator_current; })`,
+            c: `({ tsc_value_t _decorator_current = ${replacement}; tsc_value_is_undefined(_decorator_current) ? ${original} : _decorator_current; })`,
             ty: T_VALUE,
         };
-    }
-
-    private ensureClassStaticSetterDecoratorAdapter(
-        cd: ts.ClassDeclaration,
-        member: ts.SetAccessorDeclaration,
-    ): string {
-        if (!cd.name) unsupported(cd, "decorated static setters require a named class");
-        if (!isStatic(member)) unsupported(member, "static setter decorator adapter requires a static setter");
-        const accessorName = this.classAccessorCName(member.name, "set");
-        if (!accessorName) unsupported(member, "computed static setter names");
-        const name = `${nativeTypeName(cd)}_${accessorName}_decorator_original`;
-        if (this.nodeFunctionAdapters.has(name)) return name;
-        this.nodeFunctionAdapters.add(name);
-        const param = member.parameters[0];
-        if (!param) unsupported(member, "setter must have a value parameter");
-        const paramType = this.prepareType(mapType(param, this.checker));
-        const signature = `static tsc_value_t ${name}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
-        this.protos.line(signature + ";");
-        const buf = new CBuf();
-        buf.open(signature);
-        buf.line("(void)env;");
-        buf.line("(void)this_arg;");
-        buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
-        const raw = "(0 < args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined())";
-        buf.line(`${nativeTypeName(cd)}_${accessorName}(${this.coerce({ c: raw, ty: T_VALUE }, paramType, member)});`);
-        buf.line("return tsc_value_undefined();");
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
     }
 
     private classInstanceSetterDecoratorValue(
@@ -29063,6 +28901,8 @@ class Emitter {
     }
 
     private signatureThisType(sig: ts.Signature, node: ts.Node): CType | null {
+        if ((ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) &&
+            isStatic(node)) return T_VALUE;
         if (hasImplicitJavaScriptThis(node)) return T_VALUE;
         const thisParam = sig.thisParameter;
         let ty: CType | null = null;
@@ -30654,10 +30494,9 @@ class Emitter {
                         callback.line(`goto __tsc_cfg_operation_${stateNode.targets.get(id)!.id};`);
                     };
                     const preparePropertyReference = (reference: Extract<ResumableReference, { kind: "property" }>): void => {
-                        callback.line(`if (tsc_value_is_nullish(${read(reference.base)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a property of null or undefined"));`);
-                        // GetValue/PutValue in the pinned edition update the
-                        // Reference's [[ReferencedName]] after ToObject.
-                        store(reference.key, `tsc_value_to_property_key(${read(reference.key)})`);
+                        // GetValue/PutValue retain the same normalized name in
+                        // the Reference, including across await/yield edges.
+                        store(reference.key, `tsc_value_prepare_property_reference(${read(reference.base)}, ${read(reference.key)})`);
                     };
                     const getReference = (reference: ResumableReference): string => {
                         if (reference.kind !== "property") return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
@@ -36408,6 +36247,14 @@ class Emitter {
         }
 
         if (ts.isIdentifier(expr)) {
+            const classBinding = this.symbolForIdentifier(expr)?.declarations?.find(ts.isClassDeclaration);
+            if (classBinding && this.isNodeWithin(expr, classBinding) &&
+                !classBinding.heritageClauses?.some(clause => this.isNodeWithin(expr, clause))) {
+                // ClassDefinitionEvaluation initializes the inner class name
+                // before its static elements; the outer binding stays in TDZ.
+                return this.classConstructorValue(classBinding);
+            }
+
             const evalShadow = this.environmentShadowReferenceName(expr);
             if (evalShadow) return { c: `tsc_environment_reference_get(${this.stringLit(evalShadow)})`, ty: T_VALUE };
             if (this.isUnresolvedParameterScopeReference(expr)) {
@@ -37691,109 +37538,37 @@ class Emitter {
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
         prefix: boolean,
     ): EmitResult | null {
-        let recvExpr: ts.Expression | null = null;
-        let keyExpr: ts.Expression | null = null;
-        let indexUpdate = false;
-        let symbolUpdate = false;
-        let computedUpdate = false;
-        let literalKey: string | null = null;
-
-        if (ts.isPropertyAccessExpression(operand)) {
-            if (!ts.isIdentifier(operand.name)) return null;
-            recvExpr = operand.expression;
-            literalKey = operand.name.text;
-            if (this.namespaceMemberName(operand.name)) return null;
-            if (ts.isIdentifier(recvExpr)) {
-                const sym = this.checker.getSymbolAtLocation(recvExpr);
-                const cd = sym
-                    ?.getDeclarations()
-                    ?.find(ts.isClassDeclaration);
-                const staticField = cd?.members.find(
-                    (m) =>
-                        ts.isPropertyDeclaration(m) &&
-                        m.name &&
-                        this.staticPropertyName(m.name) === operand.name.text &&
-                        isStatic(m),
-                );
-                if (staticField) return null;
-            }
-        } else if (ts.isElementAccessExpression(operand)) {
-            recvExpr = operand.expression;
-            keyExpr = operand.argumentExpression;
-        } else {
-            return null;
-        }
-
+        if (!(ts.isPropertyAccessExpression(operand) || ts.isElementAccessExpression(operand))) return null;
+        if (ts.isPropertyAccessExpression(operand) &&
+            (!ts.isIdentifier(operand.name) || this.namespaceMemberName(operand.name))) return null;
+        const recvExpr = operand.expression;
         const rawRecv = this.emitExpr(recvExpr);
-        const mappedRecv = this.prepareType(mapType(recvExpr, this.checker));
-        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp" || rawRecv.ty.kind === "buffer"
-            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : rawRecv.ty.kind === "array" &&
-                (rawRecv.ty.elem?.kind === "value" ||
-                    (mappedRecv.kind === "array" && mappedRecv.elem?.kind === "value"))
-                ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
-                : rawRecv;
+        const recv = ["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind)
+            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE } : rawRecv;
         if (recv.ty.kind !== "value") return null;
-
-        const specs: SequencedCallArg[] = [
+        const keyExpr = ts.isElementAccessExpression(operand) ? operand.argumentExpression : null;
+        const key = keyExpr ? this.emitExpr(keyExpr)
+            : { c: this.stringLit((operand as ts.PropertyAccessExpression).name.text), ty: T_STRING };
+        return this.emitSequencedExpr(T_VALUE, [
             { value: recv, target: T_VALUE, node: recvExpr },
-        ];
-        if (keyExpr) {
-            const key = this.emitExpr(keyExpr);
-            indexUpdate = key.ty.kind === "number";
-            symbolUpdate = key.ty.kind === "symbol";
-            computedUpdate = key.ty.kind === "value";
-            if (symbolUpdate && !this.isSupportedWellKnownSymbolExpression(keyExpr)) {
-                unsupported(keyExpr, "computed update needs a supported well-known Symbol key");
-            }
-            specs.push({
-                value: key,
-                target: indexUpdate
-                    ? T_NUMBER
-                    : symbolUpdate
-                        ? T_SYMBOL
-                        : computedUpdate
-                            ? T_VALUE
-                            : T_STRING,
-                node: keyExpr,
-            });
-        }
-
-        const fn = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
-        return this.emitSequencedExpr(T_VALUE, specs, (values) => {
-            const obj = values[0]!;
-            const keyC = keyExpr
-                ? values[1]!
-                : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
-            const cur = this.freshTemp("_dynupd");
-            const next = this.freshTemp("_dynupd_next");
-            const curRoot = this.freshTemp("_dynupd_gc_root");
-            const nextRoot = this.freshTemp("_dynupd_next_gc_root");
-            const pinCur = `void* volatile ${curRoot} = tsc_value_gc_root(${cur}); (void)${curRoot};`;
-            const pinNext = `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot};`;
-            if (!indexUpdate && !symbolUpdate && !computedUpdate) {
-                const cache = this.freshTemp("_prop_cache");
-                const existing = `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
-                const set = `tsc_value_set_prop_cached(${obj}, ${keyC}, ${next}, &${cache})`;
-                return `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${this.emitPropertyWriteStatement(set, operand)}; ${prefix ? next : cur}; })`;
-            }
-            const existing = indexUpdate
-                ? `tsc_value_get_index(${obj}, ${keyC})`
-                : symbolUpdate
-                    ? `tsc_value_get_symbol_prop(${obj}, ${keyC})`
-                    : `tsc_value_get_computed_prop(${obj}, ${keyC})`;
-            const set = indexUpdate
-                ? `tsc_value_set_index(${obj}, ${keyC}, ${next})`
-                : symbolUpdate
-                    ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${next})`
-                    : `tsc_value_set_computed_prop(${obj}, ${keyC}, ${next})`;
-            return `({ tsc_value_t ${cur} = tsc_value_to_numeric(${existing}); ${pinCur} tsc_value_t ${next} = ${fn}(${cur}); ${pinNext} ${this.emitPropertyWriteStatement(set, operand)}; ${prefix ? next : cur}; })`;
+            { value: key, target: T_VALUE, node: keyExpr ?? operand },
+        ], ([base, rawName]) => {
+            const name = this.freshTemp("_reference_name"), nameRoot = this.freshTemp("_reference_name_root");
+            const current = this.freshTemp("_reference_numeric"), currentRoot = this.freshTemp("_reference_numeric_root");
+            const next = this.freshTemp("_reference_next"), nextRoot = this.freshTemp("_reference_next_root");
+            const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+            const write = this.emitPropertyWriteStatement(`tsc_value_set_computed_prop(${base}, ${name}, ${next})`, operand,
+                !!this.moduleNamespacePlanForExpression(recvExpr));
+            return `({ tsc_value_t ${name} = tsc_value_prepare_property_reference(${base}, ${rawName}); ` +
+                `void* volatile ${nameRoot} = tsc_value_gc_root(${name}); (void)${nameRoot}; ` +
+                `tsc_value_t ${current} = tsc_value_to_numeric(tsc_value_get_computed_prop(${base}, ${name})); ` +
+                `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); (void)${currentRoot}; ` +
+                `tsc_value_t ${next} = ${operation}(${current}); ` +
+                `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot}; ` +
+                `${write}; ${prefix ? next : current}; })`;
         });
     }
 
-    /** Addition keeps one source tree and lowers its postorder worklist into
-     * flat staged values. Every operation runs after both operand evaluations;
-     * parenthesized subtrees keep their own conversion/completion boundaries. */
     private emitAdditionExpression(root: ts.BinaryExpression): EmitResult {
         const results = new Map<ts.Expression, EmitResult>();
         const pending: { expression: ts.Expression; exit: boolean }[] = [{ expression: root, exit: false }];
@@ -38256,12 +38031,6 @@ class Emitter {
         if (!sig) unsupported(accessor.decl, "could not resolve getter signature");
         const ret = this.mapRuntimeType(accessor.decl, sig.getReturnType());
         const callee = `${accessor.owner}_${name}`;
-        if (isStatic(accessor.decl)) {
-            if (this.classMemberHasDecorators(accessor.decl)) {
-                return this.emitDecoratedStaticGetterAccess(pa, accessor.decl, callee, ret);
-            }
-            return this.emitSequencedCall(callee, ret, []);
-        }
         if (!recv || recv.ty.kind !== "class" || !recv.ty.className) {
             unsupported(pa.expression, "class getter receiver must be a class instance");
         }
@@ -38327,69 +38096,6 @@ class Emitter {
         );
     }
 
-    private emitDecoratedStaticGetterAccess(
-        pa: ts.PropertyAccessExpression,
-        getter: ts.GetAccessorDeclaration,
-        callee: string,
-        ret: CType,
-    ): EmitResult {
-        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
-            unsupported(getter, "decorated static getter requires a containing class");
-        }
-        return this.emitSequencedExpr(ret, [], () =>
-            this.decoratedStaticGetterReadExpr(pa, getter, callee, ret),
-        );
-    }
-
-    private decoratedStaticGetterReadExpr(
-        node: ts.Expression,
-        getter: ts.GetAccessorDeclaration,
-        callee: string,
-        ret: CType,
-    ): string {
-        if (!getter.parent || !ts.isClassDeclaration(getter.parent)) {
-            unsupported(getter, "decorated static getter requires a containing class");
-        }
-        const replacement = this.classStaticGetterDecoratorReplacementName(getter.parent, getter);
-        const fn = this.freshTemp("_getter_replacement");
-        const out = this.freshTemp("_getter_result");
-        const av = this.freshTemp("_getter_args");
-        const applied = {
-            c: `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`,
-            ty: T_VALUE,
-        };
-        return (
-            `({ tsc_value_t ${fn} = ${replacement}; ` +
-            `${ret.c} ${out} = ${this.zeroValue(ret)}; ` +
-            `if (tsc_value_is_undefined(${fn})) { ${out} = ${callee}(); } ` +
-            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-            `${out} = ${this.coerce(applied, ret, node)}; } ` +
-            `${out}; })`
-        );
-    }
-
-    private decoratedStaticSetterCallExpr(
-        node: ts.Expression,
-        setter: ts.SetAccessorDeclaration,
-        callee: string,
-        paramType: CType,
-        assigned: string,
-    ): string {
-        if (!setter.parent || !ts.isClassDeclaration(setter.parent)) {
-            unsupported(setter, "decorated static setter requires a containing class");
-        }
-        const replacement = this.classStaticSetterDecoratorReplacementName(setter.parent, setter);
-        const fn = this.freshTemp("_setter_replacement");
-        const av = this.freshTemp("_setter_args");
-        return (
-            `({ tsc_value_t ${fn} = ${replacement}; ` +
-            `if (tsc_value_is_undefined(${fn})) { ${callee}(${assigned}); } ` +
-            `else { tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), 1); ` +
-            `tsc_array_push_value(${av}, ${this.coerce({ c: assigned, ty: paramType }, T_VALUE, node)}); ` +
-            `(void)tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av})); } })`
-        );
-    }
-
     private decoratedInstanceSetterCallExpr(
         node: ts.Expression,
         setter: ts.SetAccessorDeclaration,
@@ -38425,7 +38131,7 @@ class Emitter {
         }
         const left = bin.left;
         const accessor = this.classAccessorForPropertyAccess(left, "set");
-        if (!accessor) return null;
+        if (!accessor || isStatic(accessor.decl)) return null;
         const param = accessor.decl.parameters[0];
         if (!param) unsupported(accessor.decl, "setter must have a value parameter");
         const paramType = this.prepareType(mapType(param, this.checker));
@@ -38446,43 +38152,6 @@ class Emitter {
         const getterType = getter && getterSig
             ? this.mapRuntimeType(getter.decl, getterSig.getReturnType())
             : null;
-        if (isStatic(accessor.decl)) {
-            const setCall = (assigned: string): string =>
-                this.classMemberHasDecorators(accessor.decl)
-                    ? this.decoratedStaticSetterCallExpr(left, accessor.decl, callee, paramType, assigned)
-                    : `${callee}(${assigned})`;
-            return this.emitSequencedExpr(
-                paramType,
-                [{ value: rhs, target: paramType, node: bin.right }],
-                ([value]) => {
-                    if (!getter || !getterName || !getterType) {
-                        return `({ ${setCall(value!)}; ${value}; })`;
-                    }
-                    const cur = this.freshTemp("_accessor_cur");
-                    const next = this.freshTemp("_accessor_next");
-                    const getCallee = `${getter.owner}_${getterName}`;
-                    const getCall = isStatic(getter.decl) && this.classMemberHasDecorators(getter.decl)
-                        ? this.decoratedStaticGetterReadExpr(left, getter.decl, getCallee, getterType)
-                        : `${getCallee}()`;
-                    const current = this.coerce({ c: getCall, ty: getterType }, paramType, left);
-                    if (this.isLogicalAssignmentOperator(op)) {
-                        return `({ ${paramType.c} ${cur} = ${current}; ` +
-                            this.classAccessorLogicalAssignmentValue(
-                                op,
-                                paramType,
-                                cur,
-                                value!,
-                                next,
-                                setCall,
-                                left,
-                            ) +
-                            `; })`;
-                    }
-                    const assigned = this.classAccessorCompoundValue(op, paramType, cur, value!);
-                    return `({ ${paramType.c} ${cur} = ${current}; ${paramType.c} ${next} = ${assigned}; ${setCall(next)}; ${next}; })`;
-                },
-            );
-        }
         const recv = this.emitExpr(left.expression);
         if (recv.ty.kind !== "class" || !recv.ty.className) {
             return null;
@@ -38657,18 +38326,6 @@ class Emitter {
             : this.staticPropertyName(ts.factory.createComputedPropertyName(expr.argumentExpression));
         if (field === null) return null;
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return null;
-        if (ts.isIdentifier(expr.expression)) {
-            const owner = this.staticClassReceiver(expr.expression);
-            const declaration = owner?.members.find(member => ts.isPropertyDeclaration(member) &&
-                isStatic(member) && this.staticPropertyName(member.name) === field);
-            if (owner?.name && declaration) {
-                const type = mapType(declaration, this.checker);
-                if (type.kind !== "value") return null;
-                const name = nativeTypeName(owner);
-                return { setup: [], get: `${name}_${mangleIdent(field)}`,
-                    set: value => this.nativeStaticFieldStore(name, field, type, value) };
-            }
-        }
         const receiver = this.emitExpr(expr.expression);
         if (receiver.ty.kind !== "class") return null;
         const receiverType = this.expressionDeclaredOrCurrentType(expr.expression);
@@ -39081,80 +38738,20 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
-        let recvExpr: ts.Expression | null = null;
-        let keyExpr: ts.Expression | null = null;
-        let key: EmitResult | null = null;
-        let indexAssignment = false;
-        let computedAssignment = false;
-        let literalKey: string | null = null;
-
-        if (ts.isPropertyAccessExpression(bin.left)) {
-            const left = bin.left;
-            if (!ts.isIdentifier(left.name)) return null;
-            recvExpr = left.expression;
-            literalKey = left.name.text;
-            if (this.namespaceMemberName(left.name)) return null;
-            if (ts.isIdentifier(recvExpr)) {
-                const sym = this.checker.getSymbolAtLocation(recvExpr);
-                const cd = sym
-                    ?.getDeclarations()
-                    ?.find(ts.isClassDeclaration);
-                const staticField = cd?.members.find(
-                    (m) =>
-                        ts.isPropertyDeclaration(m) &&
-                        m.name &&
-                        this.staticPropertyName(m.name) === left.name.text &&
-                        isStatic(m),
-                );
-                if (staticField) return null;
-            }
-        } else if (ts.isElementAccessExpression(bin.left)) {
-            recvExpr = bin.left.expression;
-            keyExpr = bin.left.argumentExpression;
-        } else {
-            return null;
-        }
-
+        const left = bin.left;
+        if (!(ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left))) return null;
+        if (ts.isPropertyAccessExpression(left) &&
+            (!ts.isIdentifier(left.name) || this.namespaceMemberName(left.name))) return null;
+        const recvExpr = left.expression;
         const rawRecv = this.emitExpr(recvExpr);
-        const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
-        const recv: EmitResult = rawRecv.ty.kind === "function" || rawRecv.ty.kind === "regexp" || rawRecv.ty.kind === "buffer"
-            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE }
-            : rawRecv.ty.kind === "array" &&
-                (rawRecv.ty.elem?.kind === "value" ||
-                    (() => {
-                        const mapped = this.prepareType(mapType(recvExpr, this.checker));
-                        return mapped.kind === "array" && mapped.elem?.kind === "value";
-                    })())
-                ? { c: `tsc_value_array(${rawRecv.c})`, ty: T_VALUE }
-                : rawRecv;
+        const recv = ["function", "regexp", "buffer", "array"].includes(rawRecv.ty.kind)
+            ? { c: this.coerce(rawRecv, T_VALUE, recvExpr), ty: T_VALUE } : rawRecv;
         if (recv.ty.kind !== "value") return null;
-
+        const keyExpr = ts.isElementAccessExpression(left) ? left.argumentExpression : null;
+        const key = keyExpr ? this.emitExpr(keyExpr)
+            : { c: this.stringLit((left as ts.PropertyAccessExpression).name.text), ty: T_STRING };
         const rhs = this.emitExpr(bin.right);
-        const specs: SequencedCallArg[] = [
-            { value: recv, target: T_VALUE, node: recvExpr },
-        ];
-        if (keyExpr) {
-            key = this.emitExpr(keyExpr);
-            indexAssignment = key.ty.kind === "number";
-            computedAssignment = key.ty.kind === "value";
-            specs.push({
-                value: key,
-                target: indexAssignment
-                    ? T_NUMBER
-                    : key.ty.kind === "symbol"
-                        ? T_SYMBOL
-                        : computedAssignment
-                            ? T_VALUE
-                            : T_STRING,
-                node: keyExpr,
-            });
-        }
-
-        const logicalOp =
-            op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
-            op === ts.SyntaxKind.BarBarEqualsToken ||
-            op === ts.SyntaxKind.QuestionQuestionEqualsToken;
-
+        const logicalOp = this.isLogicalAssignmentOperator(op);
         const compoundFn =
             op === ts.SyntaxKind.PlusEqualsToken
                 ? "tsc_value_add"
@@ -39183,62 +38780,42 @@ class Emitter {
                                                             : null;
 
         if (op !== ts.SyntaxKind.EqualsToken && !compoundFn && !logicalOp) return null;
-        if (key?.ty.kind === "symbol" && op !== ts.SyntaxKind.EqualsToken) {
-            unsupported(bin.left, "symbol-key dynamic assignment currently supports plain assignment only");
-        }
-        if (!logicalOp) {
-            specs.push({ value: rhs, target: T_VALUE, node: bin.right });
-        }
-
-        return this.emitSequencedExpr(T_VALUE, specs, (values) => {
-            const obj = values[0]!;
-            const keyC = keyExpr
-                ? values[1]!
-                : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
-            const out = this.freshTemp("_dynassign");
-            const outRoot = this.freshTemp("_dynassign_gc_root");
-            const pinOut = `void* volatile ${outRoot} = tsc_value_gc_root(${out}); (void)${outRoot};`;
-            const symbolAssignment = key?.ty.kind === "symbol";
-            const cache = !indexAssignment && !symbolAssignment && !computedAssignment
-                ? this.freshTemp("_prop_cache")
-                : null;
-            const existing = indexAssignment
-                ? `tsc_value_get_index(${obj}, ${keyC})`
-                : symbolAssignment
-                    ? `tsc_value_get_symbol_prop(${obj}, ${keyC})`
-                    : computedAssignment
-                        ? `tsc_value_get_computed_prop(${obj}, ${keyC})`
-                        : `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
-            const set = (value: string) => indexAssignment
-                ? `tsc_value_set_index(${obj}, ${keyC}, ${value})`
-                : symbolAssignment
-                    ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${value})`
-                    : computedAssignment
-                        ? `tsc_value_set_computed_prop(${obj}, ${keyC}, ${value})`
-                        : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
-            const setStatement = (value: string) => this.emitPropertyWriteStatement(set(value), bin, moduleNamespaceAssignment);
-            const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
-            if (logicalOp) {
-                const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
-                const cond =
-                    op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
-                        ? `tsc_value_is_truthy(${out})`
-                        : op === ts.SyntaxKind.BarBarEqualsToken
-                            ? `!tsc_value_is_truthy(${out})`
-                            : `tsc_value_is_nullish(${out})`;
-                return `({ ${prefix}tsc_value_t ${out} = ${existing}; ${pinOut} if (${cond}) { ${out} = ${rhsValue}; ${outRoot} = tsc_value_gc_root(${out}); ${setStatement(out)}; } ${out}; })`;
-            }
-            const value = values[keyExpr ? 2 : 1]!;
-            if (indexAssignment) {
-                if (op === ts.SyntaxKind.EqualsToken) {
-                    return `({ tsc_value_t ${out} = ${value}; ${pinOut} ${setStatement(out)}; ${out}; })`;
-                }
-                return `({ tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${pinOut} ${setStatement(out)}; ${out}; })`;
-            }
+        const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: recv, target: T_VALUE, node: recvExpr },
+            { value: key, target: T_VALUE, node: keyExpr ?? left },
+        ], ([base, rawKey]) => {
+            // The Reference retains its actual base and updates ReferencedName
+            // once. Compound GetValue precedes the RHS; simple PutValue follows it.
+            const name = this.freshTemp("_reference_name");
+            const nameRoot = this.freshTemp("_reference_name_root");
+            const old = this.freshTemp("_reference_old");
+            const oldRoot = this.freshTemp("_reference_old_root");
+            const out = this.freshTemp("_reference_result");
+            const outRoot = this.freshTemp("_reference_result_root");
+            const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
+            const prepare = `tsc_value_t ${name} = tsc_value_prepare_property_reference(${base}, ${rawKey}); ` +
+                `void* volatile ${nameRoot} = tsc_value_gc_root(${name}); (void)${nameRoot}; `;
+            const pinResult = `void* volatile ${outRoot} = tsc_value_gc_root(${out}); (void)${outRoot}; `;
+            const write = this.emitPropertyWriteStatement(
+                `tsc_value_set_computed_prop(${base}, ${name}, ${out})`, bin, moduleNamespaceAssignment);
             if (op === ts.SyntaxKind.EqualsToken) {
-                return `({ ${prefix}tsc_value_t ${out} = ${value}; ${pinOut} ${setStatement(out)}; ${out}; })`;
+                return `({ tsc_value_t ${out} = ${rhsValue}; ${pinResult}${prepare}${write}; ${out}; })`;
             }
-            return `({ ${prefix}tsc_value_t ${out} = ${compoundFn}(${existing}, ${value}); ${pinOut} ${setStatement(out)}; ${out}; })`;
+            const read = `${prepare}tsc_value_t ${old} = tsc_value_get_computed_prop(${base}, ${name}); ` +
+                `void* volatile ${oldRoot} = tsc_value_gc_root(${old}); (void)${oldRoot}; `;
+            if (logicalOp) {
+                const condition = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                    ? `tsc_value_is_truthy(${old})` : op === ts.SyntaxKind.BarBarEqualsToken
+                        ? `!tsc_value_is_truthy(${old})` : `tsc_value_is_nullish(${old})`;
+                return `({ ${read}tsc_value_t ${out} = ${old}; ${pinResult}` +
+                    `if (${condition}) { ${out} = ${rhsValue}; ${outRoot} = tsc_value_gc_root(${out}); ${write}; } ${out}; })`;
+            }
+            const right = this.freshTemp("_reference_rhs");
+            const rightRoot = this.freshTemp("_reference_rhs_root");
+            return `({ ${read}tsc_value_t ${right} = ${rhsValue}; ` +
+                `void* volatile ${rightRoot} = tsc_value_gc_root(${right}); (void)${rightRoot}; ` +
+                `tsc_value_t ${out} = ${compoundFn}(${old}, ${right}); ${pinResult}${write}; ${out}; })`;
         });
     }
 
@@ -39259,27 +38836,9 @@ class Emitter {
     private emitLvalue(expr: ts.Expression): string {
         if (ts.isIdentifier(expr)) return this.identifierRead(expr);
         if (ts.isPropertyAccessExpression(expr)) {
-            // Static class field: MyClass.field
             if (ts.isIdentifier(expr.name)) {
                 const nsName = this.namespaceMemberName(expr.name);
                 if (nsName) return nsName;
-            }
-            if (ts.isIdentifier(expr.expression)) {
-                const cd = this.staticClassReceiver(expr.expression);
-                if (cd && cd.name) {
-                    const field = cd.members.find(
-                        (m) =>
-                            ts.isPropertyDeclaration(m) &&
-                            m.name &&
-                            this.staticPropertyName(m.name) === expr.name.text &&
-                            isStatic(m),
-                    );
-                    if (field) {
-                        if (mapType(field, this.checker).kind === "value") unsupported(expr,
-                            "boxed native field writes require a rooted reference across suspension");
-                        return `${nativeTypeName(cd)}_${mangleIdent(expr.name.text)}`;
-                    }
-                }
             }
             const recv = this.emitExpr(expr.expression);
             if (recv.ty.kind === "class") {
@@ -57711,32 +57270,6 @@ class Emitter {
                 return { c: moduleNsMember, ty };
             }
         }
-        if (ts.isIdentifier(pa.expression)) {
-            // Static class property access: MyClass.staticField.
-            // Must come BEFORE emitting pa.expression since a class used as a
-            // value (rather than an instance) has no runtime representation.
-            const classDecl = this.staticClassReceiver(pa.expression);
-            if (classDecl && classDecl.name) {
-                const getter = this.classAccessorForPropertyAccess(pa, "get");
-                if (getter && isStatic(getter.decl)) {
-                    return this.emitClassAccessorGet(pa, getter, null);
-                }
-                const field = classDecl.members.find(
-                    (m) =>
-                        ts.isPropertyDeclaration(m) &&
-                        m.name &&
-                        this.staticPropertyName(m.name) === pa.name.text &&
-                        isStatic(m),
-                );
-                if (field) {
-                    const ft = mapType(field, this.checker);
-                    return {
-                        c: `${nativeTypeName(classDecl)}_${mangleIdent(pa.name.text)}`,
-                        ty: ft,
-                    };
-                }
-            }
-        }
         const isStaticArrayPrototypeProperty =
             ts.isPropertyAccessExpression(pa.expression) &&
             ts.isIdentifier(pa.expression.expression) &&
@@ -59095,7 +58628,13 @@ class Emitter {
             ts.isGetAccessorDeclaration(current) ||
             ts.isSetAccessorDeclaration(current)
         ) {
-            name = this.staticPropertyName(current.name) ?? "";
+            name = ts.isClassLike(current.parent)
+                ? this.classMemberPropertyKey(current.name).publicName
+                : this.staticPropertyName(current.name) ?? "";
+            if (ts.isClassLike(current.parent) &&
+                (ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current))) {
+                name = `${ts.isGetAccessorDeclaration(current) ? "get" : "set"} ${name}`;
+            }
         } else if (
             ts.isFunctionExpression(current) ||
             ts.isArrowFunction(current) ||

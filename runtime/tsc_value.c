@@ -7069,6 +7069,17 @@ tsc_str_t* tsc_value_to_string_coercion(tsc_value_t value) {
     );
 }
 
+tsc_value_t tsc_value_prepare_property_reference(tsc_value_t base, tsc_value_t name) {
+    void* volatile base_root = tsc_value_gc_root(base);
+    void* volatile name_root = tsc_value_gc_root(name);
+    (void)base_root;
+    (void)name_root;
+    if (tsc_value_is_nullish(base)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a property of null or undefined"));
+    }
+    return tsc_value_to_property_key(name);
+}
+
 tsc_value_t tsc_value_to_property_key(tsc_value_t value) {
     tsc_value_t primitive = value_to_primitive_if_object(
         value,
