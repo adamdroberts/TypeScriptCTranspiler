@@ -1,6 +1,7 @@
+import {classDefinitionEvaluationExpressions,classExpressionFromDeclaration} from './class-definition';
 import ts from "typescript";
 import { normalizeAssignmentTarget } from "./binding-tree";
-import { planResumableExpression, type ResumableExpressionState } from "./resumable-expression";
+import { planResumableExpression, type ResumableExpressionState, type ResumableClassDefinition } from "./resumable-expression";
 import { directLexicalDeclarations, lexicalDeclarationsFromList } from "./lexical-declarations";
 import {
     planAsyncFunctionCompletionEdge,
@@ -105,6 +106,7 @@ type AsyncControlFlowStateCore =
         readonly kind: "resumable-expression";
         readonly id: number;
         readonly operation: ResumableExpressionState;
+        readonly classDefinitions:readonly ResumableClassDefinition[];
         readonly entry: boolean;
         readonly slots: readonly number[];
         readonly targets: ReadonlyMap<number, AsyncControlFlowTarget>;
@@ -404,7 +406,8 @@ export function planAsyncControlFlowGraph(
         const worklist = [node];
         while (worklist.length) {
             const current = worklist.pop()!;
-            if (ts.isFunctionLike(current) || ts.isClassLike(current)) continue;
+            if (ts.isFunctionLike(current)) continue;
+            if(ts.isClassLike(current)){worklist.push(...classDefinitionEvaluationExpressions(current));continue;}
             if (ts.isAwaitExpression(current) || includeYield && ts.isYieldExpression(current)) return true;
             ts.forEachChild(current, child => { worklist.push(child); });
         }
@@ -552,7 +555,7 @@ export function planAsyncControlFlowGraph(
                     ? [operation.yes, operation.no] : [operation.next];
                 const edges = new Map(edgeIds.map(id => [id, targets.get(id)!]));
                 setState({ kind: "resumable-expression", id: targets.get(operation.id)!.id,
-                    operation, entry: operation.id === graph.entry || bindingContinuations.has(operation.id), slots, targets: edges, next: edgeIds.length ? targets.get(edgeIds[0]!)! : completeTarget,
+                    operation, classDefinitions:graph.classDefinitions, entry: operation.id === graph.entry || bindingContinuations.has(operation.id), slots, targets: edges, next: edgeIds.length ? targets.get(edgeIds[0]!)! : completeTarget,
                     returnTarget: operation.kind === "suspend" ? context.returnTarget : null }, context.exceptionTarget);
             }
             return targets.get(graph.entry)!;
@@ -1680,6 +1683,10 @@ export function planAsyncControlFlowGraph(
         if (ts.isExpressionStatement(statement) && containsAwait(statement.expression)) {
             const sequence = buildExpressionSequence(statement.expression, null, next, context);
             if (sequence) return sequence;
+        }
+        if(ts.isClassDeclaration(statement)&&statement.name&&containsAwait(statement)&&options.isSupportedNestedClass?.(statement)){
+            const sequence=buildExpressionSequence(classExpressionFromDeclaration(statement),statement.name,next,context);
+            if(sequence)return sequence;
         }
         if (containsAwait(statement) ||
             containsUnsupportedNestedFunctionOrClass(statement) ||

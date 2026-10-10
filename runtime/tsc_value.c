@@ -445,6 +445,9 @@ tsc_value_t tsc_value_function_named_kind(
     id->func_prototype_initialized = false;
     id->construct = construct;
     id->class_elements = NULL;
+    id->class_name_value = tsc_value_undefined();
+    id->class_name_gc_root = NULL;
+    id->class_name_initialized = false;
     id->class_constructor_body = tsc_value_undefined();
     id->class_constructor_body_root = NULL;
     id->derived_class_constructor = false;
@@ -541,6 +544,24 @@ tsc_value_t tsc_value_function_class_named(
         name,
         TSC_FUNCTION_IDENTITY_BUILTIN
     );
+}
+
+/* The constructor owns the inner name binding through every suspended
+ * definition stage and escaping closure. Address projections preserve the
+ * emitter's existing value/root/TDZ binding record. */
+static tsc_function_identity_t* tsc_value_class_name_owner(tsc_value_t constructor) {
+    if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class name owner is not a constructor"));
+    return (tsc_function_identity_t*)value_ptr(constructor);
+}
+volatile tsc_value_t* tsc_value_class_name_value(tsc_value_t constructor) {
+    return &tsc_value_class_name_owner(constructor)->class_name_value;
+}
+void** tsc_value_class_name_root(tsc_value_t constructor) {
+    return &tsc_value_class_name_owner(constructor)->class_name_gc_root;
+}
+bool* tsc_value_class_name_initialized(tsc_value_t constructor) {
+    return &tsc_value_class_name_owner(constructor)->class_name_initialized;
 }
 
 /* The retained ClassElement List is shared by static and instance

@@ -1,3 +1,4 @@
+import {classDefinitionPlan,classDefinitionEvaluationExpressions} from './class-definition';
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { runtimeGlobalBindings } from "../global-bindings";
@@ -25949,7 +25950,7 @@ class Emitter {
         return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
     }
 
-    private emitClassElementDefinitions(
+    private emitClassConstructorDefinition(
         definition: ts.ClassLikeDeclaration, constructor: string, prototype: string, nativeStorage: boolean,
     ): string[] {
         const pieces: string[] = [`tsc_value_function_with_home_object(${constructor}, ${prototype})`];
@@ -25964,60 +25965,76 @@ class Emitter {
             pieces.push(`tsc_value_t ${value} = ${body}`, `void* volatile ${root} = tsc_value_gc_root(${value})`,
                 `(void)${root}`, `tsc_value_class_set_constructor_body(${constructor}, ${value})`);
         }
-        for (const member of definition.members) {
-            const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
-                ts.isSetAccessorDeclaration(member)) && !!member.body;
-            const field = ts.isPropertyDeclaration(member);
-            const block = ts.isClassStaticBlockDeclaration(member);
-            if (ts.isConstructorDeclaration(member)) continue;
-            if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
-                unsupported(member, "class element requires the canonical initialization plan");
-            }
-            if (!nativeStorage && block) {
-                const initializer = this.retainClassElementInitializer(member, pieces, constructor);
-                pieces.push(`tsc_value_class_add_element(${constructor}, NULL, ${initializer}, true, true, false)`);
-                continue;
-            }
-            if (!callable && !field) continue;
-            if (!nativeStorage && field && ts.isPrivateIdentifier(member.name))
-                unsupported(member, "class element requires the canonical initialization plan");
-            // Declaration fields retain their key for later initialization;
-            // expression methods borrow a local carrier owned by this definition.
-            const name = member.name!;
-            const publicName = this.classMemberPublicName(name);
-            let key = this.stringLit(publicName);
-            if (ts.isComputedPropertyName(name)) {
-                const retained = nativeStorage;
-                key = retained ? this.classMemberPropertyKey(name).propertyKey : this.freshTemp("_class_element_key");
-                const evaluated = this.emitExpr(name.expression);
-                pieces.push(`${retained ? "" : "tsc_str_t* const "}${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, name.expression)})`);
-            }
-            if (ts.isPropertyDeclaration(member)) {
-                if (!nativeStorage) {
-                    const initializer = this.retainClassElementInitializer(member, pieces, isStatic(member) ? constructor : prototype);
-                    const source = member.initializer && this.unwrapTransparentExpression(member.initializer);
-                    const inferred = !!source && (ts.isArrowFunction(source) ||
-                        ts.isFunctionExpression(source) && !source.name);
-                    pieces.push(`tsc_value_class_add_element(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, false, ${inferred})`);
-                }
-                continue;
-            }
-            const target = isStatic(member) ? constructor : prototype;
-            const value = this.freshTemp("_class_element_value"), root = this.freshTemp("_class_element_value_root");
-            const closure = this.coerce(this.emitClosureExpression(member as ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration), T_VALUE, member);
-            pieces.push(`tsc_value_t ${value} = tsc_value_function_with_home_object(${closure}, ${target})`, `void* volatile ${root} = tsc_value_gc_root(${value})`, `(void)${root}`);
-            if (ts.isComputedPropertyName(name)) {
-                const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
-                pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
-            }
-            if (ts.isMethodDeclaration(member)) {
-                pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
-            } else {
-                const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
-                pieces.push(`if (!tsc_value_object_define_${kind}(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
-                pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
-            }
+        return pieces;
+    }
+
+    private emitClassElementDefinition(
+        member: ts.ClassElement, constructor: string, prototype: string, nativeStorage: boolean,
+        keyOverride?: string,
+    ): string[] {
+        const pieces: string[] = [];
+        const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
+            ts.isSetAccessorDeclaration(member)) && !!member.body;
+        const field = ts.isPropertyDeclaration(member);
+        const block = ts.isClassStaticBlockDeclaration(member);
+        if (ts.isConstructorDeclaration(member)) return pieces;
+        if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
+            unsupported(member, "class element requires the canonical initialization plan");
         }
+        if (!nativeStorage && block) {
+            const initializer = this.retainClassElementInitializer(member, pieces, constructor);
+            pieces.push(`tsc_value_class_add_element(${constructor}, NULL, ${initializer}, true, true, false)`);
+            return pieces;
+        }
+        if (!callable && !field) return pieces;
+        if (!nativeStorage && field && ts.isPrivateIdentifier(member.name))
+            unsupported(member, "class element requires the canonical initialization plan");
+        // Declaration fields retain their key for later initialization;
+        // expression methods borrow a local carrier owned by this definition.
+        const name = member.name!;
+        const publicName = this.classMemberPublicName(name);
+        let key = this.stringLit(publicName);
+        if (ts.isComputedPropertyName(name)) {
+            const retained = nativeStorage;
+            key = retained ? this.classMemberPropertyKey(name).propertyKey : this.freshTemp("_class_element_key");
+            const evaluated = keyOverride ?? this.coerce(this.emitExpr(name.expression), T_VALUE, name.expression);
+            pieces.push(`${retained ? "" : "tsc_str_t* const "}${key} = tsc_value_to_internal_property_key(${evaluated})`);
+        }
+        if (ts.isPropertyDeclaration(member)) {
+            if (!nativeStorage) {
+                const initializer = this.retainClassElementInitializer(member, pieces, isStatic(member) ? constructor : prototype);
+                const source = member.initializer && this.unwrapTransparentExpression(member.initializer);
+                const inferred = !!source && (ts.isArrowFunction(source) ||
+                    ts.isFunctionExpression(source) && !source.name);
+                pieces.push(`tsc_value_class_add_element(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, false, ${inferred})`);
+            }
+            return pieces;
+        }
+        const target = isStatic(member) ? constructor : prototype;
+        const value = this.freshTemp("_class_element_value"), root = this.freshTemp("_class_element_value_root");
+        const closure = this.coerce(this.emitClosureExpression(member as ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration), T_VALUE, member);
+        pieces.push(`tsc_value_t ${value} = tsc_value_function_with_home_object(${closure}, ${target})`, `void* volatile ${root} = tsc_value_gc_root(${value})`, `(void)${root}`);
+        if (ts.isComputedPropertyName(name)) {
+            const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
+            pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
+        }
+        if (ts.isMethodDeclaration(member)) {
+            pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
+        } else {
+            const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
+            pieces.push(`if (!tsc_value_object_define_${kind}(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
+            pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, tsc_value_undefined(), false, false, false, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class accessor definition failed"))`);
+        }
+        return pieces;
+    }
+
+    private emitClassElementDefinitions(
+        definition: ts.ClassLikeDeclaration, constructor: string, prototype: string, nativeStorage: boolean,
+    ): string[] {
+        const pieces = this.emitClassConstructorDefinition(definition, constructor, prototype, nativeStorage);
+        for (const stage of classDefinitionPlan(definition))
+            if (stage.kind === 'element')
+                pieces.push(...this.emitClassElementDefinition(stage.member, constructor, prototype, nativeStorage));
         return pieces;
     }
 
@@ -27529,6 +27546,7 @@ class Emitter {
         };
         const cfgAssignmentInitializesLexical = (identifier: ts.Identifier): boolean => {
             const declaration = identifier.parent;
+            if(ts.isClassDeclaration(declaration)&&declaration.name===identifier)return true;
             return ts.isVariableDeclaration(declaration) &&
                 declaration.name === identifier &&
                 ts.isVariableDeclarationList(declaration.parent) &&
@@ -27789,6 +27807,24 @@ class Emitter {
                 callback.line(`state->exception_pc = ${stateNode.exceptionTarget?.target.id ?? -1};`);
                 if (stateNode.kind === "resumable-expression") {
                     const operation = stateNode.operation;
+                    const scopeNode:ts.Node=operation.kind==='value'
+                        ? 'definition' in operation.operation
+                            ? operation.operation.kind==='class-start' ? operation.operation.definition.parent
+                                : operation.operation.kind==='class-element' ? operation.operation.member : operation.operation.definition
+                            : graph.expressionResults[stateNode.slots[operation.output]!]!
+                        : 'node' in operation ? operation.node
+                        : 'target' in operation ? graph.expressionResults[stateNode.slots[operation.target]!]!
+                        : 'source' in operation && operation.source!==null ? graph.expressionResults[stateNode.slots[operation.source]!]!
+                        : 'value' in operation ? graph.expressionResults[stateNode.slots[operation.value]!]! : body;
+                    const ancestors=new Set<ts.Node>();
+                    for(let node:ts.Node|undefined=scopeNode;node;node=node.parent)ancestors.add(node);
+                    const classEnvironment=new Map<ts.Symbol,ClosureEnvBinding>();
+                    for(const definition of stateNode.classDefinitions)
+                        if(ancestors.has(definition.definition))
+                            for(const [symbol,binding] of this.createClassNameEnvironment(definition.definition,
+                                `state->expression_result_${stateNode.slots[definition.owner]}`))classEnvironment.set(symbol,binding);
+                    this.closureEnvScopes.push(classEnvironment);
+                    try {
                     if (operation.kind === "binding")
                         unsupported(operation.node, "resumable binding requires a canonical operation graph");
                     const read = (slot: number): string => `state->expression_result_${stateNode.slots[slot]}`;
@@ -27821,7 +27857,7 @@ class Emitter {
                             return;
                         }
                         const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (field) {
+                        if (field && !this.classNameBindingForIdentifier(reference.identifier)) {
                             emitCfgFieldAssignment(callback, field, { c: source, ty: T_VALUE }, reference.identifier);
                             return;
                         }
@@ -27937,7 +27973,21 @@ class Emitter {
                     } else if (operation.kind === "value") {
                         const op = operation.operation;
                         let evaluated: string;
-                        if (op.kind === "copy") evaluated = read(op.source);
+                        if(op.kind==='class-start')evaluated=this.emitClassDefinitionBegin(op.definition).c;
+                        else if(op.kind==='class-heritage'){
+                            callback.line(`tsc_value_class_set_heritage(${read(op.owner)}, ${read(op.superclass)});`);
+                            evaluated=read(op.owner);
+                        }else if(op.kind==='class-element'){
+                            for(const piece of this.emitClassElementDefinition(op.member,read(op.owner),
+                                `tsc_value_get_prop(${read(op.owner)}, ${this.stringLit("prototype")})`,false,
+                                op.key===null?undefined:read(op.key)))callback.line(piece+';');
+                            evaluated=read(op.owner);
+                        }else if(op.kind==='class-complete'){
+                            const inner=this.createClassNameEnvironment(op.definition,read(op.owner));
+                            for(const piece of this.initializeClassNameEnvironment(inner,read(op.owner)))callback.line(piece+';');
+                            callback.line(`tsc_value_class_initialize_elements(${read(op.owner)}, ${read(op.owner)}, true);`);
+                            evaluated=read(op.owner);
+                        }else if (op.kind === "copy") evaluated = read(op.source);
                         else if (op.kind === "undefined") evaluated = "tsc_value_undefined()";
                         else if (op.kind === "get") evaluated = getReference(op.reference);
                         else if (op.kind === "set") {
@@ -28035,6 +28085,7 @@ class Emitter {
                         store(operation.target, `tsc_value_string(tsc_str_concat(tsc_value_as_string(${read(operation.target)}), tsc_str_concat(${string}, ${this.stringLit(operation.tail)})))`);
                         transition(operation.next);
                     }
+                    } finally { this.closureEnvScopes.pop(); }
                 } else if (stateNode.kind === "sync") {
                     if (ts.isVariableStatement(stateNode.statement)) {
                         for (const declaration of stateNode.statement.declarationList.declarations) {
@@ -28997,18 +29048,15 @@ class Emitter {
     }
 
     private containsAwaitInFunctionBody(node: ts.Node): boolean {
-        let found = false;
-        const visit = (current: ts.Node): void => {
-            if (found) return;
-            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-            if (ts.isAwaitExpression(current)) {
-                found = true;
-                return;
-            }
-            ts.forEachChild(current, visit);
-        };
-        visit(node);
-        return found;
+        const pending:ts.Node[]=[node];
+        while(pending.length){
+            const current=pending.pop()!;
+            if(current!==node&&ts.isFunctionLike(current))continue;
+            if(ts.isClassLike(current)){pending.push(...classDefinitionEvaluationExpressions(current));continue;}
+            if(ts.isAwaitExpression(current))return true;
+            ts.forEachChild(current,child=>{pending.push(child)});
+        }
+        return false;
     }
 
     private isAsyncDeclaration(node: ts.Node): boolean {
@@ -32124,36 +32172,35 @@ class Emitter {
      * have static duration; dynamic definitions allocate escaping cells. Both
      * use the same binding and initialization projection. */
     private createClassNameEnvironment(
-        definition: ts.ClassLikeDeclaration, storage: string[], native = false,
+        definition: ts.ClassLikeDeclaration, constructor?: string,
     ): Map<ts.Symbol, ClosureEnvBinding> {
         const environment = new Map<ts.Symbol, ClosureEnvBinding>();
         const symbol = definition.name ? this.symbolForIdentifier(definition.name) : undefined;
         if (!symbol) return environment;
-        const cell = this.freshTemp("_class_name_cell");
-        const root = this.freshTemp("_class_name_root_cell");
-        const initialized = this.freshTemp("_class_name_initialized_cell");
-        if (native) {
+        if (constructor) {
+            environment.set(symbol, { type: T_VALUE,
+                ptr: `tsc_value_class_name_value(${constructor})`,
+                rootPtr: `tsc_value_class_name_root(${constructor})`,
+                initializedPtr: `tsc_value_class_name_initialized(${constructor})`,
+                lexicalName: definition.name!.text, immutable: true,
+                creationScope: this.argumentValueScopes.at(-1) });
+        } else {
+            const cell = this.freshTemp("_class_name_cell"),root = this.freshTemp("_class_name_root_cell"),
+                initialized = this.freshTemp("_class_name_initialized_cell");
             this.globalDecls.line(`static volatile tsc_value_t ${cell};`);
             this.globalDecls.line(`static void* ${root};`);
             this.globalDecls.line(`static bool ${initialized};`);
-        } else {
-            storage.push(`volatile tsc_value_t* ${cell} = TSC_GC_MALLOC(sizeof(tsc_value_t))`,
-                `void** ${root} = TSC_GC_MALLOC(sizeof(void*))`,
-                `bool* ${initialized} = TSC_GC_MALLOC(sizeof(bool))`,
-                `*${cell} = tsc_value_undefined()`, `*${root} = NULL`, `*${initialized} = false`);
+            environment.set(symbol, { type: T_VALUE, ptr: `(&${cell})`,rootPtr: `(&${root})`,
+                initializedPtr: `(&${initialized})`,lexicalName:definition.name!.text,immutable:true,
+                creationScope:this.argumentValueScopes.at(-1) });
         }
-        environment.set(symbol, { type: T_VALUE, ptr: native ? `(&${cell})` : cell,
-            rootPtr: native ? `(&${root})` : root,
-            initializedPtr: native ? `(&${initialized})` : initialized,
-            lexicalName: definition.name!.text, immutable: true,
-            creationScope: this.argumentValueScopes.at(-1) });
         return environment;
     }
 
     private nativeClassNameEnvironment(definition: ts.ClassDeclaration): Map<ts.Symbol, ClosureEnvBinding> {
         let environment = this.nativeClassNameEnvironments.get(definition);
         if (!environment) {
-            environment = this.createClassNameEnvironment(definition, [], true);
+            environment = this.createClassNameEnvironment(definition);
             this.nativeClassNameEnvironments.set(definition, environment);
         }
         return environment;
@@ -32180,7 +32227,7 @@ class Emitter {
     /** ClassDefinitionEvaluation uses one source-ordered element collection
      * for JavaScript declarations, local declarations and class expressions.
      * Unrepresented elements fail closed at this shared boundary. */
-    private emitClassDefinitionValue(expression: ts.ClassLikeDeclaration): EmitResult {
+    private emitClassDefinitionBegin(expression: ts.ClassLikeDeclaration): EmitResult {
         if (!this.isSupportedDynamicClassDefinition(expression))
             unsupported(expression, "class element requires the canonical initialization plan");
 
@@ -32203,20 +32250,40 @@ class Emitter {
             `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
             `(void)${prototypeRoot}`,
         ];
-        const inner = this.createClassNameEnvironment(expression, pieces);
+        const inner = this.createClassNameEnvironment(expression, constructor);
         this.closureEnvScopes.push(inner);
         try {
-            const heritage = expression.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword)?.types[0];
-            if (heritage) {
-                const superclass = this.emitExpr(heritage.expression);
-                pieces.push(`tsc_value_class_set_heritage(${constructor}, ${this.coerce(superclass, T_VALUE, heritage.expression)})`);
-            }
-            pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype, false));
+            pieces.push(...this.emitClassConstructorDefinition(expression, constructor, prototype, false));
         } finally {
             this.closureEnvScopes.pop();
         }
-        pieces.push(...this.initializeClassNameEnvironment(inner, constructor));
-        pieces.push(`tsc_value_class_initialize_elements(${constructor}, ${constructor}, true)`);
+        pieces.push(constructor);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
+    private emitClassDefinitionValue(expression: ts.ClassLikeDeclaration): EmitResult {
+        const constructor = this.freshTemp("_class_definition_constructor");
+        const root = this.freshTemp("_class_definition_root");
+        const pieces: string[] = [];
+        const inner = this.createClassNameEnvironment(expression, constructor);
+        this.closureEnvScopes.push(inner);
+        try {
+            for (const stage of classDefinitionPlan(expression)) {
+                if (stage.kind === 'begin') {
+                    pieces.push(`tsc_value_t ${constructor} = ${this.emitClassDefinitionBegin(expression).c}`,
+                        `void* volatile ${root} = tsc_value_gc_root(${constructor})`, `(void)${root}`);
+                } else if (stage.kind === 'heritage') {
+                    const superclass = this.emitExpr(stage.expression);
+                    pieces.push(`tsc_value_class_set_heritage(${constructor}, ${this.coerce(superclass, T_VALUE, stage.expression)})`);
+                } else if (stage.kind === 'element') {
+                    pieces.push(...this.emitClassElementDefinition(stage.member, constructor,
+                        `tsc_value_get_prop(${constructor}, ${this.stringLit("prototype")})`, false));
+                } else {
+                    pieces.push(...this.initializeClassNameEnvironment(inner, constructor));
+                    pieces.push(`tsc_value_class_initialize_elements(${constructor}, ${constructor}, true)`);
+                }
+            }
+        } finally { this.closureEnvScopes.pop(); }
         pieces.push(constructor);
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }

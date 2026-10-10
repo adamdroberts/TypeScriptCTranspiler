@@ -42,6 +42,7 @@
     "src/emit/async-ir.ts",
     "src/emit/binding-tree.ts",
     "src/emit/cbuf.ts",
+    "src/emit/class-definition.ts",
     "src/emit/index.ts",
     "src/emit/lexical-declarations.ts",
     "src/emit/mangle.ts",

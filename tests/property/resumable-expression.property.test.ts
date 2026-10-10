@@ -92,7 +92,7 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
             else if (op.kind === "call") result = op.construct
                 ? Reflect.construct(values[op.callee], values[op.arguments])
                 : Reflect.apply(values[op.callee], op.receiver === null ? undefined : values[op.receiver], values[op.arguments]);
-            else {
+            else if (op.kind === "evaluate") {
                 const substitutions = new Map(op.inputs.map(input => [input.expression, ts.factory.createIdentifier(`slot_${input.slot}`)]));
                 const transformed = ts.transform(op.expression, [context => root => {
                     const visit: ts.Visitor = node => substitutions.get(node as ts.Expression) ?? ts.visitEachChild(node, visit, context);
@@ -103,6 +103,10 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
                     const scope = Object.assign(Object.create(environment), Object.fromEntries(op.inputs.map(input => [`slot_${input.slot}`, values[input.slot]])));
                     result = new Function("scope", `with (scope) { return (${text}); }`)(scope);
                 } finally { transformed.dispose(); }
+            } else {
+                // Class stages are exercised by the native/Node class
+                // differential property, outside this Reference interpreter.
+                throw new Error(`operation ${op.kind} is outside the Reference model`);
             }
             values[state.output] = result;
         } else if (state.kind === "append") {

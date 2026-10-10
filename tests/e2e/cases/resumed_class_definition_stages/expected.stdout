@@ -1,0 +1,6 @@
+async:true
+static,instance
+generator:true
+static,instance
+async-generator:true
+static,instance

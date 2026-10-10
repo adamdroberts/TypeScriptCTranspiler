@@ -1,3 +1,4 @@
+import {classDefinitionPlan,classDefinitionEvaluationExpressions,sourceClassDefinition} from './class-definition';
 import ts from "typescript";
 import { normalizeAssignmentTarget } from "./binding-tree";
 
@@ -8,7 +9,16 @@ export type ResumableReference =
     | { readonly kind: "property"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression;
         readonly base: ResumableValueSlot; readonly key: ResumableValueSlot; readonly receiver?: ResumableValueSlot };
 
+export interface ResumableClassDefinition {
+    readonly definition:ts.ClassLikeDeclaration;
+    readonly owner:ResumableValueSlot;
+}
+
 type ValueOperation =
+    | {readonly kind:'class-start';readonly definition:ts.ClassLikeDeclaration}
+    | {readonly kind:'class-heritage';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly superclass:ResumableValueSlot}
+    | {readonly kind:'class-element';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly member:ts.ClassElement;readonly key:ResumableValueSlot|null}
+    | {readonly kind:'class-complete';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot}
     | { readonly kind: "evaluate"; readonly expression: ts.Expression;
         readonly inputs: readonly { readonly expression: ts.Expression; readonly slot: ResumableValueSlot }[] }
     | { readonly kind: "super-constructor"; readonly node: ts.CallExpression }
@@ -70,6 +80,7 @@ export interface ResumableExpressionGraph {
      * actual argument Lists and partially initialized literal owners. */
     readonly values: readonly ts.Expression[];
     readonly result: ResumableValueSlot;
+    readonly classDefinitions:readonly ResumableClassDefinition[];
 }
 
 export interface ResumableExpressionFailure {
@@ -96,6 +107,7 @@ function transparent(expression: ts.Expression): ts.Expression {
 export function planResumableExpression(expression: ts.Expression, options: { asyncGenerator?: boolean } = {}): ResumableExpressionPlan {
     const states: Array<ResumableExpressionState | undefined> = [];
     const values: ts.Expression[] = [];
+    const classDefinitions:ResumableClassDefinition[]=[];
     const worklist: Array<() => void> = [];
     let failure: ResumableExpressionFailure | null = null;
     const reject = (node: ts.Node): void => {
@@ -260,6 +272,30 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         const anchor = reserve();
         worklist.push(() => {
             const node = transparent(source);
+            if (ts.isClassExpression(node) && suspending.get(source)) {
+                const definition=sourceClassDefinition(node);
+                classDefinitions.push({definition,owner:output});
+                let entry=next;
+                const stages=classDefinitionPlan(definition);
+                for(let index=stages.length-1;index>=0;--index){
+                    const stage=stages[index]!;
+                    if(stage.kind==='complete')entry=operation({kind:'class-complete',definition,owner:output},output,entry);
+                    else if(stage.kind==='element'){
+                        const key=stage.key?value(stage.key):null;
+                        const defined=operation({kind:'class-element',definition,owner:output,member:stage.member,key},output,entry);
+                        if(stage.key&&key!==null){
+                            const raw=value(stage.key);
+                            const normalized=operation({kind:'property-key',source:raw},key,defined);
+                            entry=build(stage.key,raw,normalized);
+                        }else entry=defined;
+                    }else if(stage.kind==='heritage'){
+                        const superclass=value(stage.expression);
+                        const inherited=operation({kind:'class-heritage',definition,owner:output,superclass},output,entry);
+                        entry=build(stage.expression,superclass,inherited);
+                    }else entry=operation({kind:'class-start',definition},output,entry);
+                }
+                jump(anchor,entry);return;
+            }
             if (!suspending.get(source)) {
                 jump(anchor, operation({ kind: "evaluate", expression: source, inputs: [] }, output, next));
                 return;
@@ -393,13 +429,15 @@ export function planResumableExpression(expression: ts.Expression, options: { as
     const sourceWorklist: { node: ts.Node; expanded: boolean }[] = [{ node: expression, expanded: false }];
     while (sourceWorklist.length) {
         const item = sourceWorklist.pop()!, node = item.node;
-        if (ts.isFunctionLike(node) || ts.isClassLike(node)) { suspending.set(node, false); continue; }
+        if (ts.isFunctionLike(node)) { suspending.set(node, false); continue; }
+        const children:ts.Node[]=ts.isClassLike(node)?[...classDefinitionEvaluationExpressions(node)]:[];
+        if(!ts.isClassLike(node))ts.forEachChild(node,child=>{children.push(child)});
         if (!item.expanded) {
             sourceWorklist.push({ node, expanded: true });
-            ts.forEachChild(node, child => { sourceWorklist.push({ node: child, expanded: false }); });
+            for(const child of children)sourceWorklist.push({node:child,expanded:false});
         } else {
             let found = ts.isAwaitExpression(node) || ts.isYieldExpression(node);
-            ts.forEachChild(node, child => { found ||= suspending.get(child) ?? false; });
+            for(const child of children)found ||= suspending.get(child)??false;
             suspending.set(node, found);
         }
     }
@@ -428,5 +466,5 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         if (state.kind === "branch") return { ...state, id, yes: target(state.yes), no: target(state.no) };
         return { ...state, id, next: target(state.next) };
     });
-    return { kind: "graph", graph: { entry: target(entry), states: compact, values, result } };
+    return { kind: "graph", graph: { entry: target(entry), states: compact, values, result, classDefinitions } };
 }
