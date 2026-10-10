@@ -9,7 +9,7 @@ import {parseHostObservation} from '../test262/protocol';
 
 function subject(profile:boolean,noGc:boolean):string {
  const entries=[...runtimeGlobalBindings].map(([name,descriptor])=>({name,...descriptor}));
- const accesses=entries.filter(entry=>entry.writable).map(({name})=>{const actuals='marker,symbol',ignored="events.push('argument'),marker,symbol",order='get|argument|call',first='marker',second='symbol';return `{
+ const accesses=entries.filter(entry=>entry.writable).map(({name})=>{const actuals='marker,symbol',ignored="(events.push('argument'),2),marker,symbol",order='get|argument|call',first='marker',second='symbol';return `{
   const saved=own(host,${JSON.stringify(name)});events.length=0;
   const replacement=function(this:any,...args:any[]):any{events.push('call');return {args,receiver:this};};
   define(host,${JSON.stringify(name)},{get(){events.push('get');collect();return replacement;},configurable:true});

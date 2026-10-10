@@ -4,6 +4,8 @@ A whole-program TypeScript-to-C transpiler that produces native Linux binaries.
 
 Goal: take a Node.js-style TypeScript app and get back a standalone executable that behaves like `node app.ts` — without Node at runtime. It uses the **official TypeScript Compiler API** for parsing and type-checking, generates C11, and invokes **gcc** to produce the binary. Memory is managed by **Boehm GC** (`libgc`).
 
+Finite CLI eval sources now share the native-host source worklist and retained lexical/private environments. Source identity preserves UTF-16 text and caller strictness; the canonical eval intrinsic supports ordinary values and global-property mutation. Runtime-unknown source and complete target coverage remain open.
+
 ## Status
 
 Substantial working subset, backed by native end-to-end regressions including a real word-count CLI. This repository **does not currently claim full ECMAScript 2026 conformance**: the pinned Test262 host and exact clause/partition matrix intentionally fail closed until every remaining language and runner gap is resolved. See the generated [ECMAScript 2026 checklist](docs/ecmascript-2026-coverage.md).

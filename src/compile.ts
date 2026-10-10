@@ -23,7 +23,8 @@ import {
 } from "./emit/index";
 import { invokeCc } from "./link/cc";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
-import { sourceEvaluationInvocations } from "./source-value-flow";
+import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
+import { sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
 import {
     type NativeAddonManifest,
     loadNativeAddonManifest,
@@ -38,7 +39,6 @@ import {
 } from "./dynamic-require";
 import {
     loadRuntimeCodeManifest,
-    parseAotEvalConstant,
     runtimeCodeManifestHasEval,
     type RuntimeCodeManifest,
 } from "./runtime-code-aot";
@@ -194,21 +194,26 @@ function permanentLimitDiagnostics(
         dynamicRequires?: DynamicRequireManifest;
         runtimeCode?: RuntimeCodeManifest;
         test262Observation?: Test262NativeObservationPlan;
+        sourceEval?: SourceEvalPlan;
+        functionEntries?: readonly FunctionConstructorEntry[];
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     const checker = program.getTypeChecker();
     const finiteEvalCalls = new Map<ts.Node, boolean>();
-    if (opts.test262Observation) for (const invocation of sourceEvaluationInvocations(program,{evaluations:[
-        ...(opts.test262Observation.evalScriptEntries ?? []),
-        ...(opts.test262Observation.directEvalEntries ?? []),
-        ...(opts.test262Observation.indirectEvalEntries ?? []),
+    const sourceEval = opts.sourceEval ?? opts.test262Observation;
+    if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{functions: opts.functionEntries, evaluations:[
+        ...(sourceEval.evalScriptEntries ?? []),
+        ...(sourceEval.directEvalEntries ?? []),
+        ...(sourceEval.indirectEvalEntries ?? []),
     ]})) {
         if (invocation.operation !== "eval") continue;
-        const entries = invocation.direct ? opts.test262Observation!.directEvalEntries : opts.test262Observation!.indirectEvalEntries;
+        const entries = invocation.direct ? sourceEval.directEvalEntries : sourceEval.indirectEvalEntries;
         const represented = invocation.choices !== null && invocation.choices.every(source =>
             entries?.some(entry => entry.source === source));
         finiteEvalCalls.set(invocation.node,(finiteEvalCalls.get(invocation.node) ?? true) && represented);
+        if (!represented && !opts.unsafeEval && !runtimeCodeManifestHasEval(opts.runtimeCode ?? {eval:[],functions:[]}))
+            diagnostics.push({node:invocation.node,message:UNKNOWN_EVAL_AOT_MESSAGE});
     }
     for (const sf of program.getSourceFiles()) {
         if (sf.isDeclarationFile || sf.fileName === libCoreDts) continue;
@@ -254,14 +259,13 @@ function permanentLimitDiagnostics(
                             source === null &&
                             !!(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode));
                         const canDispatchFiniteEval = finiteEvalCalls.get(node) === true;
-                        const canCompileWithoutDelegation = opts.test262Observation
-                            ? node.arguments.length === 0 || canDispatchFiniteEval
-                            : canAotCompileEvalCall(node);
+                        const canCompileWithoutDelegation = node.arguments.length === 0 || canDispatchFiniteEval;
                         if (
                             !opts.unsafeEval &&
                             !canCompileWithoutDelegation &&
                             !canDispatchRuntimeManifest &&
-                            !canDispatchFiniteEval
+                            !canDispatchFiniteEval &&
+                            !diagnostics.some(diagnostic => diagnostic.node === node)
                         ) {
                             diagnostics.push({
                                 node,
@@ -331,16 +335,6 @@ function permanentLimitDiagnostics(
                         if (message) diagnostics.push({ node, message });
                     }
                 }
-            } else if (
-                ts.isIdentifier(node) &&
-                node.text === "eval" && !opts.test262Observation &&
-                !opts.unsafeEval &&
-                isGlobalEvalOrFunctionValueReference(node, checker)
-            ) {
-                diagnostics.push({
-                    node,
-                    message: UNKNOWN_EVAL_AOT_MESSAGE,
-                });
             }
             ts.forEachChild(node, visit);
         };
@@ -514,11 +508,7 @@ function stringSpecifierTexts(expr: ts.Expression): string[] {
     return staticStringExpressionTexts(expr);
 }
 
-function canAotCompileEvalCall(call: ts.CallExpression): boolean {
-    if (call.arguments.length === 0) return true;
-    const source = call.arguments[0] ? runtimeCodeStringText(call.arguments[0]!) : null;
-    return source !== null && parseAotEvalConstant(source) !== null;
-}
+
 
 function runtimeCodeStringText(expr: ts.Expression): string | null {
     return staticStringExpressionText(expr);
@@ -736,7 +726,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         writeDiagnostic(`tsc2c: ${(e as Error).message}\n`);
         return { exitCode: 3, buildDir, mainC: "" };
     }
-    const usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
+    let usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
 
     const programOptions = {
         entry: opts.entry,
@@ -750,17 +740,50 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     };
     let built = buildProgram(programOptions);
     const functionEntries = new Map<string, FunctionConstructorEntry>();
+    const evalEntries = new Map<string, EvalSourceRequest & { entry: string | null }>();
+    for (const kind of ["script", "direct", "indirect"] as const) {
+        const entries = kind === "script" ? opts.test262Observation?.evalScriptEntries :
+            kind === "direct" ? opts.test262Observation?.directEvalEntries : opts.test262Observation?.indirectEvalEntries;
+        for (const entry of entries ?? []) {
+            const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false);
+            evalEntries.set(evalSourceKey(request), { ...request, entry: entry.entry });
+        }
+    }
+    let sourceEval: SourceEvalPlan | undefined = opts.test262Observation;
+    let unresolvedCalls: readonly ts.Node[] = [];
+    const refreshEvalPlan = (): SourceEvalPlan => ({
+        unresolvedCalls,
+        evalScriptEntries: [...evalEntries.values()].filter(e => e.kind === "script"),
+        directEvalEntries: [...evalEntries.values()].filter(e => e.kind === "direct"),
+        indirectEvalEntries: [...evalEntries.values()].filter(e => e.kind === "indirect"),
+    });
     // Close the finite source graph transitively. Every admitted body goes
     // through the same JS parser/binder and ordinary function lowering.
     for (;;) {
         let addedRoot = false;
+        const graphEntries = { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] };
+        const strictContexts = new Map([...evalEntries.values()].flatMap(entry => entry.entry ? [[path.resolve(entry.entry), entry.strict] as const] : []));
+        const evaluation = evaluationSourceRequests(built.program, graphEntries, strictContexts);
+        unresolvedCalls = evaluation.unresolved.map(invocation => invocation.node);
+        if (evaluation.hasEvaluations) sourceEval = refreshEvalPlan();
+        const manifestRequests = runtimeCode.eval.flatMap(({source}) => [
+            evalSourceRequest("direct", source, false), evalSourceRequest("direct", source, true), evalSourceRequest("indirect", source),
+        ]);
+        for (const request of [...evaluation.requests, ...manifestRequests]) {
+            const key = evalSourceKey(request);
+            if (evalEntries.has(key)) continue;
+            let entry: string | null = null;
+            if (evalSourceIsValid(request)) {
+                entry = path.join(buildDir, `eval-source-${createHash("sha256").update(key).digest("hex")}.js`);
+                await fs.writeFile(entry, Buffer.from("\ufeff" + request.source, "utf16le"));
+                addedRoot = true;
+            }
+            evalEntries.set(key, { ...request, entry });
+        }
+        if (sourceEval) sourceEval = refreshEvalPlan();
         const sources = finiteFunctionConstructorSources(built.program, [
             { parameters: "", body: "" }, ...runtimeCode.functions,
-        ], { functions: [...functionEntries.values()], evaluations: [
-            ...(opts.test262Observation?.evalScriptEntries ?? []),
-            ...(opts.test262Observation?.directEvalEntries ?? []),
-            ...(opts.test262Observation?.indirectEvalEntries ?? []),
-        ] });
+        ], { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
             if (functionEntries.has(key)) continue;
@@ -776,16 +799,20 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             functionEntries.set(key, { ...source, entry });
         }
         if (!addedRoot) break;
-        const roots = [...functionEntries.values()].flatMap(source => source.entry ? [source.entry] : []);
+        const roots = [...functionEntries.values(), ...evalEntries.values()].flatMap(source => source.entry ? [source.entry] : []);
         built = buildProgram({ ...programOptions,
             additionalRoots: [...(opts.additionalRoots ?? []), ...roots],
             isolatedScriptRoots: [...(opts.isolatedScriptRoots ?? []), ...roots],
         });
     }
+    const unsafeEvalRequired = !!opts.unsafeEval && (!sourceEval || !!sourceEval.unresolvedCalls?.length ||
+        sourceConstructorInvocations(built.program, { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] })
+            .some(invocation => invocation.choices === null));
+    usesNodeEmbed = unsafeEvalRequired || nativeAddonManifestHasEntries(nativeAddons);
     const { program, checker, entrySourceFile, libCoreDts } = built;
     const staticSemanticsFailures = [
         ...program.getSourceFiles().filter(file => !file.isDeclarationFile && !/\.json$/i.test(file.fileName))
-            .flatMap(file => { const directEval = opts.test262Observation?.directEvalEntries?.some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName));
+            .flatMap(file => { const directEval = sourceEval?.directEvalEntries?.some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName));
                 const failure = earlyPrivateStaticSemanticsFailure(file, !!directEval); return failure ? [failure] : []; }),
         ...controlStaticSemanticsDiagnostics(program),
         ...functionStaticSemanticsDiagnostics(program),
@@ -809,6 +836,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         runtimeCode,
         test262Observation: opts.test262Observation,
+        sourceEval,
+        functionEntries: [...functionEntries.values()],
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
@@ -844,8 +873,9 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         runtimeCode,
         functionEntries: [...functionEntries.values()],
-        unsafeEval: opts.unsafeEval,
+        unsafeEval: unsafeEvalRequired,
         test262Observation: opts.test262Observation,
+        sourceEval,
     });
     if (diagnostics.length > 0) {
         for (const d of diagnostics) writeDiagnostic(d + "\n");
@@ -869,7 +899,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         ...RUNTIME_SOURCES,
         ...(usesNodeEmbed ? NODE_EMBED_RUNTIME_SOURCES : []),
         ...(usesDispatch ? DISPATCH_RUNTIME_SOURCES : []),
-        ...(opts.test262Observation ? TEST262_RUNTIME_SOURCES : []),
+        ...TEST262_RUNTIME_SOURCES,
     ];
     for (const f of runtimeSources) {
         await fs.copyFile(path.join(runtimeSrc, f), path.join(buildDir, f));
@@ -913,7 +943,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         libs,
         extraFlags: [
             ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
-            ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL"] : []),
+            ...(unsafeEvalRequired ? ["-DTSC_UNSAFE_EVAL"] : []),
             ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
             ...(usesLibuv ? ["-DTSC_HAS_LIBUV"] : []),
             ...(usesDispatch && dispatchMode === "serial" ? ["-DTSC_DISPATCH_SERIAL"] : []),

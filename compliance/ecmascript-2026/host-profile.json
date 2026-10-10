@@ -40,6 +40,7 @@
     "src/ecmascript-source.ts",
     "src/function-static-semantics.ts",
     "src/function-constructor-source.ts",
+    "src/eval-source.ts",
     "src/emit/async-cfg.ts",
     "src/emit/async-ir.ts",
     "src/emit/binding-tree.ts",

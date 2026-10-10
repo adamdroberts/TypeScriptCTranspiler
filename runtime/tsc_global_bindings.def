@@ -27,6 +27,7 @@ TSC_GLOBAL_INTRINSIC(SuppressedError, tsc_error_constructor_value(TSC_ERROR_SUPP
 TSC_GLOBAL_INTRINSIC(Math, tsc_builtin_math())
 TSC_GLOBAL_INTRINSIC(JSON, tsc_builtin_json())
 TSC_GLOBAL_INTRINSIC(Reflect, tsc_builtin_reflect())
+TSC_GLOBAL_FUNCTION(eval, 1.0, TSC_GLOBAL_FUNCTION_EVAL, false, false, 0)
 TSC_GLOBAL_FUNCTION(parseFloat, 1.0, TSC_GLOBAL_FUNCTION_PARSE_FLOAT, false, false, 0)
 TSC_GLOBAL_FUNCTION(parseInt, 2.0, TSC_GLOBAL_FUNCTION_PARSE_INT, false, false, 0)
 TSC_GLOBAL_FUNCTION(isFinite, 1.0, TSC_GLOBAL_FUNCTION_IS_FINITE, false, false, 0)

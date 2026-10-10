@@ -2877,6 +2877,7 @@ typedef struct {
 } tsc_global_intrinsic_t;
 
 typedef enum {
+    TSC_GLOBAL_FUNCTION_EVAL,
     TSC_GLOBAL_FUNCTION_PARSE_FLOAT,
     TSC_GLOBAL_FUNCTION_PARSE_INT,
     TSC_GLOBAL_FUNCTION_IS_FINITE,
@@ -2922,6 +2923,8 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("The input argument must be specified"));
     tsc_value_t input = global_function_argument(args, 0);
     switch (descriptor->kind) {
+        case TSC_GLOBAL_FUNCTION_EVAL:
+            return tsc_eval_indirect(args);
         case TSC_GLOBAL_FUNCTION_PARSE_FLOAT:
             return tsc_value_num(tsc_parse_float(tsc_value_to_string(input)));
         case TSC_GLOBAL_FUNCTION_PARSE_INT: {
@@ -2960,6 +2963,15 @@ static tsc_value_t global_function_intrinsic_value(const tsc_global_function_des
         tsc_str_from_lit(descriptor->name, descriptor->name_length),
         descriptor->constructible ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_BUILTIN
     );
+}
+
+tsc_value_t tsc_eval_intrinsic_value(void) {
+    for (size_t i = 0; i < sizeof(global_function_descriptors) / sizeof(global_function_descriptors[0]); ++i) {
+        if (global_function_descriptors[i].kind == TSC_GLOBAL_FUNCTION_EVAL)
+            return global_function_intrinsic_value(&global_function_descriptors[i]);
+    }
+    tsc_panic("missing eval intrinsic descriptor");
+    return tsc_value_undefined();
 }
 
 typedef struct {

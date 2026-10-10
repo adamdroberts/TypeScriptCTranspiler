@@ -1,3 +1,4 @@
+import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
@@ -84,14 +85,7 @@ import {
     emptyDynamicRequireManifest,
     type DynamicRequireManifest,
 } from "../dynamic-require";
-import {
-    type AotRuntimeConstant,
-    type AotRuntimeCodeEntry,
-    emptyRuntimeCodeManifest,
-    parseAotEvalConstant,
-    runtimeCodeManifestHasEval,
-    type RuntimeCodeManifest,
-} from "../runtime-code-aot";
+import type { RuntimeCodeManifest } from "../runtime-code-aot";
 import type { FunctionConstructorEntry } from "../function-constructor-source";
 import { functionConstructorRuntimeKind, functionKindForDeclaration } from "../function-constructor-source";
 import type { ModuleGraph, ModuleInfo } from "../resolve";
@@ -498,7 +492,7 @@ export interface EmittedProgram {
     usesLibuv: boolean;
 }
 
-export interface Test262NativeObservationPlan {
+export interface Test262NativeObservationPlan extends SourceEvalPlan {
     readonly kind: "test262-native-observation";
     readonly scenarioId: string;
     /** Independent global Script records, in evaluation order. */
@@ -508,28 +502,11 @@ export interface Test262NativeObservationPlan {
     readonly async: boolean;
     /** Exact separately parsed Script records sharing the current Realm. */
     readonly scriptEntries?: readonly string[];
-    /** Finite AOT ParseScript records dispatched by exact runtime source text. */
-    readonly evalScriptEntries?: readonly Test262EvalScriptEntry[];
-    /** Finite direct-PerformEval records keyed by source and effective strictness. */
-    readonly directEvalEntries?: readonly Test262DirectEvalEntry[];
-    /** Finite indirect-PerformEval records evaluated in the callee Realm. */
-    readonly indirectEvalEntries?: readonly Test262IndirectEvalEntry[];
 }
 
-export interface Test262EvalScriptEntry {
-    readonly source: string;
-    /** Null means ParseScript produced a SyntaxError and no source root was compiled. */
-    readonly entry: string | null;
-}
-
-export interface Test262DirectEvalEntry extends Test262EvalScriptEntry {
-    readonly strictCaller: boolean;
-    readonly strict: boolean;
-}
-
-export interface Test262IndirectEvalEntry extends Test262EvalScriptEntry {
-    readonly strict: boolean;
-}
+export type Test262EvalScriptEntry = EvalSourceEntry;
+export type Test262DirectEvalEntry = DirectEvalSourceEntry;
+export type Test262IndirectEvalEntry = IndirectEvalSourceEntry;
 
 interface CapturedSuperPropertyReference {
     readonly base: string;
@@ -609,6 +586,7 @@ export interface EmitProgramOptions {
     functionEntries?: readonly FunctionConstructorEntry[];
     unsafeEval?: boolean;
     test262Observation?: Test262NativeObservationPlan;
+    sourceEval?: SourceEvalPlan;
 }
 
 export function emitProgram(
@@ -804,18 +782,18 @@ class Emitter {
         this.test262ScriptEntryPaths = new Set(
             [
                 ...(options.test262Observation?.scriptEntries ?? []),
-                ...(options.test262Observation?.evalScriptEntries ?? [])
+                ...((options.sourceEval ?? options.test262Observation)?.evalScriptEntries ?? [])
                     .flatMap((entry) => entry.entry ? [entry.entry] : []),
-                ...(options.test262Observation?.directEvalEntries ?? [])
+                ...((options.sourceEval ?? options.test262Observation)?.directEvalEntries ?? [])
                     .flatMap((entry) => entry.entry && !entry.strict ? [entry.entry] : []),
-                ...(options.test262Observation?.indirectEvalEntries ?? [])
+                ...((options.sourceEval ?? options.test262Observation)?.indirectEvalEntries ?? [])
                     .flatMap((entry) => entry.entry && !entry.strict ? [entry.entry] : []),
             ].map((entry) => path.resolve(entry)),
         );
         this.test262EvalEntryModes = new Map(
             [
-                ...(options.test262Observation?.directEvalEntries ?? []),
-                ...(options.test262Observation?.indirectEvalEntries ?? []),
+                ...((options.sourceEval ?? options.test262Observation)?.directEvalEntries ?? []),
+                ...((options.sourceEval ?? options.test262Observation)?.indirectEvalEntries ?? []),
             ]
                 .flatMap((entry) => entry.entry
                     ? [[path.resolve(entry.entry), entry.strict] as const]
@@ -1320,7 +1298,7 @@ class Emitter {
             if (seen.has(current) || this.isAmbientDeclaration(current)) continue;
             seen.add(current);
             if (this.isJavaScriptSourceFile(current.getSourceFile()) || this.sourceHasTopLevelAwait(current.getSourceFile()) ||
-                classPrivateNames(current).length) return true;
+                classPrivateNames(current).length || this.sourceEnvironmentEnabled(current.getSourceFile())) return true;
             for (const clause of current.heritageClauses ?? []) {
                 if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
                 for (const heritage of clause.types) {
@@ -13521,7 +13499,7 @@ class Emitter {
         out.line("    return mod_retained_graph;"); out.line("}");
         out.line("static tsc_promise_t* mod_runtime_evaluation(size_t index) {");
         out.line("    return tsc_module_evaluate(mod_runtime_graph(), index);"); out.line("}"); out.line();
-        const evalScriptEntries = this.options.test262Observation?.evalScriptEntries ?? [];
+        const evalScriptEntries = (this.options.sourceEval ?? this.options.test262Observation)?.evalScriptEntries ?? [];
         if (evalScriptEntries.length > 0) {
             out.line("static tsc_value_t test262_eval_script_dispatch(tsc_str_t* source) {");
             for (const [index, entry] of evalScriptEntries.entries()) {
@@ -13545,8 +13523,8 @@ class Emitter {
             out.line("}");
             out.line();
         }
-        const directEvalEntries = this.options.test262Observation?.directEvalEntries ?? [];
-        if (directEvalEntries.length > 0) {
+        const directEvalEntries = (this.options.sourceEval ?? this.options.test262Observation)?.directEvalEntries ?? [];
+        if (directEvalEntries.length > 0 || this.options.unsafeEval) {
             out.line("static tsc_value_t test262_direct_eval_dispatch(tsc_str_t* source, bool strict_caller) {");
             for (const [index, entry] of directEvalEntries.entries()) {
                 out.line(
@@ -13567,13 +13545,14 @@ class Emitter {
                 }
                 out.line("    }");
             }
-            out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"direct eval source is outside the finite AOT graph\"));");
+            if (this.options.unsafeEval) out.line("    return tsc_node_eval(source);");
+            else out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"direct eval source is outside the finite AOT graph\"));");
             out.line("    return tsc_value_undefined();");
             out.line("}");
             out.line();
         }
-        const indirectEvalEntries = this.options.test262Observation?.indirectEvalEntries ?? [];
-        if (indirectEvalEntries.length > 0) {
+        const indirectEvalEntries = (this.options.sourceEval ?? this.options.test262Observation)?.indirectEvalEntries ?? [];
+        if (indirectEvalEntries.length > 0 || this.options.unsafeEval) {
             out.line("static tsc_value_t test262_indirect_eval_dispatch(tsc_str_t* source) {");
             for (const [index, entry] of indirectEvalEntries.entries()) {
                 out.line(
@@ -13591,7 +13570,8 @@ class Emitter {
                 }
                 out.line("    }");
             }
-            out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"indirect eval source is outside the finite AOT graph\"));");
+            if (this.options.unsafeEval) out.line("    return tsc_node_eval(source);");
+            else out.line("    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(\"indirect eval source is outside the finite AOT graph\"));");
             out.line("    return tsc_value_undefined();");
             out.line("}");
             out.line();
@@ -13619,6 +13599,15 @@ class Emitter {
         out.line("int main(int argc, char** argv) {");
         out.line("    tsc_bootstrap(argc, argv);");
         if (functionEntries.length) out.line("    tsc_function_set_source_callback(function_source_dispatch);");
+        if (evalScriptEntries.length > 0) {
+            out.line("    tsc_test262_set_eval_script_callback(test262_eval_script_dispatch);");
+        }
+        if (directEvalEntries.length > 0 || this.options.unsafeEval) {
+            out.line("    tsc_test262_set_direct_eval_callback(test262_direct_eval_dispatch);");
+        }
+        if (indirectEvalEntries.length > 0 || this.options.unsafeEval) {
+            out.line("    tsc_test262_set_indirect_eval_callback(test262_indirect_eval_dispatch);");
+        }
         const observation = this.options.test262Observation;
         if (observation) {
             const setupIds = new Set(observation.setupEntries.map((filename) => {
@@ -13631,15 +13620,6 @@ class Emitter {
                 throw new Error("Test262 observation test entry differs from the module-graph entry");
             }
             const scenario = escapeCString(observation.scenarioId);
-            if (evalScriptEntries.length > 0) {
-                out.line("    tsc_test262_set_eval_script_callback(test262_eval_script_dispatch);");
-            }
-            if (directEvalEntries.length > 0) {
-                out.line("    tsc_test262_set_direct_eval_callback(test262_direct_eval_dispatch);");
-            }
-            if (indirectEvalEntries.length > 0) {
-                out.line("    tsc_test262_set_indirect_eval_callback(test262_indirect_eval_dispatch);");
-            }
             out.line("    tsc_test262_begin();");
             for (const [index, modId] of startupOrder.entries()) {
                 const origin = setupIds.has(modId)
@@ -21686,8 +21666,8 @@ class Emitter {
         if (this.functionSourcePaths.has(path.resolve(sf.fileName))) return true;
         const evalStrict = this.test262EvalEntryModes.get(path.resolve(sf.fileName));
         if (evalStrict !== undefined) return true;
-        return !!this.options.test262Observation &&
-            this.isJavaScriptSourceFile(sf) &&
+        return !!(this.options.sourceEval || this.options.test262Observation) &&
+            (this.isJavaScriptSourceFile(sf) || !!this.options.sourceEval) &&
             (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
     }
 
@@ -21703,7 +21683,7 @@ class Emitter {
         return expr.kind === ts.SyntaxKind.ThisKeyword &&
             !this.currentClass &&
             !this.functionThisStack[this.functionThisStack.length - 1] &&
-            !!this.options.test262Observation &&
+            !!(this.options.sourceEval || this.options.test262Observation) &&
             (this.isTest262ScriptSourceFile(expr.getSourceFile()) ||
                 this.isTest262EvalSourceFile(expr.getSourceFile()));
     }
@@ -22195,7 +22175,7 @@ class Emitter {
     }
 
     private moduleVariableUsesCanonicalBindings(declaration: ts.VariableDeclaration): boolean {
-        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) || this.sourceHasTopLevelAwait(declaration.getSourceFile()) || this.resourceDeclarationHint(declaration) !== null) return true;
+        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) || this.sourceHasTopLevelAwait(declaration.getSourceFile()) || this.sourceEnvironmentEnabled(declaration.getSourceFile()) || this.resourceDeclarationHint(declaration) !== null) return true;
         if (ts.isIdentifier(declaration.name)) return false;
         // Native Node module aliases have a separate AOT owner admission. Their
         // value factories must join ordinary GetValue before replacing those
@@ -23672,7 +23652,7 @@ class Emitter {
 
     private sourceEnvironmentEnabled(source: ts.SourceFile): boolean {
         if (this.isCommonJsSourceFile(source)) return true;
-        if (!this.options.test262Observation || !this.isJavaScriptSourceFile(source)) return false;
+        if (!this.options.sourceEval && (!this.options.test262Observation || !this.isJavaScriptSourceFile(source))) return false;
         if (this.isSourceModuleEnvironment(source)) return true;
         const cached = this.sourceEnvironmentFiles.get(source);
         if (cached !== undefined) return cached;
@@ -23688,7 +23668,7 @@ class Emitter {
     }
 
     private isSourceModuleEnvironment(source: ts.SourceFile): boolean {
-        return this.isCommonJsSourceFile(source) || !!this.options.test262Observation && this.isJavaScriptSourceFile(source) && ts.isExternalModule(source) &&
+        return this.isCommonJsSourceFile(source) || !!(this.options.sourceEval || this.options.test262Observation) && (this.isJavaScriptSourceFile(source) || !!this.options.sourceEval) && ts.isExternalModule(source) &&
             !this.isTest262ScriptSourceFile(source) && !this.isTest262EvalSourceFile(source) &&
             !this.functionSourcePaths.has(path.resolve(source.fileName));
     }
@@ -32338,7 +32318,7 @@ class Emitter {
     }
 
     private isDirectEvalSourceFile(source: ts.SourceFile): boolean {
-        return !!this.options.test262Observation?.directEvalEntries?.some(entry => entry.entry &&
+        return !!(this.options.sourceEval ?? this.options.test262Observation)?.directEvalEntries?.some(entry => entry.entry &&
             path.resolve(entry.entry) === path.resolve(source.fileName));
     }
 
@@ -33908,9 +33888,9 @@ class Emitter {
             this.globalDecls.line(`static const tsc_template_segment_t ${site}_segments[] = { ${segments.join(", ")} };`);
             const filename = path.resolve(template.getSourceFile().fileName);
             const runtimeParse = this.functionSourcePaths.has(filename) || [
-                ...(this.options.test262Observation?.evalScriptEntries ?? []),
-                ...(this.options.test262Observation?.directEvalEntries ?? []),
-                ...(this.options.test262Observation?.indirectEvalEntries ?? []),
+                ...((this.options.sourceEval ?? this.options.test262Observation)?.evalScriptEntries ?? []),
+                ...((this.options.sourceEval ?? this.options.test262Observation)?.directEvalEntries ?? []),
+                ...((this.options.sourceEval ?? this.options.test262Observation)?.indirectEvalEntries ?? []),
             ].some(entry => entry.entry && path.resolve(entry.entry) === filename);
             this.globalDecls.line(`static const tsc_template_site_t ${site} = { ${parts.length}, ${site}_segments, ${runtimeParse} };`);
         }
@@ -35714,7 +35694,7 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
-        if (this.options.test262Observation && this.isDirectEvalSyntax(call)) return this.emitDynamicValueCall(call,this.emitExpr(call.expression));
+        if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(call)) return this.emitDynamicValueCall(call,this.emitExpr(call.expression));
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
@@ -35814,9 +35794,6 @@ class Emitter {
         if (this.isRuntimeGlobalReference(calleeId) ||
             this.functionSourcePaths.has(path.resolve(call.getSourceFile().fileName)) && this.isSourceGlobalReference(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
-        }
-        if (name === "eval" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
-            return this.emitUnsafeEvalCall(call);
         }
         if (name === "structuredClone") {
             if (call.arguments.length < 1) unsupported(call, "structuredClone expects at least 1 arg");
@@ -36476,31 +36453,6 @@ class Emitter {
         });
     }
 
-    private emitUnsafeEvalCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) {
-            return this.emitSequencedExpr(T_VALUE, [], () => "tsc_value_undefined()");
-        }
-        const sourceNode = call.arguments[0]!;
-        const staticSource = this.aotRuntimeCodeStaticString(sourceNode);
-        if (staticSource !== null) {
-            const constant = parseAotEvalConstant(staticSource);
-            if (constant) {
-                return this.emitSequencedExpr(T_VALUE, this.ignoredArgumentSpecs(call.arguments, 1), () =>
-                    this.emitAotRuntimeConstant(constant).c,
-                );
-            }
-        }
-        const runtimeCode = this.options.runtimeCode ?? emptyRuntimeCodeManifest();
-        if (runtimeCodeManifestHasEval(runtimeCode)) {
-            return this.emitAotEvalManifestDispatch(call, sourceNode, runtimeCode.eval);
-        }
-        const source = this.emitExpr(sourceNode);
-        return this.emitSequencedCall("tsc_node_eval", T_VALUE, [
-            { value: source, target: T_STRING, node: sourceNode },
-            ...this.ignoredArgumentSpecs(call.arguments, 1),
-        ]);
-    }
-
     private emitCallApplication(node: ts.CallExpression | ts.NewExpression | ts.TaggedTemplateExpression,
         callee: string, receiver: string, argumentsValue: string): string {
         if (ts.isNewExpression(node)) return `tsc_value_construct(${callee}, ${argumentsValue})`;
@@ -36509,7 +36461,7 @@ class Emitter {
             if (!environment) unsupported(node, "super call requires a constructor environment");
             return `tsc_environment_super_construct(${environment.c}, ${callee}, ${argumentsValue})`;
         }
-        if (this.options.test262Observation && this.isDirectEvalSyntax(node))
+        if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(node))
             return this.emitDirectEvalApplication(node,callee,argumentsValue);
         return `tsc_value_apply_function(${callee}, ${receiver}, ${argumentsValue})`;
     }
@@ -36545,55 +36497,6 @@ class Emitter {
             `tsc_environment_private_names_project(${scope}.record, ${privateProjection}, ${privateNames.length}); ` +
             `(void)tsc_environment_swap(${scope}.record); ` +
             `tsc_test262_direct_eval_call(${callee}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
-    }
-
-    private aotRuntimeCodeStaticString(expr: ts.Expression): string | null {
-        return staticStringExpressionText(expr) ??
-            this.sideEffectFreeStringLiteralText(expr, new Set());
-    }
-
-    private emitAotEvalManifestDispatch(
-        call: ts.CallExpression,
-        sourceNode: ts.Expression,
-        entries: AotRuntimeCodeEntry[],
-    ): EmitResult {
-        const source = this.emitExpr(sourceNode);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: source, target: T_STRING, node: sourceNode },
-            ...this.ignoredArgumentSpecs(call.arguments, 1),
-        ], ([sourceValue]) => {
-            const out = this.freshTemp("_aot_eval");
-            const pieces = [`tsc_value_t ${out} = tsc_value_undefined()`];
-            let dispatch = "";
-            entries.forEach((entry, index) => {
-                const cond = `${index === 0 ? "if" : "else if"} (tsc_str_eq(${sourceValue}, ${this.cStringLiteral(entry.source)}))`;
-                dispatch += `${cond} { ${out} = ${this.emitAotRuntimeConstant(entry.constant).c}; } `;
-            });
-            dispatch += this.options.unsafeEval
-                ? `else { ${out} = tsc_node_eval(${sourceValue}); }`
-                : `else { tsc_throw_str(tsc_str_from_cstr("runtime eval source outside AOT allow-list")); }`;
-            pieces.push(dispatch);
-            pieces.push(out);
-            return `({ ${pieces.join("; ")}; })`;
-        });
-    }
-
-    private emitAotRuntimeConstant(value: AotRuntimeConstant): EmitResult {
-        switch (value.kind) {
-            case "number":
-                return { c: `tsc_value_num(${Number.isNaN(value.value) ? "NAN" : JSON.stringify(value.value)})`, ty: T_VALUE };
-            case "string":
-                return {
-                    c: `tsc_value_string(tsc_str_from_lit("${escapeCString(value.value)}", ${utf8ByteLen(value.value)}))`,
-                    ty: T_VALUE,
-                };
-            case "boolean":
-                return { c: `tsc_value_bool(${value.value ? "true" : "false"})`, ty: T_VALUE };
-            case "null":
-                return { c: "tsc_value_null()", ty: T_VALUE };
-            case "undefined":
-                return { c: "tsc_value_undefined()", ty: T_VALUE };
-        }
     }
 
     private cStringLiteral(value: string): string {

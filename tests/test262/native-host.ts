@@ -14,7 +14,7 @@ import {
     moduleRequestKey,
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
-import { sourceEvaluationInvocations } from "../../src/source-value-flow";
+import { evaluationSourceRequests, sourceFileIsStrict } from "../../src/eval-source";
 import {
     bindingNames,
     earlyModuleStaticSemanticsFailure,
@@ -86,20 +86,6 @@ export interface FiniteEvalScriptSourceGraph {
     readonly error: string | null;
 }
 
-function sourceFileIsStrict(sourceFile: ts.SourceFile): boolean {
-    return ecmaParseGoal(sourceFile) === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements);
-}
-
-function directEvalIsStrict(node: ts.Node, inherited: boolean): boolean {
-    for (let current: ts.Node | undefined = node; current; current = current.parent) {
-        if (ts.isClassLike(current) || ts.isClassStaticBlockDeclaration(current)) return true;
-        if (ts.isFunctionLike(current) && "body" in current && current.body && ts.isBlock(current.body)) {
-            if (ecmaDirectivePrologueHasUseStrict(current.body.statements)) return true;
-        }
-    }
-    return inherited;
-}
-
 /** Eval and dynamic Function construction consume the same source-owned
  * value/location/List graph. Extend its exact-source records to a fixed point;
  * source bindings remain isolated exactly as in native Script compilation. */
@@ -141,36 +127,33 @@ export function finiteEvalScriptSourceGraph(
         const program = ts.createProgram([...byPath].filter(([,record])=>record.root).map(([filename])=>filename),options,host);
         const before = records.length;
         let unresolved: string | null = null;
-        for (const invocation of sourceEvaluationInvocations(program,{evaluations:records.filter(record => record.evaluation)
-            .map(record => ({source:record.source,entry:path.resolve(record.path)}))})) {
-            const file = invocation.node.getSourceFile(),record = byPath.get(path.resolve(file.fileName))!;
-            if (invocation.choices === null) {
-                if (invocation.operation === "eval" && !invocation.direct) continue;
-                const location = file.getLineAndCharacterOfPosition(invocation.node.getStart(file));
-                const label = invocation.operation === "eval-script" ? "evalScript" : "direct eval";
-                unresolved ??= `${record.path}:${location.line+1}:${location.character+1}: ${label} source is not a finite static string expression`;
-                continue;
-            }
-            for (const source of invocation.choices) {
-                const parsed = createEcmaSourceFile("eval-source.js",source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,"script");
-                if (invocation.operation === "eval-script") {
-                    if (sources.has(source)) continue;
-                    sources.add(source);
-                    records.push({path:`__tsc2c_eval_script__/${sha256Text(source)}.js`,source,goal:"script",root:true,evaluation:true});
-                } else if (invocation.direct) {
-                    const strictCaller = directEvalIsStrict(invocation.node,record.strictContext ?? sourceFileIsStrict(file));
-                    const strict = strictCaller || sourceFileIsStrict(parsed),key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
-                    if (directSources.has(key)) continue;
-                    directSources.set(key,{source,strictCaller,strict});
-                    records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,goal:"script",
-                        strictContext:strict,root:true,evaluation:true});
-                } else {
-                    if (indirectSources.has(source)) continue;
-                    const strict = sourceFileIsStrict(parsed);
-                    indirectSources.set(source,{source,strict});
-                    records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(source)}.js`,source,goal:"script",
-                        strictContext:strict,root:true,evaluation:true});
-                }
+        const projected = evaluationSourceRequests(program, { evaluations: records.filter(record => record.evaluation)
+            .map(record => ({source:record.source,entry:path.resolve(record.path)})) },
+            new Map(records.filter(record => record.strictContext !== undefined).map(record => [path.resolve(record.path), record.strictContext!])));
+        for (const invocation of projected.unresolved) {
+            if (invocation.operation === "eval" && !invocation.direct) continue;
+            const file = invocation.node.getSourceFile(), record = byPath.get(path.resolve(file.fileName))!;
+            const location = file.getLineAndCharacterOfPosition(invocation.node.getStart(file));
+            const label = invocation.operation === "eval-script" ? "evalScript" : "direct eval";
+            unresolved ??= `${record.path}:${location.line+1}:${location.character+1}: ${label} source is not a finite static string expression`;
+        }
+        for (const request of projected.requests) {
+            const {source, strict, strictCaller} = request;
+            if (request.kind === "script") {
+                if (sources.has(source)) continue;
+                sources.add(source);
+                records.push({path:`__tsc2c_eval_script__/${sha256Text(JSON.stringify(source))}.js`,source,goal:"script",root:true,evaluation:true});
+            } else if (request.kind === "direct") {
+                const key = `${strictCaller ? "strict" : "sloppy"}\0${source}`;
+                if (directSources.has(key)) continue;
+                directSources.set(key,{source,strictCaller,strict});
+                records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(JSON.stringify(source))}.js`,source,goal:"script",
+                    strictContext:strict,root:true,evaluation:true});
+            } else {
+                if (indirectSources.has(source)) continue;
+                indirectSources.set(source,{source,strict});
+                records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(JSON.stringify(source))}.js`,source,goal:"script",
+                    strictContext:strict,root:true,evaluation:true});
             }
         }
         if (records.length === before) {
@@ -797,13 +780,13 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
         const evalScriptEntries: Array<{ source: string; entry: string | null }> = [];
         const evalScriptRoots: string[] = [];
         for (const source of evalScriptGraph.sources) {
-            const relative = `__tsc2c_eval_script__/${sha256Text(source)}.js`;
+            const relative = `__tsc2c_eval_script__/${sha256Text(JSON.stringify(source))}.js`;
             const failure = parseFailure(source, relative, "parse", "test-source", "script");
             if (failure) {
                 evalScriptEntries.push({ source, entry: null });
                 continue;
             }
-            const entry = await writeExclusive(sourceRoot, relative, source);
+            const entry = await writeExclusive(sourceRoot, relative, Buffer.from("\ufeff" + source, "utf16le"));
             evalScriptRoots.push(entry);
             evalScriptEntries.push({ source, entry });
         }
@@ -817,13 +800,13 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
         for (const direct of evalScriptGraph.directEvalSources) {
             const relative =
                 `__tsc2c_direct_eval__/${direct.strictCaller ? "strict" : "sloppy"}/` +
-                `${sha256Text(direct.source)}.js`;
+                `${sha256Text(JSON.stringify(direct.source))}.js`;
             const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true);
             if (failure) {
                 directEvalEntries.push({ ...direct, entry: null });
                 continue;
             }
-            const entry = await writeExclusive(sourceRoot, relative, direct.source);
+            const entry = await writeExclusive(sourceRoot, relative, Buffer.from("\ufeff" + direct.source, "utf16le"));
             directEvalRoots.push(entry);
             directEvalEntries.push({ ...direct, entry });
         }
@@ -836,13 +819,13 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
         for (const indirect of evalScriptGraph.indirectEvalSources) {
             const relative =
                 `__tsc2c_indirect_eval__/${indirect.strict ? "strict" : "sloppy"}/` +
-                `${sha256Text(indirect.source)}.js`;
+                `${sha256Text(JSON.stringify(indirect.source))}.js`;
             const failure = parseFailure(indirect.source, relative, "parse", "test-source", "script");
             if (failure) {
                 indirectEvalEntries.push({ ...indirect, entry: null });
                 continue;
             }
-            const entry = await writeExclusive(sourceRoot, relative, indirect.source);
+            const entry = await writeExclusive(sourceRoot, relative, Buffer.from("\ufeff" + indirect.source, "utf16le"));
             indirectEvalRoots.push(entry);
             indirectEvalEntries.push({ ...indirect, entry });
         }

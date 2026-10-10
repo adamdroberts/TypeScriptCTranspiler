@@ -1,2 +1,0 @@
-tsc_node_eval(
-tsc_str_from_lit("1 + 4", 5)

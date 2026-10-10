@@ -9,9 +9,7 @@ static const char test262_host_realm_state_key;
 
 static void test262_install_current_realm_globals(void);
 
-static tsc_value_t test262_eval_intrinsic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)this_arg;
+tsc_value_t tsc_eval_indirect(tsc_array_t* args) {
     tsc_value_t source = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
@@ -62,18 +60,12 @@ tsc_value_t tsc_test262_direct_eval_call(
     tsc_value_t args,
     bool strict_caller
 ) {
-    if (value_is_box(callee) && value_tag(callee) == TSC_VALUE_TAG_FUNCTION) {
-        const tsc_function_identity_t* identity =
-            (const tsc_function_identity_t*)value_ptr(callee);
-        if (identity->kind == TSC_FUNCTION_IDENTITY_BUILTIN &&
-            identity->code.generic == test262_eval_intrinsic &&
-            identity->env == tsc_realm_current()) {
+    if (tsc_value_eq(callee, tsc_eval_intrinsic_value())) {
             tsc_array_t* list = tsc_value_as_array(args);
             tsc_value_t source = list && list->len > 0
                 ? TSC_ARR(tsc_value_t, list, 0)
                 : tsc_value_undefined();
-            return tsc_test262_direct_eval(source, strict_caller);
-        }
+        return tsc_test262_direct_eval(source, strict_caller);
     }
     return tsc_value_apply_function(callee, tsc_value_undefined(), args);
 }
@@ -499,12 +491,7 @@ static void test262_install_current_realm_globals(void) {
         {
             "eval",
             4,
-            tsc_value_function_builtin_named(
-                test262_eval_intrinsic,
-                realm,
-                1.0,
-                tsc_str_from_lit("eval", 4)
-            )
+            tsc_eval_intrinsic_value()
         },
         {
             "print",
