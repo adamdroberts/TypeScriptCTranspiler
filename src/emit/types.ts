@@ -217,11 +217,11 @@ export function isOrdinaryClassMember(node: ts.Node): node is ts.MethodDeclarati
 }
 
 /** Source formal syntax owns one value ABI for ordinary functions and
- * object/class members. Constructors and external callbacks retain their
+ * object/class members and constructors. External callbacks retain their
  * separate physical adapters where applicable. */
 export function hasCanonicalValueFormals(node: ts.Node): boolean {
     return isOrdinaryObjectMember(node) || isOrdinaryClassMember(node) ||
-        (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
+        (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isConstructorDeclaration(node)) &&
             !!node.body && !node.getSourceFile().isDeclarationFile ||
         ts.isFunctionLike(node) && /\.[cm]?jsx?$/i.test(node.getSourceFile().fileName);
 }

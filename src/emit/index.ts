@@ -25104,6 +25104,18 @@ class Emitter {
         // ClassName_init: runs ctor body + initializers on a pre-allocated self.
         const initParams = [`${name}_t* self`, ...ctorParams];
         this.defs.open(`static inline void ${name}_init(${initParams.join(", ")})`);
+        const capturedCells = ctor ? this.capturedCellsFor(ctor) : new Map<ts.Symbol, CaptureCell>();
+        const parameterValues = new Map<ts.Symbol, string>();
+        const parameterTypes = new Map<ts.Symbol, CType>();
+        const rawParameterNames = this.collectParamInfos(ctor?.parameters ?? []).map(parameter => parameter.name);
+        const formalPlans = ctor ? this.emitSourceFormalBindingStorage(
+            this.defs, ctor, rawParameterNames, capturedCells, parameterValues, parameterTypes,
+        ) : null;
+        this.argumentValueScopes.push(parameterValues);
+        this.argumentValueTypeScopes.push(parameterTypes);
+        this.cellScopes.push(capturedCells);
+        if (formalPlans) this.formalParameterScopes.push(formalPlans);
+        if (ctor && formalPlans) this.emitSourceFormalParameterInitialization(this.defs, ctor, rawParameterNames, formalPlans);
         const typeChain = this.classTypeChain(cd);
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         for (const field of this.classOwnInstanceFields(cd)) {
@@ -25140,9 +25152,11 @@ class Emitter {
             }
         }
         for (const field of this.classOwnInstanceFields(cd)) {
-            if (field.parameter && ts.isIdentifier(field.parameter.name)) this.defs.line(
-                `${this.nativeFieldStore("self", name, field.name, field.type, mangleIdent(field.parameter.name.text))};`,
-            );
+            if (field.parameter && ts.isIdentifier(field.parameter.name)) {
+                const symbol = this.symbolForIdentifier(field.parameter.name);
+                const value = symbol && formalPlans?.get(symbol)?.value || mangleIdent(field.parameter.name.text);
+                this.defs.line(`${this.nativeFieldStore("self", name, field.name, field.type, value)};`);
+            }
         }
         if (ctor && ctor.body) {
             this.currentClass = name;
@@ -25160,6 +25174,10 @@ class Emitter {
             this.defs.line(`${baseName}_init((${baseName}_t*)self);`);
         }
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
+        if (formalPlans) this.formalParameterScopes.pop();
+        this.cellScopes.pop();
+        this.argumentValueTypeScopes.pop();
+        this.argumentValueScopes.pop();
         this.defs.close();
         this.defs.line();
 
@@ -25176,9 +25194,7 @@ class Emitter {
         this.defs.line("self->__tsc_object_owner.object = NULL;");
         this.defs.line(`self->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(classType(name), cd)};`);
         const initArgs = ["self"];
-        for (const p of ctor?.parameters ?? []) {
-            if (ts.isIdentifier(p.name)) initArgs.push(mangleIdent(p.name.text));
-        }
+        initArgs.push(...rawParameterNames);
         this.defs.line(`${name}_init(${initArgs.join(", ")});`);
         this.defs.line("return self;");
         this.defs.close();
@@ -25687,19 +25703,25 @@ class Emitter {
             buf.line("(void)env;");
             buf.line("(void)this_arg;");
             buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+            buf.line("tsc_call_activation_t activation;");
+            buf.line("tsc_call_activation_push(&activation, args, this_arg, tsc_value_current_callee());");
+            buf.line("tsc_call_activation_configure(true, NULL);");
             const callArgs: string[] = [];
             for (let index = 0; index < paramTypes.length; index++) {
-                const raw = `(${index} < args->len ? TSC_ARR(tsc_value_t, args, ${index}) : tsc_value_undefined())`;
+                const raw = params[index]!.dotDotDotToken
+                    ? `tsc_value_array(tsc_array_slice(args, ${index}.0, (double)args->len))`
+                    : `(${index} < args->len ? TSC_ARR(tsc_value_t, args, ${index}) : tsc_value_undefined())`;
                 callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[index]!, ctor ?? cd));
             }
             buf.line(`${className}_t* result = ${className}_new(${callArgs.join(", ")});`);
+            buf.line("tsc_call_activation_pop(&activation);");
             buf.line(`return ${this.classValueBoxExpression({ c: "result", ty: classType(className) }, ctor ?? cd)};`);
             buf.close();
             buf.line();
             this.closureDefs.write(buf.toString());
         }
         const constructor = this.withCallableSourceText(
-            `tsc_value_function_class_named(${adapter}, NULL, ${paramTypes.length}.0, ` +
+            `tsc_value_function_class_named(${adapter}, NULL, ${ctor ? this.javaScriptFunctionLength(ctor) : 0}.0, ` +
             `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
         if (!initializeMembers) return { c: constructor, ty: T_VALUE };
         const definitions: string[] = [];
@@ -37056,7 +37078,7 @@ class Emitter {
                 }
                 specs.push({
                     value: { c: "tsc_value_undefined()", ty: T_VALUE },
-                    lazyValue: () => paramDecl.initializer
+                    lazyValue: hasCanonicalValueFormals(paramDecl.parent) ? undefined : () => paramDecl.initializer
                         ? this.emitMissingDefaultArgument(paramDecl)
                         : this.emitMissingOptionalArgument(paramDecl, paramType),
                     target: paramType,
@@ -46774,6 +46796,15 @@ class Emitter {
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
         const targetClass = targetClassDecl ?? targetClassExpression;
+        if (targetClassDecl && !targetClassDecl.getSourceFile().isDeclarationFile &&
+            !targetClassDecl.typeParameters?.length) {
+            const constructor = this.emitExpr(n.expression);
+            const constructed = this.emitDynamicValueConstruct(n, {
+                c: this.coerce(constructor, T_VALUE, n.expression), ty: T_VALUE,
+            });
+            const native = classType(nativeTypeName(targetClassDecl));
+            return { c: this.coerce(constructed, native, n), ty: native };
+        }
         const cls = targetClass ? nativeTypeName(targetClass)
             : this.isOutOfBandIdentifier(ctorExpr) ? ctorExpr.text : this.identifierName(ctorExpr);
         if (cls === "TextEncoder") {
