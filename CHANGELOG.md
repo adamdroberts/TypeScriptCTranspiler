@@ -1,5 +1,7 @@
 # Changelog
 
+- Share typed Module patterns with the canonical binding-cell collection and BindingInitialization tree. Preserve boxed aggregate/default sources, actual iterator values, cyclic TDZ/var state and live exports; verify independent Node semantics, deep binding and typed E2E in both memory modes.
+
 - Include actual arguments, source writes, aliases and patterns in the shared native-result graph. Preserve actual values through annotated ABI slots, shared collection codecs, callback adapters and reflective calls; verify independent semantics and typed module E2E in both memory modes.
 
 - Preserve actual ordinary Date/Buffer results across inferred function, closure, field, aggregate and awaited ABI slots through one source graph and scoped type projection. Verify independent Type/identity/effect partitions, deep source dependencies and typed module E2E in both memory modes.

@@ -553,6 +553,7 @@ class Emitter {
     }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor"}], ["buffer", {}]]);
     private readonly ordinaryNativeOwnerResultFacts = new Map<ts.Node, boolean>();
     private ordinaryNativeOwnerInputs: Map<ts.Node, Set<ts.Node>> | null = null;
+    private ordinaryAggregateDepth = 0;
 
     public diagnostics: string[] = [];
     private structDecls = new CBuf();
@@ -23425,6 +23426,10 @@ class Emitter {
             return null;
         }
         const symbol = this.symbolForIdentifier(id);
+        // Module instantiation can expose a var cell before its typed source
+        // initializer runs. Pattern leaves also receive actual iterator/Get
+        // values; checker scalar types do not replace either cell value.
+        if (symbol && (this.moduleVarBindings.has(symbol) || this.moduleLexicalBindings.has(symbol))) return null;
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         if (declaration && this.expressionHasOrdinaryNativeOwnerResult(declaration)) return null;
         const lexical = this.localLexicalMetadataForSymbol(this.symbolForIdentifier(id));
@@ -24495,7 +24500,7 @@ class Emitter {
     private collectModuleVarBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
         const prepared = this.moduleVarBindingsBySource.get(sf);
         if (prepared) return prepared;
-        if (!this.isJavaScriptSourceFile(sf) || !ts.isExternalModule(sf) ||
+        if (!ts.isExternalModule(sf) ||
             this.isTest262ScriptSourceFile(sf)) return [];
         const plans: ModuleVarBindingPlan[] = [];
         const visit = (node: ts.Node): void => {
@@ -24506,7 +24511,7 @@ class Emitter {
                 return;
             }
             if (
-                ts.isVariableDeclaration(node) &&
+                ts.isVariableDeclaration(node) && this.moduleVariableUsesCanonicalBindings(node) &&
                 ts.isVariableDeclarationList(node.parent) &&
                 (node.parent.flags & (
                     ts.NodeFlags.Const |
@@ -24554,7 +24559,7 @@ class Emitter {
 
     private moduleVariableDeclarationKind(declaration: ts.VariableDeclaration): "var" | "lexical" | null {
         const source = declaration.getSourceFile();
-        if ((!this.isJavaScriptSourceFile(source) && this.resourceDeclarationHint(declaration) === null) ||
+        if (!this.moduleVariableUsesCanonicalBindings(declaration) ||
             !ts.isExternalModule(source) || this.isTest262ScriptSourceFile(source) ||
             !ts.isVariableDeclarationList(declaration.parent)) return null;
         const list = declaration.parent;
@@ -24565,6 +24570,16 @@ class Emitter {
             if (ts.isSourceFile(node)) return "var";
         }
         return null;
+    }
+
+    private moduleVariableUsesCanonicalBindings(declaration: ts.VariableDeclaration): boolean {
+        if (this.isJavaScriptSourceFile(declaration.getSourceFile()) || this.resourceDeclarationHint(declaration) !== null) return true;
+        if (ts.isIdentifier(declaration.name)) return false;
+        // Native Node module aliases have a separate AOT owner admission. Their
+        // value factories must join ordinary GetValue before replacing those
+        // adapters; ordinary source patterns share Module binding cells now.
+        return !this.isCommonJsModuleDestructureAliasDeclaration(declaration) &&
+            !(declaration.initializer && (this.nativeAddonSpecifierFromExpression(declaration.initializer) ?? this.requireCallSpecifier(declaration.initializer)));
     }
 
     private emitModuleBindingLeaf(buf: CBuf, identifier: ts.Identifier, value: string): void {
@@ -24580,7 +24595,8 @@ class Emitter {
         const kind = this.moduleVariableDeclarationKind(declaration);
         if (!kind) return false;
         if (kind === "var" && !declaration.initializer) return true;
-        const value = declaration.initializer ? this.coerce(this.emitExpr(declaration.initializer),T_VALUE,declaration.initializer)
+        const value = declaration.initializer ? this.coerce(ts.isIdentifier(declaration.name)
+            ? this.emitExpr(declaration.initializer) : this.emitOrdinaryObjectExpression(declaration.initializer),T_VALUE,declaration.initializer)
             : "tsc_value_undefined()";
         this.emitBindingInitialization(buf,declaration.name,value,(target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
         return true;
@@ -24635,8 +24651,9 @@ class Emitter {
             }
             if (!ts.isVariableStatement(statement)) continue;
             const flags = statement.declarationList.flags;
-            if ((flags & ts.NodeFlags.BlockScoped) === 0 || resourceOnly && (flags & ts.NodeFlags.Using) === 0) continue;
+            if ((flags & ts.NodeFlags.BlockScoped) === 0) continue;
             for (const declaration of statement.declarationList.declarations) {
+                if (!this.moduleVariableUsesCanonicalBindings(declaration)) continue;
                 for (const name of this.test262BindingNames(declaration.name))
                     addPlan(declaration, name, (flags & (ts.NodeFlags.Const | ts.NodeFlags.Using)) !== 0);
             }
@@ -25106,7 +25123,7 @@ class Emitter {
         buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
         if (initializer) {
             buf.open(`if (tsc_value_is_undefined(${value}))`);
-            const fallback = this.emitExpr(initializer);
+            const fallback = this.emitOrdinaryObjectExpression(initializer);
             buf.line(`${value} = ${this.coerce(fallback, T_VALUE, initializer)};`);
             buf.line(`${root} = tsc_value_gc_root(${value});`);
             buf.close();
@@ -56006,10 +56023,8 @@ class Emitter {
     }
 
     private emitOrdinaryObjectExpression(expression: ts.Expression): EmitResult {
-        const value = this.unwrapTransparentExpression(expression);
-        return ts.isObjectLiteralExpression(value)
-            ? this.emitObjectLiteral(value, true)
-            : this.emitExpr(expression);
+        this.ordinaryAggregateDepth++;
+        try { return this.emitExpr(expression); } finally { this.ordinaryAggregateDepth--; }
     }
 
     private emitPropertyDescriptorDefinition(
@@ -57651,7 +57666,7 @@ class Emitter {
         return props.every((p) => seen.has(p.getName()));
     }
 
-    private emitObjectLiteral(ol: ts.ObjectLiteralExpression, ordinary = false): EmitResult {
+    private emitObjectLiteral(ol: ts.ObjectLiteralExpression, ordinary = this.ordinaryAggregateDepth > 0): EmitResult {
         const hasAccessor = ol.properties.some((property) =>
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
@@ -57895,7 +57910,7 @@ class Emitter {
             this.asyncAwaitReturnContextTypes.get(al) ??
             this.checker.getContextualType(al) ??
             this.checker.getTypeAtLocation(al);
-        const mapped = this.isUntypedJsArrayLiteral(al)
+        const mapped = this.ordinaryAggregateDepth > 0 || this.isUntypedJsArrayLiteral(al)
             ? T_VALUE
             : mapTsType(al, litType, this.checker);
         if (mapped.kind === "value") {
