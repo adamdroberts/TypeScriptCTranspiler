@@ -25848,6 +25848,9 @@ class Emitter {
     }
 
     private classDecoratorValue(cd: ts.ClassDeclaration): EmitResult {
+        // Member decorators retain the original constructor. Only a class
+        // decorator owns a constructor replacement cell.
+        if (!ts.canHaveDecorators(cd) || !(ts.getDecorators(cd) ?? []).length) return this.classConstructorValue(cd);
         const replacement = this.classDecoratorReplacementName(cd);
         return {
             c: `({ tsc_value_t _decorator_current = ${replacement}; ` +

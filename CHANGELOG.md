@@ -1,3 +1,5 @@
+Member-only decorated TypeScript classes now retain their original constructor when published through module bindings, avoiding an undeclared class replacement cell.
+
 Continuation regression checks now follow the canonical CFG representation, and Reflect rejection checks observe the specified TypeError constructor instead of an obsolete message.
 
 Array exception regression observations now verify the specified error class against Node rather than obsolete runtime messages.
