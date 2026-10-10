@@ -1,5 +1,7 @@
 # Changelog
 
+- Compose local Date construction and UTC/local/legacy setters through one Number calendar component kernel before host time-zone conversion. Preserve cancellation, fractional truncation, invalid-year wall-time fallback and valid negative epoch seconds; verify independent normalization, offset/clip properties, deep retention and typed E2E in both memory modes.
+
 - Share ordinary Date instance lookup and pre-coercion time snapshots, migrate UTC setters to the exact calendar kernel and remove direct method/purity predecessors. Share Date/Buffer owner admission and a source fact worklist for inferred result/alias storage; verify Node and pinned year semantics, retained owners, deep source dependencies and typed/suspended consumers.
 
 - Return integral current UTC milliseconds from the shared Date clock and verify native values against independent execution-time host bounds. Bind exact UTC/now clauses to reciprocal properties, typed cases, one generated retained-owner argument List and reviewed metadata, while retaining full Date and signed host/report gaps.

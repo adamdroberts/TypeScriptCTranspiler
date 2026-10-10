@@ -6719,13 +6719,18 @@ static tsc_date_t* date_this_value(tsc_value_t receiver, const char* method) {
 static int date_numeric_arguments(
     const tsc_array_t* args,
     int maximum,
-    double values[4]
+    double values[4],
+    bool local_year,
+    double* base_time
 ) {
     const size_t actual_count = args ? args->len : 0;
     int count = actual_count > (size_t)maximum ? maximum : (int)actual_count;
     if (count == 0) count = 1;
     for (int index = 0; index < count; index++) {
         values[index] = tsc_value_to_number(date_argument(args, (size_t)index));
+        if (index == 0 && local_year) {
+            *base_time = isnan(*base_time) ? 0.0 : tsc_date_local_time(*base_time);
+        }
     }
     return count;
 }
@@ -6788,28 +6793,34 @@ static tsc_value_t date_prototype_method_apply(
         case TSC_DATE_METHOD_SET_UTC_PART:
         case TSC_DATE_METHOD_SET_LOCAL_PART: {
             double values[4] = { 0.0, 0.0, 0.0, 0.0 };
-            int count = date_numeric_arguments(args, descriptor->max_args, values);
+            const bool local = descriptor->operation == TSC_DATE_METHOD_SET_LOCAL_PART;
+            double base_time = local && descriptor->part != 0
+                ? tsc_date_local_time(captured_time) : captured_time;
+            int count = date_numeric_arguments(args, descriptor->max_args, values,
+                local && descriptor->part == 0, &base_time);
             return tsc_value_num(
                 descriptor->operation == TSC_DATE_METHOD_SET_UTC_PART
                     ? tsc_date_set_utc_part(
-                        date, captured_time,
+                        date, base_time,
                         descriptor->part,
                         values[0], values[1], values[2], values[3],
                         count
                     )
                     : tsc_date_set_local_part(
-                        date, captured_time,
+                        date, base_time,
                         descriptor->part,
                         values[0], values[1], values[2], values[3],
                         count
                     )
             );
         }
-        case TSC_DATE_METHOD_SET_LEGACY_YEAR:
+        case TSC_DATE_METHOD_SET_LEGACY_YEAR: {
+            const double year = tsc_value_to_number(date_argument(args, 0));
+            const double wall_time = isnan(captured_time) ? 0.0 : tsc_date_local_time(captured_time);
             return tsc_value_num(tsc_date_set_legacy_year(
-                date, captured_time,
-                tsc_value_to_number(date_argument(args, 0))
+                date, wall_time, year
             ));
+        }
         case TSC_DATE_METHOD_STRING:
             return tsc_value_string(descriptor->string_operation(date));
         case TSC_DATE_METHOD_TO_JSON:

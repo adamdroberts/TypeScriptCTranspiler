@@ -21,9 +21,9 @@ function subject():string {
         function check(value,label){if(!value)throw new Error(label);PRINT(label);}
         for(const plan of plans)for(const invalid of [false,true])for(const mode of ['absent','present','undefined','abrupt']){
             const date=new Date(invalid?NaN:seed),events=[];
-            const first={valueOf(){events.push('first');date.setTime(mode==='abrupt'?12345:0);if(mode==='abrupt')throw raw;return plan.values[0];}};
+            const first={valueOf(){events.push('first');COLLECT;date.setTime(mode==='abrupt'?12345:0);if(mode==='abrupt')throw raw;return plan.values[0];}};
             const args=[first];
-            if(mode==='present')for(let position=1;position<plan.values.length;position++)args.push({valueOf(){events.push('optional:'+position);date.setTime(0);return plan.values[position];}});
+            if(mode==='present')for(let position=1;position<plan.values.length;position++)args.push({valueOf(){events.push('optional:'+position);COLLECT;date.setTime(0);return plan.values[position];}});
             if(mode==='undefined' && plan.values.length>1)args.push(undefined);
             const ignored={[Symbol.toPrimitive](){throw new Error('ignored conversion');}};
             if(mode==='present')args.push(ignored);
@@ -41,7 +41,7 @@ function subject():string {
         for(const name of parts){
             const descriptor=Object.getOwnPropertyDescriptor(Date.prototype,name),events=[],date=new Date(seed);
             Object.defineProperty(Date.prototype,name,{get(){events.push('get');return function(value){events.push('call:'+value);return this===date?'replacement':'wrong';};},configurable:true});
-            function argument(){events.push('arg');Object.defineProperty(Date.prototype,name,{value(){throw raw;},writable:true,configurable:true});return 7;}
+            function argument(){events.push('arg');COLLECT;Object.defineProperty(Date.prototype,name,{value(){throw raw;},writable:true,configurable:true});return 7;}
             check(date[name](argument())==='replacement' && events.join('|')==='get|arg|call:7','saved-instance-method:'+name);
             Object.defineProperty(Date.prototype,name,descriptor);
         }
@@ -85,6 +85,7 @@ test("Date instance calls retain ordinary lookup and setters consume the pre-coe
                 ...(profile?{test262Observation:{kind:"test262-native-observation" as const,scenarioId:"property/date-instance.js#module",setupEntries:[],testEntry:entry,async:false,scriptEntries:[]}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
             expect({exitCode:result.exitCode,diagnostics:diagnostics.join("")}).toEqual({exitCode:0,diagnostics:""});
             const native=Bun.spawnSync([output],{stdout:"pipe",stderr:"pipe",env:{...process.env,TZ:"UTC",GC_FREE_SPACE_DIVISOR:"100"}});
+            if(native.exitCode!==0)throw new Error(JSON.stringify({profile,noGc,exitCode:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString().slice(-3000)}));
             expect({exitCode:native.exitCode,stderr:native.stderr.toString()}).toEqual({exitCode:0,stderr:""});
             const observation=profile?parseHostObservation(JSON.parse(native.stdout.toString())):null;if(observation)expect(observation).toMatchObject({kind:"normal"});
             expect((observation?observation.stdout??"":native.stdout.toString()).trimEnd().split("\n")).toEqual(expected);

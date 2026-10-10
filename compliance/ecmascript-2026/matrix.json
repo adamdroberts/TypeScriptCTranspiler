@@ -2881,7 +2881,8 @@
           "tests/property/date-utc-calendar.property.test.ts",
           "tests/property/date-now.property.test.ts",
           "tests/property/date-instance-invocation.property.test.ts",
-          "tests/property/ordinary-native-owner-result.property.test.ts"
+          "tests/property/ordinary-native-owner-result.property.test.ts",
+          "tests/property/date-local-calendar.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2900,7 +2901,8 @@
           "date_static_invocation",
           "date_utc_calendar",
           "date_now_time_value",
-          "date_instance_invocation"
+          "date_instance_invocation",
+          "date_local_calendar"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [

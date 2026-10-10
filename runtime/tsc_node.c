@@ -17137,131 +17137,92 @@ static double date_make_date(double day, double time) {
     return isfinite(result) ? result : NAN;
 }
 
-double tsc_date_set_utc_part(tsc_date_t* d, double base_ms, int part, double a, double b, double c, double e, int arg_count) {
-    if (!d || part < 0 || part > 6) return NAN;
-    /* Non-year setters return without writing when their captured time is
-     * invalid, even if conversion hooks have since mutated the receiver. */
-    if (isnan(base_ms)) {
-        if (part != 0) return NAN;
-        base_ms = 0.0;
-    }
-    time_t seconds = (time_t)floor(base_ms / 1000.0);
+/* Calendar composition happens entirely in Number space. Host time-zone
+ * APIs only see the resulting normalized wall time, never source arguments. */
+static bool date_host_seconds(double time, time_t* seconds) {
+    if (!isfinite(time)) return false;
+    double integral = floor(time / 1000.0);
+    double limit = ldexp(1.0, (int)(sizeof(time_t) * CHAR_BIT) - 1);
+    if (integral < -limit || integral >= limit) return false;
+    *seconds = (time_t)integral;
+    return true;
+}
+
+double tsc_date_local_time(double time) {
+    time_t seconds;
+    struct tm local;
+    if (!date_host_seconds(time, &seconds) || !localtime_r(&seconds, &local)) return time;
+    return date_number_add(time, date_number_multiply((double)local.tm_gmtoff, 1000.0));
+}
+
+static double date_local_to_utc(double time) {
+    if (!isfinite(time)) return NAN;
+    time_t seconds;
+    struct tm local;
+    /* UTC is the fallback where the host cannot supply political rules. This
+     * also avoids an undefined cast for arbitrary finite Number inputs. */
+    if (!date_host_seconds(time, &seconds) || !gmtime_r(&seconds, &local)) return time;
+    local.tm_isdst = -1;
+    errno = 0;
+    time_t instant = mktime(&local);
+    if (instant == (time_t)-1 && errno == EOVERFLOW) return time;
+    // -1 is also an ordinary epoch second; it is not an error sentinel alone.
+    double offset = date_number_multiply((double)seconds - (double)instant, 1000.0);
+    return date_number_add(time, -offset);
+}
+
+static double date_update_components(double base_ms, int part, const double* provided, size_t count) {
+    if (part < 0 || part > 6 || isnan(base_ms)) return NAN;
+    time_t seconds;
     struct tm tm;
-    if (!gmtime_r(&seconds, &tm)) return NAN;
+    if (!date_host_seconds(base_ms, &seconds) || !gmtime_r(&seconds, &tm)) return NAN;
     double millis = fmod(base_ms, 1000.0);
     if (millis < 0.0) millis += 1000.0;
     double components[] = { (double)tm.tm_year + 1900.0, tm.tm_mon,
         tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, millis };
-    const double provided[] = { a, b, c, e };
     const size_t component_count = sizeof(components) / sizeof(components[0]);
-    const size_t provided_count = sizeof(provided) / sizeof(provided[0]);
-    for (size_t index = 0; index < provided_count && index < (size_t)arg_count &&
-        (size_t)part + index < component_count; index++) {
+    for (size_t index = 0; index < count && (size_t)part + index < component_count; index++) {
         components[(size_t)part + index] = provided[index];
     }
     double day = part <= 2 ? date_make_day(components[0], components[1], components[2])
         : floor(base_ms / 86400000.0);
-    double time = date_make_time(components[3], components[4], components[5], components[6]);
-    d->ms = date_time_clip(date_make_date(day, time));
+    return date_make_date(day, date_make_time(components[3], components[4], components[5], components[6]));
+}
+
+double tsc_date_set_utc_part(tsc_date_t* d, double base_ms, int part, double a, double b, double c, double e, int arg_count) {
+    if (!d || part < 0 || part > 6) return NAN;
+    if (isnan(base_ms)) {
+        if (part != 0) return NAN;
+        base_ms = 0.0;
+    }
+    const double provided[] = { a, b, c, e };
+    size_t count = arg_count > 0 ? (size_t)arg_count : 0;
+    const size_t available = sizeof(provided) / sizeof(provided[0]);
+    if (count > available) count = available;
+    d->ms = date_time_clip(date_update_components(base_ms, part, provided, count));
     return d->ms;
 }
 
-double tsc_date_set_local_part(tsc_date_t* d, double base_ms, int part, double a, double b, double c, double e, int arg_count) {
-    if (!d) return NAN;
-    bool invalid_base = isnan(base_ms);
-    if (invalid_base && part != 0) return NAN;
-    if (invalid_base) base_ms = 0.0;
-    double provided[] = { a, b, c, e };
-    for (int i = 0; i < arg_count && i < 4; i++) {
-        if (!isfinite(provided[i])) {
-            d->ms = NAN;
-            return NAN;
-        }
+double tsc_date_set_local_part(tsc_date_t* d, double wall_ms, int part, double a, double b, double c, double e, int arg_count) {
+    if (!d || part < 0 || part > 6) return NAN;
+    if (isnan(wall_ms)) {
+        if (part != 0) return NAN;
+        wall_ms = 0.0;
     }
-    double seconds_double = floor(base_ms / 1000.0);
-    time_t seconds = (time_t)seconds_double;
-    struct tm tm;
-    if (!(invalid_base ? gmtime_r(&seconds, &tm) : localtime_r(&seconds, &tm))) {
-        d->ms = NAN;
-        return NAN;
-    }
-    double rem = fmod(base_ms, 1000.0);
-    if (rem < 0) rem += 1000.0;
-    int millis = (int)floor(rem);
-
-    switch (part) {
-        case 0:
-            tm.tm_year = (int)a - 1900;
-            if (arg_count > 1) tm.tm_mon = (int)b;
-            if (arg_count > 2) tm.tm_mday = (int)c;
-            break;
-        case 1:
-            tm.tm_mon = (int)a;
-            if (arg_count > 1) tm.tm_mday = (int)b;
-            break;
-        case 2:
-            tm.tm_mday = (int)a;
-            break;
-        case 3:
-            tm.tm_hour = (int)a;
-            if (arg_count > 1) tm.tm_min = (int)b;
-            if (arg_count > 2) tm.tm_sec = (int)c;
-            if (arg_count > 3) millis = (int)e;
-            break;
-        case 4:
-            tm.tm_min = (int)a;
-            if (arg_count > 1) tm.tm_sec = (int)b;
-            if (arg_count > 2) millis = (int)c;
-            break;
-        case 5:
-            tm.tm_sec = (int)a;
-            if (arg_count > 1) millis = (int)b;
-            break;
-        case 6:
-            millis = (int)a;
-            break;
-        default:
-            return NAN;
-    }
-
-    tm.tm_isdst = -1;
-    time_t t = mktime(&tm);
-    if (t == (time_t)-1) {
-        d->ms = NAN;
-        return NAN;
-    }
-    d->ms = date_time_clip(((double)t) * 1000.0 + (double)millis);
+    const double provided[] = { a, b, c, e };
+    size_t count = arg_count > 0 ? (size_t)arg_count : 0;
+    const size_t available = sizeof(provided) / sizeof(provided[0]);
+    if (count > available) count = available;
+    d->ms = date_time_clip(date_local_to_utc(date_update_components(wall_ms, part, provided, count)));
     return d->ms;
 }
 
-double tsc_date_set_legacy_year(tsc_date_t* d, double base_ms, double year) {
+double tsc_date_set_legacy_year(tsc_date_t* d, double wall_ms, double year) {
     if (!d) return NAN;
-    if (!isfinite(year)) {
-        d->ms = NAN;
-        return NAN;
-    }
-    int y = (int)year;
-    if (y >= 0 && y <= 99) y += 1900;
-
-    bool invalid_base = isnan(base_ms);
-    if (invalid_base) base_ms = 0.0;
-    double seconds_double = floor(base_ms / 1000.0);
-    time_t seconds = (time_t)seconds_double;
-    struct tm tm;
-    if (!(invalid_base ? gmtime_r(&seconds, &tm) : localtime_r(&seconds, &tm))) {
-        d->ms = NAN;
-        return NAN;
-    }
-    double rem = fmod(base_ms, 1000.0);
-    if (rem < 0) rem += 1000.0;
-    tm.tm_year = y - 1900;
-    tm.tm_isdst = -1;
-    time_t t = mktime(&tm);
-    if (t == (time_t)-1) {
-        d->ms = NAN;
-        return NAN;
-    }
-    d->ms = date_time_clip(((double)t) * 1000.0 + floor(rem));
+    double full_year = trunc(year);
+    if (full_year >= 0.0 && full_year <= 99.0) full_year = date_number_add(full_year, 1900.0);
+    if (isnan(wall_ms)) wall_ms = 0.0;
+    d->ms = date_time_clip(date_local_to_utc(date_update_components(wall_ms, 0, &full_year, 1)));
     return d->ms;
 }
 
@@ -17379,23 +17340,11 @@ double tsc_date_utc(double year, double month, double day, double hours, double 
 }
 
 double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
-    if (!isfinite(year) || !isfinite(month) || !isfinite(day) || !isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) {
-        return NAN;
-    }
-    int y = (int)year;
-    if (y >= 0 && y <= 99) y += 1900;
-    struct tm tm;
-    memset(&tm, 0, sizeof(tm));
-    tm.tm_year = y - 1900;
-    tm.tm_mon = (int)month;
-    tm.tm_mday = (int)day;
-    tm.tm_hour = (int)hours;
-    tm.tm_min = (int)minutes;
-    tm.tm_sec = (int)seconds;
-    tm.tm_isdst = -1;
-    time_t t = mktime(&tm);
-    if (t == (time_t)-1) return NAN;
-    return date_time_clip(((double)t) * 1000.0 + ms);
+    double full_year = trunc(year);
+    if (full_year >= 0.0 && full_year <= 99.0) full_year = date_number_add(full_year, 1900.0);
+    double wall_time = date_make_date(date_make_day(full_year, month, day),
+        date_make_time(hours, minutes, seconds, ms));
+    return date_time_clip(date_local_to_utc(wall_time));
 }
 
 double tsc_date_get_utc_part(const tsc_date_t* d, int part) {
