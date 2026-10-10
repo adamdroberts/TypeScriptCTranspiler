@@ -1,5 +1,7 @@
 # Changelog
 
+- Share Date year sign/magnitude formatting for prescribed ISO expanded years and civil minimum padding. Verify TimeClip boundaries, independent sign/width partitions, fixed offsets, deep retention and typed E2E in both memory modes.
+
 - Retain boxed lexical companion roots after their last store and root canonical native invocation/construction operands across allocation and callbacks. Verify forced collection across value kinds, fresh constructor receivers, deep escaped cells and typed Date consumers in both memory modes.
 
 - Compose local Date construction and UTC/local/legacy setters through one Number calendar component kernel before host time-zone conversion. Preserve cancellation, fractional truncation, invalid-year wall-time fallback and valid negative epoch seconds; verify independent normalization, offset/clip properties, deep retention and typed E2E in both memory modes.

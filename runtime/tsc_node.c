@@ -17407,6 +17407,15 @@ double tsc_date_get_timezone_offset(const tsc_date_t* d) {
     return difftime(utc_as_utc, local_as_utc) / 60.0;
 }
 
+/* Sign and decimal magnitude are separate format elements. Civil years have
+ * at least four digits; ISO expanded years have a mandatory sign and six. */
+static void date_format_year(char* buffer, size_t capacity, int year, bool iso) {
+    const bool expanded = iso && (year < 0 || year > 9999);
+    const char* sign = year < 0 ? "-" : expanded ? "+" : "";
+    unsigned int magnitude = year < 0 ? (unsigned int)(-(int64_t)year) : (unsigned int)year;
+    snprintf(buffer, capacity, "%s%0*u", sign, expanded ? 6 : 4, magnitude);
+}
+
 tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
     if (!d || isnan(d->ms)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_lit("Invalid time value", 18));
     double seconds_double = floor(d->ms / 1000.0);
@@ -17415,12 +17424,14 @@ tsc_str_t* tsc_date_to_iso_string(const tsc_date_t* d) {
     if (!gmtime_r(&seconds, &tm)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_lit("Invalid time value", 18));
     double rem = fmod(d->ms, 1000.0);
     if (rem < 0) rem += 1000.0;
+    char year[16];
+    date_format_year(year, sizeof(year), tm.tm_year + 1900, true);
     char buf[32];
     snprintf(
         buf,
         sizeof(buf),
-        "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
-        tm.tm_year + 1900,
+        "%s-%02d-%02dT%02d:%02d:%02d.%03dZ",
+        year,
         tm.tm_mon + 1,
         tm.tm_mday,
         tm.tm_hour,
@@ -17444,15 +17455,17 @@ tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
     if (!gmtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
     static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
     static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    char year[16];
+    date_format_year(year, sizeof(year), tm.tm_year + 1900, false);
     char buf[40];
     snprintf(
         buf,
         sizeof(buf),
-        "%s, %02d %s %04d %02d:%02d:%02d GMT",
+        "%s, %02d %s %s %02d:%02d:%02d GMT",
         weekdays[tm.tm_wday],
         tm.tm_mday,
         months[tm.tm_mon],
-        tm.tm_year + 1900,
+        year,
         tm.tm_hour,
         tm.tm_min,
         tm.tm_sec
@@ -17468,15 +17481,17 @@ tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d) {
     if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
     static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
     static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    char year[16];
+    date_format_year(year, sizeof(year), tm.tm_year + 1900, false);
     char buf[24];
     snprintf(
         buf,
         sizeof(buf),
-        "%s %s %02d %04d",
+        "%s %s %02d %s",
         weekdays[tm.tm_wday],
         months[tm.tm_mon],
         tm.tm_mday,
-        tm.tm_year + 1900
+        year
     );
     return tsc_str_from_cstr(buf);
 }
@@ -17580,15 +17595,17 @@ tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     int offset_remainder = offset_minutes % 60;
     const char* zone_name = offset_minutes == 0 ? "Coordinated Universal Time" : "Local Time";
 
+    char year[16];
+    date_format_year(year, sizeof(year), tm.tm_year + 1900, false);
     char buf[96];
     snprintf(
         buf,
         sizeof(buf),
-        "%s %s %02d %04d %02d:%02d:%02d GMT%c%02d%02d (%s)",
+        "%s %s %02d %s %02d:%02d:%02d GMT%c%02d%02d (%s)",
         weekdays[tm.tm_wday],
         months[tm.tm_mon],
         tm.tm_mday,
-        tm.tm_year + 1900,
+        year,
         tm.tm_hour,
         tm.tm_min,
         tm.tm_sec,
