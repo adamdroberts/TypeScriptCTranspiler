@@ -15,7 +15,7 @@ try {
     Reflect.apply(proto.push, closed, ["x"]);
     console.log("closed push:", "unexpected success");
 } catch (err: any) {
-    console.log("closed push:", err);
+    console.log("closed push:", err instanceof TypeError);
 }
 
 const sealed: any = { 0: "a", length: 1 };
@@ -24,7 +24,7 @@ try {
     Reflect.apply(proto.pop, sealed, []);
     console.log("sealed pop:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed pop:", err);
+    console.log("sealed pop:", err instanceof TypeError);
 }
 
 const sealedShift: any = { 0: "a", 1: "b", length: 2 };
@@ -33,7 +33,7 @@ try {
     Reflect.apply(proto.shift, sealedShift, []);
     console.log("sealed shift:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed shift:", err);
+    console.log("sealed shift:", err instanceof TypeError);
 }
 
 const closedUnshift: any = { length: 0 };
@@ -42,5 +42,5 @@ try {
     Reflect.apply(proto.unshift, closedUnshift, ["x"]);
     console.log("closed unshift:", "unexpected success");
 } catch (err: any) {
-    console.log("closed unshift:", err);
+    console.log("closed unshift:", err instanceof TypeError);
 }

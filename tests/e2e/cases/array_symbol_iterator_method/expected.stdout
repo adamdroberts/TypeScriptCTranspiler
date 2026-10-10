@@ -3,4 +3,4 @@ proto: function 2 a b
 identity: true true values
 named: map 1 A|B
 plain: true function
-missing receiver: Array.prototype.values receiver is null or undefined
+missing receiver: true

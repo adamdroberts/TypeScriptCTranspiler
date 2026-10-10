@@ -1,0 +1,6 @@
+insert: true true true true true
+order: Glength;H1;G1;S3;H0;D2;S0;S1;Slength;
+copy: true true
+boxed: true true
+flat: true true
+retained: true true true

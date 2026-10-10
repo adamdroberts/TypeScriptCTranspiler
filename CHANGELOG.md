@@ -234,6 +234,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share generic Array receiver, length and ordered property operations across native, ordinary, Proxy and primitive owners. Use one actual List for insertion and concatenation, replace recursive flattening with a rooted worklist, admit arbitrary/readonly flat depth, and verify independent semantics plus imported module E2E in both memory modes.
+
 - For-in uses one retained prototype/key/descriptor worklist and shares ordinary iteration binding and completion owners across synchronous, async and generator entry.
 
 - Share Object/Map GroupBy through live captured Iterator Records and rooted keyed-group records. Preserve close precedence, property/collection key semantics, intrinsic result descriptors and retained typed object/pair identity. Use the ordinary Map/Set constructor protocol with checked native storage projection, retain tagged nullish cells and language key equality, delete eager/copy predecessors, and verify independent Node partitions and deep native ownership in both memory modes.

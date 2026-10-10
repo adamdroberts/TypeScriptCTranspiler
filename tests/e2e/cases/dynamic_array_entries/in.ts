@@ -4,7 +4,7 @@ function mark(label: string): string {
   seen += label;
   return label;
 }
-const entries: any = items.entries(mark("e"));
+const entries: any = Array.from(items.entries(mark("e")));
 
 console.log("entry0:", entries[0][0], entries[0][1]);
 console.log("entry2:", entries[2][0], entries[2][1]);

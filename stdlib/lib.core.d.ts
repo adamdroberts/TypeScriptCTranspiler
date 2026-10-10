@@ -287,9 +287,8 @@ interface Array<T> extends Iterable<T> {
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
     fill(value: T, start?: number, end?: number, ...ignored: any[]): T[];
     copyWithin(target: number, start: number, end?: number, ...ignored: any[]): T[];
-    flat(depth: 0, ...ignored: any[]): T[];
-    flat<U>(this: U[][], depth?: 1, ...ignored: any[]): U[];
-    flat<U>(this: U[][][], depth: 2, ...ignored: any[]): U[];
+    // Runtime depth determines the nested result shape; no depth whitelist.
+    flat(depth?: number, ...ignored: any[]): any[];
     slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
     join(sep?: string, ...ignored: any[]): string;
@@ -328,6 +327,7 @@ interface ReadonlyArray<T> extends Iterable<T> {
     toSorted(cmp?: (a: T, b: T) => number, ...ignored: any[]): T[];
     with(index: number, value: T, ...ignored: any[]): T[];
     toSpliced(start?: number, deleteCount?: number, ...items: T[]): T[];
+    flat(depth?: number, ...ignored: any[]): any[];
     slice(start?: number, end?: number, ...ignored: any[]): T[];
     concat(...items: (T | T[])[]): T[];
     join(sep?: string, ...ignored: any[]): string;

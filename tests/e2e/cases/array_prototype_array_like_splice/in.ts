@@ -26,7 +26,7 @@ try {
     Reflect.apply(proto.splice, sealed, [0, 1]);
     console.log("sealed:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed:", err);
+    console.log("sealed:", err instanceof TypeError);
 }
 
 const closed: any = { length: 0 };
@@ -35,5 +35,5 @@ try {
     Reflect.apply(proto.splice, closed, [0, 0, "x"]);
     console.log("closed:", "unexpected success");
 } catch (err: any) {
-    console.log("closed:", err);
+    console.log("closed:", err instanceof TypeError);
 }

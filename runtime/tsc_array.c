@@ -689,11 +689,11 @@ static tsc_array_t* array_proto_items(tsc_array_t* args, size_t start) {
 
 static tsc_value_t array_proto_callback_arg(tsc_array_t* args, const char* method) {
     if (!args || args->len == 0) {
-        tsc_throw_str(tsc_str_from_cstr(method));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(method));
     }
     tsc_value_t callback = TSC_ARR(tsc_value_t, args, 0);
     if (!tsc_value_is_callable(callback)) {
-        tsc_throw_str(tsc_str_from_cstr(method));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(method));
     }
     return callback;
 }
@@ -718,12 +718,7 @@ static tsc_value_t array_proto_apply_callback(tsc_value_t callback, tsc_value_t 
     );
 }
 
-static size_t array_proto_length(tsc_value_t receiver) {
-    double len = tsc_value_length(receiver);
-    if (isnan(len) || len <= 0.0) return 0;
-    if (len >= (double)SIZE_MAX) return SIZE_MAX;
-    return (size_t)floor(len);
-}
+
 
 static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
     char key_buf[32];
@@ -732,13 +727,6 @@ static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
 }
 
 static tsc_value_t array_proto_get_index(tsc_value_t receiver, size_t index) {
-    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* array = (tsc_array_t*)value_ptr(receiver);
-        if (index >= array->len) return tsc_value_undefined();
-        char key_buf[32];
-        snprintf(key_buf, sizeof key_buf, "%zu", index);
-        return tsc_value_get_prop_receiver(receiver, tsc_str_from_cstr(key_buf), receiver);
-    }
     return tsc_value_get_index(receiver, (double)index);
 }
 
@@ -751,114 +739,15 @@ static tsc_array_t* array_proto_reduce_callback_args(tsc_value_t acc, tsc_value_
     return cb_args;
 }
 
-static void array_prototype_require_receiver(tsc_value_t receiver, const char* method) {
-    if (tsc_value_is_nullish(receiver)) {
-        char buf[128];
-        snprintf(buf, sizeof buf, "Array.prototype.%s receiver is null or undefined", method);
-        tsc_throw_str(tsc_str_from_cstr(buf));
-    }
-}
-
 static tsc_value_t array_proto_empty_args(void) {
     return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
-}
-
-static bool array_proto_is_string_receiver(tsc_value_t receiver) {
-    return value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_STRING;
-}
-
-static void array_proto_reject_string_mutation(tsc_value_t receiver, const char* method) {
-    if (array_proto_is_string_receiver(receiver)) {
-        char message[128];
-        snprintf(message, sizeof message, "Array.prototype.%s cannot mutate a string receiver", method);
-        tsc_throw_str(tsc_str_from_cstr(message));
-    }
-}
-
-static bool array_proto_is_empty_primitive_receiver(tsc_value_t receiver) {
-    if (!value_is_box(receiver)) return true;
-    tsc_value_tag_t tag = value_tag(receiver);
-    return tag == TSC_VALUE_TAG_FALSE || tag == TSC_VALUE_TAG_TRUE;
-}
-
-static tsc_value_t array_proto_empty_array(void) {
-    return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
-}
-
-static tsc_str_t* array_proto_join_part(tsc_value_t value) {
-    return tsc_value_is_nullish(value) ? tsc_str_from_lit("", 0) : tsc_value_to_string(value);
-}
-
-static tsc_value_t array_proto_generic_join(tsc_value_t receiver, tsc_value_t separator) {
-    size_t len = array_proto_length(receiver);
-    tsc_str_t* sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
-    tsc_str_t* out = tsc_str_from_lit("", 0);
-    for (size_t i = 0; i < len; i++) {
-        if (i > 0) out = tsc_str_concat(out, sep);
-        out = tsc_str_concat(out, array_proto_join_part(array_proto_get_index(receiver, i)));
-    }
-    return tsc_value_string(out);
-}
-
-static tsc_value_t array_proto_generic_includes(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
-    size_t len = array_proto_length(receiver);
-    size_t start = value_array_forward_start(len, value_slice_arg(position, 0.0));
-    for (size_t i = start; i < len; i++) {
-        if (tsc_value_same_value_zero(array_proto_get_index(receiver, i), needle)) return tsc_value_bool(true);
-    }
-    return tsc_value_bool(false);
-}
-
-static tsc_value_t array_proto_generic_index_of(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
-    size_t len = array_proto_length(receiver);
-    size_t start = value_array_forward_start(len, value_slice_arg(position, 0.0));
-    for (size_t i = start; i < len; i++) {
-        if (tsc_value_eq(array_proto_get_index(receiver, i), needle)) return tsc_value_num((double)i);
-    }
-    return tsc_value_num(-1.0);
-}
-
-static tsc_value_t array_proto_generic_last_index_of(tsc_value_t receiver, tsc_value_t needle, tsc_value_t position) {
-    size_t len = array_proto_length(receiver);
-    if (len == 0) return tsc_value_num(-1.0);
-    size_t i = 0;
-    double raw = value_slice_arg(position, INFINITY);
-    if (raw == -INFINITY) return tsc_value_num(-1.0);
-    if (raw == INFINITY) {
-        i = len - 1;
-    } else {
-        if (isnan(raw)) raw = 0.0;
-        int64_t idx = (int64_t)(raw < 0 ? ceil(raw) : floor(raw));
-        if (idx < 0) idx = (int64_t)len + idx;
-        else if (idx >= (int64_t)len) idx = (int64_t)len - 1;
-        if (idx < 0) return tsc_value_num(-1.0);
-        i = (size_t)idx;
-    }
-    while (true) {
-        if (tsc_value_eq(array_proto_get_index(receiver, i), needle)) return tsc_value_num((double)i);
-        if (i == 0) break;
-        i--;
-    }
-    return tsc_value_num(-1.0);
-}
-
-static tsc_array_t* array_proto_generic_slice_array(tsc_value_t receiver, tsc_value_t start, tsc_value_t end) {
-    size_t len = array_proto_length(receiver);
-    size_t from = value_array_forward_start(len, value_slice_arg(start, 0.0));
-    size_t to = value_array_forward_start(len, value_slice_arg(end, (double)len));
-    if (to < from) to = from;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), to > from ? to - from : 1);
-    for (size_t i = from; i < to; i++) {
-        tsc_value_t value = array_proto_get_index(receiver, i);
-        tsc_array_push_raw(out, &value);
-    }
-    return out;
 }
 
 static tsc_value_t array_prototype_to_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    array_prototype_require_receiver(this_arg, "toString");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     tsc_value_t join = tsc_value_get_prop(this_arg, tsc_str_from_lit("join", 4));
     if (tsc_value_is_callable(join)) {
         return tsc_value_apply_function(join, this_arg, array_proto_empty_args());
@@ -891,44 +780,37 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
 }
 
 static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "at");
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_at(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_includes(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "includes");
-    if (array_proto_is_string_receiver(this_arg)) {
-        return array_proto_generic_includes(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
-    }
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_includes(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "indexOf");
-    if (array_proto_is_string_receiver(this_arg)) {
-        return array_proto_generic_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
-    }
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_last_index_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "lastIndexOf");
-    if (array_proto_is_string_receiver(this_arg)) {
-        return array_proto_generic_last_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
-    }
-    return tsc_value_method_last_index_of(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    return tsc_value_method_last_index_of(this_arg, array_proto_arg(args, 0), args && args->len > 1 ? array_proto_arg(args, 1) : tsc_value_num(INFINITY));
 }
 
 static tsc_value_t array_prototype_join(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "join");
-    if (array_proto_is_string_receiver(this_arg)) {
-        return array_proto_generic_join(this_arg, array_proto_arg(args, 0));
-    }
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_join(this_arg, array_proto_arg(args, 0));
 }
 
@@ -1049,91 +931,66 @@ static tsc_value_t array_prototype_entries(void* env, tsc_value_t this_arg, tsc_
 }
 
 static tsc_value_t array_prototype_pop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    array_prototype_require_receiver(this_arg, "pop");
-    array_proto_reject_string_mutation(this_arg, "pop");
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_pop(this_arg);
 }
 
 static tsc_value_t array_prototype_push(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "push");
-    array_proto_reject_string_mutation(this_arg, "push");
-    size_t count = args ? args->len : 0;
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
-    if (count == 0) return tsc_value_method_push_empty(this_arg);
-    for (size_t i = 0; i < count; i++) {
-        tsc_value_method_push(this_arg, TSC_ARR(tsc_value_t, args, i));
-    }
-    return tsc_value_num(tsc_value_length(this_arg));
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    return tsc_value_method_push_items(this_arg, args);
 }
 
 static tsc_value_t array_prototype_shift(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    array_prototype_require_receiver(this_arg, "shift");
-    array_proto_reject_string_mutation(this_arg, "shift");
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_shift(this_arg);
 }
 
 static tsc_value_t array_prototype_unshift(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "unshift");
-    array_proto_reject_string_mutation(this_arg, "unshift");
-    size_t count = args ? args->len : 0;
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
-    if (count == 0) return tsc_value_method_unshift_empty(this_arg);
-    for (size_t i = count; i > 0; i--) {
-        tsc_value_method_unshift(this_arg, TSC_ARR(tsc_value_t, args, i - 1));
-    }
-    return tsc_value_num(tsc_value_length(this_arg));
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    return tsc_value_method_unshift_items(this_arg, args);
 }
 
 static tsc_value_t array_prototype_concat(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "concat");
-    size_t count = args ? args->len : 0;
-    tsc_value_t out = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), count + 1));
-    out = tsc_value_method_concat(out, this_arg);
-    for (size_t i = 0; i < count; i++) {
-        out = tsc_value_method_concat(out, TSC_ARR(tsc_value_t, args, i));
-    }
-    return out;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    return tsc_value_method_concat_items(this_arg, args);
 }
 
 static tsc_value_t array_prototype_slice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "slice");
-    if (array_proto_is_string_receiver(this_arg)) {
-        return tsc_value_array(array_proto_generic_slice_array(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1)));
-    }
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_slice(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_fill(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "fill");
-    array_proto_reject_string_mutation(this_arg, "fill");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_fill(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
 
 static tsc_value_t array_prototype_copy_within(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "copyWithin");
-    array_proto_reject_string_mutation(this_arg, "copyWithin");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_copy_within(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
 
 static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "splice");
-    array_proto_reject_string_mutation(this_arg, "splice");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
-    int argc = args && args->len <= (size_t)INT_MAX ? (int)args->len : INT_MAX;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t argc = args ? args->len : 0;
     return tsc_value_method_splice(
         this_arg,
         array_proto_arg(args, 0),
@@ -1144,48 +1001,27 @@ static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_a
 }
 
 static tsc_value_t array_prototype_sort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "sort");
-    if (array_proto_is_string_receiver(this_arg)) {
-        tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot sort a string receiver"));
-    }
-    if (array_proto_is_empty_primitive_receiver(this_arg)) {
-        tsc_value_t cmp = array_proto_arg(args, 0);
-        if (!tsc_value_is_undefined(cmp) && !tsc_value_is_callable(cmp)) {
-            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort comparator must be callable"));
-        }
-        return this_arg;
-    }
+    (void)env; (void)args;
     return tsc_value_method_sort(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_to_sorted(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "toSorted");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) {
-        tsc_value_t cmp = array_proto_arg(args, 0);
-        if (!tsc_value_is_undefined(cmp) && !tsc_value_is_callable(cmp)) {
-            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort comparator must be callable"));
-        }
-        return array_proto_empty_array();
-    }
+    (void)env; (void)args;
     return tsc_value_method_to_sorted(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_with(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "with");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) {
-        tsc_throw_str(tsc_str_from_cstr("Array.with index out of range"));
-    }
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_with(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1));
 }
 
 static tsc_value_t array_prototype_to_spliced(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "toSpliced");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_array(array_proto_items(args, 2));
-    int argc = args && args->len <= (size_t)INT_MAX ? (int)args->len : INT_MAX;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t argc = args ? args->len : 0;
     tsc_value_t zero = tsc_value_num(0.0);
     return tsc_value_method_to_spliced(
         this_arg,
@@ -1197,44 +1033,35 @@ static tsc_value_t array_prototype_to_spliced(void* env, tsc_value_t this_arg, t
 }
 
 static tsc_value_t array_prototype_flat(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    array_prototype_require_receiver(this_arg, "flat");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_flat(this_arg, array_proto_arg(args, 0));
 }
 
 static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    array_prototype_require_receiver(this_arg, "reverse");
-    array_proto_reject_string_mutation(this_arg, "reverse");
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_reverse(this_arg);
 }
 
 static tsc_value_t array_prototype_to_reversed(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    array_prototype_require_receiver(this_arg, "toReversed");
-    if (array_proto_is_string_receiver(this_arg)) {
-        size_t len = array_proto_length(this_arg);
-        tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-        for (size_t i = len; i > 0; i--) {
-            tsc_value_t value = array_proto_get_index(this_arg, i - 1);
-            tsc_array_push_raw(out, &value);
-        }
-        return tsc_value_array(out);
-    }
-    if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
+    (void)env; (void)args;
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
     return tsc_value_method_to_reversed(this_arg);
 }
 
 static tsc_value_t array_prototype_for_each(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "forEach");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.forEach callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         (void)array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
@@ -1244,11 +1071,14 @@ static tsc_value_t array_prototype_for_each(void* env, tsc_value_t this_arg, tsc
 
 static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "map");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.map callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
     for (size_t i = 0; i < len; i++) {
         if (array_proto_has_index(this_arg, i)) {
             tsc_value_t mapped = array_proto_apply_callback(
@@ -1270,11 +1100,14 @@ static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_arra
 
 static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "flatMap");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.flatMap callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t mapped = array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
@@ -1285,14 +1118,18 @@ static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc
 
 static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "filter");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.filter callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t value = array_proto_get_index(this_arg, i);
+        void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             tsc_array_push_value(out, value);
         }
@@ -1302,10 +1139,13 @@ static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_a
 
 static tsc_value_t array_prototype_some(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "some");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.some callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
@@ -1317,10 +1157,13 @@ static tsc_value_t array_prototype_some(void* env, tsc_value_t this_arg, tsc_arr
 
 static tsc_value_t array_prototype_every(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "every");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.every callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         if (!tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
@@ -1332,12 +1175,16 @@ static tsc_value_t array_prototype_every(void* env, tsc_value_t this_arg, tsc_ar
 
 static tsc_value_t array_prototype_find(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "find");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.find callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = 0; i < len; i++) {
         tsc_value_t value = array_proto_get_index(this_arg, i);
+        void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             return value;
         }
@@ -1347,10 +1194,13 @@ static tsc_value_t array_prototype_find(void* env, tsc_value_t this_arg, tsc_arr
 
 static tsc_value_t array_prototype_find_index(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "findIndex");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findIndex callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = 0; i < len; i++) {
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_num((double)i);
@@ -1361,12 +1211,16 @@ static tsc_value_t array_prototype_find_index(void* env, tsc_value_t this_arg, t
 
 static tsc_value_t array_prototype_find_last(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "findLast");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findLast callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = len; i-- > 0;) {
         tsc_value_t value = array_proto_get_index(this_arg, i);
+        void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
             return value;
         }
@@ -1376,10 +1230,13 @@ static tsc_value_t array_prototype_find_last(void* env, tsc_value_t this_arg, ts
 
 static tsc_value_t array_prototype_find_last_index(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "findLastIndex");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.findLastIndex callback must be callable");
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
-    size_t len = array_proto_length(this_arg);
+    void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
     for (size_t i = len; i-- > 0;) {
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg))) {
             return tsc_value_num((double)i);
@@ -1390,63 +1247,77 @@ static tsc_value_t array_prototype_find_last_index(void* env, tsc_value_t this_a
 
 static tsc_value_t array_prototype_reduce(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "reduce");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.reduce callback must be callable");
-    size_t len = array_proto_length(this_arg);
-    tsc_value_t acc;
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
+    tsc_value_t acc = tsc_value_undefined();
+    void* volatile acc_gc_root = NULL; (void)acc_gc_root;
     size_t start = 0;
     if (args && args->len > 1) {
         acc = TSC_ARR(tsc_value_t, args, 1);
+        acc_gc_root = tsc_value_gc_root(acc);
     } else {
         bool found = false;
         for (; start < len; start++) {
             if (!array_proto_has_index(this_arg, start)) continue;
             acc = array_proto_get_index(this_arg, start);
+            acc_gc_root = tsc_value_gc_root(acc);
             start++;
             found = true;
             break;
         }
-        if (!found) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value"));
+        if (!found) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.reduce: empty array with no initial value"));
     }
     for (size_t i = start; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t value = array_proto_get_index(this_arg, i);
+        void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         acc = tsc_value_apply_function(
             callback,
             tsc_value_undefined(),
             tsc_value_array(array_proto_reduce_callback_args(acc, value, i, this_arg))
         );
+        acc_gc_root = tsc_value_gc_root(acc);
     }
     return acc;
 }
 
 static tsc_value_t array_prototype_reduce_right(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    array_prototype_require_receiver(this_arg, "reduceRight");
+    this_arg = tsc_value_to_object(this_arg);
+    void* volatile this_gc_root = tsc_value_gc_root(this_arg); (void)this_gc_root;
+    size_t len = tsc_value_length_of_array_like(this_arg);
     tsc_value_t callback = array_proto_callback_arg(args, "Array.reduceRight callback must be callable");
-    size_t len = array_proto_length(this_arg);
-    tsc_value_t acc;
+    void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
+    tsc_value_t acc = tsc_value_undefined();
+    void* volatile acc_gc_root = NULL; (void)acc_gc_root;
     size_t i = len;
     if (args && args->len > 1) {
         acc = TSC_ARR(tsc_value_t, args, 1);
+        acc_gc_root = tsc_value_gc_root(acc);
     } else {
         bool found = false;
         while (i-- > 0) {
             if (!array_proto_has_index(this_arg, i)) continue;
             acc = array_proto_get_index(this_arg, i);
+            acc_gc_root = tsc_value_gc_root(acc);
             found = true;
             break;
         }
-        if (!found) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));
+        if (!found) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));
     }
     while (i-- > 0) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t value = array_proto_get_index(this_arg, i);
+        void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         acc = tsc_value_apply_function(
             callback,
             tsc_value_undefined(),
             tsc_value_array(array_proto_reduce_callback_args(acc, value, i, this_arg))
         );
+        acc_gc_root = tsc_value_gc_root(acc);
     }
     return acc;
 }

@@ -31,5 +31,5 @@ try {
     Reflect.apply(proto.sort, frozen, []);
     console.log("frozen:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen:", err);
+    console.log("frozen:", err instanceof TypeError);
 }

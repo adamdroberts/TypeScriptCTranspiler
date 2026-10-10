@@ -6,9 +6,9 @@ console.log("join:", Reflect.apply(proto.join, like, ["|"]));
 console.log("search:", Reflect.apply(proto.includes, like, ["a"]), Reflect.apply(proto.includes, like, [undefined]), Reflect.apply(proto.indexOf, like, [null]), Reflect.apply(proto.lastIndexOf, like, ["a"]));
 console.log("at:", Reflect.apply(proto.at, like, [-1]), Reflect.apply(proto.at, inherited, [0]));
 
-const keys: any = Reflect.apply(proto.keys, like, []);
-const values: any = Reflect.apply(proto.values, like, []);
-const entries: any = Reflect.apply(proto.entries, like, []);
+const keys: any = Array.from(Reflect.apply(proto.keys, like, []));
+const values: any = Array.from(Reflect.apply(proto.values, like, []));
+const entries: any = Array.from(Reflect.apply(proto.entries, like, []));
 console.log("iters:", keys.join("|"), values.join("|"), entries[1].join(":"));
 console.log("inherited:", Reflect.apply(proto.join, inherited, ["/"]), Reflect.apply(proto.includes, inherited, ["q"]));
 

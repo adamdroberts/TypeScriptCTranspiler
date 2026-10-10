@@ -4,9 +4,9 @@ function report(label: string, receiver: any): void {
     const sliced: any = Reflect.apply(proto.slice, receiver, [0]);
     const reversed: any = Reflect.apply(proto.toReversed, receiver, []);
     const flattened: any = Reflect.apply(proto.flat, receiver, []);
-    const keys: any = Reflect.apply(proto.keys, receiver, []);
-    const values: any = Reflect.apply(proto.values, receiver, []);
-    const entries: any = Reflect.apply(proto.entries, receiver, []);
+    const keys: any = Array.from(Reflect.apply(proto.keys, receiver, []));
+    const values: any = Array.from(Reflect.apply(proto.values, receiver, []));
+    const entries: any = Array.from(Reflect.apply(proto.entries, receiver, []));
     const spliced: any = Reflect.apply(proto.toSpliced, receiver, [0, 0, "x", "y"]);
 
     console.log(
@@ -40,17 +40,17 @@ function report(label: string, receiver: any): void {
     try {
         Reflect.apply(proto.sort, receiver, [5]);
     } catch (err: any) {
-        console.log(label, "sortBad:", err);
+        console.log(label, "sortBad:", err instanceof TypeError);
     }
     try {
         Reflect.apply(proto.toSorted, receiver, [5]);
     } catch (err: any) {
-        console.log(label, "toSortedBad:", err);
+        console.log(label, "toSortedBad:", err instanceof TypeError);
     }
     try {
         Reflect.apply(proto.with, receiver, [0, "z"]);
     } catch (err: any) {
-        console.log(label, "withBad:", err);
+        console.log(label, "withBad:", err instanceof RangeError);
     }
 }
 

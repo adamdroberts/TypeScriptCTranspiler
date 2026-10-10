@@ -9,9 +9,9 @@ const sliced: any = Reflect.apply(proto.slice, text, [1, 3]);
 const reversed: any = Reflect.apply(proto.toReversed, text, []);
 console.log("copy:", Array.isArray(sliced), sliced.join(""), Array.isArray(reversed), reversed.join(""));
 
-const keys: any = Reflect.apply(proto.keys, text, []);
-const values: any = Reflect.apply(proto.values, text, []);
-const entries: any = Reflect.apply(proto.entries, text, []);
+const keys: any = Array.from(Reflect.apply(proto.keys, text, []));
+const values: any = Array.from(Reflect.apply(proto.values, text, []));
+const entries: any = Array.from(Reflect.apply(proto.entries, text, []));
 console.log("iters:", keys.join("|"), values.join("|"), entries[2].join(":"));
 
 console.log("string-slice:", text.slice(1, 3));
@@ -20,14 +20,14 @@ try {
     Reflect.apply(proto.sort, text, []);
     console.log("sort:", "unexpected success");
 } catch (err: any) {
-    console.log("sort:", err);
+    console.log("sort:", err instanceof TypeError);
 }
 
 function attemptMutation(method: any, args: any[]): any {
     try {
         return "unexpected success: " + String(Reflect.apply(method, text, args));
     } catch (err: any) {
-        return String(err);
+        return err instanceof TypeError;
     }
 }
 

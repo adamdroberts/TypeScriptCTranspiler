@@ -621,7 +621,6 @@ double value_slice_arg(tsc_value_t v, double fallback);
 size_t value_array_forward_start(size_t len, double from_index);
 bool value_array_last_start(size_t len, double from_index, size_t* out);
 tsc_str_t* value_join_part(tsc_value_t v);
-void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth);
 uint32_t split_limit_from_value(tsc_value_t limit);
 tsc_array_t* value_array_from_string_array(const tsc_array_t* strings);
 tsc_str_t* str_alloc(size_t len);
