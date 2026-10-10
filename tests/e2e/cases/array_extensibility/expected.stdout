@@ -4,7 +4,7 @@ prevent identity: true
 after: false false
 set existing: true a|BB
 set new: false 2 a|BB
-prevent push: Array.prototype.push could not add array-like element
+prevent push: TypeError
 define new: false
 object define: true 3 7
 define props: true 3 11|2|33
@@ -17,30 +17,30 @@ sealed desc: true false
 sealed set: true 10
 sealed new: false 2
 sealed delete: false 10
-sealed push: Array.prototype.push cannot mutate a sealed or frozen array
-sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
-sealed shift: Array.prototype.shift cannot mutate a sealed or frozen array
-sealed unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
-sealed splice: Array.prototype.splice cannot mutate a sealed or frozen array
+sealed push: TypeError
+sealed pop: TypeError
+sealed shift: TypeError
+sealed unshift: TypeError
+sealed splice: TypeError
 sealed fill: 5|5
-sealed define props failed: TypeError: Object.defineProperties failed
+sealed define props failed: TypeError
 sealed define props: 2 6|5
-sealed object define failed: TypeError: Object.defineProperty failed
+sealed object define failed: TypeError
 freeze identity: true
 frozen: false true true
 frozen desc: false false
 frozen set: false 3
 frozen delete: false 3
-frozen push: Array.prototype.push cannot mutate a sealed or frozen array
-frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
-frozen shift: Array.prototype.shift cannot mutate a sealed or frozen array
-frozen unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
-frozen splice: Array.prototype.splice cannot mutate a sealed or frozen array
-frozen fill: Array.prototype.fill cannot mutate a frozen array
-frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
-frozen reverse: Array.prototype.reverse cannot mutate a frozen array
-frozen sort: Array.prototype.sort cannot mutate a frozen array
-sealed sparse sort: Array.prototype.sort cannot reorder a sealed sparse array
+frozen push: TypeError
+frozen pop: TypeError
+frozen shift: TypeError
+frozen unshift: TypeError
+frozen splice: TypeError
+frozen fill: TypeError
+frozen copyWithin: TypeError
+frozen reverse: TypeError
+frozen sort: TypeError
+sealed sparse sort: TypeError
 frozen define same: true false true false
 frozen define signed zero: true false
 frozen length negative zero: true

@@ -3,7 +3,7 @@ function report(label: string, action: () => void, values: any[]): void {
         action();
         console.log(label + " success");
     } catch (error: any) {
-        console.log(label + ":", error);
+        console.log(label + ":", error instanceof TypeError ? "TypeError" : String(error));
     }
     console.log(label + " state:", values.join("|"), Object.keys(values).join("|"));
 }

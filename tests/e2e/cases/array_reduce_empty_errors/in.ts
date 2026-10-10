@@ -2,24 +2,24 @@ const typed: number[] = [];
 try {
     console.log("typed reduce result:", typed.reduce((acc: number, value: number) => acc + value));
 } catch (err) {
-    console.log("typed reduce error:", String(err));
+    console.log("typed reduce error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 try {
     console.log("typed reduceRight result:", typed.reduceRight((acc: number, value: number) => acc + value));
 } catch (err) {
-    console.log("typed reduceRight error:", String(err));
+    console.log("typed reduceRight error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 
 const dynamicEmpty: any = [];
 try {
     console.log("dynamic reduce result:", dynamicEmpty.reduce((acc: any, value: any) => acc + value));
 } catch (err) {
-    console.log("dynamic reduce error:", String(err));
+    console.log("dynamic reduce error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 try {
     console.log("dynamic reduceRight result:", dynamicEmpty.reduceRight((acc: any, value: any) => acc + value));
 } catch (err) {
-    console.log("dynamic reduceRight error:", String(err));
+    console.log("dynamic reduceRight error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 
 const proto: any = Array.prototype;
@@ -31,14 +31,14 @@ try {
         (acc: any, value: any) => acc + value,
     ]));
 } catch (err) {
-    console.log("proto reduce error:", String(err));
+    console.log("proto reduce error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 try {
     console.log("proto reduceRight result:", Reflect.apply(proto.reduceRight, sparseLike, [
         (acc: any, value: any) => acc + value,
     ]));
 } catch (err) {
-    console.log("proto reduceRight error:", String(err));
+    console.log("proto reduceRight error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 try {
     console.log("initial reduce result:", Reflect.apply(proto.reduce, emptyLike, [
@@ -46,10 +46,10 @@ try {
         "seed",
     ]));
 } catch (err) {
-    console.log("initial reduce error:", String(err));
+    console.log("initial reduce error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }
 try {
     console.log("initial reduceRight result:", dynamicEmpty.reduceRight((acc: any, value: any) => acc + value, "seed"));
 } catch (err) {
-    console.log("initial reduceRight error:", String(err));
+    console.log("initial reduceRight error:", (err instanceof TypeError ? "TypeError" : String(err)));
 }

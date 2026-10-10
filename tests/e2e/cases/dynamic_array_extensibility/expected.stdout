@@ -17,19 +17,19 @@ frozen set: false 3
 frozen length: false 2
 frozen delete: false 3
 frozen define same: true false true false
-sealed push: Array.prototype.push cannot mutate a sealed or frozen array
-sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
-sealed shift: Array.prototype.shift cannot mutate a sealed or frozen array
-sealed unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
+sealed push: TypeError
+sealed pop: TypeError
+sealed shift: TypeError
+sealed unshift: TypeError
 sealed fill: q|q
-sealed splice: Array.prototype.splice cannot mutate a sealed or frozen array
-frozen push: Array.prototype.push cannot mutate a sealed or frozen array
-frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
-frozen shift: Array.prototype.shift cannot mutate a sealed or frozen array
-frozen unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
-frozen fill: Array.prototype.fill cannot mutate a frozen array
-frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
-frozen reverse: Array.prototype.reverse cannot mutate a frozen array
-frozen splice: Array.prototype.splice cannot mutate a sealed or frozen array
-frozen sort: Array.prototype.sort cannot mutate a frozen array
-sealed sparse sort: Array.prototype.sort cannot reorder a sealed sparse array
+sealed splice: TypeError
+frozen push: TypeError
+frozen pop: TypeError
+frozen shift: TypeError
+frozen unshift: TypeError
+frozen fill: TypeError
+frozen copyWithin: TypeError
+frozen reverse: TypeError
+frozen splice: TypeError
+frozen sort: TypeError
+sealed sparse sort: TypeError

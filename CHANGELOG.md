@@ -1,3 +1,5 @@
+Array exception regression observations now verify the specified error class against Node rather than obsolete runtime messages.
+
 Private class fields, methods and accessors now retain per-class lexical identities and receiver brands through the shared class-element and Reference lowering, including suspension. Private static semantics reject invalid declarations and references before native generation.
 
 Anonymous callables in admitted instance/static fields now infer their field name through the shared source syntax projection, preserving explicit names, reference identity and name descriptors. Independent Node property and imported E2E coverage include anonymous class member calls and retained metadata. Computed-key named evaluation and complete class contexts remain open.

@@ -51,32 +51,32 @@ try {
     sealedMethods.push("x");
     console.log("sealed push:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed push:", err);
+    console.log("sealed push:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     sealedMethods.pop();
     console.log("sealed pop:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed pop:", err);
+    console.log("sealed pop:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     sealedMethods.shift();
     console.log("sealed shift:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed shift:", err);
+    console.log("sealed shift:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     sealedMethods.unshift("x");
     console.log("sealed unshift:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed unshift:", err);
+    console.log("sealed unshift:", err instanceof TypeError ? "TypeError" : err);
 }
 console.log("sealed fill:", sealedMethods.fill("q").join("|"));
 try {
     sealedMethods.splice(0, 1);
     console.log("sealed splice:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed splice:", err);
+    console.log("sealed splice:", err instanceof TypeError ? "TypeError" : err);
 }
 
 const frozenMethods: any = ["z", "a"];
@@ -85,55 +85,55 @@ try {
     frozenMethods.push("x");
     console.log("frozen push:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen push:", err);
+    console.log("frozen push:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.pop();
     console.log("frozen pop:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen pop:", err);
+    console.log("frozen pop:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.shift();
     console.log("frozen shift:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen shift:", err);
+    console.log("frozen shift:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.unshift("x");
     console.log("frozen unshift:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen unshift:", err);
+    console.log("frozen unshift:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.fill("q");
     console.log("frozen fill:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen fill:", err);
+    console.log("frozen fill:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.copyWithin(0, 1);
     console.log("frozen copyWithin:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen copyWithin:", err);
+    console.log("frozen copyWithin:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.reverse();
     console.log("frozen reverse:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen reverse:", err);
+    console.log("frozen reverse:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.splice(0, 1);
     console.log("frozen splice:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen splice:", err);
+    console.log("frozen splice:", err instanceof TypeError ? "TypeError" : err);
 }
 try {
     frozenMethods.sort();
     console.log("frozen sort:", "unexpected success");
 } catch (err: any) {
-    console.log("frozen sort:", err);
+    console.log("frozen sort:", err instanceof TypeError ? "TypeError" : err);
 }
 
 const sealedSparse: any = [3, 1, 2];
@@ -143,5 +143,5 @@ try {
     sealedSparse.sort();
     console.log("sealed sparse sort:", "unexpected success");
 } catch (err: any) {
-    console.log("sealed sparse sort:", err);
+    console.log("sealed sparse sort:", err instanceof TypeError ? "TypeError" : err);
 }

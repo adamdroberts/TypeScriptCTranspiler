@@ -2,7 +2,7 @@ function catchTyped(index: number): string {
     try {
         return [1, 2, 3].with(index, 9).join(",");
     } catch (err) {
-        return String(err);
+        return (err instanceof RangeError ? "RangeError" : String(err));
     }
 }
 
@@ -12,7 +12,7 @@ function catchDynamic(index: number): string {
     try {
         return dynamicNums.with(index, "x").join(",");
     } catch (err) {
-        return String(err);
+        return (err instanceof RangeError ? "RangeError" : String(err));
     }
 }
 
