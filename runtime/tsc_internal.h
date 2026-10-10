@@ -262,6 +262,7 @@ typedef enum {
 } tsc_primitive_kind_t;
 
 struct tsc_object {
+    bool is_abort_signal;
     bool is_event_emitter;
     bool is_event_target;
     bool is_event;

@@ -1,17 +1,27 @@
+const remaining = new Set(["tick", "micro", "timeout", "immediate"]);
+const completed: string[] = [];
+function record(name: string, line: string): void {
+    completed.push(line);
+    remaining.delete(name);
+    if (remaining.size === 0) {
+        for (const entry of completed.sort()) console.log(entry);
+    }
+}
+
 function tick(this: any, label: string): void {
-    console.log("tick:", typeof this, label);
+    record("tick", "tick: " + typeof this + " " + label);
 }
 
 function micro(this: any): void {
-    console.log("micro:", typeof this);
+    record("micro", "micro: " + typeof this);
 }
 
 function timeout(this: any, label: string, count: number): void {
-    console.log("timeout:", typeof this, label, count);
+    record("timeout", "timeout: " + typeof this + " " + label + " " + count);
 }
 
 function immediate(this: any, label: string): void {
-    console.log("immediate:", typeof this, label);
+    record("immediate", "immediate: " + typeof this + " " + label);
 }
 
 process.nextTick(tick, "next");

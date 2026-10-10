@@ -881,6 +881,7 @@ typedef struct {
     void* env;
     double id;
     bool canceled;
+    bool referenced;
 } tsc_immediate_entry_t;
 static tsc_immediate_entry_t* g_immediate_queue = NULL;
 static size_t g_immediate_len = 0;
@@ -929,7 +930,11 @@ typedef struct {
 static tsc_abort_controller_state_t* abort_signal_state(tsc_value_t signal) {
     if (!value_is_box(signal) || value_tag(signal) != TSC_VALUE_TAG_OBJECT) return NULL;
     tsc_object_t* object = (tsc_object_t*)value_ptr(signal);
-    return object && object->class_ptr ? (tsc_abort_controller_state_t*)object->class_ptr : NULL;
+    return object && object->is_abort_signal && object->class_ptr ? (tsc_abort_controller_state_t*)object->class_ptr : NULL;
+}
+
+bool tsc_abort_signal_is_native(tsc_value_t signal) {
+    return abort_signal_state(signal) != NULL;
 }
 
 tsc_value_t tsc_abort_error_value(void) {
@@ -1065,6 +1070,7 @@ static tsc_value_t abort_signal_throw_if_aborted(void* env, tsc_value_t this_arg
 tsc_value_t tsc_abort_controller_new(void) {
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
     state->signal = tsc_object_new_class(state);
+    state->signal->is_abort_signal = true;
     state->controller = NULL;
     state->aborted = false;
     state->callbacks = NULL;
@@ -1861,7 +1867,7 @@ double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
         g_immediate_cap = next;
     }
     double id = g_next_timer_id++;
-    g_immediate_queue[g_immediate_len++] = (tsc_immediate_entry_t){ fn, env, id, false };
+    g_immediate_queue[g_immediate_len++] = (tsc_immediate_entry_t){ fn, env, id, false, true };
     return id;
 }
 
@@ -1873,6 +1879,21 @@ void tsc_clear_immediate(double id) {
             return;
         }
     }
+}
+
+void tsc_unref_immediate(double id) {
+    for (size_t index = 0; index < g_immediate_len; ++index)
+        if (g_immediate_queue[index].id == id) {
+            g_immediate_queue[index].referenced = false;
+            return;
+        }
+}
+
+static bool tsc_has_active_immediate(void) {
+    for (size_t index = 0; index < g_immediate_len; ++index)
+        if (!g_immediate_queue[index].canceled && g_immediate_queue[index].referenced && g_immediate_queue[index].fn)
+            return true;
+    return false;
 }
 
 void tsc_drain_immediates(void) {
@@ -2099,19 +2120,24 @@ static void tsc_loop_idle_wait(double delay_ms) {
 }
 #endif
 
-void tsc_run_event_loop(void) {
-    while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_active_timeout() || g_immediate_len > 0
+static bool tsc_has_referenced_event_source(void) {
+    return tsc_has_active_timeout() || tsc_has_active_immediate()
 #ifdef TSC_HAS_LIBUV
            || tsc_fs_libuv_pending()
 #endif
 #ifdef TSC_THREADS
            || tsc_dispatch_pending()
 #endif
-    ) {
+    ;
+}
+
+void tsc_run_event_loop(void) {
+    while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_referenced_event_source()) {
 #ifdef TSC_THREADS
         tsc_drain_cross_queue();
 #endif
         tsc_drain_microtasks_and_next_ticks();
+        if (!tsc_has_referenced_event_source()) break;
         if (tsc_has_ready_timeout()) {
             tsc_drain_timeouts();
             tsc_drain_microtasks_and_next_ticks();

@@ -1,0 +1,7 @@
+/* Name, operation, delay argument, payload argument, options argument,
+ * queue, interval. The compiler and native activation consume this List. */
+TSC_TIMERS_PROMISE_OPERATION("setTimeout", TIMEOUT, 0, 1, 2, DELAYED, false)
+TSC_TIMERS_PROMISE_OPERATION("setImmediate", IMMEDIATE, -1, 0, 1, IMMEDIATE, false)
+TSC_TIMERS_PROMISE_OPERATION("setInterval", INTERVAL, 0, 1, 2, DELAYED, true)
+TSC_TIMERS_PROMISE_OPERATION("scheduler.wait", WAIT, 0, -1, 1, DELAYED, false)
+TSC_TIMERS_PROMISE_OPERATION("scheduler.yield", YIELD, -1, -1, -1, IMMEDIATE, false)

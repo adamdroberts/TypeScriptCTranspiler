@@ -904,6 +904,7 @@ tsc_value_t tsc_value_sloppy_this(tsc_value_t value);
 tsc_value_t tsc_abort_controller_new(void);
 tsc_value_t tsc_abort_error_value(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
+bool tsc_abort_signal_is_native(tsc_value_t signal);
 typedef void (*tsc_abort_callback_fn_t)(void* env);
 void tsc_abort_signal_add_callback(tsc_value_t signal, tsc_abort_callback_fn_t fn, void* env);
 void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise);
@@ -1689,6 +1690,7 @@ void tsc_drain_microtasks(void);
 void tsc_drain_microtasks_and_next_ticks(void);
 double tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
 void tsc_clear_immediate(double id);
+void tsc_unref_immediate(double id);
 void tsc_drain_immediates(void);
 double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay);
 double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay);
@@ -1697,7 +1699,13 @@ void tsc_ref_timeout(double id);
 void tsc_unref_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
-tsc_value_t tsc_timers_promises_set_interval(tsc_value_t value, double delay, tsc_value_t signal);
+typedef enum {
+#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval) TSC_TIMERS_PROMISE_##operation,
+#include "tsc_timers_promises.def"
+#undef TSC_TIMERS_PROMISE_OPERATION
+    TSC_TIMERS_PROMISE_OPERATION_COUNT
+} tsc_timers_promise_operation_t;
+tsc_value_t tsc_timers_promises_call(tsc_timers_promise_operation_t operation, tsc_array_t* arguments);
 bool tsc_fs_libuv_pending(void);
 void tsc_fs_libuv_run_once(bool block);
 

@@ -2120,7 +2120,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-json-%symbol.tostringtag%` — JSON [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
 - [ ] **Managing Memory** (`sec-managing-memory`) — tracking: `todo`, scope: `required`
   - Semantic partitions: WeakRef; FinalizationRegistry; cleanup jobs; implementation-defined collection timing.
-  - Linked local regression evidence: property: tests/property/deferred-environment-owner.property.test.ts; E2E: weak_ref, deferred_environment_owner.
+  - Linked local regression evidence: property: tests/property/deferred-environment-owner.property.test.ts, tests/property/timers-promises-activation.property.test.ts, tests/property/timers-promises-unref.property.test.ts; E2E: weak_ref, deferred_environment_owner, timers_promises_activation.
   - Known blockers: Diagnostic native observation supports forced collection; complete WeakRef/finalization semantics and an eligible host finalization protocol remain incomplete.
   - [ ] `sec-managing-memory` — Managing Memory: exact disposition and partitions missing.
   - [ ] `sec-weak-ref-objects` — WeakRef Objects: exact disposition and partitions missing.
@@ -2148,7 +2148,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-finalization-registry-instances` — Properties of FinalizationRegistry Instances: exact disposition and partitions missing.
 - [ ] **Control Abstraction Objects** (`sec-control-abstraction-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: iterators; generators; promises and jobs; async functions and generators; disposable resources.
-  - Linked local regression evidence: property: tests/property/for-in-owner.property.test.ts, tests/property/resumable-resource.property.test.ts, tests/property/array-from-async.property.test.ts, tests/property/continuation-binding-owner.property.test.ts, tests/property/deferred-environment-owner.property.test.ts; generated regression: async-leading-await-chain, async-binding-default-depth; stress: async-leading-await-chain; E2E: for_in_owner, array_from_async, promise_combinators_dynamic, resource_completion_protocol, array_from_async_protocol, continuation_binding_owner, deferred_environment_owner.
+  - Linked local regression evidence: property: tests/property/for-in-owner.property.test.ts, tests/property/resumable-resource.property.test.ts, tests/property/array-from-async.property.test.ts, tests/property/continuation-binding-owner.property.test.ts, tests/property/deferred-environment-owner.property.test.ts, tests/property/timers-promises-activation.property.test.ts, tests/property/timers-promises-unref.property.test.ts, tests/property/timers-promises-signal-boundary.property.test.ts; generated regression: async-leading-await-chain, async-binding-default-depth; stress: async-leading-await-chain; E2E: for_in_owner, array_from_async, promise_combinators_dynamic, resource_completion_protocol, array_from_async_protocol, continuation_binding_owner, deferred_environment_owner, timers_promises_activation.
   - Known blockers: General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete.
   - [ ] `sec-control-abstraction-objects` — Control Abstraction Objects: exact disposition and partitions missing.
   - [ ] `sec-iteration` — Iteration: exact disposition and partitions missing.

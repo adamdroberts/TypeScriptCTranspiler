@@ -1250,17 +1250,134 @@ tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t
     return promise;
 }
 
+typedef enum { TSC_TIMERS_QUEUE_DELAYED, TSC_TIMERS_QUEUE_IMMEDIATE } tsc_timers_queue_t;
 typedef struct {
-    double timer_id;
-    tsc_value_t value;
-    tsc_value_t iterator;
+    const char* name;
+    int delay_argument, payload_argument, options_argument;
+    tsc_timers_queue_t queue;
+    bool interval;
+} tsc_timers_promise_descriptor_t;
+static const tsc_timers_promise_descriptor_t timers_promise_operations[] = {
+#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval) \
+    [TSC_TIMERS_PROMISE_##operation] = { name, delay, payload, options, TSC_TIMERS_QUEUE_##queue, interval },
+#include "tsc_timers_promises.def"
+#undef TSC_TIMERS_PROMISE_OPERATION
+};
+
+/* A retained actual List owns all source arguments. A second value List owns
+ * projected options, including fresh values returned by getters. Both use the
+ * canonical array codec and its decoded-root vector, independently of length. */
+typedef struct {
+    const tsc_timers_promise_descriptor_t* operation;
+    tsc_array_t* arguments;
+    tsc_array_t* options;
+    tsc_promise_t* promise;
+    tsc_object_t* iterator;
+    double timer_id, delay;
     tsc_array_t* queued;
     tsc_array_t* pending;
     tsc_object_t* signal;
-    bool closed;
-    bool aborted;
-    bool abort_delivered;
-} tsc_timers_promises_interval_state_t;
+    bool started, closed, aborted, abort_delivered;
+} tsc_timers_promises_record_t;
+
+static tsc_value_t timers_promises_argument(const tsc_timers_promises_record_t* state, int index) {
+    return index < 0 ? tsc_value_undefined() : promise_argument(state->arguments, (size_t)index);
+}
+
+static void timers_promises_validate_signal(tsc_value_t signal) {
+    if (tsc_value_is_undefined(signal)) return;
+    if (tsc_value_is_nullish(signal) || !str_lit_eq(tsc_value_typeof(signal), "object") ||
+        !tsc_value_has_prop(signal, tsc_str_from_lit("aborted", 7)))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises signal must be an AbortSignal"));
+    if (!tsc_abort_signal_is_native(signal))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises requires a native AbortSignal"));
+}
+
+static void timers_promises_validate_ref(tsc_value_t ref) {
+    if (!str_lit_eq(tsc_value_typeof(ref), "boolean"))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises ref must be a Boolean"));
+}
+
+typedef struct {
+    const char* name;
+    void (*validate)(tsc_value_t);
+    bool default_ref;
+} tsc_timers_option_descriptor_t;
+static const tsc_timers_option_descriptor_t timers_promise_options[] = {
+    { "signal", timers_promises_validate_signal, false },
+    { "ref", timers_promises_validate_ref, true },
+};
+
+static void timers_promises_validate(tsc_timers_promises_record_t* state) {
+    tsc_value_t delay = timers_promises_argument(state, state->operation->delay_argument);
+    if (!tsc_value_is_undefined(delay) && !str_lit_eq(tsc_value_typeof(delay), "number"))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises delay must be a Number"));
+    state->delay = tsc_value_is_undefined(delay) ? 1.0 : tsc_value_as_num(delay);
+    if (!isfinite(state->delay) || state->delay < 1.0 || state->delay > 2147483647.0) state->delay = 1.0;
+    tsc_value_t options = timers_promises_argument(state, state->operation->options_argument);
+    if (tsc_value_is_undefined(options)) return;
+    if (tsc_value_is_nullish(options) || tsc_value_is_array(options) ||
+        !str_lit_eq(tsc_value_typeof(options), "object"))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises options must be an Object"));
+    for (size_t index = 0; index < sizeof(timers_promise_options) / sizeof(*timers_promise_options); ++index) {
+        const tsc_timers_option_descriptor_t* field = &timers_promise_options[index];
+        tsc_str_t* key = tsc_str_from_lit(field->name, strlen(field->name));
+        tsc_value_t value = tsc_value_get_prop(options, key);
+        void* volatile value_gc_root = tsc_value_gc_root(value);
+        if (!tsc_value_is_undefined(value)) {
+            tsc_value_t validated = tsc_value_get_prop(options, key);
+            void* volatile validated_gc_root = tsc_value_gc_root(validated);
+            field->validate(validated);
+            (void)validated_gc_root;
+        }
+        (void)value_gc_root;
+    }
+}
+
+static void timers_promises_project_options(tsc_timers_promises_record_t* state) {
+    tsc_value_t options = timers_promises_argument(state, state->operation->options_argument);
+    for (size_t index = 0; index < sizeof(timers_promise_options) / sizeof(*timers_promise_options); ++index) {
+        const tsc_timers_option_descriptor_t* field = &timers_promise_options[index];
+        tsc_value_t value = tsc_value_is_undefined(options) ? tsc_value_undefined() :
+            tsc_value_get_prop(options, tsc_str_from_lit(field->name, strlen(field->name)));
+        if (tsc_value_is_undefined(value) && field->default_ref) value = tsc_value_bool(true);
+        tsc_array_push_value(state->options, value);
+    }
+}
+
+static void timers_promises_interval_abort(void* env);
+static void timers_promises_interval_tick(void* env);
+
+static void timers_promises_complete(void* env) {
+    tsc_timers_promises_record_t* state = env;
+    tsc_promise_resolve_into(state->promise,
+        timers_promises_argument(state, state->operation->payload_argument));
+}
+
+static void timers_promises_schedule(tsc_timers_promises_record_t* state) {
+    timers_promises_project_options(state);
+    tsc_value_t signal = TSC_ARR(tsc_value_t, state->options, 0);
+    bool referenced = tsc_value_is_truthy(TSC_ARR(tsc_value_t, state->options, 1));
+    if (state->operation->interval) {
+        state->signal = value_is_box(signal) && value_tag(signal) == TSC_VALUE_TAG_OBJECT ? value_ptr(signal) : NULL;
+        if (!tsc_value_is_undefined(signal)) tsc_abort_signal_add_callback(signal, timers_promises_interval_abort, state);
+        if (!state->closed) state->timer_id = tsc_set_interval(timers_promises_interval_tick, state, state->delay);
+    } else if (state->operation->queue == TSC_TIMERS_QUEUE_IMMEDIATE) {
+        state->timer_id = tsc_set_immediate(timers_promises_complete, state);
+        if (!referenced) tsc_unref_immediate(state->timer_id);
+        if (!tsc_value_is_undefined(signal)) {
+            tsc_abort_signal_add_promise(signal, state->promise);
+            tsc_abort_signal_add_immediate(signal, state->timer_id);
+        }
+    } else {
+        state->timer_id = tsc_set_timeout(timers_promises_complete, state, state->delay);
+        if (!tsc_value_is_undefined(signal)) {
+            tsc_abort_signal_add_promise(signal, state->promise);
+            tsc_abort_signal_add_timeout(signal, state->timer_id);
+        }
+    }
+    if (!referenced && state->operation->queue == TSC_TIMERS_QUEUE_DELAYED) tsc_unref_timeout(state->timer_id);
+}
 
 static tsc_value_t timers_promises_interval_result(tsc_value_t value, bool done) {
     tsc_object_t* result = tsc_object_new();
@@ -1273,11 +1390,14 @@ static void timers_promises_interval_remove_first(tsc_array_t* values) {
     if (!values || values->len == 0) return;
     if (values->len > 1) {
         memmove(values->data, (char*)values->data + values->es, (values->len - 1) * values->es);
+        if (values->value_roots) memmove(values->value_roots, values->value_roots + 1, (values->len - 1) * sizeof(void*));
     }
     values->len--;
+    if (values->dense_len > values->len) values->dense_len = values->len;
+    if (values->value_roots) values->value_roots[values->len] = NULL;
 }
 
-static tsc_value_t timers_promises_interval_abort_reason(const tsc_timers_promises_interval_state_t* state) {
+static tsc_value_t timers_promises_interval_abort_reason(const tsc_timers_promises_record_t* state) {
     if (!state || !state->signal) return tsc_value_undefined();
     return tsc_value_get_prop(
         tsc_value_object(state->signal),
@@ -1286,7 +1406,7 @@ static tsc_value_t timers_promises_interval_abort_reason(const tsc_timers_promis
 }
 
 static void timers_promises_interval_abort(void* env) {
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)env;
+    tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
     if (!state || state->closed) return;
     state->closed = true;
     state->aborted = true;
@@ -1302,22 +1422,22 @@ static void timers_promises_interval_abort(void* env) {
 }
 
 static void timers_promises_interval_tick(void* env) {
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)env;
+    tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
     if (!state || state->closed) return;
     if (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         timers_promises_interval_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, timers_promises_interval_result(state->value, false));
+        tsc_promise_fulfill_in_place(promise, timers_promises_interval_result(timers_promises_argument(state, state->operation->payload_argument), false));
         return;
     }
-    tsc_value_t value = state->value;
+    tsc_value_t value = timers_promises_argument(state, state->operation->payload_argument);
     tsc_array_push_raw(state->queued, &value);
 }
 
 static tsc_value_t timers_promises_interval_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)env;
+    tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
     if (!state) return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
     if (state->queued->len > 0) {
         tsc_value_t value = TSC_ARR(tsc_value_t, state->queued, 0);
@@ -1336,12 +1456,28 @@ static tsc_value_t timers_promises_interval_next(void* env, tsc_value_t this_arg
     }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_array_push_raw(state->pending, &promise);
+    if (!state->started) {
+        state->started = true;
+        TSC_TRY_FRAME(frame);
+        tsc_try_push(&frame);
+        if (setjmp(frame.jb) == 0) {
+            timers_promises_validate(state);
+            timers_promises_schedule(state);
+            tsc_try_pop();
+        } else {
+            tsc_value_t error = tsc_current_error_value();
+            tsc_try_pop();
+            state->closed = true;
+            state->pending->len = state->pending->dense_len = 0;
+            tsc_promise_reject_in_place(promise, error);
+        }
+    }
     return tsc_value_promise(promise);
 }
 
 static tsc_value_t timers_promises_interval_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)env;
+    tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
     if (!state) return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
     if (!state->closed) {
         state->closed = true;
@@ -1360,38 +1496,43 @@ static tsc_value_t timers_promises_interval_return(void* env, tsc_value_t this_a
 static tsc_value_t timers_promises_interval_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)env;
-    return state ? state->iterator : tsc_value_undefined();
+    tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
+    return state ? tsc_value_object(state->iterator) : tsc_value_undefined();
 }
 
-tsc_value_t tsc_timers_promises_set_interval(tsc_value_t value, double delay, tsc_value_t signal) {
-    tsc_timers_promises_interval_state_t* state = (tsc_timers_promises_interval_state_t*)TSC_GC_MALLOC(sizeof(tsc_timers_promises_interval_state_t));
-    state->timer_id = 0.0;
-    state->value = value;
-    state->queued = tsc_array_new(sizeof(tsc_value_t), 4);
-    state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
-    state->signal = value_is_box(signal) && value_tag(signal) == TSC_VALUE_TAG_OBJECT
-        ? (tsc_object_t*)value_ptr(signal)
-        : NULL;
-    state->closed = false;
-    state->aborted = false;
-    state->abort_delivered = false;
-    tsc_object_t* iterator = tsc_object_new();
-    state->iterator = tsc_value_object(iterator);
-    tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(timers_promises_interval_next, state, 0.0, tsc_str_from_lit("next", 4)));
-    tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(timers_promises_interval_return, state, 0.0, tsc_str_from_lit("return", 6)));
-    tsc_value_set_symbol_prop(
-        state->iterator,
-        tsc_symbol_async_iterator(),
-        tsc_value_function_builtin_named(timers_promises_interval_async_iterator, state, 0.0, tsc_str_from_lit("[Symbol.asyncIterator]", 22))
-    );
-    if (state->signal) {
-        tsc_abort_signal_add_callback(signal, timers_promises_interval_abort, state);
+tsc_value_t tsc_timers_promises_call(tsc_timers_promise_operation_t operation, tsc_array_t* arguments) {
+    if ((unsigned)operation >= sizeof(timers_promise_operations) / sizeof(*timers_promise_operations))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timers/promises requires a canonical operation descriptor"));
+    tsc_timers_promises_record_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (tsc_timers_promises_record_t){ .operation = &timers_promise_operations[operation], .arguments = arguments };
+    state->options = tsc_array_new(sizeof(tsc_value_t), 1);
+    if (state->operation->interval) {
+        state->queued = tsc_array_new(sizeof(tsc_value_t), 1);
+        state->pending = tsc_array_new(sizeof(tsc_promise_t*), 1);
+        state->iterator = tsc_object_new();
+        tsc_object_set(state->iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(timers_promises_interval_next, state, 0.0, tsc_str_from_lit("next", 4)));
+        tsc_object_set(state->iterator, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(timers_promises_interval_return, state, 0.0, tsc_str_from_lit("return", 6)));
+        tsc_value_set_symbol_prop(tsc_value_object(state->iterator), tsc_symbol_async_iterator(),
+            tsc_value_function_builtin_named(timers_promises_interval_async_iterator, state, 0.0, tsc_str_from_lit("[Symbol.asyncIterator]", 22)));
+        return tsc_value_object(state->iterator);
     }
-    if (!state->closed) {
-        state->timer_id = tsc_set_interval(timers_promises_interval_tick, state, delay);
+    state->promise = tsc_promise_pending();
+    state->started = true;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        timers_promises_validate(state);
+        tsc_try_pop();
+    } else {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        tsc_promise_reject_in_place(state->promise, error);
+        return tsc_value_promise(state->promise);
     }
-    return state->iterator;
+    /* Native one-shot validation rejects its Promise. Subsequent option
+     * projection runs in the caller; interval activation runs inside next. */
+    timers_promises_schedule(state);
+    return tsc_value_promise(state->promise);
 }
 
 typedef struct {

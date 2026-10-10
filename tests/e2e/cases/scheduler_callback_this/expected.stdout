@@ -1,5 +1,5 @@
 sync
-tick: undefined next
-micro: undefined
-timeout: undefined timer 2
-immediate: undefined soon
+immediate: object soon
+micro: object
+tick: object next
+timeout: object timer 2

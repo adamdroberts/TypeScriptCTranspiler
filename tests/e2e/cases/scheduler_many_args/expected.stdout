@@ -1,2 +1,2 @@
 sync
-tick:undefined:a:1:true:d:5:g|timeout:undefined:b:2:false:e:6:h|immediate:undefined:c:3:true:f:7:i
+immediate:object:c:3:true:f:7:i|tick:object:a:1:true:d:5:g|timeout:object:b:2:false:e:6:h

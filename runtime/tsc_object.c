@@ -54,6 +54,7 @@ static uint64_t g_object_id_counter = 0;
 
 static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
+    o->is_abort_signal = false;
     o->is_event_emitter = false;
     o->is_event_target = false;
     o->is_event = false;
