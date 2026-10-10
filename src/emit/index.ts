@@ -25106,7 +25106,7 @@ class Emitter {
                 if (!ts.isPropertyDeclaration(member) || isStatic(member)) continue;
                 const field = this.classInstanceDefinitionKey(member);
                 const type = this.prepareType(mapType(member, this.checker));
-                const initial = member.initializer ? this.emitExpr(member.initializer) : { c: "tsc_value_undefined()", ty: T_VALUE };
+                const initial = this.emitClassFieldInitializer(member);
                 let value = this.coerce(initial, type, member);
                 if (this.classMemberHasDecorators(member)) {
                     value = this.coerce({ c: `tsc_decorator_apply_field_initializers(${this.classFieldDecoratorInitializersName(cd, member)}, ${this.coerce({ c: value, ty: type }, T_VALUE, member)})`, ty: T_VALUE }, type, member);
@@ -25251,10 +25251,8 @@ class Emitter {
                 if (ts.isPropertyDeclaration(m)) {
                     if (!isStatic(m)) continue;
                     const { propertyKey } = this.classMemberPropertyKey(m.name);
-                    const initializer = m.initializer ? this.emitExpr(m.initializer) : null;
-                    const value = initializer
-                        ? this.boxObjectIdentity(initializer.c, initializer.ty, m.initializer!)
-                        : "tsc_value_undefined()";
+                    const initializer = this.emitClassFieldInitializer(m);
+                    const value = this.boxObjectIdentity(initializer.c, initializer.ty, m.initializer ?? m);
                     buf.line(`if (!tsc_value_define_property_desc(${constructor.c}, ${propertyKey}, ${value}, ` +
                         `true, true, true, true, true, true, true)) ` +
                         `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class static field definition failed"));`);
@@ -25270,6 +25268,20 @@ class Emitter {
             this.functionActivationBindings.pop();
             this.functionThisStack.pop();
         }
+    }
+
+    private emitClassFieldInitializer(member: ts.PropertyDeclaration): EmitResult {
+        if (!member.initializer) return { c: "tsc_value_undefined()", ty: T_VALUE };
+        const value = this.emitExpr(member.initializer);
+        const source = this.unwrapTransparentExpression(member.initializer);
+        const anonymous = ts.isArrowFunction(source) ||
+            (ts.isFunctionExpression(source) || ts.isClassExpression(source)) && !source.name;
+        if (!anonymous || !ts.isComputedPropertyName(member.name)) return value;
+        const { propertyKey } = this.classMemberPropertyKey(member.name);
+        return {
+            c: `tsc_value_function_with_property_name(${this.coerce(value, T_VALUE, member.initializer)}, ${propertyKey}, NULL)`,
+            ty: T_VALUE,
+        };
     }
 
     private classHasDecorators(cd: ts.ClassLikeDeclaration): boolean {
@@ -25754,16 +25766,18 @@ class Emitter {
             definitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${parent})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
             definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
         }
-        // One source-ordered member collection defines constructor and prototype
-        // descriptors. Every callable borrows ordinary activation and formals.
+        // Every admitted element participates in the same ordered key pass.
+        // Field values run later; their keys are already owned by this plan.
         for (const member of cd.members) {
-            if (!(ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) || !member.body) continue;
+            if (!(ts.isPropertyDeclaration(member) ||
+                (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body)) continue;
             const { propertyKey: key } = this.classMemberPropertyKey(member.name);
-            const target = isStatic(member) ? "_class_constructor" : "_class_prototype";
             if (ts.isComputedPropertyName(member.name)) {
                 const evaluated = this.emitExpr(member.name.expression);
                 definitions.push(`${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, member.name.expression)})`);
             }
+            if (ts.isPropertyDeclaration(member)) continue;
+            const target = isStatic(member) ? "_class_constructor" : "_class_prototype";
             const closure = this.coerce(this.emitClosureExpression(member), T_VALUE, member);
             const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
             const value = ts.isComputedPropertyName(member.name)

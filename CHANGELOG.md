@@ -288,6 +288,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Computed static fields now evaluate and retain keys through the ordered class-element plan before static values; anonymous callables infer names from actual String/Symbol keys. Independent Node properties and imported consumers cover both memory modes.
 - Share Array logical length and sparse own indices with ordinary descriptor and receiver operations. Apply ordered length conversions and descending deletion with failure restoration, preserve virtual holes and transparent Proxy writes, remove obsolete raw mutators, and verify independent semantics plus retained module E2E in both memory modes.
 
 - Share Array species construction and actual result owners across prototype result-producing methods. Preserve ordered constructor/species/Realm selection, fresh indexed descriptors, final length failures and result aliases; replace private dense output builders and verify independent semantics plus imported module E2E in both memory modes.
