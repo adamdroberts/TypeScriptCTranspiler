@@ -1149,6 +1149,7 @@ typedef struct {
 } tsc_iterator_record_t;
 typedef tsc_iterator_record_t tsc_sync_iterator_t;
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
+tsc_sync_iterator_t tsc_for_in_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_sync_iterator_open_direct(tsc_value_t iterator);
 tsc_sync_iterator_t tsc_sync_iterator_open_with_method(tsc_value_t source, tsc_value_t method);
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* iterator, tsc_value_t* value);

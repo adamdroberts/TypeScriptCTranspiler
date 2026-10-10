@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -183,21 +184,40 @@ test("for-of steps one ordinary iterator between bodies and closes lexical scope
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }, 180_000);
 
-test("unrepresented synchronous disposal scopes fail through one stable completion diagnostic", async () => {
-    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-of-boundary-"));
-    const boundary = "synchronous completion cannot represent disposal scopes";
-    try {
-        const bodies = [
-            `for (const value of source) { using resource: any = null; }`,
-        ];
-        for (const [index, body] of bodies.entries()) {
-            const entry = path.join(temporary, `boundary-${index}.ts`);
-            await fs.writeFile(entry, `function run(source: any): void { ${body} } run([]);`);
-            const diagnostics: string[] = [];
-            const result = await compile({ entry, output: path.join(temporary, `boundary-${index}`),
-                buildDir: path.join(temporary, `build-${index}`), diagnosticWriter: message => diagnostics.push(message) });
-            expect(result.exitCode).not.toBe(0);
-            expect(diagnostics.join("")).toContain(boundary);
+test("synchronous iteration completions drain their resource scopes", async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-of-resource-"));
+    const source = `
+        const marker:any={};
+        for(const mode of ['normal','continue','break','return','throw']) {
+            const log:string[]=[];
+            function run():any {
+                for(const value of [1,2]) {
+                    using resource:any={ [Symbol.dispose]() {log.push('dispose:'+value);} };
+                    log.push('body:'+value);
+                    if(mode==='continue')continue;
+                    if(mode==='break')break;
+                    if(mode==='return')return marker;
+                    if(mode==='throw')throw marker;
+                }
+                return undefined;
+            }
+            try {const answer=run();console.log(mode+':'+(answer===marker)+':'+log.join('|'));}
+            catch(error){console.log(mode+':'+(error===marker)+':'+log.join('|'));}
         }
-    } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-});
+    `;
+    try {
+        const referenceFile=path.join(temporary,'reference.cjs');
+        await fs.writeFile(referenceFile,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.CommonJS}}).outputText);
+        const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+        expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+        for(const noGc of [false,true]) {
+            const entry=path.join(temporary,`subject-${noGc}.ts`),output=path.join(temporary,`program-${noGc}`),diagnostics:string[]=[];
+            await fs.writeFile(entry,source);
+            const result=await compile({entry,output,noGc,buildDir:path.join(temporary,`build-${noGc}`),diagnosticWriter:message=>diagnostics.push(message)});
+            expect({exitCode:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({exitCode:0,diagnostics:''});
+            const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+            expect({exitCode:native.exitCode,stderr:native.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+            expect(native.stdout.toString()).toBe(reference.stdout.toString());
+        }
+    } finally {await fs.rm(temporary,{recursive:true,force:true});}
+},90_000);

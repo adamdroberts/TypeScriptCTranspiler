@@ -1,0 +1,7 @@
+enumeration: 1|visible|inherited
+generator: 1|visible|inherited
+assignment: 1|visible|inherited
+nullish: 0
+shared: true true
+retained: true true true true
+completion: true true

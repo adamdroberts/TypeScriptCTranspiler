@@ -98,6 +98,69 @@ tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source) {
     return tsc_sync_iterator_open_with_method(source, method);
 }
 
+/* CreateForInIterator retains one current object, remaining-key List and
+ * visited-key Set. OwnPropertyKeys is captured on entering each prototype;
+ * descriptors stay live until a key is processed. Neither property values nor
+ * user-visible iterator methods participate in enumeration. */
+typedef struct {
+    tsc_value_t object;
+    void* object_gc_root;
+    bool object_was_visited;
+    tsc_array_t* remaining_keys;
+    size_t key_index;
+    tsc_set_t* visited_keys;
+} for_in_iterator_state_t;
+
+static tsc_value_t for_in_iterator_next(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    (void)args;
+    for_in_iterator_state_t* state = env;
+    for (;;) {
+        if (tsc_value_is_nullish(state->object)) return tsc_iterator_result(tsc_value_undefined(), true);
+        if (!state->object_was_visited) {
+            state->remaining_keys = tsc_value_own_keys(state->object);
+            state->key_index = 0;
+            state->object_was_visited = true;
+        }
+        while (state->key_index < state->remaining_keys->len) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, state->remaining_keys, state->key_index++);
+            if (tsc_set_has_raw(state->visited_keys, &key)) continue;
+            tsc_value_t descriptor = tsc_value_get_own_property_descriptor(state->object, key);
+            void* volatile descriptor_root = tsc_value_gc_root(descriptor);
+            (void)descriptor_root;
+            if (tsc_value_is_undefined(descriptor)) continue;
+            tsc_set_add_raw(state->visited_keys, &key);
+            if (tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("enumerable", 10))))
+                return tsc_iterator_result(tsc_value_string(key), false);
+        }
+        state->object = tsc_value_get_prototype_of(state->object);
+        state->object_gc_root = tsc_value_gc_root(state->object);
+        state->object_was_visited = false;
+        state->remaining_keys = NULL;
+    }
+}
+
+tsc_sync_iterator_t tsc_for_in_iterator_open(tsc_value_t source) {
+    if (tsc_value_is_nullish(source)) return (tsc_sync_iterator_t){ .done = true };
+    void* volatile source_root = tsc_value_gc_root(source);
+    for_in_iterator_state_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (for_in_iterator_state_t){ .object = tsc_value_to_object(source) };
+    state->object_gc_root = tsc_value_gc_root(state->object);
+    state->visited_keys = tsc_set_new(sizeof(tsc_str_t*), TSC_KEY_STR, 0);
+    tsc_object_t* iterator = tsc_object_new();
+    tsc_object_define(iterator, tsc_str_from_lit("next", 4),
+        tsc_value_function_builtin_named(for_in_iterator_next, state, 0, tsc_str_from_lit("next", 4)),
+        true, false, true);
+    /* These internal methods are never invoked. Own null values prevent
+     * Object.prototype mutation from adding observable close operations. */
+    tsc_object_define(iterator, tsc_str_from_lit("return", 6), tsc_value_null(), true, false, true);
+    tsc_object_define(iterator, tsc_str_from_lit("throw", 5), tsc_value_null(), true, false, true);
+    tsc_sync_iterator_t record = tsc_sync_iterator_open_direct(tsc_value_object(iterator));
+    record.source = source;
+    record.source_gc_root = (void*)source_root;
+    return record;
+}
+
 bool tsc_sync_iterator_step(tsc_sync_iterator_t* record, tsc_value_t* value) {
     if (!record || record->done) return false;
     TSC_TRY_FRAME(frame);

@@ -232,6 +232,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- For-in uses one retained prototype/key/descriptor worklist and shares ordinary iteration binding and completion owners across synchronous, async and generator entry.
+
 - Share Object/Map GroupBy through live captured Iterator Records and rooted keyed-group records. Preserve close precedence, property/collection key semantics, intrinsic result descriptors and retained typed object/pair identity. Use the ordinary Map/Set constructor protocol with checked native storage projection, retain tagged nullish cells and language key equality, delete eager/copy predecessors, and verify independent Node partitions and deep native ownership in both memory modes.
 
 - Project Realm initialization and global Reference admission from one binding descriptor collection. Share mutable globalThis/free-name reads, writes, deletion, typeof, calls and construction across CLI and native observation; retain shadows and suspended owners, remove hardwired globalThis and duplicate dispatch branches, and publish Object static adapters over existing value operations. Verify independent Script/Module semantic partitions, retained-owner stress and typed E2E in both memory modes.
