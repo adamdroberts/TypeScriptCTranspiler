@@ -3695,6 +3695,12 @@ tsc_value_t tsc_value_construct_with_new_target(
 static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, tsc_value_t fn) {
     if (!ident) return tsc_value_undefined();
     if (!ident->func_prototype_initialized) {
+        /* MakeConstructor's default object belongs to the function's creation
+         * Realm. Materialization may be triggered by a read or descriptor
+         * operation in any other Realm. Keep the callable owner rooted while
+         * allocating its retained prototype through the common object path. */
+        void* volatile function_root = tsc_value_gc_root(fn);
+        tsc_realm_t* previous_realm = tsc_realm_swap(ident->realm);
         tsc_object_t* proto = tsc_object_new();
         tsc_object_define(
             proto,
@@ -3705,6 +3711,8 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
             true
         );
         tsc_function_identity_set_own_prototype(ident, tsc_value_object(proto));
+        (void)tsc_realm_swap(previous_realm);
+        (void)function_root;
     }
     return ident->func_prototype;
 }
