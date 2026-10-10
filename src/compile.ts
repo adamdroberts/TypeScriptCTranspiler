@@ -785,7 +785,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const { program, checker, entrySourceFile, libCoreDts } = built;
     const staticSemanticsFailures = [
         ...program.getSourceFiles().filter(file => !file.isDeclarationFile && !/\.json$/i.test(file.fileName))
-            .flatMap(file => { const failure = earlyPrivateStaticSemanticsFailure(file); return failure ? [failure] : []; }),
+            .flatMap(file => { const directEval = opts.test262Observation?.directEvalEntries?.some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName));
+                const failure = earlyPrivateStaticSemanticsFailure(file, !!directEval); return failure ? [failure] : []; }),
         ...controlStaticSemanticsDiagnostics(program),
         ...functionStaticSemanticsDiagnostics(program),
         ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),

@@ -227,6 +227,7 @@ function parseFailure(
     phase: ParseFailure["phase"],
     origin: ParseFailure["origin"],
     goal: "script" | "module",
+    allowExternalPrivateNames = false,
 ): ParseFailure | null {
     const sourceFile = createEcmaSourceFile(
         filename,
@@ -248,7 +249,7 @@ function parseFailure(
         ? earlyControlFlowFailure(sourceFile)
         : null;
     const functionFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure
-        ? earlyFunctionStaticSemanticsFailure(sourceFile) ?? earlyPrivateStaticSemanticsFailure(sourceFile)
+        ? earlyFunctionStaticSemanticsFailure(sourceFile) ?? earlyPrivateStaticSemanticsFailure(sourceFile, allowExternalPrivateNames)
         : null;
     const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && goal === "module"
         ? earlyModuleStaticSemanticsFailure(sourceFile)
@@ -817,7 +818,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             const relative =
                 `__tsc2c_direct_eval__/${direct.strictCaller ? "strict" : "sloppy"}/` +
                 `${sha256Text(direct.source)}.js`;
-            const failure = parseFailure(direct.source, relative, "parse", "test-source", "script");
+            const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true);
             if (failure) {
                 directEvalEntries.push({ ...direct, entry: null });
                 continue;

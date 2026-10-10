@@ -1,3 +1,5 @@
+Admitted direct eval programs now retain lexical private-name identities through the shared environment tree and validate missing external names before evaluating their source.
+
 Member-only decorated TypeScript classes now retain their original constructor when published through module bindings, avoiding an undeclared class replacement cell.
 
 Continuation regression checks now follow the canonical CFG representation, and Reflect rejection checks observe the specified TypeError constructor instead of an obsolete message.

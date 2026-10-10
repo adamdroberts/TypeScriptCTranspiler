@@ -1,4 +1,4 @@
-import { classPrivateNames, resolveClassPrivateName } from "./private-names";
+import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan} from './class-definition';
@@ -13561,6 +13561,8 @@ class Emitter {
                     if (!moduleId) {
                         throw new Error(`Test262 direct eval entry is absent from the module graph: ${entry.entry}`);
                     }
+                    for (const name of externalPrivateNames(this.graph.modules.get(moduleId)!.sf))
+                        out.line(`        if (!tsc_environment_has_private_name(${this.cStringLiteral(name)})) tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("private name is absent from the eval environment"));`);
                     out.line(`        return mod_evaluate_${moduleId}();`);
                 }
                 out.line("    }");
@@ -23637,6 +23639,13 @@ class Emitter {
             }
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
             if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.isDirectEvalSyntax(node)) {
+                for (const name of classPrivateNamesInScope(node)) {
+                    if (this.isNodeWithin(name.definition, fn)) continue;
+                    const identifier = name.declarations[0]!.name as ts.PrivateIdentifier;
+                    const symbol = this.privateNameSymbol(identifier);
+                    if (!captures.has(symbol)) captures.set(symbol, { symbol, type: T_VALUE,
+                        field: `${mangleIdent(identifier.text)}_${captures.size}`, lexical: null });
+                }
                 for (const symbol of this.checker.getSymbolsInScope(node, ts.SymbolFlags.Value)) {
                     const identifier = this.environmentBindingIdentifier(symbol);
                     if (identifier) captureReference(identifier, this.symbolForIdentifier(identifier) ?? symbol);
@@ -27013,7 +27022,9 @@ class Emitter {
             params.push(capture);
         };
         const visitClosureCaptures = (node: ts.Node): void => {
-            if (this.isPrivateNameReference(node)) retainClosureCapture(this.privateNameSymbol(node));
+            if (this.isPrivateNameReference(node) && resolveClassPrivateName(node)) retainClosureCapture(this.privateNameSymbol(node));
+            if (this.isDirectEvalSyntax(node)) for (const name of classPrivateNamesInScope(node))
+                retainClosureCapture(this.privateNameSymbol(name.declarations[0]!.name as ts.PrivateIdentifier));
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
                 if (symbol) retainClosureCapture(symbol);
@@ -32326,7 +32337,14 @@ class Emitter {
         unsupported(identifier, "private name is missing its canonical class binding");
     }
 
+    private isDirectEvalSourceFile(source: ts.SourceFile): boolean {
+        return !!this.options.test262Observation?.directEvalEntries?.some(entry => entry.entry &&
+            path.resolve(entry.entry) === path.resolve(source.fileName));
+    }
+
     private emitPrivateNameValue(identifier: ts.PrivateIdentifier): EmitResult {
+        if (!resolveClassPrivateName(identifier) && this.isDirectEvalSourceFile(identifier.getSourceFile()))
+            return { c: `tsc_environment_private_name(${this.stringLit(identifier.text)})`, ty: T_VALUE };
         const symbol = this.privateNameSymbol(identifier);
         const binding = this.closureEnvBindingForSymbol(symbol);
         if (!binding) unsupported(identifier, "private name is missing its retained identity cell");
@@ -36513,11 +36531,18 @@ class Emitter {
             if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
             references.push(this.environmentBindingReference(symbol, call, outer));
         }
+        const privateNames = classPrivateNamesInScope(call).map(name => {
+            const identity = this.emitPrivateNameValue(name.declarations[0]!.name as ts.PrivateIdentifier);
+            return `{ ${this.stringLit(name.description)}, ${identity.c} }`;
+        });
         const scope = this.freshTemp("_direct_eval_environment");
+        const privateProjection = privateNames.length
+            ? `(tsc_environment_private_name_ref_t[]){ ${privateNames.join(", ")} }` : "NULL";
         const projection = references.length
             ? `(tsc_environment_binding_ref_t[]){ ${references.join(", ")} }` : "NULL";
         return `({ tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = ` +
             `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
+            `tsc_environment_private_names_project(${scope}.record, ${privateProjection}, ${privateNames.length}); ` +
             `(void)tsc_environment_swap(${scope}.record); ` +
             `tsc_test262_direct_eval_call(${callee}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
     }

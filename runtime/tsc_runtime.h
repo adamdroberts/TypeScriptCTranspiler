@@ -917,6 +917,12 @@ void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_bind
 void tsc_environment_alias_variable(const tsc_environment_binding_ref_t* reference);
 void tsc_environment_alias_capture(const tsc_environment_binding_ref_t* reference);
 tsc_environment_t* tsc_environment_project(const tsc_environment_binding_ref_t* references, size_t length);
+typedef struct { tsc_str_t* name; tsc_value_t identity; } tsc_environment_private_name_ref_t;
+void tsc_environment_private_names_project(tsc_environment_t* record,
+    const tsc_environment_private_name_ref_t* references, size_t length);
+bool tsc_environment_has_private_name(tsc_str_t* name);
+tsc_value_t tsc_environment_private_name(tsc_str_t* name);
+
 tsc_value_t tsc_environment_reference_get(tsc_str_t* key);
 tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
 bool tsc_environment_reference_delete(tsc_str_t* key);

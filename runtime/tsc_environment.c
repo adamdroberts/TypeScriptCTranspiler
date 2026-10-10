@@ -14,9 +14,16 @@ typedef struct tsc_environment_binding {
     struct tsc_environment_binding* next;
 } tsc_environment_binding_t;
 
+typedef struct {
+    tsc_str_t* name;
+    tsc_value_t identity;
+    void* identity_root;
+} environment_private_name_t;
+
 struct tsc_environment {
     tsc_environment_t* parent;
     tsc_environment_binding_t* bindings;
+    tsc_array_t* private_names;
     bool variable_scope;
     tsc_environment_t* captured;
     enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION } context;
@@ -42,6 +49,7 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     tsc_environment_t* environment = TSC_GC_MALLOC(sizeof(*environment));
     environment->parent = parent;
     environment->bindings = NULL;
+    environment->private_names = NULL;
     environment->variable_scope = variable_scope;
     environment->captured = NULL;
     environment->context = ENV_CONTEXT_NONE;
@@ -341,4 +349,34 @@ bool tsc_environment_reference_delete(tsc_str_t* key) {
 tsc_str_t* tsc_environment_reference_typeof(tsc_str_t* key) {
     tsc_environment_binding_t* binding = environment_resolve(key);
     return binding ? tsc_value_typeof(binding_read(binding)) : tsc_global_reference_typeof(key);
+}
+
+/* Private names occupy their own collection; ordinary binding lookup and
+ * declaration instantiation cannot observe or replace these identities. */
+void tsc_environment_private_names_project(tsc_environment_t* record,
+    const tsc_environment_private_name_ref_t* references, size_t length) {
+    if (!record) tsc_panic("private environment projection requires a record");
+    if (!length) return;
+    record->private_names = tsc_array_new(sizeof(environment_private_name_t), length);
+    for (size_t index = 0; index < length; index++) {
+        environment_private_name_t name = { references[index].name, references[index].identity,
+            tsc_value_gc_root(references[index].identity) };
+        tsc_array_push_raw(record->private_names, &name);
+    }
+}
+static const environment_private_name_t* environment_private_name(tsc_str_t* name) {
+    for (tsc_environment_t* record = current_environment; record; record = record->parent) {
+        if (!record->private_names) continue;
+        for (size_t index = 0; index < record->private_names->len; index++) {
+            const environment_private_name_t* candidate = &TSC_ARR(environment_private_name_t, record->private_names, index);
+            if (tsc_str_eq(candidate->name, name)) return candidate;
+        }
+    }
+    return NULL;
+}
+bool tsc_environment_has_private_name(tsc_str_t* name) { return environment_private_name(name) != NULL; }
+tsc_value_t tsc_environment_private_name(tsc_str_t* name) {
+    const environment_private_name_t* binding = environment_private_name(name);
+    if (!binding) tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("private name is absent from the eval environment"));
+    return binding->identity;
 }
