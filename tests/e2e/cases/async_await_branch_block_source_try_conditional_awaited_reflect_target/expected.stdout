@@ -5,7 +5,7 @@ get-true get-true LTM
 get-false get-false LFM
 get-reject rejected-reflect-bad LM
 set-true set-true LTS
-set-throw rejected-Reflect.set target must be an object LS
+set-throw rejected-TypeError LS
 descriptor-true descriptor-true LTV
 descriptor-false descriptor-false LFV
 descriptor-reject caught-descriptor LV

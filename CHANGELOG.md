@@ -1,3 +1,5 @@
+Continuation regression checks now follow the canonical CFG representation, and Reflect rejection checks observe the specified TypeError constructor instead of an obsolete message.
+
 Array exception regression observations now verify the specified error class against Node rather than obsolete runtime messages.
 
 Private class fields, methods and accessors now retain per-class lexical identities and receiver brands through the shared class-element and Reference lowering, including suspension. Private static semantics reject invalid declarations and references before native generation.

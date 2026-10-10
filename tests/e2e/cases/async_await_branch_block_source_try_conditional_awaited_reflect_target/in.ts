@@ -103,7 +103,7 @@ hasDeclaration(1)
         trace = "";
         return runner.getMethod(9).then(
             (result) => "unexpected-" + result,
-            (reason) => "rejected-" + reason,
+            (reason) => "rejected-" + (reason instanceof TypeError ? "TypeError" : reason),
         );
     })
     .then((value) => {
@@ -116,7 +116,7 @@ hasDeclaration(1)
         trace = "";
         return runner.setMethod(5).then(
             (result) => "unexpected-" + result,
-            (reason) => "rejected-" + reason,
+            (reason) => "rejected-" + (reason instanceof TypeError ? "TypeError" : reason),
         );
     })
     .then((value) => {
