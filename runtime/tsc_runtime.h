@@ -824,10 +824,20 @@ tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, void* env, double length, tsc_str_t* name);
 void tsc_value_class_add_element(tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer, bool is_static, bool is_block, bool inferred_name);
+void tsc_value_class_add_private_field(tsc_value_t constructor, tsc_value_t name, tsc_value_t initializer, bool is_static, bool inferred_name);
+void tsc_value_class_add_private_callable(tsc_value_t constructor, tsc_value_t name, tsc_value_t value, bool is_static, bool is_accessor, bool is_setter);
 void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t receiver, bool is_static);
 volatile tsc_value_t* tsc_value_class_name_value(tsc_value_t constructor);
 void** tsc_value_class_name_root(tsc_value_t constructor);
 bool* tsc_value_class_name_initialized(tsc_value_t constructor);
+volatile tsc_value_t* tsc_value_class_private_name_value(tsc_value_t constructor, tsc_str_t* description);
+void** tsc_value_class_private_name_root(tsc_value_t constructor, tsc_str_t* description);
+typedef enum { TSC_PRIVATE_FIELD, TSC_PRIVATE_METHOD, TSC_PRIVATE_ACCESSOR } tsc_private_element_kind_t;
+void tsc_value_private_add(tsc_value_t receiver, tsc_value_t name, tsc_private_element_kind_t kind,
+    tsc_value_t value, tsc_value_t getter, tsc_value_t setter);
+bool tsc_value_private_has(tsc_value_t receiver, tsc_value_t name);
+tsc_value_t tsc_value_private_get(tsc_value_t receiver, tsc_value_t name);
+tsc_value_t tsc_value_private_set(tsc_value_t receiver, tsc_value_t name, tsc_value_t value);
 void tsc_value_class_set_constructor_body(tsc_value_t constructor, tsc_value_t body);
 tsc_value_t tsc_value_class_construct_body(tsc_value_t constructor, tsc_value_t receiver, tsc_array_t* arguments);
 

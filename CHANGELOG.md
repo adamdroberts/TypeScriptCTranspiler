@@ -1,3 +1,5 @@
+Private class fields, methods and accessors now retain per-class lexical identities and receiver brands through the shared class-element and Reference lowering, including suspension. Private static semantics reject invalid declarations and references before native generation.
+
 Anonymous callables in admitted instance/static fields now infer their field name through the shared source syntax projection, preserving explicit names, reference identity and name descriptors. Independent Node property and imported E2E coverage include anonymous class member calls and retained metadata. Computed-key named evaluation and complete class contexts remain open.
 
 Source instance fields now define actual own data properties in source order with retained values and initializer this, and derived fields run after super. Future fields are no longer eagerly advertised by native owners; repeated field definitions share one storage slot. Independent Node property and imported E2E coverage accompany the change, with a stable diagnostic for unrepresented definition keys. Complete class semantics remain open.

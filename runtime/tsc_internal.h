@@ -221,6 +221,7 @@ typedef struct tsc_function_identity {
     void* func_prototype_gc_root;
     tsc_object_t* props;
     tsc_array_t* class_elements;
+    tsc_array_t* class_private_names;
     volatile tsc_value_t class_name_value;
     void* class_name_gc_root;
     bool class_name_initialized;
@@ -271,6 +272,7 @@ typedef enum {
 } tsc_primitive_kind_t;
 
 struct tsc_object {
+    tsc_array_t* private_elements;
     bool is_abort_signal;
     bool is_event_emitter;
     bool is_event_target;

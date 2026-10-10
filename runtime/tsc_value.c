@@ -445,6 +445,7 @@ tsc_value_t tsc_value_function_named_kind(
     id->func_prototype_initialized = false;
     id->construct = construct;
     id->class_elements = NULL;
+    id->class_private_names = NULL;
     id->class_name_value = tsc_value_undefined();
     id->class_name_gc_root = NULL;
     id->class_name_initialized = false;
@@ -564,49 +565,92 @@ bool* tsc_value_class_name_initialized(tsc_value_t constructor) {
     return &tsc_value_class_name_owner(constructor)->class_name_initialized;
 }
 
-/* The retained ClassElement List is shared by static and instance
- * initialization. Decoded roots accompany boxed initializer values. */
+/* One retained ClassElement List owns ordinary fields, blocks and private
+ * definitions. Private method/accessor brands precede ordered field execution. */
 typedef struct {
     tsc_str_t* key;
     void* key_root;
-    tsc_value_t initializer;
+    tsc_value_t initializer, getter, setter;
     void* initializer_root;
-    bool is_static;
-    bool is_block;
-    bool inferred_name;
+    void* getter_root;
+    void* setter_root;
+    bool is_static, is_block, inferred_name;
+    int private_kind;
 } tsc_class_element_t;
 
-void tsc_value_class_add_element(
-    tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer,
-    bool is_static, bool is_block, bool inferred_name
-) {
+static tsc_array_t* class_element_list(tsc_value_t constructor) {
     if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class element owner is not a constructor"));
+    tsc_function_identity_t* identity = value_ptr(constructor);
+    if (!identity->class_elements) identity->class_elements = tsc_array_new(sizeof(tsc_class_element_t), 0);
+    return identity->class_elements;
+}
+static void class_append_field(tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer,
+    bool is_static, bool is_block, bool inferred_name, int private_kind) {
     void* volatile constructor_root = tsc_value_gc_root(constructor);
     void* volatile initializer_root = tsc_value_gc_root(initializer);
-    (void)constructor_root;
-    (void)initializer_root;
-    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
-    if (!identity->class_elements) identity->class_elements = tsc_array_new(sizeof(tsc_class_element_t), 0);
+    (void)constructor_root; (void)initializer_root;
     tsc_symbol_t* symbol = key ? tsc_property_key_symbol(key) : NULL;
-    tsc_class_element_t element = { key, symbol ? (void*)symbol : (void*)key,
-        initializer, tsc_value_gc_root(initializer), is_static, is_block, inferred_name };
-    tsc_array_push_raw(identity->class_elements, &element);
+    tsc_class_element_t element = { .key = key, .key_root = symbol ? (void*)symbol : (void*)key,
+        .initializer = initializer, .initializer_root = tsc_value_gc_root(initializer),
+        .getter = tsc_value_undefined(), .setter = tsc_value_undefined(),
+        .is_static = is_static, .is_block = is_block, .inferred_name = inferred_name, .private_kind = private_kind };
+    tsc_array_push_raw(class_element_list(constructor), &element);
 }
-
+void tsc_value_class_add_element(tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer,
+    bool is_static, bool is_block, bool inferred_name) {
+    class_append_field(constructor, key, initializer, is_static, is_block, inferred_name, -1);
+}
+void tsc_value_class_add_private_field(tsc_value_t constructor, tsc_value_t name, tsc_value_t initializer,
+    bool is_static, bool inferred_name) {
+    class_append_field(constructor, tsc_value_to_internal_property_key(name), initializer,
+        is_static, false, inferred_name, TSC_PRIVATE_FIELD);
+}
+void tsc_value_class_add_private_callable(tsc_value_t constructor, tsc_value_t name, tsc_value_t value,
+    bool is_static, bool is_accessor, bool is_setter) {
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile name_root = tsc_value_gc_root(name);
+    void* volatile value_root = tsc_value_gc_root(value);
+    (void)constructor_root; (void)name_root; (void)value_root;
+    tsc_str_t* key = tsc_value_to_internal_property_key(name);
+    tsc_array_t* elements = class_element_list(constructor);
+    if (is_accessor) {
+        for (size_t index = 0; index < elements->len; index++) {
+            tsc_class_element_t* element = &TSC_ARR(tsc_class_element_t, elements, index);
+            if (element->private_kind != TSC_PRIVATE_ACCESSOR || element->is_static != is_static ||
+                tsc_property_key_symbol(element->key) != tsc_property_key_symbol(key)) continue;
+            if (is_setter) { element->setter = value; element->setter_root = tsc_value_gc_root(value); }
+            else { element->getter = value; element->getter_root = tsc_value_gc_root(value); }
+            return;
+        }
+    }
+    tsc_class_element_t element = { .key = key, .key_root = tsc_value_gc_root(name),
+        .initializer = is_accessor ? tsc_value_undefined() : value,
+        .initializer_root = is_accessor ? NULL : tsc_value_gc_root(value),
+        .getter = is_accessor && !is_setter ? value : tsc_value_undefined(),
+        .getter_root = is_accessor && !is_setter ? tsc_value_gc_root(value) : NULL,
+        .setter = is_accessor && is_setter ? value : tsc_value_undefined(),
+        .setter_root = is_accessor && is_setter ? tsc_value_gc_root(value) : NULL,
+        .is_static = is_static, .private_kind = is_accessor ? TSC_PRIVATE_ACCESSOR : TSC_PRIVATE_METHOD };
+    tsc_array_push_raw(elements, &element);
+}
 void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t receiver, bool is_static) {
     if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class element owner is not a constructor"));
     void* volatile constructor_root = tsc_value_gc_root(constructor);
     void* volatile receiver_root = tsc_value_gc_root(receiver);
-    (void)constructor_root;
-    (void)receiver_root;
-    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
-    tsc_array_t* elements = identity->class_elements;
+    (void)constructor_root; (void)receiver_root;
+    tsc_array_t* elements = ((tsc_function_identity_t*)value_ptr(constructor))->class_elements;
     if (!elements) return;
-    for (int64_t index = 0; index < elements->len; index++) {
+    for (size_t index = 0; index < elements->len; index++) {
         tsc_class_element_t element = TSC_ARR(tsc_class_element_t, elements, index);
-        if (element.is_static != is_static) continue;
+        if (element.is_static != is_static || element.private_kind <= TSC_PRIVATE_FIELD) continue;
+        tsc_value_private_add(receiver, tsc_value_symbol(tsc_property_key_symbol(element.key)),
+            element.private_kind, element.initializer, element.getter, element.setter);
+    }
+    for (size_t index = 0; index < elements->len; index++) {
+        tsc_class_element_t element = TSC_ARR(tsc_class_element_t, elements, index);
+        if (element.is_static != is_static || element.private_kind > TSC_PRIVATE_FIELD) continue;
         tsc_value_t value = tsc_value_undefined();
         if (!tsc_value_is_undefined(element.initializer)) {
             tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 0);
@@ -619,9 +663,15 @@ void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t re
         if (element.is_block) continue;
         void* volatile value_root = tsc_value_gc_root(value);
         (void)value_root;
-        if (element.inferred_name)
-            value = tsc_value_function_with_property_name(value, element.key, NULL);
-        if (!tsc_value_define_property_desc(receiver, element.key, value,
+        if (element.inferred_name) {
+            tsc_str_t* name = element.private_kind == TSC_PRIVATE_FIELD
+                ? tsc_symbol_description(tsc_property_key_symbol(element.key)) : element.key;
+            value = tsc_value_function_with_property_name(value, name, NULL);
+        }
+        if (element.private_kind == TSC_PRIVATE_FIELD)
+            tsc_value_private_add(receiver, tsc_value_symbol(tsc_property_key_symbol(element.key)),
+                TSC_PRIVATE_FIELD, value, tsc_value_undefined(), tsc_value_undefined());
+        else if (!tsc_value_define_property_desc(receiver, element.key, value,
                 true, true, true, true, true, true, true))
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class field definition failed"));
     }

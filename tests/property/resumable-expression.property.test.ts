@@ -212,12 +212,12 @@ test("one worklist retains a deep expression tree without recursive lowering", (
     }
 });
 
-test("unrepresented suspending operations fail closed with a stable diagnostic", () => {
-    const result = planResumableExpression(parse('object.#method(yield 1)'));
-    expect(result.kind).toBe("unsupported");
-    if (result.kind !== "unsupported") throw new Error("unrepresented operation was admitted");
-    expect(result.failure.message).toBe("resumable expression requires a canonical operation");
-    expect(ts.isPropertyAccessExpression(result.failure.node)).toBeTrue();
+test("private call References retain the opaque name through suspension", () => {
+    const result = graph('object.#method(yield 1)');
+    const operations = result.states.flatMap(node => node.kind === "value" ? [node.operation] : []);
+    expect(operations.some(operation => operation.kind === "evaluate" && ts.isPrivateIdentifier(operation.expression))).toBeTrue();
+    expect(operations.some(operation => operation.kind === "get" && operation.reference.kind === "property" &&
+        ts.isPropertyAccessExpression(operation.reference.node) && ts.isPrivateIdentifier(operation.reference.node.name))).toBeTrue();
 });
 
 

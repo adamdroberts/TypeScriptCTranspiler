@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
 import {
     earlyControlFlowStaticSemanticsFailure,
     type ControlStaticSemanticsFailure,
@@ -108,7 +109,7 @@ export interface CompileResult {
 }
 
 const RUNTIME_SOURCES = [
-    "tsc_core.c", "tsc_environment.c", "tsc_module.c",
+    "tsc_core.c", "tsc_environment.c", "tsc_module.c", "tsc_private.c",
     "tsc_value.c",
     "tsc_iterator.c",
     "tsc_string.c",
@@ -783,6 +784,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
     const { program, checker, entrySourceFile, libCoreDts } = built;
     const staticSemanticsFailures = [
+        ...program.getSourceFiles().filter(file => !file.isDeclarationFile && !/\.json$/i.test(file.fileName))
+            .flatMap(file => { const failure = earlyPrivateStaticSemanticsFailure(file); return failure ? [failure] : []; }),
         ...controlStaticSemanticsDiagnostics(program),
         ...functionStaticSemanticsDiagnostics(program),
         ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),

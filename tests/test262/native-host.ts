@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { earlyPrivateStaticSemanticsFailure } from "../../src/emit/private-names";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import ts from "typescript";
@@ -247,7 +248,7 @@ function parseFailure(
         ? earlyControlFlowFailure(sourceFile)
         : null;
     const functionFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure
-        ? earlyFunctionStaticSemanticsFailure(sourceFile)
+        ? earlyFunctionStaticSemanticsFailure(sourceFile) ?? earlyPrivateStaticSemanticsFailure(sourceFile)
         : null;
     const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && goal === "module"
         ? earlyModuleStaticSemanticsFailure(sourceFile)

@@ -1,3 +1,4 @@
+import { classPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan} from './class-definition';
@@ -1318,7 +1319,8 @@ class Emitter {
             const current = pending.pop()!;
             if (seen.has(current) || this.isAmbientDeclaration(current)) continue;
             seen.add(current);
-            if (this.isJavaScriptSourceFile(current.getSourceFile()) || this.sourceHasTopLevelAwait(current.getSourceFile())) return true;
+            if (this.isJavaScriptSourceFile(current.getSourceFile()) || this.sourceHasTopLevelAwait(current.getSourceFile()) ||
+                classPrivateNames(current).length) return true;
             for (const clause of current.heritageClauses ?? []) {
                 if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
                 for (const heritage of clause.types) {
@@ -23626,6 +23628,13 @@ class Emitter {
             }
         };
         const visit = (node: ts.Node): void => {
+            if (this.isPrivateNameReference(node)) {
+                const name = resolveClassPrivateName(node);
+                if (name && !this.isNodeWithin(name.definition, fn)) {
+                    const symbol = this.privateNameSymbol(node);
+                    if (!captures.has(symbol)) captures.set(symbol, { symbol, type: T_VALUE, field: `${mangleIdent(node.text)}_${captures.size}`, lexical: null });
+                }
+            }
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
             if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.isDirectEvalSyntax(node)) {
                 for (const symbol of this.checker.getSymbolsInScope(node, ts.SymbolFlags.Value)) {
@@ -25873,7 +25882,7 @@ class Emitter {
     }
 
     private classMemberPublicName(name: ts.PropertyName): string {
-        if (ts.isPrivateIdentifier(name)) unsupported(name, "class member key is outside the canonical definition plan");
+        if (ts.isPrivateIdentifier(name)) return name.text;
         if (ts.isComputedPropertyName(name)) {
             const symbol = this.wellKnownSymbolName(name.expression);
             return symbol ? `[Symbol.${symbol}]` : this.staticPropertyName(name) ?? `[computed:${name.pos}]`;
@@ -26096,13 +26105,12 @@ class Emitter {
             return pieces;
         }
         if (!callable && !field) return pieces;
-        if (!nativeStorage && field && ts.isPrivateIdentifier(member.name))
-            unsupported(member, "class element requires the canonical initialization plan");
         // Declaration fields retain their key for later initialization;
         // expression methods borrow a local carrier owned by this definition.
         const name = member.name!;
         const publicName = this.classMemberPublicName(name);
-        let key = this.stringLit(publicName);
+        const privateMember = ts.isPrivateIdentifier(name);
+        let key = privateMember ? this.emitPrivateNameValue(name).c : this.stringLit(publicName);
         if (ts.isComputedPropertyName(name)) {
             const retained = nativeStorage;
             key = retained ? this.classMemberPropertyKey(name).propertyKey : this.freshTemp("_class_element_key");
@@ -26115,7 +26123,9 @@ class Emitter {
                 const source = member.initializer && this.unwrapTransparentExpression(member.initializer);
                 const inferred = !!source && (ts.isArrowFunction(source) ||
                     ts.isFunctionExpression(source) && !source.name);
-                pieces.push(`tsc_value_class_add_element(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, false, ${inferred})`);
+                pieces.push(privateMember
+                    ? `tsc_value_class_add_private_field(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, ${inferred})`
+                    : `tsc_value_class_add_element(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, false, ${inferred})`);
             }
             return pieces;
         }
@@ -26123,6 +26133,10 @@ class Emitter {
         const value = this.freshTemp("_class_element_value"), root = this.freshTemp("_class_element_value_root");
         const closure = this.coerce(this.emitClosureExpression(member as ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration), T_VALUE, member);
         pieces.push(`tsc_value_t ${value} = tsc_value_function_with_home_object(${closure}, ${target})`, `void* volatile ${root} = tsc_value_gc_root(${value})`, `(void)${root}`);
+        if (privateMember) {
+            pieces.push(`tsc_value_class_add_private_callable(${constructor}, ${key}, ${value}, ${isStatic(member)}, ${!ts.isMethodDeclaration(member)}, ${ts.isSetAccessorDeclaration(member)})`);
+            return pieces;
+        }
         if (ts.isComputedPropertyName(name)) {
             const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
             pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
@@ -26996,6 +27010,7 @@ class Emitter {
             params.push(capture);
         };
         const visitClosureCaptures = (node: ts.Node): void => {
+            if (this.isPrivateNameReference(node)) retainClosureCapture(this.privateNameSymbol(node));
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
                 if (symbol) retainClosureCapture(symbol);
@@ -27959,21 +27974,19 @@ class Emitter {
                     const preparePropertyReference = (reference: Extract<ResumableReference, { kind: "property" }>): void => {
                         // GetValue/PutValue retain the same normalized name in
                         // the Reference, including across await/yield edges.
-                        store(reference.key, `tsc_value_prepare_property_reference(${read(reference.base)}, ${read(reference.key)})`);
+                        store(reference.key, this.preparePropertyReferenceName(reference.node, read(reference.base), read(reference.key)));
                     };
                     const getReference = (reference: ResumableReference): string => {
                         if (reference.kind !== "property") return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
                         preparePropertyReference(reference);
-                        return reference.receiver === undefined ? `tsc_value_get_computed_prop(${read(reference.base)}, ${read(reference.key)})`
-                            : `tsc_reflect_get_computed_prop_receiver(${read(reference.base)}, ${read(reference.key)}, ${read(reference.receiver)})`;
+                        return this.readPropertyReference(reference.node, read(reference.base), read(reference.key),
+                            reference.receiver === undefined ? undefined : read(reference.receiver));
                     };
                     const setReference = (reference: ResumableReference, source: string, sourceNode: ts.Expression): void => {
                         if (reference.kind === "property") {
                             preparePropertyReference(reference);
-                            const write = reference.receiver === undefined
-                                ? `tsc_value_set_computed_prop(${read(reference.base)}, ${read(reference.key)}, ${source})`
-                                : `tsc_reflect_set_computed_prop_receiver(${read(reference.base)}, ${read(reference.key)}, ${source}, ${read(reference.receiver)})`;
-                            callback.line(this.emitPropertyWriteStatement(write, reference.node) + ";");
+                            callback.line(this.writePropertyReference(reference.node, read(reference.base), read(reference.key), source,
+                                reference.receiver === undefined ? undefined : read(reference.receiver)) + ";");
                             return;
                         }
                         const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
@@ -32261,9 +32274,9 @@ class Emitter {
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 ts.isClassStaticBlockDeclaration(member) ||
                 ts.isConstructorDeclaration(member) && this.isSupportedDynamicConstructor(member) ||
-                ts.isPropertyDeclaration(member) && !ts.isPrivateIdentifier(member.name) ||
+                ts.isPropertyDeclaration(member) ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) &&
-                    !ts.isPrivateIdentifier(member.name) && !!member.body);
+                    !!member.body);
     }
 
     private isSupportedDynamicConstructor(constructor: ts.ConstructorDeclaration): boolean {
@@ -32295,10 +32308,55 @@ class Emitter {
     /** One inner Environment Record per class evaluation. Native declarations
      * have static duration; dynamic definitions allocate escaping cells. Both
      * use the same binding and initialization projection. */
+    private isPrivateNameReference(node: ts.Node): node is ts.PrivateIdentifier {
+        return ts.isPrivateIdentifier(node) && (ts.isPropertyAccessExpression(node.parent) && node.parent.name === node ||
+            ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.InKeyword && node.parent.left === node);
+    }
+
+    private privateNameSymbol(identifier: ts.PrivateIdentifier): ts.Symbol {
+        const name = resolveClassPrivateName(identifier);
+        if (!name) unsupported(identifier, "private name is outside its canonical class environment");
+        for (const declaration of name.declarations) {
+            const symbol = declaration.name && this.checker.getSymbolAtLocation(declaration.name);
+            if (symbol) return symbol;
+        }
+        unsupported(identifier, "private name is missing its canonical class binding");
+    }
+
+    private emitPrivateNameValue(identifier: ts.PrivateIdentifier): EmitResult {
+        const symbol = this.privateNameSymbol(identifier);
+        const binding = this.closureEnvBindingForSymbol(symbol);
+        if (!binding) unsupported(identifier, "private name is missing its retained identity cell");
+        return { c: `(*${binding.ptr})`, ty: T_VALUE };
+    }
+
+    private emitPrivatePropertyCall(call: ts.CallExpression | ts.TaggedTemplateExpression,
+        member: ts.PropertyAccessExpression): EmitResult {
+        const receiver = this.emitExpr(member.expression), name = this.emitPrivateNameValue(member.name as ts.PrivateIdentifier);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: receiver, target: T_VALUE, node: member.expression },
+            { value: name, target: T_VALUE, node: member.name },
+        ], ([base, key]) => {
+            const value = { c: `tsc_value_private_get(${base}, ${key})`, ty: T_VALUE };
+            const invoked = this.emitDynamicValueCall(call, value, { c: base, ty: T_VALUE }).c;
+            return member.questionDotToken ? `tsc_value_is_nullish(${base}) ? tsc_value_undefined() : (${invoked})` : invoked;
+        });
+    }
+
     private createClassNameEnvironment(
         definition: ts.ClassLikeDeclaration, constructor?: string,
     ): Map<ts.Symbol, ClosureEnvBinding> {
         const environment = new Map<ts.Symbol, ClosureEnvBinding>();
+        if (constructor) for (const name of classPrivateNames(definition)) {
+            const declaration = name.declarations[0]!;
+            const symbol = declaration.name && this.checker.getSymbolAtLocation(declaration.name);
+            if (!symbol) unsupported(declaration, "private name is missing its canonical class binding");
+            const description = this.stringLit(name.description);
+            environment.set(symbol, { type: T_VALUE,
+                ptr: `tsc_value_class_private_name_value(${constructor}, ${description})`,
+                rootPtr: `tsc_value_class_private_name_root(${constructor}, ${description})`,
+                immutable: true, creationScope: this.argumentValueScopes.at(-1) });
+        }
         const symbol = definition.name ? this.symbolForIdentifier(definition.name) : undefined;
         if (!symbol) return environment;
         if (constructor) {
@@ -32333,7 +32391,7 @@ class Emitter {
     private initializeClassNameEnvironment(
         environment: ReadonlyMap<ts.Symbol, ClosureEnvBinding>, constructor: string,
     ): string[] {
-        return [...environment.values()].flatMap(binding => [
+        return [...environment.values()].filter(binding => !!binding.initializedPtr).flatMap(binding => [
             `*${binding.ptr} = ${constructor}`, `*${binding.rootPtr} = tsc_value_gc_root(*${binding.ptr})`,
             `*${binding.initializedPtr} = true`,
         ]);
@@ -32374,6 +32432,8 @@ class Emitter {
             `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
             `(void)${prototypeRoot}`,
         ];
+        for (const name of classPrivateNames(expression))
+            pieces.push(`(void)tsc_value_class_private_name_value(${constructor}, ${this.stringLit(name.description)})`);
         const inner = this.createClassNameEnvironment(expression, constructor);
         this.closureEnvScopes.push(inner);
         try {
@@ -33146,6 +33206,7 @@ class Emitter {
                 { c: "tsc_value_current_new_target()", ty: T_VALUE };
         }
 
+        if (ts.isPrivateIdentifier(expr)) return this.emitPrivateNameValue(expr);
         if (ts.isIdentifier(expr)) {
             const wrapperBinding = this.commonJsWrapperBindingName(expr);
             if (wrapperBinding) return { c: `tsc_environment_reference_get(${this.stringLit(wrapperBinding)})`, ty: T_VALUE };
@@ -33839,8 +33900,7 @@ class Emitter {
         const tag = this.unwrapTransparentExpression(tt.tag);
         if (this.isSuperProperty(tag)) return this.emitSuperPropertyCall(tt, tag);
         if (ts.isPropertyAccessExpression(tag)) {
-            if (ts.isPrivateIdentifier(tag.name))
-                unsupported(tag, "tagged template requires a canonical callable reference");
+            if (ts.isPrivateIdentifier(tag.name)) return this.emitPrivatePropertyCall(tt, tag);
             return this.emitDynamicNamedPropertyCall(tt, this.emitExpr(tag.expression), tag.name.text, !!tag.questionDotToken);
         }
         if (ts.isElementAccessExpression(tag)) {
@@ -34259,17 +34319,17 @@ class Emitter {
     ): EmitResult | null {
         if (!(ts.isPropertyAccessExpression(operand) || ts.isElementAccessExpression(operand))) return null;
         if (ts.isPropertyAccessExpression(operand) &&
-            (!ts.isIdentifier(operand.name) || this.namespaceMemberName(operand.name))) return null;
+            (!ts.isIdentifier(operand.name) && !ts.isPrivateIdentifier(operand.name) || ts.isIdentifier(operand.name) && this.namespaceMemberName(operand.name))) return null;
         return this.emitCapturedPropertyReference(operand, (base, rawName, receiver, superReference) => {
             const name = this.freshTemp("_reference_name"), nameRoot = this.freshTemp("_reference_name_root");
             const current = this.freshTemp("_reference_numeric"), currentRoot = this.freshTemp("_reference_numeric_root");
             const next = this.freshTemp("_reference_next"), nextRoot = this.freshTemp("_reference_next_root");
             const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
-            const write = this.emitPropertyWriteStatement(superReference ? `tsc_reflect_set_computed_prop_receiver(${base}, ${name}, ${next}, ${receiver})` : `tsc_value_set_computed_prop(${base}, ${name}, ${next})`, operand,
+            const write = this.writePropertyReference(operand, base, name, next, superReference ? receiver : undefined,
                 !!this.moduleNamespacePlanForExpression(operand.expression));
-            return `({ tsc_value_t ${name} = tsc_value_prepare_property_reference(${base}, ${rawName}); ` +
+            return `({ tsc_value_t ${name} = ${this.preparePropertyReferenceName(operand, base, rawName)}; ` +
                 `void* volatile ${nameRoot} = tsc_value_gc_root(${name}); (void)${nameRoot}; ` +
-                `tsc_value_t ${current} = tsc_value_to_numeric(${superReference ? `tsc_reflect_get_computed_prop_receiver(${base}, ${name}, ${receiver})` : `tsc_value_get_computed_prop(${base}, ${name})`}); ` +
+                `tsc_value_t ${current} = tsc_value_to_numeric(${this.readPropertyReference(operand, base, name, superReference ? receiver : undefined)}); ` +
                 `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); (void)${currentRoot}; ` +
                 `tsc_value_t ${next} = ${operation}(${current}); ` +
                 `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot}; ` +
@@ -34452,7 +34512,7 @@ class Emitter {
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: left, target: T_VALUE, node: bin.left },
                     { value: right, target: T_VALUE, node: bin.right },
-                ], ([key, object]) => `tsc_value_in(${key}, ${object})`);
+                ], ([key, object]) => ts.isPrivateIdentifier(bin.left) ? `tsc_value_private_has(${object}, ${key})` : `tsc_value_in(${key}, ${object})`);
 
             case ts.SyntaxKind.EqualsEqualsToken:
             case ts.SyntaxKind.EqualsEqualsEqualsToken:
@@ -35038,6 +35098,28 @@ class Emitter {
         return this.readThisBinding(receiver);
     }
 
+    private isPrivatePropertyReference(node: ts.Node): boolean {
+        return ts.isPropertyAccessExpression(node) && ts.isPrivateIdentifier(node.name);
+    }
+
+    private preparePropertyReferenceName(node: ts.Node, base: string, key: string): string {
+        return this.isPrivatePropertyReference(node) ? key : `tsc_value_prepare_property_reference(${base}, ${key})`;
+    }
+
+    private readPropertyReference(node: ts.Node, base: string, key: string, receiver?: string): string {
+        if (this.isPrivatePropertyReference(node)) return `tsc_value_private_get(${base}, ${key})`;
+        return receiver === undefined ? `tsc_value_get_computed_prop(${base}, ${key})`
+            : `tsc_reflect_get_computed_prop_receiver(${base}, ${key}, ${receiver})`;
+    }
+
+    private writePropertyReference(node: ts.Node, base: string, key: string, value: string, receiver?: string,
+        moduleNamespace = false): string {
+        if (this.isPrivatePropertyReference(node)) return `(void)tsc_value_private_set(${base}, ${key}, ${value})`;
+        const write = receiver === undefined ? `tsc_value_set_computed_prop(${base}, ${key}, ${value})`
+            : `tsc_reflect_set_computed_prop_receiver(${base}, ${key}, ${value}, ${receiver})`;
+        return this.emitPropertyWriteStatement(write, node, moduleNamespace);
+    }
+
     private emitCapturedPropertyReference(
         node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
         finish: (base: string, key: string, receiver: string, superReference: boolean) => string,
@@ -35048,6 +35130,7 @@ class Emitter {
         }
         const keyNode = ts.isElementAccessExpression(node) ? node.argumentExpression : null;
         const key = keyNode ? this.emitExpr(keyNode)
+            : this.isPrivatePropertyReference(node) ? this.emitPrivateNameValue((node as ts.PropertyAccessExpression).name as ts.PrivateIdentifier)
             : { c: this.stringLit((node as ts.PropertyAccessExpression).name.text), ty: T_STRING };
         if (this.isSuperProperty(node)) {
             const home = this.superHomeObject(node), receiver = this.superThisValue(node);
@@ -35063,7 +35146,7 @@ class Emitter {
             });
         }
         const raw = this.emitExpr(node.expression);
-        const receiver = (["function", "regexp", "buffer", "array"].includes(raw.ty.kind) ||
+        const receiver = (this.isPrivatePropertyReference(node) || ["function", "regexp", "buffer", "array"].includes(raw.ty.kind) ||
             raw.ty.kind === "class" && !!this.findClassDecl(raw.ty.className!))
             ? { c: this.coerce(raw, T_VALUE, node.expression), ty: T_VALUE } : raw;
         if (receiver.ty.kind !== "value") return null;
@@ -35095,7 +35178,7 @@ class Emitter {
         const left = bin.left;
         if (!(ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left))) return null;
         if (ts.isPropertyAccessExpression(left) &&
-            (!ts.isIdentifier(left.name) || this.namespaceMemberName(left.name))) return null;
+            (!ts.isIdentifier(left.name) && !ts.isPrivateIdentifier(left.name) || ts.isIdentifier(left.name) && this.namespaceMemberName(left.name))) return null;
         const rhs = this.emitExpr(bin.right);
         const logicalOp = this.isLogicalAssignmentOperator(op);
         const compoundFn = this.dynamicCompoundAssignmentOperation(op);
@@ -35109,15 +35192,14 @@ class Emitter {
             const out = this.freshTemp("_reference_result");
             const outRoot = this.freshTemp("_reference_result_root");
             const rhsValue = this.coerce(rhs, T_VALUE, bin.right);
-            const prepare = `tsc_value_t ${name} = tsc_value_prepare_property_reference(${base}, ${rawKey}); ` +
+            const prepare = `tsc_value_t ${name} = ${this.preparePropertyReferenceName(left, base, rawKey)}; ` +
                 `void* volatile ${nameRoot} = tsc_value_gc_root(${name}); (void)${nameRoot}; `;
             const pinResult = `void* volatile ${outRoot} = tsc_value_gc_root(${out}); (void)${outRoot}; `;
-            const write = this.emitPropertyWriteStatement(
-                superReference ? `tsc_reflect_set_computed_prop_receiver(${base}, ${name}, ${out}, ${receiver})` : `tsc_value_set_computed_prop(${base}, ${name}, ${out})`, bin, moduleNamespaceAssignment);
+            const write = this.writePropertyReference(left, base, name, out, superReference ? receiver : undefined, moduleNamespaceAssignment);
             if (op === ts.SyntaxKind.EqualsToken) {
                 return `({ tsc_value_t ${out} = ${rhsValue}; ${pinResult}${prepare}${write}; ${out}; })`;
             }
-            const read = `${prepare}tsc_value_t ${old} = ${superReference ? `tsc_reflect_get_computed_prop_receiver(${base}, ${name}, ${receiver})` : `tsc_value_get_computed_prop(${base}, ${name})`}; ` +
+            const read = `${prepare}tsc_value_t ${old} = ${this.readPropertyReference(left, base, name, superReference ? receiver : undefined)}; ` +
                 `void* volatile ${oldRoot} = tsc_value_gc_root(${old}); (void)${oldRoot}; `;
             if (logicalOp) {
                 const condition = op === ts.SyntaxKind.AmpersandAmpersandEqualsToken
@@ -37821,6 +37903,7 @@ class Emitter {
         pa: ts.PropertyAccessExpression,
     ): EmitResult {
         const memberName = pa.name.text;
+        if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
         if (this.expressionHasCanonicalSourceValue(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
@@ -47833,6 +47916,15 @@ class Emitter {
     }
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
+        if (ts.isPrivateIdentifier(pa.name)) {
+            const receiver = precomputedReceiver ?? this.emitExpr(pa.expression), name = this.emitPrivateNameValue(pa.name);
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: receiver, target: T_VALUE, node: pa.expression },
+                { value: name, target: T_VALUE, node: pa.name },
+            ], ([base, key]) => pa.questionDotToken
+                ? `tsc_value_is_nullish(${base}) ? tsc_value_undefined() : tsc_value_private_get(${base}, ${key})`
+                : `tsc_value_private_get(${base}, ${key})`);
+        }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {

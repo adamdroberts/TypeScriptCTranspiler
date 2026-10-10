@@ -62,6 +62,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->cap = 4;
     o->extensible = true;
     o->class_ptr = NULL;
+    o->private_elements = NULL;
     o->is_proxy = false;
     o->proxy_revoked = false;
     o->is_promise = false;

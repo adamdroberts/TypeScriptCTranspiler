@@ -146,6 +146,10 @@ export function createEcmaSourceFile(
     if (shadow !== source) {
         (sourceFile as ts.SourceFile & { text: string }).text = source;
     }
+    // ECMA-262 OptionalChain permits ?. PrivateIdentifier. TypeScript builds
+    // the correct tree but adds its own TS18030 restriction to parse diagnostics.
+    const parsed = sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] };
+    if (parsed.parseDiagnostics) parsed.parseDiagnostics = parsed.parseDiagnostics.filter(diagnostic => diagnostic.code !== 18030);
     (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
 }

@@ -135,8 +135,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         if (!ts.isPropertyAccessExpression(current) && !ts.isElementAccessExpression(current)) {
             reject(current); return complete;
         }
-        if (current.questionDotToken && chainExit === undefined ||
-            ts.isPropertyAccessExpression(current) && ts.isPrivateIdentifier(current.name)) {
+        if (current.questionDotToken && chainExit === undefined) {
             reject(current); return complete;
         }
         const base = value(current.expression), key = value(current);
@@ -146,7 +145,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         const next = superReference ? operation({ kind: "super-base", node: current }, base, consumer(reference)) : consumer(reference);
         let keyEntry: number;
         if (ts.isPropertyAccessExpression(current)) {
-            keyEntry = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(current.name.text), inputs: [] }, key, next);
+            keyEntry = operation({ kind: "evaluate", expression: ts.isPrivateIdentifier(current.name) ? current.name : ts.factory.createStringLiteral(current.name.text), inputs: [] }, key, next);
         } else {
             const raw = value(current.argumentExpression);
             keyEntry = build(current.argumentExpression, raw, copy(raw, key, next));

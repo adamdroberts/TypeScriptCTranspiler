@@ -1,3 +1,4 @@
+import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
 import ts from "typescript";
 import { createEcmaSourceFile } from "./ecmascript-source";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
@@ -65,7 +66,7 @@ export function functionConstructorSourceIsValid(source: FunctionConstructorSour
         !parseFunctionExpression({ kind: source.kind, parameters: "", body: source.body })) return false;
     const file = parseFunctionExpression(source);
     return !!file && !earlyControlFlowStaticSemanticsFailure(file) &&
-        !earlyFunctionStaticSemanticsFailure(file);
+        !earlyFunctionStaticSemanticsFailure(file) && !earlyPrivateStaticSemanticsFailure(file);
 }
 
 export function finiteFunctionConstructorSources(
