@@ -41713,6 +41713,38 @@ class Emitter {
         unsupported(call, `timers.${name}`);
     }
 
+    /** One descriptor List defines a deferred heap environment and every
+     * initializer/root store. NaN-boxed owners need decoded roots beside
+     * their fields; ordinary C pointers are already visible to the collector. */
+    private emitRetainedEnvironmentFields(
+        owner: ts.Node,
+        envType: string,
+        fields: readonly { name: string; type: CType }[],
+    ): (environment: string, values: readonly string[]) => string {
+        this.structDecls.open(`typedef struct ${envType}`);
+        for (const field of fields) {
+            this.structDecls.line(`${field.type.c} ${field.name};`);
+            if (field.type.kind === "value")
+                this.structDecls.line(`void* ${field.name}_gc_root;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        return (environment, values) => {
+            if (values.length !== fields.length)
+                unsupported(owner, "retained environment requires a field-aligned initializer List");
+            return fields.map((field, index) => `${environment}->${field.name} = ${values[index]}; ` +
+                (field.type.kind === "value"
+                    ? `${environment}->${field.name}_gc_root = tsc_value_gc_root(${environment}->${field.name}); `
+                    : "")).join("");
+        };
+    }
+
+    private emitDeferredPromiseResolution(promise: string, value: EmitResult, owner: ts.Node): string {
+        const stored = this.prepareType(value.ty);
+        if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array")
+            return `tsc_promise_fulfill_in_place_ptr(${promise}, ${value.c});`;
+        return `tsc_promise_resolve_into(${promise}, ${this.coerce(value, T_VALUE, owner)});`;
+    }
+
     private emitTimersPromisesCall(call: ts.CallExpression, name: string): EmitResult {
         if (name === "setInterval") {
             const delayNode = call.arguments[0];
@@ -41778,10 +41810,10 @@ class Emitter {
                             const signal = signalValue ? values[specs.length]! : null;
                             const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
                             const envType = `${callbackName}_env_t`;
-                            this.structDecls.open(`typedef struct ${envType}`);
-                            this.structDecls.line("tsc_promise_t* promise;");
-                            if (signal) this.structDecls.line("tsc_value_t signal;");
-                            this.structDecls.close(` ${envType};`);
+                            const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                                { name: "promise", type: mapped },
+                                ...(signal ? [{ name: "signal", type: T_VALUE }] : []),
+                            ]);
                             this.protos.line(`void ${callbackName}(void* env);`);
                             const buf = new CBuf();
                             buf.open(`void ${callbackName}(void* env)`);
@@ -41794,7 +41826,7 @@ class Emitter {
                             const timerRegistration = signal
                                 ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
                                 : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
-                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${timerRegistration} ${promiseVar}; })`;
+                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, ...(signal ? [signal] : [])])}${timerRegistration} ${promiseVar}; })`;
                         });
                     }
                     const value = this.emitExpr(valueNode);
@@ -41807,34 +41839,25 @@ class Emitter {
                         const signal = signalValue ? values[specs.length + 1]! : null;
                         const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
                         const envType = `${callbackName}_env_t`;
-                        this.structDecls.open(`typedef struct ${envType}`);
-                        this.structDecls.line("tsc_promise_t* promise;");
-                        if (signal) this.structDecls.line("tsc_value_t signal;");
-                        this.structDecls.line(`${storedValueType.c} value;`);
-                        this.structDecls.close(` ${envType};`);
+                        const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                            { name: "promise", type: mapped },
+                            { name: "value", type: storedValueType },
+                            ...(signal ? [{ name: "signal", type: T_VALUE }] : []),
+                        ]);
                         this.protos.line(`void ${callbackName}(void* env);`);
                         const buf = new CBuf();
                         buf.open(`void ${callbackName}(void* env)`);
                         buf.line(`${envType}* state = (${envType}*)env;`);
-                        const stored = this.prepareType(storedValueType);
-                        if (stored.kind === "promise") {
-                            buf.line("tsc_promise_adopt_into(state->promise, state->value);");
-                        } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
-                            buf.line("tsc_promise_fulfill_in_place_ptr(state->promise, state->value);");
-                        } else {
-                            const fulfilled = this.coerce({ c: "state->value", ty: storedValueType }, T_VALUE, valueNode);
-                            buf.line(`tsc_promise_fulfill_in_place(state->promise, ${fulfilled});`);
-                        }
+                        buf.line(this.emitDeferredPromiseResolution("state->promise", { c: "state->value", ty: storedValueType }, valueNode));
                         buf.close();
                         this.closureDefs.write(buf.toString());
                         const env = this.freshTemp("_timeoutEnv");
                         const promiseVar = this.freshTemp("_promise");
                         const valueVar = values[specs.length]!;
-                        const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
                         const timerRegistration = signal
                             ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
                             : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
-                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${env}->value = ${valueVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
+                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, valueVar, ...(signal ? [signal] : [])])}${timerRegistration} ${promiseVar}; })`;
                     });
                 }
 
@@ -41861,11 +41884,11 @@ class Emitter {
                     const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
                     const envType = `${callbackName}_env_t`;
 
-                    this.structDecls.open(`typedef struct ${envType}`);
-                    this.structDecls.line("tsc_promise_t* promise;");
-                    if (signalValue) this.structDecls.line("tsc_value_t signal;");
-                    if (valueNode) this.structDecls.line(`${storedValueType.c} value;`);
-                    this.structDecls.close(` ${envType};`);
+                    const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                        { name: "promise", type: mapped },
+                        ...(valueNode ? [{ name: "value", type: storedValueType }] : []),
+                        ...(signalValue ? [{ name: "signal", type: T_VALUE }] : []),
+                    ]);
 
                     this.protos.line(`void ${callbackName}(void* env);`);
 
@@ -41873,16 +41896,8 @@ class Emitter {
                     buf.open(`void ${callbackName}(void* env)`);
                     buf.line(`${envType}* state = (${envType}*)env;`);
                     buf.line("tsc_promise_t* promise = state->promise;");
-                    const stored = this.prepareType(storedValueType);
                     const valueAccess = valueNode ? "state->value" : "tsc_value_undefined()";
-                    if (stored.kind === "promise") {
-                        buf.line(`tsc_promise_adopt_into(promise, ${valueAccess});`);
-                    } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
-                        buf.line(`tsc_promise_fulfill_in_place_ptr(promise, ${valueAccess});`);
-                    } else {
-                        const fulfilled = this.coerce({ c: valueAccess, ty: storedValueType }, T_VALUE, valueNode ?? call);
-                        buf.line(`tsc_promise_fulfill_in_place(promise, ${fulfilled});`);
-                    }
+                    buf.line(this.emitDeferredPromiseResolution("promise", { c: valueAccess, ty: storedValueType }, valueNode ?? call));
                     buf.close();
                     this.closureDefs.write(buf.toString());
 
@@ -41891,11 +41906,10 @@ class Emitter {
                     const pieces: string[] = [
                         `tsc_promise_t* ${promiseVar} = tsc_promise_pending()`,
                         `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                        `${env}->promise = ${promiseVar}`,
                     ];
-                    if (valueNode) pieces.push(`${env}->value = ${valueVar}`);
                     const signalVar = signalValue ? args[valueNode ? 2 : 1]! : null;
-                    if (signalValue) pieces.push(`${env}->signal = ${signalVar}`);
+                    pieces.push(initializeEnvironment(env, [promiseVar,
+                        ...(valueNode ? [valueVar] : []), ...(signalValue ? [signalVar!] : [])]));
                     if (signalValue) {
                         pieces.push(`double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
                         pieces.push(`tsc_abort_signal_add_promise(${signalVar}, ${promiseVar})`);
@@ -41922,9 +41936,10 @@ class Emitter {
                         const signal = signalValue ? values[0]! : null;
                         const callbackName = `tsc_timers_promises_setImmediate_${this.timersPromisesSetTimeoutAdapters++}`;
                         const envType = `${callbackName}_env_t`;
-                        this.structDecls.open(`typedef struct ${envType}`);
-                        this.structDecls.line("tsc_promise_t* promise;");
-                        this.structDecls.close(` ${envType};`);
+                        const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                            { name: "promise", type: mapped },
+                            ...(signal ? [{ name: "signal", type: T_VALUE }] : []),
+                        ]);
                         this.protos.line(`void ${callbackName}(void* env);`);
                         const buf = new CBuf();
                         buf.open(`void ${callbackName}(void* env)`);
@@ -41937,7 +41952,7 @@ class Emitter {
                         const registration = signal
                             ? `double _immediate_id = tsc_set_immediate(${callbackName}, ${env}); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_immediate(${signal}, _immediate_id);`
                             : `tsc_set_immediate(${callbackName}, ${env});`;
-                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${registration} ${promiseVar}; })`;
+                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, ...(signal ? [signal] : [])])}${registration} ${promiseVar}; })`;
                     });
                 }
                 const value = this.emitExpr(valueNode);
@@ -41949,34 +41964,25 @@ class Emitter {
                     const callbackName = `tsc_timers_promises_setImmediate_${this.timersPromisesSetTimeoutAdapters++}`;
                     const envType = `${callbackName}_env_t`;
                     const storedValueType = value.ty.kind !== "void" ? value.ty : T_VALUE;
-                    this.structDecls.open(`typedef struct ${envType}`);
-                    this.structDecls.line("tsc_promise_t* promise;");
-                    if (signal) this.structDecls.line("tsc_value_t signal;");
-                    this.structDecls.line(`${storedValueType.c} value;`);
-                    this.structDecls.close(` ${envType};`);
+                    const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                        { name: "promise", type: mapped },
+                        { name: "value", type: storedValueType },
+                        ...(signal ? [{ name: "signal", type: T_VALUE }] : []),
+                    ]);
                     this.protos.line(`void ${callbackName}(void* env);`);
                     const buf = new CBuf();
                     buf.open(`void ${callbackName}(void* env)`);
                     buf.line(`${envType}* state = (${envType}*)env;`);
-                    const stored = this.prepareType(storedValueType);
-                    if (stored.kind === "promise") {
-                        buf.line(`tsc_promise_adopt_into(state->promise, state->value);`);
-                    } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
-                        buf.line(`tsc_promise_fulfill_in_place_ptr(state->promise, state->value);`);
-                    } else {
-                        const fulfilled = this.coerce({ c: "state->value", ty: storedValueType }, T_VALUE, valueNode);
-                        buf.line(`tsc_promise_fulfill_in_place(state->promise, ${fulfilled});`);
-                    }
+                    buf.line(this.emitDeferredPromiseResolution("state->promise", { c: "state->value", ty: storedValueType }, valueNode));
                     buf.close();
                     this.closureDefs.write(buf.toString());
                     const env = this.freshTemp("_immediateEnv");
                     const promiseVar = this.freshTemp("_promise");
                     const valueVar = this.coerce({ c: values[0]!, ty: value.ty }, storedValueType, valueNode);
-                    const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
                     const registration = signal
                         ? `double _immediate_id = tsc_set_immediate(${callbackName}, ${env}); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_immediate(${signal}, _immediate_id);`
                         : `tsc_set_immediate(${callbackName}, ${env});`;
-                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${env}->value = ${valueVar}; ${signalAssignment}${registration} ${promiseVar}; })`;
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, valueVar, ...(signal ? [signal] : [])])}${registration} ${promiseVar}; })`;
                 });
             }
         }
@@ -42011,10 +42017,10 @@ class Emitter {
                             const callbackName = `tsc_timers_promises_scheduler_wait_${this.timersPromisesSchedulerWaitAdapters++}`;
                             const envType = `${callbackName}_env_t`;
                             const signal = signalValue ? values[signalSpecIndex]! : null;
-                            this.structDecls.open(`typedef struct ${envType}`);
-                            this.structDecls.line("tsc_promise_t* promise;");
-                            if (signal) this.structDecls.line("tsc_value_t signal;");
-                            this.structDecls.close(` ${envType};`);
+                            const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                                { name: "promise", type: mapped },
+                                ...(signal ? [{ name: "signal", type: T_VALUE }] : []),
+                            ]);
                             this.protos.line(`void ${callbackName}(void* env);`);
                             const buf = new CBuf();
                             buf.open(`void ${callbackName}(void* env)`);
@@ -42024,11 +42030,10 @@ class Emitter {
                             this.closureDefs.write(buf.toString());
                             const env = this.freshTemp("_schedulerWaitEnv");
                             const promiseVar = this.freshTemp("_promise");
-                            const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
                             const timerRegistration = signal
                                 ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
                                 : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
-                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
+                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, ...(signal ? [signal] : [])])}${timerRegistration} ${promiseVar}; })`;
                         },
                     );
                 }
@@ -42047,10 +42052,10 @@ class Emitter {
                     const callbackName = `tsc_timers_promises_scheduler_wait_${this.timersPromisesSchedulerWaitAdapters++}`;
                     const envType = `${callbackName}_env_t`;
 
-                    this.structDecls.open(`typedef struct ${envType}`);
-                    this.structDecls.line("tsc_promise_t* promise;");
-                    if (signalValue) this.structDecls.line("tsc_value_t signal;");
-                    this.structDecls.close(` ${envType};`);
+                    const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                        { name: "promise", type: mapped },
+                        ...(signalValue ? [{ name: "signal", type: T_VALUE }] : []),
+                    ]);
 
                     this.protos.line(`void ${callbackName}(void* env);`);
 
@@ -42064,11 +42069,10 @@ class Emitter {
                     const env = this.freshTemp("_schedulerWaitEnv");
                     const promiseVar = this.freshTemp("_promise");
                     const signalVar = signalValue ? args[signalSpecIndex]! : null;
-                    const signalAssignment = signalValue ? `${env}->signal = ${signalVar}; ` : "";
                     const timerRegistration = signalValue
                         ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, ${delayVar!}); tsc_abort_signal_add_promise(${signalVar}, ${promiseVar}); tsc_abort_signal_add_timeout(${signalVar}, _timeout_id);`
                         : `tsc_set_timeout(${callbackName}, ${env}, ${delayVar!});`;
-                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar, ...(signalValue ? [signalVar!] : [])])}${timerRegistration} ${promiseVar}; })`;
                 });
             }
             case "yield": {
@@ -42078,9 +42082,9 @@ class Emitter {
                     () => {
                         const callbackName = `tsc_timers_promises_scheduler_yield_${this.timersPromisesSchedulerYieldAdapters++}`;
                         const envType = `${callbackName}_env_t`;
-                        this.structDecls.open(`typedef struct ${envType}`);
-                        this.structDecls.line("tsc_promise_t* promise;");
-                        this.structDecls.close(` ${envType};`);
+                        const initializeEnvironment = this.emitRetainedEnvironmentFields(call, envType, [
+                            { name: "promise", type: mapped },
+                        ]);
                         this.protos.line(`void ${callbackName}(void* env);`);
                         const buf = new CBuf();
                         buf.open(`void ${callbackName}(void* env)`);
@@ -42090,7 +42094,7 @@ class Emitter {
                         this.closureDefs.write(buf.toString());
                         const env = this.freshTemp("_schedulerYieldEnv");
                         const promiseVar = this.freshTemp("_promise");
-                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; tsc_set_immediate(${callbackName}, ${env}); ${promiseVar}; })`;
+                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${initializeEnvironment(env, [promiseVar])}tsc_set_immediate(${callbackName}, ${env}); ${promiseVar}; })`;
                     },
                 );
             }
