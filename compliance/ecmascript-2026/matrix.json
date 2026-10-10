@@ -2894,7 +2894,8 @@
           "tests/property/math-sum-precise.property.test.ts",
           "tests/property/math-intrinsic-owner.property.test.ts",
           "tests/property/number-binary-formats.property.test.ts",
-          "tests/property/primitive-constructor-owner.property.test.ts"
+          "tests/property/primitive-constructor-owner.property.test.ts",
+          "tests/property/number-storage-remainder.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2926,7 +2927,8 @@
           "math_sum_precise",
           "math_intrinsic_owner",
           "number_binary_formats",
-          "primitive_constructor_owner"
+          "primitive_constructor_owner",
+          "number_storage_remainder"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
@@ -2945,15 +2947,38 @@
           "src/emit/index.ts",
           "src/emit/index.ts#isRuntimeGlobalReference",
           "runtime/tsc_value.c#math_intrinsic_apply",
-          "runtime/tsc_builtin.c#tsc_number_exponentiate", "runtime/tsc_builtin.c#tsc_math_round", "src/emit/index.ts#emitAssignment", "runtime/tsc_value.c#value_numeric_binary",
-          "runtime/tsc_value.c#tsc_value_to_bigint", "runtime/tsc_value.c#tsc_value_to_index", "runtime/tsc_value.c#tsc_bigint_constructor_value", "runtime/tsc_builtin.c#tsc_bigint_try_from_str", "runtime/tsc_builtin.c#tsc_bigint_as_n",
-          "runtime/tsc_builtin.c#tsc_math_sum_precise", "runtime/tsc_builtin.c#tsc_bigint_to_number_scaled", "runtime/tsc_iterator.c#tsc_sync_iterator_step", "runtime/tsc_iterator.c#tsc_sync_iterator_close_with_error",
-          "runtime/tsc_value.c#tsc_builtin_math", "runtime/tsc_builtin.c#tsc_math_random_initialize", "runtime/tsc_builtin.c#tsc_math_random",
-          "runtime/tsc_builtin.c#bigint_round_binary_format", "runtime/tsc_builtin.c#number_exact_integer", "runtime/tsc_builtin.c#tsc_math_f16round", "runtime/tsc_builtin.c#tsc_math_fround", "src/emit/index.ts#emitResultExpression",
-          "runtime/tsc_value.c#primitive_convert", "runtime/tsc_value.c#primitive_constructor_construct", "runtime/tsc_value.c#primitive_initialize_wrapper"
+          "runtime/tsc_builtin.c#tsc_number_exponentiate",
+          "runtime/tsc_builtin.c#tsc_math_round",
+          "src/emit/index.ts#emitAssignment",
+          "runtime/tsc_value.c#value_numeric_binary",
+          "runtime/tsc_value.c#tsc_value_to_bigint",
+          "runtime/tsc_value.c#tsc_value_to_index",
+          "runtime/tsc_value.c#tsc_bigint_constructor_value",
+          "runtime/tsc_builtin.c#tsc_bigint_try_from_str",
+          "runtime/tsc_builtin.c#tsc_bigint_as_n",
+          "runtime/tsc_builtin.c#tsc_math_sum_precise",
+          "runtime/tsc_builtin.c#tsc_bigint_to_number_scaled",
+          "runtime/tsc_iterator.c#tsc_sync_iterator_step",
+          "runtime/tsc_iterator.c#tsc_sync_iterator_close_with_error",
+          "runtime/tsc_value.c#tsc_builtin_math",
+          "runtime/tsc_builtin.c#tsc_math_random_initialize",
+          "runtime/tsc_builtin.c#tsc_math_random",
+          "runtime/tsc_builtin.c#bigint_round_binary_format",
+          "runtime/tsc_builtin.c#number_exact_integer",
+          "runtime/tsc_builtin.c#tsc_math_f16round",
+          "runtime/tsc_builtin.c#tsc_math_fround",
+          "src/emit/index.ts#emitResultExpression",
+          "runtime/tsc_value.c#primitive_convert",
+          "runtime/tsc_value.c#primitive_constructor_construct",
+          "runtime/tsc_value.c#primitive_initialize_wrapper",
+          "runtime/tsc_runtime.h#tsc_num_mod",
+          "src/emit/index.ts#variableDeclarationStorageType",
+          "runtime/tsc_map_set.c#tsc_set_add_num"
         ]
       },
-      "knownGaps": ["Ordinary Realm Math calls consume actual values and ordered conversion. Math.sumPrecise uses one IteratorRecord, exact GMP accumulation and one shared scaled binary64 rounding; property and E2E evidence cover semantic partitions. Math object/tag/method/constant descriptors and per-Realm random streams have independent metadata and metamorphic schedule evidence. Math.f16round/fround and exact binary64 conversion share one descriptor-driven ties-to-even significand kernel with independent midpoint/normal/subnormal/overflow evidence. Number/String/Boolean calls and construction share Realm References and one deferred primitive wrapper plan, with conversion before prototype lookup and actual String call/construct Symbol behavior. Float16Array/DataView, remaining primitive/Symbol consumers, general approximation accuracy, remaining numeric metadata and exact reciprocal/signed coverage remain incomplete.",
+      "knownGaps": [
+        "Source Numbers now use binary64 storage/encoded values and one shared remainder kernel, replacing unproven integer-shape storage/arithmetic and typed Set truncation paths. Independent scalar/context/source-dependency property and imported consumer checks provide local evidence; complete Number/bitwise/collection clauses and eligible host evidence remain open.",
+        "Ordinary Realm Math calls consume actual values and ordered conversion. Math.sumPrecise uses one IteratorRecord, exact GMP accumulation and one shared scaled binary64 rounding; property and E2E evidence cover semantic partitions. Math object/tag/method/constant descriptors and per-Realm random streams have independent metadata and metamorphic schedule evidence. Math.f16round/fround and exact binary64 conversion share one descriptor-driven ties-to-even significand kernel with independent midpoint/normal/subnormal/overflow evidence. Number/String/Boolean calls and construction share Realm References and one deferred primitive wrapper plan, with conversion before prototype lookup and actual String call/construct Symbol behavior. Float16Array/DataView, remaining primitive/Symbol consumers, general approximation accuracy, remaining numeric metadata and exact reciprocal/signed coverage remain incomplete.",
         "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding; now shares an integral UTC clock. Both exact intrinsic clauses bind reciprocal property, generated actual-List stress, declaration and implementation evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
       ]
     },
@@ -2984,8 +3009,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Map", "Set", "WeakMap", "WeakSet", "collection iterators"],
-      "localEvidence": {"property": ["tests/property/group-by.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["map_set_constructors", "map_set_same_value_zero", "weak_collections", "group_by_iterator_records"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ObjectConstructor", "stdlib/lib.core.d.ts#MapConstructor"], "implementation": ["runtime/tsc_map_set.c", "runtime/tsc_iterator.c", "runtime/tsc_value.c", "runtime/tsc_runtime.h", "src/emit/index.ts", "src/emit/types.ts"]},
-      "knownGaps": ["All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification."]
+      "localEvidence": {"property": ["tests/property/group-by.property.test.ts", "tests/property/number-storage-remainder.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["map_set_constructors", "map_set_same_value_zero", "weak_collections", "group_by_iterator_records", "number_storage_remainder"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ObjectConstructor", "stdlib/lib.core.d.ts#MapConstructor"], "implementation": ["runtime/tsc_map_set.c", "runtime/tsc_iterator.c", "runtime/tsc_value.c", "runtime/tsc_runtime.h", "src/emit/index.ts", "src/emit/types.ts", "runtime/tsc_runtime.h#tsc_num_mod", "src/emit/index.ts#variableDeclarationStorageType", "runtime/tsc_map_set.c#tsc_set_add_num"]},
+      "knownGaps": ["Source Numbers now use binary64 storage/encoded values and one shared remainder kernel, replacing unproven integer-shape storage/arithmetic and typed Set truncation paths. Independent scalar/context/source-dependency property and imported consumer checks provide local evidence; complete Number/bitwise/collection clauses and eligible host evidence remain open.", "All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification."]
     },
     {
       "id": "structured-data",

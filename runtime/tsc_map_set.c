@@ -225,24 +225,6 @@ void set_grow_ordered(tsc_set_t* s, size_t want) {
     s->cap = cap;
 }
 
-void set_grow_ordered_atomic(tsc_set_t* s, size_t want) {
-    if (want <= s->cap) return;
-    size_t cap = s->cap ? s->cap : 512;
-    while (cap < want) cap *= 2;
-    const size_t old_cap = s->cap;
-    void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC_ATOMIC(cap * s->es);
-    s->data = nd;
-    s->order.entries = TSC_GC_REALLOC(s->order.entries, cap * sizeof(*s->order.entries));
-    memset(s->order.entries + old_cap, 0, (cap - old_cap) * sizeof(*s->order.entries));
-    if (s->es == sizeof(tsc_value_t)) {
-        s->value_roots = s->value_roots
-            ? (void**)TSC_GC_REALLOC(s->value_roots, cap * sizeof(void*))
-            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
-        memset(s->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
-    }
-    s->cap = cap;
-}
-
 size_t set_lookup(const tsc_set_t* s, const void* v, size_t* slot_out) {
     if (s->bucket_cap == 0) {
         if (slot_out) *slot_out = TSC_BKT_EMPTY;
@@ -292,32 +274,6 @@ size_t set_lookup_num(const tsc_set_t* s, double v, size_t* slot_out) {
     }
 }
 
-size_t set_lookup_int(const tsc_set_t* s, int64_t v, size_t* slot_out) {
-    if (s->bucket_cap == 0) {
-        if (slot_out) *slot_out = TSC_BKT_EMPTY;
-        return TSC_BKT_EMPTY;
-    }
-    size_t mask = s->bucket_cap - 1;
-    size_t slot = (size_t)(((uint64_t)v * 11400714819323198485ULL) & mask);
-    size_t first_tomb = TSC_BKT_EMPTY;
-    double dv = (double)v;
-    double* data = (double*)s->data;
-    while (1) {
-        size_t e = s->buckets[slot];
-        if (e == TSC_BKT_EMPTY) {
-            if (slot_out) *slot_out = (first_tomb != TSC_BKT_EMPTY) ? first_tomb : slot;
-            return TSC_BKT_EMPTY;
-        }
-        if (e == TSC_BKT_TOMBSTONE) {
-            if (first_tomb == TSC_BKT_EMPTY) first_tomb = slot;
-        } else if (data[e] == dv) {
-            if (slot_out) *slot_out = slot;
-            return e;
-        }
-        slot = (slot + 1) & mask;
-    }
-}
-
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap) {
     tsc_set_t* s = (tsc_set_t*)TSC_GC_MALLOC(sizeof(tsc_set_t));
     *s = (tsc_set_t){0};
@@ -353,22 +309,6 @@ void tsc_set_add_raw(tsc_set_t* s, const void* v) {
     s->len++;
 }
 
-void tsc_set_add_int(tsc_set_t* s, int64_t v) {
-    if (s->bucket_cap == 0 || (s->len + 1) * 4 > s->bucket_cap * 3) {
-        size_t bc = s->bucket_cap ? s->bucket_cap * 2 : 1024;
-        while ((s->len + 1) * 4 > bc * 3) bc *= 2;
-        set_rebuild_buckets(s, bc);
-    }
-    size_t slot;
-    size_t e = set_lookup_int(s, v, &slot);
-    if (e != TSC_BKT_EMPTY) return;
-    set_grow_ordered_atomic(s, s->len + 1);
-    ((double*)s->data)[s->len] = (double)v;
-    s->buckets[slot] = s->len;
-    collection_order_append(&s->order, s->len);
-    s->len++;
-}
-
 void tsc_set_add_num(tsc_set_t* s, double v) {
     if (v == 0) v = 0;
     if (s->bucket_cap == 0 || (s->len + 1) * 4 > s->bucket_cap * 3) {
@@ -388,10 +328,6 @@ void tsc_set_add_num(tsc_set_t* s, double v) {
 
 bool tsc_set_has_raw(const tsc_set_t* s, const void* v) {
     return set_lookup(s, v, NULL) != TSC_BKT_EMPTY;
-}
-
-bool tsc_set_has_int(const tsc_set_t* s, int64_t v) {
-    return set_lookup_int(s, v, NULL) != TSC_BKT_EMPTY;
 }
 
 bool tsc_set_has_num(const tsc_set_t* s, double v) {

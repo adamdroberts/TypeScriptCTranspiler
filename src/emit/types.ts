@@ -91,10 +91,6 @@ export function withTypeBindings<T>(
 }
 
 export const T_NUMBER: CType = { kind: "number", c: "double" };
-/** Same TS-level type (`number`) but stored as `int64_t` in C — used by the
- *  int-shape specialization path so chains of arithmetic stay in integer
- *  registers without per-op cvttsd2si/cvtsi2sd round trips. */
-export const T_NUMBER_INT: CType = { kind: "number", c: "int64_t" };
 export const T_BIGINT: CType = { kind: "bigint", c: "tsc_bigint_t*" };
 export const T_SYMBOL: CType = { kind: "symbol", c: "tsc_symbol_t*" };
 export const T_STRING: CType = { kind: "string", c: "tsc_str_t*" };

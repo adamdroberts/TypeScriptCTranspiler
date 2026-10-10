@@ -43,7 +43,6 @@ import {
     T_HASH,
     T_HMAC,
     T_NUMBER,
-    T_NUMBER_INT,
     T_REGEXP,
     T_STRING,
     T_SYMBOL,
@@ -721,13 +720,6 @@ class Emitter {
     private referencedVariables = new WeakSet<ts.VariableDeclaration>();
     private localFunctionNames = new WeakMap<ts.FunctionDeclaration, string>();
     private nativeTypeDeclarations = new Map<string, NativeTypeDeclaration>();
-    /**
-     * Symbols whose value is provably integer-shape at every read site.
-     * Populated per source file by analyzeIntegerSymbols(); consulted by
-     * isIntegerShape(). Used to emit naked int64 modulo for `%` instead of
-     * the generic tsc_num_mod helper.
-     */
-    private intSymbols = new Set<ts.Symbol>();
     constructor(
         private checker: ts.TypeChecker,
         private graph: ModuleGraph,
@@ -13739,7 +13731,6 @@ class Emitter {
                 this.emitCaptureCellInitialization(initBuf, cell, this.zeroValue(cell.type));
             }
             const statements = this.flattenModuleStatements(sf.statements);
-            this.analyzeIntegerSymbols(sf);
             this.emitModuleVarDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleLexicalDeclarationInstantiation(instantiationBuf, sf);
             this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
@@ -20982,12 +20973,6 @@ class Emitter {
             if (ts.isVariableDeclaration(decl)) {
                 return this.variableDeclarationStorageType(decl, base);
             }
-            // Int-shape specialization: the C-level storage of this symbol
-            // is int64_t, not double. Surface that to the assignment / read
-            // sites so they don't insert spurious cvtsi2sd casts.
-            if (base.c === "double" && sym && this.intSymbols.has(sym)) {
-                return T_NUMBER_INT;
-            }
             return base;
         } catch {
             return null;
@@ -21010,7 +20995,6 @@ class Emitter {
         declaration: ts.VariableDeclaration,
         base: CType,
     ): CType {
-        const symbol = this.symbolForBindingName(declaration.name);
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
         if (this.expressionHasOrdinaryNativeOwnerResult(declaration)) return T_VALUE;
         if (this.isIterationDeclaration(declaration)) return T_VALUE;
@@ -21022,7 +21006,6 @@ class Emitter {
              * inference into another declaration. */
             return T_VALUE;
         }
-        if (base.c === "double" && symbol && this.intSymbols.has(symbol)) return T_NUMBER_INT;
         return this.variableStorageType(base);
     }
 
@@ -29088,15 +29071,13 @@ class Emitter {
             const baseCt = this.variableDeclarationStorageType(d, inferredCt);
 
             const ct = baseCt;
-            const useInt = ct.kind === "number" && ct.c === "int64_t";
             if (sym) this.symbolStorageTypes.set(sym, ct);
 
             const lit = isConst && d.initializer
                 ? this.tryFoldNumericLiteral(d.initializer)
                 : null;
             if (lit !== null && baseCt.c === "double") {
-                const literalValue = useInt ? `((int64_t)(${lit}))` : lit;
-                this.globalDecls.line(`static const ${ct.c} ${name} = ${literalValue};`);
+                this.globalDecls.line(`static const ${ct.c} ${name} = ${lit};`);
                 if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
                 continue;
             }
@@ -29108,9 +29089,7 @@ class Emitter {
             }
             if (d.initializer) {
                 const r = this.emitExpr(d.initializer);
-                const coerced = useInt && r.ty.kind === "number"
-                    ? `((int64_t)(${r.c}))`
-                    : this.coerce(r, ct, d.initializer);
+                const coerced = this.coerce(r, ct, d.initializer);
                 initBuf.line(`${name} = ${coerced};`);
                 if (dynamicRoot) initBuf.line(`${dynamicRoot} = tsc_value_gc_root(${name});`);
             } else if (ct.kind === "value") {
@@ -29119,362 +29098,6 @@ class Emitter {
             }
             if (lexicalInitialized) initBuf.line(`${lexicalInitialized} = true;`);
         }
-    }
-
-    /**
-     * Walk the source file and populate `this.intSymbols` with every local
-     * `let`/`const`/parameter that is provably integer-shape at every read.
-     *
-     * A symbol is integer-shape iff:
-     *   - its declaration's initializer is integer-shape (or it's a for-let
-     *     counter with an integer initializer + an integer increment), AND
-     *   - every assignment / compound assignment / ++/-- to it is
-     *     integer-shape.
-     *
-     * Iterates to a fixpoint: each round may unlock more symbols as their
-     * dependencies become known-int. Conservative on anything else.
-     */
-    private analyzeIntegerSymbols(sf: ts.SourceFile): void {
-        this.intSymbols = new Set();
-
-        interface Cand {
-            sym: ts.Symbol;
-            initExpr: ts.Expression | null;     // `null` if init is "0" of for-let counter
-            initIsInt: boolean | null;          // null = recompute each pass
-            assignments: ts.Expression[];       // RHS of `s = expr` (and compound-RHS for `s += expr`)
-            compoundOnlyOps: Set<ts.SyntaxKind>; // operators used in `s op= rhs` and ++/--
-        }
-        const candidates = new Map<ts.Symbol, Cand>();
-        const constNumberValues = new Map<ts.Symbol, number>();
-        const smallBoundedIntSymbols = new Set<ts.Symbol>();
-        const SMALL_LIT_BOUND = 1 << 20; // 1M — products with two of these stay < 2^40
-
-        const recordCand = (sym: ts.Symbol, initExpr: ts.Expression | null) => {
-            if (!candidates.has(sym)) {
-                candidates.set(sym, {
-                    sym,
-                    initExpr,
-                    initIsInt: null,
-                    assignments: [],
-                    compoundOnlyOps: new Set(),
-                });
-            }
-        };
-        const recordWrite = (sym: ts.Symbol, rhs: ts.Expression | null, op: ts.SyntaxKind | null) => {
-            const c = candidates.get(sym);
-            if (!c) return;
-            if (rhs) c.assignments.push(rhs);
-            if (op !== null) c.compoundOnlyOps.add(op);
-        };
-        const numericBound = (e: ts.Expression): number | null => {
-            let cur: ts.Expression = e;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            if (ts.isNumericLiteral(cur)) {
-                const n = Number(cur.text);
-                return Number.isFinite(n) ? n : null;
-            }
-            if (ts.isIdentifier(cur)) {
-                const sym = this.checker.getSymbolAtLocation(cur);
-                return sym ? constNumberValues.get(sym) ?? null : null;
-            }
-            return null;
-        };
-        const markSmallBoundedForCounter = (fs: ts.ForStatement): void => {
-            if (!fs.initializer || !ts.isVariableDeclarationList(fs.initializer)) return;
-            if (fs.initializer.declarations.length !== 1) return;
-            const decl = fs.initializer.declarations[0]!;
-            if (!ts.isIdentifier(decl.name) || !decl.initializer || !this.isIntegerShape(decl.initializer)) return;
-            if (!fs.condition || !ts.isBinaryExpression(fs.condition)) return;
-            const op = fs.condition.operatorToken.kind;
-            if (op !== ts.SyntaxKind.LessThanToken && op !== ts.SyntaxKind.LessThanEqualsToken) return;
-            if (!ts.isIdentifier(fs.condition.left) || fs.condition.left.text !== decl.name.text) return;
-            const bound = numericBound(fs.condition.right);
-            if (bound === null || bound < 0 || bound > SMALL_LIT_BOUND) return;
-            if (!fs.incrementor) return;
-            let increments = false;
-            if (
-                (ts.isPostfixUnaryExpression(fs.incrementor) || ts.isPrefixUnaryExpression(fs.incrementor)) &&
-                fs.incrementor.operator === ts.SyntaxKind.PlusPlusToken &&
-                ts.isIdentifier(fs.incrementor.operand) &&
-                fs.incrementor.operand.text === decl.name.text
-            ) {
-                increments = true;
-            }
-            if (!increments) return;
-            const sym = this.checker.getSymbolAtLocation(decl.name);
-            if (sym) smallBoundedIntSymbols.add(sym);
-        };
-
-        const visit = (n: ts.Node) => {
-            // Capture declarations.
-            if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) {
-                const sym = this.checker.getSymbolAtLocation(n.name);
-                if (sym) {
-                    recordCand(sym, n.initializer ?? null);
-                    const parent = n.parent;
-                    if (
-                        n.initializer &&
-                        ts.isVariableDeclarationList(parent) &&
-                        (parent.flags & ts.NodeFlags.Const) !== 0
-                    ) {
-                        const value = numericBound(n.initializer);
-                        if (value !== null) constNumberValues.set(sym, value);
-                    }
-                }
-            }
-            if (ts.isForStatement(n)) markSmallBoundedForCounter(n);
-            // Function/method parameters that have a default integer initializer
-            // are not common in our hot paths — skip for now.
-
-            // Capture writes.
-            if (ts.isBinaryExpression(n)) {
-                const op = n.operatorToken.kind;
-                if (op === ts.SyntaxKind.EqualsToken && ts.isIdentifier(n.left)) {
-                    const sym = this.checker.getSymbolAtLocation(n.left);
-                    if (sym) recordWrite(sym, n.right, null);
-                } else if (
-                    op === ts.SyntaxKind.PlusEqualsToken ||
-                    op === ts.SyntaxKind.MinusEqualsToken ||
-                    op === ts.SyntaxKind.AsteriskEqualsToken ||
-                    op === ts.SyntaxKind.PercentEqualsToken ||
-                    op === ts.SyntaxKind.AmpersandEqualsToken ||
-                    op === ts.SyntaxKind.BarEqualsToken ||
-                    op === ts.SyntaxKind.CaretEqualsToken ||
-                    op === ts.SyntaxKind.LessThanLessThanEqualsToken ||
-                    op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
-                    op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
-                ) {
-                    if (ts.isIdentifier(n.left)) {
-                        const sym = this.checker.getSymbolAtLocation(n.left);
-                        if (sym) recordWrite(sym, n.right, op);
-                    }
-                } else if (
-                    op === ts.SyntaxKind.SlashEqualsToken ||
-                    op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
-                ) {
-                    // /= and **= produce non-int in general; demote.
-                    if (ts.isIdentifier(n.left)) {
-                        const sym = this.checker.getSymbolAtLocation(n.left);
-                        if (sym) {
-                            recordCand(sym, null);
-                            const c = candidates.get(sym)!;
-                            c.compoundOnlyOps.add(op); // marker that disqualifies
-                        }
-                    }
-                }
-            }
-            if (
-                (ts.isPostfixUnaryExpression(n) || ts.isPrefixUnaryExpression(n)) &&
-                (n.operator === ts.SyntaxKind.PlusPlusToken ||
-                    n.operator === ts.SyntaxKind.MinusMinusToken)
-            ) {
-                if (ts.isIdentifier(n.operand)) {
-                    const sym = this.checker.getSymbolAtLocation(n.operand);
-                    if (sym) recordWrite(sym, null, n.operator);
-                }
-            }
-
-            ts.forEachChild(n, visit);
-        };
-        visit(sf);
-
-        // Optimistic-narrow fixpoint: assume every candidate is int, then
-        // demote any whose init or any assignment evaluates to non-int under
-        // the current set. Iterate until stable.
-        this.intSymbols = new Set(candidates.keys());
-        let changed = true;
-        let safety = 0;
-        while (changed && safety++ < 32) {
-            changed = false;
-            for (const c of candidates.values()) {
-                if (!this.intSymbols.has(c.sym)) continue;
-                let demote = false;
-                if (c.compoundOnlyOps.has(ts.SyntaxKind.SlashEqualsToken) ||
-                    c.compoundOnlyOps.has(ts.SyntaxKind.AsteriskAsteriskEqualsToken)) {
-                    demote = true;
-                }
-                if (!demote && c.initExpr && !this.isIntegerShape(c.initExpr)) {
-                    demote = true;
-                }
-                if (!demote) {
-                    for (const rhs of c.assignments) {
-                        if (!this.isIntegerShape(rhs)) { demote = true; break; }
-                    }
-                }
-                if (demote) {
-                    this.intSymbols.delete(c.sym);
-                    changed = true;
-                }
-            }
-        }
-
-        // Overflow-safety pass: ECMAScript numbers are doubles, so any
-        // intermediate that would exceed 2^53 in true int64 arithmetic
-        // would round under JS but stay exact in our int-spec emit, giving
-        // observably-different results. Demote any symbol that participates
-        // in a multiplication where the other operand isn't a tiny literal.
-        const isSmallLit = (e: ts.Expression): boolean => {
-            let cur: ts.Expression = e;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            if (ts.isPrefixUnaryExpression(cur) &&
-                (cur.operator === ts.SyntaxKind.MinusToken ||
-                    cur.operator === ts.SyntaxKind.PlusToken)) {
-                cur = cur.operand;
-                while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            }
-            if (!ts.isNumericLiteral(cur)) return false;
-            const n = Math.abs(Number(cur.text));
-            return isFinite(n) && n <= SMALL_LIT_BOUND;
-        };
-        const isSmallBoundedIdent = (e: ts.Expression): boolean => {
-            let cur: ts.Expression = e;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            if (!ts.isIdentifier(cur)) return false;
-            const sym = this.checker.getSymbolAtLocation(cur);
-            return !!sym && smallBoundedIntSymbols.has(sym);
-        };
-        const demoteIfCandidateIdent = (e: ts.Expression): void => {
-            let cur: ts.Expression = e;
-            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-            if (ts.isIdentifier(cur)) {
-                const sym = this.checker.getSymbolAtLocation(cur);
-                if (sym) this.intSymbols.delete(sym);
-            }
-        };
-        const overflowCheck = (n: ts.Node): void => {
-            if (ts.isBinaryExpression(n) &&
-                n.operatorToken.kind === ts.SyntaxKind.AsteriskToken) {
-                const lSmall = isSmallLit(n.left);
-                const rSmall = isSmallLit(n.right);
-                const boundedProduct = isSmallBoundedIdent(n.left) && isSmallBoundedIdent(n.right);
-                if (!lSmall && !rSmall && !boundedProduct) {
-                    demoteIfCandidateIdent(n.left);
-                    demoteIfCandidateIdent(n.right);
-                }
-            }
-            ts.forEachChild(n, overflowCheck);
-        };
-        // Iterate to fixpoint: a demotion can break a dependent's int-shape
-        // invariant in the next pass.
-        let prevSize = -1;
-        while (this.intSymbols.size !== prevSize) {
-            prevSize = this.intSymbols.size;
-            overflowCheck(sf);
-            let again = true;
-            let safety2 = 0;
-            while (again && safety2++ < 32) {
-                again = false;
-                for (const c of candidates.values()) {
-                    if (!this.intSymbols.has(c.sym)) continue;
-                    let bad = false;
-                    if (c.initExpr && !this.isIntegerShape(c.initExpr)) bad = true;
-                    if (!bad) for (const rhs of c.assignments) {
-                        if (!this.isIntegerShape(rhs)) { bad = true; break; }
-                    }
-                    if (bad) { this.intSymbols.delete(c.sym); again = true; }
-                }
-            }
-        }
-    }
-
-    /**
-     * Emit `e` as a pure int64 C expression. Caller must have verified
-     * isIntegerShape(e). Identifiers resolve through the active symbol-value
-     * scope (which may be a heap CFG field rather than a C local); numeric literals shed their `.0`;
-     * binary +,-,*,% and parens recurse without going through emitExpr's
-     * double-typed path. As a last resort, casts a normally-emitted
-     * double expression to int64.
-     */
-    private emitIntegerExpr(e: ts.Expression): string {
-        let cur: ts.Expression = e;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-
-        if (ts.isNumericLiteral(cur)) {
-            // Strip any source separators ("1_000_003") and any trailing 'n'
-            // (BigInt literals don't reach here — typed paths only).
-            return cur.text.replace(/_/g, "");
-        }
-        if (ts.isPrefixUnaryExpression(cur)) {
-            if (cur.operator === ts.SyntaxKind.MinusToken) {
-                return `(-${this.emitIntegerExpr(cur.operand)})`;
-            }
-            if (cur.operator === ts.SyntaxKind.PlusToken) {
-                return this.emitIntegerExpr(cur.operand);
-            }
-        }
-        if (ts.isBinaryExpression(cur)) {
-            const op = cur.operatorToken.kind;
-            const cop =
-                op === ts.SyntaxKind.PlusToken ? "+" :
-                op === ts.SyntaxKind.MinusToken ? "-" :
-                op === ts.SyntaxKind.AsteriskToken ? "*" :
-                op === ts.SyntaxKind.PercentToken ? "%" :
-                op === ts.SyntaxKind.AmpersandToken ? "&" :
-                op === ts.SyntaxKind.BarToken ? "|" :
-                op === ts.SyntaxKind.CaretToken ? "^" :
-                op === ts.SyntaxKind.LessThanLessThanToken ? "<<" :
-                op === ts.SyntaxKind.GreaterThanGreaterThanToken ? ">>" :
-                null;
-            if (cop) {
-                return `(${this.emitIntegerExpr(cur.left)} ${cop} ${this.emitIntegerExpr(cur.right)})`;
-            }
-        }
-        // The numeric value read owns its storage contract, including lexical
-        // cells and CFG fields. Never cast a raw NaN-boxed binding slot merely
-        // because integer analysis proves the source value is integral.
-        const r = this.emitExpr(e);
-        return `((int64_t)(${this.coerce(r, T_NUMBER, e)}))`;
-    }
-
-    /**
-     * True if `e` provably evaluates to an integer-valued double at every
-     * runtime visit. Conservative: returns false on anything not in the
-     * recognized set. Consults `this.intSymbols` populated by
-     * analyzeIntegerSymbols().
-     */
-    private isIntegerShape(e: ts.Expression): boolean {
-        let cur: ts.Expression = e;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-
-        if (ts.isNumericLiteral(cur)) {
-            return /^\d+$/.test(cur.text);
-        }
-        if (ts.isPrefixUnaryExpression(cur)) {
-            if (cur.operator === ts.SyntaxKind.MinusToken ||
-                cur.operator === ts.SyntaxKind.PlusToken) {
-                return this.isIntegerShape(cur.operand);
-            }
-            if (cur.operator === ts.SyntaxKind.TildeToken) return true; // bitwise NOT yields int
-        }
-        if (ts.isPostfixUnaryExpression(cur)) {
-            if (cur.operator === ts.SyntaxKind.PlusPlusToken ||
-                cur.operator === ts.SyntaxKind.MinusMinusToken) {
-                return this.isIntegerShape(cur.operand);
-            }
-        }
-        if (ts.isBinaryExpression(cur)) {
-            const op = cur.operatorToken.kind;
-            // Bitwise ops always coerce to int32 in JS — safely int-shape.
-            if (op === ts.SyntaxKind.AmpersandToken ||
-                op === ts.SyntaxKind.BarToken ||
-                op === ts.SyntaxKind.CaretToken ||
-                op === ts.SyntaxKind.LessThanLessThanToken ||
-                op === ts.SyntaxKind.GreaterThanGreaterThanToken ||
-                op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken) {
-                return true;
-            }
-            if (op === ts.SyntaxKind.PlusToken ||
-                op === ts.SyntaxKind.MinusToken ||
-                op === ts.SyntaxKind.AsteriskToken ||
-                op === ts.SyntaxKind.PercentToken) {
-                return this.isIntegerShape(cur.left) && this.isIntegerShape(cur.right);
-            }
-        }
-        if (ts.isIdentifier(cur)) {
-            const sym = this.checker.getSymbolAtLocation(cur);
-            if (sym && this.intSymbols.has(sym)) return true;
-        }
-        return false;
     }
 
     /**
@@ -29600,9 +29223,7 @@ class Emitter {
             if (envBinding) {
                 if (d.initializer) {
                     const value = this.emitExpr(d.initializer);
-                    const coerced = envBinding.type.c === "int64_t" && value.ty.kind === "number"
-                        ? `((int64_t)(${value.c}))`
-                        : this.coerce(value, envBinding.type, d.initializer);
+                    const coerced = this.coerce(value, envBinding.type, d.initializer);
                     buf.line(`*${envBinding.ptr} = ${coerced};`);
                 } else {
                     buf.line(`*${envBinding.ptr} = ${this.zeroValue(envBinding.type)};`);
@@ -29726,12 +29347,9 @@ class Emitter {
             // A planned cell owns the physical layout. Initializer inference
             // must never allocate one C type and initialize it as another.
             ct = cell?.type ?? this.variableDeclarationStorageType(d, ct);
-            const useInt = ct.kind === "number" && ct.c === "int64_t";
             if (sym) this.symbolStorageTypes.set(sym, ct);
             if (r) {
-                const coerced = useInt && r.ty.kind === "number"
-                    ? `((int64_t)(${r.c}))`
-                    : this.coerce(r, ct, d.initializer!);
+                const coerced = this.coerce(r, ct, d.initializer!);
                 init = " = " + coerced;
             } else if (ct.kind === "value") {
                 init = " = tsc_value_undefined()";
@@ -33239,15 +32857,9 @@ class Emitter {
                     : ty;
                 return this.emitFunctionReferenceClosure(expr, physicalType);
             }
-            // Surface int-spec storage type so downstream emitters (binary,
-            // JSON, etc.) can pick the int64 fast paths.
-            const effectiveTy =
-                declaredTy && declaredTy.c === "int64_t" && ty.kind === "number"
-                    ? declaredTy
-                    : ty;
             return {
                 c: this.identifierRead(expr),
-                ty: effectiveTy,
+                ty,
             };
         }
         if (ts.isParenthesizedExpression(expr)) {
@@ -34400,16 +34012,6 @@ class Emitter {
                 if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
-                // Fast path: when both sides are provably integer-valued, lower
-                // the whole sub-tree as int64 arithmetic (no double round trip
-                // per intermediate). Falls back to tsc_num_mod (inline runtime
-                // helper) otherwise.
-                if (this.isIntegerShape(bin.left) && this.isIntegerShape(bin.right)) {
-                    return {
-                        c: `(${this.emitIntegerExpr(bin.left)} % ${this.emitIntegerExpr(bin.right)})`,
-                        ty: T_NUMBER_INT,
-                    };
-                }
                 return { c: `tsc_num_mod(${left.c}, ${right.c})`, ty: T_NUMBER };
             }
             case ts.SyntaxKind.AsteriskAsteriskToken: {
@@ -39234,15 +38836,7 @@ class Emitter {
                 const c = this.coerce(r, e, args[0]!);
                 const st = this.freshTemp("_set");
                 if (e.kind === "number") {
-                    const intArg = r.ty.c === "int64_t" || this.isIntegerShape(args[0]!)
-                        ? `(int64_t)(${r.c})`
-                        : null;
-                    return {
-                        c: intArg
-                            ? `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_add_int(${st}, ${intArg}); ${st}; })`
-                            : `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_add_num(${st}, ${c}); ${st}; })`,
-                        ty: recv.ty,
-                    };
+                    return { c: `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_add_num(${st}, ${c}); ${st}; })`, ty: recv.ty };
                 }
                 const vt = this.freshTemp("_sv");
                 return {
@@ -39255,15 +38849,7 @@ class Emitter {
                 const c = this.coerce(r, e, args[0]!);
                 const st = this.freshTemp("_set");
                 if (e.kind === "number") {
-                    const intArg = r.ty.c === "int64_t" || this.isIntegerShape(args[0]!)
-                        ? `(int64_t)(${r.c})`
-                        : null;
-                    return {
-                        c: intArg
-                            ? `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_has_int(${st}, ${intArg}); })`
-                            : `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_has_num(${st}, ${c}); })`,
-                        ty: T_BOOLEAN,
-                    };
+                    return { c: `({ tsc_set_t* const ${st} = ${recv.c}; tsc_set_has_num(${st}, ${c}); })`, ty: T_BOOLEAN };
                 }
                 const vt = this.freshTemp("_sv");
                 return {

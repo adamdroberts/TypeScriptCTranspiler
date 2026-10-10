@@ -1,0 +1,12 @@
+import {remainder, assign} from './owner';
+let zero: number = -0;
+const read = (): number => zero;
+console.log(Object.is(zero, -0), Object.is(read(), -0));
+console.log(Object.is((-4) % 2, -0), Object.is(remainder(-4, 2), -0), Object.is(assign(-4, 2), -0));
+console.log(Number.isNaN(5 % 0), Number.isNaN(remainder(Infinity, 3)));
+console.log(((9007199254740992 + 1) % 3) === remainder(9007199254740992, 3));
+let counter: number = 9007199254740992;
+const old: number = counter++;
+counter += 1;
+console.log(counter === old, counter === 9007199254740992);
+console.log(remainder(9223372036854775808, 3) === 2);

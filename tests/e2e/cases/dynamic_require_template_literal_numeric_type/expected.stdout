@@ -1,6 +1,4 @@
-number 1 true init
-number 1 false init
-number 2 true init
 number 2 false init
 numeric template first: number-2-false
+number 1 true init
 numeric template second: number-1-true

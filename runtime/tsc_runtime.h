@@ -303,14 +303,10 @@ void tsc_finregistry_register(tsc_finregistry_t* r, void* token);
 bool tsc_finregistry_unregister(tsc_finregistry_t* r, void* token);
 
 /* ------------- numbers ------------- */
-/* Inline fast path: fmod is libm-slow; when both operands fit in int64 (the
- * common case for ECMAScript int-shape doubles), use C's integer modulo. */
+/* Number remainder shares binary64 evaluation with typed and boxed callers.
+ * fmod preserves the dividend's zero sign and handles non-finite/zero divisors
+ * without undefined floating-to-integer conversions or signed overflow. */
 static inline double tsc_num_mod(double a, double b) {
-    long long ai = (long long)a;
-    long long bi = (long long)b;
-    if (bi != 0 && (double)ai == a && (double)bi == b) {
-        return (double)(ai % bi);
-    }
     return fmod(a, b);
 }
 double tsc_parse_float(const tsc_str_t* s);
@@ -1593,10 +1589,8 @@ tsc_text_decoder_t* tsc_value_as_text_decoder(tsc_value_t v);
 
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
 void tsc_set_add_raw(tsc_set_t* s, const void* v);
-void tsc_set_add_int(tsc_set_t* s, int64_t v);
 void tsc_set_add_num(tsc_set_t* s, double v);
 bool tsc_set_has_raw(const tsc_set_t* s, const void* v);
-bool tsc_set_has_int(const tsc_set_t* s, int64_t v);
 bool tsc_set_has_num(const tsc_set_t* s, double v);
 bool tsc_set_delete_raw(tsc_set_t* s, const void* v);
 void tsc_set_clear(tsc_set_t* s);
