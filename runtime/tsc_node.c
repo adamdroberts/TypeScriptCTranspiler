@@ -2,6 +2,7 @@
 #include <arpa/nameser.h>
 #include <resolv.h>
 #include <sys/statvfs.h>
+#include <float.h>
 
 /* ---------------- crypto ---------------- */
 
@@ -17282,23 +17283,128 @@ double tsc_date_parse(const tsc_str_t* text) {
     return date_time_clip(result);
 }
 
-double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
-    if (!isfinite(year) || !isfinite(month) || !isfinite(day) || !isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) {
-        return NAN;
+/* Every calendar integer remains exact until an explicit Number operation.
+ * Reuse the shared nearest/even integer-to-binary64 codec rather than GMP's
+ * truncating mpz_get_d conversion. */
+static double date_integer_number(const mpz_t integer) {
+    tsc_bigint_t number;
+    mpz_init_set(number.value, integer);
+    double result = tsc_bigint_to_number(&number);
+    mpz_clear(number.value);
+    return result;
+}
+
+static double date_day_from_year(double year) {
+    mpz_t y, days, quotient;
+    mpz_inits(y, days, quotient, NULL);
+    mpz_set_d(y, year);
+    mpz_sub_ui(days, y, 1970);
+    mpz_mul_ui(days, days, 365);
+    const unsigned long offsets[] = {1969, 1901, 1601};
+    const unsigned long divisors[] = {4, 100, 400};
+    for (size_t index = 0; index < sizeof(divisors) / sizeof(divisors[0]); index++) {
+        mpz_sub_ui(quotient, y, offsets[index]);
+        mpz_fdiv_q_ui(quotient, quotient, divisors[index]);
+        if (index == 1) mpz_sub(days, days, quotient);
+        else mpz_add(days, days, quotient);
     }
-    int y = (int)year;
-    if (y >= 0 && y <= 99) y += 1900;
-    struct tm tm;
-    memset(&tm, 0, sizeof(tm));
-    tm.tm_year = y - 1900;
-    tm.tm_mon = (int)month;
-    tm.tm_mday = (int)day;
-    tm.tm_hour = (int)hours;
-    tm.tm_min = (int)minutes;
-    tm.tm_sec = (int)seconds;
-    time_t t = timegm(&tm);
-    if (t == (time_t)-1) return NAN;
-    return date_time_clip(((double)t) * 1000.0 + ms);
+    double result = date_integer_number(days);
+    mpz_clears(y, days, quotient, NULL);
+    return result;
+}
+
+/* Explicit stores preserve each ECMAScript binary64 rounding point, including
+ * release builds on targets that otherwise contract multiplication/addition. */
+static double date_number_add(double left, double right) {
+    volatile double result = left + right;
+    return result;
+}
+
+static double date_number_multiply(double left, double right) {
+    volatile double result = left * right;
+    return result;
+}
+
+static uint64_t date_number_order(double value) {
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits >> 63 ? ~bits : bits ^ UINT64_C(0x8000000000000000);
+}
+
+static double date_number_from_order(uint64_t order) {
+    uint64_t bits = order >> 63 ? order ^ UINT64_C(0x8000000000000000) : ~order;
+    double value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static double date_make_day(double year, double month, double date) {
+    if (!isfinite(year) || !isfinite(month) || !isfinite(date)) return NAN;
+    mpz_t m, quotient, y;
+    mpz_inits(m, quotient, y, NULL);
+    mpz_set_d(m, trunc(month));
+    /* Mathematical floor/modulo precede conversion to Number. A rounded
+     * binary64 division by twelve is not this operation at large magnitudes. */
+    unsigned long normalized_month = mpz_fdiv_q_ui(quotient, m, 12);
+    double normalized_year = date_number_add(trunc(year), date_integer_number(quotient));
+    mpz_clears(m, quotient, NULL);
+    if (!isfinite(normalized_year)) { mpz_clear(y); return NAN; }
+    mpz_set_d(y, normalized_year);
+    bool leap = mpz_divisible_ui_p(y, 400) ||
+        (mpz_divisible_ui_p(y, 4) && !mpz_divisible_ui_p(y, 100));
+    mpz_clear(y);
+    const unsigned short month_starts[] = {0,31,59,90,120,151,181,212,243,273,304,334};
+    double month_start = month_starts[normalized_month] + (leap && normalized_month >= 2 ? 1 : 0);
+    double year_day = date_day_from_year(normalized_year);
+    double year_start = date_number_multiply(year_day, 86400000.0);
+    double next_year = fabs(normalized_year) < 9007199254740992.0
+        ? normalized_year + 1.0 : nextafter(normalized_year, INFINITY);
+    double next_start = isfinite(next_year)
+        ? date_number_multiply(date_day_from_year(next_year), 86400000.0) : INFINITY;
+    if (year_start == INFINITY || next_start == -INFINITY || year_start >= next_start) return NAN;
+
+    /* YearFromTime(t)==y iff TimeFromYear(y)<=t<TimeFromYear(next integral
+     * Number). Within that interval Day(t)-DayFromYear(y) is monotone. Search
+     * the complete finite Number order for the first month-day witness; this
+     * proves representability without a C integer/year bound or assuming an
+     * ideal calendar midnight is representable at every binary64 magnitude. */
+    uint64_t lower = date_number_order(isfinite(year_start) ? year_start : -DBL_MAX);
+    uint64_t upper = date_number_order(isfinite(next_start) ? next_start : DBL_MAX);
+    while (lower < upper) {
+        uint64_t middle = lower + (upper - lower) / 2;
+        double time = date_number_from_order(middle);
+        double within_year = date_number_add(floor(time / 86400000.0), -year_day);
+        if (within_year < month_start) lower = middle + 1;
+        else upper = middle;
+    }
+    /* Time values are integral Numbers. The first integral value at or above
+     * the lower-bound witness is sufficient because the predicate is monotone. */
+    double witness = ceil(date_number_from_order(lower));
+    double day = floor(witness / 86400000.0);
+    if (witness < year_start || witness >= next_start ||
+        date_number_add(day, -year_day) != month_start) return NAN;
+    return date_number_add(date_number_add(day, trunc(date)), -1.0);
+}
+
+static double date_make_time(double hours, double minutes, double seconds, double ms) {
+    if (!isfinite(hours) || !isfinite(minutes) || !isfinite(seconds) || !isfinite(ms)) return NAN;
+    double result = date_number_add(date_number_multiply(trunc(hours), 3600000.0),
+        date_number_multiply(trunc(minutes), 60000.0));
+    result = date_number_add(result, date_number_multiply(trunc(seconds), 1000.0));
+    return date_number_add(result, trunc(ms));
+}
+
+static double date_make_date(double day, double time) {
+    if (!isfinite(day) || !isfinite(time)) return NAN;
+    double result = date_number_add(date_number_multiply(day, 86400000.0), time);
+    return isfinite(result) ? result : NAN;
+}
+
+double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
+    double full_year = trunc(year);
+    if (full_year >= 0.0 && full_year <= 99.0) full_year += 1900.0;
+    return date_time_clip(date_make_date(date_make_day(full_year, month, day),
+        date_make_time(hours, minutes, seconds, ms)));
 }
 
 double tsc_date_local(double year, double month, double day, double hours, double minutes, double seconds, double ms) {

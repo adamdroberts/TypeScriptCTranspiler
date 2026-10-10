@@ -2761,7 +2761,8 @@
           "tests/property/number-call-boundary.property.test.ts",
           "tests/property/number-decimal-format.property.test.ts",
           "tests/property/locale-invocation.property.test.ts",
-          "tests/property/date-static-invocation.property.test.ts"
+          "tests/property/date-static-invocation.property.test.ts",
+          "tests/property/date-utc-calendar.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2776,7 +2777,8 @@
           "number_call_boundary",
           "number_decimal_rounding",
           "locale_ordinary_invocation",
-          "date_static_invocation"
+          "date_static_invocation",
+          "date_utc_calendar"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
@@ -2792,7 +2794,7 @@
         ]
       },
       "knownGaps": [
-        "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
+        "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding with independent property/typed evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
       ]
     },
     {
