@@ -4855,33 +4855,10 @@ tsc_value_t tsc_value_symbol_prototype(void) {
     return primitive_prototype(&primitive_symbol);
 }
 
-tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t v) {
-    if (tsc_value_is_nullish(v)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.getPrototypeOf target must not be null or undefined"));
-    }
-    if (value_is_box(v)) {
-        switch (value_tag(v)) {
-            case TSC_VALUE_TAG_OBJECT:
-            case TSC_VALUE_TAG_ARRAY:
-            case TSC_VALUE_TAG_FUNCTION:
-                return tsc_value_get_prototype_of(v);
-            case TSC_VALUE_TAG_FALSE:
-            case TSC_VALUE_TAG_TRUE:
-                return tsc_value_boolean_prototype();
-            case TSC_VALUE_TAG_STRING:
-                return tsc_value_string_prototype();
-            case TSC_VALUE_TAG_BIGINT:
-                return tsc_value_bigint_prototype();
-            case TSC_VALUE_TAG_SYMBOL:
-                return tsc_value_symbol_prototype();
-            case TSC_VALUE_TAG_UNDEFINED:
-            case TSC_VALUE_TAG_NULL:
-                break;
-        }
-    } else {
-        return tsc_value_number_prototype();
-    }
-    return tsc_value_undefined();
+tsc_value_t tsc_value_object_get_prototype_of(tsc_value_t value) {
+    tsc_value_t object = tsc_value_to_object(value);
+    void* volatile object_root = tsc_value_gc_root(object); (void)object_root;
+    return tsc_value_get_prototype_of(object);
 }
 
 bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
@@ -5995,36 +5972,23 @@ tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t value) {
 
 }
 
-static void object_assign_set_or_throw(tsc_value_t target, tsc_str_t* key, tsc_value_t value) {
-    bool ok = tsc_value_set_prop(target, key, value);
-    if (!ok) tsc_throw_str(tsc_str_from_cstr("Object.assign target set failed"));
-}
-
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source) {
-    if (tsc_value_is_nullish(target)) {
-        tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined"));
-    }
-    if (!value_is_box(target)) return target;
-    bool target_is_object = value_tag(target) == TSC_VALUE_TAG_OBJECT;
-    bool target_is_array = value_tag(target) == TSC_VALUE_TAG_ARRAY;
-    bool target_is_function = value_tag(target) == TSC_VALUE_TAG_FUNCTION;
-    if (!target_is_object && !target_is_array && !target_is_function) return target;
-    if (!value_is_box(source)) return target;
-    tsc_value_tag_t source_tag = value_tag(source);
-    if (
-        source_tag != TSC_VALUE_TAG_OBJECT &&
-        source_tag != TSC_VALUE_TAG_ARRAY &&
-        source_tag != TSC_VALUE_TAG_STRING &&
-        source_tag != TSC_VALUE_TAG_FUNCTION
-    ) {
-        return target;
-    }
-    tsc_array_t* keys = tsc_value_raw_own_keys(source);
-    for (size_t i = 0; i < keys->len; i++) {
-        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-        if (!tsc_value_property_is_enumerable(source, key)) continue;
+    target = tsc_value_to_object(target);
+    void* volatile target_root = tsc_value_gc_root(target); (void)target_root;
+    if (tsc_value_is_nullish(source)) return target;
+    source = tsc_value_to_object(source);
+    void* volatile source_root = tsc_value_gc_root(source); (void)source_root;
+    tsc_array_t* volatile keys = tsc_value_raw_own_keys(source);
+    for (size_t index = 0; index < keys->len; ++index) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, index);
+        tsc_value_t descriptor = tsc_value_get_own_property_descriptor(source, key);
+        void* volatile descriptor_root = tsc_value_gc_root(descriptor); (void)descriptor_root;
+        if (tsc_value_is_undefined(descriptor) ||
+            !tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("enumerable", 10)))) continue;
         tsc_value_t value = tsc_value_get_prop(source, key);
-        object_assign_set_or_throw(target, key, value);
+        void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
+        if (!tsc_value_set_prop(target, key, value))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.assign target set failed"));
     }
     return target;
 }

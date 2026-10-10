@@ -147,10 +147,9 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
     "keys", "values", "entries", "forEach", "reduce", "reduceRight",
 ]);
 
-const ORDINARY_OBJECT_STATIC_METHODS = new Set([
-    "create", "defineProperty", "defineProperties", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors",
-    "getOwnPropertyNames", "getOwnPropertySymbols", "setPrototypeOf", "hasOwn", "keys", "values", "entries",
-]);
+// These ordinary global owners share Realm References, member calls and the
+// canonical source-value dependency graph independently of method signatures.
+const ORDINARY_OBJECT_GLOBAL_OWNERS = new Set(["Object", "Reflect"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -1367,8 +1366,8 @@ class Emitter {
             if (ts.isPropertyAccessExpression(expr.expression) &&
                 (ORDINARY_VALUE_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
                     ORDINARY_OBJECT_PROTOTYPE_METHODS.has(expr.expression.name.text) ||
-                    ORDINARY_OBJECT_STATIC_METHODS.has(expr.expression.name.text) ||
-                    (ts.isIdentifier(expr.expression.expression) && expr.expression.expression.text === "Reflect"))) return false;
+                    (ts.isIdentifier(expr.expression.expression) &&
+                        ORDINARY_OBJECT_GLOBAL_OWNERS.has(expr.expression.expression.text)))) return false;
             return this.isSideEffectFreeSymbolStringMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeToStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
@@ -1652,12 +1651,6 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)
-        ) {
-            return true;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
             this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
         ) {
             return true;
@@ -1691,37 +1684,6 @@ class Emitter {
         const method = call.expression.name.text;
         return (method === "of" || method === "from") &&
             this.isSideEffectFreeStaticCall(call, seenConsts);
-    }
-
-    private isSideEffectFreeArrayReturningObjectHelperCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression)
-        ) {
-            return false;
-        }
-        const recv = call.expression.expression;
-        const method = call.expression.name.text;
-        if (
-            this.isUnshadowedGlobalIdentifier(recv, "Object") &&
-            (
-                method === "keys" ||
-                method === "values" ||
-                method === "entries" ||
-                method === "getOwnPropertyNames" ||
-                method === "getOwnPropertySymbols"
-            ) &&
-            call.arguments.length === 1
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
-        }
-        return this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
-            method === "ownKeys" &&
-            call.arguments.length === 1 &&
-            this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeElementAccess(
@@ -2097,156 +2059,6 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            method === "is" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeTopLevelConstInitializer(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "keys" ||
-                method === "values" ||
-                method === "entries" ||
-                method === "getOwnPropertyNames" ||
-                method === "getOwnPropertySymbols"
-            ) &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "getOwnPropertyDescriptor" &&
-            call.arguments.length >= 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
-                Array.from(call.arguments).slice(2).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "getPrototypeOf" ||
-                method === "isExtensible" ||
-                method === "isSealed" ||
-                method === "isFrozen"
-            ) &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "preventExtensions" ||
-                method === "seal" ||
-                method === "freeze"
-            ) &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return (
-                this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) ||
-                this.isSideEffectFreeNonNullishPrimitiveObjectOperand(call.arguments[0]!, seenConsts)
-            ) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "setPrototypeOf" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "create" &&
-            (call.arguments.length === 1 || call.arguments.length === 2) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts) &&
-                (!call.arguments[1] || this.isSideEffectFreeDataPropertyDescriptorMap(call.arguments[1], seenConsts));
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "assign" &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            const [target, ...sources] = Array.from(call.arguments);
-            return this.isSideEffectFreeFreshObjectMutationTarget(target!, seenConsts) &&
-                sources.every((source) =>
-                    this.isSideEffectFreeObjectAssignSourceOperand(source, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "defineProperty" &&
-            call.arguments.length === 3 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
-                this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "defineProperties" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeDataPropertyDescriptorMap(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "fromEntries" &&
-            call.arguments.length === 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectFromEntriesOperand(call.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "hasOwn" &&
-            call.arguments.length >= 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
-                Array.from(call.arguments).slice(2).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "groupBy" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Object")
-        ) {
-            return this.isSideEffectFreeEmptyArrayFromSource(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
             this.isSideEffectFreeMathCall(method, call.arguments, seenConsts) &&
             this.isUnshadowedGlobalIdentifier(recv, "Math")
         ) {
@@ -2333,106 +2145,6 @@ class Emitter {
             this.isUnshadowedGlobalIdentifier(recv, "RegExp")
         ) {
             return this.isSideEffectFreeStringCoercion(call.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "ownKeys" &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "has" ||
-                method === "getOwnPropertyDescriptor"
-            ) &&
-            call.arguments.length >= 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts) &&
-                Array.from(call.arguments).slice(2).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "get" &&
-            (call.arguments.length === 2 || call.arguments.length === 3) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
-                (!call.arguments[2] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2], seenConsts));
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "set" &&
-            (call.arguments.length === 3 || call.arguments.length === 4) &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2]!, seenConsts) &&
-                (!call.arguments[3] || this.isSideEffectFreeTopLevelConstInitializer(call.arguments[3], seenConsts));
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "deleteProperty" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(call.arguments[1]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "defineProperty" &&
-            call.arguments.length === 3 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
-                this.isSideEffectFreeDataPropertyDescriptor(call.arguments[2]!, seenConsts);
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            (
-                method === "getPrototypeOf" ||
-                method === "isExtensible"
-            ) &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "preventExtensions" &&
-            call.arguments.length >= 1 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                Array.from(call.arguments).slice(1).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
-        if (
-            ts.isIdentifier(recv) &&
-            method === "setPrototypeOf" &&
-            call.arguments.length === 2 &&
-            this.isUnshadowedGlobalIdentifier(recv, "Reflect")
-        ) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(call.arguments[0]!, seenConsts) &&
-                this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[1]!, seenConsts);
         }
         return false;
     }
@@ -3698,8 +3410,7 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)
+                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
             )
         ) {
             return true;
@@ -3721,8 +3432,7 @@ class Emitter {
         }
         return ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts)
+                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
             );
     }
 
@@ -3739,11 +3449,7 @@ class Emitter {
         }
         return ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningStringifiableObjectEntriesCall(unwrapped, seenConsts)
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
             );
     }
 
@@ -6400,93 +6106,13 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectValuesCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningStringifiableObjectEntriesCall(unwrapped, seenConsts)
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
             )
         ) {
             return true;
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeStringArrayOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeStringArrayReturningObjectKeyHelperCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            call.arguments.length !== 1
-        ) {
-            return false;
-        }
-        const recv = call.expression.expression;
-        const method = call.expression.name.text;
-        if (
-            this.isUnshadowedGlobalIdentifier(recv, "Object") &&
-            (
-                method === "keys" ||
-                method === "getOwnPropertyNames"
-            )
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(call.arguments[0]!, seenConsts);
-        }
-        return this.isUnshadowedGlobalIdentifier(recv, "Reflect") &&
-            method === "ownKeys" &&
-            this.isSideEffectFreeObjectEnumerationOperand(call.arguments[0]!, seenConsts);
-    }
-
-    private isSideEffectFreeStringArrayReturningObjectValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
-            call.expression.name.text !== "values" ||
-            call.arguments.length !== 1
-        ) {
-            return false;
-        }
-        return this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, seenConsts);
-    }
-
-    private isSideEffectFreeStringArrayReturningEmptyObjectEntriesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
-            call.expression.name.text !== "entries" ||
-            call.arguments.length !== 1
-        ) {
-            return false;
-        }
-        return this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(call.arguments[0]!, seenConsts) ||
-            this.isSideEffectFreeNonStringPrimitiveObjectEntriesSource(call.arguments[0]!, seenConsts);
-    }
-
-    private isSideEffectFreeStringArrayReturningStringifiableObjectEntriesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Object") ||
-            call.expression.name.text !== "entries" ||
-            call.arguments.length !== 1
-        ) {
-            return false;
-        }
-        return this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeObjectValuesStringCoercionSource(
@@ -6517,20 +6143,19 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-                this.isSideEffectFreeStringArrayReturningObjectKeyHelperCall(unwrapped, seenConsts)
+                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
             )
         ) {
             return true;
         }
         if (this.isObjectAssignCall(unwrapped)) {
-            return this.isSideEffectFreeObjectAssignStringValuesCall(unwrapped, seenConsts);
+            return false;
         }
         if (this.isObjectFromEntriesCall(unwrapped)) {
-            return this.isSideEffectFreeObjectFromEntriesStringValuesCall(unwrapped, seenConsts);
+            return false;
         }
         if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
-            return this.isSideEffectFreeObjectCreateStringValuesCall(unwrapped, seenConsts);
+            return false;
         }
         if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertyCall(unwrapped)) {
             return this.isSideEffectFreeObjectDefinePropertyStringValuesCall(unwrapped, seenConsts);
@@ -6589,19 +6214,6 @@ class Emitter {
         return !!init && this.isSideEffectFreeNonStringPrimitiveObjectEntriesSource(init, seenConsts);
     }
 
-    private isSideEffectFreeObjectAssignStringValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (call.arguments.length < 1) return false;
-        const [target, ...sources] = Array.from(call.arguments);
-        return this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(target!, seenConsts) &&
-            this.isSideEffectFreeObjectValuesStringCoercionSource(target!, new Set(seenConsts)) &&
-            sources.every((source) =>
-                this.isSideEffectFreeObjectAssignStringValuesSource(source, new Set(seenConsts))
-            );
-    }
-
     private isSideEffectFreeObjectAssignStringValuesSource(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -6610,14 +6222,6 @@ class Emitter {
         if (this.isSideEffectFreeNullishObjectAssignSource(unwrapped, seenConsts)) return true;
         if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return true;
         return this.isSideEffectFreeObjectValuesStringCoercionSource(unwrapped, seenConsts);
-    }
-
-    private isSideEffectFreeObjectFromEntriesStringValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return call.arguments.length === 1 &&
-            this.isSideEffectFreeObjectFromEntriesStringValuesOperand(call.arguments[0]!, seenConsts);
     }
 
     private isSideEffectFreeObjectFromEntriesStringValuesOperand(
@@ -6646,19 +6250,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectFromEntriesStringValuesOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeObjectCreateStringValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return (
-            call.arguments.length === 1 ||
-            call.arguments.length === 2
-        ) &&
-            this.isSideEffectFreeObjectCreatePrototypeOperand(call.arguments[0]!, seenConsts) &&
-            (!call.arguments[1] ||
-                this.isSideEffectFreeDataPropertyDescriptorMapStringValues(call.arguments[1], seenConsts));
     }
 
     private isSideEffectFreeObjectDefinePropertyStringValuesCall(
@@ -7099,12 +6690,6 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
-        if (name === "Object") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                Array.from(call.arguments).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
-        }
         if (name === "Array") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeArrayConstructorArgs(call.arguments, seenConsts);
@@ -7306,11 +6891,6 @@ class Emitter {
             if (name === "FinalizationRegistry") {
                 return args.length === 1 &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
-            }
-            if (name === "Object") {
-                return Array.from(args).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
             }
             if (name === "String") {
                 return args.length === 0 ||
@@ -8561,12 +8141,6 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            this.isSideEffectFreePrimitiveReflectGetCall(unwrapped, seenConsts)
-        ) {
-            return true;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
             this.isSideEffectFreeAbsentOwnPropertyDescriptorCall(unwrapped, seenConsts)
         ) {
             return true;
@@ -9704,36 +9278,6 @@ class Emitter {
             entryIndex,
             tupleIndex,
             seenConsts,
-        ) !== "unsafe";
-    }
-
-    private isSideEffectFreePrimitiveReflectGetCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            (call.arguments.length !== 2 && call.arguments.length !== 3) ||
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Reflect") ||
-            call.expression.name.text !== "get"
-        ) {
-            return false;
-        }
-        if (
-            call.arguments.length === 3 &&
-            !this.isSideEffectFreeTopLevelConstInitializer(call.arguments[2]!, seenConsts)
-        ) {
-            return false;
-        }
-
-        const key = this.sideEffectFreeObjectPropertyReadKey(call.arguments[1]!, seenConsts);
-        if (key === null) return false;
-        const target = call.arguments[0]!;
-        return this.sideEffectFreePrimitiveObjectOrArrayPropertyResult(
-            target,
-            key,
-            new Set(seenConsts),
         ) !== "unsafe";
     }
 
@@ -13685,8 +13229,7 @@ class Emitter {
         }
         if (!ts.isCallExpression(unwrapped)) return false;
         const isFreshArrayHelper =
-            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts) ||
-            this.isSideEffectFreeArrayReturningObjectHelperCall(unwrapped, seenConsts);
+            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts);
         if (isFreshArrayHelper) return true;
         return (
             this.isObjectAssignCall(unwrapped) ||
@@ -14177,7 +13720,8 @@ class Emitter {
     private isRuntimeGlobalReference(id: ts.Identifier): boolean {
         if (!this.isOutOfBandIdentifier(id)) return false;
         const descriptor = runtimeGlobalBindings.get(id.text);
-        if (descriptor && (this.isJavaScriptSourceFile(id.getSourceFile()) || descriptor.mutableValue)) return true;
+        if (descriptor && (this.isJavaScriptSourceFile(id.getSourceFile()) || descriptor.mutableValue ||
+            ORDINARY_OBJECT_GLOBAL_OWNERS.has(id.text))) return true;
         // A free JS name has no physical C slot. Resolve its actual property
         // against the Realm global record, including missing-name semantics.
         if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
@@ -23760,6 +23304,15 @@ class Emitter {
                 }
                 const callee = this.unwrapTransparentExpression(node.expression);
                 const values = Array.from(node.arguments ?? [], argument => ts.isSpreadElement(argument) ? argument.expression : argument);
+                if (ts.isCallExpression(node)) {
+                    // An ordinary callee can retain or mutate every actual
+                    // object owner. Later reads and aliases must borrow that
+                    // same value domain instead of a checker-selected copy.
+                    for (const value of values) {
+                        input(declarationFor(value), callee);
+                        if (ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) input(value, callee);
+                    }
+                }
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     for (const argument of node.arguments ?? []) input(declarationFor(callee.expression), argument);
                     callableInputs(callee.expression, values);
@@ -23807,7 +23360,8 @@ class Emitter {
             // retained owners, aliases, aggregates and source call sites.
             if (hasCanonicalValueFormals(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
-                this.isUnshadowedGlobalIdentifier(node, "Array")) admitPositive(node);
+                (this.isUnshadowedGlobalIdentifier(node, "Array") ||
+                    runtimeGlobalBindings.has(node.text) && this.isRuntimeGlobalReference(node))) admitPositive(node);
             if (ts.isElementAccessExpression(node) || ts.isPropertyAccessExpression(node)) {
                 const receivers = [this.checker.getTypeAtLocation(node.expression)];
                 const receiverTypes = new Set<ts.Type>();
@@ -23821,9 +23375,6 @@ class Emitter {
                         receiver.getSymbol()?.getName() === "ObjectEntry")) { admitPositive(node); break; }
                 }
             }
-            if (ts.isPropertyAccessExpression(node) && node.name.text === "fromEntries" &&
-                ts.isIdentifier(node.expression) && this.isUnshadowedGlobalIdentifier(node.expression, "Object"))
-                admitPositive(node);
             if (node.kind === ts.SyntaxKind.ThisKeyword) {
                 for (let owner: ts.Node | undefined = node.parent; owner; owner = owner.parent) {
                     if (ts.isClassLike(owner)) break;
@@ -36009,9 +35560,6 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
                 return { c: "tsc_array_constructor_value()", ty: T_VALUE };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Object")) {
-                return { c: "tsc_object_constructor_value()", ty: T_VALUE };
-            }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 if (this.options.test262Observation) {
                     return {
@@ -36065,9 +35613,6 @@ class Emitter {
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "JSON")) {
                 return { c: "tsc_builtin_json()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Reflect")) {
-                return { c: "tsc_builtin_reflect()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "NaN")) return { c: "((double)NAN)", ty: T_NUMBER };
             if (this.isUnshadowedGlobalIdentifier(expr, "Infinity")) return { c: "((double)INFINITY)", ty: T_NUMBER };
@@ -41570,9 +41115,8 @@ class Emitter {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
 
         if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
-            (ts.isIdentifier(recvExpr) && recvExpr.text === "Reflect") ||
-            (ts.isIdentifier(recvExpr) && recvExpr.text === "Object" &&
-                ORDINARY_OBJECT_STATIC_METHODS.has(memberName))) {
+            (ts.isIdentifier(recvExpr) && ORDINARY_OBJECT_GLOBAL_OWNERS.has(recvExpr.text) &&
+                this.isUnshadowedGlobalIdentifier(recvExpr, recvExpr.text))) {
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
 
@@ -42446,9 +41990,6 @@ class Emitter {
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Symbol") {
             return this.emitSymbolStatic(call, memberName);
-        }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Object") {
-            return this.emitObjectCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Promise")) {
             return this.emitPromiseStatic(call, memberName);
@@ -51872,577 +51413,6 @@ class Emitter {
             return mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker);
         }
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
-    }
-
-    private emitObjectCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name === "fromEntries") {
-            return this.emitDynamicNamedPropertyCall(call,
-                this.emitExpr((call.expression as ts.PropertyAccessExpression).expression), name, false);
-        }
-        const args = call.arguments;
-        if (args.length < 1) unsupported(call, `Object.${name} needs an argument`);
-        const arg = args[0]!;
-        const tsType = this.expressionDeclaredOrCurrentType(arg);
-        const mappedType = this.isTest262ScriptGlobalThisExpression(arg) ||
-            this.hasDynamicJsonModuleRepresentation(arg) ||
-            this.isUntypedJsObjectCallTarget(arg) ||
-            (ts.isIdentifier(arg) && this.untypedJsLiteralVariableDeclaration(arg))
-            ? T_VALUE
-            : this.prepareType(mapTsType(arg, tsType, this.checker));
-        // RegExp has an ordinary cached object. All Object operations consume
-        // its descriptors and identity rather than synthesizing a fixed surface.
-        const mapped = mappedType.kind === "regexp" ? T_VALUE : mappedType;
-        const primitiveObjectArg =
-            mapped.kind === "number" ||
-            mapped.kind === "boolean" ||
-            mapped.kind === "string" ||
-            mapped.kind === "bigint" ||
-            mapped.kind === "symbol";
-        const nonStringPrimitiveObjectArg =
-            mapped.kind === "number" ||
-            mapped.kind === "boolean" ||
-            mapped.kind === "bigint" ||
-            mapped.kind === "symbol";
-        const emptyOwnBuiltinObjectArg =
-            mapped.kind === "map" ||
-            mapped.kind === "set" ||
-            mapped.kind === "weakmap" ||
-            mapped.kind === "weakset" ||
-            mapped.kind === "weakref" ||
-            mapped.kind === "finregistry" ||
-            mapped.kind === "promise" ||
-            mapped.kind === "eventemitter" ||
-            mapped.kind === "event" ||
-            mapped.kind === "eventtarget" ||
-            mapped.kind === "date" ||
-            mapped.kind === "url" ||
-            mapped.kind === "urlsearchparams" ||
-            mapped.kind === "hash" ||
-            mapped.kind === "hmac" ||
-            mapped.kind === "arraybuffer" ||
-            mapped.kind === "dataview";
-        const emptyEnumerableBuiltinObjectArg =
-            emptyOwnBuiltinObjectArg ||
-            mapped.kind === "error";
-        const fixedBuiltinIntegrityArg =
-            emptyEnumerableBuiltinObjectArg ||
-            mapped.kind === "fsstats" ||
-            mapped.kind === "fsdirent";
-        const dynamicObjectArg = (value: string, actual: CType = mapped): string => {
-            return this.boxObjectIdentity(value, actual, arg);
-        };
-        if (name === "assign") {
-            if (mapped.kind === "void") {
-                const specs: SequencedCallArg[] = [
-                    { value: this.emitExpr(arg), target: T_VALUE, node: arg },
-                ];
-                for (const source of args.slice(1)) {
-                    specs.push({ value: this.emitExpr(source), target: T_VALUE, node: source });
-                }
-                return this.emitSequencedExpr(T_VALUE, specs, ([target, ...sources]) => {
-                    const targetArg = target!;
-                    if (sources.length === 0) {
-                        return `({ if (tsc_value_is_nullish(${targetArg})) tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined")); ${targetArg}; })`;
-                    }
-                    const calls = sources.map((source) => `tsc_value_object_assign(${targetArg}, ${source})`);
-                    return `({ ${calls.join("; ")}; ${targetArg}; })`;
-                });
-            }
-            if (mapped.kind === "array") {
-                const target = this.emitExpr(arg);
-                return this.emitTypedArrayObjectAssign(call, arg, target, args.slice(1));
-            }
-            if (mapped.kind === "class") {
-                const target = this.emitExpr(arg);
-                return this.emitTypedObjectAssign(call, arg, target, tsType, args.slice(1));
-            }
-            if (mapped.kind !== "value") {
-                unsupported(arg, "Object.assign currently supports dynamic, typed object, and typed array targets only");
-            }
-            const specs: SequencedCallArg[] = [
-                { value: this.emitExpr(arg), target: T_VALUE, node: arg },
-            ];
-            for (const source of args.slice(1)) {
-                specs.push({ value: this.emitExpr(source), target: T_VALUE, node: source });
-            }
-            return this.emitSequencedExpr(T_VALUE, specs, ([target, ...sources]) => {
-                const targetArg = target!;
-                if (sources.length === 0) {
-                    return `({ if (tsc_value_is_nullish(${targetArg})) tsc_throw_str(tsc_str_from_cstr("Object.assign target must not be null or undefined")); ${targetArg}; })`;
-                }
-                const calls = sources.map((source) => `tsc_value_object_assign(${targetArg}, ${source})`);
-                return `({ ${calls.join("; ")}; ${targetArg}; })`;
-            });
-        }
-        if (name === "is") {
-            if (args.length < 2) unsupported(call, "Object.is expects two values");
-            const ignored = this.ignoredArgumentSpecs(args, 2);
-            const left = this.emitExpr(args[0]!);
-            const right = this.emitExpr(args[1]!);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: left, target: T_VALUE, node: args[0]! },
-                { value: right, target: T_VALUE, node: args[1]! },
-                ...ignored,
-            ], ([l, r]) => `tsc_value_object_is(${l}, ${r})`);
-        }
-        if (name === "getPrototypeOf") {
-            if (args.length < 1) unsupported(call, "Object.getPrototypeOf expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => `tsc_value_object_get_prototype_of(${o})`);
-            }
-            const primitivePrototypeFns: Partial<Record<CType["kind"], string>> = {
-                number: "tsc_value_number_prototype",
-                boolean: "tsc_value_boolean_prototype",
-                string: "tsc_value_string_prototype",
-                bigint: "tsc_value_bigint_prototype",
-                symbol: "tsc_value_symbol_prototype",
-            };
-            const primitivePrototypeFn = primitivePrototypeFns[mapped.kind];
-            if (primitivePrototypeFn) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, node: arg },
-                    ...ignored,
-                ], ([o]) => `({ (void)${o}; ${primitivePrototypeFn}(); })`);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "promise" && mapped.kind !== "buffer") {
-                unsupported(arg, "Object.getPrototypeOf currently supports dynamic objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: obj, target: T_VALUE, node: arg },
-                ...ignored,
-            ], ([o]) => `tsc_value_object_get_prototype_of(${o})`);
-        }
-        if (name === "isExtensible") {
-            if (args.length < 1) unsupported(call, "Object.isExtensible expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
-            }
-            if (fixedBuiltinIntegrityArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
-                unsupported(arg, "Object.isExtensible currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => `tsc_value_is_extensible(${dynamicObjectArg(o!, obj.ty)})`);
-        }
-        if (name === "isSealed") {
-            if (args.length < 1) unsupported(call, "Object.isSealed expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
-            }
-            if (fixedBuiltinIntegrityArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
-                unsupported(arg, "Object.isSealed currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => `tsc_value_is_sealed(${dynamicObjectArg(o!, obj.ty)})`);
-        }
-        if (name === "isFrozen") {
-            if (args.length < 1) unsupported(call, "Object.isFrozen expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
-            }
-            if (fixedBuiltinIntegrityArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
-                unsupported(arg, "Object.isFrozen currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            return this.emitSequencedExpr(T_BOOLEAN, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => `tsc_value_is_frozen(${dynamicObjectArg(o!, obj.ty)})`);
-        }
-        if (name === "preventExtensions") {
-            if (args.length < 1) unsupported(call, "Object.preventExtensions expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => o!);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.preventExtensions currently supports dynamic objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
-            return this.emitSequencedExpr(resultType, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => {
-                const target = dynamicObjectArg(o!, obj.ty);
-                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ if (!tsc_value_prevent_extensions(${target})) tsc_throw_str(tsc_str_from_cstr("Object.preventExtensions failed")); ${result}; })`;
-            });
-        }
-        if (name === "seal") {
-            if (args.length < 1) unsupported(call, "Object.seal expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => o!);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.seal currently supports dynamic objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
-            return this.emitSequencedExpr(resultType, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => {
-                const target = dynamicObjectArg(o!, obj.ty);
-                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ if (!tsc_value_seal(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.seal failed")); ${result}; })`;
-            });
-        }
-        if (name === "freeze") {
-            if (args.length < 1) unsupported(call, "Object.freeze expects object");
-            const ignored = this.ignoredArgumentSpecs(args, 1);
-            if (mapped.kind === "void") {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(T_VALUE, [
-                    { value: obj, target: T_VALUE, node: arg },
-                    ...ignored,
-                ], ([o]) => o!);
-            }
-            if (primitiveObjectArg) {
-                const obj = this.emitExpr(arg);
-                return this.emitSequencedExpr(mapped, [{ value: obj, node: arg }, ...ignored], ([o]) => o);
-            }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.freeze currently supports dynamic objects, arrays, functions, and primitives only");
-            }
-            const obj = this.emitExpr(arg);
-            const resultType = obj.ty.kind === "value" ? T_VALUE : mapped;
-            return this.emitSequencedExpr(resultType, [
-                { value: obj, node: arg },
-                ...ignored,
-            ], ([o]) => {
-                const target = dynamicObjectArg(o!, obj.ty);
-                const result = this.coerce({ c: o!, ty: obj.ty }, resultType, arg);
-                return `({ if (!tsc_value_freeze(${target})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.freeze failed")); ${result}; })`;
-            });
-        }
-        if (name === "groupBy") {
-            return this.emitObjectGroupBy(call);
-        }
-        unsupported(call, `Object.${name}`);
-    }
-
-    private isUntypedJsObjectCallTarget(expr: ts.Expression): boolean {
-        return this.isJavaScriptSourceFile(expr.getSourceFile()) &&
-            (ts.isObjectLiteralExpression(expr) || ts.isArrayLiteralExpression(expr));
-    }
-
-    private emitTypedObjectAssign(
-        call: ts.CallExpression,
-        targetExpr: ts.Expression,
-        target: EmitResult,
-        targetTsType: ts.Type,
-        sourceExprs: readonly ts.Expression[],
-    ): EmitResult {
-        if (target.ty.kind !== "class") unsupported(targetExpr, "Object.assign typed target must be an object");
-        const targetFields = this.objectProperties(targetTsType).map((prop) => {
-            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? targetExpr;
-            return {
-                name: prop.getName(),
-                field: mangleIdent(prop.getName()),
-                type: this.prepareType(mapTsType(
-                    decl,
-                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
-                    this.checker,
-                )),
-            };
-        });
-        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
-
-        const specs: SequencedCallArg[] = [{ value: target, node: targetExpr }];
-        const sources: { ty: CType; node: ts.Expression; tsType: ts.Type; pos: number; dynamicLike: boolean }[] = [];
-        for (const sourceExpr of sourceExprs) {
-            const sourceTsType = this.expressionDeclaredOrCurrentType(sourceExpr);
-            const source = this.emitExpr(sourceExpr);
-            const primitiveSource =
-                source.ty.kind === "number" ||
-                source.ty.kind === "boolean" ||
-                source.ty.kind === "bigint" ||
-                source.ty.kind === "symbol";
-            const dynamicLike =
-                source.ty.kind === "value" ||
-                source.ty.kind === "array" ||
-                source.ty.kind === "string";
-            if (source.ty.kind !== "class" && !dynamicLike && !primitiveSource) {
-                unsupported(sourceExpr, "Object.assign typed object target currently supports typed object, array, string, dynamic, or primitive sources");
-            }
-            sources.push({ ty: source.ty, node: sourceExpr, tsType: sourceTsType, pos: specs.length, dynamicLike });
-            specs.push({ value: source, target: dynamicLike ? T_VALUE : undefined, node: sourceExpr });
-        }
-
-        return this.emitSequencedExpr(target.ty, specs, (vals) => {
-            const targetC = vals[0]!;
-            const pieces: string[] = [];
-            for (const source of sources) {
-                const sourceC = vals[source.pos]!;
-                if (source.ty.kind === "class") {
-                    const assignments: string[] = [];
-                    for (const prop of this.objectProperties(source.tsType)) {
-                        const targetField = targetByName.get(prop.getName());
-                        if (!targetField) continue;
-                        const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? source.node;
-                        const sourceType = this.prepareType(mapTsType(
-                            decl,
-                            this.checker.getTypeOfSymbolAtLocation(prop, decl),
-                            this.checker,
-                        ));
-                        const raw = {
-                            c: `${sourceC}->${mangleIdent(prop.getName())}`,
-                            ty: sourceType,
-                        };
-                        assignments.push(
-                            `${this.nativeFieldStore(targetC, target.ty.className!, targetField.name, targetField.type, this.coerce(raw, targetField.type, source.node))}`,
-                        );
-                    }
-                    pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
-                    continue;
-                }
-                if (source.dynamicLike) {
-                    const assignments: string[] = [];
-                    for (const targetField of targetFields) {
-                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
-                        const raw = {
-                            c: `tsc_value_get_prop(${sourceC}, ${key})`,
-                            ty: T_VALUE,
-                        };
-                        assignments.push(
-                            `if (tsc_value_has_own_prop(${sourceC}, ${key})) ${this.nativeFieldStore(targetC, target.ty.className!, targetField.name, targetField.type, this.coerce(raw, targetField.type, source.node))}`,
-                        );
-                    }
-                    pieces.push(assignments.length ? assignments.join("; ") : `(void)${sourceC}`);
-                    continue;
-                }
-                pieces.push(`(void)${sourceC}`);
-            }
-            return `({ ${pieces.join("; ")}; ${targetC}; })`;
-        });
-    }
-
-    private emitTypedArrayObjectAssign(
-        call: ts.CallExpression,
-        targetExpr: ts.Expression,
-        target: EmitResult,
-        sourceExprs: readonly ts.Expression[],
-    ): EmitResult {
-        if (target.ty.kind !== "array") unsupported(targetExpr, "Object.assign typed target must be an array");
-        const elem = target.ty.elem ?? T_VALUE;
-        const specs: SequencedCallArg[] = [{ value: target, node: targetExpr }];
-        const sources: { ty: CType; node: ts.Expression; tsType: ts.Type; pos: number }[] = [];
-        for (const sourceExpr of sourceExprs) {
-            const sourceTsType = this.expressionDeclaredOrCurrentType(sourceExpr);
-            const source = this.emitExpr(sourceExpr);
-            const primitiveSource =
-                source.ty.kind === "number" ||
-                source.ty.kind === "boolean" ||
-                source.ty.kind === "bigint" ||
-                source.ty.kind === "symbol";
-            if (source.ty.kind !== "array" && source.ty.kind !== "string" && source.ty.kind !== "value" && source.ty.kind !== "class" && !primitiveSource) {
-                unsupported(sourceExpr, "Object.assign typed array target currently supports array, string, typed object, dynamic, or primitive sources");
-            }
-            sources.push({ ty: source.ty, node: sourceExpr, tsType: sourceTsType, pos: specs.length });
-            specs.push({ value: source, node: sourceExpr });
-        }
-        return this.emitSequencedExpr(target.ty, specs, (vals) => {
-            const targetC = vals[0]!;
-            const assignFailure = `tsc_throw_str(tsc_str_from_cstr("Object.assign target set failed"))`;
-            const pieces: string[] = [];
-            for (const source of sources) {
-                const sourceC = vals[source.pos]!;
-                const idx = this.freshTemp("_ta_assign_i");
-                const elemTmp = this.freshTemp("_ta_assign_v");
-                if (source.ty.kind === "array") {
-                    const sourceElem = source.ty.elem ?? T_VALUE;
-                    const current = {
-                        c: `TSC_ARR(${sourceElem.c}, ${sourceC}, ${idx})`,
-                        ty: sourceElem,
-                    };
-                    const coerced = this.coerce(current, elem, source.node);
-                    pieces.push(
-                        `for (size_t ${idx} = 0; ${idx} < ${sourceC}->len; ${idx}++) { ` +
-                            `${elem.c} ${elemTmp} = ${coerced}; ` +
-                            `if (${targetC}->frozen) { ${assignFailure}; ` +
-                            `} else if (${idx} < ${targetC}->len) { ` +
-                                `tsc_array_store_raw(${targetC}, ${idx}, &${elemTmp}); ` +
-                            `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
-                                `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                            `} else { ${assignFailure}; } ` +
-                        `}`,
-                    );
-                    continue;
-                }
-                if (source.ty.kind === "value") {
-                    const keys = this.freshTemp("_ta_assign_keys");
-                    const key = this.freshTemp("_ta_assign_key");
-                    const targetIdx = this.freshTemp("_ta_assign_j");
-                    const nextKey = this.freshTemp("_ta_assign_next_key");
-                    const raw = {
-                        c: `tsc_value_get_prop(${sourceC}, ${key})`,
-                        ty: T_VALUE,
-                    };
-                    const coerced = this.coerce(raw, elem, source.node);
-                    pieces.push(
-                        `tsc_array_t* ${keys} = tsc_value_object_keys(${sourceC}); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${keys}->len; ${idx}++) { ` +
-                            `tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${idx}); ` +
-                            `bool _ta_assign_done = false; ` +
-                            `for (size_t ${targetIdx} = 0; ${targetIdx} < ${targetC}->len; ${targetIdx}++) { ` +
-                                `tsc_str_t* _ta_assign_idx_key = tsc_str_from_int((int64_t)${targetIdx}); ` +
-                                `if (tsc_str_eq(${key}, _ta_assign_idx_key)) { ` +
-                                    `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                    `if (${targetC}->frozen) { ${assignFailure}; } else { tsc_array_store_raw(${targetC}, ${targetIdx}, &${elemTmp}); } ` +
-                                    `_ta_assign_done = true; ` +
-                                    `break; ` +
-                                `} ` +
-                            `} ` +
-                            `if (!_ta_assign_done) { ` +
-                                `tsc_str_t* ${nextKey} = tsc_str_from_int((int64_t)${targetC}->len); ` +
-                                `if (tsc_str_eq(${key}, ${nextKey})) { ` +
-                                    `${elem.c} ${elemTmp} = ${coerced}; ` +
-                                    `if (${targetC}->frozen || !${targetC}->extensible || ${targetC}->sealed || !${targetC}->length_writable) { ${assignFailure}; } else { tsc_array_push_raw(${targetC}, &${elemTmp}); } ` +
-                                `} ` +
-                            `} ` +
-                        `}`,
-                    );
-                    continue;
-                }
-                if (source.ty.kind === "class") {
-                    const sourceProps = this.objectProperties(source.tsType);
-                    const assignments: string[] = [];
-                    for (const prop of sourceProps) {
-                        const key = prop.getName();
-                        if (!/^(0|[1-9]\d*)$/.test(key)) continue;
-                        const numericKey = Number(key);
-                        if (!Number.isSafeInteger(numericKey)) continue;
-                        const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? source.node;
-                        const propType = this.prepareType(mapTsType(
-                            decl,
-                            this.checker.getTypeOfSymbolAtLocation(prop, decl),
-                            this.checker,
-                        ));
-                        const raw = {
-                            c: `${sourceC}->${mangleIdent(key)}`,
-                            ty: propType,
-                        };
-                        const coerced = this.coerce(raw, elem, source.node);
-                        assignments.push(
-                            `{ ${elem.c} ${elemTmp} = ${coerced}; ` +
-                                `if (${targetC}->frozen && ${numericKey} <= ${targetC}->len) { ${assignFailure}; ` +
-                                `} else if (${numericKey} < ${targetC}->len) { ` +
-                                    `tsc_array_store_raw(${targetC}, ${numericKey}, &${elemTmp}); ` +
-                                `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${numericKey} == ${targetC}->len) { ` +
-                                    `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                                `} else if (${numericKey} == ${targetC}->len) { ` +
-                                    `${assignFailure}; ` +
-                                `} ` +
-                            `}`,
-                        );
-                    }
-                    if (assignments.length) {
-                        pieces.push(assignments.join(" "));
-                    } else {
-                        pieces.push(`(void)${sourceC}`);
-                    }
-                    continue;
-                }
-                if (
-                    source.ty.kind === "number" ||
-                    source.ty.kind === "boolean" ||
-                    source.ty.kind === "bigint" ||
-                    source.ty.kind === "symbol"
-                ) {
-                    pieces.push(`(void)${sourceC}`);
-                    continue;
-                }
-                const codeUnits = this.freshTemp("_ta_assign_string_units");
-                const current = {
-                    c: `TSC_ARR(tsc_str_t*, ${codeUnits}, ${idx})`,
-                    ty: T_STRING,
-                };
-                const coerced = this.coerce(current, elem, source.node);
-                pieces.push(
-                    `tsc_array_t* ${codeUnits} = tsc_str_code_units(${sourceC}); ` +
-                    `for (size_t ${idx} = 0; ${idx} < ${codeUnits}->len; ${idx}++) { ` +
-                        `${elem.c} ${elemTmp} = ${coerced}; ` +
-                        `if (${targetC}->frozen) { ${assignFailure}; ` +
-                        `} else if (${idx} < ${targetC}->len) { ` +
-                            `tsc_array_store_raw(${targetC}, ${idx}, &${elemTmp}); ` +
-                        `} else if (${targetC}->extensible && !${targetC}->sealed && ${targetC}->length_writable && ${idx} == ${targetC}->len) { ` +
-                            `tsc_array_push_raw(${targetC}, &${elemTmp}); ` +
-                        `} else { ${assignFailure}; } ` +
-                    `}`,
-                );
-            }
-            return `({ ${pieces.join("; ")}; ${targetC}; })`;
-        });
-    }
-
-    private emitObjectGroupBy(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 2) unsupported(call, "Object.groupBy expects (items, callback)");
-        const items = this.emitExpr(call.arguments[0]!);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: {c: this.boxObjectIdentity(items.c, items.ty, call.arguments[0]!), ty: T_VALUE}, node: call.arguments[0]! },
-            { value: this.emitExpr(call.arguments[1]!), target: T_VALUE, node: call.arguments[1]! },
-            ...this.ignoredArgumentSpecs(call.arguments, 2),
-        ], ([source, callback]) => `tsc_value_object_group_by(${source}, ${callback})`);
     }
 
     private emitTypedObjectHasOwn(

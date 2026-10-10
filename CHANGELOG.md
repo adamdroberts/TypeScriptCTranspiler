@@ -1,3 +1,5 @@
+- Share ordinary Realm Object/Reflect global References, static calls, aliases and actual results with the canonical source-value worklist. Retain argument owners across typed reads, delete static assign/predicate/purity predecessors, root shared assign/prototype kernels, declare Object construction, and verify independent semantics plus imported-owner E2E in both memory modes.
+
 - Share rooted SetIntegrityLevel/TestIntegrityLevel descriptor worklists across objects, Arrays, callables and Proxies. Delete cached state and trap probes, preserve actual own-key invariants and abrupt partial mutations, and verify independent semantic properties plus imported-owner E2E in both memory modes.
 
 # Changelog

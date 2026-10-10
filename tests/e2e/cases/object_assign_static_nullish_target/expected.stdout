@@ -1,5 +1,5 @@
-null source: Object.assign target must not be null or undefined
-undefined source: Object.assign target must not be null or undefined
-null empty: Object.assign target must not be null or undefined
-undefined empty: Object.assign target must not be null or undefined
+null source: true
+undefined source: true
+null empty: true
+undefined empty: true
 marks: ab

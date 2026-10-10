@@ -1,4 +1,4 @@
-locked: Object.assign target set failed
+locked: true
 locked value: 1
-closed: Object.assign target set failed
+closed: true
 closed has: false
