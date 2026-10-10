@@ -14266,7 +14266,7 @@ class Emitter {
         const sym = this.symbolForIdentifier(id);
         if (!sym) return true;
         const source = id.getSourceFile();
-        return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
+        return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source && !this.isAmbientDeclaration(decl));
     }
 
     private isSyntheticGlobalPropertyDeclaration(
@@ -14290,10 +14290,21 @@ class Emitter {
             key.text === name;
     }
 
+    /** Type-only ambient declarations do not create source runtime bindings,
+     * including declarations nested in ambient namespaces. */
+    private isAmbientDeclaration(node: ts.Node): boolean {
+        if (node.getSourceFile().isDeclarationFile) return true;
+        for (let current: ts.Node | undefined = node; current && !ts.isSourceFile(current); current = current.parent) {
+            if (ts.canHaveModifiers(current) &&
+                ts.getModifiers(current)?.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)) return true;
+        }
+        return false;
+    }
+
     private isOutOfBandIdentifier(id: ts.Identifier): boolean {
         const symbol = this.symbolForIdentifier(id);
         return !symbol || (symbol.declarations ?? []).every((declaration) =>
-            declaration.getSourceFile().isDeclarationFile ||
+            this.isAmbientDeclaration(declaration) ||
             !this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) ||
             ts.isIdentifier(declaration) ||
             ts.isPropertyAccessExpression(declaration) ||
@@ -14327,7 +14338,7 @@ class Emitter {
         // against the Realm global record, including missing-name semantics.
         if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
         const symbol = this.symbolForIdentifier(id);
-        return !symbol || !(symbol.declarations ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile);
+        return !symbol || !(symbol.declarations ?? []).some(declaration => this.isAmbientDeclaration(declaration));
     }
 
     private isSourceGlobalReference(id: ts.Identifier): boolean {
@@ -14464,6 +14475,7 @@ class Emitter {
     }
 
     private shouldEmitTopLevelVariable(decl: ts.VariableDeclaration): boolean {
+        if (this.isAmbientDeclaration(decl)) return false;
         return !this.isPrunableTopLevelVariable(decl) || this.referencedTopLevelVariables.has(decl);
     }
 
@@ -14483,6 +14495,7 @@ class Emitter {
     }
 
     private shouldEmitLocalVariable(decl: ts.VariableDeclaration): boolean {
+        if (this.isAmbientDeclaration(decl)) return false;
         if (this.sourceEnvironmentEnabled(decl.getSourceFile())) return true;
         return !this.isPrunableLocalVariable(decl) || this.referencedVariables.has(decl);
     }
@@ -14532,7 +14545,7 @@ class Emitter {
                 if (ts.isInterfaceDeclaration(node)) {
                     const declarations = this.checker.getSymbolAtLocation(node.name)?.getDeclarations() ?? [];
                     const owners = declarations.filter(declaration => ts.isInterfaceDeclaration(declaration) &&
-                        !declaration.getSourceFile().isDeclarationFile);
+                        !this.isAmbientDeclaration(declaration));
                     if (owners.length > 1) unsupported(node, "native type declaration merging requires a canonical owner");
                 }
                 const name = nativeTypeName(node), previous = this.nativeTypeDeclarations.get(name);
@@ -15398,7 +15411,7 @@ class Emitter {
         if (moduleVar) return moduleVar.cName;
         const moduleLexical = sym ? this.moduleLexicalBindings.get(sym) : undefined;
         if (moduleLexical) return moduleLexical.cName;
-        if (decl && !decl.getSourceFile().isDeclarationFile && (((ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) &&
+        if (decl && !this.isAmbientDeclaration(decl) && (((ts.isVariableDeclaration(decl) || ts.isBindingElement(decl)) &&
             this.isTopLevelValueDeclaration(decl)) || this.isNamespaceTopLevelDeclaration(decl))) {
             const name = this.declarationName(decl);
             return name ? this.declaredName(name) : mangleIdent(id.text);
@@ -23106,7 +23119,7 @@ class Emitter {
         const symbolDeclaration = symbol.declarations?.find(declaration =>
             ts.isFunctionDeclaration(declaration) && this.isDirectScopeLexicalDeclaration(declaration)) ??
             symbol.valueDeclaration ?? symbol.declarations?.[0];
-        if (!symbolDeclaration) return null;
+        if (!symbolDeclaration || this.isAmbientDeclaration(symbolDeclaration)) return null;
         const directNamedDeclaration =
             (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration)) &&
             symbolDeclaration.name &&
@@ -23459,7 +23472,7 @@ class Emitter {
         if (globalRoot) return `&${globalRoot}`;
         const declaration = sym.valueDeclaration ?? sym.declarations?.[0];
         if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) &&
-            !declaration.getSourceFile().isDeclarationFile && this.isTopLevelValueDeclaration(declaration)) {
+            !this.isAmbientDeclaration(declaration) && this.isTopLevelValueDeclaration(declaration)) {
             const storage = this.symbolStorageTypes.get(sym) ?? this.variableDeclarationStorageType(declaration,
                 this.variableStorageType(this.prepareType(mapType(declaration, this.checker))));
             if (storage.kind === "value")
@@ -23733,7 +23746,7 @@ class Emitter {
 
     private hasOrdinaryNativeConstructorType(expression: ts.Expression): boolean {
         const symbol = this.checker.getTypeAtLocation(expression).getSymbol();
-        if (!symbol || !(symbol.declarations ?? []).some(declaration => declaration.getSourceFile().isDeclarationFile)) return false;
+        if (!symbol || !(symbol.declarations ?? []).some(declaration => this.isAmbientDeclaration(declaration))) return false;
         for (const owner of this.ordinaryNativeOwners.values()) {
             if (owner.constructorType === symbol.getName()) return true;
         }
@@ -23798,7 +23811,7 @@ class Emitter {
                 symbol = this.checker.getTypeAtLocation(target.expression).getProperty(target.argumentExpression.text);
             if (symbol && (symbol.flags & ts.SymbolFlags.Alias)) symbol = this.checker.getAliasedSymbol(symbol);
             const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-            return declaration && !declaration.getSourceFile().isDeclarationFile ? declaration : undefined;
+            return declaration && !this.isAmbientDeclaration(declaration) ? declaration : undefined;
         };
         const input = (owner: ts.Node | undefined, value: ts.Node): void => {
             if (!owner) return;
@@ -23827,7 +23840,7 @@ class Emitter {
                         if (ts.isElementAccessExpression(reference) && !declarationFor(reference)) {
                             for (const property of this.checker.getTypeAtLocation(reference.expression).getProperties()) {
                                 const declaration = property.valueDeclaration ?? property.declarations?.[0];
-                                if (declaration && !declaration.getSourceFile().isDeclarationFile &&
+                                if (declaration && !this.isAmbientDeclaration(declaration) &&
                                     (ts.isPropertyDeclaration(declaration) || ts.isPropertySignature(declaration) || ts.isPropertyAssignment(declaration))) input(declaration, value);
                             }
                         }
@@ -23838,7 +23851,7 @@ class Emitter {
         const callableInputs = (expression: ts.Expression, values: readonly ts.Expression[]): void => {
             for (const signature of this.checker.getTypeAtLocation(expression).getCallSignatures()) {
                 const declaration = signature.getDeclaration();
-                if (declaration && !declaration.getSourceFile().isDeclarationFile && ts.isFunctionLike(declaration))
+                if (declaration && !this.isAmbientDeclaration(declaration) && ts.isFunctionLike(declaration))
                     for (const parameter of declaration.parameters) for (const value of values) input(parameter, value);
             }
         };
@@ -23872,7 +23885,7 @@ class Emitter {
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) write(node.left, node.right);
             if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
                 const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
-                if (declaration && !declaration.getSourceFile().isDeclarationFile && ts.isFunctionLike(declaration)) {
+                if (declaration && !this.isAmbientDeclaration(declaration) && ts.isFunctionLike(declaration)) {
                     for (const parameter of declaration.parameters) for (const argument of node.arguments ?? [])
                         input(parameter, ts.isSpreadElement(argument) ? argument.expression : argument);
                 }
@@ -23960,7 +23973,7 @@ class Emitter {
             }
             if (ts.isCallExpression(node)) {
                 const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
-                if (declaration && !declaration.getSourceFile().isDeclarationFile) dependency(declaration);
+                if (declaration && !this.isAmbientDeclaration(declaration)) dependency(declaration);
                 const callee = this.unwrapTransparentExpression(node.expression);
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     const receiver = this.prepareType(mapType(callee.expression, this.checker));
@@ -23973,7 +23986,7 @@ class Emitter {
             if (ts.isIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
                 const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-                if (declaration && !declaration.getSourceFile().isDeclarationFile) {
+                if (declaration && !this.isAmbientDeclaration(declaration)) {
                     dependency(declaration);
                 }
             }
@@ -24508,6 +24521,7 @@ class Emitter {
             this.isTest262ScriptSourceFile(sf)) return [];
         const plans: ModuleVarBindingPlan[] = [];
         const visit = (node: ts.Node): void => {
+            if (this.isAmbientDeclaration(node)) return;
             if (
                 node !== sf &&
                 (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node))
@@ -24643,6 +24657,7 @@ class Emitter {
             plans.push(plan);
         };
         for (const statement of sf.statements) {
+            if (this.isAmbientDeclaration(statement)) continue;
             if (ts.isClassDeclaration(statement)) {
                 if (resourceOnly) continue;
                 // Class declarations create mutable lexical bindings. Their
@@ -24694,6 +24709,7 @@ class Emitter {
         }
         const states: string[] = [];
         for (const statement of sf.statements) {
+            if (this.isAmbientDeclaration(statement)) continue;
             if (!ts.isVariableStatement(statement)) continue;
             const flags = statement.declarationList.flags;
             if ((flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
@@ -24889,6 +24905,7 @@ class Emitter {
             immutable: boolean;
         }> = [];
         for (const statement of sf.statements) {
+            if (this.isAmbientDeclaration(statement)) continue;
             if (ts.isClassDeclaration(statement)) {
                 if (statement.name) {
                     lexicals.push({
@@ -24924,6 +24941,7 @@ class Emitter {
 
         const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration> = [];
         const visit = (node: ts.Node): void => {
+            if (this.isAmbientDeclaration(node)) return;
             if (ts.isFunctionDeclaration(node)) {
                 if (this.isTest262ScriptGlobalFunctionDeclaration(node)) {
                     varDeclarations.push(node);
@@ -25947,7 +25965,7 @@ class Emitter {
                         this.isSupportedLexicalFunctionDeclaration(fn)
                 ) &&
                 (!this.isTopLevelValueDeclaration(decl) ||
-                    (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
+                    (this.dispatchCaptureClone && !this.isAmbientDeclaration(decl))) &&
                 this.isCapturableValueDeclaration(decl)
             ) {
                 const lexical = this.localLexicalMetadataForSymbol(sym);
@@ -26048,7 +26066,7 @@ class Emitter {
         if (!this.sourceEnvironmentEnabled(identifier.getSourceFile())) return null;
         const symbol = this.symbolForIdentifier(identifier);
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-        if (!symbol || !declaration || declaration.getSourceFile().isDeclarationFile ||
+        if (!symbol || !declaration || this.isAmbientDeclaration(declaration) ||
             !this.isCapturableValueDeclaration(declaration) || this.test262ScriptGlobalBindingName(identifier)) return null;
         for (let node: ts.Node | undefined = identifier.parent; node; node = node.parent) {
             if (!ts.isFunctionLike(node) || !("body" in node)) continue;
@@ -33489,13 +33507,13 @@ class Emitter {
         seen = new Set<ts.Symbol>(),
     ): ts.ClassDeclaration | null {
         const imported = this.importAliasTargetDeclaration(id);
-        if (imported && ts.isClassDeclaration(imported) && !imported.getSourceFile().isDeclarationFile) return imported;
+        if (imported && ts.isClassDeclaration(imported) && !this.isAmbientDeclaration(imported)) return imported;
 
         const sym = this.symbolForIdentifier(id);
         if (sym && seen.has(sym)) return null;
         if (sym) seen.add(sym);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isClassDeclaration(decl) && !decl.getSourceFile().isDeclarationFile) return decl;
+        if (decl && ts.isClassDeclaration(decl) && !this.isAmbientDeclaration(decl)) return decl;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
             const init = this.unwrapTransparentExpression(decl.initializer);
             if (ts.isIdentifier(init)) {
@@ -35904,7 +35922,7 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(node);
                 const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
                 if (symbol && declaration && !environment.has(symbol) &&
-                    !declaration.getSourceFile().isDeclarationFile &&
+                    !this.isAmbientDeclaration(declaration) &&
                     !this.isNodeWithin(declaration, statement.finallyBlock) &&
                     !this.sourceReferencePlan(node) &&
                     (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isParameter(declaration))) {
@@ -36403,7 +36421,7 @@ class Emitter {
             const declaration = this.importAliasTargetDeclaration(expr) ??
                 this.checker.getSymbolAtLocation(expr)?.valueDeclaration;
             const classDecl = declaration && ts.isClassDeclaration(declaration) &&
-                !declaration.getSourceFile().isDeclarationFile ? declaration : null;
+                !this.isAmbientDeclaration(declaration) ? declaration : null;
             if (classDecl) {
                 const lexicalBinding = this.moduleLexicalBindingForDeclaration(classDecl);
                 const defaultBinding = this.moduleDefaultExportBindings.get(classDecl);
@@ -36516,7 +36534,7 @@ class Emitter {
                 : null;
             if (processProp) return processProp;
             if (declaration && ts.isVariableDeclaration(declaration) &&
-                declaration.getSourceFile().isDeclarationFile) {
+                this.isAmbientDeclaration(declaration)) {
                 unsupported(expr, "ambient host value requires an ordinary runtime owner");
             }
             const scopedTy = this.identifierScopedType(expr);
@@ -40424,7 +40442,7 @@ class Emitter {
             const identifier = this.environmentBindingIdentifier(scopedSymbol);
             const symbol = identifier ? this.symbolForIdentifier(identifier) ?? scopedSymbol : scopedSymbol;
             const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-            if (!declaration || !identifier || declaration.getSourceFile().isDeclarationFile ||
+            if (!declaration || !identifier || this.isAmbientDeclaration(declaration) ||
                 this.test262ScriptGlobalBindingName(identifier)) continue;
             if (this.isModuleBindingSymbol(symbol)) continue;
             const outer = !!owner && !this.isNodeWithin(declaration, owner);
@@ -40542,7 +40560,7 @@ class Emitter {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl)) {
-            if (decl.getSourceFile().isDeclarationFile ||
+            if (this.isAmbientDeclaration(decl) ||
                 !this.graph.fileToModuleId.has(path.resolve(decl.getSourceFile().fileName))) return false;
             if (hasCanonicalValueFormals(decl)) return false;
             return !this.isDirectScopeLexicalDeclaration(decl);
@@ -47109,7 +47127,7 @@ class Emitter {
                 if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
                     const sym = this.symbolForIdentifier(node);
                     const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-                    if (decl && !decl.getSourceFile().isDeclarationFile) {
+                    if (decl && !this.isAmbientDeclaration(decl)) {
                         if (ts.isFunctionDeclaration(decl) && !this.isNodeWithin(decl, helper)) {
                             auditTransitiveFunction(decl);
                         } else if (this.isTopLevelValueDeclaration(decl)) {
@@ -47165,7 +47183,7 @@ class Emitter {
                     decl &&
                     // Globals declared in lib shims (Error, console, dispatch,
                     // ...) are runtime intercepts, not shared mutable state.
-                    !decl.getSourceFile().isDeclarationFile &&
+                    !this.isAmbientDeclaration(decl) &&
                     !this.isNodeWithin(decl, fn) &&
                     (this.isCapturableValueDeclaration(decl) || this.isTopLevelValueDeclaration(decl))
                 ) {
@@ -55734,7 +55752,7 @@ class Emitter {
             if (this.isCommonJsModuleIdentifier(pa.expression)) {
                 const sym = this.symbolForIdentifier(pa.expression);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-                if (!decl || decl.getSourceFile().isDeclarationFile || this.isCommonJsModuleAliasDeclaration(decl as ts.VariableDeclaration)) {
+                if (!decl || this.isAmbientDeclaration(decl) || this.isCommonJsModuleAliasDeclaration(decl as ts.VariableDeclaration)) {
                     if (pa.name.text === "filename" || pa.name.text === "id") {
                         return { c: this.stringLit(pa.getSourceFile().fileName), ty: T_STRING };
                     }
