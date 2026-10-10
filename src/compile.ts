@@ -21,7 +21,7 @@ import {
     type Test262NativeObservationPlan,
 } from "./emit/index";
 import { invokeCc } from "./link/cc";
-import { staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
+import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { sourceEvaluationInvocations } from "./source-value-flow";
 import {
     type NativeAddonManifest,
@@ -288,7 +288,7 @@ function permanentLimitDiagnostics(
                             });
                         }
                     } else if (expr.text === "require") {
-                        const spec = node.arguments[0];
+                        const spec = commonJsRequireSpecifierArgument(node,new Set(),new Set());
                         const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
                         if (literalSpecs.length > 0) {
                             addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);
@@ -310,7 +310,7 @@ function permanentLimitDiagnostics(
                         }
                     }
                 } else if (isModuleRequireAccess(expr)) {
-                    const spec = node.arguments[0];
+                    const spec = commonJsRequireSpecifierArgument(node,new Set(),new Set());
                     const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
                     if (literalSpecs.length > 0) {
                         addNativeAddonDiagnostics(node, literalSpecs, sf.fileName, opts, diagnostics);

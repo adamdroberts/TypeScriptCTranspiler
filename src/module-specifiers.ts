@@ -6127,68 +6127,72 @@ export function requireCallSpecifiers(
     return null;
 }
 
-export function commonJsRequireSpecifierArgument(
-    expr: ts.CallExpression,
-    requireAliases: Set<string>,
-    moduleAliases: Set<string>,
-): ts.Expression | null {
-    if (
-        isCommonJsRequireCallee(expr.expression, requireAliases, moduleAliases) &&
-        expr.arguments.length === 1
-    ) {
-        return expr.arguments[0]!;
-    }
-    const callee = expr.expression;
-    if (
-        ts.isPropertyAccessExpression(callee) &&
-        callee.name.text === "call" &&
-        isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
-        expr.arguments.length === 2 &&
-        isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!, moduleAliases)
-    ) {
-        return expr.arguments[1]!;
-    }
-    if (
-        ts.isPropertyAccessExpression(callee) &&
-        callee.name.text === "apply" &&
-        isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
-        expr.arguments.length === 2 &&
-        isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!, moduleAliases)
-    ) {
-        const specList = expr.arguments[1]!;
-        return staticSingleRequireApplySpecifierArgument(specList);
-    }
-    if (
-        ts.isPropertyAccessExpression(callee) &&
-        ts.isIdentifier(callee.expression) &&
-        callee.expression.text === "Reflect" &&
-        callee.name.text === "apply" &&
-        expr.arguments.length === 3 &&
-        isCommonJsRequireCallee(expr.arguments[0]!, requireAliases, moduleAliases) &&
-        isCommonJsRequireThisArg(expr.arguments[0]!, expr.arguments[1]!, moduleAliases)
-    ) {
-        const specList = expr.arguments[2]!;
-        return staticSingleRequireApplySpecifierArgument(specList);
+/** Project the first actual argument from one static argument collection.
+ * Literal spreads and immutable aliases use the same worklist; an unknown
+ * iterator/list leaves the finite-manifest admission boundary closed. */
+function staticActualArgumentAt(arguments_: readonly ts.Expression[], actualIndex = 0): ts.Expression | null {
+    type Task = { expression: ts.Expression } | { leave: ts.ArrayLiteralExpression };
+    const pending: Task[] = arguments_.map(expression => ({ expression })).reverse();
+    const activeArrays = new Set<ts.ArrayLiteralExpression>();
+    const literal = (expression: ts.Expression): ts.ArrayLiteralExpression | null => {
+        const aliases = new Set<ts.Expression>();
+        let value = unwrapStaticExpression(expression);
+        while (ts.isIdentifier(value)) {
+            if (aliases.has(value)) return null;
+            aliases.add(value);
+            const declaration = earlierConstStringDeclaration(value) ?? topLevelConstStringDeclaration(value);
+            if (!declaration?.initializer) return null;
+            value = unwrapStaticExpression(declaration.initializer);
+        }
+        return ts.isArrayLiteralExpression(value) ? value : null;
+    };
+    while (pending.length > 0) {
+        const task = pending.pop()!;
+        if ("leave" in task) { activeArrays.delete(task.leave); continue; }
+        const argument = task.expression;
+        if (ts.isOmittedExpression(argument)) return null;
+        if (!ts.isSpreadElement(argument)) {
+            if (actualIndex-- === 0) return argument;
+            continue;
+        }
+        const array = literal(argument.expression);
+        if (!array || activeArrays.has(array)) return null;
+        activeArrays.add(array);
+        pending.push({ leave: array });
+        for (let index = array.elements.length - 1; index >= 0; --index)
+            pending.push({ expression: array.elements[index]! });
     }
     return null;
 }
 
-function staticSingleRequireApplySpecifierArgument(expr: ts.Expression): ts.Expression | null {
-    const unwrapped = unwrapStaticExpression(expr);
-    if (ts.isArrayLiteralExpression(unwrapped)) {
-        return singleArraySpecifier(unwrapped);
-    }
-    if (!ts.isIdentifier(unwrapped)) return null;
-    const decl = earlierConstStringDeclaration(unwrapped) ?? topLevelConstStringDeclaration(unwrapped);
-    if (!decl?.initializer) return null;
-    const init = unwrapStaticExpression(decl.initializer);
-    return ts.isArrayLiteralExpression(init) ? singleArraySpecifier(init) : null;
+function firstStaticApplyArgument(expression: ts.Expression): ts.Expression | null {
+    const spread = ts.factory.createSpreadElement(expression);
+    return staticActualArgumentAt([spread]);
 }
 
-function singleArraySpecifier(array: ts.ArrayLiteralExpression): ts.Expression | null {
-    if (array.elements.length !== 1) return null;
-    const element = array.elements[0]!;
-    return ts.isSpreadElement(element) ? null : element;
+export function commonJsRequireSpecifierArgument(
+    expr: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+    requireCallee?: (expression: ts.Expression) => boolean,
+): ts.Expression | null {
+    const isRequire = requireCallee ?? ((expression: ts.Expression) =>
+        isCommonJsRequireCallee(expression, requireAliases, moduleAliases));
+    if (isRequire(expr.expression)) return staticActualArgumentAt(expr.arguments);
+    const callee = expr.expression;
+    if (ts.isPropertyAccessExpression(callee) && isRequire(callee.expression)) {
+        if (callee.name.text === "call") return staticActualArgumentAt(expr.arguments, 1);
+        if (callee.name.text === "apply") {
+            const argumentList = staticActualArgumentAt(expr.arguments, 1);
+            return argumentList ? firstStaticApplyArgument(argumentList) : null;
+        }
+    }
+    if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) &&
+        callee.expression.text === "Reflect" && callee.name.text === "apply") {
+        const target = staticActualArgumentAt(expr.arguments), argumentList = staticActualArgumentAt(expr.arguments, 2);
+        if (target && isRequire(target) && argumentList) return firstStaticApplyArgument(argumentList);
+    }
+    return null;
 }
 
 function isCommonJsModuleThisArg(expr: ts.Expression, moduleAliases: Set<string>): boolean {

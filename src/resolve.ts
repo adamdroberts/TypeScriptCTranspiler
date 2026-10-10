@@ -48,6 +48,7 @@ export interface ModuleGraph {
     emitOrder: string[];
     topoOrder: string[];
     entryModuleId: string;
+    initializationModuleIds: string[];
     fileToModuleId: Map<string, string>;
 }
 
@@ -203,6 +204,7 @@ export function buildModuleGraph(
     const visited = new Set<string>();
     const initializationEntries = options_.initializationEntries ?? [entry];
     const seenInitializationEntries = new Set<string>();
+    const initializationModuleIds: string[] = [];
     for (const initializationEntry of initializationEntries) {
         const absolute = path.resolve(initializationEntry);
         if (seenInitializationEntries.has(absolute)) {
@@ -211,6 +213,7 @@ export function buildModuleGraph(
         seenInitializationEntries.add(absolute);
         const rootId = fileToModuleId.get(absolute);
         if (!rootId) throw new Error(`initialization entry not found in module graph: ${initializationEntry}`);
+        initializationModuleIds.push(rootId);
         if (visited.has(rootId)) continue;
         const active = new Set<string>([rootId]);
         const frames: Array<{ readonly id: string; next: number }> = [{ id: rootId, next: 0 }];
@@ -232,7 +235,7 @@ export function buildModuleGraph(
         }
     }
 
-    return { modules, emitOrder: [...modules.keys()], topoOrder: topo, entryModuleId, fileToModuleId };
+    return { modules, emitOrder: [...modules.keys()], topoOrder: topo, entryModuleId, initializationModuleIds, fileToModuleId };
 }
 
 function isTypeOnlyModuleEdge(stmt: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
