@@ -6418,7 +6418,7 @@ static tsc_value_t value_numeric_binary(
         case TSC_NUMERIC_MUL: return tsc_value_num(a * b);
         case TSC_NUMERIC_DIV: return tsc_value_num(a / b);
         case TSC_NUMERIC_MOD: return tsc_value_num(tsc_num_mod(a, b));
-        case TSC_NUMERIC_POW: return tsc_value_num(pow(a, b));
+        case TSC_NUMERIC_POW: return tsc_value_num(tsc_number_exponentiate(a, b));
         case TSC_NUMERIC_BIT_AND:
             return tsc_value_num((double)(tsc_to_int32(a) & tsc_to_int32(b)));
         case TSC_NUMERIC_BIT_OR:
@@ -8878,7 +8878,7 @@ static const tsc_math_intrinsic_t math_intrinsics[] = {
     TSC_MATH_UNARY_ENTRY("log2", log2),
     TSC_MATH_VARIADIC_ENTRY("max", 2.0, TSC_MATH_MAX),
     TSC_MATH_VARIADIC_ENTRY("min", 2.0, TSC_MATH_MIN),
-    TSC_MATH_BINARY_ENTRY("pow", pow),
+    TSC_MATH_BINARY_ENTRY("pow", tsc_number_exponentiate),
     TSC_MATH_VARIADIC_ENTRY("random", 0.0, TSC_MATH_RANDOM),
     TSC_MATH_UNARY_ENTRY("round", tsc_math_round),
     TSC_MATH_UNARY_ENTRY("sign", tsc_math_sign),

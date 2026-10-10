@@ -318,6 +318,7 @@ double tsc_parse_int(const tsc_str_t* s, double radix);
 double tsc_string_to_number(const tsc_str_t* s);
 double tsc_math_random(void);
 double tsc_math_round(double x);
+double tsc_number_exponentiate(double base, double exponent);
 double tsc_math_sign(double x);
 double tsc_math_imul(double a, double b);
 double tsc_math_clz32(double x);

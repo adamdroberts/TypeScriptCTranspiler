@@ -35201,7 +35201,10 @@ class Emitter {
                 if (bigint) return bigint;
                 requireNumber(bin, left.ty);
                 requireNumber(bin, right.ty);
-                return { c: `pow(${left.c}, ${right.c})`, ty: T_NUMBER };
+                return this.emitSequencedCall("tsc_number_exponentiate", T_NUMBER, [
+                    { value: left, target: T_NUMBER, node: bin.left },
+                    { value: right, target: T_NUMBER, node: bin.right },
+                ]);
             }
             case ts.SyntaxKind.EqualsEqualsToken:
             case ts.SyntaxKind.EqualsEqualsEqualsToken:
@@ -35323,74 +35326,6 @@ class Emitter {
         return op === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
             op === ts.SyntaxKind.BarBarEqualsToken ||
             op === ts.SyntaxKind.QuestionQuestionEqualsToken;
-    }
-
-    private classAccessorLogicalAssignmentValue(
-        op: ts.SyntaxKind,
-        lhsType: CType,
-        current: string,
-        rhs: string,
-        next: string,
-        setCall: (assigned: string) => string,
-        node: ts.Expression,
-    ): string {
-        const assign = `({ ${lhsType.c} ${next} = ${rhs}; ${setCall(next)}; ${next}; })`;
-        if (op === ts.SyntaxKind.QuestionQuestionEqualsToken) {
-            if (lhsType.kind === "value") {
-                return `tsc_value_is_nullish(${current}) ? ${assign} : ${current}`;
-            }
-            if (isPointerKind(lhsType)) {
-                return `${current} == NULL ? ${assign} : ${current}`;
-            }
-            return current;
-        }
-        const cond = this.truthyC({ c: current, ty: lhsType }, node);
-        if (op === ts.SyntaxKind.AmpersandAmpersandEqualsToken) {
-            return `${cond} ? ${assign} : ${current}`;
-        }
-        return `${cond} ? ${current} : ${assign}`;
-    }
-
-    private classAccessorCompoundValue(
-        op: ts.SyntaxKind,
-        lhsType: CType,
-        current: string,
-        rhs: string,
-    ): string {
-        if (lhsType.kind === "string" && op === ts.SyntaxKind.PlusEqualsToken) {
-            return `tsc_str_concat(${current}, ${rhs})`;
-        }
-        if (lhsType.kind !== "number") {
-            unsupported(this.currentSf!, `compound accessor assignment on ${lhsType.c}`);
-        }
-        switch (op) {
-            case ts.SyntaxKind.PlusEqualsToken:
-                return `(${current} + ${rhs})`;
-            case ts.SyntaxKind.MinusEqualsToken:
-                return `(${current} - ${rhs})`;
-            case ts.SyntaxKind.AsteriskEqualsToken:
-                return `(${current} * ${rhs})`;
-            case ts.SyntaxKind.SlashEqualsToken:
-                return `(${current} / ${rhs})`;
-            case ts.SyntaxKind.PercentEqualsToken:
-                return `tsc_num_mod(${current}, ${rhs})`;
-            case ts.SyntaxKind.AsteriskAsteriskEqualsToken:
-                return `pow(${current}, ${rhs})`;
-            case ts.SyntaxKind.AmpersandEqualsToken:
-                return `((double)((int32_t)(${current}) & (int32_t)(${rhs})))`;
-            case ts.SyntaxKind.BarEqualsToken:
-                return `((double)((int32_t)(${current}) | (int32_t)(${rhs})))`;
-            case ts.SyntaxKind.CaretEqualsToken:
-                return `((double)((int32_t)(${current}) ^ (int32_t)(${rhs})))`;
-            case ts.SyntaxKind.LessThanLessThanEqualsToken:
-                return `((double)((int32_t)(${current}) << (int32_t)(${rhs})))`;
-            case ts.SyntaxKind.GreaterThanGreaterThanEqualsToken:
-                return `((double)((int32_t)(${current}) >> (int32_t)(${rhs})))`;
-            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
-                return `((double)((uint32_t)(${current}) >> (uint32_t)(${rhs})))`;
-            default:
-                unsupported(this.currentSf!, `unsupported compound accessor assignment ${ts.SyntaxKind[op]}`);
-        }
     }
 
     private emitTest262GlobalAssignment(
@@ -35630,50 +35565,20 @@ class Emitter {
             return this.emitLogicalAssignment(bin, op, lhsC, lhsType, rhs);
         }
 
-        if (lhsType.kind === "bigint") {
-            if (rhs.ty.kind !== "bigint") {
-                unsupported(bin.right, `cannot apply compound BigInt assignment with ${rhs.ty.c}`);
-            }
-            const fn =
-                op === ts.SyntaxKind.PlusEqualsToken
-                    ? "tsc_bigint_add"
-                    : op === ts.SyntaxKind.MinusEqualsToken
-                        ? "tsc_bigint_sub"
-                        : op === ts.SyntaxKind.AsteriskEqualsToken
-                            ? "tsc_bigint_mul"
-                            : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
-                                ? "tsc_bigint_pow"
-                                : op === ts.SyntaxKind.SlashEqualsToken
-                                    ? "tsc_bigint_div"
-                                    : op === ts.SyntaxKind.PercentEqualsToken
-                                        ? "tsc_bigint_mod"
-                                        : op === ts.SyntaxKind.AmpersandEqualsToken
-                                            ? "tsc_bigint_bit_and"
-                                            : op === ts.SyntaxKind.BarEqualsToken
-                                                ? "tsc_bigint_bit_or"
-                                                : op === ts.SyntaxKind.CaretEqualsToken
-                                                    ? "tsc_bigint_bit_xor"
-                                                    : op === ts.SyntaxKind.LessThanLessThanEqualsToken
-                                                        ? "tsc_bigint_shl"
-                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
-                                                            ? "tsc_bigint_shr"
-                                        : null;
-            if (fn) return { c: `(${lhsC} = ${fn}(${lhsC}, ${rhs.c}))`, ty: T_BIGINT };
-        }
-
-        if (lhsType.kind === "value" || lhsType.kind === "number" && rhs.ty.kind === "value") {
+        if (lhsType.kind === "value" || lhsType.kind === "number" || lhsType.kind === "bigint") {
             const fn = this.dynamicCompoundAssignmentOperation(op);
             if (fn) {
-                const current = this.coerce({ c: lhsC, ty: lhsType }, T_VALUE, bin.left);
-                const result = `${fn}(${current}, ${this.coerce(rhs, T_VALUE, bin.right)})`;
-                const assignment = `${lhsC} = ${this.coerce({ c: result, ty: T_VALUE }, lhsType, bin.left)}`;
-                const refresh = this.dynamicIdentifierRootRefresh(bin.left, lhsC);
-                return {
-                    c: refresh
-                        ? `({ ${assignment}; ${refresh}; ${lhsC}; })`
-                        : `(${assignment})`,
-                    ty: lhsType,
-                };
+                const reference = this.freshTemp("_compound_assignment_ref");
+                const slot = `*${reference}`;
+                const refresh = this.dynamicIdentifierRootRefresh(bin.left, slot);
+                const result = this.emitSequencedExpr(lhsType, [
+                    { value: { c: slot, ty: lhsType }, target: T_VALUE, node: bin.left },
+                    { value: rhs, target: T_VALUE, node: bin.right },
+                ], ([current, value]) => {
+                    const assigned = `${slot} = ${this.coerce({ c: `${fn}(${current}, ${value})`, ty: T_VALUE }, lhsType, bin.left)}`;
+                    return refresh ? `({ ${assigned}; ${refresh}; ${slot}; })` : `(${assigned})`;
+                });
+                return { c: `({ ${lhsType.c}* const ${reference} = &(${lhsC}); ${result.c}; })`, ty: lhsType };
             }
         }
 
@@ -35686,52 +35591,6 @@ class Emitter {
             return { c: `({ tsc_str_t** ${reference} = &(${lhsC}); ${result.c}; })`, ty: T_STRING };
         }
 
-        requireNumber(bin.left, lhsType);
-        requireNumber(bin.right, rhs.ty);
-        const plain =
-            op === ts.SyntaxKind.PlusEqualsToken
-                ? "+="
-                : op === ts.SyntaxKind.MinusEqualsToken
-                    ? "-="
-                    : op === ts.SyntaxKind.AsteriskEqualsToken
-                        ? "*="
-                        : op === ts.SyntaxKind.SlashEqualsToken
-                            ? "/="
-                            : null;
-        if (plain) return { c: `(${lhsC} ${plain} ${rhs.c})`, ty: T_NUMBER };
-        if (op === ts.SyntaxKind.PercentEqualsToken) {
-            return {
-                c: `(${lhsC} = tsc_num_mod(${lhsC}, ${rhs.c}))`,
-                ty: T_NUMBER,
-            };
-        }
-        if (op === ts.SyntaxKind.AsteriskAsteriskEqualsToken) {
-            return { c: `(${lhsC} = pow(${lhsC}, ${rhs.c}))`, ty: T_NUMBER };
-        }
-        const bitwiseAssign =
-            op === ts.SyntaxKind.AmpersandEqualsToken
-                ? "&"
-                : op === ts.SyntaxKind.BarEqualsToken
-                    ? "|"
-                    : op === ts.SyntaxKind.CaretEqualsToken
-                        ? "^"
-                        : op === ts.SyntaxKind.LessThanLessThanEqualsToken
-                            ? "<<"
-                            : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
-                                ? ">>"
-                                : null;
-        if (bitwiseAssign) {
-            return {
-                c: `(${lhsC} = (double)((int32_t)(${lhsC}) ${bitwiseAssign} (int32_t)(${rhs.c})))`,
-                ty: T_NUMBER,
-            };
-        }
-        if (op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) {
-            return {
-                c: `(${lhsC} = (double)((uint32_t)(${lhsC}) >> (uint32_t)(${rhs.c})))`,
-                ty: T_NUMBER,
-            };
-        }
         unsupported(bin, `compound assignment ${ts.SyntaxKind[op]}`);
     }
 

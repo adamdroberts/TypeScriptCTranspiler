@@ -394,9 +394,33 @@ double tsc_math_random(void) {
 }
 
 double tsc_math_round(double x) {
-    if (isnan(x) || isinf(x) || x == 0.0) return x;
+    if (!isfinite(x) || trunc(x) == x) return x;
     if (x >= -0.5 && x < 0.0) return -0.0;
-    return floor(x + 0.5);
+    double lower = floor(x);
+    return x - lower < 0.5 ? lower : lower + 1.0;
+}
+
+/* Number::exponentiate prescribes exceptional values before the
+ * implementation-approximated finite result. Math.pow and ** share it. */
+double tsc_number_exponentiate(double base, double exponent) {
+    if (isnan(exponent)) return NAN;
+    if (exponent == 0.0) return 1.0;
+    if (isnan(base)) return NAN;
+    bool odd = isfinite(exponent) && trunc(exponent) == exponent &&
+        fmod(fabs(exponent), 2.0) == 1.0;
+    if (isinf(base) || base == 0.0) {
+        bool infinite_base = isinf(base);
+        bool infinite = infinite_base == (exponent > 0.0);
+        double result = infinite ? INFINITY : 0.0;
+        return signbit(base) && odd ? -result : result;
+    }
+    if (isinf(exponent)) {
+        double magnitude = fabs(base);
+        if (magnitude == 1.0) return NAN;
+        return (magnitude > 1.0) == (exponent > 0.0) ? INFINITY : 0.0;
+    }
+    if (base < 0.0 && trunc(exponent) != exponent) return NAN;
+    return pow(base, exponent);
 }
 
 double tsc_math_sign(double x) {

@@ -116,14 +116,15 @@ typedef struct tsc_str {
 | `tsc_parse_float` | `(const tsc_str_t*) -> double` | Length-driven `parseFloat` decimal/Infinity-prefix scan with ECMAScript leading whitespace, partial parsing, signed zero, and `NaN` on failure. |
 | `tsc_parse_int` | `(const tsc_str_t*, double radix) -> double` | Length-driven `parseInt` digit scan with ECMAScript leading whitespace, ToInt32 radix inference/validation, exact GMP accumulation, and binary64 rounding. |
 | `tsc_string_to_number` | `(const tsc_str_t*) -> double` | Complete-input StringNumericLiteral conversion after ECMAScript trimming, with locale-stable decimal parsing and exact arbitrary-length binary/octal/hex rounding. |
-Source Math calls obtain the actual Realm global and descriptor-backed callee, evaluate one rooted actual argument List, and enter the existing intrinsic descriptor dispatcher. ToNumber occurs inside the operation; binary arguments convert in order and min/max complete all conversions before NaN disposition. Native class boxing retains the class prototype and defines native field data handles; source instance methods and accessors live as ordinary closures on the prototype and use actual receivers and formals.
-
 | `tsc_math_random` | `() -> double` | `Math.random()`, range [0, 1). Uses `rand()`. |
-| `tsc_math_round` | `(double) -> double` | `Math.round()`, preserving JavaScript negative zero. |
+| `tsc_math_round` | `(double) -> double` | Preserves integral inputs and signed zero; rounds from the lower integer with ties toward positive infinity, avoiding x + 0.5 rounding. |
+| `tsc_number_exponentiate` | `(double base, double exponent) -> double` | Shared Number::exponentiate for Math.pow and numeric operators; prescribed exceptional values and integral parity precede the approximated finite pow result. |
 | `tsc_math_sign` | `(double) -> double` | `Math.sign()`, preserving signed zero and `NaN`. |
 | `tsc_math_imul` | `(double, double) -> double` | `Math.imul`, using JS ToInt32 coercion and signed 32-bit result wrapping. |
 | `tsc_math_clz32` | `(double) -> double` | `Math.clz32`, using JS ToUint32 coercion. |
 | `tsc_math_fround` | `(double) -> double` | `Math.fround`, rounded through C `float` and returned as `double`. |
+
+Source Math calls obtain the actual Realm global and descriptor-backed callee, evaluate one rooted actual argument List, and enter the existing intrinsic descriptor dispatcher. ToNumber occurs inside the operation; binary arguments convert in order and min/max complete all conversions before NaN disposition. Native class boxing retains the class prototype and defines native field data handles; source instance methods and accessors live as ordinary closures on the prototype and use actual receivers and formals.
 
 ## Arrays (`tsc_array_t`)
 
