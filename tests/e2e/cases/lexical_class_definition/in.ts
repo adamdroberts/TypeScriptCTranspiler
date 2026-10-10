@@ -1,0 +1,10 @@
+import { makeOwner, memberKey, forwardBinding } from './owner';
+const label = Symbol('label');
+const Constructor = makeOwner(label);
+const owner = new Constructor();
+const descriptor = Object.getOwnPropertyDescriptor(Constructor.prototype, memberKey)!;
+console.log('imported-capture:' + (owner[memberKey]() === label && owner.current === label));
+console.log('inner-name:' + (Constructor.self() === Constructor && Constructor.name === 'Local'));
+console.log('method-descriptor:' + (descriptor.value.name === '[imported-local]' && descriptor.writable && !descriptor.enumerable && descriptor.configurable));
+console.log('fresh-definition:' + (Constructor !== makeOwner(label)));
+console.log('forward-tdz:' + forwardBinding());

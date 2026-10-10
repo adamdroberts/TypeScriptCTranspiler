@@ -123,7 +123,7 @@ test("class expressions derive constructor identity and method closures from one
     }
 }, 90_000);
 
-test("unrepresented class initialization and local environments fail at their shared boundaries", async () => {
+test("unrepresented class initialization plans fail at their shared boundaries", async () => {
     const partitions = [
         {
             source: "class Base {}\nfunction make(): any { return class extends Base {}; }\nmake();\n",
@@ -131,11 +131,11 @@ test("unrepresented class initialization and local environments fail at their sh
         },
         {
             source: "function make(): any { return class { field: any = 1; }; }\nmake();\n",
-            diagnostic: "class expression element is not supported by dynamic class definition",
+            diagnostic: "class element requires the canonical initialization plan",
         },
         {
-            source: '// @ts-nocheck\ntry { class C { static get ["prototype"]() { return 1; } } } catch (error) {}\n',
-            diagnostic: "referenced local class declarations are not supported yet",
+            source: "function make(): any { class Local { field: any = 1; } return Local; }\nmake();\n",
+            diagnostic: "class element requires the canonical initialization plan",
         },
     ] as const;
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-class-expression-unsupported-"));

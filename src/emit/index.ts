@@ -737,6 +737,7 @@ class Emitter {
      * CaseBlock declarations and per-iteration bindings share this collection
      * and the same identifier/capture operations. */
     private lexicalBindingScopes: Map<ts.Symbol, LocalLexicalBindingPlan>[] = [];
+    private classBindingSymbols = new WeakMap<ts.ClassLikeDeclaration, ts.Symbol>();
     private sourceEnvironmentFiles = new WeakMap<ts.SourceFile, boolean>();
     /** Runtime parameter environments for non-simple source formal lists.
      * These are separate from CaseBlock environments but expose the same
@@ -19464,6 +19465,21 @@ class Emitter {
             const selected = this.functionDeclarationsForBody(bindingOwner.body).get(id.text);
             if (selected) sym = this.checker.getSymbolAtLocation(selected.name);
         }
+        // JavaScript computed names can carry a transient checker Symbol for
+        // the same named class declaration. The declaration name owns the
+        // runtime binding, so all self references use its canonical Symbol.
+        if (declaration && ts.isClassLike(declaration)) {
+            let bindingOwner: ts.ClassLikeDeclaration = declaration;
+            for (let owner: ts.Node | undefined = id.parent; owner; owner = owner.parent) {
+                if (ts.isClassLike(owner) && owner.name?.text === id.text) {
+                    bindingOwner = owner;
+                    break;
+                }
+            }
+            const canonical = this.classBindingSymbols.get(bindingOwner) ??
+                (bindingOwner.name ? this.checker.getSymbolAtLocation(bindingOwner.name) : undefined) ?? sym;
+            if (canonical) { this.classBindingSymbols.set(bindingOwner, canonical); sym = canonical; }
+        }
         // Checker CommonJS inference can alias an ordinary require initializer
         // to an export RHS. A source variable/parameter still owns its binding
         // independently of the input language or the inferred export shape.
@@ -20456,6 +20472,10 @@ class Emitter {
             ts.isFunctionDeclaration(declaration) && this.isDirectScopeLexicalDeclaration(declaration)) ??
             symbol.valueDeclaration ?? symbol.declarations?.[0];
         if (!symbolDeclaration || this.isAmbientDeclaration(symbolDeclaration)) return null;
+        if (ts.isClassExpression(symbolDeclaration) && symbolDeclaration.name) {
+            return { name: symbolDeclaration.name.text, immutable: true,
+                declaration: symbolDeclaration, identifier: symbolDeclaration.name };
+        }
         const directNamedDeclaration =
             (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration)) &&
             symbolDeclaration.name &&
@@ -20493,7 +20513,7 @@ class Emitter {
         if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
             return {
                 name: identifier.text,
-                immutable: false,
+                immutable: this.closureEnvBindingForSymbol(symbol)?.immutable ?? false,
                 declaration,
                 identifier,
             };
@@ -20550,8 +20570,7 @@ class Emitter {
         // Ordinary function bodies have a lexical Environment Record as well
         // as their parameter/var environment. Their direct declarations use
         // the same retained binding and closure representation as Blocks.
-        return !!owner && ts.isBlock(owner) &&
-            !(ts.isClassDeclaration(declaration) && ts.isFunctionLike(owner.parent));
+        return !!owner && ts.isBlock(owner);
     }
 
     private lexicalBindingForSymbol(
@@ -21069,8 +21088,8 @@ class Emitter {
         if (this.expressionHasCanonicalSourceValue(declaration)) return T_VALUE;
         if (this.isIterationDeclaration(declaration)) return T_VALUE;
         if (this.isDirectScopeLexicalDeclaration(declaration)) return T_VALUE;
-        if (this.typeIncludesDirectSwitchClass(declaration)) {
-            /* A direct CaseBlock class is a runtime constructor/object pair,
+        if (this.typeIncludesScopeClass(declaration)) {
+            /* A direct scope class is a runtime constructor/object pair,
              * not one of the statically laid-out TypeScript class structs.
              * Preserve that representation after the value escapes through
              * inference into another declaration. */
@@ -21413,7 +21432,7 @@ class Emitter {
         return positive.has(expression);
     }
 
-    private typeIncludesDirectSwitchClass(node: ts.Node): boolean {
+    private typeIncludesScopeClass(node: ts.Node): boolean {
         const pending: ts.Type[] = [this.checker.getTypeAtLocation(node)];
         const seen = new Set<ts.Type>();
         while (pending.length > 0) {
@@ -21426,7 +21445,7 @@ class Emitter {
             const symbol = current.getSymbol() ?? current.aliasSymbol;
             if (symbol?.declarations?.some((candidate) =>
                 ts.isClassDeclaration(candidate) &&
-                this.isSupportedDirectSwitchClassDeclaration(candidate))) {
+                this.isSupportedScopeClassDeclaration(candidate))) {
                 return true;
             }
         }
@@ -23034,9 +23053,9 @@ class Emitter {
                 ...(lexical || parameter && ts.isFunctionLike(owner) && !this.sourceParameterListIsSimple(owner)
                     ? { initializedCellName: `${cellName}__initialized` } : {}) });
         };
-        const addClosureCaptures = (closure: ClosureLikeDeclaration): void => {
+        const addClosureCaptures = (closure: ClosureLikeDeclaration, classOwner?: ts.ClassLikeDeclaration): void => {
             for (const cap of this.collectClosureCaptures(closure)) {
-                if (captures.has(cap.symbol)) continue;
+                if (classOwner && (cap.symbol.valueDeclaration ?? cap.symbol.declarations?.[0]) === classOwner || captures.has(cap.symbol)) continue;
                 const cellName = this.cellNameForCapture(cap.symbol, cap.field);
                 captures.set(cap.symbol, {
                     type: cap.type,
@@ -23065,8 +23084,9 @@ class Emitter {
                  * member cardinality never changes the lowering shape. */
                 for (const member of node.members) {
                     if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body) {
-                        addClosureCaptures(member);
+                        addClosureCaptures(member, node);
                     }
+                    if (member.name && ts.isComputedPropertyName(member.name)) visit(member.name.expression);
                 }
                 return;
             }
@@ -23388,7 +23408,7 @@ class Emitter {
             ) {
                 const lexical = this.localLexicalMetadataForSymbol(sym);
                 const declaredType = this.isJavaScriptSourceFile(decl.getSourceFile()) ||
-                    this.functionVarDeclarationOwner(decl) || lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
+                    this.functionVarDeclarationOwner(decl) || lexical && (ts.isClassExpression(lexical.declaration) || this.isDirectScopeLexicalDeclaration(lexical.declaration))
                     ? T_VALUE
                     : this.prepareType(mapTsType(decl,
                         this.checker.getTypeOfSymbolAtLocation(sym, decl), this.checker));
@@ -23401,7 +23421,7 @@ class Emitter {
                  * cannot change its storage or closure-capture ABI. */
                 let type = this.functionVarDeclarationOwner(decl) ? T_VALUE : existingStorageType ?? (formalParameter
                     ? T_VALUE
-                    : lexical && (this.isDirectScopeLexicalDeclaration(lexical.declaration) ||
+                    : lexical && (ts.isClassExpression(lexical.declaration) || this.isDirectScopeLexicalDeclaration(lexical.declaration) ||
                         ts.isVariableDeclaration(lexical.declaration) &&
                         this.isIterationLexicalDeclaration(lexical.declaration))
                     ? T_VALUE
@@ -23604,7 +23624,7 @@ class Emitter {
             ts.isFunctionDeclaration(decl) &&
                 this.isSupportedLexicalFunctionDeclaration(decl) ||
             ts.isClassDeclaration(decl) &&
-                this.isSupportedDirectSwitchClassDeclaration(decl)
+                this.isSupportedScopeClassDeclaration(decl) || ts.isClassExpression(decl)
         );
     }
 
@@ -25801,20 +25821,20 @@ class Emitter {
             definitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${parent})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
             definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
         }
-        definitions.push(...this.emitClassElementDefinitions(cd, "_class_constructor", "_class_prototype"));
+        definitions.push(...this.emitClassElementDefinitions(cd, "_class_constructor", "_class_prototype", true));
         return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
     }
 
     private emitClassElementDefinitions(
-        definition: ts.ClassLikeDeclaration, constructor: string, prototype: string,
+        definition: ts.ClassLikeDeclaration, constructor: string, prototype: string, nativeStorage: boolean,
     ): string[] {
         const pieces: string[] = [];
         for (const member of definition.members) {
             const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
                 ts.isSetAccessorDeclaration(member)) && !!member.body;
             const field = ts.isPropertyDeclaration(member);
-            if (ts.isClassExpression(definition) && !callable && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
-                unsupported(member, "class expression element is not supported by dynamic class definition");
+            if (!nativeStorage && !callable && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
+                unsupported(member, "class element requires the canonical initialization plan");
             }
             if (!callable && !field) continue;
             // Declaration fields retain their key for later initialization;
@@ -25823,7 +25843,7 @@ class Emitter {
             const publicName = this.classMemberPublicName(name);
             let key = this.stringLit(publicName);
             if (ts.isComputedPropertyName(name)) {
-                const retained = ts.isClassDeclaration(definition);
+                const retained = nativeStorage;
                 key = retained ? this.classMemberPropertyKey(name).propertyKey : this.freshTemp("_class_element_key");
                 const evaluated = this.emitExpr(name.expression);
                 pieces.push(`${retained ? "" : "tsc_str_t* const "}${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, name.expression)})`);
@@ -26628,7 +26648,7 @@ class Emitter {
                 return safe;
             },
             isSupportedNestedClass: (node) =>
-                this.isSupportedDirectSwitchClassDeclaration(node),
+                this.isSupportedScopeClassDeclaration(node),
         });
         if (!graph || (protocol === "generator" && graph.asyncIteratorCount > 0)) return false;
         const owner = ts.isFunctionLike(body.parent) && "body" in body.parent
@@ -27005,7 +27025,7 @@ class Emitter {
                 }
             } else if (stateNode.kind === "sync" && ts.isClassDeclaration(stateNode.statement)) {
                 const declaration = stateNode.statement;
-                if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) return false;
+                if (!this.isSupportedScopeClassDeclaration(declaration)) return false;
                 const symbol = this.symbolForIdentifier(declaration.name);
                 if (!symbol || !fieldBySymbol.has(symbol)) return false;
             } else if (stateNode.kind === "iterator-init") {
@@ -27835,14 +27855,14 @@ class Emitter {
                         }
                     } else if (ts.isClassDeclaration(stateNode.statement)) {
                         const declaration = stateNode.statement;
-                        if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) return false;
+                        if (!this.isSupportedScopeClassDeclaration(declaration)) return false;
                         const symbol = this.symbolForIdentifier(declaration.name);
                         const local = symbol ? fieldBySymbol.get(symbol) : undefined;
                         if (!local) return false;
                         emitCfgFieldAssignment(
                             callback,
                             local,
-                            this.directEmptyClassConstructorValue(declaration),
+                            this.emitClassDefinitionValue(declaration),
                             declaration,
                             "state",
                             true,
@@ -29111,7 +29131,7 @@ class Emitter {
             return;
         }
         if (ts.isClassDeclaration(stmt)) {
-            if (this.emitDirectSwitchClassDeclaration(buf, stmt)) return;
+            if (this.emitScopeClassDeclaration(buf, stmt)) return;
             if (!this.shouldEmitLocalClassDeclaration(stmt)) return;
             unsupported(stmt, "referenced local class declarations are not supported yet");
         }
@@ -31018,8 +31038,7 @@ class Emitter {
             }
         }
         this.preallocatedVariableCells.push(preallocatedVars);
-        const declarations = functionBody ? directLexicalDeclarations(statements)
-            .filter(declaration => !ts.isClassDeclaration(declaration)) : [];
+        const declarations = functionBody ? directLexicalDeclarations(statements) : [];
         const bodyScope = declarations.length > 0 ? this.createScopeLexicalBindings(buf, declarations) : null;
         if (bodyScope) {
             this.lexicalBindingScopes.push(bodyScope);
@@ -31841,16 +31860,17 @@ class Emitter {
         return directLexicalDeclarations(sw.caseBlock.clauses.flatMap((clause) => [...clause.statements]));
     }
 
-    private isSupportedDirectSwitchClassDeclaration(
+    private isSupportedScopeClassDeclaration(
         declaration: ts.ClassDeclaration,
     ): declaration is ts.ClassDeclaration & { readonly name: ts.Identifier } {
         return !!declaration.name &&
-            this.isDirectSwitchLexicalDeclaration(declaration) &&
+            this.isDirectScopeLexicalDeclaration(declaration) &&
             !declaration.typeParameters?.length &&
             !declaration.heritageClauses?.length &&
             !this.classHasDecorators(declaration) &&
             declaration.members.every((member) =>
-                member.kind === ts.SyntaxKind.SemicolonClassElement);
+                member.kind === ts.SyntaxKind.SemicolonClassElement ||
+                (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && !!member.body);
     }
 
     private ensureDefaultClassConstructAdapter(): string {
@@ -31878,26 +31898,12 @@ class Emitter {
         return name;
     }
 
-    private directEmptyClassConstructorValue(
-        declaration: ts.ClassDeclaration & { readonly name: ts.Identifier },
-    ): EmitResult {
-        const adapter = this.ensureDefaultClassConstructAdapter();
-        const identity = this.freshTemp("_switch_class_identity");
-        const runtimeName = declaration.name.text;
-        return {
-            c: this.withCallableSourceText(`({ void* const ${identity} = TSC_GC_MALLOC(sizeof(char)); ` +
-                `tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ` +
-                `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)})); })`, declaration),
-            ty: T_VALUE,
-        };
-    }
-
     /** ClassDefinitionEvaluation for the dynamic base/default-constructor
      * partition.  Every supported method enters one source-ordered member
      * collection and is materialized as a closure on the constructor or its
      * prototype.  Other element families remain one stable fail-closed
      * boundary until they join this same definition plan. */
-    private emitClassExpression(expression: ts.ClassExpression): EmitResult {
+    private emitClassDefinitionValue(expression: ts.ClassLikeDeclaration): EmitResult {
         if (expression.typeParameters?.length) {
             unsupported(expression, "class expression type parameters are not supported by dynamic class definition");
         }
@@ -31916,37 +31922,53 @@ class Emitter {
         const prototypeRoot = this.freshTemp("_class_expression_prototype_root");
         const pieces: string[] = [
             `void* const ${identity} = TSC_GC_MALLOC(sizeof(char))`,
-            `tsc_value_t ${constructor} = ${this.withCallableSourceText(`tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${this.functionValueNameLiteral(expression)})`, expression)}`,
+            `tsc_value_t ${constructor} = ${this.withCallableSourceText(`tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${ts.isClassDeclaration(expression) ? this.stringLit(this.classRuntimeName(expression)) : this.functionValueNameLiteral(expression)})`, expression)}`,
             `void* volatile ${constructorRoot} = tsc_value_gc_root(${constructor})`,
             `(void)${constructorRoot}`,
             `tsc_value_t ${prototype} = tsc_value_get_prop(${constructor}, tsc_str_from_lit("prototype", 9))`,
             `void* volatile ${prototypeRoot} = tsc_value_gc_root(${prototype})`,
             `(void)${prototypeRoot}`,
         ];
-        pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype));
+        // The class's inner name is an immutable, initially uninitialized
+        // Environment Record binding. It belongs to this evaluation, rather
+        // than the mutable outer declaration cell or an enclosing activation.
+        const inner = new Map<ts.Symbol, ClosureEnvBinding>();
+        const symbol = expression.name ? this.symbolForIdentifier(expression.name) : undefined;
+        const cell = this.freshTemp("_class_name_cell");
+        const root = this.freshTemp("_class_name_root_cell");
+        const initialized = this.freshTemp("_class_name_initialized_cell");
+        if (symbol) {
+            pieces.push(`volatile tsc_value_t* ${cell} = TSC_GC_MALLOC(sizeof(tsc_value_t))`,
+                `void** ${root} = TSC_GC_MALLOC(sizeof(void*))`,
+                `bool* ${initialized} = TSC_GC_MALLOC(sizeof(bool))`,
+                `*${cell} = tsc_value_undefined()`, `*${root} = NULL`, `*${initialized} = false`);
+            inner.set(symbol, { type: T_VALUE, ptr: cell, rootPtr: root,
+                initializedPtr: initialized, lexicalName: expression.name!.text, immutable: true });
+        }
+        this.closureEnvScopes.push(inner);
+        try {
+            pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype, false));
+        } finally {
+            this.closureEnvScopes.pop();
+        }
+        if (symbol) pieces.push(`*${cell} = ${constructor}`, `*${root} = tsc_value_gc_root(*${cell})`, `*${initialized} = true`);
         pieces.push(constructor);
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
-    private emitDirectSwitchClassDeclaration(
+    private emitScopeClassDeclaration(
         buf: CBuf,
         declaration: ts.ClassDeclaration,
     ): boolean {
-        if (!this.isDirectSwitchLexicalDeclaration(declaration) ||
+        if (!this.isDirectScopeLexicalDeclaration(declaration) ||
             this.lexicalBindingScopes.length === 0) return false;
-        if (!this.isSupportedDirectSwitchClassDeclaration(declaration)) {
-            unsupported(
-                declaration,
-                "direct switch class declaration requires the canonical class-definition lowering; " +
-                "only an empty base class is currently supported",
-            );
-        }
+        if (!declaration.name) unsupported(declaration, "class declaration is missing its canonical lexical cell");
         const symbol = this.symbolForIdentifier(declaration.name);
         const binding = this.lexicalBindingForSymbol(symbol);
         if (!binding || binding.declaration !== declaration) {
-            unsupported(declaration.name, "direct switch class is missing its CaseBlock cell");
+            unsupported(declaration.name, "class declaration is missing its canonical lexical cell");
         }
-        const value = this.directEmptyClassConstructorValue(declaration);
+        const value = this.emitClassDefinitionValue(declaration);
         buf.line(`${binding.value} = ${value.c};`);
         buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
         buf.line(`${binding.initialized} = true;`);
@@ -32684,7 +32706,7 @@ class Emitter {
                 return { c: `tsc_value_get_prop(${owner.c}, ${this.stringLit(imported.name)})`, ty: T_VALUE };
             }
             const classBinding = this.symbolForIdentifier(expr)?.declarations?.find(ts.isClassDeclaration);
-            if (classBinding && this.isNodeWithin(expr, classBinding) &&
+            if (classBinding && !this.isDirectScopeLexicalDeclaration(classBinding) && this.isNodeWithin(expr, classBinding) &&
                 !classBinding.heritageClauses?.some(clause => this.isNodeWithin(expr, clause))) {
                 // ClassDefinitionEvaluation initializes the inner class name
                 // before its static elements; the outer binding stays in TDZ.
@@ -33034,7 +33056,7 @@ class Emitter {
         if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
             return this.emitClosureExpression(expr);
         }
-        if (ts.isClassExpression(expr)) return this.emitClassExpression(expr);
+        if (ts.isClassExpression(expr)) return this.emitClassDefinitionValue(expr);
         if (ts.isNewExpression(expr)) return this.emitNew(expr);
         if (ts.isPropertyAccessExpression(expr)) return this.emitPropertyAccess(expr);
         if (ts.isElementAccessExpression(expr)) return this.emitElementAccess(expr);

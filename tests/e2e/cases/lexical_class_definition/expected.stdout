@@ -1,0 +1,5 @@
+imported-capture:true
+inner-name:true
+method-descriptor:true
+fresh-definition:true
+forward-tdz:true

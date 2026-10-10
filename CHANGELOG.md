@@ -288,6 +288,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Local base/default classes in ordinary function, block and switch scopes share expression definition, retained capture cells and immutable inner names; unsupported initialization remains a stable diagnostic.
+
 - Share class-element key, callable-root and descriptor lowering across declarations and expressions, admitting computed public methods/accessors and preserving protected-descriptor failures; remove the separate expression method loop and verify independent Node and typed consumers in both memory modes.
 
 - Lower public computed instance fields through retained actual keys and declaration-owned value cells, preserving names, descriptors, inheritance and source order; remove the inferred-name gate and verify independent Node and imported typed consumers in both memory modes.

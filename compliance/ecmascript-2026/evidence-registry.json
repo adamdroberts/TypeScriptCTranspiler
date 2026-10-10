@@ -108,7 +108,7 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#emitClassExpression",
+      "id": "src/emit/index.ts#emitClassDefinitionValue",
       "targets": [
         "sec-module-semantics-static-semantics-early-errors#module-body-name-control-containment-and-private-environment-rules"
       ]
