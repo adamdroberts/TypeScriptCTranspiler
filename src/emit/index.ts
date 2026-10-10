@@ -415,6 +415,9 @@ interface ClosureEnvBinding {
     initializedPtr?: string;
     lexicalName?: string;
     immutable?: boolean;
+    /** A definition environment created within this activation is inside its
+     * retained continuation cells, rather than a creation-time outer handle. */
+    creationScope?: Map<ts.Symbol, string>;
 }
 
 /** The lexical scope tree is projected onto one active completion worklist.
@@ -20893,7 +20896,14 @@ class Emitter {
 
     private asyncContinuationCellForSymbol(sym: ts.Symbol): string | null {
         const scope = this.argumentValueScopes[this.argumentValueScopes.length - 1];
-        return scope ? this.asyncContinuationCellScopes.get(scope)?.get(sym) ?? null : null;
+        if (!scope) return null;
+        for (let index = this.closureEnvScopes.length - 1; index >= 0; index--) {
+            const binding = this.closureEnvScopes[index]!.get(sym);
+            if (!binding) continue;
+            if (binding.creationScope === scope) return null;
+            break;
+        }
+        return this.asyncContinuationCellScopes.get(scope)?.get(sym) ?? null;
     }
 
     private moduleLexicalBindingForIdentifier(id: ts.Identifier): ModuleLexicalBindingPlan | null {
@@ -23055,7 +23065,7 @@ class Emitter {
         };
         const addClosureCaptures = (closure: ClosureLikeDeclaration, classOwner?: ts.ClassLikeDeclaration): void => {
             for (const cap of this.collectClosureCaptures(closure)) {
-                if (classOwner && (cap.symbol.valueDeclaration ?? cap.symbol.declarations?.[0]) === classOwner || captures.has(cap.symbol)) continue;
+                if (classOwner && this.classDefinitionOwnsSymbol(classOwner, cap.symbol) || captures.has(cap.symbol)) continue;
                 const cellName = this.cellNameForCapture(cap.symbol, cap.field);
                 captures.set(cap.symbol, {
                     type: cap.type,
@@ -23384,6 +23394,10 @@ class Emitter {
             buffer.line(`tsc_array_push_raw(${mapping}, &${entry});`);
         }
         buffer.line(`tsc_call_activation_configure(false, ${mapping});`);
+    }
+
+    private classDefinitionOwnsSymbol(definition: ts.ClassLikeDeclaration, symbol: ts.Symbol): boolean {
+        return !!definition.name && this.symbolForIdentifier(definition.name) === symbol;
     }
 
     private collectClosureCaptures(
@@ -26631,6 +26645,7 @@ class Emitter {
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node) && !ts.isMethodDeclaration(node) &&
                     !ts.isGetAccessorDeclaration(node) && !ts.isSetAccessorDeclaration(node)) return false;
                 for (const capture of this.collectClosureCaptures(node)) {
+                    if (ts.isClassLike(node.parent) && this.classDefinitionOwnsSymbol(node.parent, capture.symbol)) continue;
                     if (!this.currentFunctionCellForSymbol(capture.symbol) &&
                         !this.closureEnvBindingForSymbol(capture.symbol)) return false;
                 }
@@ -26647,8 +26662,8 @@ class Emitter {
                 visit(node);
                 return safe;
             },
-            isSupportedNestedClass: (node) =>
-                this.isSupportedScopeClassDeclaration(node),
+            isSupportedNestedClass: (node) => ts.isClassDeclaration(node)
+                ? this.isSupportedScopeClassDeclaration(node) : this.isSupportedDynamicClassDefinition(node),
         });
         if (!graph || (protocol === "generator" && graph.asyncIteratorCount > 0)) return false;
         const owner = ts.isFunctionLike(body.parent) && "body" in body.parent
@@ -26756,6 +26771,18 @@ class Emitter {
             visit(body);
             return used;
         };
+        const cfgBindingStorageType = (node: ts.VariableDeclaration | ts.Identifier, symbol: ts.Symbol): CType => {
+            // Runtime lexical bindings and iterator/pattern Gets retain the
+            // actual value domain; a checker function union cannot select one
+            // Promise/generator/native call ABI for the shared binding cell.
+            if (this.localLexicalMetadataForSymbol(symbol)) return T_VALUE;
+            const cell = this.currentFunctionCellForSymbol(symbol);
+            if (cell) return cell.type;
+            const declaration = ts.isVariableDeclaration(node) ? node :
+                this.test262BindingVariableDeclaration(symbol.valueDeclaration ?? symbol.declarations?.[0] ?? node);
+            const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+            return declaration ? this.variableDeclarationStorageType(declaration, type) : type;
+        };
         for (const declaration of graph.declarations) {
             /* Pattern leaves are represented once in bindingIdentifiers and
              * enter the same recursive CFG BindingInitialization tree. */
@@ -26768,10 +26795,7 @@ class Emitter {
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(declaration, symbol)) return false;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
-            const type = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
-                ? T_VALUE
-                : cell?.type ?? this.variableDeclarationStorageType(declaration,
-                    this.variableStorageType(this.prepareType(mapType(declaration, this.checker))));
+            const type = cfgBindingStorageType(declaration, symbol);
             if (type.kind === "void" &&
                 !symbolHasUseOutsideDeclaration(symbol, declaration.name)) {
                 seenSymbols.add(symbol);
@@ -26797,10 +26821,7 @@ class Emitter {
             const cell = this.currentFunctionCellForSymbol(symbol);
             if (cell && capturedCellNeedsCfgScope(identifier, symbol)) return false;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
-            const type = lexical && this.isDirectScopeLexicalDeclaration(lexical.declaration)
-                ? T_VALUE
-                : cell?.type ??
-                    this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
+            const type = cfgBindingStorageType(identifier, symbol);
             if (type.kind === "void" || type.kind === "never" ||
                 !this.isAsyncAwaitPreludeCaptureType(type)) return false;
             seenSymbols.add(symbol);
@@ -28707,32 +28728,37 @@ class Emitter {
     private asyncAwaitContinuationParameters(
         parameters: readonly ts.ParameterDeclaration[],
     ): AsyncAwaitContinuationParam[] {
-        const params: AsyncAwaitContinuationParam[] = [];
-        for (const param of parameters) {
-            if (this.isThisParameter(param) || !ts.isIdentifier(param.name)) continue;
-            const symbol = this.symbolForIdentifier(param.name);
-            if (!symbol) continue;
-            const cell = this.currentFunctionCellForSymbol(symbol);
-            const type = cell?.type ?? (this.isJavaScriptSourceFile(param.getSourceFile())
-                ? T_VALUE : this.prepareType(mapType(param, this.checker)));
-            if (type.kind === "void" || type.kind === "never") continue;
-            const name = mangleIdent(param.name.text);
-            params.push({
-                symbol,
-                name,
-                type: cell?.type ?? type,
-                field: `param_${name}`,
-                ...(cell ? {
-                    cell: {
-                        kind: "entry",
-                        ptr: cell.cellName,
-                        rootPtr: cell.rootCellName ?? null,
-                        initializedPtr: cell.initializedCellName ?? null,
-                    },
-                } : {}),
-            });
+        // Every bound name in FormalParameters owns a retained binding,
+        // independent of pattern width/depth or raw argument-slot shape.
+        // Duplicate simple formals share the canonical Symbol-owned cell.
+        const params = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        for (const parameter of parameters) {
+            if (this.isThisParameter(parameter)) continue;
+            for (const identifier of this.test262BindingNames(parameter.name)) {
+                const symbol = this.symbolForIdentifier(identifier);
+                if (!symbol || params.has(symbol)) continue;
+                const cell = this.currentFunctionCellForSymbol(symbol);
+                const type = cell?.type ?? (this.isJavaScriptSourceFile(parameter.getSourceFile())
+                    ? T_VALUE : this.prepareType(mapType(identifier, this.checker)));
+                if (type.kind === "void" || type.kind === "never") continue;
+                const name = mangleIdent(identifier.text);
+                params.set(symbol, {
+                    symbol,
+                    name,
+                    type,
+                    field: `param_${name}`,
+                    ...(cell ? {
+                        cell: {
+                            kind: "entry",
+                            ptr: cell.cellName,
+                            rootPtr: cell.rootCellName ?? null,
+                            initializedPtr: cell.initializedCellName ?? null,
+                        },
+                    } : {}),
+                });
+            }
         }
-        return params;
+        return [...params.values()];
     }
 
     private asyncAwaitClosureCaptureParameter(
@@ -31863,12 +31889,13 @@ class Emitter {
     private isSupportedScopeClassDeclaration(
         declaration: ts.ClassDeclaration,
     ): declaration is ts.ClassDeclaration & { readonly name: ts.Identifier } {
-        return !!declaration.name &&
-            this.isDirectScopeLexicalDeclaration(declaration) &&
-            !declaration.typeParameters?.length &&
-            !declaration.heritageClauses?.length &&
-            !this.classHasDecorators(declaration) &&
-            declaration.members.every((member) =>
+        return !!declaration.name && this.isDirectScopeLexicalDeclaration(declaration) &&
+            this.isSupportedDynamicClassDefinition(declaration);
+    }
+
+    private isSupportedDynamicClassDefinition(definition: ts.ClassLikeDeclaration): boolean {
+        return !definition.typeParameters?.length && !definition.heritageClauses?.length &&
+            !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && !!member.body);
     }
@@ -31943,7 +31970,8 @@ class Emitter {
                 `bool* ${initialized} = TSC_GC_MALLOC(sizeof(bool))`,
                 `*${cell} = tsc_value_undefined()`, `*${root} = NULL`, `*${initialized} = false`);
             inner.set(symbol, { type: T_VALUE, ptr: cell, rootPtr: root,
-                initializedPtr: initialized, lexicalName: expression.name!.text, immutable: true });
+                initializedPtr: initialized, lexicalName: expression.name!.text, immutable: true,
+                creationScope: this.argumentValueScopes.at(-1) });
         }
         this.closureEnvScopes.push(inner);
         try {
@@ -48780,7 +48808,8 @@ class Emitter {
             ) {
                 parent = parent.parent;
             }
-            if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+            if ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) &&
+                ts.isIdentifier(parent.name)) {
                 name = parent.name.text;
             } else if (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent)) {
                 name = this.staticPropertyName(parent.name) ?? "";

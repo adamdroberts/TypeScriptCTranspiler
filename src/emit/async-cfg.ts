@@ -343,7 +343,7 @@ export interface AsyncControlFlowGraph {
 export interface AsyncControlFlowPlannerOptions {
     readonly suspensionKind?: "async" | "generator" | "async-generator";
     readonly isSupportedNestedFunction?: (node: ts.SignatureDeclaration) => boolean;
-    readonly isSupportedNestedClass?: (node: ts.ClassDeclaration) => boolean;
+    readonly isSupportedNestedClass?: (node: ts.ClassLikeDeclaration) => boolean;
 }
 
 interface LoopTargets {
@@ -427,7 +427,7 @@ export function planAsyncControlFlowGraph(
                 found = true;
                 return;
             }
-            if (current !== node && ts.isClassLike(current)) {
+            if (ts.isClassLike(current) && !options.isSupportedNestedClass?.(current)) {
                 found = true;
                 return;
             }

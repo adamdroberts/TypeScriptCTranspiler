@@ -1,0 +1,6 @@
+generator-pause:true
+generator-capture:true
+async-expression:true
+async-generator-capture:true
+fresh-inner-name:true
+pattern-formals:true

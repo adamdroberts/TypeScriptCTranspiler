@@ -288,6 +288,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Resumed class declarations and expressions retain immutable inner names; continuation state retains all formal bound names, including patterns/rest, and anonymous defaults infer their binding names.
+
 - Local base/default classes in ordinary function, block and switch scopes share expression definition, retained capture cells and immutable inner names; unsupported initialization remains a stable diagnostic.
 
 - Share class-element key, callable-root and descriptor lowering across declarations and expressions, admitting computed public methods/accessors and preserving protected-descriptor failures; remove the separate expression method loop and verify independent Node and typed consumers in both memory modes.
