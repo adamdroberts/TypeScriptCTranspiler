@@ -21320,7 +21320,13 @@ class Emitter {
         if (this.canonicalSourceValueInputs) return this.canonicalSourceValueInputs;
         const inputs = this.canonicalSourceValueInputs = new Map<ts.Node, Set<ts.Node>>();
         const declarationFor = (expression: ts.Expression): ts.Node | undefined => {
-            const target = this.unwrapTransparentExpression(expression);
+            let target = this.unwrapTransparentExpression(expression);
+            // Unchecked References borrow the containing owner. A property
+            // symbol query first infers the whole receiver alias chain.
+            if (this.isJavaScriptSourceFile(target.getSourceFile())) {
+                while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))
+                    target = this.unwrapTransparentExpression(target.expression);
+            }
             let symbol = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
             if (!symbol && ts.isElementAccessExpression(target) && ts.isStringLiteralLike(target.argumentExpression))
                 symbol = this.checker.getTypeAtLocation(target.expression).getProperty(target.argumentExpression.text);
@@ -21352,7 +21358,7 @@ class Emitter {
                     input(declarationFor(reference), value);
                     if (ts.isElementAccessExpression(reference) || ts.isPropertyAccessExpression(reference)) {
                         input(declarationFor(reference.expression), value);
-                        if (ts.isElementAccessExpression(reference) && !declarationFor(reference)) {
+                        if (ts.isElementAccessExpression(reference) && !this.isJavaScriptSourceFile(reference.getSourceFile()) && !declarationFor(reference)) {
                             for (const property of this.checker.getTypeAtLocation(reference.expression).getProperties()) {
                                 const declaration = property.valueDeclaration ?? property.declarations?.[0];
                                 if (declaration && !this.isAmbientDeclaration(declaration) &&
@@ -21361,13 +21367,6 @@ class Emitter {
                         }
                     }
                 }
-            }
-        };
-        const callableInputs = (expression: ts.Expression, values: readonly ts.Expression[]): void => {
-            for (const signature of this.checker.getTypeAtLocation(expression).getCallSignatures()) {
-                const declaration = signature.getDeclaration();
-                if (declaration && !this.isAmbientDeclaration(declaration) && ts.isFunctionLike(declaration))
-                    for (const parameter of declaration.parameters) for (const value of values) input(parameter, value);
             }
         };
         const pending: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
@@ -21405,11 +21404,9 @@ class Emitter {
             if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
                 SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) write(node.operand, node);
             if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-                const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
-                if (declaration && !this.isAmbientDeclaration(declaration) && ts.isFunctionLike(declaration)) {
-                    for (const parameter of declaration.parameters) for (const argument of node.arguments ?? [])
-                        input(parameter, ts.isSpreadElement(argument) ? argument.expression : argument);
-                }
+                // Source formals already receive canonical actual values.
+                // The owner/callee edges preserve escape and mutation facts
+                // without asking the checker to infer an argument signature.
                 const callee = this.unwrapTransparentExpression(node.expression);
                 const values = Array.from(node.arguments ?? [], argument => ts.isSpreadElement(argument) ? argument.expression : argument);
                 if (ts.isCallExpression(node)) {
@@ -21423,10 +21420,7 @@ class Emitter {
                 }
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     for (const argument of node.arguments ?? []) input(declarationFor(callee.expression), argument);
-                    callableInputs(callee.expression, values);
-                    values.push(callee.expression);
                 }
-                for (const argument of node.arguments ?? []) callableInputs(ts.isSpreadElement(argument) ? argument.expression : argument, values);
             }
             ts.forEachChild(node, child => { pending.push(child); });
         }
@@ -21456,6 +21450,16 @@ class Emitter {
             }
             // Annotation syntax cannot create an ordinary runtime owner.
             if (ts.isTypeNode(node)) continue;
+            // Unchecked source reads/calls already cross the tagged Reference
+            // and actual-List boundaries. Their argument/receiver inference
+            // cannot add physical storage facts and may recurse over aliases.
+            if (this.isJavaScriptSourceFile(node.getSourceFile()) &&
+                (ts.isCallExpression(node) || ts.isNewExpression(node) ||
+                    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))) {
+                admitPositive(node);
+                continue;
+            }
+
             const dependency = (child: ts.Node): void => {
                 const parents = dependents.get(child);
                 if (parents) parents.push(node);

@@ -17,7 +17,7 @@ test("eval and constructor discovery share the source-value and actual-List grap
     const depth=4096,bindings=[`var sourceCell0="97;";`];
     for(let index=1;index<depth;++index)bindings.push(`var sourceCell${index}=sourceCell${index-1};`);
     const source=fixture.replace("GENERATED_PARTITIONS",partitions).replace("DEEP_SOURCE_GRAPH",
-        `{${bindings.join("\n")}check(eval(sourceCell${depth-1})===97,"deep-source-cell-chain");}`);
+        `{${bindings.join("\n")}check(sourceCell${depth-1}.length===3&&sourceCell${depth-1}[0]==="9","deep-source-cell-reads");check(eval(sourceCell${depth-1})===97,"deep-source-cell-chain");}`);
     const temporary=await fs.mkdtemp(path.join(os.tmpdir(),"tsc2c-eval-source-flow-"));
     try{
         const referenceFile=path.join(temporary,"reference.js");await fs.writeFile(referenceFile,source.replaceAll("NATIVE_GC","false"));

@@ -749,7 +749,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             evalEntries.set(evalSourceKey(request), { ...request, entry: entry.entry });
         }
     }
-    let sourceEval: SourceEvalPlan | undefined = opts.test262Observation;
+    let sourceEval: SourceEvalPlan | undefined = evalEntries.size ? opts.test262Observation : undefined;
     let unresolvedCalls: readonly ts.Node[] = [];
     const refreshEvalPlan = (): SourceEvalPlan => ({
         unresolvedCalls,
