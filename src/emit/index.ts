@@ -23258,7 +23258,21 @@ class Emitter {
         if (!sym) return null;
         for (let i = this.closureEnvScopes.length - 1; i >= 0; i--) {
             const found = this.closureEnvScopes[i]!.get(sym);
-            if (found) return found;
+            if (!found) continue;
+            // A continuation activates the retained cell in its own C state.
+            // The creation-time closure pointer describes the same owner but
+            // is outside that callback's C scope. Every binding consumer must
+            // resolve through the innermost active handle.
+            const cell = this.asyncContinuationCellForSymbol(sym);
+            if (!cell) return found;
+            const type = this.argumentValueTypeScopes.at(-1)?.get(sym) ?? found.type;
+            return {
+                ...found,
+                type,
+                ptr: `((${type.c}*)${cell}.value_cell)`,
+                ...(found.rootPtr ? { rootPtr: `${cell}.gc_root_cell` } : {}),
+                ...(found.initializedPtr ? { initializedPtr: `${cell}.initialized_cell` } : {}),
+            };
         }
         return null;
     }

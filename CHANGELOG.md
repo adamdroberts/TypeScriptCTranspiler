@@ -1,5 +1,7 @@
 # Changelog
 
+- Resolve captured bindings through the innermost active continuation cell. Preserve shared reads, writes, roots and nested owners across async and generator resumption; verify independent Node semantics, deep retention and source-module E2E in both memory modes.
+
 - Preserve ordinary property Get results for native collections and source tuple value Lists. Share sequenced computed reads and deletes, skip optional key evaluation for nullish receivers, share Object.fromEntries with captured Iterator Records and ordinary entry Gets, remove scalar/pair/typed-struct predecessors, and verify independent semantics plus module E2E in both memory modes.
 
 - Exclude source ambient declarations from runtime binding, capture and native-result collections. Preserve real source shadows and existing native constructor adapters; verify erased source semantics, imported owners and the stable unsupported-owner diagnostic.

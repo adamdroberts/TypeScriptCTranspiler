@@ -1,0 +1,1 @@
+{"description":"Resumed functions and generator consumers resolve captured formal, var and lexical cells through their active continuation state across source modules."}
