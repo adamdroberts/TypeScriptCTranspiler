@@ -172,6 +172,29 @@ const WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS = {
 
 type WellKnownSymbolName = keyof typeof WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS;
 
+/** Source operators and their assignment aliases share one numeric kernel
+ * selection. References own evaluation/storage; runtime ToNumeric owns values. */
+const SOURCE_NUMERIC_OPERATIONS = [
+        [ts.SyntaxKind.PlusToken, ts.SyntaxKind.PlusEqualsToken, "tsc_value_add"],
+        [ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken, "tsc_value_sub"],
+        [ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskEqualsToken, "tsc_value_mul"],
+        [ts.SyntaxKind.SlashToken, ts.SyntaxKind.SlashEqualsToken, "tsc_value_div"],
+        [ts.SyntaxKind.PercentToken, ts.SyntaxKind.PercentEqualsToken, "tsc_value_mod"],
+        [ts.SyntaxKind.AsteriskAsteriskToken, ts.SyntaxKind.AsteriskAsteriskEqualsToken, "tsc_value_pow"],
+        [ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.AmpersandEqualsToken, "tsc_value_bit_and"],
+        [ts.SyntaxKind.BarToken, ts.SyntaxKind.BarEqualsToken, "tsc_value_bit_or"],
+        [ts.SyntaxKind.CaretToken, ts.SyntaxKind.CaretEqualsToken, "tsc_value_bit_xor"],
+        [ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.LessThanLessThanEqualsToken, "tsc_value_shl"],
+        [ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, "tsc_value_shr"],
+        [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken, "tsc_value_ushr"],
+    ] as const;
+const SOURCE_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
+    SOURCE_NUMERIC_OPERATIONS.flatMap(([binary, assignment, operation]) => [[binary, operation], [assignment, operation]] as const),
+);
+const SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
+    SOURCE_NUMERIC_OPERATIONS.map(([binary, , operation]) => [binary, operation]),
+);
+
 interface EmitResult {
     c: string;
     ty: CType;
@@ -33282,19 +33305,7 @@ class Emitter {
     }
 
     private dynamicCompoundAssignmentOperation(op: ts.SyntaxKind): string | null {
-        return op === ts.SyntaxKind.PlusEqualsToken ? "tsc_value_add" :
-            op === ts.SyntaxKind.MinusEqualsToken ? "tsc_value_sub" :
-            op === ts.SyntaxKind.AsteriskEqualsToken ? "tsc_value_mul" :
-            op === ts.SyntaxKind.AsteriskAsteriskEqualsToken ? "tsc_value_pow" :
-            op === ts.SyntaxKind.SlashEqualsToken ? "tsc_value_div" :
-            op === ts.SyntaxKind.PercentEqualsToken ? "tsc_value_mod" :
-            op === ts.SyntaxKind.AmpersandEqualsToken ? "tsc_value_bit_and" :
-            op === ts.SyntaxKind.BarEqualsToken ? "tsc_value_bit_or" :
-            op === ts.SyntaxKind.CaretEqualsToken ? "tsc_value_bit_xor" :
-            op === ts.SyntaxKind.LessThanLessThanEqualsToken ? "tsc_value_shl" :
-            op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ? "tsc_value_shr" :
-            op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ? "tsc_value_ushr" :
-            null;
+        return SOURCE_NUMERIC_OPERATION_FUNCTIONS.get(op) ?? null;
     }
 
     private emitLocalLexicalUpdate(
@@ -33541,6 +33552,7 @@ class Emitter {
         if (op === ts.SyntaxKind.ExclamationToken) {
             return { c: `(!${this.emitBoolExpr(pu.operand)})`, ty: T_BOOLEAN };
         }
+        if (op === ts.SyntaxKind.TildeToken) return this.emitNumericExpression(pu);
         const inner = this.emitExpr(pu.operand);
         switch (op) {
             case ts.SyntaxKind.MinusToken:
@@ -33603,22 +33615,7 @@ class Emitter {
                 }
                 requireNumber(pu, inner.ty);
                 return { c: `(--${inner.c})`, ty: T_NUMBER };
-            case ts.SyntaxKind.TildeToken:
-                if (inner.ty.kind === "value") {
-                    return this.emitSequencedCall("tsc_value_bit_not", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                if (inner.ty.kind === "bigint") {
-                    return { c: `tsc_bigint_bit_not(${inner.c})`, ty: T_BIGINT };
-                }
-                if (inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_bit_not", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
+
         }
         unsupported(pu, `prefix operator ${ts.SyntaxKind[op]}`);
     }
@@ -33793,61 +33790,47 @@ class Emitter {
         });
     }
 
-    private emitAdditionExpression(root: ts.BinaryExpression): EmitResult {
+    /** One postorder tree owns numeric/bitwise operands through evaluation and
+     * arbitrary conversion hooks. Source representation never selects another
+     * arithmetic algorithm or imposes an inference/nesting pass limit. */
+    private emitNumericExpression(root: ts.Expression): EmitResult {
         const results = new Map<ts.Expression, EmitResult>();
         const pending: { expression: ts.Expression; exit: boolean }[] = [{ expression: root, exit: false }];
         const statements: string[] = [];
         const stage = (expression: ts.Expression, value: EmitResult): void => {
-            const type = value.ty.kind === "void" || value.ty.kind === "never" ? T_VALUE : value.ty;
-            const name = this.freshTemp("_addition_value");
-            const init = type === value.ty ? value.c : this.boxSourceValue(value, expression);
-            statements.push(`${type.c}${isPointerKind(type) ? " volatile" : ""} ${name} = ${init}`);
-            if (type.kind === "value") {
-                const gcRoot = this.freshTemp("_addition_gc_root");
-                statements.push(`void* volatile ${gcRoot} = tsc_value_gc_root(${name})`, `(void)${gcRoot}`);
-            }
-            results.set(expression, { c: name, ty: type });
+            const name = this.freshTemp("_numeric_value");
+            const gcRoot = this.freshTemp("_numeric_gc_root");
+            statements.push(`tsc_value_t ${name} = ${this.boxSourceValue(value, expression)}`,
+                `void* volatile ${gcRoot} = tsc_value_gc_root(${name})`, `(void)${gcRoot}`);
+            results.set(expression, { c: name, ty: T_VALUE });
         };
         while (pending.length > 0) {
             const work = pending.pop()!, expression = this.unwrapTransparentExpression(work.expression);
+            const unary = ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.TildeToken;
+            const operation = ts.isBinaryExpression(expression)
+                ? SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.get(expression.operatorToken.kind) : undefined;
             if (work.exit) {
-                if (!ts.isBinaryExpression(expression)) throw new Error("addition worklist node is not a binary expression");
-                stage(work.expression, this.emitAdditionOperands(expression,
-                    results.get(expression.left)!, results.get(expression.right)!));
+                if (unary) {
+                    stage(work.expression, { c: `tsc_value_bit_not(${results.get(expression.operand)!.c})`, ty: T_VALUE });
+                } else if (ts.isBinaryExpression(expression) && operation) {
+                    stage(work.expression, { c: `${operation}(${results.get(expression.left)!.c}, ${results.get(expression.right)!.c})`, ty: T_VALUE });
+                } else {
+                    unsupported(expression, "numeric expression is outside the canonical tree");
+                }
                 continue;
             }
             const override = this.expressionOverride(work.expression) ?? this.expressionOverride(expression);
             if (override) { stage(work.expression, override); continue; }
-            if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) {
+            if (unary) {
+                pending.push({ expression: work.expression, exit: true }, { expression: expression.operand, exit: false });
+            } else if (ts.isBinaryExpression(expression) && operation) {
+                pending.push({ expression: work.expression, exit: true },
+                    { expression: expression.right, exit: false }, { expression: expression.left, exit: false });
+            } else {
                 stage(work.expression, this.emitExpr(work.expression));
-                continue;
             }
-            pending.push({ expression: work.expression, exit: true },
-                { expression: expression.right, exit: false }, { expression: expression.left, exit: false });
         }
-        const result = results.get(root)!;
-        return { c: `({ ${statements.join("; ")}; ${result.c}; })`, ty: result.ty };
-    }
-
-    /** Primitive native operations have no conversion hooks. Every other
-     * representation uses the ordinary default-hint value-add algorithm. */
-    private emitAdditionOperands(bin: ts.BinaryExpression, left: EmitResult, right: EmitResult): EmitResult {
-        if (left.ty.kind === "number" && right.ty.kind === "number") {
-            return this.emitSequencedExpr(T_NUMBER, [{ value: left, target: T_NUMBER }, { value: right, target: T_NUMBER }],
-                ([leftValue, rightValue]) => `(${leftValue} + ${rightValue})`);
-        }
-        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-            return this.emitSequencedCall("tsc_bigint_add", T_BIGINT, [{ value: left }, { value: right }]);
-        }
-        if ((left.ty.kind === "string" || right.ty.kind === "string") &&
-            ["number", "bigint", "string"].includes(left.ty.kind) &&
-            ["number", "bigint", "string"].includes(right.ty.kind)) {
-            return this.emitSequencedExpr(T_STRING, [{ value: left }, { value: right }],
-                ([leftValue, rightValue]) => `tsc_str_concat(` +
-                    `${this.coerceToString({ c: leftValue!, ty: left.ty }, bin.left)}, ` +
-                    `${this.coerceToString({ c: rightValue!, ty: right.ty }, bin.right)})`);
-        }
-        return this.emitDynamicBinary("tsc_value_add", T_VALUE, bin, left, right);
+        return { c: `({ ${statements.join("; ")}; ${results.get(root)!.c}; })`, ty: T_VALUE };
     }
 
     private isLogicalValueOperator(operator: ts.SyntaxKind): boolean {
@@ -33959,7 +33942,7 @@ class Emitter {
             if (typeofComparison) return typeofComparison;
         }
 
-        if (op === ts.SyntaxKind.PlusToken) return this.emitAdditionExpression(bin);
+        if (SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.has(op)) return this.emitNumericExpression(bin);
 
         if (this.isLogicalValueOperator(op)) return this.emitLogicalExpression(bin);
 
@@ -33977,56 +33960,6 @@ class Emitter {
                     { value: right, target: T_VALUE, node: bin.right },
                 ], ([key, object]) => `tsc_value_in(${key}, ${object})`);
 
-            case ts.SyntaxKind.MinusToken:
-            case ts.SyntaxKind.AsteriskToken:
-            case ts.SyntaxKind.SlashToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
-                    const fn =
-                        op === ts.SyntaxKind.MinusToken
-                            ? "tsc_value_sub"
-                            : op === ts.SyntaxKind.AsteriskToken
-                                ? "tsc_value_mul"
-                                : "tsc_value_div";
-                    return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                const cop =
-                    op === ts.SyntaxKind.MinusToken
-                        ? "-"
-                        : op === ts.SyntaxKind.AsteriskToken
-                            ? "*"
-                            : "/";
-                if (op === ts.SyntaxKind.SlashToken) {
-                    return { c: `(((double)(${left.c})) / ((double)(${right.c})))`, ty: T_NUMBER };
-                }
-                return { c: `(${left.c} ${cop} ${right.c})`, ty: T_NUMBER };
-            }
-            case ts.SyntaxKind.PercentToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
-                    return this.emitDynamicBinary("tsc_value_mod", T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                return { c: `tsc_num_mod(${left.c}, ${right.c})`, ty: T_NUMBER };
-            }
-            case ts.SyntaxKind.AsteriskAsteriskToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
-                    return this.emitDynamicBinary("tsc_value_pow", T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                return this.emitSequencedCall("tsc_number_exponentiate", T_NUMBER, [
-                    { value: left, target: T_NUMBER, node: bin.left },
-                    { value: right, target: T_NUMBER, node: bin.right },
-                ]);
-            }
             case ts.SyntaxKind.EqualsEqualsToken:
             case ts.SyntaxKind.EqualsEqualsEqualsToken:
                 return this.emitEquality(bin, left, right, false);
@@ -34038,47 +33971,7 @@ class Emitter {
             case ts.SyntaxKind.GreaterThanToken:
             case ts.SyntaxKind.GreaterThanEqualsToken:
                 return this.emitRelational(bin, left, right, op);
-            case ts.SyntaxKind.AmpersandToken:
-            case ts.SyntaxKind.BarToken:
-            case ts.SyntaxKind.CaretToken:
-            case ts.SyntaxKind.LessThanLessThanToken:
-            case ts.SyntaxKind.GreaterThanGreaterThanToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
-                    const fn =
-                        op === ts.SyntaxKind.AmpersandToken
-                            ? "tsc_value_bit_and"
-                            : op === ts.SyntaxKind.BarToken
-                                ? "tsc_value_bit_or"
-                                : op === ts.SyntaxKind.CaretToken
-                                    ? "tsc_value_bit_xor"
-                                    : op === ts.SyntaxKind.LessThanLessThanToken
-                                        ? "tsc_value_shl"
-                                        : "tsc_value_shr";
-                    return this.emitDynamicBinary(fn, T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                const cop = bitwiseOp(op);
-                return {
-                    c: `((double)((int32_t)(${left.c}) ${cop} (int32_t)(${right.c})))`,
-                    ty: T_NUMBER,
-                };
-            }
-            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken: {
-                if (left.ty.kind === "value" || right.ty.kind === "value") {
-                    return this.emitDynamicBinary("tsc_value_ushr", T_VALUE, bin, left, right);
-                }
-                const bigint = this.emitBigIntBinaryOperation(bin, left, right, op);
-                if (bigint) return bigint;
-                requireNumber(bin, left.ty);
-                requireNumber(bin, right.ty);
-                return {
-                    c: `((double)((uint32_t)(${left.c}) >> (uint32_t)(${right.c})))`,
-                    ty: T_NUMBER,
-                };
-            }
+
         }
         unsupported(bin, `binary operator ${ts.SyntaxKind[op]}`);
     }
@@ -34622,32 +34515,7 @@ class Emitter {
             : { c: this.stringLit((left as ts.PropertyAccessExpression).name.text), ty: T_STRING };
         const rhs = this.emitExpr(bin.right);
         const logicalOp = this.isLogicalAssignmentOperator(op);
-        const compoundFn =
-            op === ts.SyntaxKind.PlusEqualsToken
-                ? "tsc_value_add"
-                : op === ts.SyntaxKind.MinusEqualsToken
-                    ? "tsc_value_sub"
-                    : op === ts.SyntaxKind.AsteriskEqualsToken
-                        ? "tsc_value_mul"
-                        : op === ts.SyntaxKind.AsteriskAsteriskEqualsToken
-                            ? "tsc_value_pow"
-                            : op === ts.SyntaxKind.SlashEqualsToken
-                                ? "tsc_value_div"
-                                : op === ts.SyntaxKind.PercentEqualsToken
-                                    ? "tsc_value_mod"
-                                    : op === ts.SyntaxKind.AmpersandEqualsToken
-                                        ? "tsc_value_bit_and"
-                                        : op === ts.SyntaxKind.BarEqualsToken
-                                            ? "tsc_value_bit_or"
-                                            : op === ts.SyntaxKind.CaretEqualsToken
-                                                ? "tsc_value_bit_xor"
-                                                : op === ts.SyntaxKind.LessThanLessThanEqualsToken
-                                                    ? "tsc_value_shl"
-                                                    : op === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken
-                                                        ? "tsc_value_shr"
-                                                        : op === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
-                                                            ? "tsc_value_ushr"
-                                                            : null;
+        const compoundFn = this.dynamicCompoundAssignmentOperation(op);
 
         if (op !== ts.SyntaxKind.EqualsToken && !compoundFn && !logicalOp) return null;
         const moduleNamespaceAssignment = !!this.moduleNamespacePlanForExpression(recvExpr);
@@ -35008,76 +34876,6 @@ class Emitter {
             { value: left, target: T_VALUE, node: bin.left },
             { value: right, target: T_VALUE, node: bin.right },
         ]);
-    }
-
-    private emitBigIntBinaryOperation(
-        bin: ts.BinaryExpression,
-        left: EmitResult,
-        right: EmitResult,
-        op: ts.SyntaxKind,
-    ): EmitResult | null {
-        if (
-            left.ty.kind !== "bigint" && right.ty.kind !== "bigint" &&
-            left.ty.kind !== "symbol" && right.ty.kind !== "symbol"
-        ) return null;
-        let valueFunction: string;
-        let bigintFunction: string | null;
-        switch (op) {
-            case ts.SyntaxKind.PlusToken:
-                valueFunction = "tsc_value_add";
-                bigintFunction = "tsc_bigint_add";
-                break;
-            case ts.SyntaxKind.MinusToken:
-                valueFunction = "tsc_value_sub";
-                bigintFunction = "tsc_bigint_sub";
-                break;
-            case ts.SyntaxKind.AsteriskToken:
-                valueFunction = "tsc_value_mul";
-                bigintFunction = "tsc_bigint_mul";
-                break;
-            case ts.SyntaxKind.SlashToken:
-                valueFunction = "tsc_value_div";
-                bigintFunction = "tsc_bigint_div";
-                break;
-            case ts.SyntaxKind.PercentToken:
-                valueFunction = "tsc_value_mod";
-                bigintFunction = "tsc_bigint_mod";
-                break;
-            case ts.SyntaxKind.AsteriskAsteriskToken:
-                valueFunction = "tsc_value_pow";
-                bigintFunction = "tsc_bigint_pow";
-                break;
-            case ts.SyntaxKind.AmpersandToken:
-                valueFunction = "tsc_value_bit_and";
-                bigintFunction = "tsc_bigint_bit_and";
-                break;
-            case ts.SyntaxKind.BarToken:
-                valueFunction = "tsc_value_bit_or";
-                bigintFunction = "tsc_bigint_bit_or";
-                break;
-            case ts.SyntaxKind.CaretToken:
-                valueFunction = "tsc_value_bit_xor";
-                bigintFunction = "tsc_bigint_bit_xor";
-                break;
-            case ts.SyntaxKind.LessThanLessThanToken:
-                valueFunction = "tsc_value_shl";
-                bigintFunction = "tsc_bigint_shl";
-                break;
-            case ts.SyntaxKind.GreaterThanGreaterThanToken:
-                valueFunction = "tsc_value_shr";
-                bigintFunction = "tsc_bigint_shr";
-                break;
-            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
-                valueFunction = "tsc_value_ushr";
-                bigintFunction = null;
-                break;
-            default:
-                return null;
-        }
-        if (left.ty.kind === "bigint" && right.ty.kind === "bigint" && bigintFunction) {
-            return { c: `${bigintFunction}(${left.c}, ${right.c})`, ty: T_BIGINT };
-        }
-        return this.emitDynamicBinary(valueFunction, T_VALUE, bin, left, right);
     }
 
     private emitTernary(expr: ts.ConditionalExpression): EmitResult {
@@ -49861,17 +49659,6 @@ function jsonEscape(s: string): string {
         else out += c;
     }
     return out;
-}
-
-function bitwiseOp(k: ts.SyntaxKind): string {
-    switch (k) {
-        case ts.SyntaxKind.AmpersandToken: return "&";
-        case ts.SyntaxKind.BarToken: return "|";
-        case ts.SyntaxKind.CaretToken: return "^";
-        case ts.SyntaxKind.LessThanLessThanToken: return "<<";
-        case ts.SyntaxKind.GreaterThanGreaterThanToken: return ">>";
-    }
-    throw new Error("unreachable bitwise op");
 }
 
 function formatNumericLiteral(text: string): string {
