@@ -1227,6 +1227,7 @@ interface Math {
     sqrt(x: number, ...ignored: any[]): number;
     pow(x: number, y: number, ...ignored: any[]): number;
     hypot(...values: number[]): number;
+    sumPrecise(items: Iterable<number>, ...ignored: any[]): number;
     min(...values: number[]): number;
     max(...values: number[]): number;
     log(x: number, ...ignored: any[]): number;

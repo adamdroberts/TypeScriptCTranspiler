@@ -337,6 +337,8 @@ tsc_bigint_t* tsc_bigint_from_num(double n);
 tsc_bigint_t* tsc_bigint_from_bool(bool b);
 tsc_bigint_t* tsc_bigint_as_n(const tsc_bigint_t* value, double bits, bool is_signed);
 double tsc_bigint_to_number(const tsc_bigint_t* value);
+/* Exact integer times 2^binary_scale, rounded once to binary64. */
+double tsc_bigint_to_number_scaled(const tsc_bigint_t* value, int binary_scale);
 tsc_bigint_t* tsc_bigint_neg(const tsc_bigint_t* a);
 tsc_bigint_t* tsc_bigint_add(const tsc_bigint_t* a, const tsc_bigint_t* b);
 tsc_bigint_t* tsc_bigint_sub(const tsc_bigint_t* a, const tsc_bigint_t* b);
@@ -1146,6 +1148,7 @@ typedef struct {
     bool done;
 } tsc_iterator_record_t;
 typedef tsc_iterator_record_t tsc_sync_iterator_t;
+double tsc_math_sum_precise(tsc_value_t items);
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_for_in_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_sync_iterator_open_direct(tsc_value_t iterator);

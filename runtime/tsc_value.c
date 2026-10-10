@@ -8872,6 +8872,7 @@ typedef enum {
     TSC_MATH_MIN,
     TSC_MATH_MAX,
     TSC_MATH_RANDOM,
+    TSC_MATH_SUM_PRECISE,
 } tsc_math_intrinsic_kind_t;
 
 typedef struct {
@@ -8926,6 +8927,7 @@ static const tsc_math_intrinsic_t math_intrinsics[] = {
     TSC_MATH_UNARY_ENTRY("sin", sin),
     TSC_MATH_UNARY_ENTRY("sinh", sinh),
     TSC_MATH_UNARY_ENTRY("sqrt", sqrt),
+    TSC_MATH_VARIADIC_ENTRY("sumPrecise", 1.0, TSC_MATH_SUM_PRECISE),
     TSC_MATH_UNARY_ENTRY("tan", tan),
     TSC_MATH_UNARY_ENTRY("tanh", tanh),
     TSC_MATH_UNARY_ENTRY("trunc", trunc),
@@ -8968,6 +8970,9 @@ static tsc_value_t math_intrinsic_apply(void* env, tsc_value_t this_arg, tsc_arr
         double first = math_argument(args, 0);
         double second = math_argument(args, 1);
         return tsc_value_num(intrinsic->implementation.binary(first, second));
+    }
+    if (intrinsic->kind == TSC_MATH_SUM_PRECISE) {
+        return tsc_value_num(tsc_math_sum_precise(args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined()));
     }
     if (intrinsic->kind == TSC_MATH_RANDOM) {
         return tsc_value_num(tsc_math_random());

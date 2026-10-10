@@ -668,54 +668,99 @@ tsc_bigint_t* tsc_bigint_as_n(const tsc_bigint_t* value, double bits, bool is_si
     return result;
 }
 
-double tsc_bigint_to_number(const tsc_bigint_t* value) {
+/* Round an exact integer times a power of two once, to binary64. The
+ * quotient and discarded-bit predicates cover normal and subnormal values
+ * without a separately rounded intermediate floating-point operation. */
+double tsc_bigint_to_number_scaled(const tsc_bigint_t* value, int binary_scale) {
     if (!value || mpz_sgn(value->value) == 0) return 0.0;
-
     const int sign = mpz_sgn(value->value);
     mpz_t magnitude;
     mpz_init(magnitude);
     mpz_abs(magnitude, value->value);
     const size_t bit_length = mpz_sizeinbase(magnitude, 2);
-
-    if (bit_length <= 53) {
-        const double exact = mpz_get_d(magnitude);
-        mpz_clear(magnitude);
-        return sign < 0 ? -exact : exact;
-    }
-    if (bit_length > 1024) {
+    if (binary_scale >= 1024 || bit_length > (size_t)(1024LL - binary_scale)) {
         mpz_clear(magnitude);
         return sign < 0 ? -INFINITY : INFINITY;
     }
-
-    mp_bitcnt_t shift = (mp_bitcnt_t)(bit_length - 53);
+    long long shift = bit_length > 53 ? (long long)bit_length - 53 : 0;
+    const long long quantum_shift = -1074LL - binary_scale;
+    if (shift < quantum_shift) shift = quantum_shift;
     mpz_t significand;
-    mpz_t remainder;
-    mpz_t halfway;
     mpz_init(significand);
-    mpz_init(remainder);
-    mpz_init_set_ui(halfway, 1u);
-    mpz_fdiv_q_2exp(significand, magnitude, shift);
-    mpz_fdiv_r_2exp(remainder, magnitude, shift);
-    mpz_mul_2exp(halfway, halfway, shift - 1);
-
-    const int halfway_comparison = mpz_cmp(remainder, halfway);
-    if (
-        halfway_comparison > 0 ||
-        (halfway_comparison == 0 && mpz_odd_p(significand))
-    ) {
-        mpz_add_ui(significand, significand, 1u);
+    mpz_fdiv_q_2exp(significand, magnitude, (mp_bitcnt_t)shift);
+    if (shift > 0 && mpz_tstbit(magnitude, (mp_bitcnt_t)shift - 1) &&
+        (mpz_scan1(magnitude, 0) < (mp_bitcnt_t)shift - 1 || mpz_odd_p(significand))) {
+        mpz_add_ui(significand, significand, 1);
     }
-    if (mpz_sizeinbase(significand, 2) > 53) {
-        mpz_fdiv_q_2exp(significand, significand, 1);
-        shift++;
-    }
-
-    const double rounded = ldexp(mpz_get_d(significand), (int)shift);
-    mpz_clear(halfway);
-    mpz_clear(remainder);
+    const double rounded = ldexp(mpz_get_d(significand), (int)(shift + binary_scale));
     mpz_clear(significand);
     mpz_clear(magnitude);
     return sign < 0 ? -rounded : rounded;
+}
+
+double tsc_bigint_to_number(const tsc_bigint_t* value) {
+    return tsc_bigint_to_number_scaled(value, 0);
+}
+
+/* Every finite binary64 value is an integer multiple of 2^-1074. One GMP
+ * accumulator and one IteratorRecord therefore suffice for any iterable
+ * cardinality, including cancellation after intermediate overflow. */
+double tsc_math_sum_precise(tsc_value_t items) {
+    if (tsc_value_is_nullish(items)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Math.sumPrecise requires an iterable"));
+    }
+    typedef struct {
+        tsc_sync_iterator_t iterator;
+        tsc_bigint_t* sum;
+        tsc_bigint_t* term;
+    } sum_state_t;
+    sum_state_t* owner = TSC_GC_MALLOC(sizeof(*owner));
+    memset(owner, 0, sizeof(*owner));
+    void* volatile owner_gc_root = owner;
+    (void)owner_gc_root;
+    owner->iterator = tsc_sync_iterator_open(items);
+    owner->sum = bigint_alloc();
+    owner->term = bigint_alloc();
+    enum { MINUS_ZERO, FINITE, PLUS_INFINITY, MINUS_INFINITY, NOT_A_NUMBER } state = MINUS_ZERO;
+    uint64_t count = 0;
+    tsc_value_t next;
+    while (tsc_sync_iterator_step(&owner->iterator, &next)) {
+        if (count >= UINT64_C(9007199254740991)) {
+            tsc_sync_iterator_close_abrupt(&owner->iterator,
+                tsc_value_error(tsc_error_new_named(tsc_str_from_lit("RangeError", 10),
+                    tsc_str_from_cstr("Math.sumPrecise input exceeds maximum item count"))));
+        }
+        if (value_is_box(next)) {
+            tsc_sync_iterator_close_abrupt(&owner->iterator,
+                tsc_value_error(tsc_error_new_named(tsc_str_from_lit("TypeError", 9),
+                    tsc_str_from_cstr("Math.sumPrecise item is not a Number"))));
+        }
+        double number = tsc_value_as_num(next);
+        if (state != NOT_A_NUMBER) {
+            if (isnan(number)) state = NOT_A_NUMBER;
+            else if (isinf(number)) {
+                if (number > 0) state = state == MINUS_INFINITY ? NOT_A_NUMBER : PLUS_INFINITY;
+                else state = state == PLUS_INFINITY ? NOT_A_NUMBER : MINUS_INFINITY;
+            } else if (!(number == 0.0 && signbit(number)) && (state == MINUS_ZERO || state == FINITE)) {
+                state = FINITE;
+                uint64_t bits;
+                memcpy(&bits, &number, sizeof(bits));
+                unsigned exponent = (unsigned)((bits >> 52) & UINT64_C(0x7ff));
+                uint64_t mantissa = bits & UINT64_C(0xfffffffffffff);
+                if (exponent) mantissa |= UINT64_C(0x10000000000000);
+                mpz_import(owner->term->value, 1, 1, sizeof(mantissa), 0, 0, &mantissa);
+                if (exponent) mpz_mul_2exp(owner->term->value, owner->term->value, exponent - 1);
+                if (signbit(number)) mpz_sub(owner->sum->value, owner->sum->value, owner->term->value);
+                else mpz_add(owner->sum->value, owner->sum->value, owner->term->value);
+            }
+        }
+        count++;
+    }
+    if (state == NOT_A_NUMBER) return NAN;
+    if (state == PLUS_INFINITY) return INFINITY;
+    if (state == MINUS_INFINITY) return -INFINITY;
+    if (state == MINUS_ZERO) return -0.0;
+    return tsc_bigint_to_number_scaled(owner->sum, -1074);
 }
 
 tsc_bigint_t* tsc_bigint_neg(const tsc_bigint_t* a) {
