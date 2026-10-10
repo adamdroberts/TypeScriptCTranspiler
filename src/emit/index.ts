@@ -21278,6 +21278,15 @@ class Emitter {
             // Numeric results and PutValue share the actual value domain with
             // their source owners. An annotation cannot convert an update's
             // Number/BigInt result back to the predecessor storage type.
+            // Hoisted var bindings start as undefined before any initializer;
+            // executed let declarations and class fields without initializers
+            // create undefined too. Their complete alias/capture domain uses
+            // value storage from this same graph.
+            if ((ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
+                (!node.initializer || ts.isVariableDeclaration(node) &&
+                    ts.isVariableDeclarationList(node.parent) &&
+                    !(node.parent.flags & ts.NodeFlags.BlockScoped)) &&
+                !this.isAmbientDeclaration(node)) admitPositive(node);
             if (ts.isBinaryExpression(node) && (SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) ||
                     SOURCE_BINARY_NUMERIC_OPERATIONS.has(node.operatorToken.kind)) ||
                 ts.isPrefixUnaryExpression(node) && (SOURCE_PREFIX_NUMERIC_OPERATIONS.has(node.operator) ||
@@ -29416,10 +29425,10 @@ class Emitter {
             if (r) {
                 const coerced = this.coerce(r, ct, d.initializer!);
                 init = " = " + coerced;
-            } else if (ct.kind === "value") {
-                init = " = tsc_value_undefined()";
             } else {
-                init = " = " + this.zeroValue(ct);
+                if (ct.kind !== "value")
+                    unsupported(d, "uninitialized declaration requires canonical value storage");
+                init = " = tsc_value_undefined()";
             }
             if (cell) {
                 if (this.preallocatedVariableCells.some(scope => scope.has(cell))) {

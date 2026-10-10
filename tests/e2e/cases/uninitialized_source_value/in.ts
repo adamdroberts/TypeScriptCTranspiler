@@ -1,0 +1,12 @@
+import {readUninitialized,readHoisted,Holder} from './owner';
+const local=readUninitialized(),instance=new Holder();
+console.log(local[0]===undefined,local[1]==='undefined');
+console.log((instance.read() as any)===undefined,typeof instance.value==='undefined');
+console.log(Object.prototype.hasOwnProperty.call(instance,'value'),(Holder.value as any)===undefined);
+let captured!:number;
+const read=()=>captured;
+console.log((read() as any)===undefined);
+captured=3;
+console.log(read()===3);
+const hoisted=readHoisted();
+console.log(hoisted[0]===undefined,hoisted[1]===3);
