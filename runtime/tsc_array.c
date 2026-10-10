@@ -685,13 +685,7 @@ tsc_value_t tsc_array_constructor_value(void) {
         tsc_runtime_unlock();
         return array_constructor_value;
     }
-    if (array_prototype_initialized) {
-        (void)tsc_value_set_prop(
-            array_constructor_value,
-            tsc_str_from_lit("prototype", 9),
-            tsc_value_array(tsc_array_prototype())
-        );
-    } else if (!array_prototype_initializing) {
+    if (!array_prototype_initialized && !array_prototype_initializing) {
         (void)tsc_array_prototype();
     }
     tsc_runtime_unlock();
@@ -1567,15 +1561,14 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_gc_root = proto;
         intrinsics->default_prototype = tsc_value_array(proto);
         array_prototype_initialized = true;
-        (void)tsc_value_set_prop(
-            tsc_array_constructor_value(),
-            tsc_str_from_lit("prototype", 9),
-            intrinsics->default_prototype
-        );
+        tsc_value_t constructor = tsc_array_constructor_value();
+        tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+        tsc_function_identity_set_own_prototype(identity, intrinsics->default_prototype);
+        identity->func_prototype_writable = false;
         tsc_object_define(
             proto->props,
             tsc_str_from_lit("constructor", 11),
-            tsc_array_constructor_value(),
+            constructor,
             true,
             false,
             true

@@ -150,7 +150,7 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
 
 // These ordinary global owners share Realm References, member calls and the
 // canonical source-value dependency graph independently of method signatures.
-const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean", "Symbol"]);
+const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean", "Symbol", "Array"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -1646,7 +1646,7 @@ class Emitter {
         }
         if (
             ts.isCallExpression(unwrapped) &&
-            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+            false
         ) {
             return true;
         }
@@ -1663,22 +1663,6 @@ class Emitter {
     ): boolean {
         return this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts);
-    }
-
-    private isSideEffectFreeArrayReturningArrayHelperCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
-        ) {
-            return false;
-        }
-        const method = call.expression.name.text;
-        return (method === "of" || method === "from") &&
-            this.isSideEffectFreeStaticCall(call, seenConsts);
     }
 
     private isSideEffectFreeElementAccess(
@@ -1992,8 +1976,6 @@ class Emitter {
         ) {
             return true;
         }
-        // Array constructor methods are mutable ordinary properties.
-        if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Array")) return false;
         // Ordinary Realm owners expose mutable properties and global bindings.
         if (ts.isIdentifier(recv) && ORDINARY_REALM_GLOBAL_OWNERS.has(recv.text) && this.isUnshadowedGlobalIdentifier(recv, recv.text)) return false;
         // Date statics are mutable ordinary methods, including unused calls.
@@ -3370,7 +3352,7 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+                false
             )
         ) {
             return true;
@@ -3392,7 +3374,7 @@ class Emitter {
         }
         return ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts)
+                false
             );
     }
 
@@ -3409,7 +3391,7 @@ class Emitter {
         }
         return ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
+                false
             );
     }
 
@@ -4277,25 +4259,6 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
-            unwrapped.expression.name.text === "of"
-        ) {
-            return Array.from(unwrapped.arguments);
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
-            unwrapped.expression.name.text === "from" &&
-            unwrapped.arguments.length === 1
-        ) {
-            return this.sideEffectFreeSetArraySourceExpressions(unwrapped.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
             unwrapped.expression.name.text === "slice" &&
             unwrapped.arguments.length <= 2
         ) {
@@ -4807,25 +4770,6 @@ class Emitter {
                 elements.push(element);
             }
             return elements;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
-            unwrapped.expression.name.text === "of"
-        ) {
-            return Array.from(unwrapped.arguments);
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
-            unwrapped.expression.name.text === "from" &&
-            unwrapped.arguments.length === 1
-        ) {
-            return this.sideEffectFreeMapArraySourceExpressions(unwrapped.arguments[0]!, seenConsts);
         }
         if (
             ts.isCallExpression(unwrapped) &&
@@ -5366,41 +5310,6 @@ class Emitter {
         }
         const recv = unwrapped.expression.expression;
         const method = unwrapped.expression.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "Array") && method === "of") {
-            return Array.from(unwrapped.arguments).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            )
-                ? unwrapped.arguments.length
-                : null;
-        }
-        if (
-            this.isUnshadowedGlobalIdentifier(recv, "Array") &&
-            method === "from" &&
-            unwrapped.arguments.length >= 1 &&
-            unwrapped.arguments.length <= 3 &&
-            this.isSideEffectFreeStaticCall(unwrapped, seenConsts)
-        ) {
-            const source = unwrapped.arguments[0]!;
-            if (
-                unwrapped.arguments.length >= 2 &&
-                this.isSideEffectFreeEmptyArrayFromSource(source, seenConsts) &&
-                this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[1]!, seenConsts) &&
-                (!unwrapped.arguments[2] ||
-                    this.isSideEffectFreeTopLevelConstInitializer(unwrapped.arguments[2], seenConsts))
-            ) {
-                return 0;
-            }
-            if (unwrapped.arguments.length !== 1) return null;
-            const sourceArrayLength = this.sideEffectFreeArrayLiteralLength(source, seenConsts);
-            if (sourceArrayLength !== null) return sourceArrayLength;
-            const sourceReturnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(source, seenConsts);
-            if (sourceReturnedArrayLength !== null) return sourceReturnedArrayLength;
-            const sourceText = this.sideEffectFreeStringLiteralText(source, seenConsts);
-            if (sourceText !== null) return Array.from(sourceText).length;
-            const sourceSetLength = this.sideEffectFreeNewCollectionLength(source, "Set", seenConsts);
-            if (sourceSetLength !== null) return sourceSetLength;
-            return this.sideEffectFreeNewCollectionLength(source, "Map", seenConsts);
-        }
         if (
             method === "keys" &&
             unwrapped.arguments.length === 1 &&
@@ -6051,7 +5960,7 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
+                false
             )
         ) {
             return true;
@@ -6088,7 +5997,7 @@ class Emitter {
         if (
             ts.isCallExpression(unwrapped) &&
             (
-                this.isSideEffectFreeStringArrayReturningArrayHelperCall(unwrapped, seenConsts)
+                false
             )
         ) {
             return true;
@@ -6252,31 +6161,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDataPropertyDescriptorStringValue(init, seenConsts);
-    }
-
-    private isSideEffectFreeStringArrayReturningArrayHelperCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (
-            !ts.isPropertyAccessExpression(call.expression) ||
-            !ts.isIdentifier(call.expression.expression) ||
-            !this.isUnshadowedGlobalIdentifier(call.expression.expression, "Array")
-        ) {
-            return false;
-        }
-        const method = call.expression.name.text;
-        if (method === "of") {
-            return Array.from(call.arguments).every((arg) =>
-                this.isSideEffectFreeStringCoercion(arg, seenConsts)
-            );
-        }
-        if (method === "from" && call.arguments.length === 1) {
-            return this.isSideEffectFreeStringOperand(call.arguments[0]!, seenConsts) ||
-                this.isSideEffectFreeStringArrayOperand(call.arguments[0]!, new Set(seenConsts)) ||
-                this.isSideEffectFreeStringSetConstructorSource(call.arguments[0]!, new Set(seenConsts));
-        }
-        return false;
     }
 
     private isSideEffectFreeStringSetConstructorSource(
@@ -6617,10 +6501,6 @@ class Emitter {
                     this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
                 );
         }
-        if (name === "Array") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                this.isSideEffectFreeArrayConstructorArgs(call.arguments, seenConsts);
-        }
         const osExport = this.namedImportExportName(callee, ["os", "node:os"]);
         if (osExport !== null) {
             return this.isSideEffectFreeOsCall(osExport, call.arguments, seenConsts);
@@ -6756,7 +6636,6 @@ class Emitter {
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
             if (name === "URLSearchParams") return this.isSideEffectFreeURLSearchParamsConstructorArgs(args, seenConsts);
-            if (name === "Array") return this.isSideEffectFreeArrayConstructorArgs(args, seenConsts);
             if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
             if (name === "DataView") return this.isSideEffectFreeDataViewConstructorArgs(args, seenConsts);
             if (name === "Map") {
@@ -6802,24 +6681,6 @@ class Emitter {
         return this.isSideEffectFreePrimitiveNumberCoercion(errorArgs[0]!, seenConsts) &&
             errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-        );
-    }
-
-    private isSideEffectFreeArrayConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length === 0) return true;
-        if (args.length === 1) {
-            const length = this.sideEffectFreeNumericLiteralSameValueZeroValue(args[0]!, seenConsts);
-            return length !== null &&
-                Number.isFinite(length) &&
-                Number.isInteger(length) &&
-                length >= 0 &&
-                length <= 0xffffffff;
-        }
-        return Array.from(args).every((arg) =>
-            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
     }
 
@@ -10287,25 +10148,6 @@ class Emitter {
         }
         const recv = call.expression.expression;
         const method = call.expression.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "Array") && method === "of") {
-            if (index < 0) return "absent";
-            const arg = call.arguments[index];
-            if (!arg) return "absent";
-            return this.isSideEffectFreePrimitivePromiseResolveValue(arg, new Set(seenConsts))
-                ? "present"
-                : "unsafe";
-        }
-        if (
-            this.isUnshadowedGlobalIdentifier(recv, "Array") &&
-            method === "from" &&
-            call.arguments.length === 1
-        ) {
-            return this.sideEffectFreePrimitiveArrayFromElementResult(
-                call.arguments[0]!,
-                index,
-                seenConsts,
-            );
-        }
         if (
             (
                 method === "keys" ||
@@ -10662,25 +10504,6 @@ class Emitter {
         }
         const recv = call.expression.expression;
         const method = call.expression.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "Array") && method === "of") {
-            if (index < 0) return "absent";
-            const arg = call.arguments[index];
-            if (!arg) return "absent";
-            return this.isSideEffectFreeTopLevelConstInitializer(arg, new Set(seenConsts))
-                ? "present"
-                : "unsafe";
-        }
-        if (
-            this.isUnshadowedGlobalIdentifier(recv, "Array") &&
-            method === "from" &&
-            call.arguments.length === 1
-        ) {
-            return this.sideEffectFreeArrayFromElementPresenceResult(
-                call.arguments[0]!,
-                index,
-                seenConsts,
-            );
-        }
         return null;
     }
 
@@ -12438,7 +12261,7 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
             if (new Set([
-                "Array", "Error", "EvalError", "Function",
+                "Error", "EvalError", "Function",
                 "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
                 "RegExp", "SuppressedError", "SyntaxError", "TypeError",
                 "URIError",
@@ -12678,7 +12501,7 @@ class Emitter {
         }
         if (!ts.isCallExpression(unwrapped)) return false;
         const isFreshArrayHelper =
-            this.isSideEffectFreeArrayReturningArrayHelperCall(unwrapped, seenConsts);
+            false;
         if (isFreshArrayHelper) return true;
         return (
             this.isObjectAssignCall(unwrapped) ||
@@ -21426,8 +21249,7 @@ class Emitter {
                 if (target && this.isCommonJsSourceFile(target.sf)) admitPositive(node);
             }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
-                (this.isUnshadowedGlobalIdentifier(node, "Array") ||
-                    runtimeGlobalBindings.has(node.text) && this.isRuntimeGlobalReference(node))) admitPositive(node);
+                (runtimeGlobalBindings.has(node.text) && this.isRuntimeGlobalReference(node))) admitPositive(node);
             if (ts.isElementAccessExpression(node) || ts.isPropertyAccessExpression(node)) {
                 const receivers = [this.checker.getTypeAtLocation(node.expression)];
                 const receiverTypes = new Set<ts.Type>();
@@ -31844,33 +31666,6 @@ class Emitter {
         if (stringBool !== null) return stringBool;
         const globalNumberBool = this.sideEffectFreeGlobalNumberPredicateCallValue(unwrapped, seenConsts);
         if (globalNumberBool !== null) return globalNumberBool;
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            unwrapped.expression.name.text === "isArray" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Array") &&
-            unwrapped.arguments.length >= 1 &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            const arg = unwrapped.arguments[0]!;
-            const unwrappedArg = this.unwrapSideEffectFreeStaticExpression(arg);
-            if (this.isSideEffectFreeArrayOperand(arg, seenConsts)) return true;
-            if (
-                this.staticNullishState(unwrappedArg, seenConsts) === "nullish" ||
-                this.sideEffectFreeStringLiteralText(unwrappedArg, seenConsts) !== null ||
-                this.sideEffectFreeNumericLiteralSameValueZeroValue(unwrappedArg, seenConsts) !== null ||
-                this.sideEffectFreeBigIntLiteralText(unwrappedArg, seenConsts) !== null ||
-                this.sideEffectFreePrimitiveBooleanValue(unwrappedArg, seenConsts) !== null ||
-                this.isSideEffectFreeFreshNonArrayBuiltinOperand(unwrappedArg, seenConsts) ||
-                (
-                    ts.isObjectLiteralExpression(unwrappedArg) &&
-                    this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrappedArg, seenConsts)
-                )
-            ) {
-                return false;
-            }
-        }
         if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
         if (
@@ -33190,9 +32985,6 @@ class Emitter {
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "RegExp")) {
                 return { c: "tsc_regexp_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
-                return { c: "tsc_array_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 if (this.options.test262Observation) {
@@ -36084,9 +35876,6 @@ class Emitter {
         }
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
-        }
-        if (name === "Array") {
-            return this.emitDynamicValueCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
         if (name === "Promise" && this.isUnshadowedGlobalIdentifier(calleeId, name)) {
             return this.emitDynamicValueCall(call, { c: "tsc_promise_constructor_value()", ty: T_VALUE });
@@ -39093,9 +38882,6 @@ class Emitter {
         }
         if (this.isBufferConstructorExpression(recvExpr)) {
             return this.emitBufferStatic(call, memberName);
-        }
-        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Array")) {
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
@@ -48390,9 +48176,6 @@ class Emitter {
             return this.emitDynamicValueConstruct(n, { c: ctorExpr.text === "Map"
                 ? "tsc_map_constructor_value()" : "tsc_set_constructor_value()", ty: T_VALUE });
         }
-        if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
-            return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
-        }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
             return this.emitDynamicValueConstruct(n, {
                 c: `tsc_environment_reference_get(${this.stringLit("Function")})`, ty: T_VALUE,
@@ -49041,12 +48824,6 @@ class Emitter {
                 return { c: "tsc_value_object_prototype()", ty: T_VALUE };
             }
             if (
-                pa.name.text === "prototype" &&
-                this.isUnshadowedGlobalIdentifier(pa.expression, "Array")
-            ) {
-                return { c: "tsc_array_prototype()", ty: arrayType(T_VALUE) };
-            }
-            if (
                 (this.isEventEmitterConstructorIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners") ||
                 (this.isEventsModuleIdentifier(pa.expression) && pa.name.text === "defaultMaxListeners")
             ) {
@@ -49138,17 +48915,6 @@ class Emitter {
                 const ty = this.moduleNamespaceMemberType(pa);
                 return { c: moduleNsMember, ty };
             }
-        }
-        const isStaticArrayPrototypeProperty =
-            ts.isPropertyAccessExpression(pa.expression) &&
-            ts.isIdentifier(pa.expression.expression) &&
-            pa.expression.name.text === "prototype" &&
-            this.isUnshadowedGlobalIdentifier(pa.expression.expression, "Array");
-        if (isStaticArrayPrototypeProperty && pa.name.text !== "length") {
-            return {
-                c: `tsc_value_get_prop(tsc_value_array(tsc_array_prototype()), tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`,
-                ty: T_VALUE,
-            };
         }
         const rawRecv = precomputedReceiver ?? this.emitExpr(pa.expression);
         const recv: EmitResult = rawRecv.ty.kind === "function"
