@@ -743,8 +743,6 @@ void fs_readdir_recursive_into(const char* root, const char* rel, tsc_array_t* o
 void fs_readdir_recursive_buffer_into(const char* root, const char* rel, tsc_array_t* out);
 tsc_str_t* path_join_impl(size_t n, va_list ap, bool resolve);
 size_t path_split_components(const tsc_str_t* p, size_t starts[256], size_t lens[256]);
-bool date_parse_fixed_int(const tsc_str_t* text, size_t* pos, size_t digits, int* out);
-bool date_parse_char(const tsc_str_t* text, size_t* pos, char ch);
 double date_millis_part(const tsc_date_t* d);
 tsc_str_t* path_str_slice(const tsc_str_t* p, size_t start, size_t len);
 tsc_str_t* path_get_string_prop(tsc_value_t object, const char* key, size_t key_len);

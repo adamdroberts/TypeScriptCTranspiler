@@ -17226,110 +17226,213 @@ double tsc_date_set_legacy_year(tsc_date_t* d, double wall_ms, double year) {
     return d->ms;
 }
 
-bool date_parse_fixed_int(const tsc_str_t* text, size_t* pos, size_t digits, int* out) {
-    if (!text || !pos || !out || *pos + digits > text->len) return false;
-    int value = 0;
-    for (size_t i = 0; i < digits; i++) {
-        unsigned char ch = (unsigned char)text->data[*pos + i];
-        if (!isdigit(ch)) return false;
-        value = value * 10 + (int)(ch - '0');
+static const char* date_weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+static const char* date_months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+/* Parsing projects grammar elements into the same semantic component order
+ * used by the calendar kernel. No source field becomes a host struct tm. */
+typedef struct {
+    const tsc_str_t* text;
+    size_t position;
+    double fields[7];
+    bool present[7];
+    bool has_zone;
+    double offset_minutes;
+} date_text_record_t;
+
+static const struct {
+    char separator;
+    size_t width;
+    double initial;
+    double minimum;
+    double maximum;
+    int prerequisite;
+    bool required;
+} date_text_components[] = {
+    { 0,   4, 0, -INFINITY, INFINITY, -1, true },
+    { '-', 2, 1, 1, 12,               0, false },
+    { '-', 2, 1, 1, 31,               1, false },
+    { 'T', 2, 0, 0, 24,               0, false },
+    { ':', 2, 0, 0, 59,               3, true },
+    { ':', 2, 0, 0, 59,               4, false },
+    { '.', 3, 0, 0, 999,              5, false },
+};
+
+static date_text_record_t date_text_record(const tsc_str_t* text) {
+    date_text_record_t record = { .text = text };
+    for (size_t index = 0; index < sizeof(record.fields) / sizeof(record.fields[0]); index++)
+        record.fields[index] = date_text_components[index].initial;
+    return record;
+}
+
+static char date_text_peek(const date_text_record_t* record) {
+    return record->position < record->text->len ? record->text->data[record->position] : 0;
+}
+
+static bool date_text_literal(date_text_record_t* record, const char* literal) {
+    size_t length = strlen(literal);
+    if (length > record->text->len - record->position ||
+        memcmp(record->text->data + record->position, literal, length) != 0) return false;
+    record->position += length;
+    return true;
+}
+
+/* Width zero is an unbounded civil-year digit traversal. Fixed widths are
+ * prescribed grammar widths, not limits on the source collection. */
+static bool date_text_number(date_text_record_t* record, size_t width, double* out) {
+    size_t start = record->position;
+    double value = 0;
+    while (record->position < record->text->len &&
+        (width == 0 || record->position - start < width)) {
+        unsigned char ch = (unsigned char)record->text->data[record->position];
+        if (ch < '0' || ch > '9') break;
+        value = date_number_add(date_number_multiply(value, 10), ch - '0');
+        record->position++;
     }
-    *pos += digits;
+    size_t consumed = record->position - start;
+    if (consumed == 0 || (width != 0 && consumed != width)) return false;
     *out = value;
     return true;
 }
 
-bool date_parse_char(const tsc_str_t* text, size_t* pos, char ch) {
-    if (!text || !pos || *pos >= text->len || text->data[*pos] != ch) return false;
-    *pos += 1;
+/* Retain the existing fractional-second extension through the same record:
+ * consume the whole digit run, projecting its first millisecond digits. */
+static bool date_text_fraction(date_text_record_t* record, double* out) {
+    size_t digits = 0;
+    double value = 0;
+    while (record->position < record->text->len) {
+        unsigned char ch = (unsigned char)record->text->data[record->position];
+        if (ch < '0' || ch > '9') break;
+        if (digits < 3) value = value * 10 + ch - '0';
+        digits++;
+        record->position++;
+    }
+    if (digits == 0) return false;
+    while (digits < 3) { value *= 10; digits++; }
+    *out = value;
     return true;
+}
+
+static bool date_text_offset(date_text_record_t* record, bool colon) {
+    char sign = date_text_peek(record);
+    if (sign != '+' && sign != '-') return false;
+    record->position++;
+    double hours, minutes;
+    if (!date_text_number(record, 2, &hours) ||
+        (colon && !date_text_literal(record, ":")) ||
+        !date_text_number(record, 2, &minutes) || hours > 23 || minutes > 59) return false;
+    record->has_zone = true;
+    record->offset_minutes = (sign == '-' ? -1 : 1) * (hours * 60 + minutes);
+    return true;
+}
+
+static bool date_text_iso(date_text_record_t* record) {
+    char sign = date_text_peek(record);
+    bool expanded = sign == '+' || sign == '-';
+    if (expanded) record->position++;
+    if (!date_text_number(record, expanded ? 6 : 4, &record->fields[0])) return false;
+    if (sign == '-') {
+        if (record->fields[0] == 0) return false;
+        record->fields[0] = -record->fields[0];
+    }
+    record->present[0] = true;
+    for (size_t index = 1; index < sizeof(date_text_components) / sizeof(date_text_components[0]); index++) {
+        char next = date_text_peek(record);
+        bool matches = next == date_text_components[index].separator || (index == 3 && next == 't');
+        int prerequisite = date_text_components[index].prerequisite;
+        if (!matches) {
+            if (date_text_components[index].required && record->present[prerequisite]) return false;
+            continue;
+        }
+        if (!record->present[prerequisite]) return false;
+        record->position++;
+        bool parsed = index == 6
+            ? date_text_fraction(record, &record->fields[index])
+            : date_text_number(record, date_text_components[index].width, &record->fields[index]);
+        if (!parsed) return false;
+        record->present[index] = true;
+    }
+    if (record->position < record->text->len) {
+        if (!record->present[3]) return false;
+        if (date_text_peek(record) == 'Z' || date_text_peek(record) == 'z') {
+            record->position++;
+            record->has_zone = true;
+        } else if (!date_text_offset(record, true)) return false;
+    }
+    return record->position == record->text->len;
+}
+
+static bool date_text_name(date_text_record_t* record, const char* const* names, size_t count, double* out) {
+    for (size_t index = 0; index < count; index++) {
+        size_t length = strlen(names[index]);
+        if (length <= record->text->len - record->position &&
+            memcmp(record->text->data + record->position, names[index], length) == 0) {
+            record->position += length;
+            *out = (double)index;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool date_text_civil(date_text_record_t* record) {
+    double weekday;
+    if (!date_text_name(record, date_weekdays, sizeof(date_weekdays) / sizeof(date_weekdays[0]), &weekday)) return false;
+    bool utc = date_text_peek(record) == ',';
+    if (!date_text_literal(record, utc ? ", " : " ")) return false;
+    static const size_t field_order[][3] = { { 1, 2, 0 }, { 2, 1, 0 } };
+    const size_t* order = field_order[utc ? 1 : 0];
+    for (size_t index = 0; index < sizeof(field_order[0]) / sizeof(field_order[0][0]); index++) {
+        size_t field = order[index];
+        if (field == 1) {
+            if (!date_text_name(record, date_months, sizeof(date_months) / sizeof(date_months[0]), &record->fields[field])) return false;
+            record->fields[field]++;
+        } else {
+            bool negative = field == 0 && date_text_peek(record) == '-';
+            if (negative) record->position++;
+            size_t start = record->position;
+            if (!date_text_number(record, field == 0 ? 0 : date_text_components[field].width, &record->fields[field]) ||
+                (field == 0 && record->position - start < 4)) return false;
+            if (negative) record->fields[field] = -record->fields[field];
+        }
+        record->present[field] = true;
+        if (!date_text_literal(record, " ")) return false;
+    }
+    for (size_t field = 3; field <= 5; field++) {
+        if (field != 3 && !date_text_literal(record, ":")) return false;
+        if (!date_text_number(record, date_text_components[field].width, &record->fields[field])) return false;
+        record->present[field] = true;
+    }
+    if (!date_text_literal(record, " GMT")) return false;
+    record->has_zone = true;
+    if (!utc) {
+        if (!date_text_offset(record, false)) return false;
+        if (record->position < record->text->len) {
+            if (!date_text_literal(record, " (")) return false;
+            while (record->position < record->text->len && date_text_peek(record) != ')') record->position++;
+            if (!date_text_literal(record, ")")) return false;
+        }
+    }
+    return record->position == record->text->len;
 }
 
 double tsc_date_parse(const tsc_str_t* text) {
     if (!text || text->len == 0) return NAN;
-    size_t pos = 0;
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-    int ms = 0;
-    int offset_minutes = 0;
-
-    if (!date_parse_fixed_int(text, &pos, 4, &year)) return NAN;
-    if (!date_parse_char(text, &pos, '-')) return NAN;
-    if (!date_parse_fixed_int(text, &pos, 2, &month)) return NAN;
-    if (!date_parse_char(text, &pos, '-')) return NAN;
-    if (!date_parse_fixed_int(text, &pos, 2, &day)) return NAN;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return NAN;
-
-    bool has_time = false;
-    if (pos < text->len) {
-        char sep = text->data[pos];
-        if (sep != 'T' && sep != 't') return NAN;
-        pos += 1;
-        has_time = true;
-        if (!date_parse_fixed_int(text, &pos, 2, &hour)) return NAN;
-        if (!date_parse_char(text, &pos, ':')) return NAN;
-        if (!date_parse_fixed_int(text, &pos, 2, &minute)) return NAN;
-        if (!date_parse_char(text, &pos, ':')) return NAN;
-        if (!date_parse_fixed_int(text, &pos, 2, &second)) return NAN;
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return NAN;
-        if (pos < text->len && text->data[pos] == '.') {
-            pos += 1;
-            int digits = 0;
-            while (pos < text->len && isdigit((unsigned char)text->data[pos])) {
-                if (digits < 3) {
-                    ms = ms * 10 + (int)(text->data[pos] - '0');
-                    digits++;
-                }
-                pos += 1;
-            }
-            if (digits == 0) return NAN;
-            while (digits < 3) {
-                ms *= 10;
-                digits++;
-            }
-        }
-        if (pos >= text->len) return NAN;
-        if (text->data[pos] == 'Z' || text->data[pos] == 'z') {
-            pos += 1;
-        } else if (text->data[pos] == '+' || text->data[pos] == '-') {
-            int sign = text->data[pos] == '+' ? 1 : -1;
-            int tz_hour = 0;
-            int tz_minute = 0;
-            pos += 1;
-            if (!date_parse_fixed_int(text, &pos, 2, &tz_hour)) return NAN;
-            if (!date_parse_char(text, &pos, ':')) return NAN;
-            if (!date_parse_fixed_int(text, &pos, 2, &tz_minute)) return NAN;
-            if (tz_hour > 23 || tz_minute > 59) return NAN;
-            offset_minutes = sign * (tz_hour * 60 + tz_minute);
-        } else {
-            return NAN;
-        }
+    date_text_record_t record = date_text_record(text);
+    if (!date_text_iso(&record)) {
+        record = date_text_record(text);
+        if (!date_text_civil(&record)) return NAN;
     }
-    if (pos != text->len) return NAN;
-
-    struct tm tm;
-    memset(&tm, 0, sizeof(tm));
-    tm.tm_year = year - 1900;
-    tm.tm_mon = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hour;
-    tm.tm_min = minute;
-    tm.tm_sec = second;
-    time_t t = timegm(&tm);
-    struct tm check;
-    if (!gmtime_r(&t, &check)) return NAN;
-    if (check.tm_year != tm.tm_year || check.tm_mon != tm.tm_mon || check.tm_mday != tm.tm_mday ||
-        check.tm_hour != tm.tm_hour || check.tm_min != tm.tm_min || check.tm_sec != tm.tm_sec) {
-        return NAN;
+    for (size_t index = 0; index < sizeof(record.fields) / sizeof(record.fields[0]); index++) {
+        if (!isfinite(record.fields[index]) || record.fields[index] < date_text_components[index].minimum ||
+            record.fields[index] > date_text_components[index].maximum) return NAN;
     }
-
-    double result = ((double)t) * 1000.0 + (double)ms;
-    if (has_time) result -= (double)offset_minutes * 60000.0;
-    return date_time_clip(result);
+    if (record.fields[3] == 24 && (record.fields[4] != 0 || record.fields[5] != 0 || record.fields[6] != 0)) return NAN;
+    double time = date_make_date(date_make_day(record.fields[0], record.fields[1] - 1, record.fields[2]),
+        date_make_time(record.fields[3], record.fields[4], record.fields[5], record.fields[6]));
+    if (record.has_zone) time = date_number_add(time, -record.offset_minutes * 60000);
+    else if (record.present[3]) time = date_local_to_utc(time);
+    return date_time_clip(time);
 }
 
 double tsc_date_utc(double year, double month, double day, double hours, double minutes, double seconds, double ms) {
@@ -17453,8 +17556,6 @@ tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
     if (!gmtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
-    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     char year[16];
     date_format_year(year, sizeof(year), tm.tm_year + 1900, false);
     char buf[40];
@@ -17462,9 +17563,9 @@ tsc_str_t* tsc_date_to_utc_string(const tsc_date_t* d) {
         buf,
         sizeof(buf),
         "%s, %02d %s %s %02d:%02d:%02d GMT",
-        weekdays[tm.tm_wday],
+        date_weekdays[tm.tm_wday],
         tm.tm_mday,
-        months[tm.tm_mon],
+        date_months[tm.tm_mon],
         year,
         tm.tm_hour,
         tm.tm_min,
@@ -17479,8 +17580,6 @@ tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d) {
     time_t seconds = (time_t)seconds_double;
     struct tm tm;
     if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
-    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     char year[16];
     date_format_year(year, sizeof(year), tm.tm_year + 1900, false);
     char buf[24];
@@ -17488,8 +17587,8 @@ tsc_str_t* tsc_date_to_date_string(const tsc_date_t* d) {
         buf,
         sizeof(buf),
         "%s %s %02d %s",
-        weekdays[tm.tm_wday],
-        months[tm.tm_mon],
+        date_weekdays[tm.tm_wday],
+        date_months[tm.tm_mon],
         tm.tm_mday,
         year
     );
@@ -17586,8 +17685,6 @@ tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     struct tm tm;
     if (!localtime_r(&seconds, &tm)) return tsc_str_from_lit("Invalid Date", 12);
 
-    static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-    static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     int offset_minutes = (int)-tsc_date_get_timezone_offset(d);
     char sign = offset_minutes < 0 ? '-' : '+';
     if (offset_minutes < 0) offset_minutes = -offset_minutes;
@@ -17602,8 +17699,8 @@ tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
         buf,
         sizeof(buf),
         "%s %s %02d %s %02d:%02d:%02d GMT%c%02d%02d (%s)",
-        weekdays[tm.tm_wday],
-        months[tm.tm_mon],
+        date_weekdays[tm.tm_wday],
+        date_months[tm.tm_mon],
         tm.tm_mday,
         year,
         tm.tm_hour,

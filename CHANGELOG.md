@@ -1,5 +1,7 @@
 # Changelog
 
+- Parse Date text through one semantic field record and the shared Number calendar kernel. Support optional fields, expanded years, absent-offset defaults, 24:00, TimeClip and runtime-produced civil/ISO roundtrips; delete machine-calendar normalization and verify coercion, deep retention and typed E2E in both memory modes.
+
 - Share Date year sign/magnitude formatting for prescribed ISO expanded years and civil minimum padding. Verify TimeClip boundaries, independent sign/width partitions, fixed offsets, deep retention and typed E2E in both memory modes.
 
 - Retain boxed lexical companion roots after their last store and root canonical native invocation/construction operands across allocation and callbacks. Verify forced collection across value kinds, fresh constructor receivers, deep escaped cells and typed Date consumers in both memory modes.

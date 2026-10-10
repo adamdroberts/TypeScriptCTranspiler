@@ -2883,7 +2883,8 @@
           "tests/property/date-instance-invocation.property.test.ts",
           "tests/property/ordinary-native-owner-result.property.test.ts",
           "tests/property/date-local-calendar.property.test.ts",
-          "tests/property/date-year-text.property.test.ts"
+          "tests/property/date-year-text.property.test.ts",
+          "tests/property/date-text-parse.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
@@ -2904,7 +2905,8 @@
           "date_now_time_value",
           "date_instance_invocation",
           "date_local_calendar",
-          "date_year_text"
+          "date_year_text",
+          "date_text_parse"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
