@@ -77,6 +77,13 @@ tsc_object_t* tsc_native_object_owner_get(tsc_native_object_owner_t* owner, void
     return owner->object;
 }
 
+void tsc_native_object_owner_attach(tsc_native_object_owner_t* owner, void* ptr, tsc_value_t receiver) {
+    if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native constructor requires an ordinary receiver"));
+    owner->object = (tsc_object_t*)value_ptr(receiver);
+    owner->object->class_ptr = ptr;
+}
+
 tsc_value_t tsc_object_entry_store(tsc_object_entry_t* entry, double index, tsc_value_t value) {
     if (!entry->pair) {
         entry->pair = tsc_array_new(sizeof(tsc_value_t), 2);
@@ -440,6 +447,7 @@ tsc_value_t tsc_value_function_named_kind(
     id->class_elements = NULL;
     id->class_constructor_body = tsc_value_undefined();
     id->class_constructor_body_root = NULL;
+    id->derived_class_constructor = false;
     id->home_object = tsc_value_undefined();
     id->home_object_root = NULL;
     tsc_function_init_metadata(id, length, name);
@@ -3397,6 +3405,7 @@ typedef struct tsc_callee_frame {
     struct tsc_callee_frame* prev;
     tsc_value_t value;
     tsc_value_t new_target;
+    tsc_environment_t* constructor_environment;
 } tsc_callee_frame_t;
 
 static TSC_TLS tsc_callee_frame_t* value_current_callee = NULL;
@@ -3405,6 +3414,10 @@ tsc_value_t tsc_value_current_callee(void) {
     return value_current_callee
         ? value_current_callee->value
         : tsc_value_undefined();
+}
+
+tsc_environment_t* tsc_value_current_constructor_environment(void) {
+    return value_current_callee ? value_current_callee->constructor_environment : NULL;
 }
 
 tsc_value_t tsc_value_current_new_target(void) {
@@ -3494,11 +3507,11 @@ tsc_value_t tsc_value_get_prototype_from_constructor(
 
 static tsc_value_t tsc_value_apply_with_activation(
     tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
-    tsc_value_t callee, tsc_value_t new_target
+    tsc_value_t callee, tsc_value_t new_target, tsc_environment_t* constructor_environment
 );
 
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args) {
-    return tsc_value_apply_with_activation(fn, this_arg, args, fn, tsc_value_undefined());
+    return tsc_value_apply_with_activation(fn, this_arg, args, fn, tsc_value_undefined(), NULL);
 }
 
 void tsc_value_class_set_constructor_body(tsc_value_t constructor, tsc_value_t body) {
@@ -3536,24 +3549,60 @@ tsc_value_t tsc_value_current_home_object(void) {
     return ((tsc_function_identity_t*)value_ptr(function))->home_object;
 }
 
+void tsc_value_class_set_heritage(tsc_value_t constructor, tsc_value_t superclass) {
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile superclass_root = tsc_value_gc_root(superclass);
+    (void)constructor_root; (void)superclass_root;
+    tsc_value_t parent = tsc_function_default_prototype();
+    tsc_value_t prototype_parent = tsc_value_null();
+    if (superclass != tsc_value_null()) {
+        if (!tsc_value_is_constructable(superclass))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Class extends value is not a constructor or null"));
+        parent = superclass;
+        prototype_parent = tsc_value_get_prop(superclass, tsc_str_from_lit("prototype", 9));
+        if (!tsc_value_is_object(prototype_parent) && prototype_parent != tsc_value_null())
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Superclass prototype must be an object or null"));
+    }
+    void* volatile prototype_root = tsc_value_gc_root(prototype_parent);
+    (void)prototype_root;
+    tsc_value_t prototype = tsc_value_get_prop(constructor, tsc_str_from_lit("prototype", 9));
+    if (!tsc_value_set_prototype_of(constructor, parent) || !tsc_value_set_prototype_of(prototype, prototype_parent))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Class heritage prototype definition failed"));
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    identity->derived_class_constructor = true;
+    identity->construct_allocates_receiver = false;
+}
+
 tsc_value_t tsc_value_class_construct_body(tsc_value_t constructor, tsc_value_t receiver, tsc_array_t* arguments) {
     void* volatile constructor_root = tsc_value_gc_root(constructor);
     void* volatile receiver_root = tsc_value_gc_root(receiver);
-    (void)constructor_root;
-    (void)receiver_root;
+    (void)constructor_root; (void)receiver_root;
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
     tsc_value_t new_target = tsc_value_current_new_target();
     void* volatile target_root = tsc_value_gc_root(new_target);
     (void)target_root;
-    tsc_value_class_initialize_elements(constructor, receiver, false);
-    if (tsc_value_is_undefined(identity->class_constructor_body)) return tsc_value_undefined();
-    return tsc_value_apply_with_activation(identity->class_constructor_body, receiver,
-        tsc_value_array(arguments), constructor, new_target);
+    bool default_body = tsc_value_is_undefined(identity->class_constructor_body);
+    tsc_environment_t* parent = default_body ? identity->lexical_environment
+        : ((tsc_function_identity_t*)value_ptr(identity->class_constructor_body))->lexical_environment;
+    tsc_environment_t* volatile environment = tsc_environment_constructor_new(parent, constructor, new_target,
+        receiver, identity->derived_class_constructor);
+    if (!identity->derived_class_constructor) tsc_value_class_initialize_elements(constructor, receiver, false);
+    if (default_body) {
+        if (identity->derived_class_constructor) return tsc_environment_super_construct(environment,
+            tsc_environment_super_constructor(environment), tsc_value_array(arguments));
+        return receiver;
+    }
+    tsc_value_t result = tsc_value_apply_with_activation(identity->class_constructor_body, receiver,
+        tsc_value_array(arguments), constructor, new_target, environment);
+    if (tsc_value_is_object(result)) return result;
+    if (identity->derived_class_constructor && !tsc_value_is_undefined(result))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Derived constructor may only return an object or undefined"));
+    return tsc_environment_get_this(environment);
 }
 
 static tsc_value_t tsc_value_apply_with_activation(
     tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
-    tsc_value_t callee, tsc_value_t new_target
+    tsc_value_t callee, tsc_value_t new_target, tsc_environment_t* constructor_environment
 ) {
     // The canonical invocation owns its encoded operands across argument-list
     // materialization and arbitrary user callbacks, including native callers.
@@ -3626,6 +3675,7 @@ static tsc_value_t tsc_value_apply_with_activation(
             .prev = value_current_callee,
             .value = callee,
             .new_target = new_target,
+            .constructor_environment = constructor_environment,
         };
         value_current_callee = &frame;
         tsc_value_t result = ident->code.generic(ident->env, this_arg, list);

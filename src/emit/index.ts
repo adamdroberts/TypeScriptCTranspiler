@@ -50,6 +50,7 @@ import {
     T_URL,
     T_URL_SEARCH_PARAMS,
     T_VALUE,
+    T_ENVIRONMENT,
     T_VOID,
     withTypeBindings,
     withSourceTypeProjection,
@@ -23352,6 +23353,8 @@ class Emitter {
         if (current) return current;
         const inherited = this.activeArrowLexicalBinding(fn, kind);
         if (inherited) return inherited;
+        const thisEnvironment = this.functionThisStack.at(-1);
+        if (kind === "this" && thisEnvironment?.ty.kind === "environment") return thisEnvironment;
         if (kind === "home-object") return { c: "tsc_value_current_home_object()", ty: T_VALUE };
         if (this.sourceEnvironmentEnabled(fn.getSourceFile()) ||
             this.isTest262EvalSourceFile(fn.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(fn)) {
@@ -23925,6 +23928,7 @@ class Emitter {
         const parameters = this.collectParams(ctor?.parameters ?? []);
         this.protos.line(`static inline void ${name}_init(${[`${name}_t* self`, ...parameters].join(", ")});`);
         this.protos.line(`static inline ${name}_t* ${name}_new(${parameters.length ? parameters.join(", ") : "void"});`);
+        this.protos.line(`static inline ${name}_t* ${name}_new_with_receiver(${["tsc_value_t receiver", ...parameters].join(", ")});`);
     }
 
     private classConstructorInitializesAllFields(cd: ts.ClassDeclaration): boolean {
@@ -25328,7 +25332,7 @@ class Emitter {
 
         // ClassName_new: allocate + call init.
         this.defs.open(
-            `static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"})`,
+            `static inline ${name}_t* ${name}_new_with_receiver(${["tsc_value_t receiver", ...ctorParams].join(", ")})`,
         );
         const alloc = this.classConstructorInitializesAllFields(cd)
             ? "TSC_GC_MALLOC_UNINIT"
@@ -25338,12 +25342,18 @@ class Emitter {
         );
         this.defs.line("self->__tsc_object_owner.object = NULL;");
         this.defs.line(`self->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(classType(name), cd)};`);
+        this.defs.line("if (!tsc_value_is_undefined(receiver)) tsc_native_object_owner_attach(&self->__tsc_object_owner, self, receiver);");
         const initArgs = ["self"];
         initArgs.push(...rawParameterNames);
         this.defs.line(`${name}_init(${initArgs.join(", ")});`);
         this.defs.line("return self;");
         this.defs.close();
         this.defs.line();
+        this.defs.open(`static inline ${name}_t* ${name}_new(${ctorParams.length ? ctorParams.join(", ") : "void"})`);
+        this.defs.line(`return ${name}_new_with_receiver(${["tsc_value_undefined()", ...rawParameterNames].join(", ")});`);
+        this.defs.close();
+        this.defs.line();
+
 
     }
 
@@ -25875,7 +25885,7 @@ class Emitter {
                     : `(${index} < args->len ? TSC_ARR(tsc_value_t, args, ${index}) : tsc_value_undefined())`;
                 callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[index]!, ctor ?? cd));
             }
-            buf.line(`${className}_t* result = ${className}_new(${callArgs.join(", ")});`);
+            buf.line(`${className}_t* result = ${className}_new_with_receiver(${["this_arg", ...callArgs].join(", ")});`);
             buf.line("tsc_call_activation_pop(&activation);");
             buf.line(`return ${this.classValueBoxExpression({ c: "result", ty: classType(className) }, ctor ?? cd)};`);
             buf.close();
@@ -26785,19 +26795,7 @@ class Emitter {
                     if (!this.currentFunctionCellForSymbol(capture.symbol) &&
                         !this.closureEnvBindingForSymbol(capture.symbol)) return false;
                 }
-                let safe = true;
-                const visit = (current: ts.Node): void => {
-                    if (!safe) return;
-                    if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-                    if (current.kind === ts.SyntaxKind.SuperKeyword &&
-                        ts.isCallExpression(current.parent) && current.parent.expression === current) {
-                        safe = false;
-                        return;
-                    }
-                    ts.forEachChild(current, visit);
-                };
-                visit(node);
-                return safe;
+                return true;
             },
             isSupportedNestedClass: (node) => ts.isClassDeclaration(node)
                 ? this.isSupportedScopeClassDeclaration(node) : this.isSupportedDynamicClassDefinition(node),
@@ -27905,6 +27903,11 @@ class Emitter {
                             setReference(op.reference, read(op.source), graph.expressionResults[stateNode.slots[op.source]!]!);
                             evaluated = read(op.source);
                         } else if (op.kind === "property-key") evaluated = `tsc_value_to_property_key(${read(op.source)})`;
+                        else if (op.kind === "super-constructor") {
+                            const environment = this.constructorThisEnvironment(op.node);
+                            if (!environment) unsupported(op.node, "super call requires a constructor environment");
+                            evaluated = `tsc_environment_super_constructor(${environment.c})`;
+                        }
                         else if (op.kind === "super-this") evaluated = this.coerce(this.superThisValue(op.node), T_VALUE, op.node);
                         else if (op.kind === "super-base") evaluated = `tsc_value_get_prototype_of(${this.superHomeObject(op.node).c})`;
                         else if (op.kind === "template-object") evaluated = this.emitTemplateObject(op.template).c;
@@ -32039,7 +32042,8 @@ class Emitter {
     }
 
     private isSupportedDynamicClassDefinition(definition: ts.ClassLikeDeclaration): boolean {
-        return !definition.typeParameters?.length && !definition.heritageClauses?.length &&
+        return !definition.typeParameters?.length &&
+            (definition.heritageClauses ?? []).every(clause => clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.length === 1) &&
             !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 ts.isClassStaticBlockDeclaration(member) ||
@@ -32140,9 +32144,6 @@ class Emitter {
         if (expression.typeParameters?.length) {
             unsupported(expression, "class expression type parameters are not supported by dynamic class definition");
         }
-        if (expression.heritageClauses?.length) {
-            unsupported(expression, "class expression heritage is not supported by dynamic class definition");
-        }
         if (this.classHasDecorators(expression)) {
             unsupported(expression, "class expression decorators are not supported by dynamic class definition");
         }
@@ -32169,6 +32170,11 @@ class Emitter {
         const inner = this.createClassNameEnvironment(expression, pieces);
         this.closureEnvScopes.push(inner);
         try {
+            const heritage = expression.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword)?.types[0];
+            if (heritage) {
+                const superclass = this.emitExpr(heritage.expression);
+                pieces.push(`tsc_value_class_set_heritage(${constructor}, ${this.coerce(superclass, T_VALUE, heritage.expression)})`);
+            }
             pieces.push(...this.emitClassElementDefinitions(expression, constructor, prototype, false));
         } finally {
             this.closureEnvScopes.pop();
@@ -32888,7 +32894,7 @@ class Emitter {
             if (this.isCommonJsSourceFile(expr.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(expr))
                 return { c: this.commonJsModuleBindings.get(expr.getSourceFile())!.initialExports, ty: T_VALUE };
             const activationThis = this.currentFunctionActivationBinding("this");
-            if (activationThis) return activationThis;
+            if (activationThis) return this.readThisBinding(activationThis);
             const fnThis = this.functionThisStack[this.functionThisStack.length - 1];
             if (this.isTest262ScriptGlobalThisExpression(expr)) {
                 return { c: this.isTest262EvalSourceFile(expr.getSourceFile()) ? "tsc_environment_eval_this()" : "tsc_global_object()", ty: T_VALUE };
@@ -32897,7 +32903,7 @@ class Emitter {
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
             if (!this.currentClass && !fnThis)
                 unsupported(expr, "`this` outside of a class method or function this parameter");
-            if (fnThis) return fnThis;
+            if (fnThis) return this.readThisBinding(fnThis);
             return { c: "self", ty: classType(this.currentClass!) };
         }
 
@@ -34778,19 +34784,30 @@ class Emitter {
     /** One captured Reference projects ordinary and super property operations.
      * Super retains a raw ReferencedName until GetValue/PutValue normalize it,
      * and its receiver remains separate from its live home-object prototype. */
+    private readThisBinding(binding: EmitResult): EmitResult {
+        return binding.ty.kind === "environment"
+            ? { c: `tsc_environment_get_this(${binding.c})`, ty: T_VALUE } : binding;
+    }
+
+    private constructorThisEnvironment(node: ts.Node): EmitResult | null {
+        const binding = this.currentFunctionActivationBinding("this") ??
+            this.activeArrowLexicalBinding(node, "this") ?? this.functionThisStack.at(-1);
+        return binding?.ty.kind === "environment" ? binding : null;
+    }
+
     private superHomeObject(node: ts.Node): EmitResult {
-        return this.activeArrowLexicalBinding(node, "home-object") ??
-            this.currentFunctionActivationBinding("home-object") ??
+        return this.currentFunctionActivationBinding("home-object") ??
+            this.activeArrowLexicalBinding(node, "home-object") ??
             { c: "tsc_value_current_home_object()", ty: T_VALUE };
     }
 
     private superThisValue(node: ts.Node): EmitResult {
-        const receiver = this.activeArrowLexicalBinding(node, "this") ??
-            this.currentFunctionActivationBinding("this") ??
+        const receiver = this.currentFunctionActivationBinding("this") ??
+            this.activeArrowLexicalBinding(node, "this") ??
             this.functionThisStack[this.functionThisStack.length - 1] ??
             (this.currentClass ? { c: "self", ty: classType(this.currentClass) } : undefined);
         if (!receiver) unsupported(node, "super property requires a method receiver");
-        return receiver;
+        return this.readThisBinding(receiver);
     }
 
     private emitCapturedPropertyReference(
@@ -34977,7 +34994,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "weakmap", "weakset", "weakref", "finregistry", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -35375,6 +35392,11 @@ class Emitter {
          * must not discard excess ECMAScript arguments. */
         if (this.canonicalFunctionLikeForExpression(call.expression)) {
             return this.emitDynamicValueCall(call, this.emitExpr(call.expression));
+        }
+        if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
+            const environment = this.constructorThisEnvironment(call);
+            if (environment) return this.emitDynamicValueCall(call,
+                { c: `tsc_environment_super_constructor(${environment.c})`, ty: T_VALUE });
         }
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
         if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
@@ -36145,6 +36167,11 @@ class Emitter {
     private emitCallApplication(node: ts.CallExpression | ts.NewExpression | ts.TaggedTemplateExpression,
         callee: string, receiver: string, argumentsValue: string): string {
         if (ts.isNewExpression(node)) return `tsc_value_construct(${callee}, ${argumentsValue})`;
+        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.SuperKeyword) {
+            const environment = this.constructorThisEnvironment(node);
+            if (!environment) unsupported(node, "super call requires a constructor environment");
+            return `tsc_environment_super_construct(${environment.c}, ${callee}, ${argumentsValue})`;
+        }
         if (this.options.test262Observation && this.isDirectEvalSyntax(node))
             return this.emitDirectEvalApplication(node,callee,argumentsValue);
         return `tsc_value_apply_function(${callee}, ${receiver}, ${argumentsValue})`;
@@ -36559,8 +36586,8 @@ class Emitter {
                 if (cap.lexical) this.structDecls.line(`bool* ${cap.field}_initialized;`);
             }
             for (const capture of arrowLexicalCaptures) {
-                this.structDecls.line(`tsc_value_t ${capture.field};`);
-                this.structDecls.line(`void* ${capture.field}_gc_root;`);
+                this.structDecls.line(`${capture.value.ty.c} ${capture.field};`);
+                if (capture.value.ty.kind === "value") this.structDecls.line(`void* ${capture.field}_gc_root;`);
             }
             this.structDecls.close(` ${envType};`);
         }
@@ -36659,8 +36686,8 @@ class Emitter {
                 }
             }
             for (const capture of arrowLexicalCaptures) {
-                pieces.push(`${env}->${capture.field} = ${this.coerce(capture.value, T_VALUE, fn)}`);
-                pieces.push(`${env}->${capture.field}_gc_root = tsc_value_gc_root(${env}->${capture.field})`);
+                pieces.push(`${env}->${capture.field} = ${capture.value.c}`);
+                if (capture.value.ty.kind === "value") pieces.push(`${env}->${capture.field}_gc_root = tsc_value_gc_root(${env}->${capture.field})`);
             }
             pieces.push(`${tmp}->env = ${env}`);
         } else {
@@ -36727,7 +36754,7 @@ class Emitter {
             for (const capture of arrowLexicalCaptures) {
                 arrowLexicalBindings.set(capture.kind, {
                     c: `${envLocal}->${capture.field}`,
-                    ty: T_VALUE,
+                    ty: capture.value.ty,
                 });
             }
         } else {
@@ -36954,8 +36981,9 @@ class Emitter {
                 this.returnStack.push(ret);
                 if (isAsync) this.asyncFunctionStack.push({ promiseType: ret });
                 this.cellScopes.push(capturedCells);
-                const functionThisBinding = type.thisParam
-                    ? { c: "__tsc_this", ty: type.thisParam }
+                const functionThisBinding = ts.isConstructorDeclaration(fn)
+                    ? { c: "tsc_value_current_constructor_environment()", ty: T_ENVIRONMENT }
+                    : type.thisParam ? { c: "__tsc_this", ty: type.thisParam }
                     : arrowLexicalBindings.get("this") ?? null;
                 if (functionThisBinding) {
                     this.functionThisStack.push(functionThisBinding);

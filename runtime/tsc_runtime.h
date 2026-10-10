@@ -686,6 +686,8 @@ void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
 tsc_value_t tsc_call_receiver(void);
 tsc_value_t tsc_call_arguments(void);
 tsc_value_t tsc_value_current_callee(void);
+tsc_environment_t* tsc_value_current_constructor_environment(void);
+void tsc_value_class_set_heritage(tsc_value_t constructor, tsc_value_t superclass);
 tsc_value_t tsc_value_current_home_object(void);
 tsc_value_t tsc_value_function_with_home_object(tsc_value_t function, tsc_value_t home_object);
 tsc_value_t tsc_value_current_new_target(void);
@@ -891,6 +893,10 @@ void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, 
 tsc_environment_t* tsc_environment_module_new(void);
 void tsc_environment_variable_enter(tsc_environment_scope_t* scope);
 tsc_value_t tsc_environment_eval_this(void);
+tsc_environment_t* tsc_environment_constructor_new(tsc_environment_t* parent, tsc_value_t constructor, tsc_value_t new_target, tsc_value_t receiver, bool derived);
+tsc_value_t tsc_environment_get_this(tsc_environment_t* environment);
+tsc_value_t tsc_environment_super_constructor(tsc_environment_t* environment);
+tsc_value_t tsc_environment_super_construct(tsc_environment_t* environment, tsc_value_t superclass, tsc_value_t arguments);
 tsc_value_t tsc_environment_eval_new_target(void);
 void tsc_environment_require_function_context(void);
 void tsc_environment_scope_leave(tsc_environment_scope_t* scope);
@@ -1471,6 +1477,7 @@ typedef struct {
     tsc_native_object_initializer_t initialize;
 } tsc_native_object_owner_t;
 tsc_object_t* tsc_native_object_owner_get(tsc_native_object_owner_t* owner, void* ptr, tsc_native_object_initializer_t initialize);
+void tsc_native_object_owner_attach(tsc_native_object_owner_t* owner, void* ptr, tsc_value_t receiver);
 tsc_object_t* tsc_module_namespace_new(void);
 bool tsc_module_namespace_define(tsc_object_t* object, tsc_str_t* key, tsc_accessor_getter_t getter);
 void tsc_module_namespace_finalize(tsc_object_t* object);

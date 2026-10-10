@@ -20,6 +20,9 @@ struct tsc_environment {
     bool variable_scope;
     tsc_environment_t* captured;
     enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION } context;
+    bool this_initialized;
+    tsc_value_t constructor;
+    void* constructor_root;
     tsc_value_t this_value;
     void* this_root;
     tsc_value_t new_target;
@@ -42,6 +45,9 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->variable_scope = variable_scope;
     environment->captured = NULL;
     environment->context = ENV_CONTEXT_NONE;
+    environment->this_initialized = true;
+    environment->constructor = tsc_value_undefined();
+    environment->constructor_root = NULL;
     environment->this_value = tsc_value_undefined();
     environment->this_root = NULL;
     environment->new_target = tsc_value_undefined();
@@ -110,15 +116,64 @@ void tsc_environment_variable_enter(tsc_environment_scope_t* scope) {
     current_environment = scope->record;
 }
 
+tsc_environment_t* tsc_environment_constructor_new(tsc_environment_t* parent,
+    tsc_value_t constructor, tsc_value_t new_target, tsc_value_t receiver, bool derived) {
+    tsc_environment_t* captured = tsc_environment_new(parent, false);
+    tsc_environment_t* environment = tsc_environment_new(captured, true);
+    environment->captured = captured;
+    environment->context = ENV_CONTEXT_FUNCTION;
+    environment->this_initialized = !derived;
+    environment->constructor = constructor;
+    environment->constructor_root = tsc_value_gc_root(constructor);
+    environment->this_value = receiver;
+    environment->this_root = tsc_value_gc_root(receiver);
+    environment->new_target = new_target;
+    environment->new_target_root = tsc_value_gc_root(new_target);
+    return environment;
+}
+
+tsc_value_t tsc_environment_get_this(tsc_environment_t* environment) {
+    if (!environment || !environment->this_initialized)
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Must call super constructor before accessing this"));
+    return environment->this_value;
+}
+
+tsc_value_t tsc_environment_super_constructor(tsc_environment_t* environment) {
+    if (!environment || environment->context != ENV_CONTEXT_FUNCTION)
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("super call requires a constructor environment"));
+    return tsc_value_get_prototype_of(environment->constructor);
+}
+
+tsc_value_t tsc_environment_super_construct(tsc_environment_t* environment, tsc_value_t superclass, tsc_value_t arguments) {
+    tsc_environment_t* volatile owner = environment;
+    tsc_value_t receiver = tsc_value_construct_with_new_target(superclass, arguments, environment->new_target);
+    void* volatile root = tsc_value_gc_root(receiver);
+    (void)owner; (void)root;
+    if (environment->this_initialized)
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Super constructor may only be called once"));
+    environment->this_value = receiver;
+    environment->this_root = tsc_value_gc_root(receiver);
+    environment->this_initialized = true;
+    tsc_value_class_initialize_elements(environment->constructor, receiver, false);
+    return receiver;
+}
+
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict) {
-    tsc_environment_variable_enter(scope);
+    tsc_environment_t* constructor = !arrow ? tsc_value_current_constructor_environment() : NULL;
+    if (constructor) {
+        scope->previous = current_environment;
+        scope->record = constructor;
+        current_environment = constructor;
+    } else tsc_environment_variable_enter(scope);
     if (!arrow) {
         scope->record->context = ENV_CONTEXT_FUNCTION;
-        tsc_value_t receiver = tsc_call_receiver();
-        scope->record->this_value = strict ? receiver : tsc_value_sloppy_this(receiver);
-        scope->record->this_root = tsc_value_gc_root(scope->record->this_value);
-        scope->record->new_target = tsc_value_current_new_target();
-        scope->record->new_target_root = tsc_value_gc_root(scope->record->new_target);
+        if (!constructor) {
+            tsc_value_t receiver = tsc_call_receiver();
+            scope->record->this_value = strict ? receiver : tsc_value_sloppy_this(receiver);
+            scope->record->this_root = tsc_value_gc_root(scope->record->this_value);
+            scope->record->new_target = tsc_value_current_new_target();
+            scope->record->new_target_root = tsc_value_gc_root(scope->record->new_target);
+        }
         tsc_environment_binding_t* arguments = environment_create_binding(scope->record, tsc_str_from_cstr("arguments"), false, false, false);
         binding_store(arguments, tsc_call_arguments());
     }
@@ -132,7 +187,7 @@ static tsc_environment_t* environment_context(void) {
 
 tsc_value_t tsc_environment_eval_this(void) {
     tsc_environment_t* record = environment_context();
-    return record ? record->this_value : tsc_global_object();
+    return record ? tsc_environment_get_this(record) : tsc_global_object();
 }
 
 void tsc_environment_require_function_context(void) {

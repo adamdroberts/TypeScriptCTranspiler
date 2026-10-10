@@ -39,6 +39,7 @@ export type CTypeKind =
     | "fsdirent"
     | "dispatchqueue"
     | "function"
+    | "environment"
     | "value"
     | "unsupported";
 
@@ -168,6 +169,8 @@ export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_FS_DIRENT: CType = { kind: "fsdirent", c: "tsc_fs_dirent_t*" };
 export const T_DISPATCH_QUEUE: CType = { kind: "dispatchqueue", c: "tsc_dispatch_queue_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
+/** Internal retained Function Environment Record; never inferred for user values. */
+export const T_ENVIRONMENT: CType = { kind: "environment", c: "tsc_environment_t*" };
 
 export function classType(className: string): CType {
     return { kind: "class", c: `${className}_t*`, className };

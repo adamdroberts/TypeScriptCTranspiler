@@ -86,6 +86,7 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
                 result = new Function("left", "right", `return left ${spelling.slice(0, -1)} right;`)(values[op.left], values[op.right]);
             } else if (op.kind === "arguments" || op.kind === "array") result = [];
             else if (op.kind === "object") result = {};
+            else if (op.kind === "super-constructor") result = Object.getPrototypeOf(environment.constructor);
             else if (op.kind === "super-this") result = environment.thisValue;
             else if (op.kind === "super-base") result = Object.getPrototypeOf(environment.homeObject);
             else if (op.kind === "call") result = op.construct

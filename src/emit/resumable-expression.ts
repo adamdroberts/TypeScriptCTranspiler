@@ -11,6 +11,7 @@ export type ResumableReference =
 type ValueOperation =
     | { readonly kind: "evaluate"; readonly expression: ts.Expression;
         readonly inputs: readonly { readonly expression: ts.Expression; readonly slot: ResumableValueSlot }[] }
+    | { readonly kind: "super-constructor"; readonly node: ts.CallExpression }
     | { readonly kind: "super-this"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression }
     | { readonly kind: "super-base"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression }
     | { readonly kind: "copy"; readonly source: ResumableValueSlot }
@@ -181,6 +182,8 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             argumentsEntry = put({ kind: "branch", id: reserve(), source: callee, mode: "nullish",
                 yes: skip, no: argumentsEntry });
         }
+        if (ts.isCallExpression(node) && target.kind === ts.SyntaxKind.SuperKeyword)
+            return operation({ kind: "super-constructor", node }, callee, argumentsEntry);
         if (!targetIsProperty) return build(targetExpression, callee, argumentsEntry, ts.isOptionalChain(node) ? skip : undefined);
         const calleeExit = ts.isOptionalChain(node) && !ts.isParenthesizedExpression(targetExpression)
             ? skip : operation({ kind: "undefined" }, callee, argumentsEntry);

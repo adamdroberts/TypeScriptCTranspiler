@@ -204,6 +204,7 @@ typedef struct tsc_function_identity {
      * instead of inferring them from the presence of a construct callback. */
     bool has_prototype_property;
     bool construct_allocates_receiver;
+    bool derived_class_constructor;
     bool func_prototype_writable;
     bool func_prototype_initialized;
     double length;
