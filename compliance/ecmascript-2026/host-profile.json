@@ -39,6 +39,7 @@
     "src/function-constructor-source.ts",
     "src/emit/async-cfg.ts",
     "src/emit/async-ir.ts",
+    "src/emit/binding-tree.ts",
     "src/emit/cbuf.ts",
     "src/emit/index.ts",
     "src/emit/lexical-declarations.ts",

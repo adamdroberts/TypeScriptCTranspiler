@@ -1,5 +1,7 @@
 # Changelog
 
+- Project ordinary destructuring assignments onto the shared binding tree and retained Reference leaves. Preserve evaluation/default/rest/close ordering, strict and immutable write errors, actual values and source identity; verify independent Node semantics, deep assignment and typed E2E in both memory modes.
+
 - Share typed Module patterns with the canonical binding-cell collection and BindingInitialization tree. Preserve boxed aggregate/default sources, actual iterator values, cyclic TDZ/var state and live exports; verify independent Node semantics, deep binding and typed E2E in both memory modes.
 
 - Include actual arguments, source writes, aliases and patterns in the shared native-result graph. Preserve actual values through annotated ABI slots, shared collection codecs, callback adapters and reflective calls; verify independent semantics and typed module E2E in both memory modes.

@@ -1,0 +1,1 @@
+{"description":"Ordinary array/object assignment trees preserve source identity and write retained identifier, native field/accessor and indexed References through typed source modules and suspension boundaries."}

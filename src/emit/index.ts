@@ -6,6 +6,7 @@ import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
+import { normalizeAssignmentTarget } from "./binding-tree";
 import type { ResumableReference } from "./resumable-expression";
 import {
     CType,
@@ -416,6 +417,8 @@ type BindingInitializationLeafEmitter = (
     identifier: ts.Identifier,
     sourceValue: string,
 ) => void;
+
+type BindingInitializationLeafPreparation = (buf: CBuf, identifier: ts.Identifier) => void;
 
 interface Test262ScriptGlobalDeclarationPlan {
     lexicals: Array<{
@@ -25096,6 +25099,7 @@ class Emitter {
         element: ts.BindingElement,
         sourceValue: string,
         initialize: BindingInitializationLeafEmitter,
+        prepare?: BindingInitializationLeafPreparation,
     ): void {
         this.emitBindingInitializationValue(
             buf,
@@ -25103,6 +25107,7 @@ class Emitter {
             sourceValue,
             element.initializer,
             initialize,
+            prepare,
         );
     }
 
@@ -25116,6 +25121,7 @@ class Emitter {
         sourceValue: string,
         initializer: ts.Expression | undefined,
         initialize: BindingInitializationLeafEmitter,
+        prepare?: BindingInitializationLeafPreparation,
     ): void {
         const value = this.freshTemp("_binding_value");
         const root = this.freshTemp("_binding_value_gc_root");
@@ -25128,7 +25134,7 @@ class Emitter {
             buf.line(`${root} = tsc_value_gc_root(${value});`);
             buf.close();
         }
-        this.emitBindingInitialization(buf, binding, value, initialize);
+        this.emitBindingInitialization(buf, binding, value, initialize, prepare);
     }
 
     /** BindingInitialization consumes the BindingName AST as one canonical
@@ -25139,9 +25145,11 @@ class Emitter {
         binding: ts.BindingName,
         sourceValue: string,
         initialize: BindingInitializationLeafEmitter,
+        prepare?: BindingInitializationLeafPreparation,
     ): void {
         if (ts.isIdentifier(binding)) {
-            const declaration = ts.isVariableDeclaration(binding.parent) ? binding.parent : null;
+            prepare?.(buf, binding);
+            const declaration = binding.parent && ts.isVariableDeclaration(binding.parent) ? binding.parent : null;
             const value = this.resourceInitializationValue(declaration, sourceValue);
             if (declaration) this.emittingResourceBindings.add(declaration);
             try { initialize(buf, binding, value); } finally {
@@ -25149,7 +25157,7 @@ class Emitter {
             }
             return;
         }
-        if (ts.isVariableDeclaration(binding.parent) && this.resourceDeclarationHint(binding.parent) !== null)
+        if (binding.parent && ts.isVariableDeclaration(binding.parent) && this.resourceDeclarationHint(binding.parent) !== null)
             unsupported(binding, "resource declarations require an initialized identifier binding");
 
         const source = this.freshTemp("_binding_source");
@@ -25185,6 +25193,7 @@ class Emitter {
                     ) {
                         unsupported(element, "invalid object binding rest element");
                     }
+                    prepare?.(buf, element.name);
                     const rest = this.freshTemp("_binding_object_rest");
                     const restRoot = this.freshTemp("_binding_object_rest_gc_root");
                     buf.line(
@@ -25218,11 +25227,13 @@ class Emitter {
                 const keyRoot = this.freshTemp("_binding_key_gc_root");
                 buf.line(`void* volatile ${keyRoot} = tsc_value_gc_root(${key});`);
                 if (excluded) buf.line(`tsc_array_push_value(${excluded}, ${key});`);
+                if (ts.isIdentifier(element.name)) prepare?.(buf, element.name);
                 this.emitBindingInitializationElement(
                     buf,
                     element,
                     `tsc_value_get_computed_prop(${source}, ${key})`,
                     initialize,
+                    prepare,
                 );
             }
             buf.close();
@@ -25255,6 +25266,7 @@ class Emitter {
                 ) {
                     unsupported(element, "invalid array binding rest element");
                 }
+                if (ts.isIdentifier(element.name)) prepare?.(buf, element.name);
                 const rest = this.freshTemp("_binding_array_rest");
                 const next = this.freshTemp("_binding_array_rest_value");
                 const boxedRest = this.freshTemp("_binding_array_rest_boxed");
@@ -25266,13 +25278,14 @@ class Emitter {
                 buf.close();
                 buf.line(`tsc_value_t ${boxedRest} = tsc_value_array(${rest});`);
                 buf.line(`void* volatile ${boxedRestRoot} = tsc_value_gc_root(${boxedRest});`);
-                this.emitBindingInitialization(buf, element.name, boxedRest, initialize);
+                this.emitBindingInitialization(buf, element.name, boxedRest, initialize, prepare);
                 continue;
             }
             const next = this.freshTemp("_binding_iterator_value");
+            if (ts.isIdentifier(element.name)) prepare?.(buf, element.name);
             buf.line(`tsc_value_t ${next} = tsc_value_undefined();`);
             buf.line(`(void)tsc_sync_iterator_step(${iterator}, &${next});`);
-            this.emitBindingInitializationElement(buf, element, next, initialize);
+            this.emitBindingInitializationElement(buf, element, next, initialize, prepare);
         }
         buf.line(`tsc_sync_iterator_close(${iterator});`);
         buf.line("tsc_try_pop();");
@@ -37385,6 +37398,26 @@ class Emitter {
         });
     }
 
+    private emitNativeConstAssignment(bin: ts.BinaryExpression, op: ts.SyntaxKind): EmitResult | null {
+        if (op !== ts.SyntaxKind.EqualsToken) return null;
+        const target = this.unwrapTransparentExpression(bin.left);
+        if (!ts.isIdentifier(target)) return null;
+        const symbol = this.symbolForIdentifier(target);
+        let declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        while (declaration && ts.isBindingElement(declaration)) declaration = declaration.parent.parent;
+        if (!declaration || !ts.isVariableDeclaration(declaration) ||
+            !ts.isVariableDeclarationList(declaration.parent) || (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+            !this.topLevelLexicalInitializationStates.has(symbol!) || this.moduleLexicalBindings.has(symbol!)) return null;
+        const initialized = this.topLevelLexicalInitializationStates.get(symbol!)!;
+        const rhs = this.emitExpr(bin.right);
+        // PutValue on an immutable source cell never converts its actual RHS
+        // to the native scalar representation. Preserve evaluation and TDZ
+        // precedence before the shared immutable-binding error.
+        return this.emitSequencedExpr(T_VALUE,[{value:rhs,target:T_VALUE,node:bin.right}],([value])=>
+            `({ if (!${initialized}) tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot access '${escapeCString(target.text)}' before initialization")); ` +
+            `(void)${value}; tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding")); tsc_value_undefined(); })`);
+    }
+
     private emitPrefixUnary(pu: ts.PrefixUnaryExpression): EmitResult {
         const op = pu.operator;
         if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
@@ -38492,12 +38525,83 @@ class Emitter {
         return { c: `({ ${reference.setup.map(line => line + "; ").join("")}${result.c}; })`, ty: T_VALUE };
     }
 
+    /** Save an assignment Reference's expression operands before the pattern
+     * obtains its next value. The ordinary assignment dispatcher consumes the
+     * saved operands and actual value at PutValue, preserving its existing
+     * lexical/import checks, native field roots and property completion rules. */
+    private preparePatternAssignmentReference(
+        buf: CBuf,
+        target: ts.Expression,
+        owner: ts.BinaryExpression,
+    ): (value: string) => string {
+        const overrides = new Map<ts.Expression, EmitResult>();
+        const retain = (expression: ts.Expression): void => {
+            const value = this.emitExpr(expression);
+            const slot = this.freshTemp("_pattern_reference_operand");
+            buf.line(`${value.ty.c} volatile ${slot} = ${value.c};`);
+            if (value.ty.kind === "value") {
+                const root = this.freshTemp("_pattern_reference_root");
+                buf.line(`void* volatile ${root} = tsc_value_gc_root(${slot});`);
+            }
+            overrides.set(expression, {c: slot, ty: value.ty});
+        };
+        if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
+            retain(target.expression);
+            if (ts.isElementAccessExpression(target)) retain(target.argumentExpression);
+        } else if (!ts.isIdentifier(target)) {
+            unsupported(target, "assignment pattern requires a canonical Reference");
+        }
+        return value => {
+            const actual = ts.factory.createIdentifier("__tsc_pattern_actual_value");
+            const assignment = ts.factory.createBinaryExpression(target, ts.SyntaxKind.EqualsToken, actual);
+            Object.assign(assignment, {parent: owner.parent});
+            Object.assign(actual, {parent: assignment});
+            ts.setOriginalNode(assignment, owner);
+            overrides.set(actual, {c:value, ty:T_VALUE});
+            this.conditionValueScopes.push(overrides);
+            try { return this.emitAssignment(assignment, ts.SyntaxKind.EqualsToken).c; }
+            finally { this.conditionValueScopes.pop(); }
+        };
+    }
+
+    private emitPatternAssignment(bin: ts.BinaryExpression): EmitResult {
+        const targets = new Map<ts.Identifier, ts.Expression>();
+        const binding = normalizeAssignmentTarget(bin.left, targets);
+        if (!binding) unsupported(bin.left, "assignment pattern requires a canonical binding tree");
+        const source = this.emitOrdinaryObjectExpression(bin.right);
+        const value = this.freshTemp("_pattern_assignment_value");
+        const root = this.freshTemp("_pattern_assignment_root");
+        const buf = new CBuf();
+        buf.open("");
+        buf.line(`tsc_value_t const ${value} = ${this.coerce(source,T_VALUE,bin.right)};`);
+        buf.line(`void* volatile ${root} = tsc_value_gc_root(${value});`);
+        const references = new Map<ts.Identifier, (value:string)=>string>();
+        const prepare: BindingInitializationLeafPreparation = (output,identifier) => {
+            if (!references.has(identifier)) references.set(identifier,
+                this.preparePatternAssignmentReference(output, targets.get(identifier) ?? identifier, bin));
+        };
+        this.emitBindingInitialization(buf,binding,value,(output,identifier,actual)=>{
+            const reference = references.get(identifier);
+            if (!reference) unsupported(bin.left,"assignment pattern requires a canonical Reference");
+            output.line(`(void)(${reference(actual)});`);
+        },prepare);
+        buf.line(`${value};`);
+        buf.close();
+        return {c:`(${buf.toString()})`,ty:T_VALUE};
+    }
+
     private emitAssignment(
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult {
+        const target = this.unwrapTransparentExpression(bin.left);
+        if (op === ts.SyntaxKind.EqualsToken && (ts.isArrayLiteralExpression(target) || ts.isObjectLiteralExpression(target)))
+            return this.emitPatternAssignment(bin);
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
         if (immutableImportAssignment) return immutableImportAssignment;
+
+        const nativeConstAssignment = this.emitNativeConstAssignment(bin, op);
+        if (nativeConstAssignment) return nativeConstAssignment;
 
         const localLexicalAssignment = this.emitLocalLexicalAssignment(bin, op);
         if (localLexicalAssignment) return localLexicalAssignment;
