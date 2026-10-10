@@ -1051,6 +1051,7 @@ tsc_value_t tsc_promise_reason(const tsc_promise_t* p) {
 
 tsc_event_emitter_t* tsc_event_emitter_new(void) {
     tsc_event_emitter_t* ee = (tsc_event_emitter_t*)TSC_GC_MALLOC(sizeof(tsc_event_emitter_t));
+    ee->object_owner = (tsc_native_object_owner_t){0};
     ee->len = 0;
     ee->cap = 0;
     ee->next_order = 1;

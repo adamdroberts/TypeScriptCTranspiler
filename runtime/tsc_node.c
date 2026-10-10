@@ -7310,6 +7310,7 @@ double tsc_event_emitter_get_max_listeners(const tsc_event_emitter_t* ee) {
 
 tsc_event_t* tsc_event_new(tsc_str_t* type, bool cancelable) {
     tsc_event_t* event = (tsc_event_t*)TSC_GC_MALLOC(sizeof(tsc_event_t));
+    event->object_owner = (tsc_native_object_owner_t){0};
     event->type = type ? type : tsc_str_from_lit("", 0);
     event->target = NULL;
     event->current_target = NULL;
@@ -7344,6 +7345,7 @@ void tsc_event_prevent_default(tsc_event_t* event) {
 
 tsc_event_target_t* tsc_event_target_new(void) {
     tsc_event_target_t* target = (tsc_event_target_t*)TSC_GC_MALLOC(sizeof(tsc_event_target_t));
+    target->object_owner = (tsc_native_object_owner_t){0};
     target->len = 0;
     target->cap = 0;
     target->listeners = NULL;

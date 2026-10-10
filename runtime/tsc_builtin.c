@@ -1665,6 +1665,9 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
         );
     }
     tsc_object_t* o = (tsc_object_t*)TSC_GC_MALLOC(sizeof(tsc_object_t));
+    o->is_event_emitter = false;
+    o->is_event_target = false;
+    o->is_event = false;
     o->len = 0;
     o->cap = 0;
     o->extensible = true;

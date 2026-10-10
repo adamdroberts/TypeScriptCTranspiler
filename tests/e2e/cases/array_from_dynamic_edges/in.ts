@@ -10,7 +10,8 @@ function report(label: string, fn: () => any): void {
         const result: any = fn();
         console.log(label + ":", Array.isArray(result), result.length, result.join("|"));
     } catch (err: any) {
-        console.log(label + ":", err);
+        if (!(err instanceof TypeError)) throw err;
+        console.log(label + ":", err.message);
     }
 }
 

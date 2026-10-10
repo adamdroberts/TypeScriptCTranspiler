@@ -92,6 +92,226 @@ tsc_value_t tsc_value_class(void* ptr) {
     return tsc_value_object(tsc_object_new_class(ptr));
 }
 
+static void* native_event_brand(tsc_value_t value, unsigned kind) {
+    if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = value_ptr(value);
+        if ((kind == 0 && object->is_event_emitter) || (kind == 1 && object->is_event_target) || (kind == 2 && object->is_event))
+            return object->class_ptr;
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("incompatible native event receiver"));
+}
+
+tsc_event_emitter_t* tsc_value_as_event_emitter(tsc_value_t value) { return native_event_brand(value, 0); }
+tsc_event_target_t* tsc_value_as_event_target(tsc_value_t value) { return native_event_brand(value, 1); }
+tsc_event_t* tsc_value_as_event(tsc_value_t value) { return native_event_brand(value, 2); }
+
+typedef struct {
+    tsc_value_t callback;
+    void* callback_gc_root;
+} native_event_callback_t;
+
+static tsc_value_t native_event_argument(tsc_array_t* args, size_t index) {
+    return args && index < args->len ? TSC_ARR(tsc_value_t, args, index) : tsc_value_undefined();
+}
+
+static native_event_callback_t* native_event_callback_new(tsc_value_t callback) {
+    if (!tsc_value_is_callable(callback)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("event listener is not callable"));
+    native_event_callback_t* state = TSC_GC_MALLOC(sizeof(*state));
+    state->callback = callback;
+    state->callback_gc_root = tsc_value_gc_root(callback);
+    return state;
+}
+
+static void native_emitter_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    native_event_callback_t* state = env;
+    (void)tsc_value_apply_function(state->callback, tsc_value_event_emitter(emitter), tsc_value_array(args));
+}
+
+static void native_target_listener(void* env, tsc_event_target_t* target, tsc_event_t* event) {
+    native_event_callback_t* state = env;
+    tsc_value_t value = tsc_value_event(event);
+    void* volatile value_gc_root = tsc_value_gc_root(value);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, value);
+    (void)value_gc_root;
+    (void)tsc_value_apply_function(state->callback, tsc_value_event_target(target), tsc_value_array(args));
+}
+
+static tsc_value_t native_emitter_on(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    tsc_str_t* name = tsc_value_to_string(native_event_argument(args, 0));
+    native_event_callback_t* state = native_event_callback_new(native_event_argument(args, 1));
+    uintptr_t flags = (uintptr_t)env;
+    tsc_event_emitter_on(tsc_value_as_event_emitter(receiver), name, native_emitter_listener, state, state->callback_gc_root,
+        (flags & 1) != 0, (flags & 2) != 0);
+    return receiver;
+}
+
+static tsc_value_t native_emitter_off(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_str_t* name = tsc_value_to_string(native_event_argument(args, 0));
+    tsc_value_t callback = native_event_argument(args, 1);
+    if (!tsc_value_is_callable(callback)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("event listener is not callable"));
+    tsc_event_emitter_off(tsc_value_as_event_emitter(receiver), name, native_emitter_listener, tsc_value_gc_root(callback));
+    return receiver;
+}
+
+static tsc_value_t native_emitter_emit(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_str_t* name = tsc_value_to_string(native_event_argument(args, 0));
+    tsc_array_t* actuals = tsc_array_slice(args, 1.0, args ? (double)args->len : 0.0);
+    return tsc_value_bool(tsc_event_emitter_emit(tsc_value_as_event_emitter(receiver), name, actuals));
+}
+
+static tsc_value_t native_emitter_operation(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    tsc_event_emitter_t* emitter = tsc_value_as_event_emitter(receiver);
+    uintptr_t operation = (uintptr_t)env;
+    tsc_str_t* name = operation < 4 && args && args->len ? tsc_value_to_string(native_event_argument(args, 0)) : NULL;
+    switch (operation) {
+        case 0: tsc_event_emitter_remove_all(emitter, name); return receiver;
+        case 1: {
+            tsc_value_t listener = native_event_argument(args, 1);
+            return tsc_value_num(tsc_value_is_undefined(listener) ? tsc_event_emitter_listener_count(emitter, name)
+                : tsc_event_emitter_listener_count_identity(emitter, name, tsc_value_gc_root(listener)));
+        }
+        case 2: return tsc_value_array(tsc_event_emitter_listeners(emitter, name));
+        case 3: return tsc_value_array(tsc_event_emitter_raw_listeners(emitter, name));
+        case 4: {
+            tsc_array_t* names = tsc_event_emitter_event_names(emitter);
+            tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), names->len);
+            for (size_t index = 0; index < names->len; index++)
+                tsc_array_push_value(values, tsc_value_string(TSC_ARR(tsc_str_t*, names, index)));
+            return tsc_value_array(values);
+        }
+        case 5: tsc_event_emitter_set_max_listeners(emitter, tsc_value_to_number(native_event_argument(args, 0))); return receiver;
+        case 6: return tsc_value_num(tsc_event_emitter_get_max_listeners(emitter));
+        case 7: tsc_event_emitter_pause(emitter); return receiver;
+        case 8: tsc_event_emitter_resume(emitter); return receiver;
+        case 9: return tsc_value_bool(tsc_event_emitter_is_paused(emitter));
+    }
+    return tsc_value_undefined();
+}
+
+static tsc_value_t native_target_operation(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    tsc_event_target_t* target = tsc_value_as_event_target(receiver);
+    uintptr_t operation = (uintptr_t)env;
+    if (operation == 2) return tsc_value_bool(tsc_event_target_dispatch(target, tsc_value_as_event(native_event_argument(args, 0))));
+    tsc_str_t* name = tsc_value_to_string(native_event_argument(args, 0));
+    tsc_value_t callback = native_event_argument(args, 1);
+    if (tsc_value_is_nullish(callback)) return tsc_value_undefined();
+    if (operation == 1) {
+        tsc_event_target_remove(target, name, native_target_listener, tsc_value_gc_root(callback));
+    } else {
+        native_event_callback_t* state = native_event_callback_new(callback);
+        tsc_value_t options = native_event_argument(args, 2);
+        bool once = tsc_value_is_object(options) && tsc_value_is_truthy(tsc_value_get_prop(options, tsc_str_from_lit("once", 4)));
+        tsc_event_target_add(target, name, native_target_listener, state, state->callback_gc_root, once);
+    }
+    return tsc_value_undefined();
+}
+
+typedef struct {
+    const char* name;
+    tsc_generic_function_t call;
+    uintptr_t operation;
+    double length;
+} native_event_method_t;
+
+static void native_event_methods(tsc_object_t* object, const native_event_method_t* methods, size_t length) {
+    for (size_t index = 0; index < length; index++) {
+        tsc_str_t* name = tsc_str_from_cstr(methods[index].name);
+        tsc_value_t function = tsc_value_function_builtin_named(methods[index].call, (void*)methods[index].operation, methods[index].length, name);
+        tsc_object_define(object, name, function, true, false, true);
+    }
+}
+
+static void native_emitter_initialize(tsc_object_t* object) {
+    object->is_event_emitter = true;
+    const native_event_method_t methods[] = {
+        {"on", native_emitter_on, 0, 2}, {"addListener", native_emitter_on, 0, 2},
+        {"once", native_emitter_on, 1, 2}, {"prependListener", native_emitter_on, 2, 2},
+        {"prependOnceListener", native_emitter_on, 3, 2},
+        {"off", native_emitter_off, 0, 2}, {"removeListener", native_emitter_off, 0, 2},
+        {"emit", native_emitter_emit, 0, 1}, {"removeAllListeners", native_emitter_operation, 0, 0},
+        {"listenerCount", native_emitter_operation, 1, 1}, {"listeners", native_emitter_operation, 2, 1},
+        {"rawListeners", native_emitter_operation, 3, 1}, {"eventNames", native_emitter_operation, 4, 0},
+        {"setMaxListeners", native_emitter_operation, 5, 1}, {"getMaxListeners", native_emitter_operation, 6, 0},
+        {"pause", native_emitter_operation, 7, 0}, {"resume", native_emitter_operation, 8, 0}, {"isPaused", native_emitter_operation, 9, 0}
+    };
+    native_event_methods(object, methods, sizeof(methods) / sizeof(methods[0]));
+}
+
+static void native_target_initialize(tsc_object_t* object) {
+    object->is_event_target = true;
+    const native_event_method_t methods[] = {
+        {"addEventListener", native_target_operation, 0, 2},
+        {"removeEventListener", native_target_operation, 1, 2},
+        {"dispatchEvent", native_target_operation, 2, 1}
+    };
+    native_event_methods(object, methods, sizeof(methods) / sizeof(methods[0]));
+}
+
+tsc_value_t tsc_value_event_emitter(tsc_event_emitter_t* emitter) {
+    if (!emitter) return tsc_value_null();
+    return tsc_value_object(tsc_native_object_owner_get(&emitter->object_owner, emitter, native_emitter_initialize));
+}
+
+tsc_value_t tsc_value_event_target(tsc_event_target_t* target) {
+    if (!target) return tsc_value_null();
+    return tsc_value_object(tsc_native_object_owner_get(&target->object_owner, target, native_target_initialize));
+}
+
+static tsc_value_t native_event_type(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_string(tsc_event_type(tsc_value_as_event(receiver)));
+}
+
+static tsc_value_t native_event_target(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_event_target(tsc_event_target(tsc_value_as_event(receiver)));
+}
+
+static tsc_value_t native_event_current_target(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_event_target(tsc_event_current_target(tsc_value_as_event(receiver)));
+}
+
+static tsc_value_t native_event_default_prevented(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_bool(tsc_event_default_prevented(tsc_value_as_event(receiver)));
+}
+
+static tsc_value_t native_event_cancelable(void* env, tsc_value_t receiver) {
+    (void)env;
+    return tsc_value_bool(tsc_event_cancelable(tsc_value_as_event(receiver)));
+}
+
+static tsc_value_t native_event_prevent_default(void* env, tsc_value_t receiver, tsc_array_t* arguments) {
+    (void)env;
+    (void)arguments;
+    tsc_event_prevent_default(tsc_value_as_event(receiver));
+    return tsc_value_undefined();
+}
+
+static void native_event_initialize(tsc_object_t* object) {
+    object->is_event = true;
+    const struct { const char* name; tsc_accessor_getter_t get; } fields[] = {
+        {"type", native_event_type}, {"target", native_event_target},
+        {"currentTarget", native_event_current_target},
+        {"defaultPrevented", native_event_default_prevented}, {"cancelable", native_event_cancelable}
+    };
+    for (size_t index = 0; index < sizeof(fields) / sizeof(fields[0]); index++) {
+        tsc_object_define_accessor(object, tsc_str_from_cstr(fields[index].name), fields[index].get, NULL, true,
+            NULL, NULL, false, true, true, true, true);
+    }
+    tsc_object_define(object, tsc_str_from_lit("preventDefault", 14),
+        tsc_value_function_builtin_named(native_event_prevent_default, NULL, 0.0, tsc_str_from_lit("preventDefault", 14)), true, false, true);
+}
+
+tsc_value_t tsc_value_event(tsc_event_t* event) {
+    if (!event) return tsc_value_null();
+    return tsc_value_object(tsc_native_object_owner_get(&event->object_owner, event, native_event_initialize));
+}
+
 bool tsc_value_is_nullish(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     tsc_value_tag_t tag = value_tag(v);

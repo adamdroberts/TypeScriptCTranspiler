@@ -262,6 +262,9 @@ typedef enum {
 } tsc_primitive_kind_t;
 
 struct tsc_object {
+    bool is_event_emitter;
+    bool is_event_target;
+    bool is_event;
     size_t len;
     size_t cap;
     bool extensible;
@@ -358,6 +361,7 @@ typedef struct tsc_event_listener {
 } tsc_event_listener_t;
 
 struct tsc_event_emitter {
+    tsc_native_object_owner_t object_owner;
     size_t len;
     size_t cap;
     uint64_t next_order;
@@ -376,12 +380,14 @@ typedef struct {
 } tsc_dom_event_listener_t;
 
 struct tsc_event_target {
+    tsc_native_object_owner_t object_owner;
     size_t len;
     size_t cap;
     tsc_dom_event_listener_t* listeners;
 };
 
 struct tsc_event {
+    tsc_native_object_owner_t object_owner;
     tsc_str_t* type;
     tsc_event_target_t* target;
     tsc_event_target_t* current_target;

@@ -11,7 +11,8 @@ function report(label: string, promise: Promise<any[]>): void {
             console.log(label + ":", Array.isArray(result), result.length, result.join("|"));
         })
         .catch((err: any): void => {
-            console.log(label + ":", err);
+            if (!(err instanceof TypeError)) throw err;
+            console.log(label + ":", err.message);
         });
 }
 

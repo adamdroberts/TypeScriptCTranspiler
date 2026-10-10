@@ -219,6 +219,8 @@ export function isOrdinaryObjectMember(node: ts.Node): node is ts.MethodDeclarat
  * their separate physical adapters. */
 export function hasCanonicalValueFormals(node: ts.Node): boolean {
     return isOrdinaryObjectMember(node) ||
+        (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
+            !!node.body && !node.getSourceFile().isDeclarationFile ||
         ts.isFunctionLike(node) && /\.[cm]?jsx?$/i.test(node.getSourceFile().fileName);
 }
 
@@ -227,6 +229,8 @@ export function hasCanonicalValueFormals(node: ts.Node): boolean {
  * Arrow functions retain their separate lexical activation binding. */
 export function hasImplicitValueThis(node: ts.Node): boolean {
     if (isOrdinaryObjectMember(node)) return true;
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.body &&
+        !node.getSourceFile().isDeclarationFile) return true;
     if (!/\.[cm]?jsx?$/i.test(node.getSourceFile().fileName)) return false;
     return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) ||
         ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
@@ -440,9 +444,10 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             }
         }
         const sourceOwner = callSig.getDeclaration();
-        if (sourceOwner && isOrdinaryObjectMember(sourceOwner)) {
+        if (sourceOwner && ts.isFunctionLike(sourceOwner) && hasCanonicalValueFormals(sourceOwner)) {
             const parameters = sourceOwner.parameters.filter(parameter => !isThisParameter(parameter));
-            const async = ts.getModifiers(sourceOwner)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+            const async = ts.canHaveModifiers(sourceOwner) &&
+                ts.getModifiers(sourceOwner)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
             return functionType(parameters.map(parameter => parameter.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE),
                 async && !('asteriskToken' in sourceOwner && sourceOwner.asteriskToken) ? promiseType(T_VALUE) : T_VALUE,
                 thisParamType, parameters.findIndex(parameter => !!parameter.dotDotDotToken));

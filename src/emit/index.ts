@@ -294,7 +294,6 @@ type ClosureLikeDeclaration =
     | ts.MethodDeclaration
     | ts.GetAccessorDeclaration
     | ts.SetAccessorDeclaration;
-type LiftableFunctionDeclaration = ts.ArrowFunction | ts.FunctionExpression;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
 type CommonJsObjectAssignExportEntry =
     | ts.PropertyAssignment
@@ -644,10 +643,7 @@ class Emitter {
     /** GetModuleNamespace is represented once per resolved Module Record.
      * Every import and namespace re-export reaches the same lazy singleton. */
     private moduleNamespacePlans = new WeakMap<ts.SourceFile, ModuleNamespacePlan>();
-    private nextTickAdapters = new Map<string, string>();
-    private microtaskAdapters = new Map<string, string>();
-    private immediateAdapters = new Map<string, string>();
-    private timeoutAdapters = new Map<string, string>();
+    private queuedCallbackAdapterEmitted = false;
     private dispatchTaskAdapters = new Map<string, string>();
     private usesDispatch = false;
     private usesLibuv = false;
@@ -708,7 +704,6 @@ class Emitter {
     private catchStringSymbols = new Set<ts.Symbol>();
     private catchValueSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
-    private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
     private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
     private referencedLocalFunctions = new WeakSet<ts.FunctionDeclaration>();
@@ -852,11 +847,6 @@ class Emitter {
             this.referencedTopLevelFunctions.add(decl);
             enqueue(decl);
         };
-        const markTopLevelLiftedArrow = (decl: ts.VariableDeclaration): void => {
-            if (this.referencedTopLevelLiftedArrows.has(decl)) return;
-            this.referencedTopLevelLiftedArrows.add(decl);
-            enqueue(decl);
-        };
         const markTopLevelClass = (decl: ts.ClassDeclaration): void => {
             if (this.referencedTopLevelClasses.has(decl)) return;
             this.referencedTopLevelClasses.add(decl);
@@ -903,13 +893,6 @@ class Emitter {
                 this.isPrunableLocalFunction(node) &&
                 !this.isDirectScopeLexicalDeclaration(node) &&
                 !this.referencedLocalFunctions.has(node)
-            ) {
-                return;
-            }
-            if (
-                ts.isVariableDeclaration(node) &&
-                this.isPrunableTopLevelLiftedArrow(node) &&
-                !this.referencedTopLevelLiftedArrows.has(node)
             ) {
                 return;
             }
@@ -1070,13 +1053,6 @@ class Emitter {
                 ) {
                     markLocalFunction(decl);
                 }
-                if (
-                    decl &&
-                    ts.isVariableDeclaration(decl) &&
-                    this.isPrunableTopLevelLiftedArrow(decl)
-                ) {
-                    markTopLevelLiftedArrow(decl);
-                }
                 if (decl && ts.isVariableDeclaration(decl)) {
                     markVariable(decl);
                 }
@@ -1178,31 +1154,7 @@ class Emitter {
         return !this.isPrunableLocalFunction(fd) || this.referencedLocalFunctions.has(fd);
     }
 
-    private isPrunableTopLevelLiftedArrow(decl: ts.VariableDeclaration): boolean {
-        if (!this.isTopLevelLiftedArrowDeclaration(decl)) return false;
-        if (!ts.isIdentifier(decl.name)) return false;
-        const modifiers = ts.canHaveModifiers(decl.parent.parent)
-            ? ts.getModifiers(decl.parent.parent)
-            : undefined;
-        if (modifiers?.some((m) =>
-            m.kind === ts.SyntaxKind.ExportKeyword ||
-            m.kind === ts.SyntaxKind.DefaultKeyword ||
-            m.kind === ts.SyntaxKind.DeclareKeyword
-        )) {
-            return false;
-        }
-        return true;
-    }
 
-    private shouldEmitLiftedArrow(
-        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
-    ): boolean {
-        const decl = ts.isVariableDeclaration(info.name.parent) ? info.name.parent : null;
-        if (decl && !this.isTopLevelLiftedArrowDeclaration(decl)) return false;
-        return !decl ||
-            !this.isPrunableTopLevelLiftedArrow(decl) ||
-            this.referencedTopLevelLiftedArrows.has(decl);
-    }
 
     private isPrunableTopLevelClass(cd: ts.ClassDeclaration): boolean {
         if (!cd.name) return false;
@@ -1334,7 +1286,6 @@ class Emitter {
         const isConst = (decl.parent.flags & ts.NodeFlags.Const) !== 0;
         const isLet = (decl.parent.flags & ts.NodeFlags.Let) !== 0;
         if (!isConst && !isLet) return false;
-        if (this.isPrunableTopLevelLiftedArrow(decl)) return false;
         const modifiers = ts.canHaveModifiers(decl.parent.parent)
             ? ts.getModifiers(decl.parent.parent)
             : undefined;
@@ -15022,10 +14973,6 @@ class Emitter {
                 if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
                     this.emitClassPrototypes(inner);
                 }
-                if (inner) {
-                    const lift = this.getLiftableArrow(inner);
-                    if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowPrototype(lift);
-                }
             }
             this.forEachReferencedLocalFunction(sf, (local) => {
                 if (this.isSupportedLocalFunctionDeclaration(local)) {
@@ -15035,7 +14982,7 @@ class Emitter {
             for (const classExpr of commonJsClassExpressions) {
                 this.emitClassPrototypes(classExpr as unknown as ts.ClassDeclaration);
             }
-            // Pass D: function + class-method + lifted-arrow bodies.
+            // Pass D: function and class-method bodies.
             for (const inner of statements) {
                 if (
                     inner &&
@@ -15049,10 +14996,6 @@ class Emitter {
                 }
                 if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
                     this.emitClassBodies(inner);
-                }
-                if (inner) {
-                    const lift = this.getLiftableArrow(inner);
-                    if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowBody(lift);
                 }
             }
             this.forEachReferencedLocalFunction(sf, (local) => {
@@ -15285,14 +15228,6 @@ class Emitter {
                     this.emitCommonJsModuleExportsValueAssignment(initBuf, commonJsModuleExport);
                     continue;
                 }
-                // Immutable module/script lexical function bindings are
-                // represented directly by their lifted C identity. Mutable
-                // bindings take the ordinary variable-storage path below.
-                const lifted = this.getLiftableArrow(inner);
-                const liftedDecl = lifted && ts.isVariableDeclaration(lifted.name.parent)
-                    ? lifted.name.parent
-                    : null;
-                if (liftedDecl && this.isTopLevelLiftedArrowDeclaration(liftedDecl)) continue;
                 if (ts.isVariableStatement(inner)) {
                     this.emitTopLevelVarStmt(initBuf, inner);
                     continue;
@@ -23834,7 +23769,8 @@ class Emitter {
         const slot = ts.isIdentifier(node) && type === this.checker.getTypeAtLocation(node)
             ? this.symbolForIdentifier(node)?.valueDeclaration ?? node : node;
         const formal = this.sourceFormalParameterForDeclaration(slot);
-        if (formal) return slot === formal && formal.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
+        if (formal && (ts.isParameter(slot) || ts.isBindingElement(slot) || ts.isIdentifier(slot)))
+            return slot === formal && formal.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
         if (ts.isParameter(slot) && this.expressionHasOrdinaryNativeOwnerResult(slot))
             return slot.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
         if (((ts.isVariableDeclaration(slot) || ts.isPropertyDeclaration(slot) || ts.isPropertySignature(slot) ||
@@ -23909,7 +23845,7 @@ class Emitter {
         const pending: ts.Node[] = [...this.graph.modules.values()].map(module => module.sf);
         while (pending.length) {
             const node = pending.pop()!;
-            if (isOrdinaryObjectMember(node) && node.body && ts.isBlock(node.body)) {
+            if (ts.isFunctionLike(node) && hasCanonicalValueFormals(node) && "body" in node && node.body && ts.isBlock(node.body)) {
                 const formals = new Map<string, ts.ParameterDeclaration>();
                 for (const parameter of node.parameters) {
                     if (this.isThisParameter(parameter)) continue;
@@ -23985,7 +23921,7 @@ class Emitter {
             // calls, determines the value domain of ordinary member formals
             // and results. The existing dependency graph carries that ABI to
             // retained owners, aliases, aggregates and source call sites.
-            if (isOrdinaryObjectMember(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
+            if (hasCanonicalValueFormals(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
             if (node.kind === ts.SyntaxKind.ThisKeyword) {
                 for (let owner: ts.Node | undefined = node.parent; owner; owner = owner.parent) {
                     if (ts.isClassLike(owner)) break;
@@ -25465,7 +25401,7 @@ class Emitter {
         const isAsync = this.isAsyncDeclaration(fn);
         const isGenerator = this.isGeneratorDeclaration(fn);
         const ret = isAsync && !isGenerator ? promiseType(T_VALUE) : T_VALUE;
-        const signature = isOrdinaryObjectMember(fn) && !this.isJavaScriptSourceFile(fn.getSourceFile())
+        const signature = hasCanonicalValueFormals(fn) && !this.isJavaScriptSourceFile(fn.getSourceFile())
             ? this.checker.getSignatureFromDeclaration(fn) : null;
         const thisType = signature ? this.signatureThisType(signature, fn) : hasImplicitValueThis(fn) ? T_VALUE : undefined;
         return this.prepareType(functionType(params, ret, thisType ?? undefined,
@@ -25507,14 +25443,12 @@ class Emitter {
         return null;
     }
 
-    /** JavaScript-source functions additionally require dynamic activation
-     * semantics; typed source functions still use their syntax to describe
-     * rest binding and observable function length. */
-    private javaScriptFunctionLikeForExpression(
+    /** Canonical source owners retain actual Lists and their shared activation. */
+    private canonicalFunctionLikeForExpression(
         expression: ts.Expression,
     ): ts.FunctionLikeDeclaration | null {
         const sourceFunction = this.functionLikeForExpression(expression);
-        return sourceFunction && this.isJavaScriptSourceFile(sourceFunction.getSourceFile())
+        return sourceFunction && hasCanonicalValueFormals(sourceFunction)
             ? sourceFunction
             : null;
     }
@@ -29004,79 +28938,7 @@ class Emitter {
         if (typeof label !== "string") {
             unsupported(expr, "decorator expression must be callable");
         }
-        if (ts.isIdentifier(expr) && this.isDirectCallableIdentifier(expr)) {
-            const sym = this.symbolForIdentifier(expr);
-            const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-            const fnDecl = decl && ts.isVariableDeclaration(decl) && decl.initializer
-                ? decl.initializer
-                : decl;
-            const sig = fnDecl && (
-                ts.isFunctionDeclaration(fnDecl) ||
-                ts.isFunctionExpression(fnDecl) ||
-                ts.isArrowFunction(fnDecl)
-            )
-                ? this.checker.getSignatureFromDeclaration(fnDecl)
-                : null;
-            if (!sig) unsupported(expr, `${label} expression must be callable`);
-            const params = sig.getParameters();
-            if (params.length > args.length) {
-                unsupported(expr, `${label} callbacks currently support at most ${args.length} parameters`);
-            }
-            const thisType = this.directCallableThisType(expr);
-            const specs: SequencedCallArg[] = params.map((param, index) => {
-                const decl = param.valueDeclaration ?? expr;
-                return {
-                    value: args[index]!,
-                    target: this.prepareType(mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker)),
-                    node: expr,
-                };
-            });
-            const fnName = this.identifierName(expr);
-            const ret = this.prepareType(mapTsType(expr, sig.getReturnType(), this.checker));
-            return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
-                const call = `${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), ...vals].join(", ")})`;
-                if (ret.kind === "void" || ret.kind === "never") {
-                    return `({ ${call}; tsc_value_undefined(); })`;
-                }
-                return `({ ${ret.c} _decorator_return = ${call}; ${this.coerce({ c: "_decorator_return", ty: ret }, T_VALUE, expr)}; })`;
-            }).c;
-        }
-        if (ts.isIdentifier(expr) && this.identifierDeclaredType(expr)?.kind === "value") {
-            return this.emitDynamicDecoratorFunctionCall(
-                { c: this.identifierRead(expr), ty: T_VALUE },
-                args,
-                expr,
-            );
-        }
-        const callee = this.emitExpr(expr);
-        if (callee.ty.kind === "value") {
-            return this.emitDynamicDecoratorFunctionCall(callee, args, expr);
-        }
-        if (callee.ty.kind !== "function" || !callee.ty.ret) {
-            unsupported(expr, `${label} expression must be callable`);
-        }
-        const params = callee.ty.params ?? [];
-        if (params.length > args.length) {
-            unsupported(expr, `${label} callbacks currently support at most ${args.length} parameters`);
-        }
-        const specs: SequencedCallArg[] = [
-            { value: callee, target: callee.ty, node: expr },
-            ...params.map((param, index) => ({
-                value: args[index]!,
-                target: param,
-                node: expr,
-            })),
-        ];
-        return this.emitSequencedExpr(T_VALUE, specs, (vals) => {
-            const fn = vals[0]!;
-            const callArgs = vals.slice(1);
-            const call = `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`;
-            const ret = this.prepareType(callee.ty.ret!);
-            if (ret.kind === "void" || ret.kind === "never") {
-                return `({ ${call}; tsc_value_undefined(); })`;
-            }
-            return `({ ${ret.c} _decorator_return = ${call}; ${this.coerce({ c: "_decorator_return", ty: ret }, T_VALUE, expr)}; })`;
-        }).c;
+        return this.emitDynamicDecoratorFunctionCall(this.emitExpr(expr), args, expr);
     }
 
     private emitDynamicDecoratorFunctionCall(
@@ -29084,25 +28946,8 @@ class Emitter {
         args: EmitResult[],
         node: ts.Expression,
     ): string {
-        const specs: SequencedCallArg[] = [
-            { value: callee, target: T_VALUE, node },
-            ...args.map((arg) => ({
-                value: arg,
-                target: T_VALUE,
-                node,
-            })),
-        ];
-        return this.emitSequencedExpr(T_VALUE, specs, ([fn, ...vals]) => {
-            const av = this.freshTemp("_decorator_args");
-            const result = this.freshTemp("_decorator_result");
-            const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${vals.length || 1})`];
-            for (const value of vals) {
-                pieces.push(`tsc_array_push_value(${av}, ${value})`);
-            }
-            pieces.push(`tsc_value_t ${result} = tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
-            pieces.push(result);
-            return `({ ${pieces.join("; ")}; })`;
-        }).c;
+        return this.emitSequencedExpr(T_VALUE, [{ value: callee, target: T_VALUE, node }], ([fn]) =>
+            this.emitCallbackApplication(fn!, "tsc_value_undefined()", args, node).c).c;
     }
 
     private collectParams(ps: readonly ts.ParameterDeclaration[]): string[] {
@@ -29500,7 +29345,7 @@ class Emitter {
     // ---------------- function declarations ----------------
 
     private isGenericFunction(fd: ts.FunctionDeclaration): boolean {
-        return !!fd.typeParameters?.length;
+        return !hasCanonicalValueFormals(fd) && !!fd.typeParameters?.length;
     }
 
     private isGenericMethod(md: ts.MethodDeclaration): boolean {
@@ -29528,7 +29373,7 @@ class Emitter {
         const parameterTypeScope = new Map<ts.Symbol, CType>();
         const runtimeParameters = fd.parameters.filter((parameter) => !this.isThisParameter(parameter));
         const rawParameterNames = this.collectParamInfos(fd.parameters).map((parameter) => parameter.name);
-        const sourceFormalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
+        const sourceFormalPlans = hasCanonicalValueFormals(fd)
             ? this.emitSourceFormalBindingStorage(
                 this.defs,
                 fd,
@@ -29584,7 +29429,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             this.emitStmtList(this.defs, fd.body.statements);
-            if (this.isJavaScriptSourceFile(fd.getSourceFile()) && returnType.kind !== "void" && returnType.kind !== "never") {
+            if (hasCanonicalValueFormals(fd) && returnType.kind !== "void" && returnType.kind !== "never") {
                 this.defs.line(`return ${this.zeroValue(returnType)};`);
             }
         } finally {
@@ -31642,7 +31487,7 @@ class Emitter {
         const parameterValues = new Map<ts.Symbol, string>();
         const parameterTypes = new Map<ts.Symbol, CType>();
         const rawParameterNames = this.collectParamInfos(fd.parameters).map(parameter => parameter.name);
-        const formalPlans = this.isJavaScriptSourceFile(fd.getSourceFile())
+        const formalPlans = hasCanonicalValueFormals(fd)
             ? this.emitSourceFormalBindingStorage(this.defs, fd, rawParameterNames,
                 capturedCells, parameterValues, parameterTypes) : null;
         this.argumentValueScopes.push(parameterValues);
@@ -31988,7 +31833,7 @@ class Emitter {
         thisType: CType | null;
     } {
         const name = this.functionDeclarationCName(fd);
-        const sourceType = this.isJavaScriptSourceFile(fd.getSourceFile())
+        const sourceType = hasCanonicalValueFormals(fd)
             ? this.sourceFunctionValueType(fd) : null;
         const sig = sourceType ? null : this.checker.getSignatureFromDeclaration(fd);
         if (!sourceType && !sig) unsupported(fd, "could not resolve function signature");
@@ -36675,9 +36520,9 @@ class Emitter {
                 unsupported(expr, "ambient host value requires an ordinary runtime owner");
             }
             const scopedTy = this.identifierScopedType(expr);
-            const sourceJavaScriptFunction = this.javaScriptFunctionLikeForExpression(expr);
-            const sourceTy = sourceJavaScriptFunction
-                ? this.sourceFunctionValueType(sourceJavaScriptFunction)
+            const sourceFunction = this.canonicalFunctionLikeForExpression(expr);
+            const sourceTy = sourceFunction
+                ? this.sourceFunctionValueType(sourceFunction)
                 : this.prepareType(mapType(expr, this.checker));
             const ty = scopedTy ?? sourceTy;
             const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
@@ -36716,7 +36561,7 @@ class Emitter {
                 // physical ABI, including its rest-parameter array storage.
                 const physicalType = symbol && declaration && ts.isFunctionDeclaration(declaration) &&
                     !this.isGenericFunction(declaration)
-                    ? this.isJavaScriptSourceFile(declaration.getSourceFile())
+                    ? hasCanonicalValueFormals(declaration)
                         ? this.sourceFunctionValueType(declaration)
                         : this.prepareType(mapTsType(declaration,
                             this.checker.getTypeOfSymbolAtLocation(symbol, declaration), this.checker))
@@ -39650,12 +39495,10 @@ class Emitter {
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
         }
-        const inlineClosure = this.emitInlineClosureCall(call);
-        if (inlineClosure) return inlineClosure;
         /* JavaScript calls always cross one canonical argument-list boundary.
          * TypeScript's inferred signature is optimization evidence only and
          * must not discard excess ECMAScript arguments. */
-        if (this.javaScriptFunctionLikeForExpression(call.expression)) {
+        if (this.canonicalFunctionLikeForExpression(call.expression)) {
             return this.emitDynamicValueCall(call, this.emitExpr(call.expression));
         }
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
@@ -39883,18 +39726,7 @@ class Emitter {
             return this.emitBase64Call(call, name);
         }
         if (name === "queueMicrotask") {
-            if (call.arguments.length < 1) unsupported(call, "queueMicrotask expects a callback");
-            const callbackNode = call.arguments[0]!;
-            const callback = this.emitExpr(callbackNode);
-            const adapter = this.ensureMicrotaskAdapter(callbackNode, callback.ty);
-            return this.emitSequencedExpr(T_VOID, [
-                { value: callback, target: callback.ty, node: callbackNode },
-                ...this.ignoredArgumentSpecs(call.arguments, 1),
-            ], ([fn]) => {
-                const envType = `${adapter}_env_t`;
-                const env = this.freshTemp("_microtask_env");
-                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_queue_microtask(${adapter}, ${env}); })`;
-            });
+            return this.emitQueuedCallbackCall(call, "tsc_queue_microtask", false, true);
         }
         const timersPromisesNamed = ["setTimeout", "setInterval", "setImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers/promises", "node:timers/promises"], exported));
@@ -40289,36 +40121,7 @@ class Emitter {
         return adapter;
     }
 
-    private inlineClosureBody(call: ts.CallExpression): ts.Expression | null {
-        const target = this.unwrapTransparentExpression(call.expression);
-        if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return null;
-        const fn = target;
-        if (!this.isInlineYieldFreeClosureCall(call) || fn.parameters.length !== 0 || call.arguments.length !== 0) return null;
-        if (ts.isBlock(fn.body)) {
-            if (fn.body.statements.length !== 1) return null;
-            const statement = fn.body.statements[0];
-            if (!ts.isReturnStatement(statement) || !statement.expression) return null;
-            if (this.nodeContainsYield(statement.expression)) return null;
-            return statement.expression;
-        }
-        if (this.nodeContainsYield(fn.body)) return null;
-        return fn.body;
-    }
 
-    private isInlineYieldFreeClosureCall(call: ts.CallExpression): boolean {
-        const target = this.unwrapTransparentExpression(call.expression);
-        if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return false;
-        if (this.functionUsesOwnActivationBinding(target)) return false;
-        if (this.nodeContainsYield(target)) return false;
-        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) {
-            const signature = this.checker.getResolvedSignature(call);
-            const hasRestParameter = !!signature?.getParameters().some((param) =>
-                !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
-            );
-            if (!hasRestParameter) return false;
-        }
-        return target.parameters.every((parameter) => this.isSupportedInlineClosureParameter(parameter));
-    }
 
     private isSupportedInlineClosureParameter(parameter: ts.ParameterDeclaration): boolean {
         if (this.isThisParameter(parameter) ||
@@ -40541,10 +40344,6 @@ class Emitter {
         return supported;
     }
 
-    private emitInlineClosureCall(call: ts.CallExpression): EmitResult | null {
-        const body = this.inlineClosureBody(call);
-        return body ? this.emitExpr(body) : null;
-    }
 
 
     private emitOrdinaryCallApplication(
@@ -40745,106 +40544,32 @@ class Emitter {
         if (decl && ts.isFunctionDeclaration(decl)) {
             if (decl.getSourceFile().isDeclarationFile ||
                 !this.graph.fileToModuleId.has(path.resolve(decl.getSourceFile().fileName))) return false;
+            if (hasCanonicalValueFormals(decl)) return false;
             return !this.isDirectScopeLexicalDeclaration(decl);
         }
         const commonJsValueDecl = decl ? this.commonJsObjectExportValueDeclaration(decl) : null;
         if (commonJsValueDecl && ts.isFunctionDeclaration(commonJsValueDecl)) return true;
-        if (decl && ts.isVariableDeclaration(decl)) {
-            return this.isTopLevelLiftedArrowDeclaration(decl);
-        }
         return false;
     }
 
     private isDirectFunctionReferenceValue(id: ts.Identifier): boolean {
-        return this.isDirectCallableIdentifier(id);
+        if (this.isDirectCallableIdentifier(id)) return true;
+        if (this.isSourceGlobalReference(id)) return false;
+        const symbol = this.symbolForIdentifier(id);
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        return !!declaration && ts.isFunctionDeclaration(declaration) && hasCanonicalValueFormals(declaration) &&
+            this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) &&
+            !this.isDirectScopeLexicalDeclaration(declaration);
     }
 
-    private isTopLevelLiftedArrowDeclaration(decl: ts.VariableDeclaration): boolean {
-        // Every JavaScript variable has a boxed declaration slot. Replacing
-        // an immutable initializer with a bare C function breaks that ABI.
-        if (this.isJavaScriptSourceFile(decl.getSourceFile())) return false;
-        if (
-            !decl.initializer ||
-            (!ts.isArrowFunction(decl.initializer) && !ts.isFunctionExpression(decl.initializer))
-        ) {
-            return false;
-        }
-        // The declared slot, including an explicit any/nullable annotation,
-        // owns the ABI. A callable initializer cannot replace boxed storage
-        // with a bare C function reference.
-        if (this.variableDeclarationStorageType(decl, mapType(decl, this.checker)).kind !== "function") {
-            return false;
-        }
-        // A lifted function has no assignable variable slot. Restrict that
-        // representation to bindings whose write domain is exactly their
-        // initializer; mutable bindings use ordinary closure/value storage.
-        if ((decl.parent.flags & ts.NodeFlags.Const) === 0) return false;
-        if (!ts.isVariableStatement(decl.parent.parent)) return false;
-        if (ts.isIdentifier(decl.name)) {
-            const symbol = this.symbolForIdentifier(decl.name);
-            // JavaScript module lexical bindings need an explicit TDZ slot.
-            // Their function initializer therefore takes the ordinary boxed
-            // closure path instead of replacing the binding with a bare C
-            // function identity.
-            if (symbol && this.moduleLexicalBindings.has(symbol)) return false;
-        }
-        // Script-level lexical bindings likewise live in the Global
-        // Environment Record. Even an immutable function initializer must
-        // initialize that binding instead of being replaced by a lifted C
-        // identity that the runtime environment cannot resolve.
-        if (this.isTest262ScriptGlobalLexicalVariableDeclaration(decl)) return false;
-        return this.isTopLevelValueDeclaration(decl);
-    }
 
     private emitClosureCall(call: ts.CallExpression, callee: EmitResult): EmitResult {
         if (callee.ty.kind !== "function" || !callee.ty.ret) {
             unsupported(call.expression, "call target is not a function value");
         }
-        const params = callee.ty.params ?? [];
-        const sig = this.checker.getResolvedSignature(call);
-        if (!sig) unsupported(call, "unresolved function value call signature");
-        const sigParams = sig.getParameters();
-        const hasRestParameter = sigParams.some((param) =>
-            !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
-        );
-        if (call.arguments.some((arg) => ts.isSpreadElement(arg)) && !hasRestParameter) {
-            const argList = this.emitSpreadCallArgumentList(call.arguments);
-            const ret = this.prepareType(callee.ty.ret);
-            const result = this.emitSequencedExpr(ret, [
-                { value: callee, target: callee.ty, node: call.expression },
-                { value: argList, node: call },
-            ], (vals) => {
-                const fn = vals[0]!;
-                const list = vals[1]!;
-                const args: string[] = [];
-                for (let i = 0; i < params.length; i++) {
-                    args.push(this.coerce({ c: `TSC_ARR(tsc_value_t, ${list}, ${i})`, ty: T_VALUE }, params[i]!, call));
-                }
-                return `({ if (${list}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("function value argument length mismatch")); if (!${fn}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not callable")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
-            });
-            return result;
-        }
-        if (call.arguments.length > params.length && !hasRestParameter) {
-            unsupported(
-                call,
-                `function value expects at most ${params.length} args, got ${call.arguments.length}`,
-            );
-        }
-        const specs: SequencedCallArg[] = [
-            { value: callee, target: callee.ty, node: call.expression },
-            ...(sigParams.length > 0
-                ? this.callSpecsFromSignature(call, call.arguments, sigParams)
-                : params.length > 0
-                    ? this.callSpecsFromFunctionType(call, call.arguments, params)
-                    : this.callSpecsFromSignature(call, call.arguments, sigParams)),
-        ];
+        const dynamic = this.emitDynamicValueCall(call, callee);
         const ret = this.prepareType(callee.ty.ret);
-        const result = this.emitSequencedExpr(ret, specs, (vals) => {
-            const fn = vals[0]!;
-            const args = vals.slice(1);
-            return `({ if (!${fn}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("value is not callable")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
-        });
-        return result;
+        return { c: this.coerce(dynamic, ret, call), ty: ret };
     }
 
     private callSpecsFromFunctionType(
@@ -40864,24 +40589,44 @@ class Emitter {
     }
 
     private emitSpreadCallArgumentList(args: readonly ts.Expression[], leading?: { value: EmitResult; node: ts.Expression }): EmitResult {
+        const values: { value: EmitResult; node: ts.Node; spread?: boolean }[] = leading ? [leading] : [];
+        for (const argument of args) values.push(ts.isSpreadElement(argument)
+            ? { value: this.emitExpr(argument.expression), node: argument.expression, spread: true }
+            : { value: this.emitExpr(argument), node: argument });
+        return this.emitActualArgumentList(values);
+    }
+
+    private emitActualArgumentList(values: readonly { value: EmitResult; node: ts.Node; spread?: boolean }[]): EmitResult {
         const argumentsArray = this.freshTemp("_call_arguments");
-        const pieces = [`tsc_array_t* volatile ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, args.length)})`];
-        if (leading) pieces.push(`tsc_array_push_value(${argumentsArray}, ${this.coerce(leading.value, T_VALUE, leading.node)})`);
-        for (const argument of args) {
-            if (ts.isSpreadElement(argument)) {
-                const value = this.emitExpr(argument.expression);
-                const values = this.freshTemp("_spread_values");
-                pieces.push(`{ tsc_array_t* ${values} = tsc_value_iter_values(${this.boxObjectIdentity(value.c, value.ty, argument.expression)}); ` +
-                    `tsc_array_append(${argumentsArray}, ${values}); }`);
+        const pieces = [`tsc_array_t* volatile ${argumentsArray} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length)})`];
+        for (const argument of values) {
+            if (argument.spread) {
+                const spread = this.freshTemp("_spread_values");
+                pieces.push(`{ tsc_array_t* ${spread} = tsc_value_iter_values(${this.boxObjectIdentity(argument.value.c, argument.value.ty, argument.node)}); ` +
+                    `tsc_array_append(${argumentsArray}, ${spread}); }`);
             } else {
-                const value = this.emitExpr(argument);
                 const staged = this.freshTemp("_call_argument");
-                pieces.push(`tsc_value_t ${staged} = ${this.coerce(value, T_VALUE, argument)}`);
+                pieces.push(`tsc_value_t ${staged} = ${this.coerce(argument.value, T_VALUE, argument.node)}`);
                 pieces.push(`tsc_array_push_value(${argumentsArray}, ${staged})`);
             }
         }
         pieces.push(argumentsArray);
         return { c: `({ ${pieces.join("; ")}; })`, ty: arrayType(T_VALUE) };
+    }
+
+    private emitCallbackApplication(callback: string, receiver: string, values: readonly EmitResult[], node: ts.Expression): EmitResult {
+        return this.emitSequencedExpr(T_VALUE, values.map(value => ({ value, target: T_VALUE, node })), argumentsValues => {
+            const argumentsList = this.emitActualArgumentList(argumentsValues.map(c => ({ value: { c, ty: T_VALUE }, node })));
+            return `tsc_value_apply_function(${callback}, ${receiver}, tsc_value_array(${argumentsList.c}))`;
+        });
+    }
+
+    private emitCallbackBinding(node: ts.Expression): { value: string; setup: string } {
+        const value = this.freshTemp("_callback");
+        const root = this.freshTemp("_callback_gc_root");
+        return { value, setup: `tsc_value_t ${value} = ${this.coerce(this.emitExpr(node), T_VALUE, node)}; ` +
+            `void* volatile ${root} = tsc_value_gc_root(${value}); ` +
+            `if (!tsc_value_is_callable(${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` };
     }
 
     private emitFunctionReferenceClosure(id: ts.Identifier, type: CType,
@@ -42777,7 +42522,7 @@ class Emitter {
                 const callbackC = callback ? vals[(chunk ? 1 : 0) + (encoding ? 1 : 0)]! : null;
                 const writeCall = chunk ? `${fn}(${vals[0]!});` : "";
                 const callbackCall = callbackC
-                    ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callbackTy?.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`
+                    ? `${this.emitCallbackApplication(this.coerce({ c: callbackC, ty: callbackTy! }, T_VALUE, callback!.node), "tsc_value_undefined()", [], callback!.node).c};`
                     : "";
                 return `({ ${writeCall} ${endFn}(); ${callbackCall} })`;
             });
@@ -42832,7 +42577,7 @@ class Emitter {
                 const chunkC = vals[0]!;
                 const callbackC = callback ? vals[1 + (encoding ? 1 : 0)]! : null;
                 const callbackCall = callbackC
-                    ? `${callbackC}->fn(${[`${callbackC}->env`, ...(callback!.value.ty.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")})`
+                    ? this.emitCallbackApplication(this.coerce({ c: callbackC, ty: callback!.value.ty }, T_VALUE, callback!.node), "tsc_value_undefined()", [], callback!.node).c
                     : "";
                 return `({ bool _ok = ${fn}(${chunkC}); ${callbackCall}; _ok; })`;
             });
@@ -43060,23 +42805,7 @@ class Emitter {
             }
             const a = call.arguments[0];
             if (!a) unsupported(call, "Array.fromAsync needs an argument");
-            const mapfn = call.arguments[1];
-            if (!mapfn || this.isUndefinedExpression(mapfn)) {
-                return this.emitArrayFromAsyncWithoutMapper(
-                    call,
-                    a,
-                    promiseType,
-                    mapfn ? call.arguments.slice(1) : [],
-                );
-            }
-            return this.emitArrayFromAsyncWithMapper(
-                call,
-                a,
-                mapfn,
-                call.arguments[2],
-                promiseType,
-                call.arguments.slice(3),
-            );
+            return this.emitArrayFromAsync(call, a, promiseType);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
@@ -43226,28 +42955,7 @@ class Emitter {
     }
 
     private emitProcessNextTickCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "process.nextTick expects a callback");
-        const callbackNode = call.arguments[0]!;
-        const callback = this.emitExpr(callbackNode);
-        const argNodes = Array.from(call.arguments.slice(1));
-        const argValues = argNodes.map((arg) => this.emitExpr(arg));
-        const adapter = this.ensureNextTickAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-        const prepared = this.prepareType(callback.ty);
-        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-        return this.emitSequencedExpr(T_VOID, [
-            { value: callback, target: callback.ty, node: callbackNode },
-            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ], ([fn, ...args]) => {
-            const envType = `${adapter}_env_t`;
-            const env = this.freshTemp("_next_tick_env");
-            const pieces = [
-                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                `${env}->fn = ${fn}`,
-            ];
-            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-            pieces.push(`tsc_process_next_tick(${adapter}, ${env})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
+        return this.emitQueuedCallbackCall(call, "tsc_process_next_tick");
     }
 
     private emitProcessModuleCall(call: ts.CallExpression, name: string): EmitResult {
@@ -43770,83 +43478,18 @@ class Emitter {
         const copyItem = this.freshTemp("_dynsort_copy_item");
         let aName = this.freshTemp("_sa");
         let bName = this.freshTemp("_sb");
-        const bindings: string[] = [];
-        let body: EmitResult;
-        let bodyNode: ts.Expression = cb;
-
-        const leftValue: EmitResult = { c: aName, ty: T_VALUE };
-        const rightValue: EmitResult = { c: bName, ty: T_VALUE };
-
-        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            if (cb.parameters.length !== 2) {
-                unsupported(cb, "dynamic sort comparator needs 2 params");
-            }
-            const p0 = cb.parameters[0]!.name;
-            const p1 = cb.parameters[1]!.name;
-            if (!ts.isIdentifier(p0) || !ts.isIdentifier(p1)) {
-                unsupported(cb, "dynamic sort comparator params must be identifiers");
-            }
-            const bodyExpr = this.callbackReturnExpression(cb, "dynamic sort comparator");
-            aName = mangleIdent(p0.text);
-            bName = mangleIdent(p1.text);
-            body = this.emitExpr(bodyExpr);
-            bodyNode = bodyExpr;
-        } else if (ts.isIdentifier(cb)) {
-            const cbType = this.checker.getTypeAtLocation(cb);
-            const sig = cbType.getCallSignatures()[0];
-            if (!sig) unsupported(cb, "dynamic sort comparator must be callable");
-            if (this.isDirectCallableIdentifier(cb)) {
-                let fnName = this.identifierName(cb);
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                const genericBindings = genericDecl
-                    ? this.genericBindingsForCallbackTypes(cb, genericDecl, [T_VALUE, T_VALUE], T_NUMBER)
-                    : null;
-                if (genericDecl && genericBindings) {
-                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                }
-                const params = sig.getParameters();
-                const sources = [leftValue, rightValue];
-                const callArgs = params.slice(0, 2).map((param, index) => {
-                    const decl = param.valueDeclaration ?? cb;
-                    const target = this.prepareType(genericBindings
-                        ? withTypeBindings(genericBindings, () =>
-                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                        )
-                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                    return this.coerce(sources[index]!, target, cb);
-                });
-                const retType = this.prepareType(genericBindings
-                    ? withTypeBindings(genericBindings, () =>
-                        mapTsType(cb, sig.getReturnType(), this.checker),
-                    )
-                    : mapTsType(cb, sig.getReturnType(), this.checker));
-                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
-            } else {
-                const fn = this.emitExpr(cb);
-                if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                    unsupported(cb, "dynamic sort comparator must be callable");
-                }
-                const fnv = this.freshTemp("_cb");
-                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
-                const params = fn.ty.params ?? [];
-                const sources = [leftValue, rightValue];
-                const callArgs = params.slice(0, 2).map((param, index) =>
-                    this.coerce(sources[index]!, param, cb),
-                );
-                body = {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
-                    ty: this.prepareType(fn.ty.ret),
-                };
-            }
-        } else {
-            unsupported(cb, "dynamic sort comparator must be an inline arrow/function expression or function reference");
-        }
-
-        const cmpExpr = this.coerce(body, T_NUMBER, bodyNode);
+        const callback = this.freshTemp("_sort_callback");
+        const application = this.emitCallbackApplication(callback, "tsc_value_undefined()", [
+            { c: aName, ty: T_VALUE }, { c: bName, ty: T_VALUE },
+        ], cb);
+        const cmpExpr = this.coerce(application, T_NUMBER, cb);
         return this.emitSequencedExpr(T_VALUE, [
             { value: recv, target: T_VALUE, node: call.expression },
+            { value: this.emitExpr(cb), target: T_VALUE, node: cb },
             ...this.ignoredArgumentSpecs(call.arguments, 1),
-        ], ([value]) => {
+        ], ([value, callbackValue]) => {
+            const callbackSetup = `tsc_value_t ${callback} = ${callbackValue}; ` +
+                `if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); `;
             const init = copyFirst
                 ? `tsc_value_t const ${base} = ${value}; size_t const ${src} = (size_t)tsc_value_length(${base}); ` +
                     `tsc_array_t* const ${av} = tsc_array_new(sizeof(tsc_value_t), ${src} ? ${src} : 1); ` +
@@ -43862,7 +43505,6 @@ class Emitter {
                 `while (${jv} > 0) { ` +
                 `tsc_value_t ${aName} = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
                 `tsc_value_t ${bName} = ${kv}; ` +
-                `${bindings.length ? `${bindings.join("; ")}; ` : ""}` +
                 `double ${cmp} = tsc_value_is_undefined(${aName}) ` +
                 `? (tsc_value_is_undefined(${bName}) ? 0.0 : 1.0) ` +
                 `: (tsc_value_is_undefined(${bName}) ? -1.0 : ${cmpExpr}); ` +
@@ -43891,7 +43533,7 @@ class Emitter {
                 `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); ` +
                 `tsc_array_mark_hole(${av}, ${sourceIndex}); } ` +
                 `} else { ${sortLoop(av)} }`;
-            return `({ ${init} ` +
+            return `({ ${callbackSetup}${init} ` +
                 `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); ` +
                 `else { ${sortBody} } ${result}; })`;
         });
@@ -43918,7 +43560,7 @@ class Emitter {
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
         const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
         const thisArgSetup = thisArgValue
-            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg)}; `
+            ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg)}; void* volatile ${thisArgTemp}_gc_root = tsc_value_gc_root(${thisArgTemp}); `
             : "";
         const ignoredSetup = this.ignoredArgumentSpecs(call.arguments, thisArg ? 2 : 1)
             .map((spec) => `(void)(${spec.value.c}); `)
@@ -43928,136 +43570,15 @@ class Emitter {
         const iv = this.freshTemp("_i");
         const dst = this.freshTemp("_dst");
         const elem = this.freshTemp("_el");
-        const bindings: string[] = [`tsc_value_t ${elem} = TSC_ARR(tsc_value_t, ${av}, ${iv})`];
-        let callbackSetup = "";
-        let body: EmitResult;
-        let bodyNode: ts.Expression = cb;
-
-        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            if (this.isJavaScriptSourceFile(cb.getSourceFile())) {
-                const closure = this.emitExpr(cb);
-                const callback = this.freshTemp("_dynamic_hof_callback");
-                const callbackRoot = this.freshTemp("_dynamic_hof_callback_gc_root");
-                const argumentsList = this.freshTemp("_dynamic_hof_arguments");
-                const indexValue = this.freshTemp("_dynamic_hof_index");
-                const arrayValue = this.freshTemp("_dynamic_hof_array");
-                callbackSetup =
-                    `tsc_value_t ${callback} = ${this.coerce(closure, T_VALUE, cb)}; ` +
-                    `void* volatile ${callbackRoot} = tsc_value_gc_root(${callback}); `;
-                bindings.push(
-                    `tsc_array_t* ${argumentsList} = tsc_array_new(sizeof(tsc_value_t), 3)`,
-                    `tsc_array_push_value(${argumentsList}, ${elem})`,
-                    `tsc_value_t ${indexValue} = tsc_value_num((double)${iv})`,
-                    `tsc_array_push_value(${argumentsList}, ${indexValue})`,
-                    `tsc_value_t ${arrayValue} = tsc_value_array(${av})`,
-                    `tsc_array_push_value(${argumentsList}, ${arrayValue})`,
-                );
-                body = {
-                    c: `tsc_value_apply_function(${callback}, ${callbackThisArg}, tsc_value_array(${argumentsList}))`,
-                    ty: T_VALUE,
-                };
-            } else {
-            const sig = this.checker.getSignatureFromDeclaration(cb);
-            if (!sig) unsupported(cb, `dynamic ${method}: could not resolve callback signature`);
-            const thisType = this.signatureThisType(sig, cb);
-            const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-            const elemSlot = params[0];
-            if (!elemSlot || !ts.isIdentifier(elemSlot.name)) {
-                unsupported(cb, `dynamic ${method}: callback needs an element parameter`);
-            }
-            const idxSlot = params[1];
-            if (idxSlot && !ts.isIdentifier(idxSlot.name)) {
-                unsupported(idxSlot, `dynamic ${method}: index parameter must be an identifier`);
-            }
-            const arraySlot = params[2];
-            if (arraySlot && !ts.isIdentifier(arraySlot.name)) {
-                unsupported(arraySlot, `dynamic ${method}: array parameter must be an identifier`);
-            }
-            const idxName = idxSlot && ts.isIdentifier(idxSlot.name) ? idxSlot.name.text : null;
-            const arrayName = arraySlot && ts.isIdentifier(arraySlot.name) ? arraySlot.name.text : null;
-            const bodyExpr = this.callbackReturnExpression(cb, `dynamic ${method}`);
-            bindings.push(`tsc_value_t ${mangleIdent(elemSlot.name.text)} = ${elem}`);
-            if (idxName) {
-                bindings.push(`double ${mangleIdent(idxName)} = (double)${iv}`);
-            }
-            if (arrayName) {
-                bindings.push(`tsc_value_t ${mangleIdent(arrayName)} = tsc_value_array(${av})`);
-            }
-            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
-            try {
-                body = this.emitExpr(bodyExpr);
-            } finally {
-                if (thisType) this.functionThisStack.pop();
-            }
-            bodyNode = bodyExpr;
-            }
-        } else if (ts.isIdentifier(cb)) {
-            const cbType = this.checker.getTypeAtLocation(cb);
-            const sig = cbType.getCallSignatures()[0];
-            if (!sig) unsupported(cb, `dynamic ${method}: callback must be callable`);
-            if (this.isDirectCallableIdentifier(cb)) {
-                let fnName = this.identifierName(cb);
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                const genericBindings = genericDecl
-                    ? this.genericBindingsForCallback(
-                        cb,
-                        genericDecl,
-                        this.contextualCallSignature(cb, method),
-                    )
-                    : null;
-                if (genericDecl && genericBindings) {
-                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                }
-                const params = sig.getParameters();
-                const callArgs: string[] = [];
-                const typedArg = (index: number, source: EmitResult): string => {
-                    const param = params[index];
-                    if (!param) return source.c;
-                    const decl = param.valueDeclaration ?? cb;
-                    const target = this.prepareType(genericBindings
-                        ? withTypeBindings(genericBindings, () =>
-                            mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                        )
-                        : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                    return this.coerce(source, target, cb);
-                };
-                if (params.length >= 1) callArgs.push(typedArg(0, { c: elem, ty: T_VALUE }));
-                if (params.length >= 2) callArgs.push(typedArg(1, { c: `(double)${iv}`, ty: T_NUMBER }));
-                if (params.length >= 3) callArgs.push(typedArg(2, { c: `tsc_value_array(${av})`, ty: T_VALUE }));
-                const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift(callbackThisArg);
-                const retType = this.prepareType(genericBindings
-                    ? withTypeBindings(genericBindings, () =>
-                        mapTsType(cb, sig.getReturnType(), this.checker),
-                    )
-                    : mapTsType(cb, sig.getReturnType(), this.checker));
-                body = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
-            } else {
-                const fn = this.emitExpr(cb);
-                if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                    unsupported(cb, `dynamic ${method}: callback must be callable`);
-                }
-                const fnv = this.freshTemp("_cb");
-                bindings.push(`${fn.ty.c} ${fnv} = ${fn.c}`);
-                const params = fn.ty.params ?? [];
-                const callArgs: string[] = [];
-                if (params.length >= 1) {
-                    callArgs.push(this.coerce({ c: elem, ty: T_VALUE }, params[0]!, cb));
-                }
-                if (params.length >= 2) {
-                    callArgs.push(this.coerce({ c: `(double)${iv}`, ty: T_NUMBER }, params[1]!, cb));
-                }
-                if (params.length >= 3) {
-                    callArgs.push(this.coerce({ c: `tsc_value_array(${av})`, ty: T_VALUE }, params[2]!, cb));
-                }
-                body = {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
-                    ty: this.prepareType(fn.ty.ret),
-                };
-            }
-        } else {
-            unsupported(cb, `dynamic ${method}: callback must be an inline arrow/function expression or function reference`);
-        }
+        const bindings: string[] = [`tsc_value_t ${elem} = tsc_value_get_index(tsc_value_array(${av}), (double)${iv})`,
+            `void* volatile ${elem}_gc_root = tsc_value_gc_root(${elem})`];
+        const callback = this.emitCallbackBinding(cb);
+        const callbackSetup = callback.setup;
+        const bodyNode = cb;
+        const body = this.emitCallbackApplication(callback.value, callbackThisArg, [
+            { c: elem, ty: T_VALUE }, { c: `(double)${iv}`, ty: T_NUMBER },
+            { c: `tsc_value_array(${av})`, ty: T_VALUE },
+        ], cb);
         if (method === "forEach") {
             return this.emitSequencedExpr(T_VOID, [
                 { value: recv, target: T_VALUE, node: call.expression },
@@ -44237,9 +43758,10 @@ class Emitter {
 
         return this.emitSequencedExpr(callType, [
             { value: items },
+            { value: this.emitExpr(mapfnArg), target: T_VALUE, node: mapfnArg },
             ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
             ...ignored,
-        ], ([itemsExpr, thisArgExpr]) => {
+        ], ([itemsExpr, callbackValue, thisArgExpr]) => {
             const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
             const src = this.freshTemp("_af_src");
             const out = this.freshTemp("_af_out");
@@ -44250,15 +43772,15 @@ class Emitter {
                 ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
                 : `TSC_ARR(${t.c}, ${src}, ${iv})`;
             const itemValueSource = t.kind !== "value" && canBoxArrayFindElement(t)
-                ? { c: `tsc_value_get_index(tsc_value_array(${src}), (double)${iv})`, ty: T_VALUE }
+                ? { c: `tsc_value_get_index(${this.coerce({ c: src, ty: arrayType(t) }, T_VALUE, itemsArg)}, (double)${iv})`, ty: T_VALUE }
                 : undefined;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv, callbackThisArg, itemValueSource);
+            const body = this.bindArrayFromCallback(mapfnArg, t, item, iv, callbackThisArg, callbackValue!, itemValueSource);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
-                `({ tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
+                `({ if (!tsc_value_is_callable(${callbackValue})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `${t.c} ${item} = ${itemExpr}; ` +
                 `${u.c} ${mapped} = ${mappedC}; ` +
                 `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
             );
@@ -44278,9 +43800,10 @@ class Emitter {
         const callType = arrayType(u);
         return this.emitSequencedExpr(callType, [
             { value: items },
+            { value: this.emitExpr(mapfnArg), target: T_VALUE, node: mapfnArg },
             ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
             ...ignored,
-        ], ([s, thisArgExpr]) => {
+        ], ([s, callbackValue, thisArgExpr]) => {
             const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
             const src = this.freshTemp("_afs_src");
             const out = this.freshTemp("_afs_out");
@@ -44288,13 +43811,13 @@ class Emitter {
             const item = this.freshTemp("_afs_item");
             const mapped = this.freshTemp("_afs_mapped");
             const itemExpr = `TSC_ARR(tsc_str_t*, ${src}, ${iv})`;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, T_STRING, u, item, iv, callbackThisArg);
+            const body = this.bindArrayFromCallback(mapfnArg, T_STRING, item, iv, callbackThisArg, callbackValue!);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
-                `({ tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
+                `({ if (!tsc_value_is_callable(${callbackValue})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); tsc_array_t* const ${src} = tsc_str_chars(${s}); ` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${u.c}), ${src}->len ? ${src}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `tsc_str_t* ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
+                `tsc_str_t* ${item} = ${itemExpr}; ` +
                 `${u.c} ${mapped} = ${mappedC}; ` +
                 `tsc_array_push_raw(${out}, &${mapped}); } ${out}; })`
             );
@@ -44304,101 +43827,16 @@ class Emitter {
     private bindArrayFromCallback(
         cb: ts.Expression,
         t: CType,
-        u: CType,
         itemTemp: string,
         indexTemp: string,
         callbackThisArg: string,
+        callbackValue: string,
         itemValueSource?: EmitResult,
-    ): { bindings: string[]; body: EmitResult } {
-        const bindings: string[] = [];
-        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            const sig = this.checker.getSignatureFromDeclaration(cb);
-            if (!sig) unsupported(cb, "Array.from callback must be callable");
-            const thisType = this.signatureThisType(sig, cb);
-            const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-            const bodyExpr = this.callbackReturnExpression(cb, "Array.from");
-            const valueParam = params[0];
-            const indexParam = params[1];
-            if (valueParam && ts.isIdentifier(valueParam.name)) {
-                const target = valueParam.type
-                    ? this.prepareType(mapType(valueParam, this.checker))
-                    : t;
-                const source = target.kind === "value" && itemValueSource
-                    ? itemValueSource
-                    : { c: itemTemp, ty: t };
-                bindings.push(`${target.c} ${mangleIdent(valueParam.name.text)} = ${this.coerce(source, target, valueParam)};`);
-            }
-            if (indexParam && ts.isIdentifier(indexParam.name)) {
-                const target = indexParam.type
-                    ? this.prepareType(mapType(indexParam, this.checker))
-                    : T_NUMBER;
-                bindings.push(`${target.c} ${mangleIdent(indexParam.name.text)} = ${this.coerce({ c: `(double)${indexTemp}`, ty: T_NUMBER }, target, indexParam)};`);
-            }
-            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
-            try {
-                return { bindings, body: this.emitExpr(bodyExpr) };
-            } finally {
-                if (thisType) this.functionThisStack.pop();
-            }
-        }
-        if (ts.isIdentifier(cb)) {
-            const cbType = this.checker.getTypeAtLocation(cb);
-            const sig = cbType.getCallSignatures()[0];
-            if (!sig) unsupported(cb, "Array.from callback must be callable");
-            const sources: EmitResult[] = [
-                itemValueSource ?? { c: itemTemp, ty: t },
-                { c: `(double)${indexTemp}`, ty: T_NUMBER },
-            ];
-            if (this.isDirectCallableIdentifier(cb)) {
-                let fnName = this.identifierName(cb);
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                const genericBindings = genericDecl
-                    ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], u)
-                    : null;
-                if (genericDecl && genericBindings) {
-                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                }
-                const params = sig.getParameters();
-                const callArgs = params.slice(0, 2).map((param, index) => {
-                    const decl = param.valueDeclaration ?? cb;
-                    const target = this.prepareType(
-                        genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                            )
-                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                    );
-                    return this.coerce(sources[index]!, target, cb);
-                });
-                const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift(callbackThisArg);
-                const retType = this.prepareType(
-                    genericBindings
-                        ? withTypeBindings(genericBindings, () =>
-                            mapTsType(cb, sig.getReturnType(), this.checker),
-                        )
-                        : mapTsType(cb, sig.getReturnType(), this.checker),
-                );
-                return { bindings, body: { c: `${fnName}(${callArgs.join(", ")})`, ty: retType } };
-            }
-            const fn = this.emitExpr(cb);
-            if (fn.ty.kind !== "function" || !fn.ty.ret)
-                unsupported(cb, "Array.from callback must be callable");
-            const fnv = this.freshTemp("_cb");
-            bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-            const params = fn.ty.params ?? [];
-            const callArgs = params.slice(0, 2).map((param, index) =>
-                this.coerce(sources[index]!, param, cb),
-            );
-            return {
-                bindings,
-                body: {
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
-                    ty: this.prepareType(fn.ty.ret),
-                },
-            };
-        }
-        unsupported(cb, "Array.from callback must be an inline arrow/function expression or function reference");
+    ): EmitResult {
+        return this.emitCallbackApplication(callbackValue, callbackThisArg, [
+            itemValueSource ?? { c: itemTemp, ty: t },
+            { c: `(double)${indexTemp}`, ty: T_NUMBER },
+        ], cb);
     }
 
     private emitArrayFromWithoutMapper(
@@ -44454,153 +43892,52 @@ class Emitter {
         );
     }
 
-    private emitArrayFromAsyncWithMapper(
-        call: ts.CallExpression,
-        itemsArg: ts.Expression,
-        mapfnArg: ts.Expression,
-        thisArg: ts.Expression | undefined,
-        promiseType: CType,
-        ignoredArgs: readonly ts.Expression[] = [],
-    ): EmitResult {
-        if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array" || !promiseType.elem.elem) {
-            unsupported(call, "Array.fromAsync result must be Promise<T[]>");
-        }
-        const resultArrayType = promiseType.elem;
-        const resultElem = resultArrayType.elem;
-        if (!resultElem) unsupported(call, "Array.fromAsync result must be Promise<T[]>");
-        const elem = this.prepareType(resultElem);
-        const items = this.emitExpr(itemsArg);
-        const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
-        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        const sourceType = items.ty.kind === "map"
-            ? entryType(items.ty.elem!, items.ty.key!)
-            : items.ty.kind === "string"
-                ? T_STRING
-                : items.ty.kind === "value"
-                    ? T_VALUE
-                    : items.ty.elem;
-        if (!sourceType || (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string" && items.ty.kind !== "value")) {
-            unsupported(itemsArg, "Array.fromAsync(items, mapfn) currently supports typed array, Map, Set, dynamic, or string sources");
-        }
-        return this.emitSequencedExpr(
-            promiseType,
-            [
-                { value: items, target: items.ty.kind === "value" ? T_VALUE : items.ty, node: itemsArg },
-                ...(thisArgValue ? [{ value: thisArgValue, target: T_VALUE, node: thisArg! }] : []),
-                ...ignored,
-            ],
-            ([itemsExpr, thisArgExpr]) => {
-                const callbackThisArg = thisArgValue ? thisArgExpr! : "tsc_value_undefined()";
-                const src = this.freshTemp("_afa_src");
-                const out = this.freshTemp("_afa_out");
-                const result = this.freshTemp("_afa_result");
-                const pending = this.freshTemp("_afa_pending");
-                const iv = this.freshTemp("_afa_i");
-                const item = this.freshTemp("_afa_item");
-                const mapped = this.freshTemp("_afa_mapped");
-                const promise = this.freshTemp("_afa_promise");
-                const pushed = this.freshTemp("_afa_value");
-                const eh = this.freshTemp("_afa_eh");
-                const sourceArray = items.ty.kind === "set"
-                    ? `tsc_set_values(${itemsExpr})`
-                    : items.ty.kind === "map"
-                        ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Array.fromAsync(Map)").c
-                        : items.ty.kind === "string"
-                            ? `tsc_str_chars(${itemsExpr})`
-                            : items.ty.kind === "value"
-                                ? `tsc_value_array_from_values(${itemsExpr})`
-                                : itemsExpr;
-                const itemExpr = items.ty.kind === "array" && sourceType.kind === "value"
-                    ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${sourceType.c}, ${src}, ${iv}) : tsc_value_undefined())`
-                    : `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
-                const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
-                const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise, call), elem, call);
-                const pushMapped = body.ty.kind === "promise"
-                    ? `${body.ty.c} ${promise} = ${body.c}; ` +
-                        `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
-                        `if (tsc_promise_is_pending(${promise})) { ${pending} = true; continue; } ` +
-                        `${elem.c} ${pushed} = ${fulfill}; tsc_array_push_raw(${out}, &${pushed});`
-                    : `${elem.c} ${mapped} = ${this.coerce(body, elem, mapfnArg)}; tsc_array_push_raw(${out}, &${mapped});`;
-                return (
-                    `({ tsc_array_t* ${src} = NULL; ` +
-                    `tsc_array_t* ${out} = NULL; ` +
-                    `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
-                    `TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); ` +
-                    `if (setjmp(${eh}.jb) == 0) { ${src} = ${sourceArray}; ` +
-                    `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
-                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                    `${sourceType.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
-                    `${pushMapped} } ` +
-                    `tsc_try_pop(); ` +
-                    `} else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ` +
-                    `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
-                );
-            });
-    }
-
-    private emitArrayFromAsyncWithoutMapper(
-        call: ts.CallExpression,
-        itemsArg: ts.Expression,
-        promiseType: CType,
-        ignoredArgs: readonly ts.Expression[] = [],
-    ): EmitResult {
-        if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array" || !promiseType.elem.elem) {
-            unsupported(call, "Array.fromAsync result must be Promise<T[]>");
-        }
-        const resultArrayType = promiseType.elem;
-        const resultElem = resultArrayType.elem;
-        if (!resultElem) unsupported(call, "Array.fromAsync result must be Promise<T[]>");
-        const elem = this.prepareType(resultElem);
-        const source = this.emitExpr(itemsArg);
-        const ignored = this.ignoredArgumentSpecs(ignoredArgs, 0);
-        const sourceElem = source.ty.kind === "array" || source.ty.kind === "set"
-            ? source.ty.elem
-            : null;
-        if (source.ty.kind === "value") {
-            if (!sameCType(elem, T_VALUE)) unsupported(itemsArg, "Array.fromAsync(dynamic) result must be Promise<any[]>");
-            return this.emitSequencedExpr(promiseType, [
-                { value: source, target: T_VALUE, node: itemsArg },
-                ...ignored,
-            ], ([items]) => {
-                const result = this.freshTemp("_from_async_result");
-                const src = this.freshTemp("_from_async_src");
-                const eh = this.freshTemp("_from_async_eh");
-                return (
-                    `({ tsc_promise_t* ${result} = NULL; tsc_array_t* ${src} = NULL; ` +
-                    `TSC_TRY_FRAME(${eh}); tsc_try_push(&${eh}); ` +
-                    `if (setjmp(${eh}.jb) == 0) { ${src} = tsc_value_array_from_values(${items}); tsc_try_pop(); ${result} = tsc_promise_resolve_array(${src}); ` +
-                    `} else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ${result}; })`
-                );
-            });
-        }
-        if (sourceElem?.kind === "promise") {
-            return this.emitSequencedExpr(promiseType, [
-                { value: source, node: itemsArg },
-                ...ignored,
-            ], ([sourceExpr]) => {
-                const srcExpr = source.ty.kind === "set" ? `tsc_set_values(${sourceExpr})` : sourceExpr!;
-                const out = this.freshTemp("_from_async");
-                const result = this.freshTemp("_from_async_result");
-                const pending = this.freshTemp("_from_async_pending");
-                const i = this.freshTemp("_i");
-                const item = this.freshTemp("_from_async_item");
-                const value = this.freshTemp("_from_async_value");
-                const pushed = this.coerce(this.promiseFulfilledValue(elem, item, call), elem, call);
-                return (
-                    `({ tsc_array_t* const _src = ${srcExpr}; ` +
-                    `tsc_array_t* ${out} = tsc_array_new(sizeof(${elem.c}), _src->len); ` +
-                    `tsc_promise_t* ${result} = NULL; bool ${pending} = false; ` +
-                    `for (size_t ${i} = 0; ${i} < _src->len; ${i}++) { ` +
-                    `tsc_promise_t* const ${item} = TSC_ARR(tsc_promise_t*, _src, ${i}); ` +
-                    `if (tsc_promise_is_rejected(${item})) { ${result} = tsc_promise_reject(tsc_promise_reason(${item})); break; } ` +
-                    `if (tsc_promise_is_pending(${item})) { ${pending} = true; continue; } ` +
-                    `${elem.c} ${value} = ${pushed}; tsc_array_push_raw(${out}, &${value}); } ` +
-                    `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`
-                );
-            });
-        }
-        const arrayResult = this.emitArrayFromWithoutMapper(call, itemsArg, resultArrayType, ignoredArgs);
-        return { c: `tsc_promise_resolve_array(${arrayResult.c})`, ty: promiseType };
+    /** Physical collection codecs are boundary adapters. Source and mapper
+     * values both pass through the same ordinary Promise conversion. */
+    private emitArrayFromAsync(call: ts.CallExpression, itemsArg: ts.Expression, resultType: CType): EmitResult {
+        const elem = resultType.elem?.elem;
+        if (!elem) unsupported(call, "Array.fromAsync result storage cannot represent its elements");
+        const mapper = call.arguments[1];
+        const specs: SequencedCallArg[] = [
+            { value: this.emitExpr(itemsArg), target: T_VALUE, node: itemsArg },
+            ...(mapper ? [{ value: this.emitExpr(mapper), target: T_VALUE, node: mapper }] : []),
+            ...(call.arguments[2] ? [{ value: this.emitExpr(call.arguments[2]), target: T_VALUE, node: call.arguments[2] }] : []),
+            ...this.ignoredArgumentSpecs(call.arguments, 3),
+        ];
+        return this.emitSequencedExpr(resultType, specs, ([source, callback, receiver]) => {
+            const method = this.freshTemp("_from_async_iterator_method"), iterator = this.freshTemp("_from_async_iterator");
+            const src = this.freshTemp("_from_async_source"), out = this.freshTemp("_from_async_output");
+            const result = this.freshTemp("_from_async_result"), pending = this.freshTemp("_from_async_pending");
+            const index = this.freshTemp("_from_async_index"), item = this.freshTemp("_from_async_item");
+            const promise = this.freshTemp("_from_async_promise"), value = this.freshTemp("_from_async_value");
+            const pushed = this.freshTemp("_from_async_pushed"), frame = this.freshTemp("_from_async_frame");
+            const map = callback ? this.emitCallbackApplication(callback, receiver ?? "tsc_value_undefined()", [
+                { c: value, ty: T_VALUE }, { c: `(double)${index}`, ty: T_NUMBER },
+            ], mapper!).c : value;
+            const awaitValue = (expression: string): string =>
+                `${promise} = tsc_promise_await(${expression}); ` +
+                `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
+                `if (tsc_promise_is_pending(${promise})) { ${pending} = true; continue; } ` +
+                `${value} = tsc_promise_value(${promise}); `;
+            return `({ tsc_promise_t* ${result} = NULL; bool ${pending} = false; tsc_array_t* ${out} = NULL; ` +
+                `TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame}); if (setjmp(${frame}.jb) == 0) { ` +
+                (callback ? `if (!tsc_value_is_undefined(${callback}) && !tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` : "") +
+                `if (tsc_value_is_nullish(${source})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.from source must not be null or undefined")); ` +
+                `tsc_value_t ${method} = tsc_value_get_symbol_prop(${source}, tsc_symbol_iterator()); ` +
+                `void* volatile ${method}_gc_root = tsc_value_gc_root(${method}); tsc_array_t* ${src}; ` +
+                `if (!tsc_value_is_nullish(${method})) { tsc_sync_iterator_t ${iterator} = tsc_sync_iterator_open_with_method(${source}, ${method}); ` +
+                `${src} = tsc_array_new(sizeof(tsc_value_t), 1); tsc_value_t ${item}; ` +
+                `while (tsc_sync_iterator_step(&${iterator}, &${item})) { void* volatile ${item}_gc_root = tsc_value_gc_root(${item}); tsc_array_push_value(${src}, ${item}); } ` +
+                `} else ${src} = tsc_value_array_from_values(${source}); ` +
+                `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
+                `for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { ` +
+                `tsc_value_t ${item} = TSC_ARR(tsc_value_t, ${src}, ${index}); tsc_value_t ${value}; tsc_promise_t* ${promise}; ` +
+                awaitValue(item) +
+                (callback ? `if (!tsc_value_is_undefined(${callback})) { ${awaitValue(map)} } ` : "") +
+                `${elem.c} ${pushed} = ${this.coerce({ c: value, ty: T_VALUE }, elem, call)}; tsc_array_push_raw(${out}, &${pushed}); } ` +
+                `tsc_try_pop(); } else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ` +
+                `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`;
+        });
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
@@ -44625,22 +43962,6 @@ class Emitter {
                 `tsc_value_map_group_by(${source}, ${callback}, &${layout}); })`;
         });
     }
-
-    private callbackReturnExpression(
-        cb: ts.ArrowFunction | ts.FunctionExpression,
-        label: string,
-    ): ts.Expression {
-        if (!ts.isBlock(cb.body)) {
-            return cb.body;
-        }
-        const statements = cb.body.statements;
-        const statement = statements[0];
-        if (statements.length !== 1 || !statement || !ts.isReturnStatement(statement) || !statement.expression) {
-            unsupported(cb, `${label} block-body callbacks require exactly one return expression`);
-        }
-        return statement.expression;
-    }
-
 
     private emitMapEntriesArray(node: ts.Node, recv: EmitResult, feature: string): EmitResult {
         if (recv.ty.kind !== "map") unsupported(node, `${feature} expects a Map`);
@@ -45196,20 +44517,8 @@ class Emitter {
         values: readonly EmitResult[],
         node: ts.Expression,
     ): string {
-        const type = this.prepareType(callbackType);
-        if (type.kind === "value") {
-            const args = this.freshTemp("_promise_cb_args");
-            const pieces = [`tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length)})`];
-            for (const value of values) {
-                pieces.push(`tsc_array_push_value(${args}, ${this.coerce(value, T_VALUE, call)})`);
-            }
-            pieces.push(`tsc_value_apply_function(${callbackValue}, tsc_value_undefined(), tsc_value_array(${args}))`);
-            return `({ ${pieces.join("; ")}; })`;
-        }
-        if (type.kind !== "function" || !type.ret) unsupported(node, "Promise callback must be a function");
-        const params = type.params ?? [];
-        const args = params.map((param, i) => this.coerce(values[i] ?? { c: "tsc_value_undefined()", ty: T_VALUE }, param, call));
-        return `${callbackValue}->fn(${[`${callbackValue}->env`, ...(type.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
+        const callback = this.coerce({ c: callbackValue, ty: callbackType }, T_VALUE, node);
+        return this.emitCallbackApplication(callback, "tsc_value_undefined()", values, node).c;
     }
 
     private promiseFulfilledValue(elem: CType | undefined, promise: string, node: ts.Node): EmitResult {
@@ -47501,7 +46810,7 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "EventEmitter listener must be a function");
         }
-        if (prepared.thisParam && prepared.thisParam.kind !== "eventemitter") {
+        if (prepared.thisParam && prepared.thisParam.kind !== "eventemitter" && prepared.thisParam.kind !== "value") {
             unsupported(expr, "EventEmitter listener this parameter must be EventEmitter");
         }
         const key = `event:${this.typeKey(prepared)}`;
@@ -47513,18 +46822,9 @@ class Emitter {
         const buf = new CBuf();
         buf.open(`void ${name}(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args)`);
         buf.line(`${prepared.c} fn = (${prepared.c})env;`);
-        const params = prepared.params ?? [];
-        const callArgs: string[] = ["fn->env"];
-        if (prepared.thisParam) callArgs.push("emitter");
-        for (let i = 0; i < params.length; i++) {
-            const arg = this.coerce(
-                { c: `(args->len > ${i} ? TSC_ARR(tsc_value_t, args, ${i}) : tsc_value_undefined())`, ty: T_VALUE },
-                params[i]!,
-                expr,
-            );
-            callArgs.push(arg);
-        }
-        buf.line(`fn->fn(${callArgs.join(", ")});`);
+        const callback = this.coerce({ c: "fn", ty: prepared }, T_VALUE, expr);
+        const receiver = this.coerce({ c: "emitter", ty: T_EVENT_EMITTER }, T_VALUE, expr);
+        buf.line(`(void)tsc_value_apply_function(${callback}, ${receiver}, tsc_value_array(args));`);
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -47536,11 +46836,9 @@ class Emitter {
         if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
             unsupported(expr, "EventTarget listener must be a function");
         }
-        if (prepared.thisParam && prepared.thisParam.kind !== "eventtarget") {
+        if (prepared.thisParam && prepared.thisParam.kind !== "eventtarget" && prepared.thisParam.kind !== "value") {
             unsupported(expr, "EventTarget listener this parameter must be EventTarget");
         }
-        const params = prepared.params ?? [];
-        if (params.length > 1) unsupported(expr, "EventTarget listener expects at most one Event parameter");
         const key = `eventtarget:${this.typeKey(prepared)}`;
         const existing = this.eventTargetListenerAdapters.get(key);
         if (existing) return existing;
@@ -47550,79 +46848,60 @@ class Emitter {
         const buf = new CBuf();
         buf.open(`void ${name}(void* env, tsc_event_target_t* target, tsc_event_t* event)`);
         buf.line(`${prepared.c} fn = (${prepared.c})env;`);
-        const callArgs: string[] = ["fn->env"];
-        if (prepared.thisParam) callArgs.push("target");
-        if (params.length === 1) {
-            callArgs.push(this.coerce({ c: "event", ty: T_EVENT }, params[0]!, expr));
-        }
-        buf.line(`fn->fn(${callArgs.join(", ")});`);
+        const callback = this.coerce({ c: "fn", ty: prepared }, T_VALUE, expr);
+        const receiver = this.coerce({ c: "target", ty: T_EVENT_TARGET }, T_VALUE, expr);
+        buf.line(`(void)${this.emitCallbackApplication(callback, receiver, [{ c: "event", ty: T_EVENT }], expr).c};`);
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
         return name;
     }
 
-    private ensureNextTickAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
-            unsupported(expr, "process.nextTick callback must be a function");
-        }
-        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
-            unsupported(expr, "process.nextTick callback this parameter must be any/unknown");
-        }
-        const params = prepared.params ?? [];
-        if (params.length !== argTypes.length) unsupported(expr, "process.nextTick callback parameter count must match queued arguments in this subset");
-        const args = argTypes.map((arg) => this.prepareType(arg));
-        const key = `nextTick:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
-        const existing = this.nextTickAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_next_tick_callback_${this.nextTickAdapters.size}`;
-        const envType = `${name}_env_t`;
-        this.nextTickAdapters.set(key, name);
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line(`${prepared.c} fn;`);
-        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
-        this.structDecls.close(` ${envType};`);
-        this.protos.line(`void ${name}(void* env);`);
+    /** Every native queued callback retains the same boxed owner and actual
+     * argument List, independent of source formals or queued cardinality. */
+    private ensureQueuedCallbackAdapter(): string {
+        const name = "tsc_queued_source_callback";
+        if (this.queuedCallbackAdapterEmitted) return name;
+        this.queuedCallbackAdapterEmitted = true;
+        this.structDecls.open(`typedef struct ${name}_env_t`);
+        this.structDecls.line("tsc_value_t callback;");
+        this.structDecls.line("void* callback_gc_root;");
+        this.structDecls.line("tsc_array_t* arguments;");
+        this.structDecls.close(` ${name}_env_t;`);
+        this.protos.line(`static void ${name}(void* env);`);
         const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
-        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
+        buf.open(`static void ${name}(void* env)`);
+        buf.line(`${name}_env_t* state = (${name}_env_t*)env;`);
+        buf.line("(void)tsc_value_apply_function(state->callback, tsc_value_undefined(), tsc_value_array(state->arguments));");
         buf.close();
         this.closureDefs.write(buf.toString());
         return name;
     }
 
-    private ensureMicrotaskAdapter(expr: ts.Expression, type: CType): string {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
-            unsupported(expr, "queueMicrotask callback must be a function");
-        }
-        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
-            unsupported(expr, "queueMicrotask callback this parameter must be any/unknown");
-        }
-        const params = prepared.params ?? [];
-        if (params.length !== 0) unsupported(expr, "queueMicrotask callback must not require parameters in this subset");
-        const key = `microtask:${this.typeKey(prepared)}`;
-        const existing = this.microtaskAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_microtask_callback_${this.microtaskAdapters.size}`;
-        const envType = `${name}_env_t`;
-        this.microtaskAdapters.set(key, name);
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line(`${prepared.c} fn;`);
-        this.structDecls.close(` ${envType};`);
-        this.protos.line(`void ${name}(void* env);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line(`${prepared.c} fn = state->fn;`);
-        buf.line(`(void)fn->fn(${["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : [])].join(", ")});`);
-        buf.close();
-        this.closureDefs.write(buf.toString());
-        return name;
+    private emitQueuedCallbackRegistration(callback: string, argumentsList: string, runtime: string, delay?: string): string {
+        const adapter = this.ensureQueuedCallbackAdapter();
+        const envType = `${adapter}_env_t`;
+        const env = this.freshTemp("_queued_callback_env");
+        return `({ if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` +
+            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+            `${env}->callback = ${callback}; ${env}->callback_gc_root = tsc_value_gc_root(${callback}); ` +
+            `${env}->arguments = ${argumentsList}; ${runtime}(${adapter}, ${env}${delay ? `, ${delay}` : ""}); })`;
+    }
+
+    private emitQueuedCallbackCall(call: ts.CallExpression, runtime: string, timed = false, ignoresActuals = false): EmitResult {
+        const node = call.arguments[0];
+        if (!node) unsupported(call, "queued callback missing");
+        const specs: SequencedCallArg[] = [{ value: this.emitExpr(node), target: T_VALUE, node }];
+        const delayNode = timed ? call.arguments[1] : undefined;
+        if (delayNode) specs.push({ value: this.emitExpr(delayNode), target: T_NUMBER, node: delayNode });
+        specs.push({ value: this.emitSpreadCallArgumentList(ignoresActuals ? [] : call.arguments.slice(timed ? 2 : 1)), node: call });
+        if (ignoresActuals) specs.push(...this.ignoredArgumentSpecs(call.arguments, 1));
+        const ret = runtime === "tsc_process_next_tick" || runtime === "tsc_queue_microtask" ? T_VOID : T_NUMBER;
+        return this.emitSequencedExpr(ret, specs, ([callback, ...values]) => {
+            const delay = timed ? (delayNode ? values[0]! : "0.0") : undefined;
+            const argumentsList = values[delayNode ? 1 : 0]!;
+            return this.emitQueuedCallbackRegistration(callback!, argumentsList, runtime, delay);
+        });
     }
 
     private emitClearTimerCall(call: ts.CallExpression, runtime: string): EmitResult {
@@ -47686,33 +46965,7 @@ class Emitter {
     }
 
     private emitSetImmediateCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "setImmediate expects a callback");
-        const callbackNode = call.arguments[0]!;
-        const callback = this.emitExpr(callbackNode);
-        const argNodes = Array.from(call.arguments.slice(1));
-        const argValues = argNodes.map((arg) => this.emitExpr(arg));
-        const adapter = this.ensureImmediateAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-        const prepared = this.prepareType(callback.ty);
-        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-        return this.emitSequencedExpr(T_NUMBER, [
-            { value: callback, target: callback.ty, node: callbackNode },
-            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ], ([fn, ...args]) => {
-            const envType = `${adapter}_env_t`;
-            const env = this.freshTemp("_immediate_env");
-            const pieces = [
-                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                `${env}->fn = ${fn}`,
-            ];
-            args.forEach((arg, i) => {
-                pieces.push(`${env}->arg${i} = ${arg}`);
-                if (this.prepareType(params[i]!).kind === "value") {
-                    pieces.push(`${env}->arg${i}_gc_root = tsc_value_gc_root(${env}->arg${i})`);
-                }
-            });
-            pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
+        return this.emitQueuedCallbackCall(call, "tsc_set_immediate");
     }
 
     private emitImmediateCallbackSchedule(
@@ -47722,27 +46975,13 @@ class Emitter {
         values: readonly EmitResult[],
         node: ts.Expression,
     ): string {
-        const prepared = this.prepareType(callbackType);
-        if (prepared.kind !== "function" || !prepared.ret) {
-            unsupported(node, "deferred callback must be a function");
-        }
-        const params = (prepared.params ?? []).map((param) => this.prepareType(param));
-        const adapter = this.ensureImmediateAdapter(node, prepared, params);
-        const envType = `${adapter}_env_t`;
-        const env = this.freshTemp("_immediate_env");
-        const pieces = [
-            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-            `${env}->fn = ${callbackValue}`,
-        ];
-        params.forEach((param, index) => {
-            const value = values[index] ?? { c: "tsc_value_undefined()", ty: T_VALUE };
-            pieces.push(`${env}->arg${index} = ${this.coerce(value, param, call)}`);
-            if (param.kind === "value") {
-                pieces.push(`${env}->arg${index}_gc_root = tsc_value_gc_root(${env}->arg${index})`);
-            }
-        });
-        pieces.push(`(void)tsc_set_immediate(${adapter}, ${env})`);
-        return `({ ${pieces.join("; ")}; })`;
+        return this.emitSequencedExpr(T_NUMBER, [
+            { value: { c: callbackValue, ty: callbackType }, target: T_VALUE, node },
+            ...values.map(value => ({ value, target: T_VALUE, node })),
+        ], ([callback, ...actuals]) => {
+            const argumentsList = this.emitActualArgumentList(actuals.map(c => ({ value: { c, ty: T_VALUE }, node })));
+            return this.emitQueuedCallbackRegistration(callback!, argumentsList.c, "tsc_set_immediate");
+        }).c;
     }
 
     private emitDispatchCall(call: ts.CallExpression, name: string): EmitResult {
@@ -48047,95 +47286,19 @@ class Emitter {
         buf.open(`tsc_value_t ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : [])];
-        if (ret.kind === "void" || ret.kind === "never") {
-            buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
-            buf.line("return tsc_value_undefined();");
-        } else {
-            buf.line(`${ret.c} result = fn->fn(${callArgs.join(", ")});`);
-            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, expr)};`);
-        }
+        const callback = this.coerce({ c: "fn", ty: prepared }, T_VALUE, expr);
+        buf.line(`return ${this.emitCallbackApplication(callback, "tsc_value_undefined()", [], expr).c};`);
         buf.close();
         this.closureDefs.write(buf.toString());
         return name;
     }
 
     private emitSetTimeoutCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "setTimeout expects a callback and optional delay");
-        const callbackNode = call.arguments[0]!;
-        const callback = this.emitExpr(callbackNode);
-        const delayNode = call.arguments[1];
-        const delayIsDefault = !delayNode || this.isUndefinedLikeExpression(delayNode);
-        const delayValue = delayNode && (!delayIsDefault || this.shouldEvaluateSideEffectfulVoidDefault(delayNode))
-            ? this.emitExpr(delayNode)
-            : undefined;
-        const argNodes = call.arguments.length >= 2
-            ? Array.from(call.arguments.slice(2))
-            : [];
-        const argValues = argNodes.map((arg) => this.emitExpr(arg));
-        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-        const prepared = this.prepareType(callback.ty);
-        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-        const specs: SequencedCallArg[] = [
-            { value: callback, target: callback.ty, node: callbackNode },
-            ...(delayNode && delayValue
-                ? [{ value: delayValue, target: delayIsDefault ? T_VOID : T_NUMBER, node: delayNode }]
-                : []),
-            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ];
-        return this.emitSequencedExpr(T_NUMBER, specs, ([fn, ...values]) => {
-            const hasSequencedDelay = !!(delayNode && delayValue);
-            const delayC = hasSequencedDelay && !delayIsDefault ? values[0] : "0.0";
-            const args = hasSequencedDelay ? values.slice(1) : values;
-            const envType = `${adapter}_env_t`;
-            const env = this.freshTemp("_timeout_env");
-            const pieces = [
-                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                `${env}->fn = ${fn}`,
-            ];
-            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-            pieces.push(`tsc_set_timeout(${adapter}, ${env}, ${delayC})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
+        return this.emitQueuedCallbackCall(call, "tsc_set_timeout", true);
     }
 
     private emitSetIntervalCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 1) unsupported(call, "setInterval expects a callback and optional delay");
-        const callbackNode = call.arguments[0]!;
-        const callback = this.emitExpr(callbackNode);
-        const delayNode = call.arguments[1];
-        const delayIsDefault = !delayNode || this.isUndefinedLikeExpression(delayNode);
-        const delayValue = delayNode && (!delayIsDefault || this.shouldEvaluateSideEffectfulVoidDefault(delayNode))
-            ? this.emitExpr(delayNode)
-            : undefined;
-        const argNodes = call.arguments.length >= 2
-            ? Array.from(call.arguments.slice(2))
-            : [];
-        const argValues = argNodes.map((arg) => this.emitExpr(arg));
-        const adapter = this.ensureTimeoutAdapter(callbackNode, callback.ty, argValues.map((arg) => arg.ty));
-        const prepared = this.prepareType(callback.ty);
-        const params = prepared.kind === "function" ? prepared.params ?? [] : [];
-        const specs: SequencedCallArg[] = [
-            { value: callback, target: callback.ty, node: callbackNode },
-            ...(delayNode && delayValue
-                ? [{ value: delayValue, target: delayIsDefault ? T_VOID : T_NUMBER, node: delayNode }]
-                : []),
-            ...argValues.map((value, i) => ({ value, target: params[i], node: argNodes[i]! })),
-        ];
-        return this.emitSequencedExpr(T_NUMBER, specs, ([fn, ...values]) => {
-            const hasSequencedDelay = !!(delayNode && delayValue);
-            const delayC = hasSequencedDelay && !delayIsDefault ? values[0] : "0.0";
-            const args = hasSequencedDelay ? values.slice(1) : values;
-            const envType = `${adapter}_env_t`;
-            const env = this.freshTemp("_interval_env");
-            const pieces = [
-                `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
-                `${env}->fn = ${fn}`,
-            ];
-            args.forEach((arg, i) => pieces.push(`${env}->arg${i} = ${arg}`));
-            pieces.push(`tsc_set_interval(${adapter}, ${env}, ${delayC})`);
-            return `({ ${pieces.join("; ")}; })`;
-        });
+        return this.emitQueuedCallbackCall(call, "tsc_set_interval", true);
     }
 
     private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
@@ -48576,75 +47739,6 @@ class Emitter {
         return this.emitExpr(prop.initializer);
     }
 
-    private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
-            unsupported(expr, "setImmediate callback must be a function");
-        }
-        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
-            unsupported(expr, "setImmediate callback this parameter must be any/unknown");
-        }
-        const params = prepared.params ?? [];
-        if (params.length !== argTypes.length) unsupported(expr, "setImmediate callback parameter count must match queued arguments in this subset");
-        const args = argTypes.map((arg) => this.prepareType(arg));
-        const key = `immediate:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
-        const existing = this.immediateAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_immediate_callback_${this.immediateAdapters.size}`;
-        const envType = `${name}_env_t`;
-        this.immediateAdapters.set(key, name);
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line(`${prepared.c} fn;`);
-        args.forEach((arg, i) => {
-            this.structDecls.line(`${arg.c} arg${i};`);
-            if (arg.kind === "value") this.structDecls.line(`void* arg${i}_gc_root;`);
-        });
-        this.structDecls.close(` ${envType};`);
-        this.protos.line(`void ${name}(void* env);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
-        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
-        buf.close();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensureTimeoutAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
-            unsupported(expr, "setTimeout callback must be a function");
-        }
-        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
-            unsupported(expr, "setTimeout callback this parameter must be any/unknown");
-        }
-        const params = prepared.params ?? [];
-        if (params.length !== argTypes.length) unsupported(expr, "setTimeout callback parameter count must match queued arguments in this subset");
-        const args = argTypes.map((arg) => this.prepareType(arg));
-        const key = `timeout:${this.typeKey(prepared)}:${args.map((arg) => this.typeKey(arg)).join(",")}`;
-        const existing = this.timeoutAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_timeout_callback_${this.timeoutAdapters.size}`;
-        const envType = `${name}_env_t`;
-        this.timeoutAdapters.set(key, name);
-        this.structDecls.open(`typedef struct ${envType}`);
-        this.structDecls.line(`${prepared.c} fn;`);
-        args.forEach((arg, i) => this.structDecls.line(`${arg.c} arg${i};`));
-        this.structDecls.close(` ${envType};`);
-        this.protos.line(`void ${name}(void* env);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env)`);
-        buf.line(`${envType}* state = (${envType}*)env;`);
-        buf.line(`${prepared.c} fn = state->fn;`);
-        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : []), ...params.map((_, i) => `state->arg${i}`)];
-        buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
-        buf.close();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
     private unwrapTransparentExpression(expr: ts.Expression): ts.Expression {
         let cur = expr;
         while (
@@ -48883,99 +47977,25 @@ class Emitter {
         const args = call.arguments;
         if (args.length < 1) unsupported(call, "URLSearchParams.forEach expects callback and optional thisArg");
         const cb = args[0]!;
-        const specs: SequencedCallArg[] = [{ value: recv }];
+        const specs: SequencedCallArg[] = [{ value: recv }, { value: this.emitExpr(cb), target: T_VALUE, node: cb }];
         if (args[1]) {
             specs.push({ value: this.emitExpr(args[1]), target: T_VALUE, node: args[1] });
         }
         specs.push(...this.ignoredArgumentSpecs(args, 2));
-        return this.emitSequencedExpr(T_VOID, specs, ([params, thisArg]) => {
+        return this.emitSequencedExpr(T_VOID, specs, ([params, callback, thisArg]) => {
             const callbackThisArg = thisArg ?? "tsc_value_undefined()";
             const ut = this.freshTemp("_url_each");
             const iv = this.freshTemp("_i");
             const valueExpr = `${ut}->items[${iv}].value`;
             const keyExpr = `${ut}->items[${iv}].name`;
-            const bindings: string[] = [];
-            let bodyC: string;
-            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                const sig = this.checker.getSignatureFromDeclaration(cb);
-                if (!sig) unsupported(cb, "URLSearchParams.forEach callback must be callable");
-                const thisType = this.signatureThisType(sig, cb);
-                const bodyExpr = this.callbackReturnExpression(cb, "URLSearchParams.forEach");
-                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-                const valueParam = params[0];
-                const keyParam = params[1];
-                const parentParam = params[2];
-                if (valueParam && ts.isIdentifier(valueParam.name)) {
-                    bindings.push(`tsc_str_t* ${mangleIdent(valueParam.name.text)} = ${valueExpr};`);
-                }
-                if (keyParam && ts.isIdentifier(keyParam.name)) {
-                    bindings.push(`tsc_str_t* ${mangleIdent(keyParam.name.text)} = ${keyExpr};`);
-                }
-                if (parentParam && ts.isIdentifier(parentParam.name)) {
-                    bindings.push(`${recv.ty.c} ${mangleIdent(parentParam.name.text)} = ${ut};`);
-                }
-                if (thisType) {
-                    const coercedThisC = this.coerce({ c: callbackThisArg, ty: T_VALUE }, thisType, cb);
-                    this.functionThisStack.push({ c: coercedThisC, ty: thisType });
-                }
-                try {
-                    bodyC = this.emitExpr(bodyExpr).c;
-                } finally {
-                    if (thisType) this.functionThisStack.pop();
-                }
-            } else if (ts.isIdentifier(cb)) {
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "URLSearchParams.forEach callback must be callable");
-                const sources: EmitResult[] = [
-                    { c: valueExpr, ty: T_STRING },
-                    { c: keyExpr, ty: T_STRING },
-                    { c: ut, ty: recv.ty },
-                ];
-                if (this.isDirectCallableIdentifier(cb)) {
-                    let fnName = this.identifierName(cb);
-                    const genericDecl = this.genericFunctionDeclaration(sig);
-                    const genericBindings = genericDecl
-                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [T_STRING, T_STRING, recv.ty], T_VOID)
-                        : null;
-                    if (genericDecl && genericBindings) {
-                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                    }
-                    const params = sig.getParameters();
-                    const callArgs = params.slice(0, 3).map((param, index) => {
-                        const decl = param.valueDeclaration ?? cb;
-                        const target = this.prepareType(genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                            )
-                            : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker));
-                        return this.coerce(sources[index]!, target, cb);
-                    });
-                    const thisType = this.directCallableThisType(cb);
-                    if (thisType) {
-                        callArgs.unshift(this.coerce({ c: callbackThisArg, ty: T_VALUE }, thisType, cb));
-                    }
-                    bodyC = `${fnName}(${callArgs.join(", ")})`;
-                } else {
-                    const fn = this.emitExpr(cb);
-                    if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                        unsupported(cb, "URLSearchParams.forEach callback must be callable");
-                    }
-                    const fnv = this.freshTemp("_cb");
-                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-                    const params = fn.ty.params ?? [];
-                    const callArgs = params.slice(0, 3).map((param, index) =>
-                        this.coerce(sources[index]!, param, cb),
-                    );
-                    bodyC = `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`;
-                }
-            } else {
-                unsupported(cb, "URLSearchParams.forEach callback must be an inline arrow/function expression or function reference");
-            }
+            const body = this.emitCallbackApplication(callback!, callbackThisArg, [
+                { c: valueExpr, ty: T_STRING }, { c: keyExpr, ty: T_STRING }, { c: ut, ty: recv.ty },
+            ], cb);
             return (
                 `({ tsc_url_search_params_t* const ${ut} = ${params}; ` +
+                `if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${ut}->len; ${iv}++) ` +
-                `{ ${bindings.join(" ")} (void)(${bodyC}); } (void)0; })`
+                `{ (void)(${body.c}); } (void)0; })`
             );
         });
     }
@@ -49806,7 +48826,7 @@ class Emitter {
         const thisArg = supportsThisArg ? args[1] : undefined;
         const thisArgValue = thisArg ? this.emitExpr(thisArg) : null;
         const thisArgTemp = thisArgValue ? this.freshTemp("_this_arg") : null;
-        const thisArgSetup = thisArgValue
+        let thisArgSetup = thisArgValue
             ? `tsc_value_t ${thisArgTemp} = ${this.coerce(thisArgValue, T_VALUE, thisArg!)}; `
             : "";
         const ignoredSetup = supportsThisArg
@@ -49836,174 +48856,24 @@ class Emitter {
             method === "findIndex" ||
             method === "findLastIndex";
         const callbackElementExpr: EmitResult = findVisitsHoles && et.kind !== "value" && canBoxArrayFindElement(et)
-            ? { c: `tsc_value_get_index(tsc_value_array(${av}), (double)${iv})`, ty: T_VALUE }
+            ? { c: `tsc_value_get_index(${this.coerce({ c: av, ty: recv.ty }, T_VALUE, call.expression)}, (double)${iv})`, ty: T_VALUE }
             : { c: elementExpr, ty: et };
 
-        // Build a body-expression factory: given elem/idx/acc C expressions,
-        // returns the C expression and C type of the callback's result.
-        // Also yields any per-iteration bindings (local var decls) to emit.
-        let callbackDetails: {
-            bindings: string; // "type name = src; ..."
-            bodyC: string;
-            bodyType: CType;
-        };
-
-        if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            // Inline path.
-            const arrowFn = cb;
-            const sig = this.checker.getSignatureFromDeclaration(arrowFn);
-            if (!sig) unsupported(arrowFn, `${method}: could not resolve callback signature`);
-            const thisType = this.signatureThisType(sig, arrowFn);
-            const params = arrowFn.parameters.filter((p) => !this.isThisParameter(p));
-            const paramBindings: { name: string; type: CType; src: EmitResult; node: ts.Node }[] = [];
-            const isReduce = method === "reduce" || method === "reduceRight";
-            const accParam = isReduce ? params[0] : undefined;
-            const elemSlot = isReduce ? params[1] : params[0];
-            const idxSlot = isReduce ? params[2] : params[1];
-            const arraySlot = isReduce ? params[3] : params[2];
-            if (isReduce) {
-                if (!accParam || !ts.isIdentifier(accParam.name))
-                    unsupported(arrowFn, `${method}: missing acc parameter`);
-                if (!elemSlot || !ts.isIdentifier(elemSlot.name))
-                    unsupported(arrowFn, `${method}: missing element parameter`);
-            } else {
-                if (!elemSlot || !ts.isIdentifier(elemSlot.name))
-                    unsupported(arrowFn, `${method}: callback needs an element parameter`);
-            }
-            if (elemSlot && ts.isIdentifier(elemSlot.name)) {
-                const elemParamType = elemSlot.type
-                    ? this.prepareType(mapType(elemSlot, this.checker))
-                    : et;
-                paramBindings.push({
-                    name: mangleIdent(elemSlot.name.text),
-                    type: elemParamType,
-                    src: callbackElementExpr,
-                    node: elemSlot,
-                });
-            }
-            if (idxSlot && ts.isIdentifier(idxSlot.name)) {
-                const idxParamType = idxSlot.type
-                    ? this.prepareType(mapType(idxSlot, this.checker))
-                    : T_NUMBER;
-                paramBindings.push({
-                    name: mangleIdent(idxSlot.name.text),
-                    type: idxParamType,
-                    src: { c: `(double)${iv}`, ty: T_NUMBER },
-                    node: idxSlot,
-                });
-            }
-            if (arraySlot) {
-                if (!ts.isIdentifier(arraySlot.name))
-                    unsupported(arrowFn, `${method}: array parameter must be an identifier`);
-                const arrayParamType = arraySlot.type
-                    ? this.prepareType(mapType(arraySlot, this.checker))
-                    : recv.ty;
-                paramBindings.push({
-                    name: mangleIdent(arraySlot.name.text),
-                    type: arrayParamType,
-                    src: { c: av, ty: recv.ty },
-                    node: arraySlot,
-                });
-            }
-            const bodyExpr = this.callbackReturnExpression(arrowFn, method);
-            if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
-            const parameterTypeScope = new Map<ts.Symbol, CType>();
-            for (const binding of paramBindings) {
-                if (ts.isParameter(binding.node) && ts.isIdentifier(binding.node.name)) {
-                    const symbol = this.symbolForIdentifier(binding.node.name);
-                    if (symbol) parameterTypeScope.set(symbol, binding.type);
-                }
-            }
-            this.argumentValueTypeScopes.push(parameterTypeScope);
-            let bodyR: EmitResult;
-            try {
-                bodyR = this.emitExpr(bodyExpr);
-            } finally {
-                this.argumentValueTypeScopes.pop();
-                if (thisType) this.functionThisStack.pop();
-            }
-            const bindings = paramBindings
-                .map((b) => `${b.type.c} ${b.name} = ${this.coerce(b.src, b.type, b.node)};`)
-                .join(" ");
-            callbackDetails = { bindings, bodyC: bodyR.c, bodyType: bodyR.ty };
-        } else if (ts.isIdentifier(cb)) {
-            // Function reference: declared function OR lifted-arrow const.
-            if (!this.isDirectCallableIdentifier(cb)) {
-                const fn = this.emitExpr(cb);
-                if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                    unsupported(cb, `${method}: callback must be callable`);
-                }
-                const params = fn.ty.params ?? [];
-                const retType = this.prepareType(fn.ty.ret);
-                const callArgs: string[] = [];
-                if (method === "reduce" || method === "reduceRight") {
-                    callArgs.push("_acc_rd");
-                    if (params.length >= 2) callArgs.push(elementExpr);
-                    if (params.length >= 3) callArgs.push(`(double)${iv}`);
-                    if (params.length >= 4) callArgs.push(av);
-                } else {
-                    if (params.length >= 1) callArgs.push(elementExpr);
-                    if (params.length >= 2) callArgs.push(`(double)${iv}`);
-                    if (params.length >= 3) callArgs.push(av);
-                }
-                const fnv = this.freshTemp("_cb");
-                callbackDetails = {
-                    bindings: `${fn.ty.c} ${fnv} = ${fn.c};`,
-                    bodyC: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? [callbackThisArg] : []), ...callArgs].join(", ")})`,
-                    bodyType: retType,
-                };
-            } else {
-                let fnName = this.identifierName(cb);
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sigs = cbType.getCallSignatures();
-                if (sigs.length === 0)
-                    unsupported(cb, `${method}: callback must be callable`);
-                const sig = sigs[0]!;
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                const genericBindings = genericDecl
-                    ? this.genericBindingsForCallback(
-                        cb,
-                        genericDecl,
-                        this.contextualCallSignature(cb, method),
-                    )
-                    : null;
-                if (genericDecl && genericBindings) {
-                    fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                }
-                const paramCount = sig.getParameters().length;
-                const retType = this.prepareType(genericBindings
-                    ? withTypeBindings(genericBindings, () =>
-                        mapTsType(cb, sig.getReturnType(), this.checker),
-                    )
-                    : mapTsType(cb, sig.getReturnType(), this.checker));
-                // For reduce/reduceRight, callback is (acc, elem, idx?) — skip idx and just call.
-                const callArgs: string[] = [];
-                if (method === "reduce" || method === "reduceRight") {
-                    callArgs.push("_acc_rd");
-                    if (paramCount >= 2) callArgs.push(elementExpr);
-                    if (paramCount >= 3) callArgs.push(`(double)${iv}`);
-                    if (paramCount >= 4) callArgs.push(av);
-                } else {
-                    if (paramCount >= 1) callArgs.push(elementExpr);
-                    if (paramCount >= 2) callArgs.push(`(double)${iv}`);
-                    if (paramCount >= 3) callArgs.push(av);
-                }
-                const thisType = this.directCallableThisType(cb);
-                if (thisType) callArgs.unshift(callbackThisArg);
-                callbackDetails = {
-                    bindings: "",
-                    bodyC: `${fnName}(${callArgs.join(", ")})`,
-                    bodyType: retType,
-                };
-            }
-        } else {
-            unsupported(
-                cb,
-                `${method}: callback must be inline arrow or function reference`,
-            );
-        }
-
-        const { bindings, bodyC, bodyType } = callbackDetails;
+        const callback = this.emitCallbackBinding(cb);
+        thisArgSetup = callback.setup + thisArgSetup;
+        const reduce = method === "reduce" || method === "reduceRight";
+        const callbackElement = this.freshTemp("_callback_element");
+        const values: EmitResult[] = [
+            ...(reduce ? [{ c: "_acc_rd", ty: T_VALUE }] : []),
+            { c: callbackElement, ty: callbackElementExpr.ty }, { c: `(double)${iv}`, ty: T_NUMBER }, { c: av, ty: recv.ty },
+        ];
+        const application = this.emitCallbackApplication(callback.value, callbackThisArg, values, cb);
+        const bindings = `${callbackElementExpr.ty.c} ${callbackElement} = ${callbackElementExpr.c}; ` +
+            (callbackElementExpr.ty.kind === "value" ? `void* volatile ${callbackElement}_gc_root = tsc_value_gc_root(${callbackElement}); ` : "");
+        const bodyType = application.ty;
+        const predicate = method === "filter" || method === "find" || method === "findLast" ||
+            method === "findIndex" || method === "findLastIndex" || method === "some" || method === "every";
+        const bodyC = predicate ? this.coerce(application, T_BOOLEAN, cb) : application.c;
         switch (method) {
             case "forEach":
                 return {
@@ -50060,7 +48930,6 @@ class Emitter {
             }
             case "filter":
                 {
-                const filterBindings = bindings.replaceAll(elementExpr, "_el");
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
@@ -50068,7 +48937,7 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${et.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${hasElement(iv)}) { ${et.c} _el = ${elementExpr}; ${filterBindings} ` +
+                        `{ if (${hasElement(iv)}) { ${bindings} ${et.c} _el = ${callbackElement}; ` +
                         `if (${bodyC}) tsc_array_push_raw(_dst, &_el); } } _dst; })`,
                     ty: recv.ty,
                 };
@@ -50076,25 +48945,19 @@ class Emitter {
             case "reduce": {
                 const hasInit = args.length >= 2;
                 const initR = hasInit ? this.emitExpr(args[1]!) : null;
-                const accType = initR ? initR.ty : et;
-                // For inline arrow: the acc binding is named by the arrow's first param.
-                // For function ref: we use _acc_rd as the implicit acc name.
-                let accName = "_acc_rd";
-                if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                    const p0 = cb.parameters.find((p) => !this.isThisParameter(p));
-                    if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
-                }
+                const accType = T_VALUE;
+                const accName = "_acc_rd";
                 const initC = initR
-                    ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = 0;`
+                    ? `${accType.c} ${accName} = ${this.coerce(initR, T_VALUE, args[1]!)}; size_t ${iv}_start = 0;`
                     : `${accType.c} ${accName}; size_t ${iv}_start = 0; bool ${iv}_found = false; ` +
                         `for (; ${iv}_start < ${av}->len; ${iv}_start++) { ` +
-                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${elementAt(`${iv}_start`)}; ` +
+                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${this.coerce({ c: elementAt(`${iv}_start`), ty: et }, T_VALUE, cb)}; ` +
                         `${iv}_start++; ${iv}_found = true; break; } } ` +
                         `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value"));`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
-                        `${initC} ` +
+                        `${callback.setup}${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv} < ${av}->len; ${iv}++) ` +
                         `{ if (${hasElement(iv)}) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
@@ -50104,23 +48967,19 @@ class Emitter {
             case "reduceRight": {
                 const hasInit = args.length >= 2;
                 const initR = hasInit ? this.emitExpr(args[1]!) : null;
-                const accType = initR ? initR.ty : et;
-                let accName = "_acc_rd";
-                if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                    const p0 = cb.parameters.find((p) => !this.isThisParameter(p));
-                    if (p0 && ts.isIdentifier(p0.name)) accName = mangleIdent(p0.name.text);
-                }
+                const accType = T_VALUE;
+                const accName = "_acc_rd";
                 const initC = initR
-                    ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = ${av}->len;`
+                    ? `${accType.c} ${accName} = ${this.coerce(initR, T_VALUE, args[1]!)}; size_t ${iv}_start = ${av}->len;`
                     : `${accType.c} ${accName}; size_t ${iv}_start = ${av}->len; bool ${iv}_found = false; ` +
                         `while (${iv}_start > 0) { ${iv}_start--; ` +
-                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${elementAt(`${iv}_start`)}; ` +
+                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${this.coerce({ c: elementAt(`${iv}_start`), ty: et }, T_VALUE, cb)}; ` +
                         `${iv}_found = true; break; } } ` +
                         `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
-                        `${initC} ` +
+                        `${callback.setup}${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) ` +
                         `{ if (${hasElement(iv)}) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
@@ -50132,9 +48991,7 @@ class Emitter {
                 const boxedResult = canBoxArrayFindElement(et);
                 const resultType = boxedResult ? T_VALUE : et;
                 const missing = boxedResult ? "tsc_value_undefined()" : `(${et.c})0`;
-                const found = boxedResult
-                    ? `tsc_value_get_index(tsc_value_array(${av}), (double)${iv})`
-                    : elementExpr;
+                const found = this.coerce({ c: callbackElement, ty: callbackElementExpr.ty }, resultType, cb);
                 const forward = method === "find";
                 return {
                     c:
@@ -50194,9 +49051,7 @@ class Emitter {
 
     /**
      * In-place insertion sort. With no comparator, JS sorts by string conversion.
-     * Comparator callback form:
-     *   - Inline `(a, b) => expr` — body substituted, params named per user.
-     *   - Function reference — called by name with two positional args.
+     * Comparators enter the shared callable activation with the actual values.
      */
     private emitArraySort(call: ts.CallExpression, recv: EmitResult): EmitResult {
         const et = recv.ty.elem!;
@@ -50207,57 +49062,22 @@ class Emitter {
         const iv = this.freshTemp("_i");
         const jv = this.freshTemp("_j");
         const kv = this.freshTemp("_k");
-        let aName = "_sa";
-        let bName = "_sb";
+        const aName = this.freshTemp("_sa");
+        const bName = this.freshTemp("_sb");
         let cmpExpr = "";
         let comparatorSetup = "";
         if (!cb || this.isUndefinedExpression(cb)) {
             if (cb) specs.push({ value: this.emitExpr(cb), node: cb });
             cmpExpr = `tsc_str_cmp(${this.stringifyForDefaultSort(et, aName, call)}, ${this.stringifyForDefaultSort(et, bName, call)})`;
-        } else if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-            if (cb.parameters.length !== 2)
-                unsupported(cb, "sort comparator needs 2 params");
-            const p0 = cb.parameters[0]!.name;
-            const p1 = cb.parameters[1]!.name;
-            if (!ts.isIdentifier(p0) || !ts.isIdentifier(p1))
-                unsupported(cb, "sort params must be identifiers");
-            aName = mangleIdent(p0.text);
-            bName = mangleIdent(p1.text);
-            const bodyExpr = this.callbackReturnExpression(cb, "sort comparator");
-            const r = this.emitExpr(bodyExpr);
-            requireNumber(bodyExpr, r.ty);
-            cmpExpr = r.c;
-        } else if (ts.isIdentifier(cb)) {
-            if (!this.isDirectCallableIdentifier(cb)) {
-                const fn = this.emitExpr(cb);
-                if (fn.ty.kind !== "function" || !fn.ty.ret) {
-                    unsupported(cb, "sort comparator must be callable");
-                }
-                const fnv = this.freshTemp("_sort_cb");
-                comparatorSetup = `${fn.ty.c} ${fnv} = ${fn.c}; `;
-                const params = fn.ty.params ?? [];
-                const callArgs: string[] = [];
-                if (params.length >= 1) callArgs.push(this.coerce({ c: aName, ty: et }, params[0]!, cb));
-                if (params.length >= 2) callArgs.push(this.coerce({ c: bName, ty: et }, params[1]!, cb));
-                cmpExpr = this.coerce({
-                    c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
-                    ty: this.prepareType(fn.ty.ret),
-                }, T_NUMBER, cb);
-            } else {
-                let fnName = this.identifierName(cb);
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "sort comparator must be callable");
-                const genericDecl = this.genericFunctionDeclaration(sig);
-                if (genericDecl) {
-                    const bindings = this.genericBindingsForCallbackTypes(cb, genericDecl, [et, et], T_NUMBER);
-                    fnName = this.ensureGenericSpecialization(genericDecl, bindings);
-                }
-                const thisType = this.directCallableThisType(cb);
-                cmpExpr = `${fnName}(${[...(thisType ? ["tsc_value_undefined()"] : []), aName, bName].join(", ")})`;
-            }
         } else {
-            unsupported(cb, "sort comparator must be inline arrow or function reference");
+            const callback = this.freshTemp("_sort_callback");
+            specs.push({ value: this.emitExpr(cb), target: T_VALUE, node: cb });
+            comparatorSetup = `tsc_value_t ${callback} = _sort_callback_value; ` +
+                `if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); `;
+            const application = this.emitCallbackApplication(callback, "tsc_value_undefined()", [
+                { c: aName, ty: et }, { c: bName, ty: et },
+            ], cb);
+            cmpExpr = this.coerce(application, T_NUMBER, cb);
         }
         if (et.kind === "value") {
             cmpExpr = `tsc_value_is_undefined(${aName}) ` +
@@ -50319,9 +49139,9 @@ class Emitter {
                 `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); ` +
                 `tsc_array_mark_hole(${av}, ${sourceIndex}); }`;
         }
-        return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
+        return this.emitSequencedExpr(recv.ty, specs, ([arr, callbackValue]) =>
             `({ tsc_array_t* const ${av} = ${arr}; ` +
-                comparatorSetup +
+                comparatorSetup.replace("_sort_callback_value", callbackValue ?? "tsc_value_undefined()") +
                 `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); else { ` +
                 `${sortBody} } ${av}; })`,
         );
@@ -50342,141 +49162,8 @@ class Emitter {
         unsupported(node, `default sort cannot stringify ${ty.c}`);
     }
 
-    /** Is this a module-scope `const/let name = arrowFn;` worth lifting to a static C function? */
-    private getLiftableArrow(
-        stmt: ts.Statement,
-    ): { name: ts.Identifier; fn: LiftableFunctionDeclaration } | null {
-        if (!ts.isVariableStatement(stmt)) return null;
-        const decls = stmt.declarationList.declarations;
-        if (decls.length !== 1) return null;
-        const d = decls[0]!;
-        if (!ts.isIdentifier(d.name)) return null;
-        if (!d.initializer) return null;
-        if (!ts.isArrowFunction(d.initializer) && !ts.isFunctionExpression(d.initializer))
-            return null;
-        return { name: d.name, fn: d.initializer };
-    }
 
-    private emitLiftedArrowPrototype(
-        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
-    ): void {
-        const sig = this.checker.getSignatureFromDeclaration(info.fn);
-        if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
-        const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
-            ? this.sourceFunctionValueType(info.fn)
-            : null;
-        const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
-        const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);
-        const params = this.collectParams(info.fn.parameters);
-        const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
-        const name = this.declaredName(info.name);
-        this.protos.line(
-            `${ret.c} ${name}(${allParams.length ? allParams.join(", ") : "void"});`,
-        );
-    }
 
-    private emitLiftedArrowBody(
-        info: { name: ts.Identifier; fn: LiftableFunctionDeclaration },
-    ): void {
-        const sig = this.checker.getSignatureFromDeclaration(info.fn);
-        if (!sig) unsupported(info.fn, "could not resolve lifted arrow signature");
-        const sourceType = this.isJavaScriptSourceFile(info.fn.getSourceFile())
-            ? this.sourceFunctionValueType(info.fn)
-            : null;
-        const ret = sourceType?.ret ?? mapTsType(info.fn, sig.getReturnType(), this.checker);
-        const thisType = sourceType?.thisParam ?? this.signatureThisType(sig, info.fn);
-        const params = this.collectParams(info.fn.parameters);
-        const allParams = thisType ? [`${thisType.c} __tsc_this`, ...params] : params;
-        const name = this.declaredName(info.name);
-        this.defs.open(
-            `${ret.c} ${name}(${allParams.length ? allParams.join(", ") : "void"})`,
-        );
-        const isAsync = this.isAsyncDeclaration(info.fn);
-        const isGenerator = this.isGeneratorDeclaration(info.fn);
-        const mappedRet = this.prepareType(ret);
-        if (isAsync && !isGenerator) {
-            this.validateImmediateAsyncFunction(info.fn);
-            if (mappedRet.kind !== "promise") {
-                unsupported(info.fn, "async lifted function values must return Promise<T>");
-            }
-        }
-        if (isGenerator) {
-            this.emitGeneratorFunctionLikeBody(
-                this.defs,
-                info.fn,
-                mappedRet,
-                info.fn.parameters,
-                this.capturedCellsFor(info.fn),
-                thisType ? { c: "__tsc_this", ty: thisType } : null,
-            );
-            this.defs.close();
-            this.defs.line();
-            return;
-        }
-        const capturedCells = this.capturedCellsFor(info.fn);
-        this.cellScopes.push(capturedCells);
-        this.returnStack.push(mappedRet);
-        if (isAsync) this.asyncFunctionStack.push({ promiseType: mappedRet });
-        if (thisType) this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
-        const previousDynamicRoots = isAsync
-            ? this.beginAsyncDynamicRootScope(this.defs, info.fn.parameters)
-            : null;
-        try {
-            this.emitAsyncFunctionBoundary(this.defs, isAsync, () => {
-                this.emitCapturedParameterCells(this.defs, info.fn.parameters, capturedCells);
-                this.emitCallActivationConfiguration(this.defs, info.fn, capturedCells);
-                if (ts.isBlock(info.fn.body)) {
-                    const handledAsyncAwait = isAsync && this.emitAsyncBlockContinuation(
-                        this.defs,
-                        info.fn.body,
-                        info.fn.parameters,
-                        thisType ? { c: "__tsc_this", ty: thisType } : null,
-                    );
-                    if (!handledAsyncAwait) {
-                        if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
-                            unsupported(info.fn.body, "async suspension graph is not supported by the canonical CFG");
-                        }
-                        this.emitStmtList(this.defs, info.fn.body.statements);
-                        if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
-                        else if (this.isJavaScriptSourceFile(info.fn.getSourceFile()) && mappedRet.kind !== "void" && mappedRet.kind !== "never") {
-                            this.defs.line(`return ${this.zeroValue(mappedRet)};`);
-                        }
-                    }
-                } else {
-                    const asyncExpressionBlock = isAsync
-                        ? this.asyncExpressionBodyAsBlock(info.fn, info.fn.body)
-                        : null;
-                    const handledAsyncControlFlowGraph = !!asyncExpressionBlock && this.emitAsyncControlFlowGraphContinuation(
-                        this.defs,
-                        asyncExpressionBlock,
-                        info.fn.parameters,
-                        thisType ? { c: "__tsc_this", ty: thisType } : null,
-                    );
-                    if (!handledAsyncControlFlowGraph) {
-                        if (isAsync && this.containsAwaitInFunctionBody(info.fn.body)) {
-                            unsupported(info.fn.body, "async suspension expression is not supported by the canonical CFG");
-                        }
-                        const r = this.emitExpr(info.fn.body);
-                        if (isAsync) {
-                            if (r.ty.kind === "promise") this.defs.line(`return tsc_promise_adopt(${r.c});`);
-                            else this.defs.line(`return ${this.promiseResolveResult(r, info.fn.body)};`);
-                        } else {
-                            const coerced = this.coerce(r, mappedRet, info.fn.body);
-                            this.defs.line(`return ${coerced};`);
-                        }
-                    }
-                }
-            });
-        } finally {
-            if (previousDynamicRoots) this.endAsyncDynamicRootScope(previousDynamicRoots);
-            if (thisType) this.functionThisStack.pop();
-            if (isAsync) this.asyncFunctionStack.pop();
-            this.returnStack.pop();
-            this.cellScopes.pop();
-        }
-        this.defs.close();
-        this.defs.line();
-    }
 
     private emitStringMethod(
         call: ts.CallExpression,
@@ -58328,6 +57015,12 @@ class Emitter {
                     return `tsc_value_as_text_decoder(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
+                case "eventemitter":
+                    return `tsc_value_as_event_emitter(${r.c})`;
+                case "eventtarget":
+                    return `tsc_value_as_event_target(${r.c})`;
+                case "event":
+                    return `tsc_value_as_event(${r.c})`;
                 case "fsstats":
                     return `((tsc_fs_stats_t*)tsc_value_as_class(${r.c}))`;
                 case "promise":
@@ -58380,6 +57073,12 @@ class Emitter {
             }
             case "class":
                 return this.classValueBoxExpression(r, node);
+            case "eventemitter":
+                return `tsc_value_event_emitter(${r.c})`;
+            case "eventtarget":
+                return `tsc_value_event_target(${r.c})`;
+            case "event":
+                return `tsc_value_event(${r.c})`;
             case "fsstats":
                 return `tsc_value_class(${r.c})`;
             case "date":
