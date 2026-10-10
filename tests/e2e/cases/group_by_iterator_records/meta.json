@@ -1,0 +1,3 @@
+{
+  "description": "Shared GroupBy Iterator Records preserve live sources, close precedence, typed object owners and retained entry pair aliases"
+}

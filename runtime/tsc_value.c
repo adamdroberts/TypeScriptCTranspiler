@@ -66,6 +66,27 @@ tsc_object_t* tsc_object_new_class(void* ptr) {
     return o;
 }
 
+tsc_object_t* tsc_native_object_owner_get(tsc_native_object_owner_t* owner, void* ptr, tsc_native_object_initializer_t initialize) {
+    if (!owner->object) {
+        /* Publish identity before installing members so reentrant boxing
+         * borrows the same object. Allocation supplies the actual native type. */
+        if (!owner->initialize) owner->initialize = initialize;
+        owner->object = tsc_object_new_class(ptr);
+        owner->initialize(owner->object);
+    }
+    return owner->object;
+}
+
+tsc_value_t tsc_object_entry_store(tsc_object_entry_t* entry, double index, tsc_value_t value) {
+    if (!entry->pair) {
+        entry->pair = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(entry->pair, tsc_value_undefined());
+        tsc_array_push_value(entry->pair, tsc_value_undefined());
+    }
+    (void)tsc_value_set_index(tsc_value_array(entry->pair), index, value);
+    return value;
+}
+
 tsc_value_t tsc_value_class(void* ptr) {
     if (!ptr) return tsc_value_null();
     return tsc_value_object(tsc_object_new_class(ptr));
@@ -2235,6 +2256,11 @@ static tsc_value_t object_static_from_entries(void* env, tsc_value_t receiver, t
     return tsc_value_object_from_entries(object_constructor_arg(args, 0));
 }
 
+static tsc_value_t object_static_group_by(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_object_group_by(object_constructor_arg(args, 0), object_constructor_arg(args, 1));
+}
+
 typedef struct {
     const char* name;
     bool (*operation)(tsc_value_t);
@@ -2284,6 +2310,7 @@ static const tsc_object_static_method_t object_static_methods[] = {
     { "getPrototypeOf", 14, 1.0, object_static_get_prototype_of },
     { "assign", 6, 2.0, object_static_assign },
     { "fromEntries", 11, 1.0, object_static_from_entries },
+    { "groupBy", 7, 2.0, object_static_group_by },
 };
 
 static void object_constructor_define_static_method(

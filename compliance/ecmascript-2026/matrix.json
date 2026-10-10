@@ -2740,7 +2740,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Object", "Function", "Boolean", "Symbol", "Error and native errors"],
-      "localEvidence": {"property": ["tests/property/function-bind.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/resource-completion.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "object_prototypes", "function_prototypes", "symbols", "object_get_own_property_symbols", "proxy_get_own_property_symbols", "resource_completion_protocol"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_object.c", "runtime/tsc_value.c#tsc_value_bind_function", "runtime/tsc_builtin.c", "runtime/tsc_string.c", "runtime/tsc_node.c", "runtime/tsc_runtime.h"]},
+      "localEvidence": {"property": ["tests/property/function-bind.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/resource-completion.property.test.ts", "tests/property/group-by.property.test.ts"], "generatedRegression": [], "stress": ["function_call_apply_validation"], "e2e": ["function_call_apply_validation", "object_prototypes", "function_prototypes", "symbols", "object_get_own_property_symbols", "proxy_get_own_property_symbols", "resource_completion_protocol", "group_by_iterator_records"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function", "stdlib/lib.core.d.ts#ObjectConstructor", "stdlib/lib.core.d.ts#MapConstructor"], "implementation": ["runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_object.c", "runtime/tsc_value.c#tsc_value_bind_function", "runtime/tsc_builtin.c", "runtime/tsc_string.c", "runtime/tsc_node.c", "runtime/tsc_runtime.h", "runtime/tsc_iterator.c", "runtime/tsc_map_set.c", "runtime/tsc_value.c", "src/emit/index.ts", "src/emit/types.ts"]},
       "knownGaps": ["Clause-level descriptor, prototype, Symbol, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open."]
     },
     {
@@ -2818,7 +2818,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Map", "Set", "WeakMap", "WeakSet", "collection iterators"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["map_set_constructors", "map_set_same_value_zero", "weak_collections"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_map_set.c"] },
+      "localEvidence": {"property": ["tests/property/group-by.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["map_set_constructors", "map_set_same_value_zero", "weak_collections", "group_by_iterator_records"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ObjectConstructor", "stdlib/lib.core.d.ts#MapConstructor"], "implementation": ["runtime/tsc_map_set.c", "runtime/tsc_iterator.c", "runtime/tsc_value.c", "runtime/tsc_runtime.h", "src/emit/index.ts", "src/emit/types.ts"]},
       "knownGaps": ["All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification."]
     },
     {

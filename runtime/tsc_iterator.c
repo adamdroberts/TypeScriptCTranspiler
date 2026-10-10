@@ -250,6 +250,110 @@ static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t
     return state->accumulator;
 }
 
+typedef struct tsc_keyed_group {
+    tsc_value_t key;
+    void* key_root;
+    tsc_array_t* elements;
+    struct tsc_keyed_group* next;
+} tsc_keyed_group_t;
+
+typedef struct {
+    tsc_sync_iterator_t iterator;
+    tsc_value_t callback;
+    void* callback_root;
+    tsc_keyed_group_t* head;
+    tsc_keyed_group_t* tail;
+    double index;
+} tsc_group_by_state_t;
+
+static tsc_keyed_group_t* group_by_collect(tsc_value_t items, tsc_value_t callback, bool property_keys) {
+    void* volatile items_root = tsc_value_gc_root(items);
+    void* volatile callback_root = tsc_value_gc_root(callback);
+    if (tsc_value_is_nullish(items))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("GroupBy items are null or undefined"));
+    if (!tsc_value_is_callable(callback))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("GroupBy callback is not callable"));
+    tsc_group_by_state_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (tsc_group_by_state_t){ .callback = callback, .callback_root = tsc_value_gc_root(callback) };
+    state->iterator = tsc_sync_iterator_open(items);
+    (void)items_root; (void)callback_root;
+    for (;;) {
+        if (state->index >= 0x1fffffffffffffp0)
+            tsc_sync_iterator_close_abrupt(&state->iterator,
+                tsc_value_error(tsc_error_new_named(tsc_str_from_lit("TypeError", 9),
+                    tsc_str_from_cstr("GroupBy index exceeds the maximum safe integer"))));
+        tsc_value_t value;
+        // IteratorStepValue errors propagate directly. Callback and key
+        // conversion failures close the captured record with throw precedence.
+        if (!tsc_sync_iterator_step(&state->iterator, &value)) return state->head;
+        void* volatile value_root = tsc_value_gc_root(value);
+        tsc_array_t* actual = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(actual, value);
+        tsc_array_push_value(actual, tsc_value_num(state->index));
+        TSC_TRY_FRAME(frame);
+        tsc_try_push(&frame);
+        if (setjmp(frame.jb) != 0) {
+            tsc_value_t error = tsc_current_error_value();
+            tsc_try_pop();
+            tsc_sync_iterator_close_abrupt(&state->iterator, error);
+        }
+        tsc_value_t key = tsc_value_apply_function(state->callback, tsc_value_undefined(), tsc_value_array(actual));
+        void* volatile key_root = tsc_value_gc_root(key);
+        if (property_keys) key = tsc_value_to_property_key(key);
+        else key = tsc_value_canonicalize_collection_key(key);
+        key_root = tsc_value_gc_root(key);
+        tsc_keyed_group_t* group = state->head;
+        while (group && !tsc_value_object_is(group->key, key)) group = group->next;
+        if (!group) {
+            group = TSC_GC_MALLOC(sizeof(*group));
+            *group = (tsc_keyed_group_t){ .key = key, .key_root = tsc_value_gc_root(key),
+                .elements = tsc_array_new(sizeof(tsc_value_t), 0) };
+            if (state->tail) state->tail->next = group;
+            else state->head = group;
+            state->tail = group;
+        }
+        tsc_array_push_value(group->elements, value);
+        tsc_try_pop();
+        state->index++;
+        (void)value_root; (void)key_root;
+    }
+}
+
+tsc_value_t tsc_value_object_group_by(tsc_value_t items, tsc_value_t callback) {
+    tsc_keyed_group_t* groups = group_by_collect(items, callback, true);
+    tsc_value_t output = tsc_value_object_create(tsc_value_null());
+    void* volatile output_root = tsc_value_gc_root(output);
+    for (tsc_keyed_group_t* group = groups; group; group = group->next) {
+        tsc_value_t elements = tsc_value_array(group->elements);
+        if (!tsc_value_create_data_property(output, group->key, elements))
+            tsc_panic("GroupBy result property could not be created");
+    }
+    (void)output_root;
+    return output;
+}
+
+struct tsc_map* tsc_value_map_group_by(tsc_value_t items, tsc_value_t callback,
+        const tsc_group_by_map_layout_t* layout) {
+    tsc_keyed_group_t* groups = group_by_collect(items, callback, false);
+    size_t key_size = layout ? layout->key_size : sizeof(tsc_value_t);
+    tsc_map_t* map = tsc_map_new(key_size, layout ? sizeof(tsc_array_t*) : sizeof(tsc_value_t),
+        layout ? layout->key_kind : TSC_KEY_VALUE, 0);
+    if (layout) tsc_map_set_value_codecs(map, layout->box_key, layout->unbox_key, layout->box_group, layout->unbox_group);
+    void* key_storage = TSC_GC_MALLOC(key_size);
+    for (tsc_keyed_group_t* group = groups; group; group = group->next) {
+        tsc_value_t elements = tsc_value_array(group->elements);
+        if (layout) {
+            if (layout->unbox_key) layout->unbox_key(group->key, key_storage);
+            else memcpy(key_storage, &group->key, sizeof(group->key));
+            tsc_array_t* native_elements = NULL;
+            if (!layout->unbox_group || !layout->unbox_group(elements, &native_elements))
+                tsc_panic("GroupBy result storage cannot represent its elements");
+            tsc_map_set_raw(map, key_storage, &native_elements);
+        } else tsc_map_set_raw(map, &group->key, &elements);
+    }
+    return map;
+}
+
 /* Ordinary generator owners project one retained graph through the three
  * protocol operations. No yielded-value queue or eager body execution exists. */
 static tsc_value_t generator_result(tsc_value_t value, bool done) {

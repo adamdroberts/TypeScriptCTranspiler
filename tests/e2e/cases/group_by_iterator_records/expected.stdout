@@ -1,0 +1,15 @@
+live native objects
+retained native descriptor
+object group identity
+actual derived owner
+live map entry identity
+pair alias mutation
+pair constructor reads
+symbol property key
+canonical numeric keys
+tagged nullish keys
+tagged nullish elements
+bigint key equality
+callable key identity
+original callback throw
+captured iterator close order

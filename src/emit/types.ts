@@ -91,28 +91,39 @@ export const T_BOOLEAN: CType = { kind: "boolean", c: "bool" };
 export const T_VOID: CType = { kind: "void", c: "void" };
 export const T_NEVER: CType = { kind: "never", c: "void" };
 
+/* Void is a callable return convention, never a physical collection cell. */
+function collectionCellType(type: CType): CType {
+    return type.kind === "void" || type.kind === "never" ? T_VALUE : type;
+}
+
+/* BigInts compare by value, and callable adapters can share one language
+ * identity despite distinct native pointers. Their keys use the boxed ABI. */
+function collectionKeyType(type: CType): CType {
+    return type.kind === "bigint" || type.kind === "function" ? T_VALUE : collectionCellType(type);
+}
+
 export function arrayType(elem: CType): CType {
-    return { kind: "array", c: "tsc_array_t*", elem };
+    return { kind: "array", c: "tsc_array_t*", elem: collectionCellType(elem) };
 }
 
 export function entryType(elem: CType, key: CType = T_STRING): CType {
-    return { kind: "entry", c: "tsc_object_entry_t", key, elem };
+    return { kind: "entry", c: "tsc_object_entry_t", key: collectionCellType(key), elem: collectionCellType(elem) };
 }
 
 export function mapType_(key: CType, value: CType): CType {
-    return { kind: "map", c: "tsc_map_t*", key, elem: value };
+    return { kind: "map", c: "tsc_map_t*", key: collectionKeyType(key), elem: collectionCellType(value) };
 }
 
 export function setType(elem: CType): CType {
-    return { kind: "set", c: "tsc_set_t*", elem };
+    return { kind: "set", c: "tsc_set_t*", elem: collectionKeyType(elem) };
 }
 
 export function weakMapType(key: CType, value: CType): CType {
-    return { kind: "weakmap", c: "tsc_map_t*", key, elem: value };
+    return { kind: "weakmap", c: "tsc_map_t*", key: collectionCellType(key), elem: collectionCellType(value) };
 }
 
 export function weakSetType(elem: CType): CType {
-    return { kind: "weakset", c: "tsc_set_t*", elem };
+    return { kind: "weakset", c: "tsc_set_t*", elem: collectionCellType(elem) };
 }
 
 export function weakRefType(elem: CType): CType {
@@ -294,8 +305,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     if (t.flags & ts.TypeFlags.Boolean) return T_BOOLEAN;
     if (t.flags & ts.TypeFlags.EnumLike) return enumLikeTypeIsString(t) ? T_STRING : T_NUMBER;
     if (t.flags & ts.TypeFlags.Void) return T_VOID;
-    if (t.flags & ts.TypeFlags.Undefined) return T_VOID;
-    if (t.flags & ts.TypeFlags.Null) return T_VOID;
+    if (t.flags & ts.TypeFlags.Undefined) return T_VALUE;
+    if (t.flags & ts.TypeFlags.Null) return T_VALUE;
     if (t.flags & ts.TypeFlags.Never) return T_NEVER;
     if (t.flags & ts.TypeFlags.Unknown) return T_VALUE;
     if (t.flags & ts.TypeFlags.Any) return T_VALUE;

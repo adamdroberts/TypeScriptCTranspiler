@@ -644,6 +644,7 @@ class Emitter {
     private arrayValueCodecs = new Map<string, { box: string; unbox: string }>();
     private classConstructorValueAdapters = new Map<string, string>();
     private defaultClassConstructAdapter: string | null = null;
+    private nativeObjectValueInitializers = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -26059,6 +26060,7 @@ class Emitter {
     private emitInterfaceStruct(id: ts.InterfaceDeclaration): void {
         if (!id.name) return;
         this.structDecls.open(`struct ${nativeTypeName(id)}_t`);
+        this.structDecls.line("tsc_native_object_owner_t __tsc_object_owner;");
         this.emitNativeAggregateFields(this.interfaceFields(id));
         this.structDecls.close(";");
         this.structDecls.line();
@@ -26171,6 +26173,7 @@ class Emitter {
         const name = nativeTypeName(cd);
         const baseFields = this.collectInheritedFields(cd);
         this.structDecls.open(`struct ${name}_t`);
+        this.structDecls.line("tsc_native_object_owner_t __tsc_object_owner;");
         this.structDecls.line(`const char* __tsc_type;`);
         // Each inherited value/root pair retains the same prefix in subclasses.
         const inheritedFields = new Map(baseFields.map(field => [field.name, field]));
@@ -27688,6 +27691,8 @@ class Emitter {
         this.defs.line(
             `${name}_t* self = (${name}_t*)${alloc}(sizeof(${name}_t));`,
         );
+        this.defs.line("self->__tsc_object_owner.object = NULL;");
+        this.defs.line(`self->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(classType(name), cd)};`);
         const initArgs = ["self"];
         for (const p of ctor?.parameters ?? []) {
             if (ts.isIdentifier(p.name)) initArgs.push(mangleIdent(p.name.text));
@@ -28440,15 +28445,21 @@ class Emitter {
         return name;
     }
 
-    private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
-        if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
-        const classLike = this.findClassLikeDecl(r.ty.className);
-        const declaration = this.nativeTypeDeclarations.get(r.ty.className);
+    private ensureNativeObjectValueInitializer(type: CType, node: ts.Node): string | null {
+        if (type.kind !== "class" || !type.className) return null;
+        const classLike = this.findClassLikeDecl(type.className);
+        const declaration = this.nativeTypeDeclarations.get(type.className);
         const nativeInterface = declaration && ts.isInterfaceDeclaration(declaration) ? declaration : undefined;
-        if (!classLike && !nativeInterface) return `tsc_value_class(${r.c})`;
+        if (!classLike && !nativeInterface) return null;
+        const existing = this.nativeObjectValueInitializers.get(type.className);
+        if (existing) return existing;
+        const initialize = `${type.className}_object_initialize`;
+        this.nativeObjectValueInitializers.set(type.className, initialize);
+        const signature = `static void ${initialize}(tsc_object_t* object)`;
+        this.protos.line(signature + ";");
         const cd = classLike as unknown as ts.ClassDeclaration;
-        const obj = this.freshTemp("_class_box");
-        const pieces = [`tsc_object_t* volatile ${obj} = tsc_object_new_class(${r.c})`];
+        const obj = "object";
+        const definitions: string[] = [];
         const members = nativeInterface ? this.interfaceFields(nativeInterface).map(field => ({
             publicName: field.name, propertyKey: `tsc_str_from_lit("${escapeCString(field.name)}", ${utf8ByteLen(field.name)})`,
             owner: nativeInterface!, member: { kind: "field" as const, type: field.type },
@@ -28458,22 +28469,36 @@ class Emitter {
                 const method = member.method, adapter = this.ensureClassInstanceMethodValueAdapter(owner as ts.ClassDeclaration, method);
                 const sig = this.checker.getSignatureFromDeclaration(method);
                 const length = sig?.getParameters().length ?? method.parameters.length;
-                pieces.push(`tsc_object_define(${obj}, ${propertyKey}, ` +
+                definitions.push(`tsc_object_define(${obj}, ${propertyKey}, ` +
                     `${this.withCallableSourceText(`tsc_value_function_generic_named(${adapter}, NULL, ${length}.0, tsc_str_from_lit("${escapeCString(publicName)}", ${utf8ByteLen(publicName)}))`, method)}, true, false, true)`);
             } else if (member.kind === "field") {
                 const getter = this.ensureClassInstanceFieldGetterAdapter(owner, publicName, member.type);
                 const setter = this.ensureClassInstanceFieldSetterAdapter(owner, publicName, member.type);
-                pieces.push(`tsc_object_define_native_data(${obj}, ${propertyKey}, ${getter}, ${setter}, true)`);
+                definitions.push(`tsc_object_define_native_data(${obj}, ${propertyKey}, ${getter}, ${setter}, true)`);
             } else {
                 const getter = member.get ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceGetterDecoratorAdapter(owner as ts.ClassDeclaration, member.get)}, NULL, 0.0, ${this.stringLit("get " + publicName)})`, member.get) : "tsc_value_undefined()";
                 const setter = member.set ? this.withCallableSourceText(`tsc_value_function_generic_named(${this.ensureClassInstanceSetterDecoratorAdapter(owner as ts.ClassDeclaration, member.set)}, NULL, 1.0, ${this.stringLit("set " + publicName)})`, member.set) : "tsc_value_undefined()";
-                if (member.get) pieces.push(`tsc_value_object_define_getter(tsc_value_object(${obj}), ${propertyKey}, ${getter})`);
-                if (member.set) pieces.push(`tsc_value_object_define_setter(tsc_value_object(${obj}), ${propertyKey}, ${setter})`);
-                pieces.push(`tsc_value_define_property_desc(tsc_value_object(${obj}), ${propertyKey}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
+                if (member.get) definitions.push(`tsc_value_object_define_getter(tsc_value_object(${obj}), ${propertyKey}, ${getter})`);
+                if (member.set) definitions.push(`tsc_value_object_define_setter(tsc_value_object(${obj}), ${propertyKey}, ${setter})`);
+                definitions.push(`tsc_value_define_property_desc(tsc_value_object(${obj}), ${propertyKey}, tsc_value_undefined(), false, false, false, false, true, true, true)`);
             }
         }
-        pieces.push(`tsc_value_object(${obj})`);
-        return `({ ${pieces.join("; ")}; })`;
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line("(void)object;");
+        for (const definition of definitions) buf.line(definition + ";");
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return initialize;
+    }
+
+    private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
+        const initialize = this.ensureNativeObjectValueInitializer(r.ty, node);
+        if (!initialize) return `tsc_value_class(${r.c})`;
+        const native = this.freshTemp("_class_native");
+        return `({ ${r.ty.c} volatile ${native} = ${r.c}; ${native} ? ` +
+            `tsc_value_object(tsc_native_object_owner_get(&${native}->__tsc_object_owner, ${native}, ${initialize})) : tsc_value_null(); })`;
     }
 
     private classConstructorValue(cd: ts.ClassDeclaration): EmitResult {
@@ -32856,6 +32881,7 @@ class Emitter {
                 const storage = this.freshTemp(`_${name}_stack`);
                 const qual = isConst ? " const" : "";
                 buf.line(`${stackObject.cls}_t ${storage} = {0};`);
+                buf.line(`${storage}.__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(classType(stackObject.cls), d)};`);
                 for (const prop of stackObject.init.properties) {
                     if (ts.isPropertyAssignment(prop)) {
                         const fieldName = this.staticPropertyName(prop.name);
@@ -32940,7 +32966,8 @@ class Emitter {
                 }
                 const storage = this.freshTemp(`_${name}_stack`);
                 const qual = isConst ? " const" : "";
-                buf.line(`${stackNew.cls}_t ${storage};`);
+                buf.line(`${stackNew.cls}_t ${storage} = {0};`);
+                buf.line(`${storage}.__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(classType(stackNew.cls), d)};`);
                 buf.line(`${stackNew.cls}_init(&${storage}${args.length ? ", " + args.join(", ") : ""});`);
                 buf.line(`${stackNew.cls}_t*${qual} ${name} = &${storage};`);
                 continue;
@@ -35490,6 +35517,7 @@ class Emitter {
         if (!ctx || !ts.isCallExpression(expr) || !ts.isIdentifier(expr.expression)) {
             return false;
         }
+        if (!this.isDirectCallableIdentifier(expr.expression)) return false;
         if (this.identifierName(expr.expression) !== ctx.name) return false;
         if (expr.arguments.length !== ctx.params.length) return false;
 
@@ -40971,6 +40999,8 @@ class Emitter {
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isFunctionDeclaration(decl)) {
+            if (decl.getSourceFile().isDeclarationFile ||
+                !this.graph.fileToModuleId.has(path.resolve(decl.getSourceFile().fileName))) return false;
             return !this.isDirectScopeLexicalDeclaration(decl);
         }
         const commonJsValueDecl = decl ? this.commonJsObjectExportValueDeclaration(decl) : null;
@@ -44850,143 +44880,25 @@ class Emitter {
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 2)
-            unsupported(call, "Map.groupBy expects (items, keyFn)");
-        const itemsArg = call.arguments[0]!;
-        const keyArg = call.arguments[1]!;
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
-        const callType = this.prepareType(
-            mapTsType(call, this.checker.getTypeAtLocation(call), this.checker),
-        );
-        if (callType.kind !== "map" || !callType.key || !callType.elem || callType.elem.kind !== "array" || !callType.elem.elem)
-            unsupported(call, "Map.groupBy result must be a Map<K, T[]>");
-        const k = callType.key;
-        const groupArrayTy = callType.elem;
-        const t = groupArrayTy.elem!;
-
-        const items = this.emitExpr(itemsArg);
-        const validItems =
-            ((items.ty.kind === "array" || items.ty.kind === "set") && sameCType(items.ty.elem!, t)) ||
-            (items.ty.kind === "map" && !!items.ty.key && !!items.ty.elem && sameCType(entryType(items.ty.elem, items.ty.key), t)) ||
-            (items.ty.kind === "string" && sameCType(t, T_STRING)) ||
-            (items.ty.kind === "value" && sameCType(t, T_VALUE));
-        if (!validItems) {
-            unsupported(itemsArg, "Map.groupBy items must be an array, Set, Map, string, or dynamic iterable matching the result element type T[]");
-        }
-
-        return this.emitSequencedExpr(callType, [{ value: items }, ...ignored], ([itemsExpr]) => {
-            const src = this.freshTemp("_gb_src");
-            const map = this.freshTemp("_gb_map");
-            const iv = this.freshTemp("_gb_i");
-            const item = this.freshTemp("_gb_item");
-            const key = this.freshTemp("_gb_key");
-            const group = this.freshTemp("_gb_group");
-            const sourceArray = items.ty.kind === "set"
-                ? `tsc_set_values(${itemsExpr})`
-                : items.ty.kind === "map"
-                    ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Map.groupBy(Map)").c
-                : items.ty.kind === "string"
-                    ? `tsc_str_chars(${itemsExpr})`
-                : items.ty.kind === "value"
-                    ? `tsc_value_iter_values(${itemsExpr})`
-                    : itemsExpr;
-            const itemExpr = items.ty.kind === "array" && t.kind === "value"
-                ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
-                : `TSC_ARR(${t.c}, ${src}, ${iv})`;
-
-            const cb = keyArg;
-            const bindings: string[] = [];
-            let keyBody: EmitResult;
-            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                const sig = this.checker.getSignatureFromDeclaration(cb);
-                if (!sig) unsupported(cb, "Map.groupBy callback must be callable");
-                const thisType = this.signatureThisType(sig, cb);
-                const bodyExpr = this.callbackReturnExpression(cb, "Map.groupBy");
-                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-                const valueParam = params[0];
-                const indexParam = params[1];
-                if (valueParam && ts.isIdentifier(valueParam.name)) {
-                    bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
-                }
-                if (indexParam && ts.isIdentifier(indexParam.name)) {
-                    bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
-                }
-                if (thisType) this.functionThisStack.push({ c: "tsc_value_undefined()", ty: thisType });
-                try {
-                    keyBody = this.emitExpr(bodyExpr);
-                } finally {
-                    if (thisType) this.functionThisStack.pop();
-                }
-            } else if (ts.isIdentifier(cb)) {
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "Map.groupBy callback must be callable");
-                const sources: EmitResult[] = [
-                    { c: item, ty: t },
-                    { c: `(double)${iv}`, ty: T_NUMBER },
-                ];
-                if (this.isDirectCallableIdentifier(cb)) {
-                    let fnName = this.identifierName(cb);
-                    const genericDecl = this.genericFunctionDeclaration(sig);
-                    const genericBindings = genericDecl
-                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], k)
-                        : null;
-                    if (genericDecl && genericBindings) {
-                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                    }
-                    const params = sig.getParameters();
-                    const callArgs = params.slice(0, 2).map((param, index) => {
-                        const decl = param.valueDeclaration ?? cb;
-                        const target = this.prepareType(
-                            genericBindings
-                                ? withTypeBindings(genericBindings, () =>
-                                    mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                                )
-                                : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                        );
-                        return this.coerce(sources[index]!, target, cb);
-                    });
-                    const thisType = this.directCallableThisType(cb);
-                    if (thisType) callArgs.unshift("tsc_value_undefined()");
-                    const retType = this.prepareType(
-                        genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(cb, sig.getReturnType(), this.checker),
-                            )
-                            : mapTsType(cb, sig.getReturnType(), this.checker),
-                    );
-                    keyBody = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
-                } else {
-                    const fn = this.emitExpr(cb);
-                    if (fn.ty.kind !== "function" || !fn.ty.ret)
-                        unsupported(cb, "Map.groupBy callback must be callable");
-                    const fnv = this.freshTemp("_cb");
-                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-                    const params = fn.ty.params ?? [];
-                    const callArgs = params.slice(0, 2).map((param, index) =>
-                        this.coerce(sources[index]!, param, cb),
-                    );
-                    keyBody = {
-                        c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
-                        ty: this.prepareType(fn.ty.ret),
-                    };
-                }
-            } else {
-                unsupported(cb, "Map.groupBy callback must be an inline arrow/function expression or function reference");
-            }
-            const keyCExpr = this.coerce(keyBody, k, cb);
-            return (
-                `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
-                `tsc_map_t* const ${map} = tsc_map_new(sizeof(${k.c}), sizeof(tsc_array_t*), ${keyKindOf(k)}, 0); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
-                `${k.c} ${key} = ${keyCExpr}; ` +
-                `tsc_array_t* ${group} = NULL; ` +
-                `if (!tsc_map_get_raw(${map}, &${key}, &${group}) || ${group} == NULL) { ` +
-                `${group} = tsc_array_new(sizeof(${t.c}), 4); ` +
-                `tsc_map_set_raw(${map}, &${key}, &${group}); } ` +
-                `tsc_array_push_raw(${group}, &${item}); } ${map}; })`
-            );
+        if (call.arguments.length < 2) unsupported(call, "Map.groupBy expects (items, callback)");
+        const callType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (callType.kind !== "map" || !callType.key || callType.elem?.kind !== "array")
+            unsupported(call, "GroupBy result storage cannot represent its elements");
+        const keyCodec = this.ensureArrayValueCodec(callType.key, call);
+        const groupCodec = this.ensureArrayValueCodec(callType.elem, call);
+        if (!groupCodec) unsupported(call, "GroupBy result storage cannot represent its elements");
+        const items = this.emitExpr(call.arguments[0]!);
+        return this.emitSequencedExpr(callType, [
+            { value: {c: this.boxObjectIdentity(items.c, items.ty, call.arguments[0]!), ty: T_VALUE}, node: call.arguments[0]! },
+            { value: this.emitExpr(call.arguments[1]!), target: T_VALUE, node: call.arguments[1]! },
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
+        ], ([source, callback]) => {
+            const layout = this.freshTemp("_group_by_layout");
+            return `({ const tsc_group_by_map_layout_t ${layout} = { ` +
+                `.key_size = sizeof(${callType.key!.c}), .key_kind = ${keyKindOf(callType.key!)}, ` +
+                `.box_key = ${keyCodec?.box ?? "NULL"}, .unbox_key = ${keyCodec?.unbox ?? "NULL"}, ` +
+                `.box_group = ${groupCodec.box}, .unbox_group = ${groupCodec.unbox} }; ` +
+                `tsc_value_map_group_by(${source}, ${callback}, &${layout}); })`;
         });
     }
 
@@ -45032,8 +44944,8 @@ class Emitter {
                 `({ tsc_map_t* const ${mt} = ${mapExpr}; ` +
                 `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${mt}->len ? ${mt}->len : 1); ` +
                 `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) { ` +
-                `${elemType.c} ${entry}; ${this.objectEntryKeySet(entry, k, keyExpr)}; ` +
-                `${this.objectEntrySet(entry, v, valueExpr)}; ` +
+                `${elemType.c} ${entry} = {0}; ${this.objectEntryKeySet(entry, k, keyExpr, node)}; ` +
+                `${this.objectEntrySet(entry, v, valueExpr, node)}; ` +
                 `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
             ty: arrayType(elemType),
         };
@@ -55314,40 +55226,20 @@ class Emitter {
         return commonType ?? T_VOID;
     }
 
-    private objectEntrySet(entryVar: string, ty: CType, value: string): string {
-        switch (ty.kind) {
-            case "number": return `${entryVar}.num = ${value}`;
-            case "boolean": return `${entryVar}.boolean = ${value}`;
-            case "void": return `${entryVar}.ptr = NULL`;
-            default: return `${entryVar}.ptr = (void*)(${value})`;
-        }
+    private objectEntrySet(entryVar: string, ty: CType, value: string, node: ts.Node): string {
+        return `tsc_object_entry_store(&${entryVar}, 1.0, ${this.boxObjectIdentity(value, ty, node)})`;
     }
 
-    private objectEntryValue(entryVar: string, ty: CType): string {
-        switch (ty.kind) {
-            case "number": return `${entryVar}.num`;
-            case "boolean": return `${entryVar}.boolean`;
-            case "void": return "NULL";
-            default: return `((${ty.c})${entryVar}.ptr)`;
-        }
+    private objectEntryValue(entryVar: string, ty: CType, node: ts.Node): string {
+        return this.coerce({ c: `tsc_value_get_index(tsc_value_array(${entryVar}.pair), 1.0)`, ty: T_VALUE }, ty, node);
     }
 
-    private objectEntryKeySet(entryVar: string, ty: CType, value: string): string {
-        switch (ty.kind) {
-            case "string": return `${entryVar}.key = ${value}`;
-            case "number": return `${entryVar}.key_num = ${value}`;
-            case "boolean": return `${entryVar}.key_boolean = ${value}`;
-            default: return `${entryVar}.key_ptr = (void*)(${value})`;
-        }
+    private objectEntryKeySet(entryVar: string, ty: CType, value: string, node: ts.Node): string {
+        return `tsc_object_entry_store(&${entryVar}, 0.0, ${this.boxObjectIdentity(value, ty, node)})`;
     }
 
-    private objectEntryKeyValue(entryVar: string, ty: CType): string {
-        switch (ty.kind) {
-            case "string": return `${entryVar}.key`;
-            case "number": return `${entryVar}.key_num`;
-            case "boolean": return `${entryVar}.key_boolean`;
-            default: return `((${ty.c})${entryVar}.key_ptr)`;
-        }
+    private objectEntryKeyValue(entryVar: string, ty: CType, node: ts.Node): string {
+        return this.coerce({ c: `tsc_value_get_index(tsc_value_array(${entryVar}.pair), 0.0)`, ty: T_VALUE }, ty, node);
     }
 
     private staticPropertyName(name: ts.PropertyName): string | null {
@@ -56031,6 +55923,7 @@ class Emitter {
         const entry = this.freshTemp("_of_entry");
         const pieces: string[] = [
             `${target.c} ${obj} = (${target.c})TSC_GC_MALLOC(sizeof(${target.className!}_t))`,
+            `${obj}->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(target, call)}`,
         ];
         for (const p of props) {
             const name = p.getName();
@@ -56041,7 +55934,7 @@ class Emitter {
         const assigns = props
             .map((p) => {
                 const name = p.getName();
-                return `if (tsc_str_eq(${entry}.key, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${this.nativeFieldStore(obj, target.className!, name, valueType, this.objectEntryValue(entry, valueType))}`;
+                return `if (tsc_str_eq(${this.objectEntryKeyValue(entry, T_STRING, call)}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) ${this.nativeFieldStore(obj, target.className!, name, valueType, this.objectEntryValue(entry, valueType, call))}`;
             })
             .join("; ");
         pieces.push(
@@ -56631,143 +56524,13 @@ class Emitter {
     }
 
     private emitObjectGroupBy(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 2)
-            unsupported(call, "Object.groupBy expects (items, keyFn)");
-        const itemsArg = call.arguments[0]!;
-        const keyArg = call.arguments[1]!;
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
-        const items = this.emitExpr(itemsArg);
-        if (items.ty.kind !== "array" && items.ty.kind !== "set" && items.ty.kind !== "map" && items.ty.kind !== "string" && items.ty.kind !== "value")
-            unsupported(itemsArg, "Object.groupBy expects an array, Set, Map, string, or dynamic iterable");
-        const t = items.ty.kind === "value"
-            ? T_VALUE
-            : items.ty.kind === "string"
-            ? T_STRING
-            : items.ty.kind === "map"
-                ? entryType(items.ty.elem!, items.ty.key!)
-                : items.ty.elem!;
-
-        return this.emitSequencedExpr(T_VALUE, [{ value: items }, ...ignored], ([itemsExpr]) => {
-            const src = this.freshTemp("_ogb_src");
-            const out = this.freshTemp("_ogb_out");
-            const iv = this.freshTemp("_ogb_i");
-            const item = this.freshTemp("_ogb_item");
-            const keyStr = this.freshTemp("_ogb_key");
-            const existing = this.freshTemp("_ogb_existing");
-            const group = this.freshTemp("_ogb_group");
-            const boxed = this.freshTemp("_ogb_box");
-            const sourceArray = items.ty.kind === "set"
-                ? `tsc_set_values(${itemsExpr})`
-                : items.ty.kind === "map"
-                    ? this.mapEntriesArrayExpr(itemsArg, itemsExpr, items.ty, "Object.groupBy(Map)").c
-                : items.ty.kind === "string"
-                    ? `tsc_str_chars(${itemsExpr})`
-                : items.ty.kind === "value"
-                    ? `tsc_value_iter_values(${itemsExpr})`
-                    : itemsExpr;
-            const itemExpr = items.ty.kind === "array" && t.kind === "value"
-                ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
-                : `TSC_ARR(${t.c}, ${src}, ${iv})`;
-
-            const cb = keyArg;
-            const bindings: string[] = [];
-            let keyBody: EmitResult;
-            if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
-                const sig = this.checker.getSignatureFromDeclaration(cb);
-                if (!sig) unsupported(cb, "Object.groupBy callback must be callable");
-                const thisType = this.signatureThisType(sig, cb);
-                const bodyExpr = this.callbackReturnExpression(cb, "Object.groupBy");
-                const params = cb.parameters.filter((p) => !this.isThisParameter(p));
-                const valueParam = params[0];
-                const indexParam = params[1];
-                if (valueParam && ts.isIdentifier(valueParam.name)) {
-                    bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${item};`);
-                }
-                if (indexParam && ts.isIdentifier(indexParam.name)) {
-                    bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${iv};`);
-                }
-                if (thisType) this.functionThisStack.push({ c: "tsc_value_undefined()", ty: thisType });
-                try {
-                    keyBody = this.emitExpr(bodyExpr);
-                } finally {
-                    if (thisType) this.functionThisStack.pop();
-                }
-            } else if (ts.isIdentifier(cb)) {
-                const cbType = this.checker.getTypeAtLocation(cb);
-                const sig = cbType.getCallSignatures()[0];
-                if (!sig) unsupported(cb, "Object.groupBy callback must be callable");
-                const sources: EmitResult[] = [
-                    { c: item, ty: t },
-                    { c: `(double)${iv}`, ty: T_NUMBER },
-                ];
-                if (this.isDirectCallableIdentifier(cb)) {
-                    let fnName = this.identifierName(cb);
-                    const genericDecl = this.genericFunctionDeclaration(sig);
-                    const genericBindings = genericDecl
-                        ? this.genericBindingsForCallbackTypes(cb, genericDecl, [t, T_NUMBER], T_STRING)
-                        : null;
-                    if (genericDecl && genericBindings) {
-                        fnName = this.ensureGenericSpecialization(genericDecl, genericBindings);
-                    }
-                    const params = sig.getParameters();
-                    const callArgs = params.slice(0, 2).map((param, index) => {
-                        const decl = param.valueDeclaration ?? cb;
-                        const target = this.prepareType(
-                            genericBindings
-                                ? withTypeBindings(genericBindings, () =>
-                                    mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                                )
-                                : mapTsType(decl, this.checker.getTypeOfSymbolAtLocation(param, decl), this.checker),
-                        );
-                        return this.coerce(sources[index]!, target, cb);
-                    });
-                    const thisType = this.directCallableThisType(cb);
-                    if (thisType) callArgs.unshift("tsc_value_undefined()");
-                    const retType = this.prepareType(
-                        genericBindings
-                            ? withTypeBindings(genericBindings, () =>
-                                mapTsType(cb, sig.getReturnType(), this.checker),
-                            )
-                            : mapTsType(cb, sig.getReturnType(), this.checker),
-                    );
-                    keyBody = { c: `${fnName}(${callArgs.join(", ")})`, ty: retType };
-                } else {
-                    const fn = this.emitExpr(cb);
-                    if (fn.ty.kind !== "function" || !fn.ty.ret)
-                        unsupported(cb, "Object.groupBy callback must be callable");
-                    const fnv = this.freshTemp("_cb");
-                    bindings.push(`${fn.ty.c} ${fnv} = ${fn.c};`);
-                    const params = fn.ty.params ?? [];
-                    const callArgs = params.slice(0, 2).map((param, index) =>
-                        this.coerce(sources[index]!, param, cb),
-                    );
-                    keyBody = {
-                        c: `${fnv}->fn(${[`${fnv}->env`, ...(fn.ty.thisParam ? ["tsc_value_undefined()"] : []), ...callArgs].join(", ")})`,
-                        ty: this.prepareType(fn.ty.ret),
-                    };
-                }
-            } else {
-                unsupported(cb, "Object.groupBy callback must be an inline arrow/function expression or function reference");
-            }
-            const keyCExpr = this.coerceToString(keyBody, cb);
-            // Box the item into tsc_value_t. Restrict to types boxable through coerce(.., T_VALUE).
-            const boxedItemExpr = this.coerce({ c: item, ty: t }, T_VALUE, itemsArg);
-            return (
-                `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
-                `tsc_value_t ${out} = tsc_value_object_create(tsc_value_null()); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
-                `${t.c} ${item} = ${itemExpr}; ${bindings.join(" ")} ` +
-                `tsc_str_t* ${keyStr} = ${keyCExpr}; ` +
-                `tsc_value_t ${boxed} = ${boxedItemExpr}; ` +
-                `tsc_value_t ${existing} = tsc_value_get_prop(${out}, ${keyStr}); ` +
-                `tsc_array_t* ${group}; ` +
-                `if (tsc_value_is_nullish(${existing})) { ` +
-                `${group} = tsc_array_new(sizeof(tsc_value_t), 4); ` +
-                `tsc_value_set_prop(${out}, ${keyStr}, tsc_value_array(${group})); ` +
-                `} else { ${group} = tsc_value_as_array(${existing}); } ` +
-                `tsc_array_push_raw(${group}, &${boxed}); } ${out}; })`
-            );
-        });
+        if (call.arguments.length < 2) unsupported(call, "Object.groupBy expects (items, callback)");
+        const items = this.emitExpr(call.arguments[0]!);
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: {c: this.boxObjectIdentity(items.c, items.ty, call.arguments[0]!), ty: T_VALUE}, node: call.arguments[0]! },
+            { value: this.emitExpr(call.arguments[1]!), target: T_VALUE, node: call.arguments[1]! },
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
+        ], ([source, callback]) => `tsc_value_object_group_by(${source}, ${callback})`);
     }
 
     private emitTypedObjectHasOwn(
@@ -57184,7 +56947,8 @@ class Emitter {
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
         const targetClass = targetClassDecl ?? targetClassExpression;
-        const cls = targetClass ? nativeTypeName(targetClass) : this.identifierName(ctorExpr);
+        const cls = targetClass ? nativeTypeName(targetClass)
+            : this.isOutOfBandIdentifier(ctorExpr) ? ctorExpr.text : this.identifierName(ctorExpr);
         if (cls === "TextEncoder") {
             const args = n.arguments ?? [];
             return this.emitSequencedExpr(
@@ -57258,135 +57022,16 @@ class Emitter {
                 return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
             });
         }
-        // Built-in Map / Set constructors.
-        if (cls === "Map") {
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "map")
-                unsupported(n, "new Map() requires <K, V> type parameters");
-            const k = mapped.key!;
-            const v = mapped.elem!;
-            const args = n.arguments ?? [];
-            if (args.length >= 1) {
-                const entries = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (entries.ty.kind === "value" && k.kind === "value" && v.kind === "value") {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: entries, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([source]) => `tsc_value_map_constructor_entries(${source})`);
-                }
-                if (entries.ty.kind === "map") {
-                    if (
-                        !entries.ty.key ||
-                        !entries.ty.elem ||
-                        !sameCType(entries.ty.key, k) ||
-                        !sameCType(entries.ty.elem, v)
-                    ) {
-                        unsupported(args[0]!, "new Map(existingMap) key/value types must match the target Map");
-                    }
-                    return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
-                        const map = this.freshTemp("_map_copy");
-                        const idx = this.freshTemp("_i");
-                        const keyPtr = this.freshTemp("_key");
-                        const valuePtr = this.freshTemp("_value");
-                        return (
-                            `({ tsc_map_t* const ${source}_src = ${source}; ` +
-                            `tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}_src->len); ` +
-                            `for (size_t ${idx} = 0; ${idx} < ${source}_src->len; ${idx}++) { ` +
-                            `void* ${keyPtr} = (char*)${source}_src->keys + ${idx} * ${source}_src->ks; ` +
-                            `void* ${valuePtr} = (char*)${source}_src->values + ${idx} * ${source}_src->vs; ` +
-                            `tsc_map_set_raw(${map}, ${keyPtr}, ${valuePtr}); } ${map}; })`
-                        );
-                    });
-                }
-                const entryElem = entries.ty.kind === "array" ? entries.ty.elem : undefined;
-                if (!entryElem || entryElem.kind !== "entry") {
-                    unsupported(args[0]!, "new Map(entries) expects Object.entries-style tuples or another Map");
-                }
-                const entryKeyType = entryElem.key ?? T_STRING;
-                if (!sameCType(entryKeyType, k)) {
-                    unsupported(args[0]!, `new Map(entries) key type ${entryKeyType.c} does not match map key type ${k.c}`);
-                }
-                const entryValueType = entryElem.elem ?? T_VOID;
-                if (!sameCType(entryValueType, v)) {
-                    unsupported(args[0]!, `new Map(entries) value type ${entryValueType.c} does not match map value type ${v.c}`);
-                }
-                return this.emitSequencedExpr(mapped, [{ value: entries, node: args[0]! }, ...ignored], ([source]) => {
-                    const map = this.freshTemp("_map_init");
-                    const idx = this.freshTemp("_i");
-                    const entry = this.freshTemp("_entry");
-                    const key = this.freshTemp("_key");
-                    const value = this.freshTemp("_value");
-                    return (
-                        `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
-                        `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
-                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k)}; ` +
-                        `${v.c} ${value} = ${this.objectEntryValue(entry, v)}; ` +
-                        `tsc_map_set_raw(${map}, &${key}, &${value}); } ${map}; })`
-                    );
-                });
-            }
-            return {
-                c: `tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, 0)`,
-                ty: mapped,
-            };
-        }
-        if (cls === "Set") {
-            const ty = this.checker.getTypeAtLocation(n);
-            const mapped = mapTsType(n, ty, this.checker);
-            if (mapped.kind !== "set")
-                unsupported(n, "new Set() requires <T> type parameter");
-            const e = mapped.elem!;
-            const args = n.arguments ?? [];
-            if (args.length >= 1) {
-                const values = this.emitExpr(args[0]!);
-                const ignored = this.ignoredArgumentSpecs(args, 1);
-                if (values.ty.kind === "value" && e.kind === "value") {
-                    return this.emitSequencedExpr(mapped, [
-                        { value: values, target: T_VALUE, node: args[0]! },
-                        ...ignored,
-                    ], ([source]) => {
-                        const set = this.freshTemp("_set_init");
-                        const src = this.freshTemp("_set_src");
-                        const idx = this.freshTemp("_i");
-                        const value = this.freshTemp("_value");
-                        return (
-                            `({ tsc_array_t* const ${src} = tsc_value_collection_constructor_values(${source}); ` +
-                            `tsc_set_t* ${set} = tsc_set_new(sizeof(tsc_value_t), ${keyKindOf(e)}, ${src}->len); ` +
-                            `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
-                            `tsc_value_t ${value} = TSC_ARR(tsc_value_t, ${src}, ${idx}); ` +
-                            `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
-                        );
-                    });
-                }
-                if (
-                    (values.ty.kind !== "array" && values.ty.kind !== "set") ||
-                    !values.ty.elem ||
-                    !sameCType(values.ty.elem, e)
-                ) {
-                    unsupported(args[0]!, "new Set(values) expects an array or Set whose element type matches the set");
-                }
-                return this.emitSequencedExpr(mapped, [{ value: values, node: args[0]! }, ...ignored], ([source]) => {
-                    const set = this.freshTemp("_set_init");
-                    const src = this.freshTemp("_set_src");
-                    const idx = this.freshTemp("_i");
-                    const value = this.freshTemp("_value");
-                    const sourceArray = values.ty.kind === "set" ? `tsc_set_values(${source})` : source;
-                    return (
-                        `({ tsc_array_t* const ${src} = ${sourceArray}; ` +
-                        `tsc_set_t* ${set} = tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, ${src}->len); ` +
-                        `for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ` +
-                        `${e.c} ${value} = TSC_ARR(${e.c}, ${src}, ${idx}); ` +
-                        `tsc_set_add_raw(${set}, &${value}); } ${set}; })`
-                    );
-                });
-            }
-            return {
-                c: `tsc_set_new(sizeof(${e.c}), ${keyKindOf(e)}, 0)`,
-                ty: mapped,
-            };
+        // Typed and dynamic constructors consume the same actual Iterator
+        // Record. Native storage is an identity-preserving final projection.
+        if (cls === "Map" || cls === "Set") {
+            const mapped = mapTsType(n, this.checker.getTypeAtLocation(n), this.checker);
+            if (mapped.kind !== (cls === "Map" ? "map" : "set"))
+                unsupported(n, "Collection result storage cannot represent its elements");
+            const constructed = this.emitDynamicValueConstruct(n, {
+                c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(cls)})`, ty: T_VALUE,
+            });
+            return { c: this.coerce(constructed, mapped, n), ty: mapped };
         }
         if (cls === "WeakMap") {
             const ty = this.checker.getTypeAtLocation(n);
@@ -57452,8 +57097,8 @@ class Emitter {
                         `({ tsc_map_t* ${map} = tsc_map_new(sizeof(${k.c}), sizeof(${v.c}), ${keyKindOf(k)}, ${source}->len); ` +
                         `for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ` +
                         `${entryElem.c} ${entry} = TSC_ARR(${entryElem.c}, ${source}, ${idx}); ` +
-                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k)}; ` +
-                        `${v.c} ${value} = ${this.objectEntryValue(entry, v)}; ` +
+                        `${k.c} ${key} = ${this.objectEntryKeyValue(entry, k, n)}; ` +
+                        `${v.c} ${value} = ${this.objectEntryValue(entry, v, n)}; ` +
                         `tsc_map_set_raw(${map}, &${key}, &${value}); } ${map}; })`
                     );
                 });
@@ -58299,7 +57944,7 @@ class Emitter {
         if (recv.ty.kind === "entry" && pa.name.text === "length") {
             const tv = this.freshTemp("_entry");
             return {
-                c: `({ ${recv.ty.c} ${tv} = ${recv.c}; (void)${tv}; 2.0; })`,
+                c: `({ ${recv.ty.c} ${tv} = ${recv.c}; (double)${tv}.pair->len; })`,
                 ty: T_NUMBER,
             };
         }
@@ -58530,14 +58175,14 @@ class Emitter {
             if (idx === 0) {
                 const keyType = recv.ty.key ?? T_STRING;
                 return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryKeyValue(tv, keyType)}; })`,
+                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryKeyValue(tv, keyType, ea)}; })`,
                     ty: keyType,
                 };
             }
             if (idx === 1) {
                 const valueType = recv.ty.elem ?? T_VOID;
                 return {
-                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryValue(tv, valueType)}; })`,
+                    c: `({ ${recv.ty.c} ${tv} = ${recv.c}; ${this.objectEntryValue(tv, valueType, ea)}; })`,
                     ty: valueType,
                 };
             }
@@ -58792,6 +58437,8 @@ class Emitter {
             : "TSC_GC_MALLOC";
         const pieces: string[] = [
             `${cls}_t* ${tmp} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
+            `${tmp}->__tsc_object_owner.object = NULL`,
+            `${tmp}->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(mapped, ol)}`,
         ];
         const targetFields = this.objectProperties(targetType).map((prop) => {
             const name = prop.getName();
@@ -59003,16 +58650,18 @@ class Emitter {
         const value = this.emitExpr(valueExpr as ts.Expression);
         const tmp = this.freshTemp("_entry");
         const pieces = [
-            `${mapped.c} ${tmp}`,
+            `${mapped.c} ${tmp} = {0}`,
             this.objectEntryKeySet(
                 tmp,
                 keyType,
                 this.coerce(key, keyType, keyExpr as ts.Expression),
+                keyExpr,
             ),
             this.objectEntrySet(
                 tmp,
                 valueType,
                 this.coerce(value, valueType, valueExpr as ts.Expression),
+                valueExpr,
             ),
             tmp,
         ];
@@ -59128,6 +58777,20 @@ class Emitter {
         return this.coerce({ c: value, ty: type }, T_VALUE, node);
     }
 
+    private nativeCollectionRepresentation(value: string, target: CType, node: ts.Node): string {
+        const element = target.elem ?? T_VALUE;
+        const elementCodec = this.ensureArrayValueCodec(element, node);
+        if (target.kind === "map") {
+            const key = target.key ?? T_VALUE;
+            const keyCodec = this.ensureArrayValueCodec(key, node);
+            return `tsc_map_require_native_representation(tsc_value_as_map(${value}), sizeof(${key.c}), sizeof(${element.c}), ${keyKindOf(key)}, ` +
+                `${keyCodec?.box ?? "NULL"}, ${keyCodec?.unbox ?? "NULL"}, ${elementCodec?.box ?? "NULL"}, ${elementCodec?.unbox ?? "NULL"})`;
+        }
+        if (target.kind === "set") return `tsc_set_require_native_representation(tsc_value_as_set(${value}), sizeof(${element.c}), ${keyKindOf(element)}, ` +
+            `${elementCodec?.box ?? "NULL"}, ${elementCodec?.unbox ?? "NULL"})`;
+        unsupported(node, "native collection requires an element representation");
+    }
+
     private nativeArrayRepresentation(value: EmitResult, target: CType, node: ts.Node): string {
         if (target.kind !== "array" || !target.elem) unsupported(node, "native Array requires an element representation");
         const element = target.elem;
@@ -59135,9 +58798,9 @@ class Emitter {
         const boxed = value.ty.kind === "array" ? this.boxObjectIdentity(value.c, value.ty, node) : value.c;
         const kind = element.kind === "number" ? "NUMBER" : element.kind === "boolean" ? "BOOLEAN"
             : element.kind === "string" ? "STRING" : element.kind === "bigint" ? "BIGINT"
-            : element.kind === "symbol" ? "SYMBOL" : element.kind === "array" ? "ARRAY"
+            : element.kind === "symbol" ? "SYMBOL" : element.kind === "array" || element.kind === "entry" ? "ARRAY"
             : element.kind === "function" ? "FUNCTION" : element.kind === "void" || element.kind === "never" ? "UNDEFINED"
-            : element.kind === "entry" || element.kind === "unsupported" ? "UNSUPPORTED" : "OBJECT";
+            : element.kind === "unsupported" ? "UNSUPPORTED" : "OBJECT";
         const fresh = value.ty.kind === "array" && ts.isExpression(node) &&
             ts.isArrayLiteralExpression(this.unwrapTransparentExpression(node));
         return `tsc_array_require_native_representation(${boxed}, sizeof(${element.c}), ` +
@@ -59205,22 +58868,13 @@ class Emitter {
                     return `tsc_value_as_bigint(${r.c})`;
                 case "symbol":
                     return `tsc_value_as_symbol(${r.c})`;
-                case "entry": {
-                    const input = this.freshTemp("_entry_value");
-                    const root = this.freshTemp("_entry_value_root");
-                    const output = this.freshTemp("_entry_record");
-                    const key = this.coerce({ c: `tsc_value_get_index(${input}, 0.0)`, ty: T_VALUE }, target.key ?? T_STRING, node);
-                    const value = this.coerce({ c: `tsc_value_get_index(${input}, 1.0)`, ty: T_VALUE }, target.elem ?? T_VALUE, node);
-                    return `({ tsc_value_t ${input} = ${r.c}; void* volatile ${root} = tsc_value_gc_root(${input}); (void)${root}; ` +
-                        `tsc_object_entry_t ${output} = {0}; ${this.objectEntryKeySet(output, target.key ?? T_STRING, key)}; ` +
-                        `${this.objectEntrySet(output, target.elem ?? T_VALUE, value)}; ${output}; })`;
-                }
+                case "entry":
+                    return `(tsc_object_entry_t){ .pair = tsc_value_as_array(${r.c}) }`;
                 case "array":
                     return this.nativeArrayRepresentation(r, target, node);
                 case "map":
-                    return `tsc_value_as_map(${r.c})`;
                 case "set":
-                    return `tsc_value_as_set(${r.c})`;
+                    return this.nativeCollectionRepresentation(r.c, target, node);
                 case "date":
                     return `tsc_value_as_date(${r.c})`;
                 case "regexp":
@@ -59275,35 +58929,8 @@ class Emitter {
                 return `tsc_value_symbol(${r.c})`;
             case "array":
                 return `tsc_value_array(${this.arrayWithValueCodec(r.c, r.ty, node) ?? r.c})`;
-            case "entry": {
-                const keyType = r.ty.key ?? T_STRING;
-                const valueType = r.ty.elem ?? T_VOID;
-                const tmpEntry = this.freshTemp("_entryBox");
-                const tmpOut = this.freshTemp("_entryArr");
-                const tmpKey = this.freshTemp("_entryKey");
-                const tmpValue = this.freshTemp("_entryValue");
-                const tmpKeyBox = this.freshTemp("_entryKeyBox");
-                const tmpValueBox = this.freshTemp("_entryValueBox");
-                const boxedKey = this.coerce({ c: tmpKey, ty: keyType }, T_VALUE, node);
-                const valueDecl = valueType.kind === "void"
-                    ? ""
-                    : `${valueType.c} ${tmpValue} = ${this.objectEntryValue(tmpEntry, valueType)}; `;
-                const valueSource: EmitResult = valueType.kind === "void"
-                    ? { c: "NULL", ty: T_VOID }
-                    : { c: tmpValue, ty: valueType };
-                const boxedValue = this.coerce(valueSource, T_VALUE, node);
-                return (
-                    `({ ${r.ty.c} ${tmpEntry} = ${r.c}; ` +
-                    `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), 2); ` +
-                    `${keyType.c} ${tmpKey} = ${this.objectEntryKeyValue(tmpEntry, keyType)}; ` +
-                    `tsc_value_t ${tmpKeyBox} = ${boxedKey}; ` +
-                    `tsc_array_push_raw(${tmpOut}, &${tmpKeyBox}); ` +
-                    `${valueDecl}` +
-                    `tsc_value_t ${tmpValueBox} = ${boxedValue}; ` +
-                    `tsc_array_push_raw(${tmpOut}, &${tmpValueBox}); ` +
-                    `tsc_value_array(${tmpOut}); })`
-                );
-            }
+            case "entry":
+                return `tsc_value_array((${r.c}).pair)`;
             case "function": {
                 const sourceFunction = ts.isExpression(node)
                     ? this.functionLikeForExpression(node)

@@ -29,6 +29,11 @@ static void collection_order_initialize(tsc_collection_order_t* order) {
     *order->head = (tsc_collection_order_node_t){0};
 }
 
+tsc_value_t tsc_value_canonicalize_collection_key(tsc_value_t key) {
+    tsc_value_t normalized;
+    return *(const tsc_value_t*)collection_canonical_key(TSC_KEY_VALUE, sizeof(key), &key, &normalized);
+}
+
 static void collection_order_append(tsc_collection_order_t* order, size_t index) {
     tsc_collection_order_node_t* node = TSC_GC_MALLOC(sizeof(*node));
     *node = (tsc_collection_order_node_t){ .index = index, .active = true };
@@ -571,6 +576,76 @@ static void collection_unbox(tsc_value_t value, void* storage, size_t width,
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("collection storage cannot represent this value"));
 }
 
+static void collection_representation_failure(void) {
+    tsc_throw_error(TSC_ERROR_TYPE,
+        tsc_str_from_cstr("Collection cannot preserve identity through this native element representation"));
+}
+
+/* Convert only an unexposed boxed storage layout. A retained native layout
+ * cannot change beneath another typed view. Iterator insertion links and the
+ * collection object survive the conversion unchanged. */
+static void* collection_native_cells(const void* source, size_t length, size_t capacity,
+        size_t source_width, size_t target_width, tsc_array_box_element_fn source_box,
+        tsc_array_box_element_fn target_box, tsc_array_unbox_element_fn target_unbox) {
+    if (!target_width || capacity > SIZE_MAX / target_width) collection_representation_failure();
+    void* volatile output = TSC_GC_MALLOC(capacity * target_width);
+    volatile bool supported = true;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        for (size_t index = 0; index < length; index++) {
+            tsc_value_t value = collection_box(source_box, (const char*)source + index * source_width, source_width);
+            void* volatile root = tsc_value_gc_root(value);
+            void* cell = (char*)output + index * target_width;
+            collection_unbox(value, cell, target_width, target_box, target_unbox);
+            if (!tsc_value_object_is(value, collection_box(target_box, cell, target_width))) {
+                supported = false;
+                break;
+            }
+            (void)root;
+        }
+        tsc_try_pop();
+    } else {
+        tsc_try_pop();
+        supported = false;
+    }
+    if (!supported) collection_representation_failure();
+    return output;
+}
+
+tsc_map_t* tsc_map_require_native_representation(tsc_map_t* map, size_t key_size, size_t value_size, int key_kind,
+        tsc_array_box_element_fn box_key, tsc_array_unbox_element_fn unbox_key,
+        tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value) {
+    if (!map) collection_representation_failure();
+    if (map->ks == key_size && map->vs == value_size && map->kk == key_kind &&
+            map->box_key == box_key && map->unbox_key == unbox_key &&
+            map->box_value == box_value && map->unbox_value == unbox_value) return map;
+    if (map->box_key || map->unbox_key || map->box_value || map->unbox_value ||
+            map->kk != TSC_KEY_VALUE || map->ks != sizeof(tsc_value_t) || map->vs != sizeof(tsc_value_t))
+        collection_representation_failure();
+    void* volatile keys = collection_native_cells(map->keys, map->len, map->cap, map->ks, key_size, NULL, box_key, unbox_key);
+    void* volatile values = collection_native_cells(map->values, map->len, map->cap, map->vs, value_size, NULL, box_value, unbox_value);
+    map->keys = keys; map->values = values;
+    map->ks = key_size; map->vs = value_size; map->kk = key_kind;
+    tsc_map_set_value_codecs(map, box_key, unbox_key, box_value, unbox_value);
+    if (map->bucket_cap) map_rebuild_buckets(map, map->bucket_cap);
+    return map;
+}
+
+tsc_set_t* tsc_set_require_native_representation(tsc_set_t* set, size_t element_size, int key_kind,
+        tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value) {
+    if (!set) collection_representation_failure();
+    if (set->es == element_size && set->kk == key_kind &&
+            set->box_value == box_value && set->unbox_value == unbox_value) return set;
+    if (set->box_value || set->unbox_value || set->kk != TSC_KEY_VALUE || set->es != sizeof(tsc_value_t))
+        collection_representation_failure();
+    set->data = collection_native_cells(set->data, set->len, set->cap, set->es, element_size, NULL, box_value, unbox_value);
+    set->es = element_size; set->kk = key_kind;
+    tsc_set_set_value_codec(set, box_value, unbox_value);
+    if (set->bucket_cap) set_rebuild_buckets(set, set->bucket_cap);
+    return set;
+}
+
 static size_t collection_find(collection_iterator_t* source, tsc_value_t key) {
     void* volatile key_root = tsc_value_gc_root(key);
     if (source->is_map && source->map->kk == TSC_KEY_VALUE && !source->map->box_key) {
@@ -731,6 +806,11 @@ static tsc_value_t collection_species_get(void* env, tsc_value_t receiver, tsc_a
     return receiver;
 }
 
+static tsc_value_t map_static_group_by(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_map(tsc_value_map_group_by(collection_argument(args, 0), collection_argument(args, 1), NULL));
+}
+
 static tsc_value_t collection_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
     (void)receiver;
     collection_intrinsics_t* intrinsic = env;
@@ -808,6 +888,9 @@ static collection_intrinsics_t* collection_intrinsics(bool is_map) {
             ? TSC_INTRINSIC_DEFAULT_MAP_PROTOTYPE : TSC_INTRINSIC_DEFAULT_SET_PROTOTYPE;
         tsc_function_identity_set_own_prototype(identity, tsc_value_object(state->prototype));
         identity->func_prototype_writable = false;
+        if (is_map) tsc_value_define_property_desc(state->constructor, tsc_str_from_lit("groupBy", 7),
+            tsc_value_function_builtin_named(map_static_group_by, NULL, 2, tsc_str_from_lit("groupBy", 7)),
+            true, true, true, false, true, true, true);
         tsc_object_define(state->prototype, tsc_str_from_lit("constructor", 11), state->constructor, true, false, true);
         tsc_object_define(state->prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
             tsc_value_string(name), false, false, true);

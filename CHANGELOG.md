@@ -186,6 +186,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share Object/Map GroupBy through live captured Iterator Records and rooted keyed-group records. Preserve close precedence, property/collection key semantics, intrinsic result descriptors and retained typed object/pair identity. Use the ordinary Map/Set constructor protocol with checked native storage projection, retain tagged nullish cells and language key equality, delete eager/copy predecessors, and verify independent Node partitions and deep native ownership in both memory modes.
+
 - Project Realm initialization and global Reference admission from one binding descriptor collection. Share mutable globalThis/free-name reads, writes, deletion, typeof, calls and construction across CLI and native observation; retain shadows and suspended owners, remove hardwired globalThis and duplicate dispatch branches, and publish Object static adapters over existing value operations. Verify independent Script/Module semantic partitions, retained-owner stress and typed E2E in both memory modes.
 
 - Validate resource owners, parse goals, Await contexts, loop heads, trivia and BoundNames through shared static semantics. Remove bare-switch resource lowering and share raw-token Use Strict recognition across validation, emission and eval discovery. Verify independent grammar partitions, a deep native scope tree and typed E2E in both memory modes.

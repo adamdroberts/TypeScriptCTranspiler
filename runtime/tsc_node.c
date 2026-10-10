@@ -2807,8 +2807,8 @@ tsc_array_t* tsc_url_search_params_entries(const tsc_url_search_params_t* params
     tsc_array_t* a = tsc_array_new(sizeof(tsc_object_entry_t), params->len ? params->len : 1);
     tsc_object_entry_t* entries = (tsc_object_entry_t*)a->data;
     for (size_t i = 0; i < params->len; i++) {
-        entries[i].key = params->items[i].name;
-        entries[i].ptr = (void*)params->items[i].value;
+        tsc_object_entry_store(&entries[i], 0.0, tsc_value_string(params->items[i].name));
+        tsc_object_entry_store(&entries[i], 1.0, tsc_value_string(params->items[i].value));
     }
     a->len = params->len;
     return a;

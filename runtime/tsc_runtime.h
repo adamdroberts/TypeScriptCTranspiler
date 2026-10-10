@@ -1219,6 +1219,17 @@ tsc_array_t* tsc_value_object_keys(tsc_value_t v);
 tsc_array_t* tsc_value_object_values(tsc_value_t v);
 tsc_array_t* tsc_value_object_entries(tsc_value_t v);
 tsc_value_t tsc_value_object_from_entries(tsc_value_t entries);
+/* GroupBy consumes one live Iterator Record into unexposed group records.
+ * Native typed Map storage is a final projection of that same collection. */
+typedef struct {
+    size_t key_size;
+    int key_kind;
+    tsc_array_box_element_fn box_key, box_group;
+    tsc_array_unbox_element_fn unbox_key, unbox_group;
+} tsc_group_by_map_layout_t;
+tsc_value_t tsc_value_object_group_by(tsc_value_t items, tsc_value_t callback);
+struct tsc_map* tsc_value_map_group_by(tsc_value_t items, tsc_value_t callback,
+    const tsc_group_by_map_layout_t* layout);
 
 tsc_promise_t* tsc_promise_resolve(tsc_value_t value);
 tsc_promise_t* tsc_promise_resolve_fs_stats(tsc_fs_stats_t* value);
@@ -1421,6 +1432,14 @@ tsc_value_t tsc_value_method_match_all(tsc_value_t recv, tsc_value_t pattern);
 
 tsc_object_t* tsc_object_new(void);
 tsc_object_t* tsc_object_new_class(void* ptr);
+/* Source-native aggregates retain their ordinary object in the same owner.
+ * The prefix is shared by base and derived native layouts. */
+typedef void (*tsc_native_object_initializer_t)(tsc_object_t* object);
+typedef struct {
+    tsc_object_t* object;
+    tsc_native_object_initializer_t initialize;
+} tsc_native_object_owner_t;
+tsc_object_t* tsc_native_object_owner_get(tsc_native_object_owner_t* owner, void* ptr, tsc_native_object_initializer_t initialize);
 tsc_object_t* tsc_module_namespace_new(void);
 bool tsc_module_namespace_define(tsc_object_t* object, tsc_str_t* key, tsc_accessor_getter_t getter);
 void tsc_module_namespace_finalize(tsc_object_t* object);
@@ -1452,14 +1471,10 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o);
 tsc_value_t tsc_json_parse(tsc_str_t* text);
 
 typedef struct tsc_object_entry {
-    tsc_str_t* key;
-    double key_num;
-    bool key_boolean;
-    void* key_ptr;
-    double num;
-    bool boolean;
-    void* ptr;
+    /* A native entry is a view of this actual pair, including its mutations. */
+    tsc_array_t* pair;
 } tsc_object_entry_t;
+tsc_value_t tsc_object_entry_store(tsc_object_entry_t* entry, double index, tsc_value_t value);
 
 /* ------------- Map / Set (open-addressed hash + insertion-order array) ------------- */
 typedef enum {
@@ -1515,7 +1530,11 @@ struct tsc_array* tsc_map_keys(const tsc_map_t* m);
 struct tsc_array* tsc_map_values(const tsc_map_t* m);
 tsc_value_t tsc_map_constructor_value(void);
 tsc_value_t tsc_map_prototype_value(void);
+tsc_value_t tsc_value_canonicalize_collection_key(tsc_value_t key);
 tsc_map_t* tsc_map_set_value_codecs(tsc_map_t* map,
+    tsc_array_box_element_fn box_key, tsc_array_unbox_element_fn unbox_key,
+    tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
+tsc_map_t* tsc_map_require_native_representation(tsc_map_t* map, size_t key_size, size_t value_size, int key_kind,
     tsc_array_box_element_fn box_key, tsc_array_unbox_element_fn unbox_key,
     tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
 
@@ -1560,6 +1579,8 @@ struct tsc_array* tsc_set_values(const tsc_set_t* s);
 tsc_value_t tsc_set_constructor_value(void);
 tsc_value_t tsc_set_prototype_value(void);
 tsc_set_t* tsc_set_set_value_codec(tsc_set_t* set,
+    tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
+tsc_set_t* tsc_set_require_native_representation(tsc_set_t* set, size_t element_size, int key_kind,
     tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
 /* Set composition helpers — both operands must be Set<T> with matching es/kk. */
 tsc_set_t* tsc_set_union(const tsc_set_t* a, const tsc_set_t* b);

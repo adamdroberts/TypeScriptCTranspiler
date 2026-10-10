@@ -405,11 +405,11 @@ interface ObjectConstructor {
     preventExtensions<T>(o: T, ...ignored: any[]): T;
     seal<T>(o: T, ...ignored: any[]): T;
     setPrototypeOf<T>(o: T, proto: any, ...ignored: any[]): T;
-    groupBy<T>(items: T[], keyFn: (item: T, index: number) => string, ...ignored: any[]): unknown;
-    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => string, ...ignored: any[]): unknown;
-    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => string, ...ignored: any[]): unknown;
-    groupBy(items: string, keyFn: (item: string, index: number) => string, ...ignored: any[]): unknown;
-    groupBy(items: any, keyFn: (item: any, index: number) => string, ...ignored: any[]): unknown;
+    groupBy<T>(items: T[], keyFn: (item: T, index: number) => unknown, ...ignored: any[]): unknown;
+    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => unknown, ...ignored: any[]): unknown;
+    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => unknown, ...ignored: any[]): unknown;
+    groupBy(items: string, keyFn: (item: string, index: number) => unknown, ...ignored: any[]): unknown;
+    groupBy(items: any, keyFn: (item: any, index: number) => unknown, ...ignored: any[]): unknown;
 }
 declare var Object: ObjectConstructor;
 

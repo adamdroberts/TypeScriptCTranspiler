@@ -1143,7 +1143,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-reflect` — Reflect: exact disposition and partitions missing.
 - [ ] **Fundamental Objects** (`sec-fundamental-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Object; Function; Boolean; Symbol; Error and native errors.
-  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts, tests/property/symbol-coercion.property.test.ts, tests/property/resource-completion.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, object_prototypes, function_prototypes, symbols, object_get_own_property_symbols, proxy_get_own_property_symbols, resource_completion_protocol.
+  - Linked local regression evidence: property: tests/property/function-bind.property.test.ts, tests/property/symbol-coercion.property.test.ts, tests/property/resource-completion.property.test.ts, tests/property/group-by.property.test.ts; stress: function_call_apply_validation; E2E: function_call_apply_validation, object_prototypes, function_prototypes, symbols, object_get_own_property_symbols, proxy_get_own_property_symbols, resource_completion_protocol, group_by_iterator_records.
   - Known blockers: Clause-level descriptor, prototype, Symbol, and realm behavior remains unverified; Function source text, @@hasInstance, dynamic source construction, and ordinary variadic activations remain open.
   - [ ] `sec-fundamental-objects` — Fundamental Objects: exact disposition and partitions missing.
   - [ ] `sec-object-objects` — Object Objects: exact disposition and partitions missing.
@@ -1851,7 +1851,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-fromhex` — FromHex ( _string_: a String, optional _maxLength_: a non-negative integer, ): a Record with fields [[Read]] (an integer), [[Bytes]] (a List of byte values), and [[Error]] (a SyntaxError object or ~none~): exact disposition and partitions missing.
 - [ ] **Keyed Collections** (`sec-keyed-collections`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Map; Set; WeakMap; WeakSet; collection iterators.
-  - Linked local regression evidence: E2E: map_set_constructors, map_set_same_value_zero, weak_collections.
+  - Linked local regression evidence: property: tests/property/group-by.property.test.ts; E2E: map_set_constructors, map_set_same_value_zero, weak_collections, group_by_iterator_records.
   - Known blockers: All iterator-close, mutation-during-iteration, and weak-key partitions require pinned verification.
   - [ ] `sec-keyed-collections` — Keyed Collections: exact disposition and partitions missing.
   - [ ] `sec-map-objects` — Map Objects: exact disposition and partitions missing.
