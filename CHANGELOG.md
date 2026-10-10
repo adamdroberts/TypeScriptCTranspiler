@@ -1,5 +1,7 @@
 # Changelog
 
+- Return integral current UTC milliseconds from the shared Date clock and verify native values against independent execution-time host bounds. Bind exact UTC/now clauses to reciprocal properties, typed cases, one generated retained-owner argument List and reviewed metadata, while retaining full Date and signed host/report gaps.
+
 - Replace UTC machine calendar fields with exact Gregorian month/year normalization, a representability search for first-day time values, and explicit binary64 MakeTime/MakeDate rounding. Preserve truncation, legitimate negative timestamps, cancellation and TimeClip boundaries; verify independent Gregorian/Node properties, deep retention and typed native E2E in both memory modes.
 
 - Share ordinary Date static lookup and actual argument Lists with one presence-sensitive UTC default/coercion collection. Remove direct now/parse/UTC lowering and static purity bypasses; verify Node semantic partitions, deep retained arguments, typed defaults and awaited calls in both memory modes.

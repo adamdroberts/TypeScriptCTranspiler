@@ -104,6 +104,11 @@ export interface ArrayStaticFactoryItemWidthSpec {
     width: number;
 }
 
+export interface DateStaticArgumentDepthSpec {
+    generator: "date-static-argument-depth";
+    depth: number;
+}
+
 export interface NumberPrototypeArgumentWidthSpec {
     generator: "number-prototype-argument-width";
     width: number;
@@ -166,6 +171,7 @@ export type GeneratedCaseSpec =
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
+    | DateStaticArgumentDepthSpec
     | NumberPrototypeArgumentWidthSpec
     | SwitchClauseWorklistWidthSpec
     | SwitchCaseBlockEnvironmentDepthSpec
@@ -396,6 +402,13 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             generator: spec.generator,
             width,
         };
+    }
+    if (spec.generator === "date-static-argument-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return { generator: spec.generator, depth };
     }
     if (spec.generator === "number-prototype-argument-width") {
         const width = spec.width;
@@ -1359,6 +1372,45 @@ function switchCaseBlockClassWorklistWidthSource(width: number): string {
     ].join("\n");
 }
 
+function dateStaticArgumentDepthSource(depth: number): string {
+    return `
+const D: any = Date;
+const raw: any = {};
+let visits = 0, conversions = 0, expectedHint = "";
+const first: any = { [Symbol.toPrimitive](hint: string): any {
+    if (hint !== expectedHint || visits !== ${depth} + 7) throw raw;
+    conversions++;
+    return hint === "number" ? 2000 : "2000-02-29T12:34:56.789Z";
+} };
+const prefix: any[] = [first,1,29,12,34,56,789];
+let tree: any = null;
+for (let level = 0; level < ${depth}; level++) tree = {
+    previous: tree, owner: D,
+    value: { [Symbol.toPrimitive](): any { throw raw; } },
+};
+const owner: any = { tree, constructor: D };tree = null;
+const iterable: any = { [Symbol.iterator](): any {
+    let index = 0, cursor = owner.tree;
+    return { next(): any {
+        if (index < prefix.length) { visits++;return { value: prefix[index++], done: false }; }
+        if (cursor !== null) {
+            if (cursor.owner !== owner.constructor) throw raw;
+            const value = cursor.value;cursor = cursor.previous;visits++;
+            return { value, done: false };
+        }
+        return { done: true };
+    } };
+} };
+const methods: any[] = [{name:"UTC",hint:"number"},{name:"parse",hint:"string"},{name:"now",hint:""}];
+for (const method of methods) {
+    visits = 0;conversions = 0;expectedHint = method.hint;
+    const result = D[method.name](...iterable);
+    const correct = method.name === "now" ? Number.isInteger(result) && result > 0 : result === 951827696789;
+    console.log(method.name, correct, visits === ${depth} + 7, conversions === (method.hint === "" ? 0 : 1));
+}
+`;
+}
+
 function numberPrototypeArgumentWidthSource(width: number): string {
     return `
 const width = ${width};
@@ -1559,6 +1611,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return arrowFormalBindingTreeDepthSource(spec.depth);
         case "array-static-factory-item-width":
             return arrayStaticFactoryItemWidthSource(spec.width);
+        case "date-static-argument-depth":
+            return dateStaticArgumentDepthSource(spec.depth);
         case "number-prototype-argument-width":
             return numberPrototypeArgumentWidthSource(spec.width);
         case "switch-clause-worklist-width":

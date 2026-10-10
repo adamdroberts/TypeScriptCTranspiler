@@ -1297,8 +1297,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-installerrorcause` — InstallErrorCause ( _O_: an Object, _options_: an ECMAScript language value, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
 - [ ] **Numbers and Dates** (`sec-numbers-and-dates`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Number; BigInt; Math; Date.
-  - Linked local regression evidence: property: tests/property/number-shortest-string.property.test.ts, tests/property/number-call-boundary.property.test.ts, tests/property/number-decimal-format.property.test.ts, tests/property/locale-invocation.property.test.ts, tests/property/date-static-invocation.property.test.ts, tests/property/date-utc-calendar.property.test.ts; stress: number_prototype_argument_width; E2E: number_constructor, math_more, date_instances, bigint, number_shortest_string, number_call_boundary, number_decimal_rounding, locale_ordinary_invocation, date_static_invocation, date_utc_calendar.
-  - Known blockers: The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding with independent property/typed evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open.
+  - Linked local regression evidence: property: tests/property/number-shortest-string.property.test.ts, tests/property/number-call-boundary.property.test.ts, tests/property/number-decimal-format.property.test.ts, tests/property/locale-invocation.property.test.ts, tests/property/date-static-invocation.property.test.ts, tests/property/date-utc-calendar.property.test.ts, tests/property/date-now.property.test.ts; stress: number_prototype_argument_width, date_static_argument_depth; E2E: number_constructor, math_more, date_instances, bigint, number_shortest_string, number_call_boundary, number_decimal_rounding, locale_ordinary_invocation, date_static_invocation, date_utc_calendar, date_now_time_value.
+  - Known blockers: The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding; now shares an integral UTC clock. Both exact intrinsic clauses bind reciprocal property, generated actual-List stress, declaration and implementation evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open.
   - [ ] `sec-numbers-and-dates` — Numbers and Dates: exact disposition and partitions missing.
   - [ ] `sec-number-objects` — Number Objects: exact disposition and partitions missing.
   - [ ] `sec-number-constructor` — The Number Constructor: exact disposition and partitions missing.
@@ -1442,10 +1442,12 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-date-constructor` — The Date Constructor: exact disposition and partitions missing.
   - [ ] `sec-date` — Date ( ..._values_ ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-date-constructor` — Properties of the Date Constructor: exact disposition and partitions missing.
-  - [ ] `sec-date.now` — Date.now ( ): exact disposition and partitions missing.
+  - [ ] `sec-date.now` — Date.now ( )
+    - [ ] `ordinary-static-list-integral-clock-time` (intrinsic, unbounded): Date.now: ordinary lookup, ignored actual arguments and integral current UTC time values.
   - [ ] `sec-date.parse` — Date.parse ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-date.prototype` — Date.prototype: exact disposition and partitions missing.
-  - [ ] `sec-date.utc` — Date.UTC ( _year_ [ , _month_ [ , _date_ [ , _hours_ [ , _minutes_ [ , _seconds_ [ , _ms_ ] ] ] ] ] ] ): exact disposition and partitions missing.
+  - [ ] `sec-date.utc` — Date.UTC ( _year_ [ , _month_ [ , _date_ [ , _hours_ [ , _minutes_ [ , _seconds_ [ , _ms_ ] ] ] ] ] ] )
+    - [ ] `ordinary-static-list-gregorian-number-time` (intrinsic, unbounded): Date.UTC: ordinary lookup, actual argument List, ordered conversion, exact Gregorian normalization and Number arithmetic.
   - [ ] `sec-properties-of-the-date-prototype-object` — Properties of the Date Prototype Object: exact disposition and partitions missing.
   - [ ] `sec-date.prototype.constructor` — Date.prototype.constructor: exact disposition and partitions missing.
   - [ ] `sec-date.prototype.getdate` — Date.prototype.getDate ( ): exact disposition and partitions missing.

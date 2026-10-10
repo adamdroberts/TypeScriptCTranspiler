@@ -2535,6 +2535,122 @@
         }
       ],
       "rationale": "The exact intrinsic body binds a canonical representation and cardinality-independent algorithm to independent properties, one representative native stress, declarations, implementation anchors and an exhaustive pinned clause query. Signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-date.utc",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-static-list-gregorian-number-time",
+          "title": "Date.UTC: ordinary lookup, actual argument List, ordered conversion, exact Gregorian normalization and Number arithmetic",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-date.utc"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/date-static-invocation.property.test.ts",
+              "tests/property/date-utc-calendar.property.test.ts",
+              "tests/property/date-intrinsic.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "date_static_argument_depth"
+            ],
+            "e2e": [
+              "date_static_invocation",
+              "date_utc_calendar"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#DateConstructor"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#date_static_methods",
+              "runtime/tsc_value.c#date_static_method_apply",
+              "runtime/tsc_node.c#date_day_from_year",
+              "runtime/tsc_node.c#date_make_day",
+              "runtime/tsc_node.c#date_make_time",
+              "runtime/tsc_node.c#date_make_date",
+              "runtime/tsc_node.c#tsc_date_utc"
+            ]
+          },
+          "rationale": "The actual argument List has arbitrary cardinality; one normative parameter/default collection selects omissions and performs ordered ToNumber before pure calendar operations. Exact Gregorian integer calculations and mathematical month floor/modulo round through the shared Number codec. A monotone search over finite Number order proves an integral first-day witness in adjacent integral-year bounds. Explicit Number rounding points preserve MakeTime/MakeDate cancellation and TimeClip. Independent closed-form Gregorian/Node partitions, separate huge-month and absent-witness assertions, ordinary descriptor/coercion tests and one generated retained-owner argument List support the algorithm."
+        }
+      ],
+      "rationale": "The exact intrinsic clause binds reciprocal independent properties, one reviewed generated argument-List stress, typed native execution, declaration and implementation anchors, and its complete pinned clause query. Full signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-date.now",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-static-list-integral-clock-time",
+          "title": "Date.now: ordinary lookup, ignored actual arguments and integral current UTC time values",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-date.now"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/date-now.property.test.ts",
+              "tests/property/date-static-invocation.property.test.ts",
+              "tests/property/date-intrinsic.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "date_static_argument_depth"
+            ],
+            "e2e": [
+              "date_now_time_value",
+              "date_static_invocation"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#DateConstructor"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitOrdinaryCallApplication",
+              "src/emit/index.ts#emitSpreadCallArgumentList",
+              "runtime/tsc_value.c#date_static_methods",
+              "runtime/tsc_value.c#date_static_method_apply",
+              "runtime/tsc_node.c#tsc_date_now"
+            ]
+          },
+          "rationale": "Ordinary lookup captures the callable before all argument effects, and the shared argument List is accepted without coercion by the clock callback. Integer nanoseconds are quantized to integral milliseconds before epoch addition. Independent host execution-time bounds verify native UTC clock values through direct, retained, bound, reflective and fresh-Date observations in both memory modes. Ordinary descriptor/mutation partitions and the separately generated retained-owner List verify the callable boundary without assigning fixture counts to generality."
+        }
+      ],
+      "rationale": "The exact intrinsic clause binds reciprocal independent properties, one reviewed generated argument-List stress, typed native execution, declaration and implementation anchors, and its complete pinned clause query. Full signed-report and host eligibility gates remain separate."
     }
   ],
   "groups": [
@@ -2762,11 +2878,13 @@
           "tests/property/number-decimal-format.property.test.ts",
           "tests/property/locale-invocation.property.test.ts",
           "tests/property/date-static-invocation.property.test.ts",
-          "tests/property/date-utc-calendar.property.test.ts"
+          "tests/property/date-utc-calendar.property.test.ts",
+          "tests/property/date-now.property.test.ts"
         ],
         "generatedRegression": [],
         "stress": [
-          "number_prototype_argument_width"
+          "number_prototype_argument_width",
+          "date_static_argument_depth"
         ],
         "e2e": [
           "number_constructor",
@@ -2778,7 +2896,8 @@
           "number_decimal_rounding",
           "locale_ordinary_invocation",
           "date_static_invocation",
-          "date_utc_calendar"
+          "date_utc_calendar",
+          "date_now_time_value"
         ],
         "negativeDiagnostics": [],
         "declarationSurface": [
@@ -2794,7 +2913,7 @@
         ]
       },
       "knownGaps": [
-        "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding with independent property/typed evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
+        "The Number prototype text/value methods have reciprocal intrinsic evidence, including the selected non-402 locale choice. UTC uses exact Gregorian normalization, representable first-day witnesses and explicit Number rounding; now shares an integral UTC clock. Both exact intrinsic clauses bind reciprocal property, generated actual-List stress, declaration and implementation evidence. Remaining Number/BigInt/Math algorithms, full Date and typed-array/resizable-buffer semantics, source-dependent construction and exhaustive signed host/report gates remain open."
       ]
     },
     {

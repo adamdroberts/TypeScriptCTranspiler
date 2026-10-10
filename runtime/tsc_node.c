@@ -16986,7 +16986,9 @@ void setPriority(double pid, double priority, tsc_array_t* ignore) {
 double tsc_date_now(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
-        return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+        /* A time value is an integral millisecond Number. Quantize the
+         * subsecond integer before converting or adding the epoch component. */
+        return (double)ts.tv_sec * 1000.0 + (double)(ts.tv_nsec / 1000000);
     }
     return 0.0;
 }

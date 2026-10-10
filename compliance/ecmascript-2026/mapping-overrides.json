@@ -717,6 +717,26 @@
       ],
       "reason": "The pinned generic built-in esid establishes constructability rules but does not identify Number.prototype.toLocaleString; retain that generic clause and add the exact intrinsic owner backed by the source hash.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Date/UTC/not-a-constructor.js",
+      "sourceSha256": "2e506345918b3b631df1132ad16c3cd205664cb1fec27ea439cd82107557b990",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-date.utc"
+      ],
+      "reason": "The pinned generic standard-built-in metadata establishes constructability rules but does not identify Date.UTC; retain that generic clause and add the exact intrinsic owner backed by this source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/Date/now/not-a-constructor.js",
+      "sourceSha256": "1725ef83b3dc885c8984f1cb0eeca21558d629322f9063741a7ab97eebb8eafa",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-date.now"
+      ],
+      "reason": "The pinned generic standard-built-in metadata establishes constructability rules but does not identify Date.now; retain that generic clause and add the exact intrinsic owner backed by this source hash.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ]
 }

@@ -278,7 +278,9 @@
         "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
         "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
         "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
-        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options",
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
       ]
     },
     {
@@ -1953,7 +1955,9 @@
         "sec-number.prototype.toexponential#ordinary-receiver-exponential-rounding-and-shortest",
         "sec-number.prototype.toprecision#ordinary-receiver-significant-digit-rounding-and-layout",
         "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
-        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+        "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options",
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
       ]
     },
     {
@@ -2093,6 +2097,139 @@
       "id": "runtime/tsc_value.c#primitive_prototype_to_locale_string",
       "targets": [
         "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/date-static-invocation.property.test.ts",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/date-utc-calendar.property.test.ts",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/date-intrinsic.property.test.ts",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "date_static_argument_depth",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ],
+      "stressReview": {
+        "dimension": "retained Date static owner-tree depth consumed as one actual argument List",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "A single generated native input retains the actual owner and ignored argument values through a deep tree and iterator-driven List; all evaluation precedes intrinsic conversion. Cardinality follows from the shared List/descriptor operations rather than fixture enumeration.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "date_static_invocation",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "date_utc_calendar",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#DateConstructor",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#date_static_methods",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#date_static_method_apply",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time",
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#date_day_from_year",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#date_make_day",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#date_make_time",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#date_make_date",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_date_utc",
+      "targets": [
+        "sec-date.utc#ordinary-static-list-gregorian-number-time"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/date-now.property.test.ts",
+      "targets": [
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "date_now_time_value",
+      "targets": [
+        "sec-date.now#ordinary-static-list-integral-clock-time"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_date_now",
+      "targets": [
+        "sec-date.now#ordinary-static-list-integral-clock-time"
       ]
     }
   ]
