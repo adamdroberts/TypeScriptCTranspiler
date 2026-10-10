@@ -119,6 +119,40 @@ static tsc_value_t array_create_with_length(double length) {
     return tsc_value_array(array);
 }
 
+/* ArraySpeciesCreate borrows the canonical constructor/Realm/Proxy owners. */
+tsc_array_output_t tsc_array_output_species(tsc_value_t original, size_t length) {
+    tsc_value_t constructor = tsc_value_undefined();
+    void* volatile constructor_gc_root = NULL; (void)constructor_gc_root;
+    if (tsc_value_is_array(original)) {
+        constructor = tsc_value_get_prop(original, tsc_str_from_lit("constructor", 11));
+        constructor_gc_root = tsc_value_gc_root(constructor);
+        if (tsc_value_is_constructable(constructor)) {
+            tsc_realm_t* realm = tsc_value_function_realm(constructor);
+            if (realm != tsc_realm_current()) {
+                tsc_realm_t* previous = tsc_realm_swap(realm);
+                tsc_value_t intrinsic = tsc_array_constructor_value();
+                (void)tsc_realm_swap(previous);
+                if (tsc_value_object_is(constructor, intrinsic)) constructor = tsc_value_undefined();
+            }
+        }
+        if (tsc_value_is_object(constructor)) {
+            constructor = tsc_value_get_symbol_prop(constructor, tsc_symbol_species());
+            constructor_gc_root = tsc_value_gc_root(constructor);
+            if (tsc_value_eq(constructor, tsc_value_null())) constructor = tsc_value_undefined();
+        }
+    }
+    tsc_value_t object;
+    if (tsc_value_is_undefined(constructor)) object = array_create_with_length((double)length);
+    else {
+        if (!tsc_value_is_constructable(constructor))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array species is not a constructor"));
+        tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(arguments, tsc_value_num((double)length));
+        object = tsc_value_construct(constructor, tsc_value_array(arguments));
+    }
+    return (tsc_array_output_t){object, tsc_value_gc_root(object), 0};
+}
+
 static tsc_value_t array_static_create_result(
     tsc_value_t constructor,
     double length,
@@ -132,28 +166,20 @@ static tsc_value_t array_static_create_result(
     return tsc_value_construct(constructor, tsc_value_array(arguments));
 }
 
-static void array_create_data_property_or_throw(
-    tsc_value_t target,
-    double index,
-    tsc_value_t value
-) {
-    if (!tsc_value_define_property_desc(
-        target,
-        tsc_str_from_num(index),
-        value,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true
-    )) {
-        tsc_throw_error(
-            TSC_ERROR_TYPE,
-            tsc_str_from_cstr("Array factory could not create an indexed property")
-        );
-    }
+static void array_create_data_property_or_throw(tsc_value_t target, double index, tsc_value_t value) {
+    if (!tsc_value_create_data_property(target, tsc_value_num(index), value))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array result could not create an indexed property"));
+}
+
+void tsc_array_output_create(tsc_array_output_t* output, size_t index, tsc_value_t value) {
+    array_create_data_property_or_throw(output->object, (double)index, value);
+}
+
+void tsc_array_output_append(tsc_array_output_t* output, tsc_value_t value) {
+    if (output->index >= UINT64_C(9007199254740991))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array result exceeds the integer limit"));
+    tsc_array_output_create(output, output->index, value);
+    ++output->index;
 }
 
 static void array_set_length_or_throw(tsc_value_t target, double length) {
@@ -168,6 +194,11 @@ static void array_set_length_or_throw(tsc_value_t target, double length) {
         );
     }
 }
+
+void tsc_array_output_set_length(tsc_array_output_t* output, size_t length) {
+    array_set_length_or_throw(output->object, (double)length);
+}
+
 
 static _Noreturn void array_iterator_close_preserving_throw(
     tsc_sync_iterator_t* iterator,
@@ -1078,7 +1109,7 @@ static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_arra
     void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
     void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
+    tsc_array_output_t out = tsc_array_output_species(this_arg, len);
     for (size_t i = 0; i < len; i++) {
         if (array_proto_has_index(this_arg, i)) {
             tsc_value_t mapped = array_proto_apply_callback(
@@ -1088,14 +1119,10 @@ static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_arra
                 i,
                 this_arg
             );
-            tsc_array_push_value(out, mapped);
-        } else {
-            tsc_value_t hole = tsc_value_undefined();
-            tsc_array_push_value(out, hole);
-            tsc_array_mark_hole(out, i);
+            tsc_array_output_create(&out, i, mapped);
         }
     }
-    return tsc_value_array(out);
+    return out.object;
 }
 
 static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -1107,13 +1134,13 @@ static tsc_value_t array_prototype_flat_map(void* env, tsc_value_t this_arg, tsc
     void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
     void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
+    tsc_array_output_t out = tsc_array_output_species(this_arg, 0);
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t mapped = array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
-        tsc_value_array_push_flat(out, mapped);
+        tsc_value_array_flatten_value(&out, mapped);
     }
-    return tsc_value_array(out);
+    return out.object;
 }
 
 static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -1125,16 +1152,16 @@ static tsc_value_t array_prototype_filter(void* env, tsc_value_t this_arg, tsc_a
     void* volatile callback_gc_root = tsc_value_gc_root(callback); (void)callback_gc_root;
     tsc_value_t callback_this = array_proto_callback_this(args);
     void* volatile callback_this_gc_root = tsc_value_gc_root(callback_this); (void)callback_this_gc_root;
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len < 4 ? len : 4);
+    tsc_array_output_t out = tsc_array_output_species(this_arg, 0);
     for (size_t i = 0; i < len; i++) {
         if (!array_proto_has_index(this_arg, i)) continue;
         tsc_value_t value = array_proto_get_index(this_arg, i);
         void* volatile value_gc_root = tsc_value_gc_root(value); (void)value_gc_root;
         if (tsc_value_is_truthy(array_proto_apply_callback(callback, callback_this, value, i, this_arg))) {
-            tsc_array_push_value(out, value);
+            tsc_array_output_append(&out, value);
         }
     }
-    return tsc_value_array(out);
+    return out.object;
 }
 
 static tsc_value_t array_prototype_some(void* env, tsc_value_t this_arg, tsc_array_t* args) {

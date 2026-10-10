@@ -234,6 +234,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Share Array species construction and actual result owners across prototype result-producing methods. Preserve ordered constructor/species/Realm selection, fresh indexed descriptors, final length failures and result aliases; replace private dense output builders and verify independent semantics plus imported module E2E in both memory modes.
+
 - Share generic Array receiver, length and ordered property operations across native, ordinary, Proxy and primitive owners. Use one actual List for insertion and concatenation, replace recursive flattening with a rooted worklist, admit arbitrary/readonly flat depth, and verify independent semantics plus imported module E2E in both memory modes.
 
 - For-in uses one retained prototype/key/descriptor worklist and shares ordinary iteration binding and completion owners across synchronous, async and generator entry.

@@ -1405,6 +1405,17 @@ int tsc_value_cmp(tsc_value_t a, tsc_value_t b);
 tsc_value_t tsc_value_method_char_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_char_code_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_code_point_at(tsc_value_t recv, tsc_value_t index);
+/* One rooted result owner serves Array species creation and indexed output. */
+typedef struct {
+    tsc_value_t object;
+    void* volatile object_gc_root;
+    size_t index;
+} tsc_array_output_t;
+tsc_array_output_t tsc_array_output_species(tsc_value_t original, size_t length);
+void tsc_array_output_create(tsc_array_output_t* output, size_t index, tsc_value_t value);
+void tsc_array_output_append(tsc_array_output_t* output, tsc_value_t value);
+void tsc_array_output_set_length(tsc_array_output_t* output, size_t length);
+
 tsc_value_t tsc_value_method_includes(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
 tsc_value_t tsc_value_method_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
 tsc_value_t tsc_value_method_last_index_of(tsc_value_t recv, tsc_value_t needle, tsc_value_t position);
@@ -1423,7 +1434,7 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn);
 tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv, tsc_value_t compare_fn);
 tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value_t value);
 tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, size_t argc, tsc_array_t* items);
-void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value);
+void tsc_value_array_flatten_value(tsc_array_output_t* out, tsc_value_t value);
 tsc_value_t tsc_value_method_reverse(tsc_value_t recv);
 tsc_value_t tsc_value_method_to_reversed(tsc_value_t recv);
 tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_value_t end);

@@ -7673,30 +7673,31 @@ static bool value_is_concat_spreadable(tsc_value_t value) {
     return tsc_value_is_array(value);
 }
 
-static void value_concat_push(tsc_array_t* out, tsc_value_t value) {
+static void value_concat_push(tsc_array_output_t* out, tsc_value_t value) {
     if (value_is_concat_spreadable(value)) {
         size_t len = (size_t)tsc_value_length_of_array_like(value);
-        if (len > UINT64_C(9007199254740991) - out->len)
+        if (len > UINT64_C(9007199254740991) - out->index)
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Concatenated array exceeds the integer limit"));
         for (size_t i = 0; i < len; i++) {
             tsc_str_t* key = tsc_str_from_int((int64_t)i);
             bool present = tsc_value_has_prop(value, key);
             tsc_value_t item = present ? tsc_value_get_index(value, (double)i) : tsc_value_undefined();
-            tsc_array_push_raw(out, &item);
-            if (!present) tsc_array_mark_hole(out, out->len - 1);
+            if (present) tsc_array_output_create(out, out->index, item);
+            ++out->index;
         }
         return;
     }
-    if (out->len >= UINT64_C(9007199254740991))
+    if (out->index >= UINT64_C(9007199254740991))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Concatenated array exceeds the integer limit"));
-    tsc_array_push_value(out, value);
+    tsc_array_output_append(out, value);
 }
 
 tsc_value_t tsc_value_method_concat_items(tsc_value_t recv, tsc_array_t* items) {
-    tsc_array_t* out = value_array_result_new(0);
-    value_concat_push(out, recv);
-    for (size_t i = 0; items && i < items->len; ++i) value_concat_push(out, TSC_ARR(tsc_value_t, items, i));
-    return tsc_value_array(out);
+    tsc_array_output_t out = tsc_array_output_species(recv, 0);
+    value_concat_push(&out, recv);
+    for (size_t i = 0; items && i < items->len; ++i) value_concat_push(&out, TSC_ARR(tsc_value_t, items, i));
+    tsc_array_output_set_length(&out, out.index);
+    return out.object;
 }
 
 typedef struct value_flat_frame {
@@ -7707,7 +7708,7 @@ typedef struct value_flat_frame {
     struct value_flat_frame* parent;
 } value_flat_frame_t;
 
-static void value_flatten_into(tsc_array_t* target, tsc_value_t source, size_t length, double depth) {
+static void value_flatten_into(tsc_array_output_t* target, tsc_value_t source, size_t length, double depth) {
     value_flat_frame_t* frame = TSC_GC_MALLOC(sizeof(*frame));
     *frame = (value_flat_frame_t){source, tsc_value_gc_root(source), 0, length, depth, NULL};
     while (frame) {
@@ -7723,9 +7724,9 @@ static void value_flatten_into(tsc_array_t* target, tsc_value_t source, size_t l
                 isinf(frame->depth) ? INFINITY : frame->depth - 1, frame};
             frame = nested;
         } else {
-            if ((double)target->len >= 9007199254740991.0)
+            if (target->index >= UINT64_C(9007199254740991))
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Flattened array exceeds the integer limit"));
-            tsc_array_push_value(target, value);
+            tsc_array_output_append(target, value);
         }
     }
 }
@@ -7734,9 +7735,9 @@ tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
     size_t len = tsc_value_length_of_array_like(recv);
     double actual_depth = tsc_value_is_undefined(depth) ? 1.0 : tsc_value_to_integer_or_infinity(depth);
     if (actual_depth < 0) actual_depth = 0;
-    tsc_array_t* out = value_array_result_new(0);
-    value_flatten_into(out, recv, len, actual_depth);
-    return tsc_value_array(out);
+    tsc_array_output_t out = tsc_array_output_species(recv, 0);
+    value_flatten_into(&out, recv, len, actual_depth);
+    return out.object;
 }
 
 tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, size_t argc, tsc_array_t* items) {
@@ -7758,13 +7759,12 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     if (insert_len > UINT64_C(9007199254740991) - (len - del))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array-like length exceeds the integer limit"));
     size_t new_len = len - del + insert_len;
-    tsc_array_t* removed = value_array_result_new(del);
-    for (size_t i = 0; i < del; i++) {
-        bool present = value_array_like_has_index(recv, at + i);
-        tsc_value_t value = present ? tsc_value_get_index(recv, (double)(at + i)) : tsc_value_undefined();
-        tsc_array_push_raw(removed, &value);
-        if (!present) tsc_array_mark_hole(removed, removed->len - 1);
+    tsc_array_output_t removed = tsc_array_output_species(recv, del);
+    for (size_t i = 0; i < del; ++i) {
+        if (value_array_like_has_index(recv, at + i))
+            tsc_array_output_create(&removed, i, tsc_value_get_index(recv, (double)(at + i)));
     }
+    tsc_array_output_set_length(&removed, del);
 
     if (insert_len < del) {
         size_t shift = del - insert_len;
@@ -7807,7 +7807,7 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)new_len))) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.prototype.splice could not update array-like length"));
     }
-    return tsc_value_array(removed);
+    return removed.object;
 }
 
 static void value_sort_validate_compare_fn(tsc_value_t compare_fn) {
@@ -7928,9 +7928,9 @@ tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc
     return tsc_value_array(out);
 }
 
-void tsc_value_array_push_flat(tsc_array_t* out, tsc_value_t value) {
+void tsc_value_array_flatten_value(tsc_array_output_t* out, tsc_value_t value) {
     if (tsc_value_is_array(value)) value_flatten_into(out, value, tsc_value_length_of_array_like(value), 0);
-    else tsc_array_push_value(out, value);
+    else tsc_array_output_append(out, value);
 }
 
 tsc_value_t tsc_value_method_fill(tsc_value_t recv, tsc_value_t value, tsc_value_t start, tsc_value_t end) {
@@ -7990,12 +7990,13 @@ tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_valu
     const size_t len = tsc_value_length_of_array_like(recv);
     const size_t from = value_array_forward_start(len, value_slice_arg(start, 0.0));
     const size_t to = value_array_forward_start(len, value_slice_arg(end, (double)len));
-    tsc_array_t* out = value_array_result_new(to > from ? to - from : 0);
+    const size_t count = to > from ? to - from : 0;
+    tsc_array_output_t out = tsc_array_output_species(recv, count);
     for (size_t i = from; i < to; ++i) {
-        if (value_array_like_has_index(recv, i)) tsc_array_push_value(out, tsc_value_get_index(recv, (double)i));
-        else { tsc_array_push_value(out, tsc_value_undefined()); tsc_array_mark_hole(out, out->len - 1); }
+        if (value_array_like_has_index(recv, i)) tsc_array_output_create(&out, i - from, tsc_value_get_index(recv, (double)i));
     }
-    return tsc_value_array(out);
+    tsc_array_output_set_length(&out, count);
+    return out.object;
 }
 
 tsc_value_t tsc_value_method_substring(tsc_value_t recv, tsc_value_t start, tsc_value_t end) {
