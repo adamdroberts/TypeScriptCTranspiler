@@ -35728,9 +35728,6 @@ class Emitter {
         if (this.ordinaryNativeGlobalConstructor(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         }
-        if (name === "btoa" || name === "atob") {
-            return this.emitBase64Call(call, name);
-        }
         if (name === "queueMicrotask") {
             return this.emitQueuedCallbackCall(call, "tsc_queue_microtask", false, true);
         }

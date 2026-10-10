@@ -2835,6 +2835,8 @@ typedef enum {
     TSC_GLOBAL_FUNCTION_ENCODE_URI_COMPONENT,
     TSC_GLOBAL_FUNCTION_DECODE_URI,
     TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT,
+    TSC_GLOBAL_FUNCTION_BTOA,
+    TSC_GLOBAL_FUNCTION_ATOB,
 } tsc_global_function_kind_t;
 
 typedef struct {
@@ -2842,11 +2844,13 @@ typedef struct {
     size_t name_length;
     double function_length;
     tsc_global_function_kind_t kind;
+    bool constructible, enumerable;
+    size_t required_arguments;
 } tsc_global_function_descriptor_t;
 
 static const tsc_global_function_descriptor_t global_function_descriptors[] = {
 #define TSC_GLOBAL_INTRINSIC(name, value)
-#define TSC_GLOBAL_FUNCTION(name, length, kind) { #name, sizeof(#name) - 1, length, kind },
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required) { #name, sizeof(#name) - 1, length, kind, constructible, enumerable, required },
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable)
 #include "tsc_global_bindings.def"
 #undef TSC_GLOBAL_INTRINSIC
@@ -2864,6 +2868,8 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
     (void)this_arg;
     const tsc_global_function_descriptor_t* descriptor =
         (const tsc_global_function_descriptor_t*)raw_descriptor;
+    if (descriptor->required_arguments && (!args || args->len < descriptor->required_arguments))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("The input argument must be specified"));
     tsc_value_t input = global_function_argument(args, 0);
     switch (descriptor->kind) {
         case TSC_GLOBAL_FUNCTION_PARSE_FLOAT:
@@ -2888,17 +2894,21 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
             return tsc_value_string(tsc_str_decode_uri(tsc_value_to_string(input)));
         case TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT:
             return tsc_value_string(tsc_str_decode_uri_component(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_BTOA:
+            return tsc_value_string(tsc_btoa(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_ATOB:
+            return tsc_value_string(tsc_atob(tsc_value_to_string(input)));
     }
     tsc_panic("unknown global function descriptor");
     return tsc_value_undefined();
 }
 
 static tsc_value_t global_function_intrinsic_value(const tsc_global_function_descriptor_t* descriptor) {
-    return tsc_value_function_builtin_named(
-        global_function_apply,
-        (void*)descriptor,
+    return tsc_value_function_named_kind(
+        global_function_apply, NULL, (void*)descriptor,
         descriptor->function_length,
-        tsc_str_from_lit(descriptor->name, descriptor->name_length)
+        tsc_str_from_lit(descriptor->name, descriptor->name_length),
+        descriptor->constructible ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_BUILTIN
     );
 }
 
@@ -2985,7 +2995,7 @@ tsc_value_t tsc_global_object(void) {
      * the global initializer free of nested runtime-lock acquisition. */
     tsc_global_intrinsic_t intrinsics[] = {
 #define TSC_GLOBAL_INTRINSIC(name, value) { #name, sizeof(#name) - 1, value },
-#define TSC_GLOBAL_FUNCTION(name, length, kind)
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable)
 #include "tsc_global_bindings.def"
 #undef TSC_GLOBAL_INTRINSIC
@@ -2995,7 +3005,7 @@ tsc_value_t tsc_global_object(void) {
     tsc_object_t* built = tsc_object_new();
     tsc_value_t built_value = tsc_value_object(built);
 #define TSC_GLOBAL_INTRINSIC(name, value)
-#define TSC_GLOBAL_FUNCTION(name, length, kind)
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable) \
     (void)tsc_object_define(built, tsc_str_from_lit(#name, sizeof(#name) - 1), \
         value, writable, false, configurable);
@@ -3019,7 +3029,7 @@ tsc_value_t tsc_global_object(void) {
             tsc_str_from_lit(descriptor->name, descriptor->name_length),
             global_function_intrinsic_value(descriptor),
             true,
-            false,
+            descriptor->enumerable,
             true
         );
     }

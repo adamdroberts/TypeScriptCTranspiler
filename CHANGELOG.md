@@ -302,6 +302,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Retained Realm owners for first-class host base64 functions, including actual global mutation and saved callees through suspension.
+
 - Retained Module Record evaluation with top-level await, iterative DFS/SCC scheduling, shared binding cells and dynamic import completion.
 
 - Resumed class declarations and expressions retain immutable inner names; continuation state retains all formal bound names, including patterns/rest, and anonymous defaults infer their binding names.

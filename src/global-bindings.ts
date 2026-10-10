@@ -8,6 +8,7 @@ export interface RuntimeGlobalBinding {
     kind: "intrinsic" | "function" | "value";
     writable: boolean;
     configurable: boolean;
+    enumerable: boolean;
 }
 
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
@@ -15,11 +16,15 @@ export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = 
         .matchAll(/^TSC_GLOBAL_(INTRINSIC|FUNCTION|VALUE)\((\w+), (.*)\)$/gm)]
         .map(([, kind, name, operands]) => {
             const attributes = operands!.match(/, (true|false), (true|false)$/);
+            const functionAttributes = kind === "FUNCTION"
+                ? operands!.match(/, (true|false), (true|false), \d+$/) : null;
             if (kind === "VALUE" && !attributes) throw new Error("invalid canonical Realm binding attributes");
+            if (kind === "FUNCTION" && !functionAttributes) throw new Error("invalid canonical Realm function attributes");
             return [name!, {
                 kind: kind!.toLowerCase() as RuntimeGlobalBinding["kind"],
                 writable: kind !== "VALUE" || attributes![1] === "true",
                 configurable: kind !== "VALUE" || attributes![2] === "true",
+                enumerable: functionAttributes?.[2] === "true",
             }] as const;
         }),
 );

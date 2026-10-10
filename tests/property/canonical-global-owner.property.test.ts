@@ -29,7 +29,7 @@ function subject(profile:boolean,noGc:boolean):string {
  const host=globalThis;const output=host.print,collectHook=${profile&&!noGc?'host.$262.gc':'undefined'};
  const define=Object.defineProperty,own=Object.getOwnPropertyDescriptor,same=Object.is,keys=Object.keys,apply=Reflect.apply,marker={token:83},symbol=Symbol('actual'),events:any[]=[];
  const entries:any[]=${JSON.stringify(entries)};
- for(const entry of entries){const descriptor=own(host,entry.name);check(!!descriptor&&descriptor.writable===entry.writable&&descriptor.configurable===entry.configurable&&!descriptor.enumerable,'canonical-global-descriptor-'+entry.name);}
+ for(const entry of entries){const descriptor=own(host,entry.name);check(!!descriptor&&descriptor.writable===entry.writable&&descriptor.configurable===entry.configurable&&descriptor.enumerable===entry.enumerable,'canonical-global-descriptor-'+entry.name);}
  ${accesses}
  let functionError:any;try{Function(symbol);}catch(error){functionError=error;}check(functionError instanceof TypeError,'intrinsic-function-converts-only-after-actual-callee');
  let calls=0;function increment():number{calls+=1;return calls;}check(increment()===1&&increment()===2&&calls===2,'shared-physical-reference-storage');
