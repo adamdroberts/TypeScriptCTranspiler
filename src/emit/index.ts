@@ -175,7 +175,7 @@ type WellKnownSymbolName = keyof typeof WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS;
 /** Source operators and their assignment aliases share one numeric kernel
  * selection. References own evaluation/storage; runtime ToNumeric owns values. */
 interface SourceNumericOperation {
-    form: "binary" | "prefix";
+    form: "binary" | "prefix" | "update";
     token: ts.SyntaxKind;
     assignment?: ts.SyntaxKind;
     kernel: string;
@@ -197,6 +197,8 @@ const SOURCE_NUMERIC_OPERATIONS: readonly SourceNumericOperation[] = [
     { form: "prefix", token: ts.SyntaxKind.PlusToken, kernel: "tsc_value_to_number", result: "number" },
     { form: "prefix", token: ts.SyntaxKind.MinusToken, kernel: "tsc_value_neg", result: "value" },
     { form: "prefix", token: ts.SyntaxKind.TildeToken, kernel: "tsc_value_bit_not", result: "value" },
+    { form: "update", token: ts.SyntaxKind.PlusPlusToken, kernel: "tsc_value_inc", result: "value" },
+    { form: "update", token: ts.SyntaxKind.MinusMinusToken, kernel: "tsc_value_dec", result: "value" },
 ];
 const SOURCE_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
     SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary")
@@ -209,6 +211,10 @@ const SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, stri
 );
 const SOURCE_PREFIX_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
     SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "prefix")
+        .map(operation => [operation.token, operation]),
+);
+const SOURCE_UPDATE_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
+    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "update")
         .map(operation => [operation.token, operation]),
 );
 
@@ -601,8 +607,8 @@ class Emitter {
         readonly constructorType?: string;
         readonly instanceType: string;
     }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor", instanceType:"Date"}], ["buffer", {instanceType:"Buffer"}]]);
-    private readonly ordinaryNativeOwnerResultFacts = new Map<ts.Node, boolean>();
-    private ordinaryNativeOwnerInputs: Map<ts.Node, Set<ts.Node>> | null = null;
+    private readonly canonicalSourceValueFacts = new Map<ts.Node, boolean>();
+    private canonicalSourceValueInputs: Map<ts.Node, Set<ts.Node>> | null = null;
     private ordinaryAggregateDepth = 0;
 
     public diagnostics: string[] = [];
@@ -1347,7 +1353,7 @@ class Emitter {
     ): boolean {
         // Ordinary calls and their inferred aliases have actual tagged results.
         // Reuse their graph fact before the older scalar purity predictors.
-        if (this.expressionHasOrdinaryNativeOwnerResult(expr)) return false;
+        if (this.expressionHasCanonicalSourceValue(expr)) return false;
         while (
             ts.isParenthesizedExpression(expr) ||
             ts.isAsExpression(expr) ||
@@ -12288,7 +12294,7 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): string | null {
-        if (this.expressionHasOrdinaryNativeOwnerResult(expr)) return null;
+        if (this.expressionHasCanonicalSourceValue(expr)) return null;
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
             if (new Set([
@@ -19304,7 +19310,7 @@ class Emitter {
     }
 
     private requireModuleMemberCName(access: CommonJsExportAccess): string | null {
-        if (this.expressionHasOrdinaryNativeOwnerResult(access.expression)) return null;
+        if (this.expressionHasCanonicalSourceValue(access.expression)) return null;
         const decl = this.requireModuleMemberDeclaration(access);
         const name = this.commonJsAccessMemberName(access);
         return decl && name ? this.commonJsExportedDeclarationCName(decl, name) : null;
@@ -19981,7 +19987,7 @@ class Emitter {
     }
 
     private moduleNamespaceMemberCName(access: CommonJsExportAccess): string | null {
-        if (this.expressionHasOrdinaryNativeOwnerResult(access.expression)) return null;
+        if (this.expressionHasCanonicalSourceValue(access.expression)) return null;
         if (
             ts.isIdentifier(access.expression) &&
             this.moduleNamespacePlanForIdentifier(access.expression)
@@ -20710,7 +20716,7 @@ class Emitter {
         // values; checker scalar types do not replace either cell value.
         if (symbol && (this.moduleVarBindings.has(symbol) || this.moduleLexicalBindings.has(symbol))) return null;
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-        if (declaration && this.expressionHasOrdinaryNativeOwnerResult(declaration)) return null;
+        if (declaration && this.expressionHasCanonicalSourceValue(declaration)) return null;
         const lexical = this.localLexicalMetadataForSymbol(this.symbolForIdentifier(id));
         if (lexical && ts.isVariableDeclaration(lexical.declaration) &&
             this.isIterationLexicalDeclaration(lexical.declaration)) {
@@ -21036,7 +21042,7 @@ class Emitter {
         base: CType,
     ): CType {
         if (this.isJavaScriptSourceFile(declaration.getSourceFile())) return T_VALUE;
-        if (this.expressionHasOrdinaryNativeOwnerResult(declaration)) return T_VALUE;
+        if (this.expressionHasCanonicalSourceValue(declaration)) return T_VALUE;
         if (this.isIterationDeclaration(declaration)) return T_VALUE;
         if (this.isDirectScopeLexicalDeclaration(declaration)) return T_VALUE;
         if (this.typeIncludesDirectSwitchClass(declaration)) {
@@ -21075,7 +21081,7 @@ class Emitter {
             const declaration = signature?.getDeclaration();
             if (declaration && ts.isFunctionLike(declaration) &&
                 "body" in declaration && declaration.body && signature?.getReturnType() === type &&
-                (hasCanonicalValueFormals(declaration) || this.expressionHasOrdinaryNativeOwnerResult(declaration))) {
+                (hasCanonicalValueFormals(declaration) || this.expressionHasCanonicalSourceValue(declaration))) {
                 return this.isAsyncDeclaration(declaration) && !this.isGeneratorDeclaration(declaration)
                     ? promiseType(T_VALUE) : T_VALUE;
             }
@@ -21101,13 +21107,13 @@ class Emitter {
         const formal = this.sourceFormalParameterForDeclaration(slot);
         if (formal && (ts.isParameter(slot) || ts.isBindingElement(slot) || ts.isIdentifier(slot)))
             return slot === formal && formal.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
-        if (ts.isParameter(slot) && this.expressionHasOrdinaryNativeOwnerResult(slot))
+        if (ts.isParameter(slot) && this.expressionHasCanonicalSourceValue(slot))
             return slot.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE;
         if (((ts.isVariableDeclaration(slot) || ts.isPropertyDeclaration(slot) || ts.isPropertySignature(slot) ||
-                ts.isPropertyAssignment(slot) || ts.isBindingElement(slot)) && this.expressionHasOrdinaryNativeOwnerResult(slot)) ||
+                ts.isPropertyAssignment(slot) || ts.isBindingElement(slot)) && this.expressionHasCanonicalSourceValue(slot)) ||
             ((ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) &&
-                this.expressionHasOrdinaryNativeOwnerResult(node)) ||
-            (ts.isAwaitExpression(node) && this.expressionHasOrdinaryNativeOwnerResult(node))) return T_VALUE;
+                this.expressionHasCanonicalSourceValue(node)) ||
+            (ts.isAwaitExpression(node) && this.expressionHasCanonicalSourceValue(node))) return T_VALUE;
         const callableOwner = type.getCallSignatures()[0]?.getDeclaration();
         if (callableOwner && ts.isFunctionLike(callableOwner) && "body" in callableOwner &&
             callableOwner.body && hasCanonicalValueFormals(callableOwner))
@@ -21118,9 +21124,9 @@ class Emitter {
     /** One source-tree pass supplies non-child edges to the same fact graph.
      * Alias owners share their write domain; actual argument Lists conservatively
      * supply every formal slot, including spreads and rest parameters. */
-    private ordinaryNativeSourceInputs(): Map<ts.Node, Set<ts.Node>> {
-        if (this.ordinaryNativeOwnerInputs) return this.ordinaryNativeOwnerInputs;
-        const inputs = this.ordinaryNativeOwnerInputs = new Map<ts.Node, Set<ts.Node>>();
+    private sourceValueInputs(): Map<ts.Node, Set<ts.Node>> {
+        if (this.canonicalSourceValueInputs) return this.canonicalSourceValueInputs;
+        const inputs = this.canonicalSourceValueInputs = new Map<ts.Node, Set<ts.Node>>();
         const declarationFor = (expression: ts.Expression): ts.Node | undefined => {
             const target = this.unwrapTransparentExpression(expression);
             let symbol = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
@@ -21199,7 +21205,13 @@ class Emitter {
                 if ((ts.isVariableDeclaration(owner) || ts.isParameter(owner)) && owner.initializer)
                     input(node, owner.initializer);
             }
-            if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) write(node.left, node.right);
+            if (ts.isBinaryExpression(node)) {
+                if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) write(node.left, node.right);
+                else if (SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) &&
+                    !SOURCE_BINARY_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind)) write(node.left, node);
+            }
+            if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+                SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) write(node.operand, node);
             if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
                 const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
                 if (declaration && !this.isAmbientDeclaration(declaration) && ts.isFunctionLike(declaration)) {
@@ -21229,9 +21241,9 @@ class Emitter {
         return inputs;
     }
 
-    private expressionHasOrdinaryNativeOwnerResult(expression: ts.Node): boolean {
-        const sourceInputs = this.ordinaryNativeSourceInputs();
-        const known = this.ordinaryNativeOwnerResultFacts.get(expression);
+    private expressionHasCanonicalSourceValue(expression: ts.Node): boolean {
+        const sourceInputs = this.sourceValueInputs();
+        const known = this.canonicalSourceValueFacts.get(expression);
         if (known !== undefined) return known;
         const pending: ts.Node[] = [expression];
         const seen = new Set<ts.Node>();
@@ -21245,7 +21257,7 @@ class Emitter {
             const node = pending.pop()!;
             if (seen.has(node)) continue;
             seen.add(node);
-            const cached = this.ordinaryNativeOwnerResultFacts.get(node);
+            const cached = this.canonicalSourceValueFacts.get(node);
             if (cached !== undefined) {
                 if (cached) admitPositive(node);
                 continue;
@@ -21258,6 +21270,13 @@ class Emitter {
                 else dependents.set(child, [node]);
                 pending.push(child);
             };
+            // Numeric results and PutValue share the actual value domain with
+            // their source owners. An annotation cannot convert an update's
+            // Number/BigInt result back to the predecessor storage type.
+            if (ts.isBinaryExpression(node) && SOURCE_NUMERIC_OPERATION_FUNCTIONS.has(node.operatorToken.kind) ||
+                ts.isPrefixUnaryExpression(node) && (SOURCE_PREFIX_NUMERIC_OPERATIONS.has(node.operator) ||
+                    SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) ||
+                ts.isPostfixUnaryExpression(node) && SOURCE_UPDATE_NUMERIC_OPERATIONS.has(node.operator)) admitPositive(node);
             // The semantic owner, rather than checker annotations or observed
             // calls, determines the value domain of ordinary member formals
             // and results. The existing dependency graph carries that ABI to
@@ -21354,7 +21373,7 @@ class Emitter {
         while (propagate.length > 0) {
             for (const parent of dependents.get(propagate.pop()!) ?? []) admitPositive(parent);
         }
-        for (const node of seen) this.ordinaryNativeOwnerResultFacts.set(node, positive.has(node));
+        for (const node of seen) this.canonicalSourceValueFacts.set(node, positive.has(node));
         return positive.has(expression);
     }
 
@@ -33287,9 +33306,7 @@ class Emitter {
         if (!reference) return null;
         const current = this.freshTemp("_global_update_current");
         const next = this.freshTemp("_global_update_next");
-        const operation = op === ts.SyntaxKind.PlusPlusToken
-            ? "tsc_value_inc"
-            : "tsc_value_dec";
+        const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
         return {
             c:
                 `({ tsc_value_t ${current} = tsc_value_to_numeric(${reference.get}); ` +
@@ -33335,7 +33352,7 @@ class Emitter {
         const current = this.emitExpr(local.id);
         const numeric = this.freshTemp("_local_lexical_update_numeric");
         const next = this.freshTemp("_local_lexical_update_next");
-        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
         const stored = this.coerce({ c: next, ty: T_VALUE }, local.reference.type, local.id);
         return {
             c: `({ tsc_value_t ${numeric} = tsc_value_to_numeric(` +
@@ -33419,7 +33436,7 @@ class Emitter {
         const current = this.emitExpr(local.id);
         const numeric = this.freshTemp("_module_lexical_update_numeric");
         const next = this.freshTemp("_module_lexical_update_next");
-        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
         return {
             c: `({ tsc_value_t ${numeric} = tsc_value_to_numeric(${current.c}); ` +
                 `tsc_value_t ${next} = ${operation}(${numeric}); ` +
@@ -33481,7 +33498,7 @@ class Emitter {
         ], ([value]) => {
             const numeric = this.freshTemp("_import_update_numeric");
             const next = this.freshTemp("_import_update_next");
-            const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+            const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
             return `({ tsc_value_t ${numeric} = tsc_value_to_numeric(${value}); ` +
                 `tsc_value_t ${next} = ${operation}(${numeric}); ` +
                 `${this.immutableImportWriteFailure(next)}; })`;
@@ -33552,71 +33569,49 @@ class Emitter {
 
     private emitPrefixUnary(pu: ts.PrefixUnaryExpression): EmitResult {
         const op = pu.operator;
-        if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken) {
-            const importUpdate = this.emitImmutableImportUpdate(pu.operand, op);
-            if (importUpdate) return importUpdate;
-            const localLexicalUpdate = this.emitLocalLexicalUpdate(pu.operand, op, true);
-            if (localLexicalUpdate) return localLexicalUpdate;
-            const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, op, true);
-            if (moduleLexicalUpdate) return moduleLexicalUpdate;
-            const globalUpdate = this.emitSourceReferenceUpdate(pu.operand, op, true);
-            if (globalUpdate) return globalUpdate;
-            const nativeUpdate = this.emitRootedNativeFieldUpdate(pu.operand, op, true);
-            if (nativeUpdate) return nativeUpdate;
-            const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, op, true);
-            if (dynamicUpdate) return dynamicUpdate;
-        }
-        if (op === ts.SyntaxKind.ExclamationToken) {
+        if (op === ts.SyntaxKind.PlusPlusToken || op === ts.SyntaxKind.MinusMinusToken)
+            return this.emitUpdateExpression(pu, op, true);
+        if (op === ts.SyntaxKind.ExclamationToken)
             return { c: `(!${this.emitBoolExpr(pu.operand)})`, ty: T_BOOLEAN };
-        }
         if (SOURCE_PREFIX_NUMERIC_OPERATIONS.has(op)) return this.emitNumericExpression(pu);
-        const inner = this.emitExpr(pu.operand);
-        switch (op) {
-            case ts.SyntaxKind.PlusPlusToken:
-                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const update = `${inner.c} = tsc_value_inc(${inner.c})`;
-                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
-                    return {
-                        c: refresh
-                            ? `({ ${update}; ${refresh}; ${inner.c}; })`
-                            : `(${update})`,
-                        ty: T_VALUE,
-                    };
-                }
-                if (inner.ty.kind === "bigint") {
-                    return { c: `(${inner.c} = tsc_bigint_add(${inner.c}, tsc_bigint_from_lit("1")))`, ty: T_BIGINT };
-                }
-                if (inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_inc", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `(++${inner.c})`, ty: T_NUMBER };
-            case ts.SyntaxKind.MinusMinusToken:
-                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const update = `${inner.c} = tsc_value_dec(${inner.c})`;
-                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
-                    return {
-                        c: refresh
-                            ? `({ ${update}; ${refresh}; ${inner.c}; })`
-                            : `(${update})`,
-                        ty: T_VALUE,
-                    };
-                }
-                if (inner.ty.kind === "bigint") {
-                    return { c: `(${inner.c} = tsc_bigint_sub(${inner.c}, tsc_bigint_from_lit("1")))`, ty: T_BIGINT };
-                }
-                if (inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_dec", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `(--${inner.c})`, ty: T_NUMBER };
-
-        }
         unsupported(pu, `prefix operator ${ts.SyntaxKind[op]}`);
+    }
+
+    private emitUpdateExpression(
+        expression: ts.PrefixUnaryExpression | ts.PostfixUnaryExpression,
+        op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
+        prefix: boolean,
+    ): EmitResult {
+        const operand = expression.operand;
+        const importUpdate = this.emitImmutableImportUpdate(operand, op);
+        if (importUpdate) return importUpdate;
+        const localUpdate = this.emitLocalLexicalUpdate(operand, op, prefix);
+        if (localUpdate) return localUpdate;
+        const moduleUpdate = this.emitModuleLexicalUpdate(operand, op, prefix);
+        if (moduleUpdate) return moduleUpdate;
+        const sourceUpdate = this.emitSourceReferenceUpdate(operand, op, prefix);
+        if (sourceUpdate) return sourceUpdate;
+        const nativeUpdate = this.emitRootedNativeFieldUpdate(operand, op, prefix);
+        if (nativeUpdate) return nativeUpdate;
+        const propertyUpdate = this.emitDynamicPropertyUpdate(operand, op, prefix);
+        if (propertyUpdate) return propertyUpdate;
+        const reference = this.emitExpr(operand);
+        if (!ts.isIdentifier(operand) || reference.ty.kind !== "value")
+            unsupported(expression, "update requires a canonical source Reference");
+        const current = this.freshTemp("_update_numeric");
+        const currentRoot = this.freshTemp("_update_numeric_root");
+        const next = this.freshTemp("_update_next");
+        const nextRoot = this.freshTemp("_update_next_root");
+        const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
+        const refresh = this.dynamicIdentifierRootRefresh(operand, reference.c);
+        return {
+            c: `({ tsc_value_t ${current} = tsc_value_to_numeric(${reference.c}); ` +
+                `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); (void)${currentRoot}; ` +
+                `tsc_value_t ${next} = ${operation}(${current}); ` +
+                `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot}; ` +
+                `${reference.c} = ${next}; ${refresh ? `${refresh}; ` : ""}${prefix ? next : current}; })`,
+            ty: T_VALUE,
+        };
     }
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
@@ -33679,70 +33674,7 @@ class Emitter {
     }
 
     private emitPostfixUnary(pu: ts.PostfixUnaryExpression): EmitResult {
-        if (pu.operator === ts.SyntaxKind.PlusPlusToken || pu.operator === ts.SyntaxKind.MinusMinusToken) {
-            const importUpdate = this.emitImmutableImportUpdate(pu.operand, pu.operator);
-            if (importUpdate) return importUpdate;
-            const localLexicalUpdate = this.emitLocalLexicalUpdate(pu.operand, pu.operator, false);
-            if (localLexicalUpdate) return localLexicalUpdate;
-            const moduleLexicalUpdate = this.emitModuleLexicalUpdate(pu.operand, pu.operator, false);
-            if (moduleLexicalUpdate) return moduleLexicalUpdate;
-            const globalUpdate = this.emitSourceReferenceUpdate(
-                pu.operand,
-                pu.operator,
-                false,
-            );
-            if (globalUpdate) return globalUpdate;
-            const nativeUpdate = this.emitRootedNativeFieldUpdate(pu.operand, pu.operator, false);
-            if (nativeUpdate) return nativeUpdate;
-            const dynamicUpdate = this.emitDynamicPropertyUpdate(pu.operand, pu.operator, false);
-            if (dynamicUpdate) return dynamicUpdate;
-        }
-        const inner = this.emitExpr(pu.operand);
-        switch (pu.operator) {
-            case ts.SyntaxKind.PlusPlusToken: {
-                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const tmp = this.freshTemp("_post");
-                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
-                    return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_to_numeric(${inner.c}); ${inner.c} = tsc_value_inc(${tmp}); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
-                        ty: T_VALUE,
-                    };
-                }
-                if (inner.ty.kind === "bigint") {
-                    const tmp = this.freshTemp("_post_bigint");
-                    return { c: `({ tsc_bigint_t* ${tmp} = ${inner.c}; ${inner.c} = tsc_bigint_add(${tmp}, tsc_bigint_from_lit("1")); ${tmp}; })`, ty: T_BIGINT };
-                }
-                if (inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_inc", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `(${inner.c}++)`, ty: T_NUMBER };
-            }
-            case ts.SyntaxKind.MinusMinusToken: {
-                if (inner.ty.kind === "value" && ts.isIdentifier(pu.operand)) {
-                    const tmp = this.freshTemp("_post");
-                    const refresh = this.dynamicIdentifierRootRefresh(pu.operand, inner.c);
-                    return {
-                        c: `({ tsc_value_t ${tmp} = tsc_value_to_numeric(${inner.c}); ${inner.c} = tsc_value_dec(${tmp}); ${refresh ? `${refresh}; ` : ""}${tmp}; })`,
-                        ty: T_VALUE,
-                    };
-                }
-                if (inner.ty.kind === "bigint") {
-                    const tmp = this.freshTemp("_post_bigint");
-                    return { c: `({ tsc_bigint_t* ${tmp} = ${inner.c}; ${inner.c} = tsc_bigint_sub(${tmp}, tsc_bigint_from_lit("1")); ${tmp}; })`, ty: T_BIGINT };
-                }
-                if (inner.ty.kind === "symbol") {
-                    return this.emitSequencedCall("tsc_value_dec", T_VALUE, [
-                        { value: inner, target: T_VALUE, node: pu.operand },
-                    ]);
-                }
-                requireNumber(pu, inner.ty);
-                return { c: `(${inner.c}--)`, ty: T_NUMBER };
-            }
-        }
-        unsupported(pu, `postfix operator ${ts.SyntaxKind[pu.operator]}`);
+        return this.emitUpdateExpression(pu, pu.operator, false);
     }
 
     private emitDynamicPropertyUpdate(
@@ -33769,7 +33701,7 @@ class Emitter {
             const name = this.freshTemp("_reference_name"), nameRoot = this.freshTemp("_reference_name_root");
             const current = this.freshTemp("_reference_numeric"), currentRoot = this.freshTemp("_reference_numeric_root");
             const next = this.freshTemp("_reference_next"), nextRoot = this.freshTemp("_reference_next_root");
-            const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+            const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
             const write = this.emitPropertyWriteStatement(`tsc_value_set_computed_prop(${base}, ${name}, ${next})`, operand,
                 !!this.moduleNamespacePlanForExpression(recvExpr));
             return `({ tsc_value_t ${name} = tsc_value_prepare_property_reference(${base}, ${rawName}); ` +
@@ -34140,7 +34072,7 @@ class Emitter {
     private emitRootedNativeFieldUpdate(operand: ts.Expression, op: ts.SyntaxKind, prefix: boolean): EmitResult | null {
         const reference = this.rootedNativeFieldReference(operand);
         if (!reference) return null;
-        const operation = op === ts.SyntaxKind.PlusPlusToken ? "tsc_value_inc" : "tsc_value_dec";
+        const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
         const result = this.emitSequencedExpr(T_VALUE, [
             { value: { c: `tsc_value_to_numeric(${reference.get})`, ty: T_VALUE }, node: operand },
         ], ([current]) => prefix ? reference.set(`${operation}(${current})`)
@@ -37269,7 +37201,7 @@ class Emitter {
     ): EmitResult {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
-        if (this.expressionHasOrdinaryNativeOwnerResult(recvExpr))
+        if (this.expressionHasCanonicalSourceValue(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (ts.isIdentifier(recvExpr) && this.isRuntimeGlobalReference(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
@@ -47669,7 +47601,7 @@ class Emitter {
     }
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
-        if (this.expressionHasOrdinaryNativeOwnerResult(pa.expression) || ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
+        if (this.expressionHasCanonicalSourceValue(pa.expression) || ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
             const receiver = precomputedReceiver ?? this.emitExpr(pa.expression);
             return this.emitSequencedExpr(T_VALUE, [{value: receiver, target: T_VALUE, node: pa.expression}],
                 ([value]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${value}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
@@ -48143,7 +48075,7 @@ class Emitter {
             };
             // Inferred JavaScript property types are not a storage guarantee:
             // mutable properties such as lastIndex may hold arbitrary values.
-            if (this.isJavaScriptSourceFile(pa.getSourceFile()) || this.expressionHasOrdinaryNativeOwnerResult(pa)) return value;
+            if (this.isJavaScriptSourceFile(pa.getSourceFile()) || this.expressionHasCanonicalSourceValue(pa)) return value;
             const propertyType = this.checker.getTypeAtLocation(pa);
             if (propertyType.isUnion() && propertyType.types.some(part =>
                 !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))

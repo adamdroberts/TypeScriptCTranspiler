@@ -1824,7 +1824,7 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#expressionHasOrdinaryNativeOwnerResult",
+      "id": "src/emit/index.ts#expressionHasCanonicalSourceValue",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
       ]
