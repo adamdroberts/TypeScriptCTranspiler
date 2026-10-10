@@ -150,7 +150,7 @@ const ORDINARY_VALUE_PROTOTYPE_METHODS = new Set([
 
 // These ordinary global owners share Realm References, member calls and the
 // canonical source-value dependency graph independently of method signatures.
-const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt"]);
+const ORDINARY_REALM_GLOBAL_OWNERS = new Set(["Object", "Reflect", "Math", "BigInt", "Number", "String", "Boolean"]);
 const ORDINARY_OBJECT_PROTOTYPE_METHODS = new Set([
     "hasOwnProperty", "propertyIsEnumerable", "isPrototypeOf", "__defineGetter__", "__defineSetter__",
     "__lookupGetter__", "__lookupSetter__",
@@ -1470,7 +1470,7 @@ class Emitter {
             if (this.isSideEffectFreeWellKnownSymbolRead(expr)) {
                 return true;
             }
-            if (this.isSideEffectFreeStaticNumericPropertyRead(expr)) {
+            if (false) {
                 return true;
             }
             if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
@@ -1635,7 +1635,7 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -1794,7 +1794,7 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -2021,8 +2021,8 @@ class Emitter {
         }
         // Array constructor methods are mutable ordinary properties.
         if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Array")) return false;
-        // Every Number static call observes a mutable ordinary property.
-        if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Number")) return false;
+        // Ordinary Realm owners expose mutable properties and global bindings.
+        if (ts.isIdentifier(recv) && ORDINARY_REALM_GLOBAL_OWNERS.has(recv.text) && this.isUnshadowedGlobalIdentifier(recv, recv.text)) return false;
         // Date statics are mutable ordinary methods, including unused calls.
         if (ts.isIdentifier(recv) && this.isUnshadowedGlobalIdentifier(recv, "Date")) return false;
         if (
@@ -3975,17 +3975,6 @@ class Emitter {
                     }
                 }
             }
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "Number" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Number") &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            return unwrapped.arguments.length === 0
-                ? 0
-                : this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
         }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
@@ -6538,7 +6527,7 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -6631,7 +6620,7 @@ class Emitter {
         if (this.isSideEffectFreeUriStringCall(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeStringStaticStringCall(unwrapped, seenConsts)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeCallableGlobalStringCall(unwrapped, seenConsts)) {
@@ -6695,10 +6684,6 @@ class Emitter {
         if (name === "Array") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 this.isSideEffectFreeArrayConstructorArgs(call.arguments, seenConsts);
-        }
-        if (name === "String" || name === "Number" || name === "Boolean") {
-            return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                this.isSideEffectFreePrimitiveCallableConstructorArgs(call.arguments, seenConsts);
         }
         const osExport = this.namedImportExportName(callee, ["os", "node:os"]);
         if (osExport !== null) {
@@ -6885,29 +6870,6 @@ class Emitter {
             if (name === "FinalizationRegistry") {
                 return args.length === 1 &&
                     this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts);
-            }
-            if (name === "String") {
-                return args.length === 0 ||
-                    (
-                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                        Array.from(args).slice(1).every((arg) =>
-                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                        )
-                    );
-            }
-            if (name === "Number") {
-                return args.length === 0 ||
-                    (
-                        this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
-                        Array.from(args).slice(1).every((arg) =>
-                            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                        )
-                    );
-            }
-            if (name === "Boolean") {
-                return Array.from(args).every((arg) =>
-                    this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-                );
             }
             return false;
         }
@@ -8091,7 +8053,7 @@ class Emitter {
         if (this.isSideEffectFreeWellKnownSymbolRead(unwrapped)) {
             return true;
         }
-        if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeProcessPrimitiveMetadataRead(unwrapped)) {
@@ -8155,9 +8117,6 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             (
-                unwrapped.expression.text === "String" ||
-                unwrapped.expression.text === "Number" ||
-                unwrapped.expression.text === "Boolean" ||
                 unwrapped.expression.text === "Symbol" ||
                 unwrapped.expression.text === "Date" ||
                 unwrapped.expression.text === "parseInt" ||
@@ -9183,7 +9142,7 @@ class Emitter {
         ) {
             return true;
         }
-        if (this.isSideEffectFreeStaticNumericPropertyRead(unwrapped)) {
+        if (false) {
             return true;
         }
         if (this.isSideEffectFreeBuiltinModuleConstantRead(unwrapped)) {
@@ -11372,28 +11331,6 @@ class Emitter {
         return this.wellKnownSymbolName(expr) !== null;
     }
 
-    private isSideEffectFreeStaticNumericPropertyRead(expr: ts.Expression): boolean {
-        if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
-        const recv = expr.expression;
-        const name = expr.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "Number")) {
-            switch (name) {
-                case "EPSILON":
-                case "MAX_SAFE_INTEGER":
-                case "MAX_VALUE":
-                case "MIN_SAFE_INTEGER":
-                case "MIN_VALUE":
-                case "NaN":
-                case "NEGATIVE_INFINITY":
-                case "POSITIVE_INFINITY":
-                    return true;
-                default:
-                    return false;
-            }
-        }
-        return false;
-    }
-
     private isSideEffectFreeProcessPrimitiveMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
         if (!this.isUnshadowedGlobalIdentifier(expr.expression, "process")) return false;
@@ -11983,17 +11920,6 @@ class Emitter {
         );
     }
 
-    private isSideEffectFreePrimitiveCallableConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length === 0) return true;
-        return this.isSideEffectFreePrimitiveNumberCoercion(args[0]!, seenConsts) &&
-            Array.from(args).slice(1).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-    }
-
     private isSideEffectFreeUriStringCoercion(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -12254,32 +12180,6 @@ class Emitter {
             );
     }
 
-    private isSideEffectFreeStringStaticStringCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-            return !!init && this.isSideEffectFreeStringStaticStringCall(init, seenConsts);
-        }
-        const recv = unwrapped.expression.expression;
-        const method = unwrapped.expression.name.text;
-        const stringStatic =
-            ts.isIdentifier(recv) &&
-            (
-                (
-                    this.isUnshadowedGlobalIdentifier(recv, "String") &&
-                    (method === "fromCharCode" || method === "fromCodePoint")
-                ) ||
-                (
-                    this.isUnshadowedGlobalIdentifier(recv, "RegExp") &&
-                    method === "escape"
-                )
-            );
-        return stringStatic && this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
-    }
-
     private isSideEffectFreeCallableGlobalStringCall(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -12289,7 +12189,6 @@ class Emitter {
             ts.isCallExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
             (
-                unwrapped.expression.text === "String" ||
                 unwrapped.expression.text === "Date"
             )
         ) {
@@ -12306,17 +12205,6 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
             return unwrapped.text;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "String" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "String") &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            return unwrapped.arguments.length === 0
-                ? ""
-                : this.sideEffectFreeTemplateSubstitutionText(unwrapped.arguments[0]!, seenConsts);
         }
         if (
             ts.isCallExpression(unwrapped) &&
@@ -12346,8 +12234,6 @@ class Emitter {
                 }
             }
         }
-        const staticStringCallText = this.sideEffectFreeStringStaticCallText(unwrapped, seenConsts);
-        if (staticStringCallText !== null) return staticStringCallText;
         const instanceStringCallText = this.sideEffectFreeStringInstanceCallText(unwrapped, seenConsts);
         if (instanceStringCallText !== null) return instanceStringCallText;
         const elementStringText = this.sideEffectFreeStringElementAccessText(unwrapped, seenConsts);
@@ -12406,48 +12292,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreeStringLiteralText(init, seenConsts) : null;
-    }
-
-    private sideEffectFreeStringStaticCallText(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): string | null {
-        if (
-            !ts.isCallExpression(expr) ||
-            !ts.isPropertyAccessExpression(expr.expression) ||
-            !ts.isIdentifier(expr.expression.expression)
-        ) {
-            return null;
-        }
-        const recv = expr.expression.expression;
-        const method = expr.expression.name.text;
-        if (this.isUnshadowedGlobalIdentifier(recv, "String")) {
-            if (method !== "fromCharCode" && method !== "fromCodePoint") return null;
-            const values: number[] = [];
-            for (const arg of expr.arguments) {
-                const value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
-                if (value === null) return null;
-                values.push(value);
-            }
-            if (method === "fromCodePoint") {
-                if (!values.every((value) => Number.isInteger(value) && value >= 0 && value <= 0x10ffff)) {
-                    return null;
-                }
-                return String.fromCodePoint(...values);
-            }
-            return String.fromCharCode(...values.map((value) => {
-                if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
-                const truncated = Math.trunc(value);
-                return ((truncated % 0x10000) + 0x10000) % 0x10000;
-            }));
-        }
-        if (this.isUnshadowedGlobalIdentifier(recv, "RegExp")) {
-            if (method !== "escape" || expr.arguments.length < 1) return null;
-            if (!this.callIgnoredArgumentsAreSideEffectFree(expr.arguments, 1, seenConsts)) return null;
-            const text = this.sideEffectFreeStringLiteralText(expr.arguments[0]!, seenConsts);
-            return text === null ? null : escapeRegExpString(text);
-        }
-        return null;
     }
 
     private sideEffectFreeStringInstanceCallText(
@@ -12764,9 +12608,9 @@ class Emitter {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isIdentifier(unwrapped) && this.isUnshadowedGlobalIdentifier(unwrapped, unwrapped.text)) {
             if (new Set([
-                "Array", "Boolean", "Error", "EvalError", "Function",
-                "Number", "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
-                "RegExp", "String", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
+                "Array", "Error", "EvalError", "Function",
+                "Object", "Promise", "Proxy", "RangeError", "ReferenceError",
+                "RegExp", "SuppressedError", "Symbol", "SyntaxError", "TypeError",
                 "URIError",
             ]).has(unwrapped.text)) {
                 return "function";
@@ -12874,17 +12718,6 @@ class Emitter {
                 seenConsts,
             );
             if (arrayLength !== null) return arrayLength;
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "Number" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Number") &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            return unwrapped.arguments.length === 0
-                ? 0
-                : this.sideEffectFreePrimitiveNumberValue(unwrapped.arguments[0]!, seenConsts);
         }
         switch (unwrapped.kind) {
             case ts.SyntaxKind.TrueKeyword:
@@ -31980,14 +31813,6 @@ class Emitter {
         const stringText = this.sideEffectFreeStringLiteralText(unwrapped, seenConsts);
         if (stringText !== null) return stringText.length > 0;
         if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "Boolean" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Boolean")
-        ) {
-            return this.sideEffectFreePrimitiveBooleanValue(unwrapped, seenConsts);
-        }
-        if (
             ts.isRegularExpressionLiteral(unwrapped) ||
             ts.isArrowFunction(unwrapped) ||
             ts.isFunctionExpression(unwrapped)
@@ -32220,16 +32045,6 @@ class Emitter {
             ) {
                 return false;
             }
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "Boolean" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Boolean") &&
-            this.callIgnoredArgumentsAreSideEffectFree(unwrapped.arguments, 1, seenConsts)
-        ) {
-            if (unwrapped.arguments.length === 0) return false;
-            return this.staticBooleanValue(unwrapped.arguments[0]!, seenConsts);
         }
         if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
         if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
@@ -33566,18 +33381,9 @@ class Emitter {
             if (this.isUnshadowedGlobalIdentifier(expr, "Function")) {
                 return { c: "tsc_function_constructor_value()", ty: T_VALUE };
             }
-            if (this.isUnshadowedGlobalIdentifier(expr, "String")) {
-                return { c: "tsc_string_constructor_value()", ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Number")) {
-                return { c: "tsc_number_constructor_value()", ty: T_VALUE };
-            }
             if ((expr.text === "parseInt" || expr.text === "parseFloat") &&
                 this.isUnshadowedGlobalIdentifier(expr, expr.text)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
-            }
-            if (this.isUnshadowedGlobalIdentifier(expr, "Boolean")) {
-                return { c: "tsc_boolean_constructor_value()", ty: T_VALUE };
             }
             if (this.isUnshadowedGlobalIdentifier(expr, "Symbol")) {
                 return { c: "tsc_symbol_constructor_value()", ty: T_VALUE };
@@ -36576,15 +36382,6 @@ class Emitter {
         if (name === "parseInt" || name === "parseFloat") {
             return this.emitParseNumber(call, name);
         }
-        if (name === "Boolean") {
-            return this.emitBooleanConstructor(call);
-        }
-        if (name === "String") {
-            return this.emitStringConstructor(call);
-        }
-        if (name === "Number") {
-            return this.emitNumberConstructor(call);
-        }
         if (name === "Array") {
             return this.emitDynamicValueCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
@@ -37089,14 +36886,7 @@ class Emitter {
                     ? expression.expression
                     : undefined;
                 const method = ts.isPropertyAccessExpression(expression) ? expression.name.text : "";
-                const isNumberPredicate =
-                    new Set(["isFinite", "isInteger", "isNaN", "isSafeInteger"]).has(method) &&
-                    node.arguments.length === 1;
-                const isNumberParser =
-                    (method === "parseInt" || method === "parseFloat") &&
-                    node.arguments.length >= 1 && node.arguments.length <= 2;
                 const isDateStaticCall = new Set(["now", "parse", "UTC"]).has(method);
-                const isStringStaticCall = method === "fromCharCode" || method === "fromCodePoint";
                 const isArrayStaticCall =
                     (method === "isArray" && node.arguments.length === 1) ||
                     method === "of" ||
@@ -37128,11 +36918,6 @@ class Emitter {
                     new Set(["encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent", "btoa", "atob"]).has(expression.text) &&
                     this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
                     node.arguments.length === 1;
-                const isGlobalPrimitiveCoercionCall =
-                    ts.isIdentifier(expression) &&
-                    new Set(["String", "Number", "Boolean"]).has(expression.text) &&
-                    this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
-                    node.arguments.length <= 1;
                 const isGlobalNumericCall =
                     ts.isIdentifier(expression) &&
                     this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
@@ -37140,12 +36925,11 @@ class Emitter {
                         node.arguments.length >= 1 && node.arguments.length <= 2) ||
                         ((expression.text === "isFinite" || expression.text === "isNaN") &&
                             node.arguments.length === 1));
-                const isPureBuiltinCall = isGlobalStringCall || isGlobalPrimitiveCoercionCall || isGlobalNumericCall || (
+                const isPureBuiltinCall = isGlobalStringCall || isGlobalNumericCall || (
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
-                    ((receiver.text === "Number" && (isNumberPredicate || isNumberParser)) ||
+                    (
                         (receiver.text === "Date" && isDateStaticCall) ||
-                        (receiver.text === "String" && isStringStaticCall) ||
                         (receiver.text === "Array" && isArrayStaticCall) ||
                         (receiver.text === "Object" && isObjectStaticCall) ||
                         (receiver.text === "RegExp" && isRegExpStaticCall) ||
@@ -44215,28 +43999,6 @@ class Emitter {
         unsupported(call, `Number method .${method}`);
     }
 
-    private emitNumberConstructor(call: ts.CallExpression): EmitResult {
-        const arg = call.arguments[0];
-        if (!arg) return { c: "0.0", ty: T_NUMBER };
-        const r = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        if (r.ty.kind === "number") {
-            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], ([value]) => value);
-        }
-        if (r.ty.kind === "boolean") {
-            return this.emitSequencedExpr(T_NUMBER, [{ value: r }, ...ignored], ([value]) => `((${value}) ? 1.0 : 0.0)`);
-        }
-        if (r.ty.kind === "void" || r.ty.kind === "never") {
-            const value = arg.kind === ts.SyntaxKind.NullKeyword ? "0.0" : "NAN";
-            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
-            return this.emitSequencedExpr(T_NUMBER, [{ value: first }, ...ignored], () => value);
-        }
-        return this.emitSequencedExpr(T_NUMBER, [
-            { value: r, target: T_VALUE, node: arg },
-            ...ignored,
-        ], ([v]) => `tsc_value_number_constructor(${v})`);
-    }
-
     private emitGlobalNumberPredicate(call: ts.CallExpression, name: "isNaN" | "isFinite"): EmitResult {
         const arg = call.arguments[0]!;
         const value = this.emitExpr(arg);
@@ -44307,37 +44069,6 @@ class Emitter {
                 );
         }
         unsupported(call, `Boolean method .${method}`);
-    }
-
-    private emitBooleanConstructor(call: ts.CallExpression): EmitResult {
-        const arg = call.arguments[0];
-        if (!arg) return { c: "false", ty: T_BOOLEAN };
-        const r = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        if (r.ty.kind === "void" || r.ty.kind === "never") {
-            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
-            return this.emitSequencedExpr(T_BOOLEAN, [{ value: first }, ...ignored], () => "false");
-        }
-        return this.emitSequencedExpr(T_BOOLEAN, [{ value: r }, ...ignored], ([value]) =>
-            this.truthyC({ c: value, ty: r.ty }, arg),
-        );
-    }
-
-    private emitStringConstructor(call: ts.CallExpression): EmitResult {
-        const arg = call.arguments[0];
-        if (!arg) return { c: `tsc_str_from_lit("", 0)`, ty: T_STRING };
-        const r = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        if (r.ty.kind === "void" || r.ty.kind === "never") {
-            const text = arg.kind === ts.SyntaxKind.NullKeyword ? "null" : "undefined";
-            const first = { c: `({ (void)(${r.c}); false; })`, ty: T_BOOLEAN };
-            return this.emitSequencedExpr(T_STRING, [{ value: first }, ...ignored], () => this.stringLit(text));
-        }
-        return this.emitSequencedExpr(T_STRING, [{ value: r }, ...ignored], ([value]) =>
-            r.ty.kind === "value"
-                ? `tsc_value_to_explicit_string(${value})`
-                : this.coerceToString({ c: value, ty: r.ty }, arg),
-        );
     }
 
     private emitSymbolConstructor(call: ts.CallExpression): EmitResult {
@@ -49050,14 +48781,6 @@ class Emitter {
         }
         if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
-        }
-        const primitiveConstructor =
-            this.isUnshadowedGlobalIdentifier(ctorExpr, "String") ? "tsc_string_constructor_value()" :
-            this.isUnshadowedGlobalIdentifier(ctorExpr, "Number") ? "tsc_number_constructor_value()" :
-            this.isUnshadowedGlobalIdentifier(ctorExpr, "Boolean") ? "tsc_boolean_constructor_value()" :
-            undefined;
-        if (primitiveConstructor) {
-            return this.emitDynamicValueConstruct(n, { c: primitiveConstructor, ty: T_VALUE });
         }
         if (this.isUnshadowedGlobalIdentifier(ctorExpr, "Function")) {
             return this.emitDynamicValueConstruct(n, {

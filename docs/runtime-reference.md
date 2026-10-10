@@ -1,3 +1,5 @@
+Source Number/String/Boolean construction obtains the actual Realm binding and retains its callee and argument List. The shared primitive descriptor defers receiver allocation: conversion completes before newTarget.prototype lookup. One wrapper initializer is shared with Object boxing; String's raw Symbol exception applies only to calls, and its constructed exotic indices/length come from the canonical UTF-16 code-unit collection.
+
 # Runtime reference
 
 The `tsc_*` C runtime — everything in `runtime/tsc_runtime.h` and `runtime/tsc_runtime.c` — linked into every produced binary.

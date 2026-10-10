@@ -962,14 +962,15 @@ typedef struct {
     tsc_object_t* prototype;
     tsc_value_t constructor;
     bool constructor_initialized;
+    tsc_intrinsic_default_prototype_kind_t default_prototype;
 } tsc_primitive_descriptor_t;
 
 static const tsc_primitive_descriptor_t primitive_descriptor_templates[] = {
-    { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false },
-    { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false },
-    { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false },
-    { TSC_PRIMITIVE_BIGINT, "BigInt", 6, NULL, 0, false },
-    { TSC_PRIMITIVE_SYMBOL, "Symbol", 6, NULL, 0, false },
+    { TSC_PRIMITIVE_BOOLEAN, "Boolean", 7, NULL, 0, false, TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE },
+    { TSC_PRIMITIVE_NUMBER, "Number", 6, NULL, 0, false, TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE },
+    { TSC_PRIMITIVE_STRING, "String", 6, NULL, 0, false, TSC_INTRINSIC_DEFAULT_STRING_PROTOTYPE },
+    { TSC_PRIMITIVE_BIGINT, "BigInt", 6, NULL, 0, false, TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE },
+    { TSC_PRIMITIVE_SYMBOL, "Symbol", 6, NULL, 0, false, TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE },
 };
 
 typedef struct {
@@ -1052,7 +1053,8 @@ static tsc_value_t primitive_default(const tsc_primitive_descriptor_t* descripto
 
 static tsc_value_t primitive_convert(
     const tsc_primitive_descriptor_t* descriptor,
-    tsc_array_t* args
+    tsc_array_t* args,
+    bool constructing
 ) {
     if (!args || args->len == 0) return primitive_default(descriptor);
     tsc_value_t input = TSC_ARR(tsc_value_t, args, 0);
@@ -1063,7 +1065,7 @@ static tsc_value_t primitive_convert(
         return tsc_value_num(tsc_value_number_constructor(input));
     }
     if (descriptor->kind == TSC_PRIMITIVE_STRING) {
-        if (value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_SYMBOL) {
+        if (!constructing && value_is_box(input) && value_tag(input) == TSC_VALUE_TAG_SYMBOL) {
             return tsc_value_string(tsc_symbol_to_string((const tsc_symbol_t*)value_ptr(input)));
         }
         return tsc_value_string(tsc_value_to_string(input));
@@ -1076,18 +1078,18 @@ static tsc_value_t primitive_convert(
 
 static tsc_value_t primitive_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    return primitive_convert((const tsc_primitive_descriptor_t*)env, args);
+    return primitive_convert((const tsc_primitive_descriptor_t*)env, args, false);
 }
 
-static tsc_value_t primitive_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args) {
-    const tsc_primitive_descriptor_t* descriptor = (const tsc_primitive_descriptor_t*)env;
+static tsc_value_t primitive_initialize_wrapper(const tsc_primitive_descriptor_t* descriptor,
+    tsc_value_t receiver, tsc_value_t primitive) {
     if (!value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT) {
-        tsc_throw_str(tsc_str_from_cstr("primitive constructor receiver is not an object"));
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("primitive wrapper receiver is not an object"));
     }
     tsc_object_t* object = (tsc_object_t*)value_ptr(receiver);
     object->has_primitive_value = true;
     object->primitive_kind = (uint8_t)descriptor->kind;
-    object->primitive_value = primitive_convert(descriptor, args);
+    object->primitive_value = primitive;
     object->primitive_value_root = tsc_value_gc_root(object->primitive_value);
     if (descriptor->kind == TSC_PRIMITIVE_STRING) {
         const tsc_str_t* string = (const tsc_str_t*)value_ptr(object->primitive_value);
@@ -1112,6 +1114,20 @@ static tsc_value_t primitive_constructor_construct(void* env, tsc_value_t receiv
         );
     }
     return receiver;
+}
+
+static tsc_value_t primitive_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    const tsc_primitive_descriptor_t* descriptor = env;
+    tsc_value_t primitive = primitive_convert(descriptor, args, true);
+    void* volatile primitive_root = tsc_value_gc_root(primitive);
+    (void)primitive_root;
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(
+        tsc_value_current_new_target(), descriptor->default_prototype);
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
+    (void)prototype_root;
+    tsc_value_t wrapper = tsc_value_object(tsc_object_new_with_prototype(prototype));
+    return primitive_initialize_wrapper(descriptor, wrapper, primitive);
 }
 
 static tsc_value_t primitive_prototype_value_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -2076,23 +2092,8 @@ static tsc_value_t primitive_constructor_value(tsc_primitive_descriptor_t* descr
     void* volatile constructor_gc_root = tsc_value_gc_root(constructor);
     (void)constructor_gc_root;
     tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
-    switch (descriptor->kind) {
-        case TSC_PRIMITIVE_BOOLEAN:
-            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_BOOLEAN_PROTOTYPE;
-            break;
-        case TSC_PRIMITIVE_NUMBER:
-            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_NUMBER_PROTOTYPE;
-            break;
-        case TSC_PRIMITIVE_STRING:
-            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_STRING_PROTOTYPE;
-            break;
-        case TSC_PRIMITIVE_BIGINT:
-            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE;
-            break;
-        case TSC_PRIMITIVE_SYMBOL:
-            identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE;
-            break;
-    }
+    identity->construct_allocates_receiver = false;
+    identity->construct_default_prototype = descriptor->default_prototype;
     if (!identity->func_prototype_initialized) {
         tsc_function_identity_set_own_prototype(identity, primitive_prototype(descriptor));
         identity->func_prototype_writable = false;
@@ -2315,9 +2316,7 @@ static tsc_value_t object_constructor_box_primitive(
         receiver,
         primitive_prototype((tsc_primitive_descriptor_t*)descriptor)
     );
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_array_push_value(args, value);
-    return primitive_constructor_construct((void*)descriptor, receiver, args);
+    return primitive_initialize_wrapper(descriptor, receiver, value);
 }
 
 tsc_value_t tsc_value_to_object(tsc_value_t value) {
