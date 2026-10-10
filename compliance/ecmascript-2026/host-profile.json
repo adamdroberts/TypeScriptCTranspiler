@@ -99,7 +99,9 @@
     "tests/test262/spec-catalog.ts",
     "runtime/tsc_console_methods.def",
     "runtime/tsc_weak_collections.def",
-    "src/console-operations.ts"
+    "src/console-operations.ts",
+    "runtime/tsc_fs_dirent.c",
+    "runtime/tsc_fs_dirent.def"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
   "environmentAllowlist": [

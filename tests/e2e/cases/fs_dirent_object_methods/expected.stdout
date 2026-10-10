@@ -1,11 +1,11 @@
-enum: name file.txt
-entries: 1 name file.txt
-names: name name
+enum: name|parentPath file.txt|/tmp/tsc2c-fs-dirent-object-methods
+entries: 2 name file.txt
+names: name|parentPath name|parentPath|Symbol(type)
 desc: file.txt true true true undefined
-descs: name file.txt file.txt
+descs: name|parentPath file.txt file.txt
 reflect: file.txt undefined true false
 own: true false true true
 call: true true
 integrity: true false false true
-tag: [object Dirent] [object Dirent]
+tag: [object Object] [object Object]
 trace: edmDRgxkvnrsShHpicqELFIt

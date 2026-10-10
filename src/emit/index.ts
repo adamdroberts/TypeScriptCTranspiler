@@ -45,7 +45,6 @@ import {
     T_EVENT_EMITTER,
     T_EVENT_TARGET,
     T_DISPATCH_QUEUE,
-    T_FS_DIRENT,
     T_FS_STATS,
     T_HASH,
     T_HMAC,
@@ -21400,7 +21399,6 @@ class Emitter {
             type.kind === "textencoder" ||
             type.kind === "textdecoder" ||
             type.kind === "fsstats" ||
-            type.kind === "fsdirent" ||
             type.kind === "function" ||
             type.kind === "class";
     }
@@ -33416,7 +33414,6 @@ class Emitter {
             case "error":
             case "buffer":
             case "fsstats":
-            case "fsdirent":
                 return "object";
             case "function":
                 return "function";
@@ -34639,6 +34636,26 @@ class Emitter {
     }
     private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
         const expr = this.unwrapTransparentExpression(expression);
+        const fsNames = ["fs", "node:fs"];
+        if (ts.isIdentifier(expr)) {
+            let receiver: ts.Node=expr;
+            while(receiver.parent && (ts.isParenthesizedExpression(receiver.parent) || ts.isAsExpression(receiver.parent) ||
+                ts.isTypeAssertionExpression(receiver.parent) || ts.isNonNullExpression(receiver.parent) || ts.isSatisfiesExpression(receiver.parent))) receiver=receiver.parent;
+            const member=receiver.parent;
+            const direntReceiver=member && ts.isPropertyAccessExpression(member) && member.expression===receiver && member.name.text==="Dirent";
+            const importCell=expr.parent && (ts.isNamespaceImport(expr.parent) || ts.isImportClause(expr.parent));
+            if ((direntReceiver || importCell) && this.isNamespaceImportFrom(expr, fsNames)) return { c: "tsc_fs_dirent_module_value(true)", ty: T_VALUE };
+            if ((direntReceiver || importCell) && this.isDefaultImportFrom(expr, fsNames)) return { c: "tsc_fs_dirent_module_value(false)", ty: T_VALUE };
+            if (this.namedImportExportName(expr, fsNames) === "Dirent")
+                return { c: 'tsc_fs_dirent_export_value(tsc_str_from_lit("Dirent", 6))', ty: T_VALUE };
+        }
+        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && this.isFsModuleIdentifier(expr.expression)) {
+            if (expr.name.text === "Dirent") {
+                const owner=this.importedHostModuleOwner(expr.expression)!;
+                return { c: `tsc_value_get_prop(${owner.c}, tsc_str_from_lit("Dirent", 6))`, ty: T_VALUE };
+            }
+            return null;
+        }
         const modules = [
             { names: ["url", "node:url"], value: "tsc_url_module_value", export: "tsc_url_module_export_value", members: new Set(["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"]) },
             { names: ["console", "node:console"], value: "tsc_console_module_value", export: "tsc_console_module_export_value", members: consoleOperations },
@@ -34974,7 +34991,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -35049,7 +35066,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -37493,6 +37510,9 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
+        if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr) && memberName !== "Dirent")
+            return this.emitFsCall(call, memberName);
+        if (this.isFsPromisesReceiver(recvExpr)) return this.emitFsPromisesCall(call, memberName);
         if (this.importedHostModuleOwner(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
@@ -37558,9 +37578,6 @@ class Emitter {
             const earlyRecv = this.emitExpr(recvExpr);
             if (earlyRecv.ty.kind === "fsstats") {
                 return this.emitFsStatsMethod(call, earlyRecv, memberName);
-            }
-            if (earlyRecv.ty.kind === "fsdirent") {
-                return this.emitFsDirentMethod(call, earlyRecv, memberName);
             }
         }
 
@@ -38372,8 +38389,6 @@ class Emitter {
             return this.emitTextDecoderMethod(call, recv, memberName);
         if (recv.ty.kind === "fsstats")
             return this.emitFsStatsMethod(call, recv, memberName);
-        if (recv.ty.kind === "fsdirent")
-            return this.emitFsDirentMethod(call, recv, memberName);
         if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
             return this.emitTypedObjectPrototypeMethod(call, recvExpr, recv, memberName);
         }
@@ -42048,7 +42063,8 @@ class Emitter {
                     unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
-                const d = this.emitExpr(args[1]!);
+                let d = this.emitExpr(args[1]!);
+                if (d.ty.kind === "value") d = { c: `tsc_fs_data_buffer(${d.c}, ${this.stringLit(options.encoding)})`, ty: T_BUFFER };
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.writeFileSync data must be string or Buffer");
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
@@ -42079,7 +42095,8 @@ class Emitter {
                 if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
-                const d = this.emitExpr(args[1]!);
+                let d = this.emitExpr(args[1]!);
+                if (d.ty.kind === "value") d = { c: `tsc_fs_data_buffer(${d.c}, ${this.stringLit(options.encoding)})`, ty: T_BUFFER };
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.appendFileSync data must be string or Buffer");
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
@@ -42140,7 +42157,7 @@ class Emitter {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
                 if (options.withFileTypes) {
-                    return this.emitSequencedExpr(arrayType(T_FS_DIRENT), [
+                    return this.emitSequencedExpr(arrayType(T_VALUE), [
                         this.fsPathSpec(p, args[0]!, "fs.readdirSync path"),
                         ...optionSpecs,
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
@@ -43188,7 +43205,6 @@ class Emitter {
 
     private emitFsDirentArrayEncodingResult(value: string, encoding: "utf8" | "hex" | "base64" | "buffer"): string {
         if (encoding === "utf8") return value;
-        if (encoding === "buffer") throw new Error("internal buffer dirent encoding should be rejected before emission");
         return `tsc_fs_dirents_encode_names(${value}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
     }
 
@@ -43531,7 +43547,6 @@ class Emitter {
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
-        if (withFileTypes && encoding === "buffer") unsupported(options, `${label} does not support combining withFileTypes and buffer encoding yet`);
         return { withFileTypes, recursive, encoding };
     }
 
@@ -43780,7 +43795,8 @@ class Emitter {
                 if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile", true);
                 const p = this.emitExpr(args[0]!);
-                const d = this.emitExpr(args[1]!);
+                let d = this.emitExpr(args[1]!);
+                if (d.ty.kind === "value") d = { c: `tsc_fs_data_buffer(${d.c}, ${this.stringLit(options.encoding)})`, ty: T_BUFFER };
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.writeFile data must be string or Buffer");
                 const signalValue = this.fsSignalOptionValue(args[2]);
                 const optionSpecs: SequencedCallArg[] = [];
@@ -43813,7 +43829,8 @@ class Emitter {
                 if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile", true);
                 const p = this.emitExpr(args[0]!);
-                const d = this.emitExpr(args[1]!);
+                let d = this.emitExpr(args[1]!);
+                if (d.ty.kind === "value") d = { c: `tsc_fs_data_buffer(${d.c}, ${this.stringLit(options.encoding)})`, ty: T_BUFFER };
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
                 const signalValue = this.fsSignalOptionValue(args[2]);
                 const optionSpecs: SequencedCallArg[] = [];
@@ -45128,49 +45145,6 @@ class Emitter {
                 );
         }
         unsupported(call, `Stats method .${method}`);
-    }
-
-    private emitFsDirentMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        const predicates: Record<string, string> = {
-            isFile: "tsc_fs_dirent_is_file",
-            isDirectory: "tsc_fs_dirent_is_directory",
-            isSymbolicLink: "tsc_fs_dirent_is_symbolic_link",
-            isBlockDevice: "tsc_fs_dirent_is_block_device",
-            isCharacterDevice: "tsc_fs_dirent_is_character_device",
-            isFIFO: "tsc_fs_dirent_is_fifo",
-            isSocket: "tsc_fs_dirent_is_socket",
-        };
-        const predicate = Object.prototype.hasOwnProperty.call(predicates, method)
-            ? predicates[method]
-            : undefined;
-        if (predicate) {
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                ([dirent]) => `${predicate}(${dirent})`,
-            );
-        }
-        switch (method) {
-            case "toLocaleString":
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([dirent]) => `({ (void)${dirent}; tsc_str_from_lit("[object Dirent]", 15); })`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([dirent]) => dirent,
-                );
-        }
-        unsupported(call, `Dirent method .${method}`);
     }
 
     private emitTextEncoderMethod(
@@ -47214,14 +47188,6 @@ class Emitter {
         if (recv.ty.kind === "fsstats" && pa.name.text === "birthtime") {
             return { c: `tsc_date_from_ms(tsc_fs_stats_birthtime_ms(${recv.c}))`, ty: T_DATE };
         }
-        if (recv.ty.kind === "fsdirent") {
-            if (pa.name.text === "name") {
-                return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
-            }
-            if (pa.name.text === "parentPath" || pa.name.text === "path") {
-                return { c: `tsc_fs_dirent_parent_path(${recv.c})`, ty: T_STRING };
-            }
-        }
         if (recv.ty.kind === "value") {
             if (this.moduleNamespacePlanForExpression(pa.expression)) {
                 const key = this.stringLit(pa.name.text);
@@ -47828,7 +47794,6 @@ class Emitter {
         if (r.ty.kind === "error") return `tsc_error_to_string(${r.c})`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
         if (r.ty.kind === "fsstats") return `tsc_str_from_lit("[object Stats]", 14)`;
-        if (r.ty.kind === "fsdirent") return `tsc_str_from_lit("[object Dirent]", 15)`;
         if (r.ty.kind === "function") return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "void" || r.ty.kind === "never") return `tsc_str_from_lit("undefined", 9)`;
         if (r.ty.kind === "value") return `tsc_value_to_string(${r.c})`;
@@ -47987,7 +47952,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -48651,7 +48616,7 @@ function requireNumber(node: ts.Node, t: CType): void {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "fsdirent", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

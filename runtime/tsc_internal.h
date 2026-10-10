@@ -151,6 +151,7 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_BIGINT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_FS_DIRENT_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_REF_PROTOTYPE,
@@ -751,6 +752,7 @@ double fs_stat_mtime_ms(const struct stat* st);
 double fs_stat_ctime_ms(const struct stat* st);
 double fs_stat_birthtime_ms(const struct stat* st);
 void fs_stats_fill(tsc_fs_stats_t* out, const struct stat* st);
+typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 tsc_fs_dirent_t* fs_dirent_from_path(const char* dir_path, const char* name);
 char* fs_join_path(const char* left, const char* right);
 void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, bool flush, const char* label);

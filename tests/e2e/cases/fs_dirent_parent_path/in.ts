@@ -4,14 +4,14 @@ import { opendir } from "node:fs/promises";
 const root = "/tmp/tsc2c-fs-dirent-parent-path";
 
 function summarize(entries: FSDirent[]): string {
-    return entries.map((entry) => entry.name + ":" + (entry.parentPath === entry.path) + ":" + entry.parentPath).sort().join("|");
+    return entries.map((entry) => entry.name + ":" + (entry.parentPath === Reflect.get(entry,"path")) + ":" + entry.parentPath).sort().join("|");
 }
 
 async function readHandle(dir: FSDir): Promise<string[]> {
     const entries: string[] = [];
     let entry = await dir.read();
     while (entry !== null) {
-        entries.push(entry.name.toString() + ":" + (entry.parentPath === entry.path) + ":" + entry.parentPath);
+        entries.push(entry.name.toString() + ":" + (entry.parentPath === Reflect.get(entry,"path")) + ":" + entry.parentPath);
         entry = await dir.read();
     }
     return entries.sort();
@@ -50,7 +50,7 @@ fs.promises.readdir(root, { withFileTypes: true })
         const syncHandleEntries: string[] = [];
         let syncEntry = syncDir.readSync();
         while (syncEntry !== null) {
-            syncHandleEntries.push(syncEntry.name.toString() + ":" + (syncEntry.parentPath === syncEntry.path) + ":" + syncEntry.parentPath);
+            syncHandleEntries.push(syncEntry.name.toString() + ":" + (syncEntry.parentPath === Reflect.get(syncEntry,"path")) + ":" + syncEntry.parentPath);
             syncEntry = syncDir.readSync();
         }
         console.log("handle sync:", syncHandleEntries.sort().join("|"));

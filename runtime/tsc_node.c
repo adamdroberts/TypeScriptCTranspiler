@@ -1,4 +1,17 @@
+typedef struct tsc_fs_dirent tsc_fs_dirent_t;
 #include "tsc_internal.h"
+struct tsc_fs_dirent {
+    tsc_object_t* object;
+    tsc_str_t* name;
+    tsc_str_t* parent_path;
+    bool is_file;
+    bool is_directory;
+    bool is_symbolic_link;
+    bool is_block_device;
+    bool is_character_device;
+    bool is_fifo;
+    bool is_socket;
+};
 #include <arpa/nameser.h>
 #include <resolv.h>
 #include <sys/statvfs.h>
@@ -7645,6 +7658,14 @@ tsc_error_t* tsc_value_as_error(tsc_value_t v) {
     return NULL;
 }
 
+tsc_buffer_t* tsc_fs_data_buffer(tsc_value_t data,const tsc_str_t* encoding) {
+    void* volatile root=tsc_value_gc_root(data);
+    if(value_is_box(data)&&value_tag(data)==TSC_VALUE_TAG_STRING) {
+        tsc_buffer_t* result=tsc_buffer_from_str(value_ptr(data),encoding);(void)root;return result;
+    }
+    return tsc_value_as_buffer(data);
+}
+
 tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* object = (tsc_object_t*)value_ptr(v);
@@ -10740,6 +10761,7 @@ tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
 }
 
 tsc_fs_dirent_t* fs_dirent_from_uv(const char* dir_path, const char* name, int type);
+static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent,const tsc_str_t* encoding);
 
 typedef struct tsc_fs_readdir_async {
     tsc_uv_fs_t req;
@@ -10821,7 +10843,7 @@ static void tsc_fs_readdir_async_scandir_cb(tsc_uv_fs_t* req) {
         if (!ent.name) continue;
         if (task->want_dirents) {
             tsc_fs_dirent_t* value = fs_dirent_from_uv(task->path, ent.name, ent.type);
-            tsc_array_push_raw(task->entries, &value);
+            tsc_value_t boxed=tsc_fs_dirent_value(value,NULL);tsc_array_push_raw(task->entries, &boxed);
         } else if (task->want_buffer) {
             tsc_str_t* name = tsc_str_from_cstr(ent.name);
             tsc_buffer_t* value = tsc_buffer_from_str(name, NULL);
@@ -10852,9 +10874,10 @@ static tsc_promise_t* tsc_fs_promises_readdir_options_async(
     task->signal = signal;
     task->result_encoding = result_encoding;
     task->entries = tsc_array_new(
-        want_dirents ? sizeof(tsc_fs_dirent_t*) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
+        want_dirents ? sizeof(tsc_value_t) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
         16
     );
+    if(want_dirents)tsc_array_use_value_storage(task->entries);
     task->next = g_tsc_fs_readdir_async;
     g_tsc_fs_readdir_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -11025,7 +11048,7 @@ static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
         tsc_fs_dirent_t* dirent = NULL;
         if (task->want_dirents) {
             dirent = fs_dirent_from_uv(task->current_path, ent.name, ent.type);
-            tsc_array_push_raw(task->entries, &dirent);
+            tsc_value_t boxed=tsc_fs_dirent_value(dirent,NULL);tsc_array_push_raw(task->entries, &boxed);
         } else if (task->want_buffer) {
             tsc_str_t* child_name = tsc_str_from_cstr(child_relative);
             tsc_buffer_t* child_buffer = tsc_buffer_from_str(child_name, NULL);
@@ -11036,7 +11059,7 @@ static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
         }
 
         bool descend = ent.type == TSC_UV_DIRENT_DIR;
-        if (task->want_dirents && dirent) descend = tsc_fs_dirent_is_directory(dirent);
+        if (task->want_dirents && dirent) descend = (dirent && dirent->is_directory);
         if (descend) {
             if (!tsc_fs_readdir_recursive_push_work(&child_directories, child_path, child_relative)) {
                 free(child_path);
@@ -11118,9 +11141,10 @@ static tsc_promise_t* tsc_fs_promises_readdir_recursive_options_async(
     task->signal = signal;
     task->result_encoding = result_encoding;
     task->entries = tsc_array_new(
-        want_dirents ? sizeof(tsc_fs_dirent_t*) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
+        want_dirents ? sizeof(tsc_value_t) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
         16
     );
+    if(want_dirents)tsc_array_use_value_storage(task->entries);
     task->next = g_tsc_fs_readdir_recursive_async;
     g_tsc_fs_readdir_recursive_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -13615,17 +13639,7 @@ struct tsc_fs_stats {
     bool is_socket;
 };
 
-struct tsc_fs_dirent {
-    tsc_str_t* name;
-    tsc_str_t* parent_path;
-    bool is_file;
-    bool is_directory;
-    bool is_symbolic_link;
-    bool is_block_device;
-    bool is_character_device;
-    bool is_fifo;
-    bool is_socket;
-};
+
 
 void fs_kind_from_mode(mode_t mode, bool* is_file, bool* is_directory, bool* is_symbolic_link, bool* is_block_device, bool* is_character_device, bool* is_fifo, bool* is_socket) {
     *is_file = S_ISREG(mode);
@@ -14367,121 +14381,20 @@ bool tsc_fs_stats_is_socket(const tsc_fs_stats_t* st) {
     return st ? st->is_socket : false;
 }
 
-tsc_str_t* tsc_fs_dirent_name(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->name : tsc_str_from_lit("", 0);
-}
-
-tsc_str_t* tsc_fs_dirent_parent_path(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->parent_path : tsc_str_from_lit("", 0);
-}
-
-bool tsc_fs_dirent_is_file(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_file : false;
-}
-
-bool tsc_fs_dirent_is_directory(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_directory : false;
-}
-
-bool tsc_fs_dirent_is_symbolic_link(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_symbolic_link : false;
-}
-
-bool tsc_fs_dirent_is_block_device(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_block_device : false;
-}
-
-bool tsc_fs_dirent_is_character_device(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_character_device : false;
-}
-
-bool tsc_fs_dirent_is_fifo(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_fifo : false;
-}
-
-bool tsc_fs_dirent_is_socket(const tsc_fs_dirent_t* ent) {
-    return ent ? ent->is_socket : false;
-}
-
-static tsc_value_t tsc_fs_dirent_is_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_file((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_directory_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_directory((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_symbolic_link_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_symbolic_link((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_block_device_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_block_device((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_character_device_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_character_device((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_fifo_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_fifo((const tsc_fs_dirent_t*)env));
-}
-
-static tsc_value_t tsc_fs_dirent_is_socket_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    return tsc_value_bool(tsc_fs_dirent_is_socket((const tsc_fs_dirent_t*)env));
-}
-
 static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent, const tsc_str_t* encoding) {
-    if (!ent) return tsc_value_null();
-    tsc_object_t* object = tsc_object_new();
-    tsc_value_t name = tsc_value_string(tsc_fs_dirent_name(ent));
-    if (encoding && str_lit_eq(encoding, "buffer")) {
-        name = tsc_value_buffer(tsc_buffer_from_str(tsc_fs_dirent_name(ent), NULL));
-    } else if (encoding && (str_lit_eq(encoding, "hex") || str_lit_eq(encoding, "base64"))) {
-        name = tsc_value_string(tsc_buffer_to_string(
-            tsc_buffer_from_str(tsc_fs_dirent_name(ent), NULL),
-            encoding
-        ));
+    if(!ent)return tsc_value_null();if(ent->object)return tsc_value_object(ent->object);
+    void* volatile backend_root=ent;
+    tsc_value_t name=tsc_value_string(ent->name);
+    if(encoding) {
+        tsc_buffer_t* buffer=tsc_buffer_from_str(ent->name,NULL);
+        name=str_lit_eq(encoding,"buffer")?tsc_value_buffer(buffer):tsc_value_string(tsc_buffer_to_string(buffer,encoding));
     }
-    tsc_object_set(object, tsc_str_from_lit("name", 4), name);
-    tsc_object_set(object, tsc_str_from_lit("parentPath", 10), tsc_value_string(tsc_fs_dirent_parent_path(ent)));
-    tsc_object_set(object, tsc_str_from_lit("path", 4), tsc_value_string(tsc_fs_dirent_parent_path(ent)));
-    tsc_object_set(object, tsc_str_from_lit("isFile", 6), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_file_builtin, ent, 0.0, tsc_str_from_lit("isFile", 6)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isDirectory", 11), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_directory_builtin, ent, 0.0, tsc_str_from_lit("isDirectory", 11)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isSymbolicLink", 14), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_symbolic_link_builtin, ent, 0.0, tsc_str_from_lit("isSymbolicLink", 14)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isBlockDevice", 13), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_block_device_builtin, ent, 0.0, tsc_str_from_lit("isBlockDevice", 13)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isCharacterDevice", 17), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_character_device_builtin, ent, 0.0, tsc_str_from_lit("isCharacterDevice", 17)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isFIFO", 6), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_fifo_builtin, ent, 0.0, tsc_str_from_lit("isFIFO", 6)
-    ));
-    tsc_object_set(object, tsc_str_from_lit("isSocket", 8), tsc_value_function_builtin_named(
-        tsc_fs_dirent_is_socket_builtin, ent, 0.0, tsc_str_from_lit("isSocket", 8)
-    ));
-    return tsc_value_object(object);
+    double type=0;
+#define TSC_FS_DIRENT_METHOD(method, field, kind) if(ent->field)type=kind;
+#include "tsc_fs_dirent.def"
+#undef TSC_FS_DIRENT_METHOD
+    tsc_value_t value=tsc_fs_dirent_create_value(name,tsc_value_num(type),tsc_value_string(ent->parent_path));
+    ent->object=tsc_value_gc_root(value);(void)backend_root;return value;
 }
 
 typedef struct tsc_fs_dir_frame {
@@ -14776,11 +14689,11 @@ static bool tsc_fs_dir_uv_restore_parent(tsc_fs_dir_t* state) {
 }
 
 static void tsc_fs_dir_uv_descend_sync(tsc_fs_dir_t* state, tsc_fs_dirent_t* dirent) {
-    if (!state || !state->recursive || !state->uv_dir || !tsc_fs_dirent_is_directory(dirent)) return;
+    if (!state || !state->recursive || !state->uv_dir || !(dirent && dirent->is_directory)) return;
     const char* parent_path = state->current_path
         ? state->current_path
         : (state->path ? state->path->data : "");
-    char* child_path = fs_join_path_cstr(parent_path, tsc_fs_dirent_name(dirent)->data);
+    char* child_path = fs_join_path_cstr(parent_path, dirent->name->data);
     if (!child_path) return;
     g_tsc_fs_uv_loop = uv_default_loop();
     int rc = uv_fs_opendir(g_tsc_fs_uv_loop, &state->uv_req, child_path, NULL);
@@ -14797,7 +14710,7 @@ static void tsc_fs_dir_uv_descend_sync(tsc_fs_dir_t* state, tsc_fs_dirent_t* dir
 static tsc_value_t tsc_fs_dir_uv_take_entry_sync(tsc_fs_dir_t* state) {
     tsc_fs_dirent_t* dirent = NULL;
     tsc_value_t value = tsc_fs_dir_uv_take_entry(state, &dirent);
-    if (state && state->recursive && dirent && tsc_fs_dirent_is_directory(dirent)) {
+    if (state && state->recursive && dirent && (dirent && dirent->is_directory)) {
         tsc_fs_dir_uv_descend_sync(state, dirent);
     }
     return value;
@@ -14957,7 +14870,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
             tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
             tsc_fs_dirent_t* dirent = NULL;
             tsc_value_t value = tsc_fs_dir_uv_take_entry(state, &dirent);
-            if (state->recursive && dirent && tsc_fs_dirent_is_directory(dirent)) {
+            if (state->recursive && dirent && (dirent && dirent->is_directory)) {
                 tsc_fs_dir_uv_start_child(state, dirent);
             }
             if (waiter.promise) {
@@ -15395,7 +15308,7 @@ static void tsc_fs_dir_uv_start_child(tsc_fs_dir_t* state, tsc_fs_dirent_t* dire
     const char* parent_path = state->current_path
         ? state->current_path
         : (state->path ? state->path->data : "");
-    char* child_path = fs_join_path_cstr(parent_path, tsc_fs_dirent_name(dirent)->data);
+    char* child_path = fs_join_path_cstr(parent_path, dirent->name->data);
     if (!child_path) return;
 
     tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
@@ -15994,7 +15907,7 @@ void fs_readdir_recursive_dirents_into(const char* root, const char* rel, tsc_ar
     while ((ent = readdir(d))) {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
         tsc_fs_dirent_t* dirent = fs_dirent_from_path(dir_path, ent->d_name);
-        tsc_array_push_raw(out, &dirent);
+        tsc_value_t boxed=tsc_fs_dirent_value(dirent,NULL);tsc_array_push_raw(out, &boxed);
 
         char* child_rel = rel[0] == '\0' ? strdup(ent->d_name) : fs_join_path(rel, ent->d_name);
         char* child_path = fs_join_path(root, child_rel);
@@ -16047,7 +15960,7 @@ tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path) {
         return NULL;
     }
     closedir(d);
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_fs_dirent_t*), 16);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_value_t), 16);tsc_array_use_value_storage(a);
     fs_readdir_recursive_dirents_into(p, "", a);
     free(p);
     return a;
@@ -16061,12 +15974,12 @@ tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path) {
         tsc_throw_str(tsc_str_from_cstr("fs.readdirSync: could not open dir"));
         return NULL;
     }
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_fs_dirent_t*), 16);
+    tsc_array_t* a = tsc_array_new(sizeof(tsc_value_t), 16);tsc_array_use_value_storage(a);
     struct dirent* ent;
     while ((ent = readdir(d))) {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
         tsc_fs_dirent_t* dirent = fs_dirent_from_path(p, ent->d_name);
-        tsc_array_push_raw(a, &dirent);
+        tsc_value_t boxed=tsc_fs_dirent_value(dirent,NULL);tsc_array_push_raw(a, &boxed);
     }
     closedir(d);
     free(p);
@@ -16084,11 +15997,13 @@ tsc_array_t* tsc_fs_readdir_encode_names(tsc_array_t* entries, const tsc_str_t* 
 }
 
 tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* encoding) {
-    if (!entries || !encoding) return entries;
-    for (size_t i = 0; i < entries->len; i++) {
-        tsc_fs_dirent_t* ent = TSC_ARR(tsc_fs_dirent_t*, entries, i);
-        if (!ent || !ent->name) continue;
-        ent->name = tsc_buffer_to_string(tsc_buffer_from_str(ent->name, NULL), encoding);
+    if(!entries||!encoding)return entries;
+    for(size_t i=0;i<entries->len;++i) {
+        tsc_value_t entry=TSC_ARR(tsc_value_t,entries,i);void* volatile entry_root=tsc_value_gc_root(entry);
+        tsc_value_t name=tsc_value_get_prop(entry,tsc_str_from_lit("name",4));void* volatile name_root=tsc_value_gc_root(name);
+        tsc_buffer_t* buffer=tsc_buffer_from_str(tsc_value_to_string(name),NULL);
+        tsc_value_t encoded=str_lit_eq(encoding,"buffer")?tsc_value_buffer(buffer):tsc_value_string(tsc_buffer_to_string(buffer,encoding));
+        (void)tsc_value_set_prop(entry,tsc_str_from_lit("name",4),encoded);(void)entry_root;(void)name_root;
     }
     return entries;
 }

@@ -3558,6 +3558,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_FS_DIRENT_PROTOTYPE:
+            return tsc_fs_dirent_prototype_value();
         case TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE:
             return tsc_weak_map_prototype_value();
         case TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE:

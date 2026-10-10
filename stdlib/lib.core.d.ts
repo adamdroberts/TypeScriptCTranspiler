@@ -1488,10 +1488,10 @@ interface FSStats {
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
 }
-interface FSDirent {
-    readonly name: string;
-    readonly parentPath: string;
-    readonly path: string;
+interface FSDirent<Name extends string | Buffer = string> {
+    name: Name;
+    parentPath: string;
+    constructor: FSDirentConstructor;
     isFile(...ignored: any[]): boolean;
     isDirectory(...ignored: any[]): boolean;
     isSymbolicLink(...ignored: any[]): boolean;
@@ -1500,18 +1500,11 @@ interface FSDirent {
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
 }
-interface FSDirHandleEntry {
-    readonly name: string | Buffer;
-    readonly parentPath: string;
-    readonly path: string;
-    isFile(...ignored: any[]): boolean;
-    isDirectory(...ignored: any[]): boolean;
-    isSymbolicLink(...ignored: any[]): boolean;
-    isBlockDevice(...ignored: any[]): boolean;
-    isCharacterDevice(...ignored: any[]): boolean;
-    isFIFO(...ignored: any[]): boolean;
-    isSocket(...ignored: any[]): boolean;
+interface FSDirentConstructor {
+    readonly prototype: FSDirent<string | Buffer>;
+    new <Name extends string | Buffer = string>(name?: Name, type?: number, parentPath?: string, ...ignored: any[]): FSDirent<Name>;
 }
+interface FSDirHandleEntry extends FSDirent<string | Buffer> {}
 interface FSDirOptions {
     recursive?: boolean;
     encoding?: "utf8" | "utf-8" | "hex" | "base64" | "buffer" | null;
@@ -1692,6 +1685,14 @@ interface FSReaddirDirentOptions {
 interface FSPromisesReaddirDirentOptions extends FSReaddirDirentOptions {
     signal?: any;
 }
+interface FSReaddirBufferDirentOptions {
+    encoding: FSBufferEncoding;
+    recursive?: boolean;
+    withFileTypes: true;
+}
+interface FSPromisesReaddirBufferDirentOptions extends FSReaddirBufferDirentOptions {
+    signal?: any;
+}
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
 type FSFileBufferEncodingOptions = FSBufferEncoding | FSBufferEncodingOptions;
 interface FSPromisesFileBufferEncodingOptions extends FSBufferEncodingOptions {
@@ -1719,6 +1720,7 @@ interface FSConstants {
     readonly COPYFILE_FICLONE_FORCE: number;
 }
 interface FS {
+    Dirent: FSDirentConstructor;
     readonly constants: FSConstants;
     readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
     readFileSync(path: FSPathLike, options?: FSReadFileStringOptions, ...ignored: any[]): string;
@@ -1741,6 +1743,7 @@ interface FS {
     existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
+    readdirSync(path: FSPathLike, options: FSReaddirBufferDirentOptions, ...ignored: any[]): FSDirent<Buffer>[];
     readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;
@@ -1860,6 +1863,7 @@ interface FSPromises {
     writeFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     appendFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSPromisesReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
+    readdir(path: FSPathLike, options: FSPromisesReaddirBufferDirentOptions, ...ignored: any[]): Promise<FSDirent<Buffer>[]>;
     readdir(path: FSPathLike, options: FSPromisesReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSPromisesReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
     statfs(path: FSPathLike, options?: FSPromisesStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
@@ -1897,6 +1901,7 @@ interface FSPromises {
 }
 declare const fs: FS;
 declare module "fs" {
+    export var Dirent: FSDirentConstructor;
     export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
@@ -1920,6 +1925,7 @@ declare module "fs" {
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
+    export function readdirSync(path: FSPathLike, options: FSReaddirBufferDirentOptions, ...ignored: any[]): FSDirent<Buffer>[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     export function opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;
@@ -1953,6 +1959,7 @@ declare module "fs" {
     export default defaultFs;
 }
 declare module "node:fs" {
+    export var Dirent: FSDirentConstructor;
     export const constants: FSConstants;
     export const promises: FSPromises;
     export function readFileSync(path: FSPathLike, options: FSReadFileBufferOptions, ...ignored: any[]): Buffer;
@@ -1976,6 +1983,7 @@ declare module "node:fs" {
     export function existsSync(path: FSPathLike, ...ignored: any[]): boolean;
     export function accessSync(path: FSPathLike, mode?: number, ...ignored: any[]): void;
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
+    export function readdirSync(path: FSPathLike, options: FSReaddirBufferDirentOptions, ...ignored: any[]): FSDirent<Buffer>[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
     export function opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;

@@ -1,0 +1,8 @@
+/* Shared directory-entry methods, backend kind projection and type identity. */
+TSC_FS_DIRENT_METHOD(isDirectory, is_directory, 2)
+TSC_FS_DIRENT_METHOD(isFile, is_file, 1)
+TSC_FS_DIRENT_METHOD(isBlockDevice, is_block_device, 7)
+TSC_FS_DIRENT_METHOD(isCharacterDevice, is_character_device, 6)
+TSC_FS_DIRENT_METHOD(isSymbolicLink, is_symbolic_link, 3)
+TSC_FS_DIRENT_METHOD(isFIFO, is_fifo, 4)
+TSC_FS_DIRENT_METHOD(isSocket, is_socket, 5)
