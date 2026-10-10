@@ -48724,7 +48724,7 @@ class Emitter {
             }
             if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
                 name = parent.name.text;
-            } else if (ts.isPropertyAssignment(parent)) {
+            } else if (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent)) {
                 name = this.staticPropertyName(parent.name) ?? "";
             } else if (ts.isExportAssignment(parent) && !parent.isExportEquals) {
                 name = "default";
