@@ -819,6 +819,9 @@ tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, void* env, double length, tsc_str_t* name);
+void tsc_value_class_add_element(tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer, bool is_static, bool is_block, bool inferred_name);
+void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t receiver, bool is_static);
+
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_function_constructor_value(void);

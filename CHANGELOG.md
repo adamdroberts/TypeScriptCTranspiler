@@ -273,6 +273,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Initialize dynamic class fields and static blocks through one retained ordered element list, with GC roots, lexical captures, suspension and class name inference before static definitions.
+
 - Share immutable inner class-name cells across native declarations and dynamic definitions, retaining TDZ, outer binding independence, captures and suspension.
 
 - Replace constructor-source member type inference and inline argument-shape probes with one source-value/sequence graph. Close member/getter/formal/return/eval/bound/List dependencies, preserve primitive source conversions and fail closed on cyclic expansions. Derive JavaScript callable ABIs from source syntax, retain initializer effects, select boxed property assignment before native accessor probes and share actual rest-argument Lists; avoid unused structural inference and verify independent source-key observations, retained-owner stress and typed native E2E in both memory modes.

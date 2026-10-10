@@ -1,0 +1,5 @@
+definition-order:key,initializer,block,initializer
+instance-order:initializer,initializer,initializer,initializer
+retained-initializers:true
+own-field-descriptors:true
+resumed-initializers:true

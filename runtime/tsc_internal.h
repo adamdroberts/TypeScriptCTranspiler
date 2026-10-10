@@ -217,6 +217,7 @@ typedef struct tsc_function_identity {
     tsc_value_t func_prototype;
     void* func_prototype_gc_root;
     tsc_object_t* props;
+    tsc_array_t* class_elements;
     union {
         tsc_accessor_getter_t getter;
         tsc_accessor_setter_t setter;
@@ -597,6 +598,9 @@ tsc_value_t tsc_value_bind_function(tsc_value_t target, tsc_value_t bound_this, 
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_class_named(tsc_generic_function_t construct, void* env, double length, tsc_str_t* name);
+void tsc_value_class_add_element(tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer, bool is_static, bool is_block, bool inferred_name);
+void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t receiver, bool is_static);
+
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity);

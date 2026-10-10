@@ -1,5 +1,5 @@
 function makeOwner(): any {
-    class Local { field: any = 1; }
+    class Local { constructor(public field: any = 1) {} }
     return Local;
 }
 makeOwner();

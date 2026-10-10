@@ -1,2 +1,2 @@
-const Constructor = class { value: number = 1; };
+const Constructor = class { constructor(public value: number = 1) {} };
 console.log(new Constructor().value);

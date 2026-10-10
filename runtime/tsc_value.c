@@ -437,6 +437,7 @@ tsc_value_t tsc_value_function_named_kind(
     tsc_function_identity_set_own_prototype(id, tsc_value_undefined());
     id->func_prototype_initialized = false;
     id->construct = construct;
+    id->class_elements = NULL;
     tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
@@ -528,6 +529,69 @@ tsc_value_t tsc_value_function_class_named(
         name,
         TSC_FUNCTION_IDENTITY_BUILTIN
     );
+}
+
+/* The retained ClassElement List is shared by static and instance
+ * initialization. Decoded roots accompany boxed initializer values. */
+typedef struct {
+    tsc_str_t* key;
+    void* key_root;
+    tsc_value_t initializer;
+    void* initializer_root;
+    bool is_static;
+    bool is_block;
+    bool inferred_name;
+} tsc_class_element_t;
+
+void tsc_value_class_add_element(
+    tsc_value_t constructor, tsc_str_t* key, tsc_value_t initializer,
+    bool is_static, bool is_block, bool inferred_name
+) {
+    if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class element owner is not a constructor"));
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile initializer_root = tsc_value_gc_root(initializer);
+    (void)constructor_root;
+    (void)initializer_root;
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    if (!identity->class_elements) identity->class_elements = tsc_array_new(sizeof(tsc_class_element_t), 0);
+    tsc_symbol_t* symbol = key ? tsc_property_key_symbol(key) : NULL;
+    tsc_class_element_t element = { key, symbol ? (void*)symbol : (void*)key,
+        initializer, tsc_value_gc_root(initializer), is_static, is_block, inferred_name };
+    tsc_array_push_raw(identity->class_elements, &element);
+}
+
+void tsc_value_class_initialize_elements(tsc_value_t constructor, tsc_value_t receiver, bool is_static) {
+    if (!value_is_box(constructor) || value_tag(constructor) != TSC_VALUE_TAG_FUNCTION)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class element owner is not a constructor"));
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    (void)constructor_root;
+    (void)receiver_root;
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    tsc_array_t* elements = identity->class_elements;
+    if (!elements) return;
+    for (int64_t index = 0; index < elements->len; index++) {
+        tsc_class_element_t element = TSC_ARR(tsc_class_element_t, elements, index);
+        if (element.is_static != is_static) continue;
+        tsc_value_t value = tsc_value_undefined();
+        if (!tsc_value_is_undefined(element.initializer)) {
+            tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 0);
+            if (!element.is_block) {
+                tsc_symbol_t* symbol = tsc_property_key_symbol(element.key);
+                tsc_array_push_value(arguments, symbol ? tsc_value_symbol(symbol) : tsc_value_string(element.key));
+            }
+            value = tsc_value_apply_function(element.initializer, receiver, tsc_value_array(arguments));
+        }
+        if (element.is_block) continue;
+        void* volatile value_root = tsc_value_gc_root(value);
+        (void)value_root;
+        if (element.inferred_name)
+            value = tsc_value_function_with_property_name(value, element.key, NULL);
+        if (!tsc_value_define_property_desc(receiver, element.key, value,
+                true, true, true, true, true, true, true))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class field definition failed"));
+    }
 }
 
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {

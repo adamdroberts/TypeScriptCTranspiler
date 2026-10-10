@@ -721,6 +721,9 @@ class Emitter {
     private classComputedMemberKeys = new Map<ts.ComputedPropertyName, string>();
     private classComputedInstanceFieldStorageKeys = new Map<ts.PropertyDeclaration, string>();
     private defaultClassConstructAdapter: string | null = null;
+    private classElementInitializers = new WeakMap<ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration, ts.MethodDeclaration>();
+    private classElementInitializerOwners = new WeakMap<ts.MethodDeclaration, ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration>();
+    private classFieldNameScopes: Map<ts.Expression, string>[] = [];
     private nativeObjectValueInitializers = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -23099,6 +23102,9 @@ class Emitter {
                     if ((ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && member.body) {
                         addClosureCaptures(member, node);
                     }
+                    if (ts.isPropertyDeclaration(member) && member.initializer || ts.isClassStaticBlockDeclaration(member)) {
+                        addClosureCaptures(this.classElementInitializerFunction(member as ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration), node);
+                    }
                     if (member.name && ts.isComputedPropertyName(member.name)) visit(member.name.expression);
                 }
                 return;
@@ -23422,7 +23428,9 @@ class Emitter {
                 (!this.isModuleBindingSymbol(sym) || this.dispatchCaptureClone) &&
                 !this.test262ScriptGlobalBindingName(node) &&
                 (
-                    !this.isNodeWithin(decl, fn) ||
+                    !(this.isNodeWithin(decl, fn) || ts.isMethodDeclaration(fn) &&
+                        this.classElementInitializerOwners.has(fn) &&
+                        this.isNodeWithin(decl, this.classElementInitializerOwners.get(fn)!)) ||
                     decl === fn && ts.isFunctionDeclaration(fn) &&
                         this.isSupportedLexicalFunctionDeclaration(fn)
                 ) &&
@@ -25356,10 +25364,15 @@ class Emitter {
 
     private emitClassFieldInitializer(member: ts.PropertyDeclaration): EmitResult {
         if (!member.initializer) return { c: "tsc_value_undefined()", ty: T_VALUE };
-        const value = this.emitExpr(member.initializer);
         const source = this.unwrapTransparentExpression(member.initializer);
-        const anonymous = ts.isArrowFunction(source) ||
-            (ts.isFunctionExpression(source) || ts.isClassExpression(source)) && !source.name;
+        const scope = new Map<ts.Expression, string>();
+        if (ts.isClassExpression(source) && !source.name)
+            scope.set(source, this.classMemberPropertyKey(member.name).propertyKey);
+        this.classFieldNameScopes.push(scope);
+        let value: EmitResult;
+        try { value = this.emitExpr(member.initializer); }
+        finally { this.classFieldNameScopes.pop(); }
+        const anonymous = ts.isArrowFunction(source) || ts.isFunctionExpression(source) && !source.name;
         if (!anonymous || !ts.isComputedPropertyName(member.name)) return value;
         const { propertyKey } = this.classMemberPropertyKey(member.name);
         return {
@@ -25870,10 +25883,18 @@ class Emitter {
             const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
                 ts.isSetAccessorDeclaration(member)) && !!member.body;
             const field = ts.isPropertyDeclaration(member);
-            if (!nativeStorage && !callable && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
+            const block = ts.isClassStaticBlockDeclaration(member);
+            if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
                 unsupported(member, "class element requires the canonical initialization plan");
             }
+            if (!nativeStorage && block) {
+                const initializer = this.retainClassElementInitializer(member, pieces);
+                pieces.push(`tsc_value_class_add_element(${constructor}, NULL, ${initializer}, true, true, false)`);
+                continue;
+            }
             if (!callable && !field) continue;
+            if (!nativeStorage && field && ts.isPrivateIdentifier(member.name))
+                unsupported(member, "class element requires the canonical initialization plan");
             // Declaration fields retain their key for later initialization;
             // expression methods borrow a local carrier owned by this definition.
             const name = member.name!;
@@ -25885,7 +25906,16 @@ class Emitter {
                 const evaluated = this.emitExpr(name.expression);
                 pieces.push(`${retained ? "" : "tsc_str_t* const "}${key} = tsc_value_to_internal_property_key(${this.coerce(evaluated, T_VALUE, name.expression)})`);
             }
-            if (ts.isPropertyDeclaration(member)) continue;
+            if (ts.isPropertyDeclaration(member)) {
+                if (!nativeStorage) {
+                    const initializer = this.retainClassElementInitializer(member, pieces);
+                    const source = member.initializer && this.unwrapTransparentExpression(member.initializer);
+                    const inferred = !!source && (ts.isArrowFunction(source) ||
+                        ts.isFunctionExpression(source) && !source.name);
+                    pieces.push(`tsc_value_class_add_element(${constructor}, ${key}, ${initializer}, ${isStatic(member)}, false, ${inferred})`);
+                }
+                continue;
+            }
             const target = isStatic(member) ? constructor : prototype;
             const value = this.freshTemp("_class_element_value"), root = this.freshTemp("_class_element_value_root");
             const closure = this.coerce(this.emitClosureExpression(member as ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration), T_VALUE, member);
@@ -25903,6 +25933,50 @@ class Emitter {
             }
         }
         return pieces;
+    }
+
+    private retainClassElementInitializer(
+        member: ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration, pieces: string[],
+    ): string {
+        const initializer = this.emitClassElementInitializer(member);
+        const value = this.freshTemp("_class_initializer_value"), root = this.freshTemp("_class_initializer_root");
+        pieces.push(`tsc_value_t ${value} = ${initializer.c}`,
+            `void* volatile ${root} = tsc_value_gc_root(${value})`, `(void)${root}`);
+        return value;
+    }
+
+    private emitClassElementInitializer(member: ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration): EmitResult {
+        if (ts.isPropertyDeclaration(member) && !member.initializer)
+            return { c: "tsc_value_undefined()", ty: T_VALUE };
+        const scope = new Map<ts.Expression, string>();
+        if (ts.isPropertyDeclaration(member) && member.initializer) {
+            const source = this.unwrapTransparentExpression(member.initializer);
+            if (ts.isClassExpression(source) && !source.name)
+                scope.set(source, "tsc_value_to_internal_property_key(tsc_value_get_index(tsc_call_arguments(), 0.0))");
+        }
+        this.classFieldNameScopes.push(scope);
+        try { return { c: this.coerce(this.emitClosureExpression(this.classElementInitializerFunction(member),
+            functionType([], T_VALUE, T_VALUE)), T_VALUE, member), ty: T_VALUE }; }
+        finally { this.classFieldNameScopes.pop(); }
+    }
+
+    private classElementInitializerFunction(member: ts.PropertyDeclaration | ts.ClassStaticBlockDeclaration): ts.MethodDeclaration {
+        const cached = this.classElementInitializers.get(member);
+        if (cached) return cached;
+        const block = ts.isClassStaticBlockDeclaration(member);
+        const body = block ? member.body : ts.factory.createBlock([
+            ts.factory.createReturnStatement(member.initializer!),
+        ], true);
+        const functionNode = ts.factory.createMethodDeclaration(undefined, undefined,
+            "_class_initializer", undefined, undefined, [], undefined, body);
+        Object.assign(functionNode, { parent: member.parent, pos: member.pos, end: member.end });
+        if (!block) {
+            Object.assign(body, { parent: functionNode, pos: member.pos, end: member.end });
+            for (const statement of body.statements) Object.assign(statement, { parent: body, pos: member.pos, end: member.end });
+        }
+        this.classElementInitializers.set(member, functionNode);
+        this.classElementInitializerOwners.set(functionNode, member);
+        return functionNode;
     }
 
     private classRuntimeName(cd: ts.ClassDeclaration): string {
@@ -26668,7 +26742,10 @@ class Emitter {
                 if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node) && !ts.isMethodDeclaration(node) &&
                     !ts.isGetAccessorDeclaration(node) && !ts.isSetAccessorDeclaration(node)) return false;
                 for (const capture of this.collectClosureCaptures(node)) {
-                    if (ts.isClassLike(node.parent) && this.classDefinitionOwnsSymbol(node.parent, capture.symbol)) continue;
+                    const definition = capture.symbol.declarations?.find(declaration =>
+                        ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration));
+                    if (definition && this.isNodeWithin(node, definition) &&
+                        this.classDefinitionOwnsSymbol(definition, capture.symbol)) continue;
                     if (!this.currentFunctionCellForSymbol(capture.symbol) &&
                         !this.closureEnvBindingForSymbol(capture.symbol)) return false;
                 }
@@ -31920,6 +31997,8 @@ class Emitter {
         return !definition.typeParameters?.length && !definition.heritageClauses?.length &&
             !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
+                ts.isClassStaticBlockDeclaration(member) ||
+                ts.isPropertyDeclaration(member) && !ts.isPrivateIdentifier(member.name) ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) && !!member.body);
     }
 
@@ -31935,8 +32014,8 @@ class Emitter {
         const body = new CBuf();
         body.open(signature);
         body.line("(void)env;");
-        body.line("(void)this_arg;");
         body.line("(void)args;");
+        body.line("tsc_value_class_initialize_elements(tsc_value_current_callee(), this_arg, false);");
         /* Ordinary [[Construct]] keeps the receiver when a base constructor
          * returns a primitive.  One shared adapter therefore implements the
          * default constructor algorithm; the fresh environment pointer below
@@ -32027,9 +32106,13 @@ class Emitter {
         const constructorRoot = this.freshTemp("_class_expression_constructor_root");
         const prototype = this.freshTemp("_class_expression_prototype");
         const prototypeRoot = this.freshTemp("_class_expression_prototype_root");
+        let created = this.withCallableSourceText(`tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${ts.isClassDeclaration(expression) ? this.stringLit(this.classRuntimeName(expression)) : this.functionValueNameLiteral(expression)})`, expression);
+        const inferredKey = ts.isClassExpression(expression)
+            ? this.classFieldNameScopes.at(-1)?.get(expression) : undefined;
+        if (inferredKey) created = `tsc_value_function_with_property_name(${created}, ${inferredKey}, NULL)`;
         const pieces: string[] = [
             `void* const ${identity} = TSC_GC_MALLOC(sizeof(char))`,
-            `tsc_value_t ${constructor} = ${this.withCallableSourceText(`tsc_value_function_class_named(${adapter}, ${identity}, 0.0, ${ts.isClassDeclaration(expression) ? this.stringLit(this.classRuntimeName(expression)) : this.functionValueNameLiteral(expression)})`, expression)}`,
+            `tsc_value_t ${constructor} = ${created}`,
             `void* volatile ${constructorRoot} = tsc_value_gc_root(${constructor})`,
             `(void)${constructorRoot}`,
             `tsc_value_t ${prototype} = tsc_value_get_prop(${constructor}, tsc_str_from_lit("prototype", 9))`,
@@ -32044,6 +32127,7 @@ class Emitter {
             this.closureEnvScopes.pop();
         }
         pieces.push(...this.initializeClassNameEnvironment(inner, constructor));
+        pieces.push(`tsc_value_class_initialize_elements(${constructor}, ${constructor}, true)`);
         pieces.push(constructor);
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
@@ -33173,7 +33257,8 @@ class Emitter {
             this.test262ScriptGlobalBindingName(to.expression) ||
             this.isSourceGlobalReference(to.expression) ||
             this.ordinaryNativeGlobalConstructor(to.expression) ||
-            this.isUnresolvedParameterScopeReference(to.expression)
+            this.isUnresolvedParameterScopeReference(to.expression) ||
+            !this.symbolForIdentifier(to.expression)
         )) {
             return {
                 c: `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
@@ -36312,10 +36397,10 @@ class Emitter {
         return null;
     }
 
-    private emitClosureExpression(fn: ClosureLikeDeclaration): EmitResult {
+    private emitClosureExpression(fn: ClosureLikeDeclaration, typeOverride?: CType): EmitResult {
         const javascript = this.isJavaScriptSourceFile(fn.getSourceFile());
-        const sig = javascript ? null : this.checker.getSignatureFromDeclaration(fn);
-        if (!javascript && !sig) unsupported(fn, "could not resolve closure signature");
+        const sig = javascript || typeOverride ? null : this.checker.getSignatureFromDeclaration(fn);
+        if (!javascript && !sig && !typeOverride) unsupported(fn, "could not resolve closure signature");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
             if (!hasCanonicalValueFormals(fn) &&
@@ -36330,7 +36415,7 @@ class Emitter {
                 ? this.prepareType(p.dotDotDotToken ? arrayType(T_VALUE) : T_VALUE)
                 : this.prepareType(mapType(p, this.checker));
         });
-        const type = hasCanonicalValueFormals(fn)
+        const type = typeOverride ? this.prepareType(typeOverride) : hasCanonicalValueFormals(fn)
             ? this.sourceFunctionValueType(fn)
             : this.prepareType(functionType(
                 params,
