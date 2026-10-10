@@ -1254,6 +1254,7 @@ tsc_value_t tsc_promise_constructor_value(void);
 tsc_value_t tsc_promise_prototype_value(void);
 tsc_promise_t* tsc_promise_set_value_codec(tsc_promise_t* promise, tsc_value_t (*box)(void*));
 tsc_value_t tsc_async_iterator_prototype_value(void);
+tsc_iterator_record_t tsc_async_iterator_from_sync(tsc_iterator_record_t iterator);
 tsc_iterator_record_t tsc_async_iterator_open(tsc_value_t value);
 tsc_value_t tsc_async_iterator_next(tsc_iterator_record_t* iterator);
 /* NULL means no Await is required. Incoming throws retain precedence over

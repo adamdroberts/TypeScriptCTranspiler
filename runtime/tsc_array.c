@@ -402,6 +402,212 @@ static tsc_value_t array_static_from(void* env, tsc_value_t this_arg, tsc_array_
     return result;
 }
 
+/* One retained Iterator Record and one phase worklist implement the async
+ * factory. Every Await schedules a job, including already settled inputs. */
+typedef enum {
+    ARRAY_ASYNC_START, ARRAY_ASYNC_READ, ARRAY_ASYNC_NEXT,
+    ARRAY_ASYNC_INPUT, ARRAY_ASYNC_MAP, ARRAY_ASYNC_MAPPED,
+    ARRAY_ASYNC_DEFINE, ARRAY_ASYNC_CLOSE, ARRAY_ASYNC_DONE
+} array_async_phase_t;
+
+typedef enum {
+    ARRAY_ASYNC_CONSTRUCTOR, ARRAY_ASYNC_SOURCE, ARRAY_ASYNC_MAPPER,
+    ARRAY_ASYNC_THIS, ARRAY_ASYNC_RESULT, ARRAY_ASYNC_VALUE,
+    ARRAY_ASYNC_ERROR, ARRAY_ASYNC_SLOT_COUNT
+} array_async_slot_t;
+
+typedef struct {
+    tsc_value_t values[ARRAY_ASYNC_SLOT_COUNT];
+    void* roots[ARRAY_ASYNC_SLOT_COUNT];
+    tsc_iterator_record_t iterator;
+    tsc_promise_t* output;
+    tsc_promise_t* awaited;
+    tsc_realm_t* realm;
+    tsc_environment_t* environment;
+    double index, length;
+    array_async_phase_t phase;
+    bool iterable, mapping, close_on_abrupt;
+} array_async_state_t;
+
+static void array_async_store(array_async_state_t* state, array_async_slot_t slot, tsc_value_t value) {
+    state->values[slot] = value;
+    state->roots[slot] = tsc_value_gc_root(value);
+}
+
+static void array_from_async_resume(void* env);
+
+static void array_async_wait(array_async_state_t* state, tsc_promise_t* promise, array_async_phase_t phase) {
+    state->awaited = promise;
+    state->phase = phase;
+    if (tsc_promise_is_pending(promise))
+        tsc_promise_add_callback(promise, array_from_async_resume, state);
+    else tsc_queue_microtask(array_from_async_resume, state);
+}
+
+static tsc_value_t array_async_awaited_value(array_async_state_t* state) {
+    if (tsc_promise_is_rejected(state->awaited))
+        tsc_throw_value(tsc_promise_reason(state->awaited));
+    return tsc_promise_value(state->awaited);
+}
+
+static void array_async_reject(array_async_state_t* state, tsc_value_t error) {
+    array_async_store(state, ARRAY_ASYNC_ERROR, error);
+    if (state->iterable && state->close_on_abrupt) {
+        state->close_on_abrupt = false;
+        tsc_promise_t* closing = tsc_async_iterator_close(&state->iterator, true);
+        if (closing) {
+            array_async_wait(state, closing, ARRAY_ASYNC_CLOSE);
+            return;
+        }
+    }
+    state->phase = ARRAY_ASYNC_DONE;
+    tsc_promise_reject_in_place(state->output, state->values[ARRAY_ASYNC_ERROR]);
+}
+
+static void array_from_async_resume(void* env) {
+    array_async_state_t* state = env;
+    tsc_realm_t* previous_realm = tsc_realm_swap(state->realm);
+    tsc_environment_t* previous_environment = tsc_environment_swap(state->environment);
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_value_t error = tsc_current_error_value();
+        tsc_try_pop();
+        array_async_reject(state, error);
+        goto restored;
+    }
+    for (;;) {
+        switch (state->phase) {
+        case ARRAY_ASYNC_START: {
+            state->mapping = !tsc_value_is_undefined(state->values[ARRAY_ASYNC_MAPPER]);
+            if (state->mapping && !tsc_value_is_callable(state->values[ARRAY_ASYNC_MAPPER]))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.fromAsync mapper must be callable"));
+            tsc_value_t source = state->values[ARRAY_ASYNC_SOURCE];
+            if (tsc_value_is_nullish(source))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.from source must not be null or undefined"));
+            tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_async_iterator());
+            void* volatile method_root = tsc_value_gc_root(method);
+            if (!tsc_value_is_nullish(method)) {
+                state->iterator = tsc_sync_iterator_open_with_method(source, method);
+                state->iterable = true;
+            } else {
+                method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
+                method_root = tsc_value_gc_root(method);
+                if (!tsc_value_is_nullish(method)) {
+                    state->iterator = tsc_async_iterator_from_sync(tsc_sync_iterator_open_with_method(source, method));
+                    state->iterable = true;
+                }
+            }
+            (void)method_root;
+            if (!state->iterable) {
+                array_async_store(state, ARRAY_ASYNC_SOURCE, tsc_value_to_object(source));
+                state->length = array_length_of_array_like(state->values[ARRAY_ASYNC_SOURCE]);
+            }
+            array_async_store(state, ARRAY_ASYNC_RESULT, array_static_create_result(
+                state->values[ARRAY_ASYNC_CONSTRUCTOR], state->length, !state->iterable));
+            state->phase = ARRAY_ASYNC_READ;
+            break;
+        }
+        case ARRAY_ASYNC_READ: {
+            state->close_on_abrupt = false;
+            if (state->iterable) {
+                if (state->index >= 9007199254740991.0) {
+                    state->close_on_abrupt = true;
+                    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.fromAsync result exceeds the maximum safe length"));
+                }
+                tsc_value_t next = tsc_async_iterator_next(&state->iterator);
+                void* volatile next_root = tsc_value_gc_root(next);
+                array_async_wait(state, tsc_promise_await(next), ARRAY_ASYNC_NEXT);
+                (void)next_root;
+                goto suspended;
+            }
+            if (state->index >= state->length) {
+                array_set_length_or_throw(state->values[ARRAY_ASYNC_RESULT], state->length);
+                state->phase = ARRAY_ASYNC_DONE;
+                tsc_promise_resolve_into(state->output, state->values[ARRAY_ASYNC_RESULT]);
+                goto suspended;
+            }
+            array_async_store(state, ARRAY_ASYNC_VALUE,
+                tsc_value_get_index(state->values[ARRAY_ASYNC_SOURCE], state->index));
+            array_async_wait(state, tsc_promise_await(state->values[ARRAY_ASYNC_VALUE]), ARRAY_ASYNC_INPUT);
+            goto suspended;
+        }
+        case ARRAY_ASYNC_NEXT: {
+            array_async_store(state, ARRAY_ASYNC_VALUE, array_async_awaited_value(state));
+            tsc_value_t next = state->values[ARRAY_ASYNC_VALUE];
+            if (!tsc_value_is_object(next))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Async iterator result is not an object"));
+            if (tsc_value_is_truthy(tsc_value_get_prop(next, tsc_str_from_lit("done", 4)))) {
+                state->iterator.done = true;
+                array_set_length_or_throw(state->values[ARRAY_ASYNC_RESULT], state->index);
+                state->phase = ARRAY_ASYNC_DONE;
+                tsc_promise_resolve_into(state->output, state->values[ARRAY_ASYNC_RESULT]);
+                goto suspended;
+            }
+            array_async_store(state, ARRAY_ASYNC_VALUE, tsc_value_get_prop(next, tsc_str_from_lit("value", 5)));
+            state->phase = ARRAY_ASYNC_MAP;
+            break;
+        }
+        case ARRAY_ASYNC_INPUT:
+            array_async_store(state, ARRAY_ASYNC_VALUE, array_async_awaited_value(state));
+            state->phase = ARRAY_ASYNC_MAP;
+            break;
+        case ARRAY_ASYNC_MAP:
+            if (state->mapping) {
+                state->close_on_abrupt = state->iterable;
+                tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 2);
+                tsc_array_push_value(arguments, state->values[ARRAY_ASYNC_VALUE]);
+                tsc_array_push_value(arguments, tsc_value_num(state->index));
+                array_async_store(state, ARRAY_ASYNC_VALUE, tsc_value_apply_function(
+                    state->values[ARRAY_ASYNC_MAPPER], state->values[ARRAY_ASYNC_THIS], tsc_value_array(arguments)));
+                array_async_wait(state, tsc_promise_await(state->values[ARRAY_ASYNC_VALUE]), ARRAY_ASYNC_MAPPED);
+                goto suspended;
+            }
+            state->phase = ARRAY_ASYNC_DEFINE;
+            break;
+        case ARRAY_ASYNC_MAPPED:
+            array_async_store(state, ARRAY_ASYNC_VALUE, array_async_awaited_value(state));
+            state->phase = ARRAY_ASYNC_DEFINE;
+            break;
+        case ARRAY_ASYNC_DEFINE:
+            state->close_on_abrupt = state->iterable;
+            array_create_data_property_or_throw(state->values[ARRAY_ASYNC_RESULT], state->index,
+                state->values[ARRAY_ASYNC_VALUE]);
+            state->index += 1.0;
+            state->phase = ARRAY_ASYNC_READ;
+            break;
+        case ARRAY_ASYNC_CLOSE:
+            /* AsyncIteratorClose awaits return but incoming throws win over
+             * return rejection and non-object results. */
+            state->phase = ARRAY_ASYNC_DONE;
+            tsc_promise_reject_in_place(state->output, state->values[ARRAY_ASYNC_ERROR]);
+            goto suspended;
+        case ARRAY_ASYNC_DONE:
+            goto suspended;
+        }
+    }
+suspended:
+    tsc_try_pop();
+restored:
+    (void)tsc_environment_swap(previous_environment);
+    (void)tsc_realm_swap(previous_realm);
+}
+
+static tsc_value_t array_static_from_async(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    array_async_state_t* state = TSC_GC_MALLOC(sizeof(*state));
+    *state = (array_async_state_t){ .realm = tsc_realm_current(), .environment = tsc_environment_current() };
+    for (size_t slot = 0; slot < ARRAY_ASYNC_SLOT_COUNT; ++slot)
+        array_async_store(state, (array_async_slot_t)slot, tsc_value_undefined());
+    array_async_store(state, ARRAY_ASYNC_CONSTRUCTOR, receiver);
+    const array_async_slot_t argument_slots[] = { ARRAY_ASYNC_SOURCE, ARRAY_ASYNC_MAPPER, ARRAY_ASYNC_THIS };
+    for (size_t index = 0; index < sizeof(argument_slots) / sizeof(*argument_slots); ++index)
+        if (args && index < args->len) array_async_store(state, argument_slots[index], TSC_ARR(tsc_value_t, args, index));
+    state->output = tsc_promise_pending();
+    array_from_async_resume(state);
+    return tsc_value_promise(state->output);
+}
+
 static void array_constructor_define_method(tsc_value_t constructor, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
     (void)tsc_value_define_property_desc(
         constructor,
@@ -444,6 +650,7 @@ tsc_value_t tsc_array_constructor_value(void) {
         );
         array_constructor_define_method(array_constructor_value, "isArray", 7, 1.0, array_static_is_array);
         array_constructor_define_method(array_constructor_value, "from", 4, 1.0, array_static_from);
+        array_constructor_define_method(array_constructor_value, "fromAsync", 9, 1.0, array_static_from_async);
         array_constructor_define_method(array_constructor_value, "of", 2, 0.0, array_static_of);
         array_constructor_initialized = true;
     }

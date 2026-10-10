@@ -1,5 +1,5 @@
 marks: a
 number: true 0 
 object: true 0 
-string: true 2 a|b
 null: Array.from source must not be null or undefined
+string: true 2 a|b

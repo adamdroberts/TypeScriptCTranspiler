@@ -1,25 +1,25 @@
 undefined mapper thisArg evaluated
+async mapper throw: mapper throw
+promise reject: bad
+undefined mapper ignored: z TE
+mapper ignored: 42 TE
+promise array: 3|4
+promise set: left|right
+undefined mapper array: 7|8
+undefined mapper string: u|v
+dynamic string: x|y
+async mapper reject: mapper bad
 array: 1|2|3
-string map: a0,b1,c2
 set map: 6|12
 map map: x:7|y:8
 named: 0=5,1=6
 thisArg: 21|22
-promise array: 3|4
-promise set: left|right
-promise reject: bad
-undefined mapper array: 7|8
-undefined mapper string: u|v
-undefined mapper ignored: z TE
 dynamic array: 9|ten|true
-dynamic string: x|y
 async mapper array: 10|20
 async mapper string: p:0|q:1
 async mapper set: 4|5
 async mapper map: x=7|y=8
-async mapper dynamic: dyn:9|dyn:ten|dyn:true
 async mapper thisArg: 31|32
-mapper ignored: 42 TE
-async mapper reject: mapper bad
-async mapper throw: mapper throw
+string map: a0,b1,c2
+async mapper dynamic: dyn:9|dyn:ten|dyn:true
 async sparse: a|missing|c

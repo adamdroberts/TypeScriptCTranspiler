@@ -2948,7 +2948,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Array", "typed arrays", "iterators", "sparse and exotic indexed properties"],
-      "localEvidence": { "property": ["tests/property/array-static-factory.property.test.ts"], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth", "array_static_factory_item_width"], "e2e": ["array_prototypes", "array_property_descriptors", "array_buffer_dataview"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"], "implementation": ["runtime/tsc_array.c", "runtime/tsc_value.c"] },
+      "localEvidence": {"property": ["tests/property/array-static-factory.property.test.ts", "tests/property/array-from-async.property.test.ts"], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth", "array_static_factory_item_width"], "e2e": ["array_prototypes", "array_property_descriptors", "array_buffer_dataview", "array_from_async_protocol"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor"], "implementation": ["runtime/tsc_array.c", "runtime/tsc_value.c", "runtime/tsc_array.c#array_from_async_resume"]},
       "knownGaps": ["TypedArray and full array exotic semantics remain unverified."]
     },
     {
@@ -2988,7 +2988,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["iterators", "generators", "promises and jobs", "async functions and generators", "disposable resources"],
-      "localEvidence": {"property": ["tests/property/resumable-resource.property.test.ts"], "generatedRegression": ["async-leading-await-chain", "async-binding-default-depth"], "stress": ["async-leading-await-chain"], "e2e": ["array_from_async", "promise_combinators_dynamic", "resource_completion_protocol"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_promise.c", "src/emit/index.ts", "src/emit/async-cfg.ts", "runtime/tsc_value.c", "runtime/tsc_runtime.h"]},
+      "localEvidence": {"property": ["tests/property/resumable-resource.property.test.ts", "tests/property/array-from-async.property.test.ts"], "generatedRegression": ["async-leading-await-chain", "async-binding-default-depth"], "stress": ["async-leading-await-chain"], "e2e": ["array_from_async", "promise_combinators_dynamic", "resource_completion_protocol", "array_from_async_protocol"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_promise.c", "src/emit/index.ts", "src/emit/async-cfg.ts", "runtime/tsc_value.c", "runtime/tsc_runtime.h", "runtime/tsc_array.c#array_from_async_resume"]},
       "knownGaps": ["General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete."]
     },
     {

@@ -694,16 +694,21 @@ static tsc_value_t async_from_sync_iterator_wrap(tsc_iterator_record_t original)
     return tsc_value_object(wrapper);
 }
 
+tsc_iterator_record_t tsc_async_iterator_from_sync(tsc_iterator_record_t sync) {
+    tsc_value_t wrapper = async_from_sync_iterator_wrap(sync);
+    tsc_iterator_record_t record = tsc_sync_iterator_open_direct(wrapper);
+    record.source = sync.source;
+    record.source_gc_root = sync.source_gc_root;
+    return record;
+}
+
 tsc_iterator_record_t tsc_async_iterator_open(tsc_value_t value) {
     void* volatile value_root = tsc_value_gc_root(value);
     tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_iterator());
     if (!tsc_value_is_nullish(method)) return tsc_sync_iterator_open_with_method(value, method);
     tsc_iterator_record_t sync = tsc_sync_iterator_open(value);
-    tsc_value_t wrapper = async_from_sync_iterator_wrap(sync);
-    tsc_iterator_record_t record = tsc_sync_iterator_open_direct(wrapper);
-    record.source = value;
-    record.source_gc_root = value_root;
-    return record;
+    (void)value_root;
+    return tsc_async_iterator_from_sync(sync);
 }
 
 tsc_value_t tsc_async_iterator_next(tsc_iterator_record_t* iterator) {

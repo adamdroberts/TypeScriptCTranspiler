@@ -42798,14 +42798,8 @@ class Emitter {
             }
             return this.emitArrayFromWithoutMapper(call, a, undefined, mapfn ? call.arguments.slice(1) : []);
         }
-        if (ts.isIdentifier(recvExpr) && recvExpr.text === "Array" && memberName === "fromAsync") {
-            const promiseType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-            if (promiseType.kind !== "promise" || !promiseType.elem || promiseType.elem.kind !== "array") {
-                unsupported(call, "Array.fromAsync result must be Promise<T[]>");
-            }
-            const a = call.arguments[0];
-            if (!a) unsupported(call, "Array.fromAsync needs an argument");
-            return this.emitArrayFromAsync(call, a, promiseType);
+        if (ts.isIdentifier(recvExpr) && this.isUnshadowedGlobalIdentifier(recvExpr, "Array") && memberName === "fromAsync") {
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
@@ -43890,54 +43884,6 @@ class Emitter {
                     `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
             },
         );
-    }
-
-    /** Physical collection codecs are boundary adapters. Source and mapper
-     * values both pass through the same ordinary Promise conversion. */
-    private emitArrayFromAsync(call: ts.CallExpression, itemsArg: ts.Expression, resultType: CType): EmitResult {
-        const elem = resultType.elem?.elem;
-        if (!elem) unsupported(call, "Array.fromAsync result storage cannot represent its elements");
-        const mapper = call.arguments[1];
-        const specs: SequencedCallArg[] = [
-            { value: this.emitExpr(itemsArg), target: T_VALUE, node: itemsArg },
-            ...(mapper ? [{ value: this.emitExpr(mapper), target: T_VALUE, node: mapper }] : []),
-            ...(call.arguments[2] ? [{ value: this.emitExpr(call.arguments[2]), target: T_VALUE, node: call.arguments[2] }] : []),
-            ...this.ignoredArgumentSpecs(call.arguments, 3),
-        ];
-        return this.emitSequencedExpr(resultType, specs, ([source, callback, receiver]) => {
-            const method = this.freshTemp("_from_async_iterator_method"), iterator = this.freshTemp("_from_async_iterator");
-            const src = this.freshTemp("_from_async_source"), out = this.freshTemp("_from_async_output");
-            const result = this.freshTemp("_from_async_result"), pending = this.freshTemp("_from_async_pending");
-            const index = this.freshTemp("_from_async_index"), item = this.freshTemp("_from_async_item");
-            const promise = this.freshTemp("_from_async_promise"), value = this.freshTemp("_from_async_value");
-            const pushed = this.freshTemp("_from_async_pushed"), frame = this.freshTemp("_from_async_frame");
-            const map = callback ? this.emitCallbackApplication(callback, receiver ?? "tsc_value_undefined()", [
-                { c: value, ty: T_VALUE }, { c: `(double)${index}`, ty: T_NUMBER },
-            ], mapper!).c : value;
-            const awaitValue = (expression: string): string =>
-                `${promise} = tsc_promise_await(${expression}); ` +
-                `if (tsc_promise_is_rejected(${promise})) { ${result} = tsc_promise_reject(tsc_promise_reason(${promise})); break; } ` +
-                `if (tsc_promise_is_pending(${promise})) { ${pending} = true; continue; } ` +
-                `${value} = tsc_promise_value(${promise}); `;
-            return `({ tsc_promise_t* ${result} = NULL; bool ${pending} = false; tsc_array_t* ${out} = NULL; ` +
-                `TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame}); if (setjmp(${frame}.jb) == 0) { ` +
-                (callback ? `if (!tsc_value_is_undefined(${callback}) && !tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` : "") +
-                `if (tsc_value_is_nullish(${source})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.from source must not be null or undefined")); ` +
-                `tsc_value_t ${method} = tsc_value_get_symbol_prop(${source}, tsc_symbol_iterator()); ` +
-                `void* volatile ${method}_gc_root = tsc_value_gc_root(${method}); tsc_array_t* ${src}; ` +
-                `if (!tsc_value_is_nullish(${method})) { tsc_sync_iterator_t ${iterator} = tsc_sync_iterator_open_with_method(${source}, ${method}); ` +
-                `${src} = tsc_array_new(sizeof(tsc_value_t), 1); tsc_value_t ${item}; ` +
-                `while (tsc_sync_iterator_step(&${iterator}, &${item})) { void* volatile ${item}_gc_root = tsc_value_gc_root(${item}); tsc_array_push_value(${src}, ${item}); } ` +
-                `} else ${src} = tsc_value_array_from_values(${source}); ` +
-                `${out} = tsc_array_new(sizeof(${elem.c}), ${src}->len ? ${src}->len : 1); ` +
-                `for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { ` +
-                `tsc_value_t ${item} = TSC_ARR(tsc_value_t, ${src}, ${index}); tsc_value_t ${value}; tsc_promise_t* ${promise}; ` +
-                awaitValue(item) +
-                (callback ? `if (!tsc_value_is_undefined(${callback})) { ${awaitValue(map)} } ` : "") +
-                `${elem.c} ${pushed} = ${this.coerce({ c: value, ty: T_VALUE }, elem, call)}; tsc_array_push_raw(${out}, &${pushed}); } ` +
-                `tsc_try_pop(); } else { ${result} = tsc_promise_reject(tsc_current_error_value()); } ` +
-                `${result} ? ${result} : (${pending} ? tsc_promise_pending() : tsc_promise_resolve_array(${out})); })`;
-        });
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {

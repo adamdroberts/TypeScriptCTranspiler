@@ -1691,7 +1691,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-regexp-string-iterator-instances` — Properties of RegExp String Iterator Instances: exact disposition and partitions missing.
 - [ ] **Indexed Collections** (`sec-indexed-collections`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: Array; typed arrays; iterators; sparse and exotic indexed properties.
-  - Linked local regression evidence: property: tests/property/array-static-factory.property.test.ts; stress: array_literal_stack_alloc_growth, array_static_factory_item_width; E2E: array_prototypes, array_property_descriptors, array_buffer_dataview.
+  - Linked local regression evidence: property: tests/property/array-static-factory.property.test.ts, tests/property/array-from-async.property.test.ts; stress: array_literal_stack_alloc_growth, array_static_factory_item_width; E2E: array_prototypes, array_property_descriptors, array_buffer_dataview, array_from_async_protocol.
   - Known blockers: TypedArray and full array exotic semantics remain unverified.
   - [ ] `sec-indexed-collections` — Indexed Collections: exact disposition and partitions missing.
   - [ ] `sec-array-objects` — Array Objects: exact disposition and partitions missing.
@@ -2148,7 +2148,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-finalization-registry-instances` — Properties of FinalizationRegistry Instances: exact disposition and partitions missing.
 - [ ] **Control Abstraction Objects** (`sec-control-abstraction-objects`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: iterators; generators; promises and jobs; async functions and generators; disposable resources.
-  - Linked local regression evidence: property: tests/property/resumable-resource.property.test.ts; generated regression: async-leading-await-chain, async-binding-default-depth; stress: async-leading-await-chain; E2E: array_from_async, promise_combinators_dynamic, resource_completion_protocol.
+  - Linked local regression evidence: property: tests/property/resumable-resource.property.test.ts, tests/property/array-from-async.property.test.ts; generated regression: async-leading-await-chain, async-binding-default-depth; stress: async-leading-await-chain; E2E: array_from_async, promise_combinators_dynamic, resource_completion_protocol, array_from_async_protocol.
   - Known blockers: General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete.
   - [ ] `sec-control-abstraction-objects` — Control Abstraction Objects: exact disposition and partitions missing.
   - [ ] `sec-iteration` — Iteration: exact disposition and partitions missing.
