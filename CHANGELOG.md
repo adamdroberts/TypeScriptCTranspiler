@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Correct CommonJS export fixtures to define properties before freezing their target. Node rejects the previous add-to-frozen-object order; verify the exported property values directly against Node. Existing AOT import/require wrapper regressions pass; this does not prove full Node ESM/CommonJS default interop.
+
 - Preserve encoded string-or-undefined environment reads after deletion and static narrowing. Remove native environment-key truncation; verify aliases, long keys and suspended typed consumers against Node.
 
 - Share Proxy defineProperty invariants through actual target descriptors and extensibility. Reject false writable downgrades of non-configurable data properties, preserve nested target ordering and abrupt values, and remove duplicated representation branches.
