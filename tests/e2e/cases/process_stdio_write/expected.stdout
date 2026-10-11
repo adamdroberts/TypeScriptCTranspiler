@@ -1,3 +1,4 @@
 raw:write true true
-enc:callback true ecb
-stderr callback true err
+enc:callback true e
+stderr callback true 
+completed ecb err

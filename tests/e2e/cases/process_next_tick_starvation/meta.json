@@ -1,3 +1,0 @@
-{
-  "description": "bounded process.nextTick recursion starvation protection throws and is catchable"
-}

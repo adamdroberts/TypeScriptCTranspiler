@@ -1716,6 +1716,7 @@ bool tsc_process_kill(double pid, double signal);
 int tsc_posix_signal_number(const tsc_str_t* signal);
 tsc_array_t* tsc_process_hrtime(tsc_array_t* previous);
 tsc_bigint_t* tsc_process_hrtime_bigint(void);
+bool tsc_process_stdio_write(bool stderr_stream,const struct tsc_array* arguments);
 bool tsc_process_stdout_write(const tsc_str_t* data);
 bool tsc_process_stderr_write(const tsc_str_t* data);
 bool tsc_process_stdout_write_buffer(const tsc_buffer_t* data);

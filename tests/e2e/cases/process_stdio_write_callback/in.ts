@@ -1,3 +1,4 @@
+"use strict";
 let callbacks = 0;
 let seen = "";
 
@@ -18,3 +19,5 @@ const errOk = process.stderr.write("", "utf8", () => {
 });
 
 console.log("write callbacks", outOk, bufOk, errOk, callbacks, seen);
+
+process.nextTick(() => console.log("callbacks completed", callbacks, seen));

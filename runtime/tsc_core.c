@@ -863,12 +863,10 @@ static uint64_t g_dynamic_stats[TSC_DYNAMIC_STAT_COUNT];
 typedef struct {
     tsc_next_tick_fn_t fn;
     void* env;
-    int depth;
 } tsc_next_tick_entry_t;
 static tsc_next_tick_entry_t* g_next_tick_queue = NULL;
 static size_t g_next_tick_len = 0;
 static size_t g_next_tick_cap = 0;
-static int g_executing_next_tick_depth = 0;
 typedef struct {
     tsc_microtask_fn_t fn;
     void* env;
@@ -1703,6 +1701,83 @@ bool process_stream_write_bytes(FILE* f, const uint8_t* data, size_t len) {
     return written == len && ferror(f) == 0;
 }
 
+typedef struct stdio_completion stdio_completion_t;
+typedef struct {stdio_completion_t* pending[2];} stdio_completion_state_t;
+struct stdio_completion {
+    tsc_value_t callback;
+    void* callback_root;
+    tsc_array_t* arguments;
+    stdio_completion_state_t* state;
+    size_t count;
+    size_t stream;
+};
+static const char stdio_completion_state_key;
+static void stdio_complete(void* environment){
+    stdio_completion_t* volatile completion=environment;
+    /* Node clears the stream's batching record before invoking any callbacks. */
+    completion->state->pending[completion->stream]=NULL;
+    for(size_t index=0;index<completion->count;++index)
+        (void)tsc_value_apply_function(completion->callback,tsc_value_undefined(),tsc_value_array(completion->arguments));
+}
+static void stdio_queue_completion(bool stderr_stream,tsc_value_t callback){
+    if(!tsc_value_is_callable(callback))return;
+    void* volatile callback_root=tsc_value_gc_root(callback);
+    stdio_completion_state_t* state=tsc_realm_state_get(&stdio_completion_state_key);
+    if(!state){state=TSC_GC_MALLOC(sizeof(*state));memset(state,0,sizeof(*state));tsc_realm_state_set(&stdio_completion_state_key,state);}
+    size_t stream=stderr_stream?1:0;
+    stdio_completion_t* completion=state->pending[stream];
+    if(completion&&tsc_value_same_value_zero(completion->callback,callback)){++completion->count;return;}
+    completion=TSC_GC_MALLOC(sizeof(*completion));memset(completion,0,sizeof(*completion));
+    completion->callback=callback;completion->callback_root=callback_root;completion->state=state;completion->stream=stream;completion->count=1;
+    state->pending[stream]=completion;
+    completion->arguments=tsc_array_new(sizeof(tsc_value_t),1);
+    tsc_value_t error=tsc_value_null();tsc_array_push_raw(completion->arguments,&error);
+    tsc_process_next_tick(stdio_complete,completion);
+    (void)callback_root;
+}
+static _Noreturn void stdio_argument_error(const char* message,const char* code){
+    tsc_error_t* volatile error=tsc_error_new_named(tsc_str_from_lit("TypeError",9),tsc_str_from_cstr(message));
+    tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_code,tsc_value_string(tsc_str_from_cstr(code)));
+    tsc_throw_value(tsc_value_error(error));
+}
+static tsc_value_t stdio_argument(const tsc_array_t* arguments,size_t index){
+    return arguments&&index<arguments->len?TSC_ARR(tsc_value_t,arguments,index):tsc_value_undefined();
+}
+bool tsc_process_stdio_write(bool stderr_stream,const tsc_array_t* arguments){
+    const tsc_array_t* volatile arguments_root=arguments;
+    tsc_value_t chunk=stdio_argument(arguments,0),encoding=stdio_argument(arguments,1),callback=stdio_argument(arguments,2);
+    if(tsc_value_is_callable(encoding)){callback=encoding;encoding=tsc_value_undefined();}
+    if(tsc_value_same_value_zero(chunk,tsc_value_null()))stdio_argument_error("Stdio write chunk cannot be null","ERR_STREAM_NULL_VALUES");
+    if(!tsc_value_is_truthy(encoding))encoding=tsc_value_undefined();
+    tsc_str_t* volatile codec=NULL;
+    if(!tsc_value_is_undefined(encoding)){
+        if(!tsc_str_eq(tsc_value_typeof(encoding),tsc_str_from_lit("string",6)))
+            stdio_argument_error("Unknown stdio encoding","ERR_UNKNOWN_ENCODING");
+        codec=tsc_str_to_lower(tsc_value_as_string(encoding));
+        if(!tsc_str_eq(codec,tsc_str_from_lit("buffer",6))&&!tsc_buffer_is_encoding(codec))
+            stdio_argument_error("Unknown stdio encoding","ERR_UNKNOWN_ENCODING");
+    }
+    tsc_buffer_t* volatile bytes=NULL;
+    tsc_buffer_t view_bytes={0};
+    if(tsc_str_eq(tsc_value_typeof(chunk),tsc_str_from_lit("string",6))){
+        if(codec&&tsc_str_eq(codec,tsc_str_from_lit("buffer",6)))stdio_argument_error("Unknown stdio encoding","ERR_UNKNOWN_ENCODING");
+        tsc_str_t* text=tsc_value_as_string(chunk);
+        if(!codec||tsc_str_eq(codec,tsc_str_from_lit("utf8",4))||tsc_str_eq(codec,tsc_str_from_lit("utf-8",5)))text=tsc_str_to_well_formed(text);
+        bytes=tsc_buffer_from_str(text,codec);
+    }else if(tsc_util_types_is_typed_array(chunk))bytes=tsc_value_as_buffer(chunk);
+    else if(tsc_util_types_is_array_buffer_view(chunk)){
+        tsc_object_t* object=tsc_value_gc_root(chunk);
+        if(!object->is_data_view)tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Stdio write operation cannot be represented"));
+        tsc_data_view_t* view=object->class_ptr;
+        view_bytes.len=(size_t)tsc_data_view_byte_length(view);view_bytes.data=view->buffer->data+view->byte_offset;view_bytes.data_owner=view->buffer->data;bytes=&view_bytes;
+    }
+    else stdio_argument_error("Stdio write chunk must be a string or byte view","ERR_INVALID_ARG_TYPE");
+    bool result=stderr_stream?tsc_process_stderr_write_buffer(bytes):tsc_process_stdout_write_buffer(bytes);
+    if(!result)tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Stdio write operation cannot be represented"));
+    stdio_queue_completion(stderr_stream,callback);
+    (void)arguments_root;return result;
+}
+
 bool tsc_process_stdout_write(const tsc_str_t* data) {
     return process_stream_write(stdout, data);
 }
@@ -1783,25 +1858,19 @@ void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
         g_next_tick_queue = entries;
         g_next_tick_cap = next;
     }
-    int depth = g_executing_next_tick_depth + 1;
-    if (depth > 1000) {
-        tsc_throw_str(tsc_str_from_cstr("process.nextTick starvation: maximum recursion depth exceeded"));
-    }
-    g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env, depth };
+    g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env };
 }
 
 void tsc_process_drain_next_ticks(void) {
     size_t idx = 0;
-    int old_executing_depth = g_executing_next_tick_depth;
     while (idx < g_next_tick_len) {
-        tsc_next_tick_entry_t entry = g_next_tick_queue[idx++];
+        tsc_next_tick_entry_t entry = g_next_tick_queue[idx];
+        g_next_tick_queue[idx++] = (tsc_next_tick_entry_t){0};
         if (entry.fn) {
-            g_executing_next_tick_depth = entry.depth;
             entry.fn(entry.env);
             tsc_weak_job_checkpoint();
         }
     }
-    g_executing_next_tick_depth = old_executing_depth;
     g_next_tick_len = 0;
 }
 

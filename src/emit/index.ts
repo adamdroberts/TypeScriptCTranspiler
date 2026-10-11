@@ -20097,7 +20097,7 @@ class Emitter {
     }
 
     private isProcessModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "process" ||
+        return this.isUnshadowedGlobalIdentifier(id, "process") ||
             this.isNamespaceImportFrom(id, ["process", "node:process"]) ||
             this.isDefaultImportFrom(id, ["process", "node:process"]);
     }
@@ -31055,14 +31055,15 @@ class Emitter {
             }
         }
         this.preallocatedVariableCells.push(preallocatedVars);
-        const declarations = functionBody ? directLexicalDeclarations(statements) : [];
-        const bodyScope = declarations.length > 0 ? this.createScopeLexicalBindings(buf, declarations) : null;
-        if (bodyScope) {
-            this.lexicalBindingScopes.push(bodyScope);
-            this.initializeScopeFunctions(buf, declarations);
-        }
         this.localDynamicRootScopes.push(new Map());
+        let bodyScope: Map<ts.Symbol, LocalLexicalBindingPlan> | null = null;
         try {
+            const declarations = functionBody ? directLexicalDeclarations(statements) : [];
+            bodyScope = declarations.length > 0 ? this.createScopeLexicalBindings(buf, declarations) : null;
+            if (bodyScope) {
+                this.lexicalBindingScopes.push(bodyScope);
+                this.initializeScopeFunctions(buf, declarations);
+            }
             this.emitResourceScope(buf, owner ?? this.currentSf!, this.directResourceDeclarations(statements), () => {
                 for (const statement of statements) {
                     this.emitStmt(buf, statement);
@@ -37431,6 +37432,14 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
+        const processWritableStreamName = memberName === "write"
+            ? this.processWritableStreamReceiverName(recvExpr)
+            : null;
+        if (processWritableStreamName) {
+            const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+            return this.emitSequencedExpr(T_BOOLEAN, [{ value: argumentsList }],
+                ([actuals]) => `tsc_process_stdio_write(${processWritableStreamName === "stderr" ? "true" : "false"}, ${actuals})`);
+        }
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr) && memberName !== "Dirent")
             return this.emitFsCall(call, memberName);
         if (this.isFsPromisesReceiver(recvExpr)) return this.emitFsPromisesCall(call, memberName);
@@ -38107,61 +38116,7 @@ class Emitter {
                 return `({ ${writeCall} ${endFn}(); ${callbackCall} })`;
             });
         }
-        const processWritableStreamName = memberName === "write"
-            ? this.processWritableStreamReceiverName(recvExpr)
-            : null;
-        if (processWritableStreamName) {
-            const streamName = processWritableStreamName;
-            if (call.arguments.length < 1) {
-                unsupported(call, `process.${streamName}.write expects a string or Buffer with optional encoding/callback`);
-            }
-            const chunk = this.emitExpr(call.arguments[0]!);
-            if (chunk.ty.kind !== "string" && chunk.ty.kind !== "buffer") {
-                unsupported(call.arguments[0]!, `process.${streamName}.write expects a string or Buffer`);
-            }
-            let encoding: { value: EmitResult; node: ts.Expression } | null = null;
-            let callback: { value: EmitResult; node: ts.Expression } | null = null;
-            let ignoredStart = 1;
-            if (call.arguments.length >= 2) {
-                const secondNode = call.arguments[1]!;
-                ignoredStart = 2;
-                if (!this.isUndefinedExpression(secondNode)) {
-                    const second = this.emitExpr(secondNode);
-                    if (second.ty.kind === "function") {
-                        callback = { value: second, node: secondNode };
-                    } else {
-                        encoding = { value: second, node: secondNode };
-                    }
-                }
-            }
-            if (!callback && call.arguments.length >= 3 && (encoding || this.isUndefinedExpression(call.arguments[1]!))) {
-                const callbackNode = call.arguments[2]!;
-                ignoredStart = 3;
-                if (!this.isUndefinedExpression(callbackNode)) {
-                    callback = { value: this.emitExpr(callbackNode), node: callbackNode };
-                }
-            }
-            if (callback && callback.value.ty.kind !== "function") {
-                unsupported(callback.node, `process.${streamName}.write callback must be a function`);
-            }
-            const fn = streamName === "stdout"
-                ? (chunk.ty.kind === "buffer" ? "tsc_process_stdout_write_buffer" : "tsc_process_stdout_write")
-                : (chunk.ty.kind === "buffer" ? "tsc_process_stderr_write_buffer" : "tsc_process_stderr_write");
-            const specs: SequencedCallArg[] = [
-                { value: chunk, target: chunk.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: call.arguments[0]! },
-            ];
-            if (encoding) specs.push({ value: encoding.value, target: T_STRING, node: encoding.node });
-            if (callback) specs.push({ value: callback.value, target: callback.value.ty, node: callback.node });
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, ignoredStart));
-            return this.emitSequencedExpr(T_BOOLEAN, specs, (vals) => {
-                const chunkC = vals[0]!;
-                const callbackC = callback ? vals[1 + (encoding ? 1 : 0)]! : null;
-                const callbackCall = callbackC
-                    ? this.emitCallbackApplication(this.coerce({ c: callbackC, ty: callback!.value.ty }, T_VALUE, callback!.node), "tsc_value_undefined()", [], callback!.node).c
-                    : "";
-                return `({ bool _ok = ${fn}(${chunkC}); ${callbackCall}; _ok; })`;
-            });
-        }
+
         if (
             ts.isIdentifier(recvExpr) &&
             this.isProcessModuleIdentifier(recvExpr)

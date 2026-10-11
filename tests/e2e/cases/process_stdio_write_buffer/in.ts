@@ -1,3 +1,4 @@
+"use strict";
 const outOk = process.stdout.write(Buffer.from("buf:"));
 const errOk = process.stderr.write(Buffer.alloc(0));
 
@@ -13,3 +14,5 @@ function done(this: any): void {
 }
 const outWithCallback = process.stdout.write(Buffer.from("bufcb:"), mark("b"), done);
 console.log("buffer callback", outWithCallback, seen);
+
+process.nextTick(() => console.log("buffer completed", seen));

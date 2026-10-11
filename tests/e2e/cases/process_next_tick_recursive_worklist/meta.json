@@ -1,0 +1,3 @@
+{
+  "description": "finite recursive process.nextTick worklist has no artificial scheduling-depth limit"
+}

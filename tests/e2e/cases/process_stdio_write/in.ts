@@ -1,3 +1,4 @@
+"use strict";
 const outOk = process.stdout.write("raw:");
 const errOk = process.stderr.write("");
 
@@ -20,3 +21,5 @@ function errDone(): void {
 }
 const errWithCallback = process.stderr.write("", errDone);
 console.log("stderr callback", errWithCallback, errSeen);
+
+process.nextTick(() => console.log("completed", seen, errSeen));

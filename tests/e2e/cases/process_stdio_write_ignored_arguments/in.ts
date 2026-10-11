@@ -1,3 +1,4 @@
+"use strict";
 import proc, { stdout } from "node:process";
 import * as processModule from "process";
 
@@ -17,3 +18,5 @@ processModule.stdout.write("", "utf8", done, mark("m"));
 proc.stdout.write("", "utf8", done, mark("d"));
 stdout.write("", done, mark("s"));
 console.log("write ignored:", ok, seen);
+
+process.nextTick(() => console.log("ignored completed", seen));

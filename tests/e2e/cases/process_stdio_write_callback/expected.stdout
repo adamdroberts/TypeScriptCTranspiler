@@ -1,1 +1,2 @@
-enc:cb:bufcb:write callbacks true true true 7 e
+enc:bufcb:write callbacks true true true 0 e
+cb:callbacks completed 7 e

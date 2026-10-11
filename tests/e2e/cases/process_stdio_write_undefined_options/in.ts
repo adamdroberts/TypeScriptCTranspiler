@@ -1,3 +1,4 @@
+"use strict";
 let callbacks = 0;
 
 function done(): void {
@@ -11,3 +12,5 @@ const errDefault = process.stderr.write("", void 0);
 const errCallback = process.stderr.write("", "utf8", void 0);
 
 console.log("undefined write", outDefault, outCallback, outBuffer, errDefault, errCallback, callbacks);
+
+process.nextTick(() => console.log("undefined completed", callbacks));
