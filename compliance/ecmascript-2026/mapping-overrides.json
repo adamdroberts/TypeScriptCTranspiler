@@ -22,6 +22,7 @@
     }
   ],
   "legacyIdRules": [
+    {"field": "es5id", "match": "prefix", "value": "12.10.1-", "clauses": ["sec-with-statement-static-semantics-early-errors"], "reason": "The ES5 WithStatement strict-mode-restrictions section maps to the current WithStatement strict-context early error, including inherited direct-eval strictness, independently of scenario filenames.", "reviewedBy": "tsc2c compliance review"},
     {
       "field": "es5id",
       "match": "prefix",

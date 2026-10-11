@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Validate inferred and supplied eval sources through one admission path, preserving inherited strictness and rejecting invalid with bodies and strict binding names before binding instantiation.
+
 - Lower `with` through object records in the canonical environment tree, preserving unscopables lookup, captured References, call receivers and lexical scope restoration through await/yield and abrupt completion.
 
 - Capture source Reference bases before assignment RHS evaluation, updates and destructuring intake; preserve original declarative bindings across eval insertion and retain numeric roots through collecting setters. Retain the same record through the shared await/yield graph and remove the obsolete generator declaration rejection fixture.

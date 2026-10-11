@@ -752,17 +752,22 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         dynamicRequires,
         customConditions: opts.customConditions,
     };
-    let built = buildProgram(programOptions);
     const functionEntries = new Map<string, FunctionConstructorEntry>();
     const evalEntries = new Map<string, EvalSourceRequest & { entry: string | null }>();
+    const rejectedEvalRoots = new Set<string>();
     for (const kind of ["script", "direct", "indirect", "agent"] as const) {
         const entries = kind === "agent" ? opts.test262Observation?.agentEntries : kind === "script" ? opts.test262Observation?.evalScriptEntries :
             kind === "direct" ? opts.test262Observation?.directEvalEntries : opts.test262Observation?.indirectEvalEntries;
         for (const entry of entries ?? []) {
             const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false);
-            evalEntries.set(evalSourceKey(request), { ...request, entry: entry.entry });
+            const admitted=evalSourceIsValid(request);
+            if(!admitted && entry.entry)rejectedEvalRoots.add(path.resolve(entry.entry));
+            evalEntries.set(evalSourceKey(request), { ...request, entry: admitted ? entry.entry : null });
         }
     }
+    programOptions.additionalRoots=programOptions.additionalRoots?.filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
+    programOptions.isolatedScriptRoots=programOptions.isolatedScriptRoots?.filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
+    let built = buildProgram(programOptions);
     let sourceEval: SourceEvalPlan | undefined = evalEntries.size ? opts.test262Observation : undefined;
     let unresolvedCalls: readonly ts.Node[] = [];
     const refreshEvalPlan = (): SourceEvalPlan => ({
@@ -816,8 +821,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         if (!addedRoot) break;
         const roots = [...functionEntries.values(), ...evalEntries.values()].flatMap(source => source.entry ? [source.entry] : []);
         built = buildProgram({ ...programOptions,
-            additionalRoots: [...(opts.additionalRoots ?? []), ...roots],
-            isolatedScriptRoots: [...(opts.isolatedScriptRoots ?? []), ...roots],
+            additionalRoots: [...(programOptions.additionalRoots ?? []), ...roots],
+            isolatedScriptRoots: [...(programOptions.isolatedScriptRoots ?? []), ...roots],
         });
     }
     const unsafeEvalRequired = !!opts.unsafeEval && (!sourceEval || !!sourceEval.unresolvedCalls?.length ||

@@ -14,7 +14,7 @@ import {
     moduleRequestKey,
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
-import { evaluationSourceRequests, sourceFileIsStrict } from "../../src/eval-source";
+import { evaluationSourceRequests, sourceFileIsStrict, evalSourceIsValid } from "../../src/eval-source";
 import {
     bindingNames,
     earlyModuleStaticSemanticsFailure,
@@ -814,7 +814,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 `__tsc2c_direct_eval__/${direct.strictCaller ? "strict" : "sloppy"}/` +
                 `${sha256Text(JSON.stringify(direct.source))}.js`;
             const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true);
-            if (failure) {
+            if (failure || !evalSourceIsValid({kind:"direct",...direct})) {
                 directEvalEntries.push({ ...direct, entry: null });
                 continue;
             }
@@ -833,7 +833,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 `__tsc2c_indirect_eval__/${indirect.strict ? "strict" : "sloppy"}/` +
                 `${sha256Text(JSON.stringify(indirect.source))}.js`;
             const failure = parseFailure(indirect.source, relative, "parse", "test-source", "script");
-            if (failure) {
+            if (failure || !evalSourceIsValid({kind:"indirect",strictCaller:false,...indirect})) {
                 indirectEvalEntries.push({ ...indirect, entry: null });
                 continue;
             }

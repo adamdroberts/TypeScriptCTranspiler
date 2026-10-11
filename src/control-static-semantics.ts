@@ -92,8 +92,21 @@ export function earlyControlFlowStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
+        const declarationName=ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) ||
+            ts.isFunctionExpression(node) || ts.isClassDeclaration(node) || ts.isClassExpression(node) ? node.name : undefined;
+        if(declarationName && isStrictCodeContext(node)) {
+            const restricted=bindingNameEntries(declarationName).find(entry=>strictModeBindingIdentifierNames.has(entry.name));
+            if(restricted)return {node:restricted.node,message:`binding identifier '${restricted.name}' is not permitted in strict mode`};
+        }
         if (ts.isWithStatement(node) && isStrictCodeContext(node))
             return {node, message:"with statement is not permitted in strict mode"};
+        if (ts.isWithStatement(node)) {
+            let body=node.statement;
+            while(ts.isLabeledStatement(body))body=body.statement;
+            if (ts.isFunctionDeclaration(body) || ts.isClassDeclaration(body) ||
+                ts.isVariableStatement(body) && (body.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0)
+                return {node:body, message:"with body must be a Statement"};
+        }
         if (ts.isFunctionLike(node)) {
             const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
             if (body) {
