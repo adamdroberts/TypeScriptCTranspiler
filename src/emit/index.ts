@@ -20416,8 +20416,9 @@ class Emitter {
         expression: ts.Expression,
         value: string,
     ): string | null {
-        if (!ts.isIdentifier(expression)) return null;
-        const symbol = this.symbolForIdentifier(expression);
+        const identifier=this.nativeBindingIdentifier(expression);
+        if (!identifier) return null;
+        const symbol = this.symbolForIdentifier(identifier);
         if (!symbol) return null;
         const rootPtr = this.captureRootPtrForSymbol(symbol);
         if (rootPtr) return `*${rootPtr} = tsc_value_gc_root(${value})`;
@@ -22608,6 +22609,11 @@ class Emitter {
             if (this.isModuleBindingSymbol(symbol)) return;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
             const bindingDeclaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+            // Native file/namespace bindings already have static storage.
+            // Protected completion regions need retained cells for C automatic
+            // bindings, not a second local cell for those static bindings.
+            if (bindingDeclaration && this.isTopLevelValueDeclaration(bindingDeclaration) &&
+                !this.sourceEnvironmentEnabled(owner.getSourceFile())) return;
             const parameter = bindingDeclaration ? this.sourceFormalParameterForDeclaration(bindingDeclaration) : null;
             const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
             captures.set(symbol, { type: T_VALUE, cellName, rootCellName: `${cellName}__gc_root`,
@@ -34771,7 +34777,14 @@ class Emitter {
         });
     }
 
+    private nativeBindingIdentifier(expr: ts.Expression): ts.Identifier | null {
+        if (ts.isIdentifier(expr)) return expr;
+        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return expr.name;
+        return null;
+    }
+
     private storageType(expr: ts.Expression): CType {
+        expr=this.nativeBindingIdentifier(expr)??expr;
         if (ts.isIdentifier(expr)) {
             if (this.test262ScriptGlobalBindingName(expr)) return T_VALUE;
             if (this.test262HostGlobalBindingName(expr)) return T_VALUE;
@@ -34790,7 +34803,7 @@ class Emitter {
         if (ts.isPropertyAccessExpression(expr)) {
             if (ts.isIdentifier(expr.name)) {
                 const nsName = this.namespaceMemberName(expr.name);
-                if (nsName) return nsName;
+                if (nsName) return this.identifierRead(expr.name);
             }
             const recv = this.emitExpr(expr.expression);
             if (recv.ty.kind === "class") {
@@ -37386,6 +37399,9 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
+        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(recvExpr) && this.namespaceMemberName(pa.name)) {
+            return this.emitDynamicValueCall(call,this.emitExpr(pa));
+        }
         const processWritableStreamName = memberName === "write"
             ? this.processWritableStreamReceiverName(recvExpr)
             : null;
@@ -37748,28 +37764,6 @@ class Emitter {
                 )
                 : call.arguments.map((arg) => ({ value: this.emitExpr(arg), target: T_VALUE, node: arg }));
             return this.emitSequencedCall(moduleNsMember, retType, specs);
-        }
-
-        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(recvExpr)) {
-            const nsName = this.namespaceMemberName(pa.name);
-            if (nsName) {
-                const sig = this.checker.getResolvedSignature(call);
-                if (!sig) unsupported(call, "unresolved namespace function");
-                const params = sig.getParameters();
-                const retType = mapTsType(call, sig.getReturnType(), this.checker);
-                if (
-                    call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
-                    !this.signatureHasRestParameter(params)
-                ) {
-                    return this.emitStaticSpreadCall(call, nsName, retType, params);
-                }
-                const specs = this.callSpecsFromSignature(
-                    call,
-                    call.arguments,
-                    params,
-                );
-                return this.emitSequencedCall(nsName, retType, specs);
-            }
         }
 
         // Static class values retain the actual alias/TDZ binding and mutable
@@ -46138,6 +46132,10 @@ class Emitter {
                 { value: name, target: T_VALUE, node: pa.name },
             ], ([base, key]) => `tsc_value_private_get(${base}, ${key})`);
         }
+        if (ts.isIdentifier(pa.name)) {
+            const name=this.namespaceMemberName(pa.name);
+            if (name) return this.emitExpr(pa.name);
+        }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
         const importedHostModuleOwner = this.importedHostModuleOwner(pa);
         if (importedHostModuleOwner) return importedHostModuleOwner;
@@ -46415,11 +46413,6 @@ class Emitter {
             return { c: "tsc_event_emitter_get_default_max_listeners()", ty: T_NUMBER };
         }
         if (ts.isIdentifier(pa.name)) {
-            const nsName = this.namespaceMemberName(pa.name);
-            if (nsName) {
-                const ty = mapType(pa, this.checker);
-                return { c: nsName, ty };
-            }
             const requireMember = this.requireModuleMemberCName(pa);
             if (requireMember) {
                 const decl = this.requireModuleMemberDeclaration(pa);
