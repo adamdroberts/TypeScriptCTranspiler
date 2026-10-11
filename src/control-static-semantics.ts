@@ -94,6 +94,20 @@ export function earlyControlFlowStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
+        if (ts.isArrayBindingPattern(node) || ts.isObjectBindingPattern(node)) {
+            for (let index = 0; index < node.elements.length; index++) {
+                const element = node.elements[index]!;
+                if (ts.isOmittedExpression(element) || !element.dotDotDotToken) continue;
+                if (element.initializer || index !== node.elements.length - 1 || node.elements.hasTrailingComma ||
+                    ts.isObjectBindingPattern(node) && (!ts.isIdentifier(element.name) || element.propertyName))
+                    return { node: element, message: "invalid rest binding grammar" };
+            }
+        }
+        if (ts.isParameter(node) && node.dotDotDotToken) {
+            const parameters = (node.parent as ts.SignatureDeclaration).parameters;
+            if (node.initializer || parameters[parameters.length - 1] !== node || parameters.hasTrailingComma)
+                return { node, message: "invalid rest binding grammar" };
+        }
         const declarationName=ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) ||
             ts.isFunctionExpression(node) || ts.isClassDeclaration(node) || ts.isClassExpression(node) ? node.name : undefined;
         if(declarationName && isStrictCodeContext(node)) {

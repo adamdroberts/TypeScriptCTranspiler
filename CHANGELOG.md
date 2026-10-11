@@ -5027,3 +5027,5 @@ Admit intrinsic non-String eval results through canonical Realm binding metadata
 Release successful E2E case artifacts after validation to prevent temporary inode exhaustion. Preserve failed artifacts and support TSC2C_E2E_KEEP_PASSED=1 for debugging.
 
 Reject invalid catch BoundNames and catch declaration collisions before evaluation, preserving simple-identifier var redeclarations and separate function/static-block owners. Var initializers now use the active environment Reference, including simple catch shadows.
+
+Reject malformed rest binding grammar consistently before lowering, including nested patterns, object rest and formal parameter rest; preserve valid shared binding initialization.

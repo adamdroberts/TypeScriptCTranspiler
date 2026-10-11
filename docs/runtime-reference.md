@@ -821,3 +821,5 @@ Catch-pattern initialization reuses ordinary environment aliases, TDZ cells and 
 The canonical global binding definition includes frontend normal call-result categories; native Realm initialization consumes its existing value and attribute projections. Source reflection operations use ordinary owner fields. No public runtime API changes.
 
 Var initialization uses the shared binding tree and assignment Reference factory. Each leaf resolves in its active catch or with scope, so catch shadows receive initializer assignments while outer var storage remains intact. No public runtime API changes.
+
+Rest binding grammar is validated before native lowering. The existing binding initialization and iterator operations remain unchanged; no public runtime API changes.
