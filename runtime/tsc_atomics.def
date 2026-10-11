@@ -1,0 +1,11 @@
+/* Canonical word-operation metadata. Waiter operations are separate open work. */
+TSC_ATOMICS_MEMBER(add, ADD, 3)
+TSC_ATOMICS_MEMBER(and, AND, 3)
+TSC_ATOMICS_MEMBER(compareExchange, COMPARE_EXCHANGE, 4)
+TSC_ATOMICS_MEMBER(exchange, EXCHANGE, 3)
+TSC_ATOMICS_MEMBER(isLockFree, IS_LOCK_FREE, 1)
+TSC_ATOMICS_MEMBER(load, LOAD, 2)
+TSC_ATOMICS_MEMBER(or, OR, 3)
+TSC_ATOMICS_MEMBER(store, STORE, 3)
+TSC_ATOMICS_MEMBER(sub, SUB, 3)
+TSC_ATOMICS_MEMBER(xor, XOR, 3)

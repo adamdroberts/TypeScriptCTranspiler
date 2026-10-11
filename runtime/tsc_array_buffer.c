@@ -3,14 +3,81 @@
 #endif
 #include "tsc_internal.h"
 #include <sys/mman.h>
-#include <pthread.h>
 
 /* Shared blocks have one stable address for their entire maximum extent.
- * The retained block, not an individual view, owns the mapping and lock. */
-typedef struct {uint8_t* bytes;size_t capacity;pthread_mutex_t mutex;} shared_block_t;
+ * The retained block, not an individual view, owns the mapping. */
+typedef struct {uint8_t* bytes;size_t capacity;} shared_block_t;
 static void shared_block_release(void* object,void* unused){
     (void)unused;shared_block_t* block=object;
-    if(block->bytes){(void)munmap(block->bytes,block->capacity);block->bytes=NULL;(void)pthread_mutex_destroy(&block->mutex);}
+    if(block->bytes){(void)munmap(block->bytes,block->capacity);block->bytes=NULL;}
+}
+/* Raw native words alias the same byte block as DataView and TypedArray.
+ * Every shared byte access is atomic; aligned scalar accesses additionally
+ * preserve complete words. Atomics uses sequential consistency on this path. */
+typedef uint8_t __attribute__((may_alias)) word8_t;
+typedef uint16_t __attribute__((may_alias)) word16_t;
+typedef uint32_t __attribute__((may_alias)) word32_t;
+typedef uint64_t __attribute__((may_alias)) word64_t;
+_Static_assert(__atomic_always_lock_free(4,0),"ECMAScript requires lock-free 4-byte Atomics on this host");
+#define WORD_WIDTHS(M) M(1,word8_t) M(2,word16_t) M(4,word32_t) M(8,word64_t)
+static uint64_t word_load(const uint8_t* bytes,size_t width,int order){
+    switch(width){
+#define LOAD_WORD(size, type) case size:return __atomic_load_n((const type*)bytes,order);
+        WORD_WIDTHS(LOAD_WORD)
+#undef LOAD_WORD
+    }
+    abort();
+}
+static void word_store(uint8_t* bytes,size_t width,uint64_t value,int order){
+    switch(width){
+#define STORE_WORD(size, type) case size:__atomic_store_n((type*)bytes,(type)value,order);return;
+        WORD_WIDTHS(STORE_WORD)
+#undef STORE_WORD
+    }
+    abort();
+}
+static bool word_compare_exchange(uint8_t* bytes,size_t width,uint64_t* expected,uint64_t replacement){
+    switch(width){
+#define COMPARE_WORD(size, type) case size:{type read=(type)*expected;bool exchanged=__atomic_compare_exchange_n((type*)bytes,&read,(type)replacement,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST);*expected=read;return exchanged;}
+        WORD_WIDTHS(COMPARE_WORD)
+#undef COMPARE_WORD
+    }
+    abort();
+}
+bool tsc_atomic_word_lock_free(size_t width){
+    switch(width){
+#define LOCK_FREE_WORD(size, type) case size:return __atomic_always_lock_free(size,0);
+        WORD_WIDTHS(LOCK_FREE_WORD)
+#undef LOCK_FREE_WORD
+    }
+    return false;
+}
+#undef WORD_WIDTHS
+uint64_t tsc_atomic_word_update(uint8_t* bytes,size_t width,tsc_atomic_operation_t operation,uint64_t expected,uint64_t replacement){
+    uint64_t mask=width==8?UINT64_MAX:(UINT64_C(1)<<(width*8))-1;expected&=mask;replacement&=mask;
+    if(operation==TSC_ATOMIC_STORE){word_store(bytes,width,replacement,__ATOMIC_SEQ_CST);return replacement;}
+    uint64_t read=word_load(bytes,width,__ATOMIC_SEQ_CST);
+    for(;;){
+        uint64_t next;
+        switch(operation){
+            case TSC_ATOMIC_LOAD:return read;
+            case TSC_ATOMIC_COMPARE_EXCHANGE:if(read!=expected)return read;next=replacement;break;
+            case TSC_ATOMIC_EXCHANGE:next=replacement;break;
+            case TSC_ATOMIC_ADD:next=read+replacement;break;
+            case TSC_ATOMIC_SUB:next=read-replacement;break;
+            case TSC_ATOMIC_AND:next=read&replacement;break;
+            case TSC_ATOMIC_OR:next=read|replacement;break;
+            case TSC_ATOMIC_XOR:next=read^replacement;break;
+            default:abort();
+        }
+        uint64_t old=read;
+        if(word_compare_exchange(bytes,width,&read,next&mask))return old;
+    }
+}
+static uint64_t reorder_word(uint64_t raw,size_t width,bool little){
+    if(little==(*(uint8_t*)&(uint16_t){1}!=0))return raw;
+    uint64_t reordered=0;for(size_t byte=0;byte<width;++byte)reordered|=((raw>>(byte*8))&255)<<((width-byte-1)*8);
+    return reordered;
 }
 size_t tsc_array_buffer_length(const tsc_array_buffer_t* buffer){
     return buffer->shared?__atomic_load_n(&buffer->byte_length,__ATOMIC_SEQ_CST):buffer->byte_length;
@@ -23,7 +90,6 @@ tsc_array_buffer_t* tsc_shared_array_buffer_allocate(size_t length,size_t maximu
     void* bytes=mmap(NULL,block->capacity,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE,-1,0);
     if(bytes==MAP_FAILED)tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("SharedArrayBuffer maximum cannot be represented by native storage"));
     block->bytes=bytes;
-    if(pthread_mutex_init(&block->mutex,NULL)!=0){(void)munmap(bytes,block->capacity);block->bytes=NULL;tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("SharedArrayBuffer synchronization allocation failed"));}
 #ifndef TSC_NO_GC
     GC_register_finalizer_no_order(block,shared_block_release,NULL,NULL,NULL);
 #endif
@@ -41,17 +107,15 @@ bool tsc_shared_array_buffer_grow_storage(tsc_array_buffer_t* buffer,size_t leng
     }
 }
 uint64_t tsc_array_buffer_read_bits(const tsc_array_buffer_t* buffer,size_t offset,size_t width,bool little){
-    shared_block_t* block=buffer->shared_storage;
-    if(block)pthread_mutex_lock(&block->mutex);
-    uint64_t raw=0;for(size_t byte=0;byte<width;++byte)raw|=(uint64_t)buffer->data[offset+byte]<<((little?byte:width-byte-1)*8);
-    if(block)pthread_mutex_unlock(&block->mutex);
+    const uint8_t* bytes=buffer->data+offset;
+    if(buffer->shared&&((uintptr_t)bytes%width)==0)return reorder_word(word_load(bytes,width,__ATOMIC_RELAXED),width,little);
+    uint64_t raw=0;for(size_t byte=0;byte<width;++byte){uint8_t value=buffer->shared?(uint8_t)word_load(bytes+byte,1,__ATOMIC_RELAXED):bytes[byte];raw|=(uint64_t)value<<((little?byte:width-byte-1)*8);}
     return raw;
 }
 void tsc_array_buffer_write_bits(tsc_array_buffer_t* buffer,size_t offset,size_t width,bool little,uint64_t raw){
-    shared_block_t* block=buffer->shared_storage;
-    if(block)pthread_mutex_lock(&block->mutex);
-    for(size_t byte=0;byte<width;++byte)buffer->data[offset+byte]=(uint8_t)(raw>>((little?byte:width-byte-1)*8));
-    if(block)pthread_mutex_unlock(&block->mutex);
+    uint8_t* bytes=buffer->data+offset;
+    if(buffer->shared&&((uintptr_t)bytes%width)==0){word_store(bytes,width,reorder_word(raw,width,little),__ATOMIC_RELAXED);return;}
+    for(size_t byte=0;byte<width;++byte){uint8_t value=(uint8_t)(raw>>((little?byte:width-byte-1)*8));if(buffer->shared)word_store(bytes+byte,1,value,__ATOMIC_RELAXED);else bytes[byte]=value;}
 }
 void tsc_array_buffer_copy_bytes(tsc_array_buffer_t* target,size_t target_offset,const tsc_array_buffer_t* source,size_t source_offset,size_t count,bool backwards){
     for(size_t iteration=0;iteration<count;++iteration){

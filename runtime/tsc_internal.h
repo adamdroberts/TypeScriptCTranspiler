@@ -885,6 +885,22 @@ tsc_value_t tsc_typed_array_element_get(const tsc_object_t*, size_t);
 void tsc_typed_array_element_set(tsc_object_t*, double, tsc_value_t);
 bool tsc_typed_array_fixed_length(const tsc_object_t*);
 tsc_value_t tsc_typed_array_create_from_constructor(tsc_value_t, tsc_array_t*);
+typedef struct {
+    tsc_object_t* object;
+    tsc_array_buffer_t* buffer;
+    size_t offset, length, width;
+    tsc_numeric_format_t format;
+    tsc_element_kind_t kind;
+} tsc_integer_typed_array_record_t;
+tsc_integer_typed_array_record_t tsc_typed_array_atomic_record(tsc_value_t value, bool waitable);
+void tsc_typed_array_atomic_revalidate(const tsc_integer_typed_array_record_t* record, size_t index);
+typedef enum {
+#define TSC_ATOMICS_MEMBER(name, operation, arity) TSC_ATOMIC_##operation,
+#include "tsc_atomics.def"
+#undef TSC_ATOMICS_MEMBER
+} tsc_atomic_operation_t;
+uint64_t tsc_atomic_word_update(uint8_t* bytes, size_t width, tsc_atomic_operation_t operation, uint64_t expected, uint64_t replacement);
+bool tsc_atomic_word_lock_free(size_t width);
 void tsc_value_sort_values(tsc_array_t*, tsc_value_t, bool numeric);
 tsc_value_t tsc_value_stringify_indexed_range(tsc_value_t, size_t, tsc_value_t, bool locale);
 bool tsc_integer_indexed_valid(const tsc_object_t* object, double index);

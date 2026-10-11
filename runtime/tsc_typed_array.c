@@ -271,6 +271,18 @@ static tsc_typed_array_witness_t require_witness(const tsc_object_t* object){
     tsc_typed_array_witness_t witness=owner_witness(object);
     if(!witness.valid)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray view is outside its buffer"));return witness;
 }
+tsc_integer_typed_array_record_t tsc_typed_array_atomic_record(tsc_value_t value,bool waitable){
+    tsc_object_t* object=require_typed(value);tsc_typed_array_witness_t witness=require_witness(object);
+    tsc_element_kind_t kind=owner_kind(object);const element_t* element=&elements[kind];
+    if(waitable?(kind!=TSC_ELEMENT_Int32Array&&kind!=TSC_ELEMENT_BigInt64Array):(element->format==TSC_NUMERIC_FLOAT||element->format==TSC_NUMERIC_CLAMPED))
+        tsc_throw_error(TSC_ERROR_TYPE,key("Atomics requires an appropriate integer TypedArray"));
+    tsc_typed_array_t* view=object->is_buffer?NULL:object->class_ptr;
+    return (tsc_integer_typed_array_record_t){object,view?view->buffer:NULL,view?view->offset:0,witness.length,element->width,element->format,kind};
+}
+void tsc_typed_array_atomic_revalidate(const tsc_integer_typed_array_record_t* record,size_t index){
+    tsc_typed_array_witness_t witness=require_witness(record->object);
+    if(index>=witness.length)tsc_throw_error(TSC_ERROR_RANGE,key("Atomic element extent is outside its current buffer"));
+}
 static size_t relative_index(tsc_value_t value,size_t length){
     double relative=tsc_value_to_integer_or_infinity(value);
     return (size_t)(relative<0?fmax((double)length+relative,0):fmin(relative,(double)length));

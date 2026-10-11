@@ -122,6 +122,7 @@ const RUNTIME_SOURCES = [
     "tsc_numeric_storage.c",
     "tsc_typed_array.c",
     "tsc_array_buffer.c",
+    "tsc_atomics.c",
     "tsc_text_codec.c",
     "tsc_regexp.c",
     "tsc_regexp_api.c",
@@ -135,7 +136,7 @@ const RUNTIME_SOURCES = [
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const DISPATCH_RUNTIME_SOURCES = ["tsc_dispatch.c"];
 const TEST262_RUNTIME_SOURCES = ["tsc_test262.c"];
-const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h", "tsc_array_abi.h", "tsc_global_bindings.def", "tsc_timers_promises.def", "tsc_console_methods.def", "tsc_weak_collections.def", "tsc_fs_dirent.def", "tsc_crypto_digest.def", "tsc_error_values.def", "tsc_buffer_statics.def", "tsc_dataview.def", "tsc_typed_array.def", "tsc_typed_array_methods.def", "tsc_array_buffer.def", "tsc_text_codec.def", "tsc_iterator_consumers.def", "tsc_iterator_helpers.def"];
+const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h", "tsc_array_abi.h", "tsc_global_bindings.def", "tsc_timers_promises.def", "tsc_console_methods.def", "tsc_weak_collections.def", "tsc_fs_dirent.def", "tsc_crypto_digest.def", "tsc_error_values.def", "tsc_buffer_statics.def", "tsc_dataview.def", "tsc_typed_array.def", "tsc_typed_array_methods.def", "tsc_array_buffer.def", "tsc_atomics.def", "tsc_text_codec.def", "tsc_iterator_consumers.def", "tsc_iterator_helpers.def"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";

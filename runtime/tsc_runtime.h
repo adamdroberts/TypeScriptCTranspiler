@@ -562,6 +562,7 @@ tsc_value_t tsc_array_buffer_constructor_value(void);
 tsc_value_t tsc_array_buffer_prototype_value(void);
 tsc_value_t tsc_shared_array_buffer_constructor_value(void);
 tsc_value_t tsc_shared_array_buffer_prototype_value(void);
+tsc_value_t tsc_atomics_object_value(void);
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length);
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b);
 void tsc_array_buffer_detach(tsc_array_buffer_t* b);

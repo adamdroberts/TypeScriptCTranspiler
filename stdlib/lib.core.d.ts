@@ -698,6 +698,31 @@ interface SharedArrayBufferConstructor {
 }
 declare var SharedArrayBuffer: SharedArrayBufferConstructor;
 type ArrayBufferLike = ArrayBuffer | SharedArrayBuffer;
+type AtomicNumberArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array;
+type AtomicBigIntArray = BigInt64Array | BigUint64Array;
+interface Atomics {
+    add(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    add(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    and(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    and(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    compareExchange(typedArray: AtomicNumberArray, index: number, expectedValue: number, replacementValue: number, ...ignored: any[]): number;
+    compareExchange(typedArray: AtomicBigIntArray, index: number, expectedValue: bigint, replacementValue: bigint, ...ignored: any[]): bigint;
+    exchange(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    exchange(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    isLockFree(size: number, ...ignored: any[]): boolean;
+    load(typedArray: AtomicNumberArray, index: number, ...ignored: any[]): number;
+    load(typedArray: AtomicBigIntArray, index: number, ...ignored: any[]): bigint;
+    or(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    or(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    store(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    store(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    sub(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    sub(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+    xor(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
+    xor(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
+}
+declare var Atomics: Atomics;
+
 interface ArrayLike<T> {
     readonly length: number;
     readonly [index: number]: T;
