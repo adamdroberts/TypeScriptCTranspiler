@@ -14,17 +14,13 @@ struct tsc_atomic_waiter {
     tsc_atomic_wait_status_t status;
     tsc_promise_t* promise;
     tsc_realm_t* realm;
-    const void* agent;
+    tsc_agent_t* agent;
     struct tsc_atomic_waiter *next,*ready_next;
 };
 static pthread_mutex_t waiter_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t waiter_condition;
 static pthread_once_t waiter_once=PTHREAD_ONCE_INIT;
 static tsc_atomic_waiter_t *waiting_head,*waiting_tail,*ready_head,*ready_tail;
-static _Thread_local unsigned char agent_identity;
-static _Thread_local bool can_block=true;
-bool tsc_atomics_can_block(void){return can_block;}
-void tsc_atomics_set_can_block(bool value){can_block=value;}
 static void initialize_condition(void){
     pthread_condattr_t attribute;pthread_condattr_init(&attribute);pthread_condattr_setclock(&attribute,CLOCK_MONOTONIC);
     pthread_cond_init(&waiter_condition,&attribute);pthread_condattr_destroy(&attribute);
@@ -57,7 +53,7 @@ tsc_atomic_waiter_t* tsc_atomic_waiter_new(void* block,uint8_t* bytes,size_t off
     pthread_once(&waiter_once,initialize_condition);
     tsc_atomic_waiter_t* waiter=TSC_GC_MALLOC(sizeof(*waiter));memset(waiter,0,sizeof(*waiter));
     waiter->block=block;waiter->bytes=bytes;waiter->offset=offset;waiter->width=width;waiter->expected=width==8?expected:expected&((UINT64_C(1)<<(width*8))-1);
-    waiter->timeout=timeout;waiter->promise=promise;waiter->realm=promise?tsc_realm_current():NULL;waiter->agent=promise?&agent_identity:NULL;
+    waiter->timeout=timeout;waiter->promise=promise;waiter->realm=promise?tsc_realm_current():NULL;waiter->agent=tsc_agent_current();
     return waiter;
 }
 tsc_atomic_wait_status_t tsc_atomic_waiter_begin(tsc_atomic_waiter_t* waiter){
@@ -85,11 +81,12 @@ static void resolve_waiter(void* environment){
     release_payload(waiter);tsc_promise_resolve_into(promise,result);tsc_realm_swap(previous);
 }
 void tsc_atomics_schedule_completions(void){
+    tsc_agent_t* agent=tsc_agent_current();
     tsc_atomic_waiter_t* volatile local_head=NULL;tsc_atomic_waiter_t *local_tail=NULL,*previous=NULL;
     pthread_mutex_lock(&waiter_mutex);tsc_atomic_waiter_t* waiter=ready_head;
     while(waiter){
         tsc_atomic_waiter_t* next=waiter->ready_next;
-        if(waiter->agent==&agent_identity){
+        if(waiter->agent==agent){
             if(previous)previous->ready_next=next;else ready_head=next;if(ready_tail==waiter)ready_tail=previous;
             waiter->ready_next=NULL;if(local_tail)local_tail->ready_next=waiter;else local_head=waiter;local_tail=waiter;
         }else previous=waiter;
@@ -101,11 +98,12 @@ void tsc_atomics_schedule_completions(void){
         tsc_queue_microtask(resolve_waiter,current);
     }
 }
-static bool has_completions_locked(void){for(tsc_atomic_waiter_t* waiter=ready_head;waiter;waiter=waiter->ready_next)if(waiter->agent==&agent_identity)return true;return false;}
-bool tsc_atomics_has_completions(void){pthread_mutex_lock(&waiter_mutex);bool ready=has_completions_locked();pthread_mutex_unlock(&waiter_mutex);return ready;}
+static bool has_completions_locked(tsc_agent_t* agent){for(tsc_atomic_waiter_t* waiter=ready_head;waiter;waiter=waiter->ready_next)if(waiter->agent==agent)return true;return false;}
+bool tsc_atomics_has_completions(void){tsc_agent_t* agent=tsc_agent_current();pthread_mutex_lock(&waiter_mutex);bool ready=has_completions_locked(agent);pthread_mutex_unlock(&waiter_mutex);return ready;}
 void tsc_atomics_idle_wait(double delay){
+    tsc_agent_t* agent=tsc_agent_current();
     pthread_once(&waiter_once,initialize_condition);pthread_mutex_lock(&waiter_mutex);
-    if(!has_completions_locked()&&delay>0){struct timespec limit=deadline(delay);pthread_cond_timedwait(&waiter_condition,&waiter_mutex,&limit);}
+    if(!has_completions_locked(agent)&&delay>0){struct timespec limit=deadline(delay);pthread_cond_timedwait(&waiter_condition,&waiter_mutex,&limit);}
     pthread_mutex_unlock(&waiter_mutex);
 }
 static void timeout_waiter(void* environment){
@@ -123,4 +121,22 @@ size_t tsc_atomic_waiter_notify(void* block,size_t offset,double count){
 }
 size_t tsc_atomic_waiter_count(void* block,size_t offset){
     size_t count=0;pthread_mutex_lock(&waiter_mutex);for(tsc_atomic_waiter_t* waiter=waiting_head;waiter;waiter=waiter->next)if(waiter->block==block&&waiter->offset==offset)++count;pthread_mutex_unlock(&waiter_mutex);return count;
+}
+void tsc_atomics_abandon_agent(tsc_agent_t* agent){
+    pthread_mutex_lock(&waiter_mutex);
+    tsc_atomic_waiter_t* waiter=waiting_head;
+    while(waiter){tsc_atomic_waiter_t* next=waiter->next;
+        if(waiter->agent==agent)complete_locked(waiter,TSC_WAIT_TIMED_OUT);
+        waiter=next;
+    }
+    tsc_atomic_waiter_t* previous=NULL;waiter=ready_head;
+    while(waiter){tsc_atomic_waiter_t* next=waiter->ready_next;
+        if(waiter->agent==agent){
+            if(previous)previous->ready_next=next;else ready_head=next;
+            if(ready_tail==waiter)ready_tail=previous;
+            waiter->ready_next=NULL;release_payload(waiter);
+        }else previous=waiter;
+        waiter=next;
+    }
+    pthread_mutex_unlock(&waiter_mutex);
 }

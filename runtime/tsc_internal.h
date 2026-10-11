@@ -85,6 +85,17 @@ struct tsc_realm {
     tsc_realm_state_entry_t* states;
 };
 
+typedef struct tsc_agent tsc_agent_t;
+tsc_agent_t* tsc_agent_current(void);
+tsc_agent_t* tsc_agent_new(void);
+tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent);
+void tsc_agent_release(tsc_agent_t* agent);
+bool tsc_agent_owns_jobs(void);
+tsc_environment_t** tsc_agent_environment_slot(void);
+struct tsc_callee_frame;
+struct tsc_callee_frame** tsc_agent_callee_slot(void);
+void tsc_atomics_abandon_agent(tsc_agent_t* agent);
+
 tsc_realm_t* tsc_realm_new(void);
 void* tsc_realm_state_get(const void* key);
 void tsc_realm_state_set(const void* key, void* value);

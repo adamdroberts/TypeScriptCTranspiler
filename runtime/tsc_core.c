@@ -1,15 +1,114 @@
 #include "tsc_internal.h"
+#include <pthread.h>
 
 typedef struct {
     tsc_function_identity_key_t key;
     tsc_function_identity_t* identity;
 } tsc_function_identity_entry_t;
 
-/* A single registry owns every native callable identity. The key is immutable
- * after publication; name, length, descriptors and prototypes are not keys.
- * Scanned entries retain the same lifetime as the former global list. */
-static tsc_function_identity_entry_t* g_function_identity_entries;
-static size_t g_function_identity_count, g_function_identity_capacity;
+typedef struct {
+    tsc_next_tick_fn_t fn;
+    void* env;
+} tsc_next_tick_entry_t;
+typedef struct {
+    tsc_microtask_fn_t fn;
+    void* env;
+} tsc_microtask_entry_t;
+typedef struct {
+    tsc_immediate_fn_t fn;
+    void* env;
+    double id;
+    bool canceled;
+    bool referenced;
+} tsc_immediate_entry_t;
+typedef struct {
+    tsc_timeout_fn_t fn;
+    void* env;
+    double id;
+    bool canceled;
+    bool is_interval;
+    bool refed;
+    double delay_ms;
+    double trigger_ms;
+} tsc_timeout_entry_t;
+struct tsc_agent {
+    tsc_realm_t* realm;
+    tsc_function_identity_entry_t* function_identity_entries;
+    size_t function_identity_count,function_identity_capacity;
+    struct tsc_agent* identity_owner;
+    tsc_parse_unit_t* parse_unit;
+    tsc_environment_t* environment;
+    struct tsc_callee_frame* callee;
+    tsc_try_frame_t* try_top;
+    tsc_call_activation_t* activation_top;
+    tsc_throw_completion_t current_throw;
+    tsc_next_tick_entry_t* next_tick_queue;
+    tsc_microtask_entry_t* microtask_queue;
+    tsc_immediate_entry_t* immediate_queue;
+    tsc_timeout_entry_t* timeout_queue;
+    size_t next_tick_len,next_tick_cap,microtask_len,microtask_cap;
+    size_t immediate_len,immediate_cap,timeout_len,timeout_cap;
+    double next_timer_id;
+    bool owns_jobs,can_block,retired;
+    struct tsc_agent* next;
+};
+static tsc_agent_t *g_agents,*g_main_agent;
+static _Thread_local tsc_agent_t* g_current_agent;
+static pthread_mutex_t g_agent_mutex=PTHREAD_MUTEX_INITIALIZER;
+static tsc_agent_t* agent_allocate(bool independent){
+    tsc_agent_t* agent=TSC_GC_MALLOC(sizeof(*agent));memset(agent,0,sizeof(*agent));
+    agent->owns_jobs=independent;agent->can_block=true;agent->next_timer_id=1;
+    pthread_mutex_lock(&g_agent_mutex);agent->next=g_agents;g_agents=agent;
+    if(!g_main_agent)g_main_agent=agent;
+    agent->identity_owner=independent?agent:g_main_agent;
+    if(!independent&&g_main_agent!=agent)agent->realm=g_main_agent->realm;
+    pthread_mutex_unlock(&g_agent_mutex);return agent;
+}
+tsc_agent_t* tsc_agent_current(void){if(!g_current_agent)g_current_agent=agent_allocate(false);return g_current_agent;}
+tsc_agent_t* tsc_agent_new(void){return agent_allocate(true);}
+tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent){
+    if(agent&&agent->retired)tsc_panic("Cannot enter a retired runtime agent");
+    tsc_agent_t* previous=g_current_agent;g_current_agent=agent;return previous;
+}
+bool tsc_agent_owns_jobs(void){return tsc_agent_current()->owns_jobs;}
+tsc_environment_t** tsc_agent_environment_slot(void){return &tsc_agent_current()->environment;}
+struct tsc_callee_frame** tsc_agent_callee_slot(void){return &tsc_agent_current()->callee;}
+bool tsc_atomics_can_block(void){return tsc_agent_current()->can_block;}
+void tsc_atomics_set_can_block(bool value){tsc_agent_current()->can_block=value;}
+void tsc_agent_release(tsc_agent_t* agent){
+    if(!agent||agent->retired||agent==g_current_agent||agent==g_main_agent)tsc_panic("Cannot release an active runtime agent");
+    tsc_atomics_abandon_agent(agent);
+    pthread_mutex_lock(&g_agent_mutex);tsc_agent_t** link=&g_agents;
+    while(*link&&*link!=agent)link=&(*link)->next;
+    if(*link)*link=agent->next;
+    memset(agent,0,sizeof(*agent));agent->retired=true;pthread_mutex_unlock(&g_agent_mutex);
+}
+#define g_current_realm (tsc_agent_current()->realm)
+#define g_current_parse_unit (tsc_agent_current()->parse_unit)
+#define g_try_top (tsc_agent_current()->try_top)
+#define g_call_activation_top (tsc_agent_current()->activation_top)
+#define g_current_throw (tsc_agent_current()->current_throw)
+#define g_next_tick_queue (tsc_agent_current()->next_tick_queue)
+#define g_next_tick_len (tsc_agent_current()->next_tick_len)
+#define g_next_tick_cap (tsc_agent_current()->next_tick_cap)
+#define g_microtask_queue (tsc_agent_current()->microtask_queue)
+#define g_microtask_len (tsc_agent_current()->microtask_len)
+#define g_microtask_cap (tsc_agent_current()->microtask_cap)
+#define g_immediate_queue (tsc_agent_current()->immediate_queue)
+#define g_immediate_len (tsc_agent_current()->immediate_len)
+#define g_immediate_cap (tsc_agent_current()->immediate_cap)
+#define g_timeout_queue (tsc_agent_current()->timeout_queue)
+#define g_timeout_len (tsc_agent_current()->timeout_len)
+#define g_timeout_cap (tsc_agent_current()->timeout_cap)
+#define g_next_timer_id (tsc_agent_current()->next_timer_id)
+
+
+
+/* Each agent owns one canonical callable-identity registry. Keys stay immutable
+ * after publication; ordinary property mutation does not change identity. */
+#define g_function_identity_entries (tsc_agent_current()->identity_owner->function_identity_entries)
+#define g_function_identity_count (tsc_agent_current()->identity_owner->function_identity_count)
+#define g_function_identity_capacity (tsc_agent_current()->identity_owner->function_identity_capacity)
 
 static uint64_t function_identity_hash(const tsc_function_identity_key_t* key) {
     const uint64_t words[] = { (uint64_t)key->kind, (uintptr_t)key->realm,
@@ -106,11 +205,8 @@ tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t*
     return identity;
 }
 
-static tsc_realm_t* volatile g_default_realm = NULL;
-static TSC_TLS tsc_realm_t* g_current_realm = NULL;
 
 struct tsc_parse_unit { unsigned char identity; };
-static TSC_TLS tsc_parse_unit_t* g_current_parse_unit;
 
 tsc_parse_unit_t* tsc_parse_unit_new(void) {
     return (tsc_parse_unit_t*)TSC_GC_MALLOC(sizeof(tsc_parse_unit_t));
@@ -130,16 +226,13 @@ tsc_realm_t* tsc_realm_new(void) {
 
 tsc_realm_t* tsc_realm_current(void) {
     if (g_current_realm) return g_current_realm;
-    tsc_realm_t* realm = g_default_realm;
-    if (!realm) {
+    tsc_agent_t* agent=tsc_agent_current();
+    if(!agent->owns_jobs&&agent!=g_main_agent){
         tsc_runtime_lock();
-        realm = g_default_realm;
-        if (!realm) {
-            realm = tsc_realm_new();
-            g_default_realm = realm;
-        }
-        tsc_runtime_unlock();
+        if(!g_main_agent->realm)g_main_agent->realm=tsc_realm_new();
+        agent->realm=g_main_agent->realm;tsc_runtime_unlock();return agent->realm;
     }
+    tsc_realm_t* realm = tsc_realm_new();
     g_current_realm = realm;
     return realm;
 }
@@ -774,7 +867,7 @@ void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex);++g_runtime_l
 void tsc_runtime_unlock(void) { --g_runtime_lock_depth;pthread_mutex_unlock(&g_runtime_mutex); }
 size_t tsc_runtime_suspend(void){size_t depth=g_runtime_lock_depth;while(g_runtime_lock_depth)tsc_runtime_unlock();return depth;}
 void tsc_runtime_resume(size_t depth){while(depth--)tsc_runtime_lock();}
-void tsc_runtime_wake_event_loop(void){pthread_mutex_lock(&g_loop_mutex);pthread_cond_signal(&g_loop_cond);pthread_mutex_unlock(&g_loop_mutex);}
+void tsc_runtime_wake_event_loop(void){pthread_mutex_lock(&g_loop_mutex);pthread_cond_broadcast(&g_loop_cond);pthread_mutex_unlock(&g_loop_mutex);}
 
 bool tsc_is_main_thread(void) {
     return !g_main_thread_set || pthread_equal(pthread_self(), g_main_thread);
@@ -791,7 +884,7 @@ static void tsc_cross_post(tsc_cross_entry_t entry) {
         g_cross_cap = next;
     }
     g_cross_queue[g_cross_len++] = entry;
-    pthread_cond_signal(&g_loop_cond);
+    pthread_cond_broadcast(&g_loop_cond);
     pthread_mutex_unlock(&g_loop_mutex);
 }
 
@@ -811,6 +904,7 @@ void tsc_dispatch_task_scheduled(void) {
 }
 
 static bool tsc_dispatch_pending(void) {
+    if(tsc_agent_owns_jobs())return false;
     pthread_mutex_lock(&g_loop_mutex);
     bool pending = g_dispatch_outstanding > 0 || g_cross_len > 0;
     pthread_mutex_unlock(&g_loop_mutex);
@@ -820,6 +914,7 @@ static bool tsc_dispatch_pending(void) {
 /* Runs on the main thread: move cross-posted work into the regular loop
  * queues and settle dispatch promises. */
 static void tsc_drain_cross_queue(void) {
+    if(tsc_agent_owns_jobs())return;
     for (;;) {
         pthread_mutex_lock(&g_loop_mutex);
         if (g_cross_len == 0) {
@@ -858,55 +953,12 @@ void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error) {
 void tsc_dispatch_task_scheduled(void) {}
 #endif
 
-/* Exception state is thread-local in TSC_THREADS builds so dispatch tasks
- * get independent try/throw stacks; without TSC_THREADS this is a plain
- * static exactly as before. */
-static TSC_TLS tsc_try_frame_t* g_try_top = NULL;
-static TSC_TLS tsc_call_activation_t* g_call_activation_top = NULL;
-static TSC_TLS tsc_throw_completion_t g_current_throw;
+/* Try/throw stacks and queued jobs belong to the retained current agent. */
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
 static bool g_dynamic_stats_enabled = false;
 bool g_shape_diagnostics_enabled = false;
 static uint64_t g_dynamic_stats[TSC_DYNAMIC_STAT_COUNT];
-typedef struct {
-    tsc_next_tick_fn_t fn;
-    void* env;
-} tsc_next_tick_entry_t;
-static tsc_next_tick_entry_t* g_next_tick_queue = NULL;
-static size_t g_next_tick_len = 0;
-static size_t g_next_tick_cap = 0;
-typedef struct {
-    tsc_microtask_fn_t fn;
-    void* env;
-} tsc_microtask_entry_t;
-static tsc_microtask_entry_t* g_microtask_queue = NULL;
-static size_t g_microtask_len = 0;
-static size_t g_microtask_cap = 0;
-typedef struct {
-    tsc_immediate_fn_t fn;
-    void* env;
-    double id;
-    bool canceled;
-    bool referenced;
-} tsc_immediate_entry_t;
-static tsc_immediate_entry_t* g_immediate_queue = NULL;
-static size_t g_immediate_len = 0;
-static size_t g_immediate_cap = 0;
-typedef struct {
-    tsc_timeout_fn_t fn;
-    void* env;
-    double id;
-    bool canceled;
-    bool is_interval;
-    bool refed;
-    double delay_ms;
-    double trigger_ms;
-} tsc_timeout_entry_t;
-static tsc_timeout_entry_t* g_timeout_queue = NULL;
-static size_t g_timeout_len = 0;
-static size_t g_timeout_cap = 0;
-static double g_next_timer_id = 1.0;
 
 typedef struct {
     tsc_abort_callback_fn_t fn;
@@ -1855,7 +1907,7 @@ double tsc_process_stdio_rows(int fd) {
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
     if (!fn) return;
 #ifdef TSC_THREADS
-    if (!tsc_is_main_thread()) {
+    if (!tsc_is_main_thread() && !tsc_agent_owns_jobs()) {
         tsc_cross_entry_t entry = {0};
         entry.kind = TSC_CROSS_NEXT_TICK;
         entry.value = tsc_value_undefined();
@@ -1891,7 +1943,7 @@ void tsc_process_drain_next_ticks(void) {
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env) {
     if (!fn) return;
 #ifdef TSC_THREADS
-    if (!tsc_is_main_thread()) {
+    if (!tsc_is_main_thread() && !tsc_agent_owns_jobs()) {
         tsc_cross_entry_t entry = {0};
         entry.kind = TSC_CROSS_MICROTASK;
         entry.value = tsc_value_undefined();
@@ -1937,7 +1989,7 @@ void tsc_drain_microtasks_and_next_ticks(void) {
 double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
     if (!fn) return 0.0;
 #ifdef TSC_THREADS
-    if (!tsc_is_main_thread()) {
+    if (!tsc_is_main_thread() && !tsc_agent_owns_jobs()) {
         tsc_cross_entry_t entry = {0};
         entry.kind = TSC_CROSS_IMMEDIATE;
         entry.value = tsc_value_undefined();
@@ -2021,7 +2073,7 @@ static bool tsc_timeout_ready(const tsc_timeout_entry_t* entry, double now_ms) {
 static double tsc_make_timeout(tsc_timeout_fn_t fn, void* env, double delay,bool raw) {
     if (!fn) return 0.0;
 #ifdef TSC_THREADS
-    if (!tsc_is_main_thread()) {
+    if (!tsc_is_main_thread() && !tsc_agent_owns_jobs()) {
         tsc_cross_entry_t entry = {0};
         entry.kind = raw?TSC_CROSS_RAW_TIMEOUT:TSC_CROSS_TIMEOUT;
         entry.value = tsc_value_undefined();

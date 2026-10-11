@@ -36,7 +36,7 @@ struct tsc_environment {
     void* new_target_root;
 };
 
-static TSC_TLS tsc_environment_t* current_environment;
+#define current_environment (*tsc_agent_environment_slot())
 
 tsc_environment_t* tsc_environment_current(void) { return current_environment; }
 tsc_environment_t* tsc_environment_swap(tsc_environment_t* environment) {

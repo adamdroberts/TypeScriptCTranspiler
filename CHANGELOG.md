@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Replace process-global job queues and callable identities plus thread-local execution slots with one retained runtime agent context. Isolate independent-agent Realm, call/exception/callee state, blocking policy, jobs and waiter completion; preserve dispatch delivery and release retired roots. Add generated isolation, real threaded execution and deep retained-graph checks. Full Test262 agent lifecycle and eligible coverage remain open.
+
 - Add ordinary Atomics wait/waitAsync/notify owners backed by one retained shared-location FIFO, blocking lock release, owning-agent Promise completion and unbounded unreferenced deadlines. Verify conversion order, mixed waiters, foreign-thread wakeups and terminal GC roots; honor the Test262 main-agent blocking policy. Full agent/Realm/memory-model and eligible exhaustive coverage remain open.
 
 - Share integer-indexed key, validity, length and element operations across object hooks, with Buffer as the initial storage adapter. Validate after value conversion and delete direct Buffer-specific hook projections; actual TypedArray storage and full target coverage remain open.

@@ -3500,7 +3500,7 @@ typedef struct tsc_callee_frame {
     tsc_environment_t* constructor_environment;
 } tsc_callee_frame_t;
 
-static TSC_TLS tsc_callee_frame_t* value_current_callee = NULL;
+#define value_current_callee (*tsc_agent_callee_slot())
 
 tsc_value_t tsc_value_current_callee(void) {
     return value_current_callee
