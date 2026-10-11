@@ -13035,17 +13035,16 @@ class Emitter {
             if (!testId || testId !== this.graph.entryModuleId) {
                 throw new Error("Test262 observation test entry differs from the module-graph entry");
             }
+            const sourceOrigins = new Map(emitOrder.map(id => [id,
+                setupIds.has(id) ? "setup-script" : id === testId ? "test-source" : "module-graph"]));
+            out.line(`    static const char* const _test262_source_origins[] = { ${emitOrder.map(id => `"${sourceOrigins.get(id)}"`).join(", ")} };`);
             const scenario = escapeCString(observation.scenarioId);
             const canBlock = observation.canBlock == null
                 ? "tsc_atomics_can_block()" : observation.canBlock ? "true" : "false";
             out.line(`    const bool selected_can_block = ${canBlock};`);
             out.line("    tsc_test262_begin(selected_can_block);");
             for (const [index, modId] of startupOrder.entries()) {
-                const origin = setupIds.has(modId)
-                    ? "setup-script"
-                    : modId === testId
-                        ? "test-source"
-                        : "module-graph";
+                const origin = sourceOrigins.get(modId)!;
                 const frame = `_test262_instantiation_frame_${index}`;
                 out.line("    {");
                 out.line(`        TSC_TRY_FRAME(${frame});`);
@@ -13061,11 +13060,7 @@ class Emitter {
                 out.line("    }");
             }
             for (const [index, modId] of evaluationRoots.entries()) {
-                const origin = setupIds.has(modId)
-                    ? "setup-script"
-                    : modId === testId
-                        ? "test-source"
-                        : "module-graph";
+                const origin = `_test262_source_origins[tsc_module_error_source_index(mod_runtime_graph(), ${this.moduleRuntimeIndex(modId)})]`;
                 const frame = `_test262_frame_${index}`;
                 out.line("    {");
                 out.line(`        TSC_TRY_FRAME(${frame});`);
@@ -13075,7 +13070,7 @@ class Emitter {
                 out.line("            tsc_try_pop();");
                 out.line("        } else {");
                 out.line("            tsc_try_pop();");
-                out.line(`            tsc_test262_write_throw("${scenario}", "${origin}", tsc_current_error_value());`);
+                out.line(`            tsc_test262_write_throw("${scenario}", ${origin}, tsc_current_error_value());`);
                 out.line("            return 0;");
                 out.line("        }");
                 out.line("    }");

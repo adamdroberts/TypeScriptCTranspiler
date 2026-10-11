@@ -17,6 +17,7 @@ typedef struct tsc_module_record {
     tsc_promise_t* execution;
     tsc_value_t error;
     void* error_root;
+    struct tsc_module_record* error_source;
 } tsc_module_record_t;
 struct tsc_module_graph {
     size_t count;
@@ -45,6 +46,7 @@ static tsc_value_t module_execute(tsc_module_record_t* record) {
     (void)root;
     tsc_try_pop();
     (void)tsc_environment_swap(previous);
+    record->error_source = record;
     tsc_throw_value(error);
     return tsc_value_undefined();
 }
@@ -66,24 +68,26 @@ static void module_execute_async(tsc_module_record_t* record) {
     else tsc_queue_microtask(module_execution_callback, record);
 }
 
-static void module_set_error(tsc_module_record_t* record, tsc_value_t error) {
+static void module_set_error(tsc_module_record_t* record, tsc_value_t error, tsc_module_record_t* source) {
     record->status = MODULE_EVALUATED;
     record->async_active = false;
     record->has_error = true;
     record->error = error;
     record->error_root = tsc_value_gc_root(error);
+    record->error_source = source;
     if (record->top_level) tsc_promise_reject_in_place(record->top_level, error);
 }
 
 static void module_execution_rejected(tsc_module_record_t* record, tsc_value_t error) {
     void* volatile error_root = tsc_value_gc_root(error);
     (void)error_root;
+    tsc_module_record_t* source = record->error_source ? record->error_source : record;
     tsc_array_t* pending = tsc_array_new(sizeof(tsc_module_record_t*), 1);
     tsc_array_push_raw(pending, &record);
     while (pending->len) {
         tsc_module_record_t* current = TSC_ARR(tsc_module_record_t*, pending, --pending->len);
         if (current->status == MODULE_EVALUATED) continue;
-        module_set_error(current, error);
+        module_set_error(current, error, source);
         for (size_t index = 0; index < current->async_parents->len; index++) {
             tsc_module_record_t* parent = TSC_ARR(tsc_module_record_t*, current->async_parents, index);
             tsc_array_push_raw(pending, &parent);
@@ -193,7 +197,10 @@ tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
                 if (required->status == MODULE_EVALUATING) {
                     if (required->ancestor_index < record->ancestor_index) record->ancestor_index = required->ancestor_index;
                 } else required = required->cycle_root;
-                if (required->has_error) tsc_throw_value(required->error);
+                if (required->has_error) {
+                    record->error_source = required->error_source;
+                    tsc_throw_value(required->error);
+                }
                 if (required->async_active) {
                     record->pending_dependencies++;
                     tsc_array_push_raw(required->async_parents, &record);
@@ -232,10 +239,20 @@ tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
         void* volatile error_root = tsc_value_gc_root(error);
         (void)error_root;
         tsc_try_pop();
-        for (size_t item = 0; item < stack->len; item++) module_set_error(TSC_ARR(tsc_module_record_t*, stack, item), error);
-        module_set_error(root, error);
+        tsc_module_record_t* source = frames->len
+            ? TSC_ARR(module_frame_t, frames, frames->len - 1).record : root;
+        if (source->error_source) source = source->error_source;
+        for (size_t item = 0; item < stack->len; item++) module_set_error(TSC_ARR(tsc_module_record_t*, stack, item), error, source);
+        module_set_error(root, error, source);
     }
     return root->top_level;
+}
+
+size_t tsc_module_error_source_index(tsc_module_graph_t* graph, size_t index) {
+    if (index >= graph->count) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module is outside its retained graph"));
+    const tsc_module_record_t* record = &graph->records[index];
+    if (record->status == MODULE_ASYNC || record->status == MODULE_EVALUATED) record = record->cycle_root;
+    return record->error_source ? (size_t)(record->error_source - graph->records) : index;
 }
 
 void tsc_module_require_sync(tsc_module_graph_t* graph, size_t index) {

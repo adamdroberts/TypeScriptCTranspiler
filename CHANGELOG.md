@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Retain the executing Module Record identity through synchronous and asynchronous rejection so native Test262 dependency errors report their module-graph origin after propagation and caching.
+
 - Give retained source References priority for assignment and updates, matching reads; preserve const errors, short-circuiting and destructuring writes after eval environments escape.
 
 - Carry Test262 can-block selection into the owning runtime agent before setup and all source goals; preserve the native agent default, Realm inheritance and independent secondary-agent blocking.

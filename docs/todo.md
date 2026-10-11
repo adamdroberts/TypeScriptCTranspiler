@@ -1,12 +1,12 @@
 The selected can-block capability is now reviewed independently of host eligibility. tests/property/test262-can-block.property.test.ts verifies request-to-agent startup before setup, all source modes, ordered wait coercions, waitAsync independence, Realm inheritance, secondary-agent policy, actual wakeup and a retained evaluation stress. Remaining Realm/module/environment work and eligible exhaustive target evidence stay open.
 
-Retained source binding writes now follow the same environment Reference as reads, before static C lexical lowering. The prior immutable-binding regression is repaired; generated write partitions and the retained environment tree remain regression evidence. The module-dependency error-origin mismatch and eligible exhaustive target evidence remain open.
+Retained source binding writes now follow the same environment Reference as reads, before static C lexical lowering. The prior immutable-binding regression is repaired; generated write partitions and the retained environment tree remain regression evidence. Eligible exhaustive target evidence remains open.
 
 Native Test262 startup now carries the selected can-block Boolean from the scenario request into the canonical owning agent record before harness or test execution. Missing/null selection preserves the native CLI agent’s blocking default; Realm evaluation inherits its owning agent’s policy and secondary agents keep their independent blocking policy. Script, strict, raw and Module source goals share this startup path.
 
 Job boundaries, shared-memory observations and ordinary/Atomics accesses now release and restore the recursive runtime lock at one agent scheduling checkpoint. This permits independent agents to progress while another agent polls shared words or growing-view length, including within a synchronous loop or continuously replenished Promise queue. The SC word algorithm and waiter mutex ordering remain separate from this scheduler checkpoint.
 
-The full host self-test exposed an existing module-dependency runtime throw origin mismatch (module-graph reported as test-source); it also reproduces at prior commit b22b39d2d. This remains a module/host coverage gap and must be repaired before eligible full-target evidence.
+The module-dependency runtime error-origin mismatch is repaired by retaining the failing Module Record identity through graph rejection. Native observation selects the origin from one source-role collection; setup, entry, dependency and asynchronous completion retain their distinct report roles. Complete module/Realm host eligibility and exhaustive target evidence remain open.
 
 The runner guard permits thread naming and signals within the native executable’s own captured process ID so threaded GC can suspend agents. External process signals, unscoped kill/tkill, unsafe prctl and process execution stay denied; a runner-owned native self-test checks the permitted and rejected partitions.
 
