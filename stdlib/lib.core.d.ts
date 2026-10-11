@@ -682,6 +682,10 @@ interface ArrayBufferConstructor {
     isView(value: any, ...ignored: any[]): boolean;
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
+interface ArrayLike<T> {
+    readonly length: number;
+    readonly [index: number]: T;
+}
 interface TypedArray<T> extends Iterable<T> {
     readonly length: number;
     readonly byteLength: number;
@@ -702,6 +706,9 @@ interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     new(length?: number, ...ignored: any[]): V;
     new(buffer: ArrayBuffer, byteOffset?: number, length?: number, ...ignored: any[]): V;
     new(values: Iterable<T> | ArrayLike<T>, ...ignored: any[]): V;
+    from(source: Iterable<T> | ArrayLike<T>, mapper?: undefined, thisArg?: any, ...ignored: any[]): V;
+    from<U>(source: Iterable<U> | ArrayLike<U>, mapper: (value: U, index: number) => T, thisArg?: any, ...ignored: any[]): V;
+    of(...items: T[]): V;
 }
 interface Int8Array extends TypedArray<number> {}
 declare var Int8Array: TypedArrayConstructor<number, Int8Array>;

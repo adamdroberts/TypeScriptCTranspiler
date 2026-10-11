@@ -883,6 +883,7 @@ tsc_value_t tsc_typed_array_prototype_value(tsc_element_kind_t);
 tsc_value_t tsc_typed_array_element_get(const tsc_object_t*, size_t);
 void tsc_typed_array_element_set(tsc_object_t*, double, tsc_value_t);
 bool tsc_typed_array_fixed_length(const tsc_object_t*);
+tsc_value_t tsc_typed_array_create_from_constructor(tsc_value_t, tsc_array_t*);
 bool tsc_integer_indexed_valid(const tsc_object_t* object, double index);
 size_t tsc_integer_indexed_length(const tsc_object_t* object);
 tsc_value_t tsc_integer_indexed_get(const tsc_object_t* object, double index);

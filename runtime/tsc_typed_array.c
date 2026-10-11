@@ -135,13 +135,64 @@ static tsc_value_t concrete_construct(void* environment,tsc_value_t receiver,tsc
     }
     (void)first_root;(void)prototype_root;return result;
 }
-typedef enum {LENGTH,BYTE_LENGTH,OFFSET,BUFFER,TAG,SPECIES,KEYS,VALUES,ENTRIES} member_kind_t;
+tsc_value_t tsc_typed_array_create_from_constructor(tsc_value_t constructor,tsc_array_t* args){
+    void* volatile constructor_root=tsc_value_gc_root(constructor);tsc_array_t* volatile actuals=args;
+    tsc_value_t result=tsc_value_construct_with_new_target(constructor,tsc_value_array(actuals),constructor);
+    void* volatile result_root=tsc_value_gc_root(result);tsc_object_t* object=require_typed(result);
+    if((!object->is_buffer&&!tsc_typed_array_witness(object->class_ptr).valid)||
+        (actuals->len==1&&!value_is_box(TSC_ARR(tsc_value_t,actuals,0))&&
+        (double)tsc_integer_indexed_length(object)<tsc_value_to_number(TSC_ARR(tsc_value_t,actuals,0))))
+        tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray constructor result cannot hold the requested elements"));
+    (void)constructor_root;(void)result_root;return result;
+}
+typedef enum {LENGTH,BYTE_LENGTH,OFFSET,BUFFER,TAG,SPECIES,KEYS,VALUES,ENTRIES,FROM,OF} member_kind_t;
 typedef struct {const char* name;member_kind_t kind;bool getter;size_t arity;} member_t;
 static const member_t members[]={{"length",LENGTH,true,0},{"byteLength",BYTE_LENGTH,true,0},{"byteOffset",OFFSET,true,0},{"buffer",BUFFER,true,0},{"[Symbol.toStringTag]",TAG,true,0},{"keys",KEYS,false,0},{"values",VALUES,false,0},{"entries",ENTRIES,false,0}};
 static const member_t species_member={"[Symbol.species]",SPECIES,true,0};
+static const member_t factory_members[]={{"from",FROM,false,1},{"of",OF,false,0}};
+static tsc_value_t factory_apply(const member_t* member,tsc_value_t constructor,tsc_array_t* args){
+    void* volatile constructor_root=tsc_value_gc_root(constructor);tsc_array_t* volatile actuals=args;
+    if(!tsc_value_is_constructable(constructor))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray factory requires a constructor"));
+    tsc_value_t source=argument(actuals,0),mapper=member->kind==FROM?argument(actuals,1):tsc_value_undefined();
+    void* volatile source_root=tsc_value_gc_root(source);void* volatile mapper_root=tsc_value_gc_root(mapper);
+    bool mapping=!tsc_value_is_undefined(mapper);
+    if(mapping&&!tsc_value_is_callable(mapper))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray mapper is not callable"));
+    tsc_array_t* volatile values=member->kind==OF?actuals:NULL;
+    tsc_value_t array_like=tsc_value_undefined();void* volatile array_like_root=NULL;
+    size_t length;
+    if(member->kind==OF)length=actuals?actuals->len:0;
+    else{
+        tsc_value_t method=tsc_value_get_symbol_prop(source,tsc_symbol_iterator());void* volatile method_root=tsc_value_gc_root(method);
+        if(!tsc_value_is_nullish(method)){
+            tsc_sync_iterator_t iterator=tsc_sync_iterator_open_with_method(source,method);
+            values=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(values);tsc_value_t value;
+            while(tsc_sync_iterator_step(&iterator,&value)){void* volatile value_root=tsc_value_gc_root(value);tsc_array_push_raw(values,&value);(void)value_root;}
+            length=values->len;
+        }else{
+            array_like=tsc_value_to_object(source);array_like_root=tsc_value_gc_root(array_like);length=tsc_value_length_of_array_like(array_like);
+        }
+        (void)method_root;
+    }
+    tsc_array_t* volatile parameters=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(parameters);
+    tsc_value_t count=tsc_value_num((double)length);tsc_array_push_raw(parameters,&count);
+    tsc_value_t result=tsc_typed_array_create_from_constructor(constructor,parameters);void* volatile result_root=tsc_value_gc_root(result);
+    for(size_t index=0;index<length;++index){
+        tsc_str_t* property=tsc_str_from_num((double)index);
+        tsc_value_t value=values?TSC_ARR(tsc_value_t,values,index):tsc_value_get_prop(array_like,property);void* volatile value_root=tsc_value_gc_root(value);
+        if(mapping){
+            tsc_array_t* volatile arguments=tsc_array_new(sizeof(tsc_value_t),2);tsc_array_use_value_storage(arguments);
+            tsc_array_push_raw(arguments,&value);tsc_value_t position=tsc_value_num((double)index);tsc_array_push_raw(arguments,&position);
+            value=tsc_value_apply_function(mapper,argument(actuals,2),tsc_value_array(arguments));value_root=tsc_value_gc_root(value);
+        }
+        if(!tsc_value_set_prop(result,property,value))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray factory element assignment failed"));
+        (void)value_root;
+    }
+    (void)constructor_root;(void)source_root;(void)mapper_root;(void)array_like_root;(void)result_root;return result;
+}
 static tsc_value_t member_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
     (void)args;const member_t* member=environment;
     if(member->kind==SPECIES)return receiver;
+    if(member->kind==FROM||member->kind==OF)return factory_apply(member,receiver,args);
     tsc_object_t* object=typed_object(receiver);
     if(member->kind==TAG)return object?tsc_value_string(key(object->is_buffer?"Uint8Array":elements[((tsc_typed_array_t*)object->class_ptr)->kind].name)):tsc_value_undefined();
     object=require_typed(receiver);
@@ -189,6 +240,8 @@ static typed_realm_t* typed_realm(void){
     realm=TSC_GC_MALLOC(sizeof(*realm));memset(realm,0,sizeof(*realm));tsc_realm_state_set(&typed_realm_key,realm);
     initialize_intrinsic(&realm->abstract,"TypedArray",0,abstract_construct,NULL,tsc_function_default_prototype(),tsc_value_object_prototype());
     define_member(realm->abstract.constructor,&species_member,tsc_symbol_property_key(tsc_symbol_species()));
+    for(size_t index=0;index<sizeof(factory_members)/sizeof(factory_members[0]);++index)
+        define_member(realm->abstract.constructor,&factory_members[index],key(factory_members[index].name));
     for(size_t index=0;index<sizeof(members)/sizeof(members[0]);++index){
         const member_t* member=&members[index];tsc_str_t* name=member->kind==TAG?tsc_symbol_property_key(tsc_symbol_to_string_tag()):key(member->name);
         tsc_value_t function=define_member(realm->abstract.prototype,member,name);

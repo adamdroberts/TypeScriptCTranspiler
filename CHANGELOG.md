@@ -384,6 +384,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Added shared ordinary TypedArray.from/of factories with eager iterable Lists, typed constructor-result validation and inferred mapper declarations.
+
 - Added ordinary TypedArray constructors and shared numeric element storage with live resizable/detached ArrayBuffer witnesses, generic integer-indexed hooks and retained iterators.
 
 - Preserve admitted enum member constants as scalar reads in canonical source-value and continuation contexts.
