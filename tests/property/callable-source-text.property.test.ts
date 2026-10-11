@@ -26,7 +26,7 @@ const definitions=[
 ];
 const adapters=["f.toString()","f.toString.call(f)","f.toString.apply(f,[])","Reflect.apply(f.toString,f,[])","f.toString.bind(f)()"];
 function oracle(sources:string[]):string[][] {
- const result=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
+ const result=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:result.exitCode,stderr:result.stderr.toString()}).toEqual({exitCode:0,stderr:""});
  return JSON.parse(result.stdout.toString());
 }

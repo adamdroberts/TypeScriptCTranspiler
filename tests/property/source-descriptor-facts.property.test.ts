@@ -31,7 +31,7 @@ const booleanSubjects=[
 ] as const;
 const booleanSources=booleanSubjects.flatMap(([definition,descriptor,attributes])=>attributes.map(attribute=>definition+'eval('+descriptor+'.'+attribute+');'));
 test("descriptor normal attribute results are Boolean independently of their values",()=>{
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(typeof value)});return values;})));',JSON.stringify(booleanSources)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(typeof value)});return values;})));',JSON.stringify(booleanSources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});expect(JSON.parse(oracle.stdout.toString())).toEqual(booleanSources.map(()=>["boolean"]));
  for(const source of booleanSources)expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([[]]);
  for(const value of ['"101;"','external']){
@@ -40,7 +40,7 @@ test("descriptor normal attribute results are Boolean independently of their val
  }
 });
 test("own descriptor projections retain callable cells without activating accessors",()=>{
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of subjects.entries())expect({source,complete:sourceEvaluationInvocations(program(source)).some(call=>call.choices!==null&&expected[index]!.every(value=>call.choices!.includes(value)))}).toEqual({source,complete:true});
  for(const source of ['class C {}var reader={get mark(){C.toString=external;return 1;}};Object.getOwnPropertyDescriptor(reader,"mark");eval(C.toString());','class C {}var reader={get mark(){C.toString=external;return 1;}};Object.getOwnPropertyDescriptors(reader);eval(C.toString());','class C {}var reader={__proto__:{get mark(){C.toString=external;return 1;}}};Object.getOwnPropertyDescriptor(reader,"mark");eval(C.toString());'])expect(sourceEvaluationInvocations(program(source)).find(call=>call.node.getText()==='eval(C.toString())')?.choices).toEqual(['class C {}']);

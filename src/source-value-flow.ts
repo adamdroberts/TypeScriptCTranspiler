@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
-import { expectedArgumentCount } from "./function-static-semantics";
+import { callableName, expectedArgumentCount } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
@@ -61,7 +61,7 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown" }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "primitive-string" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "primitive-string" | "bound-name" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -758,7 +758,9 @@ class SourceValueFlow {
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
-        this.publish(this.presence(owner.fields,"name"),this.primitive(true));this.field(owner.fields,"name");
+        const name = this.newCell(), spelling = callableName(node, propertyName);
+        this.publish(name, spelling === null ? this.unknown : this.primitive(spelling));
+        this.defineField(owner.fields, "name", name);
         owner.fields.prototype = this.callablePrototype(owner.kind);
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
@@ -1244,7 +1246,19 @@ class SourceValueFlow {
                                 this.copy(this.opaqueMutation,fields.shape);
                                 value = { tag: "bound", target: invocation.receiver, receiver: argv?.[0] ?? this.empty, prefix: argv?.slice(1) ?? null, fields }; boundValues.set(signature, value);
                                 const length=this.property(invocation.receiver,"length",node,true),boundLength=this.newCell();
-                                this.property(invocation.receiver,"name",node);
+                                const name = this.property(invocation.receiver, "name", node), boundName = this.newCell();
+                                this.defineField(fields, "name", boundName);
+                                const primitiveName = this.newCell();
+                                const derivedName: Atom = {tag:"text-operation",operation:"bound-name",parts:[primitiveName]};
+                                this.rule([name], () => {
+                                    for (const spelling of name.values) {
+                                        if (spelling.tag === "primitive" || spelling.tag === "text-operation") {
+                                            this.publish(primitiveName, spelling);
+                                            this.publish(boundName, derivedName);
+                                        } else if (spelling.tag === "unknown" || spelling.tag === "non-string") this.publish(boundName, this.unknown);
+                                        else if (spelling.tag !== "pending-source" && spelling.tag !== "abrupt") this.publish(boundName, this.primitive("bound "));
+                                    }
+                                });
                                 this.defineField(fields,"length",boundLength);
                                 let lengthRule!:Rule;
                                 lengthRule=this.rule([length],()=>{
@@ -1368,7 +1382,8 @@ class SourceValueFlow {
                                 // Primitive operators have no user callbacks. Abrupt
                                 // numeric conversions contribute no normal choice.
                                 try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
-                            } else if (atom.operation === "primitive-string") choices.add(String(tuple[0]));
+                            } else if (atom.operation === "bound-name") choices.add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
+                            else if (atom.operation === "primitive-string") choices.add(String(tuple[0]));
                             else if (atom.operation === "template") choices.add(tuple.map(String).join(""));
                             else {
                                 const [left, right] = tuple;

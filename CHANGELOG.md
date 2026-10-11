@@ -5061,3 +5061,7 @@ Close public instance-field callable sources and default/explicit constructor de
 Include getter activation effects in the shared property source graph, preserving inactive reads and closing getter-induced eval source replacements.
 
 Retain local class declaration cells for direct eval through the canonical binding collection. Restore block-scoped getter-effect coverage and verify TDZ, mutation, inner names and escaped/iteration identities against Node.
+
+Callable name facts now share one syntactic SetFunctionName input calculation between source admission and native boxing; the emitter-only predecessor is removed. Ordinary function/class/accessor owners retain names in the property graph, and bound owners derive the bound prefix from reactive target name cells, including non-String fallback and getter effects/throws. `callable-name-facts.property` compares generated naming, descriptor and override partitions with independent Node/native observations and one deep bound graph in both memory modes; `eval_callable_name` verifies CLI source closure. Dynamic/private/Symbol name keys, exact attributes, typed-source erasure and eligible exhaustive target coverage remain open.
+
+Related callable length/source and descriptor Node oracles now write synchronously so a successful child cannot yield an empty buffered observation.

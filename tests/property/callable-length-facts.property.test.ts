@@ -30,7 +30,7 @@ const subjects=definitions.flatMap(definition=>[
 ]);
 subjects.push(...['3.75','-2','NaN','Infinity','-Infinity','"9"','{}','1n'].map(value=>'var fn=function(){};Object.defineProperty(fn,"length",{value:'+value+'});var bound=fn.bind(null,1);eval(String(bound.length));'));
 test("callable length facts follow the canonical parameter prefix and bound actual List",()=>{
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of subjects.entries())expect({source,complete:sourceEvaluationInvocations(program(source)).some(call=>call.choices!==null&&expected[index]!.every(value=>call.choices!.includes(value)))}).toEqual({source,complete:true});
  for(const source of ['var fn=function(first){};Object.defineProperty(fn,"length",{value:external});eval(String(fn.length));','var fn=function(first){};var bound=fn.bind(null);external(bound);eval(String(bound.length));'])expect(sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)).toBe(true);

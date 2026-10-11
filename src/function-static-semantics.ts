@@ -22,6 +22,50 @@ export function expectedArgumentCount(node: ts.FunctionLikeDeclaration): number 
     return length;
 }
 
+/** Shared syntactic SetFunctionName input. Null retains an unresolved property key. */
+export function callableName(
+    node: ts.Node,
+    propertyName: (name: ts.PropertyName, definition: ts.Node) => string | null,
+    declarationFor?: (name: ts.Identifier) => ts.Declaration | undefined,
+): string | null {
+    const transparent = (node: ts.Node): node is ts.ParenthesizedExpression | ts.AsExpression |
+        ts.TypeAssertion | ts.SatisfiesExpression | ts.NonNullExpression =>
+        ts.isParenthesizedExpression(node) || ts.isAsExpression(node) ||
+        ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node) || ts.isNonNullExpression(node);
+    let current = node;
+    while (transparent(current)) current = current.expression;
+    const isDefault = (node: ts.Node): boolean => !!(ts.canHaveModifiers(node) &&
+        ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword));
+    if (ts.isIdentifier(current)) {
+        const declaration = declarationFor?.(current);
+        if (declaration && (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)))
+            return declaration.name?.text ?? (isDefault(declaration) ? "default" : current.text);
+        if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
+            let initializer: ts.Node | undefined = declaration.initializer;
+            while (initializer && transparent(initializer)) initializer = initializer.expression;
+            return initializer && (ts.isFunctionExpression(initializer) || ts.isClassExpression(initializer)) && initializer.name
+                ? initializer.name.text : declaration.name.text;
+        }
+        return declaration && ts.isExportAssignment(declaration) ? "default" : current.text;
+    }
+    if (ts.isFunctionDeclaration(current) || ts.isClassDeclaration(current))
+        return current.name?.text ?? (isDefault(current) ? "default" : "");
+    if ((ts.isFunctionExpression(current) || ts.isClassExpression(current)) && current.name) return current.name.text;
+    if (ts.isMethodDeclaration(current) || ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current)) {
+        const name = propertyName(current.name, current);
+        return name === null ? null : ts.isGetAccessorDeclaration(current) ? `get ${name}` :
+            ts.isSetAccessorDeclaration(current) ? `set ${name}` : name;
+    }
+    if (ts.isFunctionExpression(current) || ts.isArrowFunction(current) || ts.isClassExpression(current)) {
+        let parent = current.parent;
+        while (parent && transparent(parent)) parent = parent.parent;
+        if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return parent.name.text;
+        if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return propertyName(parent.name, parent);
+        if (parent && ts.isExportAssignment(parent) && !parent.isExportEquals) return "default";
+    }
+    return "";
+}
+
 function pushChildren(worklist: ts.Node[], node: ts.Node): void {
     const children: ts.Node[] = [];
     node.forEachChild((child) => { children.push(child); });

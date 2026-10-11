@@ -39,7 +39,7 @@ test("class definitions and prototype identities use the shared callable graph",
  'class C {}try{eval(C());}catch(error){}',
  'class C {}eval(Object.getPrototypeOf(C.prototype));',
  'class C extends null {}eval(String(Object.getPrototypeOf(C.prototype)));');
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>{if(typeof value==="string")values.push(value);}});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>{if(typeof value==="string")values.push(value);}});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of sources.entries()){
   const calls=sourceEvaluationInvocations(program(source));

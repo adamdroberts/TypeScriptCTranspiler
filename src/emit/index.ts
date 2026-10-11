@@ -18,7 +18,7 @@ import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
-import { expectedArgumentCount } from "../function-static-semantics";
+import { callableName, expectedArgumentCount } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -47393,86 +47393,11 @@ class Emitter {
     }
 
     private functionValueNameLiteral(node: ts.Node): string {
-        let current: ts.Node = node;
-        while (true) {
-            if (ts.isParenthesizedExpression(current)) {
-                current = current.expression;
-                continue;
-            }
-            if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current)) {
-                current = current.expression;
-                continue;
-            }
-            if (ts.isNonNullExpression(current)) {
-                current = current.expression;
-                continue;
-            }
-            break;
-        }
-        let name = "";
-        if (ts.isIdentifier(current)) {
-            const symbol = this.symbolForIdentifier(current);
-            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-            if (declaration && ts.isFunctionDeclaration(declaration)) {
-                name = declaration.name?.text ?? (this.isDefaultExportDeclaration(declaration) ? "default" : current.text);
-            } else if (
-                declaration &&
-                ts.isVariableDeclaration(declaration) &&
-                ts.isIdentifier(declaration.name)
-            ) {
-                const initializer = declaration.initializer
-                    ? this.unwrapTransparentExpression(declaration.initializer)
-                    : null;
-                name = initializer && ts.isFunctionExpression(initializer) && initializer.name
-                    ? initializer.name.text
-                    : declaration.name.text;
-            } else if (declaration && ts.isExportAssignment(declaration)) {
-                name = "default";
-            } else {
-                name = current.text;
-            }
-        } else if (ts.isFunctionDeclaration(current)) {
-            name = current.name?.text ?? (this.isDefaultExportDeclaration(current) ? "default" : "");
-        } else if (ts.isFunctionExpression(current) && current.name) {
-            name = current.name.text;
-        } else if (ts.isClassExpression(current) && current.name) {
-            name = current.name.text;
-        } else if (
-            ts.isMethodDeclaration(current) ||
-            ts.isGetAccessorDeclaration(current) ||
-            ts.isSetAccessorDeclaration(current)
-        ) {
-            name = ts.isClassLike(current.parent)
-                ? this.classMemberPublicName(current.name)
-                : this.staticPropertyName(current.name) ?? "";
-            if (ts.isClassLike(current.parent) &&
-                (ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current))) {
-                name = `${ts.isGetAccessorDeclaration(current) ? "get" : "set"} ${name}`;
-            }
-        } else if (
-            ts.isFunctionExpression(current) ||
-            ts.isArrowFunction(current) ||
-            ts.isClassExpression(current)
-        ) {
-            let parent: ts.Node = current.parent;
-            while (
-                ts.isParenthesizedExpression(parent) ||
-                ts.isAsExpression(parent) ||
-                ts.isTypeAssertionExpression(parent) ||
-                ts.isSatisfiesExpression(parent) ||
-                ts.isNonNullExpression(parent)
-            ) {
-                parent = parent.parent;
-            }
-            if ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) &&
-                ts.isIdentifier(parent.name)) {
-                name = parent.name.text;
-            } else if (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent)) {
-                name = this.staticPropertyName(parent.name) ?? "";
-            } else if (ts.isExportAssignment(parent) && !parent.isExportEquals) {
-                name = "default";
-            }
-        }
+        const name = callableName(node, (property, definition) => definition.parent && ts.isClassLike(definition.parent)
+            ? this.classMemberPublicName(property) : this.staticPropertyName(property), identifier => {
+                const symbol = this.symbolForIdentifier(identifier);
+                return symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+            }) ?? "";
         return `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
     }
 
