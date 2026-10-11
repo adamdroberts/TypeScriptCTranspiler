@@ -301,6 +301,7 @@ struct tsc_object {
     struct tsc_generator* generator;
     tsc_iterator_record_t* async_from_sync_iterator;
     tsc_iterator_record_t* wrapped_iterator;
+    struct tsc_iterator_helper* iterator_helper;
     bool is_date;
     bool is_regexp;
     bool is_weak_collection;
@@ -346,6 +347,8 @@ struct tsc_object {
 };
 
 tsc_value_t tsc_iterator_prototype_value(void);
+void tsc_iterator_install_helpers(tsc_object_t* prototype);
+tsc_value_t tsc_iterator_concat_value(void);
 tsc_value_t tsc_iterator_result(tsc_value_t value, bool done);
 tsc_value_t tsc_value_species_constructor(tsc_value_t object, tsc_value_t default_constructor);
 

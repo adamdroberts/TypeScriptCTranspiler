@@ -98,6 +98,8 @@ tsc_value_t tsc_iterator_constructor_value(void) {
         (void)tsc_value_define_property_desc(constructor, tsc_str_from_lit("from", 4),
             tsc_value_function_builtin_named(iterator_from_apply, NULL, 1, tsc_str_from_lit("from", 4)),
             true, true, true, false, true, true, true);
+        (void)tsc_value_define_property_desc(constructor, tsc_str_from_lit("concat", 6),
+            tsc_iterator_concat_value(), true, true, true, false, true, true, true);
     }
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)identity);
 }
@@ -134,6 +136,7 @@ tsc_value_t tsc_iterator_prototype_value(void) {
             tsc_object_define(prototype, name, tsc_value_function_builtin_named(iterator_consume,
                 (void*)&consumers[index].operation, consumers[index].length, name), true, false, true);
         }
+        tsc_iterator_install_helpers(prototype);
         for (size_t index = 0; index < sizeof(iterator_accessor_keys) / sizeof(*iterator_accessor_keys); ++index) {
             const bool* tag = &iterator_accessor_keys[index];
             const char* name = *tag ? "[Symbol.toStringTag]" : "constructor";

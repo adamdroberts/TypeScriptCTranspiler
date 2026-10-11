@@ -1,0 +1,5 @@
+map/filter: 3,5,7
+drop/take: 2,3
+flatMap: 1,10,2,20
+concat: 1,2,3,4
+limit: true

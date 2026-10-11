@@ -113,7 +113,9 @@
     "src/buffer-statics.ts",
     "runtime/tsc_text_codec.c",
     "runtime/tsc_text_codec.def",
-    "runtime/tsc_iterator_consumers.def"
+    "runtime/tsc_iterator_consumers.def",
+    "runtime/tsc_iterator_helpers.c",
+    "runtime/tsc_iterator_helpers.def"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
   "environmentAllowlist": [

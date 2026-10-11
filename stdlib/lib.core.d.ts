@@ -64,11 +64,17 @@ interface IteratorObject<T, TReturn = any, TNext = undefined> extends Iterator<T
     every(predicate: (value: T, index: number) => unknown, ...ignored: any[]): boolean;
     find(predicate: (value: T, index: number) => unknown, ...ignored: any[]): T | undefined;
     toArray(...ignored: any[]): T[];
+    map<U>(mapper: (value: T, index: number) => U, ...ignored: any[]): IteratorObject<U>;
+    filter(predicate: (value: T, index: number) => unknown, ...ignored: any[]): IteratorObject<T>;
+    take(limit: number, ...ignored: any[]): IteratorObject<T>;
+    drop(limit: number, ...ignored: any[]): IteratorObject<T>;
+    flatMap<U>(mapper: (value: T, index: number) => Iterable<U> | Iterator<U>, ...ignored: any[]): IteratorObject<U>;
 }
 interface IteratorConstructor {
     new <T, TReturn = any, TNext = undefined>(): IteratorObject<T, TReturn, TNext>;
     readonly prototype: IteratorObject<unknown>;
     from<T>(value: Iterable<T> | Iterator<T>, ...ignored: any[]): IteratorObject<T>;
+    concat<T>(...items: Iterable<T>[]): IteratorObject<T>;
 }
 declare var Iterator: IteratorConstructor;
 interface Iterable<T> {
