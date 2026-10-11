@@ -579,3 +579,5 @@ The core with/Object Environment Record path is now implemented and tested throu
 Inherited strict eval and with Statement-body grammar now share canonical source admission. Invalid supplied eval roots are pruned before program construction. Precise actual-callee admission through dynamic object environments, complete eval/declaration/Annex B algorithms, host eligibility and exhaustive target evidence remain open.
 
 Conservative object-environment value and receiver flow now shares the source graph and declarative binder recovery. Unknown intrinsic eval remains fail-closed. Thrown-value propagation in source analysis and CLI eval Annex B function environment migration remain open.
+
+Property base validation now shares the canonical key-preparation path. With newline-sensitive let grammar and implicit source-global property ownership remain open, alongside the existing eval, Annex B, Realm and agent eligibility work.

@@ -4066,7 +4066,13 @@ static bool tsc_function_metadata_key(const tsc_function_identity_t* fn, const t
     return str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(fn);
 }
 
+static void value_require_property_base(tsc_value_t base) {
+    if (tsc_value_is_nullish(base))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a property of null or undefined"));
+}
+
 tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
+    value_require_property_base(v);
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_PROP);
     if (!value_is_box(v)) {
         return tsc_value_get_prop_receiver(primitive_prototype(&primitive_number), key, v);
@@ -4554,6 +4560,7 @@ bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc
 }
 
 tsc_value_t tsc_value_get_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    value_require_property_base(v);
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
     if (internal_key) return tsc_value_get_prop(v, internal_key);
     return tsc_value_undefined();
@@ -5303,6 +5310,7 @@ tsc_value_t tsc_reflect_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t*
 }
 
 bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
+    value_require_property_base(v);
     void* volatile value_gc_root = tsc_value_gc_root(value);
     (void)value_gc_root;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
@@ -5330,6 +5338,7 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
 }
 
 bool tsc_value_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value) {
+    value_require_property_base(v);
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
     if (internal_key) return tsc_value_set_prop(v, internal_key, value);
@@ -5644,6 +5653,7 @@ bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_c
 }
 
 bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
+    value_require_property_base(v);
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_DELETE_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_delete((tsc_object_t*)value_ptr(v), key);
@@ -5681,6 +5691,7 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
 }
 
 bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    value_require_property_base(v);
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_DELETE_PROP);
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
     if (internal_key) return tsc_value_delete_prop(v, internal_key);
@@ -5693,7 +5704,7 @@ bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
 /* A dynamically typed ECMAScript property key is normalized by one runtime
  * path before the ordinary object operation. */
 tsc_value_t tsc_value_get_computed_prop(tsc_value_t v, tsc_value_t key) {
-    key = tsc_value_to_property_key(key);
+    key = tsc_value_prepare_property_reference(v, key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
         return tsc_value_get_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
     }
@@ -5705,7 +5716,7 @@ tsc_value_t tsc_value_get_computed_prop_receiver(
     tsc_value_t key,
     tsc_value_t receiver
 ) {
-    key = tsc_value_to_property_key(key);
+    key = tsc_value_prepare_property_reference(v, key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
         return tsc_value_get_prop_receiver(
             v,
@@ -5717,7 +5728,7 @@ tsc_value_t tsc_value_get_computed_prop_receiver(
 }
 
 bool tsc_value_set_computed_prop(tsc_value_t v, tsc_value_t key, tsc_value_t value) {
-    key = tsc_value_to_property_key(key);
+    key = tsc_value_prepare_property_reference(v, key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
         return tsc_value_set_symbol_prop(v, (tsc_symbol_t*)value_ptr(key), value);
     }
@@ -5730,7 +5741,7 @@ bool tsc_value_set_computed_prop_receiver(
     tsc_value_t value,
     tsc_value_t receiver
 ) {
-    key = tsc_value_to_property_key(key);
+    key = tsc_value_prepare_property_reference(v, key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
         tsc_str_t* internal_key = value_known_symbol_internal_key((tsc_symbol_t*)value_ptr(key));
         return internal_key ? tsc_value_set_prop_receiver(v, internal_key, value, receiver) : false;
@@ -5756,7 +5767,7 @@ bool tsc_value_has_computed_prop(tsc_value_t v, tsc_value_t key) {
 }
 
 bool tsc_value_delete_computed_prop(tsc_value_t v, tsc_value_t key) {
-    key = tsc_value_to_property_key(key);
+    key = tsc_value_prepare_property_reference(v, key);
     if (value_is_box(key) && value_tag(key) == TSC_VALUE_TAG_SYMBOL) {
         return tsc_value_delete_symbol_prop(v, (tsc_symbol_t*)value_ptr(key));
     }
@@ -7535,9 +7546,7 @@ tsc_value_t tsc_value_prepare_property_reference(tsc_value_t base, tsc_value_t n
     void* volatile name_root = tsc_value_gc_root(name);
     (void)base_root;
     (void)name_root;
-    if (tsc_value_is_nullish(base)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot access a property of null or undefined"));
-    }
+    value_require_property_base(base);
     return tsc_value_to_property_key(name);
 }
 

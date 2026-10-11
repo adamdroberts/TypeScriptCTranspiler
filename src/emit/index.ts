@@ -34613,6 +34613,11 @@ class Emitter {
         return this.emitPropertyWriteStatement(write, node, moduleNamespace);
     }
 
+    private propertyBaseValue(value: EmitResult, node: ts.Expression): EmitResult {
+        return value.ty.kind === "void" || value.ty.kind === "never"
+            ? { c: this.coerce(value, T_VALUE, node), ty: T_VALUE } : value;
+    }
+
     private emitCapturedPropertyReference(
         node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
         finish: (base: string, key: string, receiver: string, superReference: boolean) => string,
@@ -34638,7 +34643,7 @@ class Emitter {
                     `${finish(base, rawKey, actualThis, true)}; })`;
             });
         }
-        const raw = this.emitExpr(node.expression);
+        const raw = this.propertyBaseValue(this.emitExpr(node.expression), node.expression);
         const receiver = (this.isPrivatePropertyReference(node) || ["function", "buffer", "array"].includes(raw.ty.kind) ||
             raw.ty.kind === "class" && !!this.findClassDecl(raw.ty.className!))
             ? { c: this.coerce(raw, T_VALUE, node.expression), ty: T_VALUE } : raw;
@@ -38121,7 +38126,7 @@ class Emitter {
             return this.emitMapGroupBy(call);
         }
 
-        const recv = this.emitExpr(recvExpr);
+        const recv = this.propertyBaseValue(this.emitExpr(recvExpr), recvExpr);
         if (recv.ty.kind === "array")
             return this.emitDynamicNamedPropertyCall(call,
                 { c: this.boxObjectIdentity(recv.c, recv.ty, recvExpr), ty: T_VALUE },
@@ -46396,7 +46401,7 @@ class Emitter {
                 return { c: moduleNsMember, ty };
             }
         }
-        const rawRecv = precomputedReceiver ?? this.emitExpr(pa.expression);
+        const rawRecv = this.propertyBaseValue(precomputedReceiver ?? this.emitExpr(pa.expression), pa.expression);
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
             : rawRecv;
@@ -46643,7 +46648,7 @@ class Emitter {
             const ty = this.moduleNamespaceMemberType(ea);
             return { c: moduleNsMember, ty };
         }
-        const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        const recv = this.propertyBaseValue(precomputedReceiver ?? this.emitExpr(ea.expression), ea.expression);
         if (recv.ty.kind === "array" || recv.ty.kind === "entry" || recv.ty.kind === "string" ||
             recv.ty.kind === "value" || recv.ty.kind === "function" ||
             recv.ty.kind === "number" || recv.ty.kind === "boolean" ||

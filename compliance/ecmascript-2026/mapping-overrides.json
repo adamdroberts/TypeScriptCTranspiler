@@ -23,6 +23,16 @@
   ],
   "legacyIdRules": [
     {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "12.10_",
+      "clauses": [
+        "sec-with-statement-runtime-semantics-evaluation"
+      ],
+      "reason": "The legacy ES5 WithStatement evaluation-section identifier maps to the current WithStatement Evaluation algorithm. The distinct strict-mode-restrictions section retains its existing early-error mapping; this rule does not depend on scenario filenames.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "field": "es6id",
       "match": "exact",
       "value": "13.11.7",
