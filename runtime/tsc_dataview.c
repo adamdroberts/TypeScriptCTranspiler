@@ -36,11 +36,6 @@ static tsc_array_buffer_t* require_buffer(tsc_value_t value){
 static void require_attached(tsc_array_buffer_t* buffer){
     if(buffer->detached)tsc_throw_error(TSC_ERROR_TYPE,key("DataView buffer is detached"));
 }
-static void require_view_bounds(tsc_data_view_t* view){
-    require_attached(view->buffer);
-    if(view->byte_offset>view->buffer->byte_length||view->byte_length>view->buffer->byte_length-view->byte_offset)
-        tsc_throw_error(TSC_ERROR_TYPE,key("DataView is outside its buffer bounds"));
-}
 static uint64_t round_shift(uint64_t significand,unsigned shift){
     uint64_t result=significand>>shift,remainder=significand&((UINT64_C(1)<<shift)-1),half=UINT64_C(1)<<(shift-1);
     return result+(remainder>half||(remainder==half&&(result&1)));
@@ -99,8 +94,8 @@ static tsc_value_t view_member_apply(void* environment,tsc_value_t receiver,tsc_
     tsc_data_view_t* volatile view=require_view(receiver);
     if(member->getter){
         if(member->format==BUFFER)return tsc_value_array_buffer(view->buffer);
-        require_view_bounds(view);
-        return tsc_value_num((double)(member->format==LENGTH?view->byte_length:view->byte_offset));
+        tsc_data_view_witness_t witness=tsc_data_view_witness(view);
+        return tsc_value_num((double)(member->format==LENGTH?witness.length:witness.offset));
     }
     double index=tsc_value_to_index(argument(actuals,0));
     uint64_t raw=0;
@@ -112,10 +107,10 @@ static tsc_value_t view_member_apply(void* environment,tsc_value_t receiver,tsc_
         }else raw=number_to_bits(tsc_value_to_number(argument(actuals,1)),member);
     }
     bool little=tsc_value_is_truthy(argument(actuals,member->setter?2:1));
-    require_view_bounds(view);
-    if(member->width>view->byte_length||index>(double)(view->byte_length-member->width))
+    tsc_data_view_witness_t witness=tsc_data_view_witness(view);
+    if(member->width>witness.length||index>(double)(witness.length-member->width))
         tsc_throw_error(TSC_ERROR_RANGE,key("DataView access is outside its view bounds"));
-    unsigned char* bytes=view->buffer->data+view->byte_offset+(size_t)index;
+    unsigned char* bytes=witness.data+(size_t)index;
     for(size_t byte=0;byte<member->width;++byte){
         unsigned shift=(unsigned)((little?byte:member->width-byte-1)*8);
         if(member->setter)bytes[byte]=(unsigned char)(raw>>shift);
@@ -142,7 +137,7 @@ static tsc_value_t view_construct(void* environment,tsc_value_t receiver,tsc_arr
     require_attached(buffer);
     if(offset>(double)buffer->byte_length||(has_length&&length>(double)buffer->byte_length-offset))
         tsc_throw_error(TSC_ERROR_RANGE,key("DataView is outside its buffer bounds"));
-    tsc_data_view_t* volatile view=tsc_data_view_new(buffer,offset,length,true);
+    tsc_data_view_t* volatile view=tsc_data_view_new(buffer,offset,length,has_length);
     tsc_value_t result=tsc_value_data_view(view);void* volatile result_root=tsc_value_gc_root(result);
     (void)tsc_value_object_set_prototype_of(result,prototype);
     (void)prototype_root;(void)result_root;(void)actuals;return result;

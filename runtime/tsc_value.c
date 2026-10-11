@@ -3554,6 +3554,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_bigint);
         case TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE:
             return primitive_prototype(&primitive_symbol);
+        case TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE:
+            return tsc_array_buffer_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE:
             return tsc_data_view_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
@@ -9136,13 +9138,15 @@ tsc_value_t tsc_value_url_search_params(tsc_url_search_params_t* params) {
     return tsc_value_object(o);
 }
 
-tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* buffer) {
+tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* input) {
+    tsc_array_buffer_t* volatile buffer=input;
     if (!buffer) return tsc_value_null();
     if (buffer->object) return tsc_value_object(buffer->object);
-    tsc_object_t* o = tsc_object_new_class(buffer);
-    o->is_array_buffer = true;
-    buffer->object = o;
-    return tsc_value_object(o);
+    tsc_object_t* volatile object=tsc_object_new_class(buffer);
+    object->is_array_buffer=true;buffer->object=object;
+    tsc_value_t result=tsc_value_object(object);
+    (void)tsc_value_object_set_prototype_of(result,tsc_array_buffer_prototype_value());
+    return result;
 }
 
 tsc_value_t tsc_value_data_view(tsc_data_view_t* input) {

@@ -535,16 +535,26 @@ typedef struct tsc_buffer {
 } tsc_buffer_t;
 typedef struct tsc_array_buffer {
     size_t byte_length;
+    size_t max_byte_length;
     uint8_t* data;
     bool detached;
+    bool resizable;
     struct tsc_object* object;
 } tsc_array_buffer_t;
 typedef struct tsc_data_view {
     tsc_array_buffer_t* buffer;
     size_t byte_offset;
     size_t byte_length;
+    bool length_tracking;
     struct tsc_object* object;
 } tsc_data_view_t;
+typedef struct { uint8_t* data; size_t length; size_t offset; } tsc_data_view_witness_t;
+tsc_data_view_witness_t tsc_data_view_witness(const tsc_data_view_t* view);
+tsc_array_buffer_t* tsc_array_buffer_allocate(size_t length, size_t maximum, bool resizable);
+void tsc_array_buffer_check_capacity(size_t maximum);
+void tsc_array_buffer_resize_storage(tsc_array_buffer_t* buffer, size_t length);
+tsc_value_t tsc_array_buffer_constructor_value(void);
+tsc_value_t tsc_array_buffer_prototype_value(void);
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length);
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b);
 void tsc_array_buffer_detach(tsc_array_buffer_t* b);

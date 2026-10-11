@@ -34,7 +34,6 @@ import {
     promiseType,
     setType,
     TypeBindings,
-    T_ARRAY_BUFFER,
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
@@ -5456,7 +5455,6 @@ class Emitter {
                 "Date",
                 "Event",
                 "EventTarget",
-                "ArrayBuffer",
             ]);
             if (emptyOwnKeyBuiltins.has(name)) {
                 return this.isSideEffectFreeNewExpression(unwrapped, seenConsts) ? 0 : null;
@@ -6450,7 +6448,6 @@ class Emitter {
             if (!this.isUnshadowedGlobalIdentifier(ctorExpr, name)) return false;
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
-            if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
                     (
@@ -6487,48 +6484,6 @@ class Emitter {
             errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
-    }
-
-    private isSideEffectFreeArrayBufferConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return this.sideEffectFreeArrayBufferConstructorByteLength(args, seenConsts) !== null;
-    }
-
-    private sideEffectFreeArrayBufferConstructorByteLength(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): number | null {
-        if (args.length === 0) return 0;
-        if (args.length !== 1) return null;
-        const length = this.sideEffectFreeNumericLiteralSameValueZeroValue(args[0]!, seenConsts);
-        return length !== null &&
-            Number.isFinite(length) &&
-            Number.isInteger(length) &&
-            length >= 0
-            ? length
-            : null;
-    }
-
-    private sideEffectFreeFreshArrayBufferByteLength(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): number | null {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            unwrapped.expression.text === "ArrayBuffer" &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "ArrayBuffer")
-        ) {
-            return this.sideEffectFreeArrayBufferConstructorByteLength(
-                unwrapped.arguments ?? ts.factory.createNodeArray(),
-                seenConsts,
-            );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init ? this.sideEffectFreeFreshArrayBufferByteLength(init, seenConsts) : null;
     }
 
     private sideEffectFreeOptionalNonnegativeInteger(
@@ -12296,8 +12251,7 @@ class Emitter {
                 unwrapped.expression.text === "AggregateError" ||
                 unwrapped.expression.text === "SuppressedError" ||
                 unwrapped.expression.text === "Event" ||
-                unwrapped.expression.text === "EventTarget" ||
-                unwrapped.expression.text === "ArrayBuffer"
+                unwrapped.expression.text === "EventTarget"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
@@ -21287,7 +21241,6 @@ class Emitter {
             type.kind === "url" ||
             type.kind === "urlsearchparams" ||
             type.kind === "buffer" ||
-            type.kind === "arraybuffer" ||
             type.kind === "textencoder" ||
             type.kind === "textdecoder" ||
             type.kind === "fsstats" ||
@@ -34891,7 +34844,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "textencoder", "textdecoder", "fsstats", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "textencoder", "textdecoder", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -34966,7 +34919,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "textencoder", "textdecoder", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "textencoder", "textdecoder", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -41537,7 +41490,7 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "arraybuffer", "textencoder", "textdecoder", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "textencoder", "textdecoder", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
             unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/arraybuffer/dataview/textencoder/textdecoder/void in this subset");
         }
@@ -46146,18 +46099,6 @@ class Emitter {
                 },
             );
         }
-        if (cls === "ArrayBuffer") {
-            const args = n.arguments ?? [];
-            const specs: SequencedCallArg[] = [];
-            const hasLength = args.length >= 1 && !this.isUndefinedExpression(args[0]);
-            if (hasLength) {
-                specs.push({ value: this.emitExpr(args[0]!), target: T_NUMBER, node: args[0]! });
-            }
-            specs.push(...this.ignoredArgumentSpecs(args, 1));
-            return this.emitSequencedExpr(T_ARRAY_BUFFER, specs, (vals) =>
-                `tsc_array_buffer_new(${hasLength ? vals[0]! : "0.0"})`,
-            );
-        }
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
                 T_EVENT_EMITTER,
@@ -46683,9 +46624,6 @@ class Emitter {
             return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
                 ([owner]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
-        if (recv.ty.kind === "arraybuffer" && pa.name.text === "byteLength") {
-            return { c: `tsc_array_buffer_byte_length(${recv.c})`, ty: T_NUMBER };
-        }
         if (recv.ty.kind === "fsstats") {
             const numericStatsProps: Record<string, string> = {
                 dev: "tsc_fs_stats_dev",
@@ -46762,21 +46700,7 @@ class Emitter {
                 c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`,
                 ty: T_VALUE,
             };
-            // Inferred JavaScript property types are not a storage guarantee:
-            // mutable properties such as lastIndex may hold arbitrary values.
-            if (this.isJavaScriptSourceFile(pa.getSourceFile()) || this.expressionHasCanonicalSourceValue(pa)) return value;
-            const propertyType = this.checker.getTypeAtLocation(pa);
-            if (propertyType.isUnion() && propertyType.types.some(part =>
-                !!(part.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void))))
-                return value;
-            const narrowed = this.prepareType(mapType(pa, this.checker));
-            if (
-                narrowed.kind === "number" ||
-                narrowed.kind === "boolean" ||
-                narrowed.kind === "string"
-            ) {
-                return { c: this.coerce(value, narrowed, pa), ty: narrowed };
-            }
+            // Static property types do not constrain mutable runtime values.
             return value;
         }
         if (recv.ty.kind === "entry" && pa.name.text === "length") {
@@ -47461,7 +47385,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -47495,8 +47419,6 @@ class Emitter {
                     return `tsc_value_as_url(${r.c})`;
                 case "urlsearchparams":
                     return `tsc_value_as_url_search_params(${r.c})`;
-                case "arraybuffer":
-                    return `tsc_value_as_array_buffer(${r.c})`;
                 case "textencoder":
                     return `tsc_value_as_text_encoder(${r.c})`;
                 case "textdecoder":
@@ -47576,8 +47498,6 @@ class Emitter {
                 return `tsc_value_url(${r.c})`;
             case "urlsearchparams":
                 return `tsc_value_url_search_params(${r.c})`;
-            case "arraybuffer":
-                return `tsc_value_array_buffer(${r.c})`;
             case "textencoder":
                 return `tsc_value_text_encoder(${r.c})`;
             case "textdecoder":
@@ -48117,7 +48037,7 @@ function requireNumber(node: ts.Node, t: CType): void {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "fsstats", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

@@ -1238,9 +1238,7 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         if (mapped) return *mapped;
         return object_prop_data_value(o, prop);
     }
-    if (o->is_array_buffer && o->class_ptr && str_lit_eq(key, "byteLength")) {
-        return tsc_value_num(tsc_array_buffer_byte_length((const tsc_array_buffer_t*)o->class_ptr));
-    }
+
 
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_receiver((tsc_object_t*)value_ptr(o->prototype), key, receiver);

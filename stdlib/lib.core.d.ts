@@ -639,10 +639,23 @@ interface FinalizationRegistryConstructor {
 }
 declare var FinalizationRegistry: FinalizationRegistryConstructor;
 interface ArrayBuffer {
+    constructor: ArrayBufferConstructor;
     readonly byteLength: number;
+    readonly maxByteLength: number;
+    readonly resizable: boolean;
+    readonly detached: boolean;
+    resize(newLength: number, ...ignored: any[]): void;
+    slice(start?: number, end?: number, ...ignored: any[]): ArrayBuffer;
+    transfer(newLength?: number, ...ignored: any[]): ArrayBuffer;
+    transferToFixedLength(newLength?: number, ...ignored: any[]): ArrayBuffer;
 }
+interface ArrayBufferOptions {maxByteLength?: number;}
 interface ArrayBufferConstructor {
-    new(byteLength?: number): ArrayBuffer;
+    readonly prototype: ArrayBuffer;
+    readonly name: string;
+    readonly length: number;
+    new(byteLength?: number, options?: ArrayBufferOptions, ...ignored: any[]): ArrayBuffer;
+    isView(value: any, ...ignored: any[]): boolean;
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
 interface DataView {

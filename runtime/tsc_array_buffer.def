@@ -1,0 +1,11 @@
+/* Public ArrayBuffer operations, ownership and function metadata. */
+TSC_ARRAY_BUFFER_MEMBER(byteLength, LENGTH, true, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(slice, SLICE, false, false, 2)
+TSC_ARRAY_BUFFER_MEMBER(maxByteLength, MAXIMUM, true, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(resizable, RESIZABLE, true, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(resize, RESIZE, false, false, 1)
+TSC_ARRAY_BUFFER_MEMBER(transfer, TRANSFER, false, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(transferToFixedLength, FIXED_TRANSFER, false, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(detached, DETACHED, true, false, 0)
+TSC_ARRAY_BUFFER_MEMBER(isView, IS_VIEW, false, true, 1)
+TSC_ARRAY_BUFFER_MEMBER(species, SPECIES, true, true, 0)

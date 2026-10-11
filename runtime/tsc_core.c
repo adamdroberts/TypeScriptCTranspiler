@@ -1769,7 +1769,8 @@ bool tsc_process_stdio_write(bool stderr_stream,const tsc_array_t* arguments){
         tsc_object_t* object=tsc_value_gc_root(chunk);
         if(!object->is_data_view)tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Stdio write operation cannot be represented"));
         tsc_data_view_t* view=object->class_ptr;
-        view_bytes.len=(size_t)tsc_data_view_byte_length(view);view_bytes.data=view->buffer->data+view->byte_offset;view_bytes.data_owner=view->buffer->data;bytes=&view_bytes;
+        tsc_data_view_witness_t witness=tsc_data_view_witness(view);
+        view_bytes.len=witness.length;view_bytes.data=witness.data;view_bytes.data_owner=view->buffer->data;bytes=&view_bytes;
     }
     else stdio_argument_error("Stdio write chunk must be a string or byte view","ERR_INVALID_ARG_TYPE");
     bool result=stderr_stream?tsc_process_stderr_write_buffer(bytes):tsc_process_stdout_write_buffer(bytes);

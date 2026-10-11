@@ -14,6 +14,8 @@
     "runtime/tsc_array.c",
     "runtime/tsc_builtin.c",
     "runtime/tsc_dataview.c",
+    "runtime/tsc_array_buffer.c",
+    "runtime/tsc_array_buffer.def",
     "runtime/tsc_dataview.def",
     "runtime/tsc_core.c",
     "runtime/tsc_environment.c",

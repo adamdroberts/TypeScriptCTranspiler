@@ -143,7 +143,8 @@ static tsc_buffer_t* crypto_bytes(tsc_value_t value,tsc_value_t encoding){
             tsc_data_view_t* view=object->class_ptr;
             (void)tsc_data_view_byte_length(view);
             tsc_buffer_t* bytes=TSC_GC_MALLOC(sizeof(*bytes));memset(bytes,0,sizeof(*bytes));
-            bytes->data=view->buffer->data+view->byte_offset;bytes->len=view->byte_length;bytes->data_owner=view->buffer->data;return bytes;
+            tsc_data_view_witness_t witness=tsc_data_view_witness(view);
+            bytes->data=witness.data;bytes->len=witness.length;bytes->data_owner=view->buffer->data;return bytes;
         }
     }
     tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Digest data must be a string or byte view"));return NULL;

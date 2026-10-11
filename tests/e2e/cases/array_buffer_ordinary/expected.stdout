@@ -1,0 +1,8 @@
+owners true true true 0
+initial 8 16 true false 6 4
+shrink 4 2 true 22136
+grow 10 4 22136 0
+slice 4 false 22136
+transfer 0 0 true true 10 16 true
+fixed transfer true 4 4 false 1450704896
+views true false true

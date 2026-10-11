@@ -954,13 +954,38 @@ static size_t array_buffer_to_index(double n, const char* label) {
 
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length) {
     size_t len = array_buffer_to_index(byte_length, "ArrayBuffer byteLength must be a non-negative finite integer");
+    return tsc_array_buffer_allocate(len, len, false);
+}
+
+static uint8_t* array_buffer_byte_block(size_t length) {
+    uint8_t* bytes = TSC_GC_MALLOC_ATOMIC(length ? length : 1);
+    if (!bytes) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("ArrayBuffer byte storage allocation failed"));
+    memset(bytes, 0, length ? length : 1);
+    return bytes;
+}
+
+tsc_array_buffer_t* tsc_array_buffer_allocate(size_t length, size_t maximum, bool resizable) {
+    if (resizable && length > maximum)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("ArrayBuffer length exceeds its maximum"));
     tsc_array_buffer_t* volatile b = (tsc_array_buffer_t*)TSC_GC_MALLOC(sizeof(tsc_array_buffer_t));
-    b->byte_length = len;
-    b->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len ? len : 1);
+    b->byte_length = length;
+    b->max_byte_length = maximum;
+    b->resizable = resizable;
+    b->data = array_buffer_byte_block(length);
+    if (resizable) tsc_array_buffer_check_capacity(maximum);
     b->detached = false;
     b->object = NULL;
-    memset(b->data,0,len?len:1);
     return b;
+}
+
+void tsc_array_buffer_resize_storage(tsc_array_buffer_t* input, size_t length) {
+    tsc_array_buffer_t* volatile buffer = input;
+    uint8_t* bytes = array_buffer_byte_block(length);
+    size_t copy = length < buffer->byte_length ? length : buffer->byte_length;
+    if (copy) memcpy(bytes, buffer->data, copy);
+    /* Old native byte consumers retain the old atomic block independently. */
+    buffer->data = bytes;
+    buffer->byte_length = length;
 }
 
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b) {
@@ -1000,6 +1025,7 @@ tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offse
     v->buffer = buffer;
     v->byte_offset = offset;
     v->byte_length = length;
+    v->length_tracking = !has_byte_length && buffer->resizable;
     v->object = NULL;
     return v;
 }
@@ -1009,13 +1035,20 @@ tsc_array_buffer_t* tsc_data_view_buffer(const tsc_data_view_t* v) {
 }
 
 double tsc_data_view_byte_offset(const tsc_data_view_t* v) {
-    data_view_require_attached(v);
-    return v ? (double)v->byte_offset : 0.0;
+    return (double)tsc_data_view_witness(v).offset;
 }
 
 double tsc_data_view_byte_length(const tsc_data_view_t* v) {
-    data_view_require_attached(v);
-    return v ? (double)v->byte_length : 0.0;
+    return (double)tsc_data_view_witness(v).length;
+}
+
+tsc_data_view_witness_t tsc_data_view_witness(const tsc_data_view_t* view) {
+    data_view_require_attached(view);
+    size_t length = view->buffer->byte_length;
+    if (view->byte_offset > length || (!view->length_tracking && view->byte_length > length - view->byte_offset))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("DataView is outside its buffer bounds"));
+    return (tsc_data_view_witness_t){view->buffer->data + view->byte_offset,
+        view->length_tracking ? length - view->byte_offset : view->byte_length, view->byte_offset};
 }
 
 int hex_value(unsigned char c) {
