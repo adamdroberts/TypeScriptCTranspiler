@@ -774,43 +774,48 @@ interface Error {
 interface ErrorOptions {
     cause?: any;
 }
-interface ErrorConstructor {
+interface ErrorConstructorProperties<E extends Error> {
+    readonly name: string;
+    readonly length: number;
+    prototype: E;
+}
+interface ErrorConstructor extends ErrorConstructorProperties<Error> {
     new (message?: any, options?: any, ...ignored: any[]): Error;
     (message?: any, options?: any, ...ignored: any[]): Error;
 }
 declare var Error: ErrorConstructor;
 interface TypeError extends Error {}
-interface TypeErrorConstructor {
+interface TypeErrorConstructor extends ErrorConstructorProperties<TypeError> {
     new (message?: any, options?: any, ...ignored: any[]): TypeError;
     (message?: any, options?: any, ...ignored: any[]): TypeError;
 }
 declare var TypeError: TypeErrorConstructor;
 interface RangeError extends Error {}
-interface RangeErrorConstructor {
+interface RangeErrorConstructor extends ErrorConstructorProperties<RangeError> {
     new (message?: any, options?: any, ...ignored: any[]): RangeError;
     (message?: any, options?: any, ...ignored: any[]): RangeError;
 }
 declare var RangeError: RangeErrorConstructor;
 interface SyntaxError extends Error {}
-interface SyntaxErrorConstructor {
+interface SyntaxErrorConstructor extends ErrorConstructorProperties<SyntaxError> {
     new (message?: any, options?: any, ...ignored: any[]): SyntaxError;
     (message?: any, options?: any, ...ignored: any[]): SyntaxError;
 }
 declare var SyntaxError: SyntaxErrorConstructor;
 interface ReferenceError extends Error {}
-interface ReferenceErrorConstructor {
+interface ReferenceErrorConstructor extends ErrorConstructorProperties<ReferenceError> {
     new (message?: any, options?: any, ...ignored: any[]): ReferenceError;
     (message?: any, options?: any, ...ignored: any[]): ReferenceError;
 }
 declare var ReferenceError: ReferenceErrorConstructor;
 interface EvalError extends Error {}
-interface EvalErrorConstructor {
+interface EvalErrorConstructor extends ErrorConstructorProperties<EvalError> {
     new (message?: any, options?: any, ...ignored: any[]): EvalError;
     (message?: any, options?: any, ...ignored: any[]): EvalError;
 }
 declare var EvalError: EvalErrorConstructor;
 interface URIError extends Error {}
-interface URIErrorConstructor {
+interface URIErrorConstructor extends ErrorConstructorProperties<URIError> {
     new (message?: any, options?: any, ...ignored: any[]): URIError;
     (message?: any, options?: any, ...ignored: any[]): URIError;
 }
@@ -818,16 +823,16 @@ declare var URIError: URIErrorConstructor;
 interface AggregateError extends Error {
     errors: any[];
 }
-interface AggregateErrorConstructor {
-    new(errors: any[], message?: any, options?: any, ...ignored: any[]): AggregateError;
-    (errors: any[], message?: any, options?: any, ...ignored: any[]): AggregateError;
+interface AggregateErrorConstructor extends ErrorConstructorProperties<AggregateError> {
+    new(errors: Iterable<any>, message?: any, options?: any, ...ignored: any[]): AggregateError;
+    (errors: Iterable<any>, message?: any, options?: any, ...ignored: any[]): AggregateError;
 }
 declare var AggregateError: AggregateErrorConstructor;
 interface SuppressedError extends Error {
     error: any;
     suppressed: any;
 }
-interface SuppressedErrorConstructor {
+interface SuppressedErrorConstructor extends ErrorConstructorProperties<SuppressedError> {
     new(error: any, suppressed: any, message?: any, ...ignored: any[]): SuppressedError;
     (error: any, suppressed: any, message?: any, ...ignored: any[]): SuppressedError;
 }

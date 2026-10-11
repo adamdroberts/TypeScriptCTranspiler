@@ -942,7 +942,7 @@ tsc_value_t tsc_abort_error_value(void) {
         tsc_str_from_lit("AbortError", 10),
         tsc_str_from_lit("This operation was aborted", 26)
     );
-    error->code = tsc_value_num(20.0);
+    tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_code,tsc_value_num(20.0));
     return tsc_value_error(error);
 }
 

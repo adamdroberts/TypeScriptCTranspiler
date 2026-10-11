@@ -1,0 +1,8 @@
+/* storage field, own property name, enumerable */
+TSC_ERROR_VALUE_FIELD(name_value, name, false)
+TSC_ERROR_VALUE_FIELD(message, message, false)
+TSC_ERROR_VALUE_FIELD(cause, cause, false)
+TSC_ERROR_VALUE_FIELD(code, code, true)
+TSC_ERROR_VALUE_FIELD(error, error, false)
+TSC_ERROR_VALUE_FIELD(suppressed, suppressed, false)
+TSC_ERROR_VALUE_FIELD(errors, errors, false)

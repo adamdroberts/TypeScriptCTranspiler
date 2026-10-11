@@ -7,7 +7,7 @@ try {
     Reflect.construct(controller.abort, []);
     console.log("construct:", "ok");
 } catch (err: any) {
-    console.log("construct:", err);
+    console.log("construct:", err instanceof TypeError);
 }
 controller.signal.addEventListener("abort", (event: any) => {
     console.log("abort event:", event.type);

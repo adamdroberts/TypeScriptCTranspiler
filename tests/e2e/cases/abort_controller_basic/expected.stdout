@@ -1,5 +1,5 @@
 methods: abort 0 false throwIfAborted 0 false addEventListener 2 false
-construct: TypeError: Reflect.construct target is not a supported constructor
+construct: true
 initial: false undefined
 abort event: abort
 onabort: abort

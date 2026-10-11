@@ -25,7 +25,6 @@ export type CTypeKind =
     | "url"
     | "urlsearchparams"
     | "date"
-    | "error"
     | "buffer"
     | "arraybuffer"
     | "dataview"
@@ -137,7 +136,6 @@ export const T_REGEXP: CType = { kind: "regexp", c: "tsc_regexp_t*" };
 export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
 export const T_URL_SEARCH_PARAMS: CType = { kind: "urlsearchparams", c: "tsc_url_search_params_t*" };
 export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
-export const T_ERROR: CType = { kind: "error", c: "tsc_error_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
 export const T_ARRAY_BUFFER: CType = { kind: "arraybuffer", c: "tsc_array_buffer_t*" };
 export const T_DATA_VIEW: CType = { kind: "dataview", c: "tsc_data_view_t*" };
@@ -503,7 +501,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             sym?.getName() === "URIError" ||
             sym?.getName() === "AggregateError" ||
             sym?.getName() === "SuppressedError"
-        ) return T_ERROR;
+        ) return T_VALUE;
         if (sym?.getName() === "Buffer") return T_BUFFER;
         if (sym?.getName() === "ArrayBuffer") return T_ARRAY_BUFFER;
         if (sym?.getName() === "DataView") return T_DATA_VIEW;

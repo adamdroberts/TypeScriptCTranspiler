@@ -496,19 +496,23 @@ typedef enum {
     TSC_ERROR_KIND_COUNT
 } tsc_error_kind_t;
 
+typedef enum {
+#define TSC_ERROR_VALUE_FIELD(name, property, enumerable) TSC_ERROR_VALUE_FIELD_##name,
+#include "tsc_error_values.def"
+#undef TSC_ERROR_VALUE_FIELD
+    TSC_ERROR_VALUE_FIELD_COUNT
+} tsc_error_value_field_t;
 typedef struct tsc_error {
     tsc_str_t* name;
-    tsc_str_t* message;
-    tsc_value_t cause;
-    tsc_value_t code;
-    struct tsc_array* errors;
-    tsc_value_t error;
-    tsc_value_t suppressed;
-    void* error_gc_root;
-    void* suppressed_gc_root;
+
+#define TSC_ERROR_VALUE_FIELD(name, property, enumerable) tsc_value_t name;void* name##_gc_root;bool name##_present;
+#include "tsc_error_values.def"
+#undef TSC_ERROR_VALUE_FIELD
     bool is_suppressed;
     struct tsc_object* object;
 } tsc_error_t;
+void tsc_error_set_value_field(tsc_error_t* error,tsc_error_value_field_t field,tsc_value_t value);
+void tsc_error_publish_value_fields(tsc_error_t* error,struct tsc_object* object);
 tsc_error_t* tsc_error_new(tsc_str_t* message);
 tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message);
 tsc_error_t* tsc_error_new_named_cause(tsc_str_t* name, tsc_str_t* message, tsc_value_t cause);
@@ -516,6 +520,7 @@ tsc_error_t* tsc_aggregate_error_new(struct tsc_array* errors, tsc_str_t* messag
 tsc_error_t* tsc_aggregate_error_new_cause(struct tsc_array* errors, tsc_str_t* message, tsc_value_t cause);
 tsc_error_t* tsc_suppressed_error_new(tsc_value_t error, tsc_value_t suppressed, tsc_str_t* message);
 tsc_str_t* tsc_error_to_string(const tsc_error_t* e);
+tsc_str_t* tsc_error_diagnostic_string(const tsc_error_t* e);
 tsc_value_t tsc_error_constructor_value(tsc_error_kind_t kind);
 _Noreturn void tsc_throw_error(tsc_error_kind_t kind, tsc_str_t* message);
 

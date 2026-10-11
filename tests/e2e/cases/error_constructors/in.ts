@@ -19,5 +19,5 @@ console.log("extra:", typeExtra.name, typeExtra.message, rangeExtra.name, rangeE
 try {
     throw rangeError;
 } catch (e) {
-    console.log("caught:", e);
+    console.log("caught:", String(e));
 }

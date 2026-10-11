@@ -103,7 +103,8 @@
     "src/crypto-digest-owners.ts",
     "runtime/tsc_fs_dirent.c",
     "runtime/tsc_fs_dirent.def",
-    "runtime/tsc_crypto_digest.def"
+    "runtime/tsc_crypto_digest.def",
+    "runtime/tsc_error_values.def"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
   "environmentAllowlist": [

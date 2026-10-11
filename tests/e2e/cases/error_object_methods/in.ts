@@ -1,5 +1,7 @@
 const err = new Error("boom", { cause: "root" });
 const agg = new AggregateError(["one"], "many");
+delete (err as any).stack;
+delete (agg as any).stack;
 let trace = "";
 
 function mark(label: string): string {
@@ -21,7 +23,7 @@ const aggDesc: any = Object.getOwnPropertyDescriptor(agg, "errors");
 console.log("enum:", keys.length, values.length, entries.length);
 console.log("names:", names.join("|"), reflectKeys.join("|"));
 console.log("desc:", desc.value, desc.writable, desc.enumerable, desc.configurable, String(missing));
-console.log("descs:", Object.keys(descs).join("|"), descs.name.value, descs.cause.value, descs.errors.value.length);
+console.log("descs:", Object.keys(descs).join("|"), descs.message.value, descs.cause.value, aggDesc.value.length);
 console.log("reflect:", reflectDesc.value, Reflect.get(err, "name", {}, mark("g")), Reflect.get(agg, "errors").length, aggDesc.value[0]);
 console.log("own:", Object.hasOwn(err, "message", mark("h")), Object.hasOwn(err, "stack", mark("H")), err.hasOwnProperty("cause", mark("p")), err.propertyIsEnumerable("message", mark("i")));
 console.log("call:", Object.prototype.hasOwnProperty.call(err, "errors", mark("c")), Object.prototype.propertyIsEnumerable.call(err, "errors", mark("q")), Reflect.has(err, "message", mark("s")), Reflect.has(err, "stack", mark("S")));

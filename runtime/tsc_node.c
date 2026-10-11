@@ -17875,58 +17875,101 @@ tsc_str_t* tsc_date_to_string(const tsc_date_t* d) {
     return tsc_str_from_cstr(buf);
 }
 
+typedef struct {size_t value_offset,root_offset,present_offset;const char* name;bool enumerable;} error_value_field_t;
+static const error_value_field_t error_value_fields[]={
+#define TSC_ERROR_VALUE_FIELD(name, property, enumerable) {offsetof(tsc_error_t,name),offsetof(tsc_error_t,name##_gc_root),offsetof(tsc_error_t,name##_present),#property,enumerable},
+#include "tsc_error_values.def"
+#undef TSC_ERROR_VALUE_FIELD
+};
+void tsc_error_set_value_field(tsc_error_t* error,tsc_error_value_field_t field,tsc_value_t value){
+    if(!error||(size_t)field>=sizeof(error_value_fields)/sizeof(error_value_fields[0]))abort();
+    const error_value_field_t* descriptor=&error_value_fields[field];
+    *(void**)((char*)error+descriptor->root_offset)=tsc_value_gc_root(value);
+    *(tsc_value_t*)((char*)error+descriptor->value_offset)=value;
+    *(bool*)((char*)error+descriptor->present_offset)=true;
+    if(error->object){
+        (void)tsc_object_define(error->object,tsc_str_from_cstr(descriptor->name),value,true,descriptor->enumerable,true);
+        *(void**)((char*)error+descriptor->root_offset)=NULL;
+    }
+}
+void tsc_error_publish_value_fields(tsc_error_t* error,tsc_object_t* object){
+    for(size_t field=0;field<sizeof(error_value_fields)/sizeof(error_value_fields[0]);++field){
+        const error_value_field_t* descriptor=&error_value_fields[field];
+        if(!*(bool*)((char*)error+descriptor->present_offset))continue;
+        tsc_value_t value=*(tsc_value_t*)((char*)error+descriptor->value_offset);
+        (void)tsc_object_define(object,tsc_str_from_cstr(descriptor->name),value,true,descriptor->enumerable,true);
+        *(void**)((char*)error+descriptor->root_offset)=NULL;
+    }
+}
 tsc_error_t* tsc_error_new(tsc_str_t* message) {
     return tsc_error_new_named(tsc_str_from_lit("Error", 5), message);
 }
 
 tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
-    tsc_error_t* e = (tsc_error_t*)TSC_GC_MALLOC(sizeof(tsc_error_t));
+    tsc_error_t* volatile e = (tsc_error_t*)TSC_GC_MALLOC(sizeof(tsc_error_t));
     e->name = name ? name : tsc_str_from_lit("Error", 5);
-    e->message = message ? message : tsc_str_from_lit("", 0);
-    e->cause = tsc_value_undefined();
-    e->code = tsc_value_undefined();
-    e->errors = NULL;
-    e->error = tsc_value_undefined();
-    e->suppressed = tsc_value_undefined();
-    e->error_gc_root = NULL;
-    e->suppressed_gc_root = NULL;
+    for(size_t field=0;field<sizeof(error_value_fields)/sizeof(error_value_fields[0]);++field){
+        const error_value_field_t* descriptor=&error_value_fields[field];
+        *(tsc_value_t*)((char*)e+descriptor->value_offset)=tsc_value_undefined();
+        *(void**)((char*)e+descriptor->root_offset)=NULL;
+        *(bool*)((char*)e+descriptor->present_offset)=false;
+    }
     e->is_suppressed = false;
     e->object = NULL;
+    if(message)tsc_error_set_value_field(e,TSC_ERROR_VALUE_FIELD_message,tsc_value_string(message));
     return e;
 }
 
-tsc_error_t* tsc_error_new_named_cause(tsc_str_t* name, tsc_str_t* message, tsc_value_t cause) {
-    tsc_error_t* e = tsc_error_new_named(name, message);
-    e->cause = cause;
-    return e;
+typedef struct {tsc_error_value_field_t field;tsc_value_t value;} error_value_input_t;
+static tsc_error_t* error_new_values(tsc_str_t* name,const char* default_name,tsc_str_t* message,const error_value_input_t* values,size_t count){
+    void* volatile roots[count?count:1];
+    for(size_t index=0;index<count;++index)roots[index]=tsc_value_gc_root(values[index].value);
+    tsc_error_t* volatile error=tsc_error_new_named(name?name:tsc_str_from_cstr(default_name),message);
+    for(size_t index=0;index<count;++index)tsc_error_set_value_field(error,values[index].field,values[index].value);
+    (void)roots;return error;
+}
+tsc_error_t* tsc_error_new_named_cause(tsc_str_t* name,tsc_str_t* message,tsc_value_t cause){
+    const error_value_input_t values[]={{TSC_ERROR_VALUE_FIELD_cause,cause}};
+    return error_new_values(name,"Error",message,values,sizeof(values)/sizeof(values[0]));
+}
+tsc_error_t* tsc_aggregate_error_new(tsc_array_t* errors,tsc_str_t* message){
+    tsc_error_t* volatile error=tsc_error_new_named(tsc_str_from_lit("AggregateError",14),message);
+    tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_errors,tsc_value_array(errors?errors:tsc_array_new(sizeof(tsc_value_t),1)));return error;
+}
+tsc_error_t* tsc_aggregate_error_new_cause(tsc_array_t* errors,tsc_str_t* message,tsc_value_t cause){
+    const error_value_input_t values[]={{TSC_ERROR_VALUE_FIELD_cause,cause}};
+    tsc_error_t* volatile error=error_new_values(NULL,"AggregateError",message,values,sizeof(values)/sizeof(values[0]));
+    tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_errors,tsc_value_array(errors?errors:tsc_array_new(sizeof(tsc_value_t),1)));return error;
+}
+tsc_error_t* tsc_suppressed_error_new(tsc_value_t primary,tsc_value_t suppressed,tsc_str_t* message){
+    const error_value_input_t values[]={{TSC_ERROR_VALUE_FIELD_error,primary},{TSC_ERROR_VALUE_FIELD_suppressed,suppressed}};
+    tsc_error_t* error=error_new_values(NULL,"SuppressedError",message,values,sizeof(values)/sizeof(values[0]));
+    error->is_suppressed=true;return error;
 }
 
-tsc_error_t* tsc_aggregate_error_new(tsc_array_t* errors, tsc_str_t* message) {
-    tsc_error_t* e = tsc_error_new_named(tsc_str_from_lit("AggregateError", 14), message);
-    e->errors = errors ? errors : tsc_array_new(sizeof(tsc_value_t), 1);
-    return e;
-}
-
-tsc_error_t* tsc_aggregate_error_new_cause(tsc_array_t* errors, tsc_str_t* message, tsc_value_t cause) {
-    tsc_error_t* e = tsc_aggregate_error_new(errors, message);
-    e->cause = cause;
-    return e;
-}
-
-tsc_error_t* tsc_suppressed_error_new(tsc_value_t error, tsc_value_t suppressed, tsc_str_t* message) {
-    tsc_error_t* e = tsc_error_new_named(tsc_str_from_lit("SuppressedError", 15), message);
-    e->error = error;
-    e->suppressed = suppressed;
-    e->error_gc_root = tsc_value_gc_root(error);
-    e->suppressed_gc_root = tsc_value_gc_root(suppressed);
-    e->is_suppressed = true;
-    return e;
+/* Diagnostics inspect ordinary data descriptors without invoking user accessors. */
+tsc_str_t* tsc_error_diagnostic_string(const tsc_error_t* e){
+    if(!e||!e->object)return tsc_error_to_string(e);
+    tsc_str_t* volatile name=e->name;
+    tsc_str_t* volatile message=tsc_str_from_lit("",0);
+    tsc_value_t object=tsc_value_object(e->object);void* volatile root=tsc_value_gc_root(object);
+    tsc_value_t descriptor=tsc_value_get_own_property_descriptor(object,tsc_str_from_lit("name",4));
+    tsc_value_t value=tsc_value_is_undefined(descriptor)?tsc_value_undefined():tsc_value_get_prop(descriptor,tsc_str_from_lit("value",5));
+    if(value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_STRING)name=tsc_value_as_string(value);
+    descriptor=tsc_value_get_own_property_descriptor(object,tsc_str_from_lit("message",7));
+    value=tsc_value_is_undefined(descriptor)?tsc_value_undefined():tsc_value_get_prop(descriptor,tsc_str_from_lit("value",5));
+    if(value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_STRING)message=tsc_value_as_string(value);
+    (void)root;
+    if(name->len==0)return message;
+    if(message->len==0)return name;
+    return tsc_str_concat_n(3,name,tsc_str_from_lit(": ",2),message);
 }
 
 tsc_str_t* tsc_error_to_string(const tsc_error_t* e) {
     if (!e) return tsc_str_from_lit("Error", 5);
+    if(e->object)return tsc_value_to_string(tsc_value_object(e->object));
     tsc_str_t* name = e->name ? e->name : tsc_str_from_lit("Error", 5);
-    tsc_str_t* message = e->message ? e->message : tsc_str_from_lit("", 0);
+    tsc_str_t* message = e->message_present ? tsc_value_to_string(e->message) : tsc_str_from_lit("", 0);
     if (name->len == 0) return message;
     if (message->len == 0) return name;
     return tsc_str_concat_n(3, name, tsc_str_from_lit(": ", 2), message);

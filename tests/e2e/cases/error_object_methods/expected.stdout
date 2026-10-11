@@ -1,10 +1,10 @@
 enum: 0 0 0
-names: name|message|cause|errors name|message|cause|errors
+names: message|cause message|cause
 desc: boom true false true undefined
-descs: name|message|cause|errors Error root 0
+descs: message|cause boom root 1
 reflect: root Error 1 one
 own: true false true false
-call: true false true false
+call: false false true false
 integrity: true false false true
 tag: [object Error] Error: boom
 trace: kvenrdmDRghHpicqsSELFIt

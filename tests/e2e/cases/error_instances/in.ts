@@ -34,5 +34,5 @@ console.log("stable boxing:", dynamicWithMessage === dynamicWithMessageAgain, dy
 try {
     throw withMessage;
 } catch (e) {
-    console.log("caught:", e);
+    console.log("caught:", String(e));
 }

@@ -51,9 +51,8 @@ tsc_str_t* tsc_value_diagnostic_string(tsc_value_t value) {
         case TSC_VALUE_TAG_ARRAY: return tsc_str_from_lit("[object Array]", 14);
         case TSC_VALUE_TAG_OBJECT: {
             tsc_object_t* object = (tsc_object_t*)value_ptr(value);
-            if (object && !object->is_proxy && object->is_error) {
-                return tsc_error_to_string((tsc_error_t*)object->class_ptr);
-            }
+            if(object&&!object->is_proxy&&object->is_error)
+                return tsc_error_diagnostic_string((tsc_error_t*)object->class_ptr);
             return tsc_str_from_lit("[object Object]", 15);
         }
     }
@@ -897,12 +896,14 @@ static tsc_value_t error_prototype_to_string(void* env, tsc_value_t this_arg, ts
             tsc_str_from_lit("Error.prototype.toString called on non-object", 45)
         );
     }
+    void* volatile receiver_root=tsc_value_gc_root(this_arg);
     tsc_value_t name_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("name", 4));
-    tsc_value_t message_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("message", 7));
-    tsc_str_t* name = tsc_value_is_undefined(name_value)
+    tsc_str_t* volatile name = tsc_value_is_undefined(name_value)
         ? tsc_str_from_lit("Error", 5)
         : tsc_value_to_string(name_value);
-    tsc_str_t* message = tsc_value_is_undefined(message_value)
+    tsc_value_t message_value = tsc_value_get_prop(this_arg, tsc_str_from_lit("message", 7));
+    (void)receiver_root;
+    tsc_str_t* volatile message = tsc_value_is_undefined(message_value)
         ? tsc_str_from_lit("", 0)
         : tsc_value_to_string(message_value);
     if (name->len == 0) return tsc_value_string(message);
@@ -1006,27 +1007,24 @@ static bool error_cause_from_options(tsc_array_t* args, size_t index, tsc_value_
 }
 
 static tsc_str_t* error_message_argument(tsc_array_t* args, size_t index) {
-    if (!args || index >= args->len) return tsc_str_from_lit("", 0);
+    if (!args || index >= args->len) return NULL;
     tsc_value_t value = TSC_ARR(tsc_value_t, args, index);
-    return tsc_value_is_undefined(value)
-        ? tsc_str_from_lit("", 0)
-        : tsc_value_to_string(value);
+    return tsc_value_is_undefined(value)?NULL:tsc_value_to_string(value);
 }
 
 static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_error_intrinsic_t* intrinsic = (tsc_error_intrinsic_t*)env;
-    tsc_error_t* error;
+    tsc_error_t* volatile error;
     if (intrinsic->kind == TSC_ERROR_AGGREGATE) {
         if (!args || args->len == 0) {
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_lit("AggregateError errors is not iterable", 37));
         }
-        tsc_array_t* errors = tsc_value_collection_constructor_values(
-            TSC_ARR(tsc_value_t, args, 0)
-        );
-        error = tsc_aggregate_error_new(errors, error_message_argument(args, 1));
+        error=tsc_error_new_named(tsc_str_from_lit(intrinsic->name,intrinsic->name_len),error_message_argument(args,1));
         tsc_value_t cause;
-        if (error_cause_from_options(args, 2, &cause)) error->cause = cause;
+        if(error_cause_from_options(args,2,&cause))tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_cause,cause);
+        tsc_array_t* errors=tsc_value_collection_constructor_values(TSC_ARR(tsc_value_t,args,0));
+        tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_errors,tsc_value_array(errors));
     } else if (intrinsic->kind == TSC_ERROR_SUPPRESSED) {
         tsc_value_t primary = args && args->len > 0
             ? TSC_ARR(tsc_value_t, args, 0)
@@ -1045,7 +1043,7 @@ static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_
             error_message_argument(args, 0)
         );
         tsc_value_t cause;
-        if (error_cause_from_options(args, 1, &cause)) error->cause = cause;
+        if (error_cause_from_options(args, 1, &cause)) tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_cause,cause);
     }
     return tsc_value_error(error);
 }
@@ -6443,18 +6441,18 @@ tsc_array_t* tsc_value_array_from_values(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
-tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t v) {
-    if (tsc_value_is_nullish(v)) {
-        return tsc_array_new(sizeof(tsc_value_t), 1);
+tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t source) {
+    void* volatile source_root=tsc_value_gc_root(source);
+    tsc_sync_iterator_t iterator=tsc_sync_iterator_open(source);
+    tsc_array_t* volatile values=tsc_array_new(sizeof(tsc_value_t),1);
+    tsc_value_t value;
+    while(tsc_sync_iterator_step(&iterator,&value)){
+        void* volatile value_root=tsc_value_gc_root(value);
+        tsc_array_push_raw(values,&value);
+        (void)value_root;
     }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_iter_values((const tsc_array_t*)value_ptr(v));
-    }
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
-        return value_string_iterator_values((const tsc_str_t*)value_ptr(v));
-    }
-    tsc_throw_str(tsc_str_from_cstr("collection constructor source is not iterable"));
-    return tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)source_root;
+    return values;
 }
 
 tsc_map_t* tsc_value_map_constructor_entries(tsc_value_t entries) {
@@ -8650,20 +8648,20 @@ tsc_value_t tsc_value_set(tsc_set_t* s) {
 tsc_value_t tsc_value_error(tsc_error_t* e) {
     if (!e) return tsc_value_null();
     if (e->object) return tsc_value_object(e->object);
+    tsc_error_t* volatile error_root=e;
     error_intrinsics_initialize();
-    tsc_object_t* o = tsc_object_new_class(e);
+    tsc_error_intrinsic_t* intrinsic=error_intrinsic(error_kind_from_name(e->name));
+    if(!tsc_str_eq(e->name,tsc_str_from_lit(intrinsic->name,intrinsic->name_len)))
+        tsc_error_set_value_field(e,TSC_ERROR_VALUE_FIELD_name_value,tsc_value_string(e->name));
+    tsc_object_t* volatile o = tsc_object_new_class(e);
     o->is_error = true;
     o->prototype = tsc_value_object(
         error_intrinsic(error_kind_from_name(e->name))->prototype
     );
     o->prototype_gc_root = tsc_value_gc_root(o->prototype);
     e->object = o;
-    if (e->is_suppressed) {
-        (void)tsc_object_define(o, tsc_str_from_lit("error", 5), e->error, true, false, true);
-        (void)tsc_object_define(o, tsc_str_from_lit("suppressed", 10), e->suppressed, true, false, true);
-        e->error_gc_root = NULL;
-        e->suppressed_gc_root = NULL;
-    }
+    tsc_error_publish_value_fields(e,o);
+    (void)error_root;
     return tsc_value_object(o);
 }
 

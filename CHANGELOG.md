@@ -303,6 +303,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Give Error instances ordinary property owners, shared payload roots and descriptors, and AggregateError construction through the existing IteratorRecord.
+
 - Give Hash and HMAC core digest operations shared ordinary owners, independent copies, generic calls and an OpenSSL digest registry; preserve suspended owners and reject unrepresented options/codecs.
 
 - Replace strong weak-collection aliases with ordinary WeakMap/WeakSet owners, conditional GC entry graphs, iterator constructors, weak symbol keys and target computed insertion methods.

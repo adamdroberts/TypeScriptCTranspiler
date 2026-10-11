@@ -9,5 +9,5 @@ console.log("uri:", uriError.name, uriError.message, uriError.toLocaleString(), 
 try {
     throw referenceError;
 } catch (e) {
-    console.log("caught:", e);
+    console.log("caught:", String(e));
 }

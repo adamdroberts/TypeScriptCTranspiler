@@ -23,5 +23,5 @@ console.log("alias:", (AggregateError as any).name, (AggregateError as any).leng
 try {
     throw aggregate;
 } catch (e) {
-    console.log("caught:", e);
+    console.log("caught:", String(e));
 }

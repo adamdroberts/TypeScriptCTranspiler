@@ -1,0 +1,7 @@
+presence: false true true false true
+mutation: Renamed: changed Renamed: changed
+deleted: false
+iterable: message-iterator 1,2 Custom: value
+causes: retained-cause retained-cause
+errors: retained-first
+suppressed: true true
