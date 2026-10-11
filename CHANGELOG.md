@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Give the supported UTF-8 text-codec surface ordinary owners across suspension and remove native source shortcuts. Replace lone surrogates on encode, decode malformed UTF-8 with replacement and initial BOM removal, and read current byte-view witnesses after options conversion. Full Encoding API labels/options, streaming, encodeInto and Uint8Array result fidelity remain open.
+
 - Correct CommonJS export fixtures to define properties before freezing their target. Node rejects the previous add-to-frozen-object order; verify the exported property values directly against Node. Existing AOT import/require wrapper regressions pass; this does not prove full Node ESM/CommonJS default interop.
 
 - Preserve encoded string-or-undefined environment reads after deletion and static narrowing. Remove native environment-key truncation; verify aliases, long keys and suspended typed consumers against Node.

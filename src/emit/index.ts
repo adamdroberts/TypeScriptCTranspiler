@@ -37,8 +37,6 @@ import {
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
-    T_TEXT_DECODER,
-    T_TEXT_ENCODER,
     T_DATE,
     T_EVENT,
     T_EVENT_EMITTER,
@@ -21243,8 +21241,6 @@ class Emitter {
             type.kind === "url" ||
             type.kind === "urlsearchparams" ||
             type.kind === "buffer" ||
-            type.kind === "textencoder" ||
-            type.kind === "textdecoder" ||
             type.kind === "fsstats" ||
             type.kind === "function" ||
             type.kind === "class";
@@ -34846,7 +34842,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "textencoder", "textdecoder", "fsstats", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -34921,7 +34917,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "textencoder", "textdecoder", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -38192,10 +38188,7 @@ class Emitter {
         if (this.ordinaryNativeOwners.has(recv.ty.kind))
             return this.emitDynamicNamedPropertyCall(call, recv, memberName,
                 ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-        if (recv.ty.kind === "textencoder")
-            return this.emitTextEncoderMethod(call, recv, memberName);
-        if (recv.ty.kind === "textdecoder")
-            return this.emitTextDecoderMethod(call, recv, memberName);
+
         if (recv.ty.kind === "fsstats")
             return this.emitFsStatsMethod(call, recv, memberName);
         if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
@@ -41466,7 +41459,7 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "textencoder", "textdecoder", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
             unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/arraybuffer/dataview/textencoder/textdecoder/void in this subset");
         }
@@ -44638,76 +44631,6 @@ class Emitter {
         unsupported(call, `Stats method .${method}`);
     }
 
-    private emitTextEncoderMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "encode": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasInput = args.length >= 1 && !this.isUndefinedExpression(args[0]);
-                if (hasInput) {
-                    specs.push({
-                        value: this.emitExpr(args[0]),
-                        target: T_STRING,
-                        node: args[0],
-                    });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(
-                    T_BUFFER,
-                    specs,
-                    (vals) => {
-                        const str = hasInput ? vals[1]! : "NULL";
-                        return `tsc_text_encoder_encode(${vals[0]}, ${str})`;
-                    },
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
-        }
-        unsupported(call, `TextEncoder.${method} (only encode is supported)`);
-    }
-
-    private emitTextDecoderMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "decode": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasBuffer = args.length >= 1 && !this.isUndefinedExpression(args[0]);
-                if (hasBuffer) {
-                    specs.push({
-                        value: this.emitExpr(args[0]),
-                        target: T_BUFFER,
-                        node: args[0],
-                    });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    specs,
-                    (vals) => {
-                        const buf = hasBuffer ? vals[1]! : "NULL";
-                        return `tsc_text_decoder_decode(${vals[0]}, ${buf})`;
-                    },
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
-        }
-        unsupported(call, `TextDecoder.${method} (only decode is supported)`);
-    }
-
     private emitBufferPropertyKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, inherited: boolean, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
         const operation = inherited ? "tsc_value_has_computed_prop" : "tsc_value_has_own_computed_prop";
@@ -46036,14 +45959,6 @@ class Emitter {
         }
         const cls = targetClass ? nativeTypeName(targetClass)
             : this.isOutOfBandIdentifier(ctorExpr) ? ctorExpr.text : this.identifierName(ctorExpr);
-        if (cls === "TextEncoder") {
-            const args = n.arguments ?? [];
-            return this.emitSequencedExpr(
-                T_TEXT_ENCODER,
-                this.ignoredArgumentSpecs(args, 0),
-                () => "tsc_text_encoder_new()",
-            );
-        }
         if (cls === "DispatchQueue") {
             const args = n.arguments ?? [];
             if (args.length < 1) unsupported(n, "new DispatchQueue expects a label");
@@ -46054,27 +45969,7 @@ class Emitter {
                 ...this.ignoredArgumentSpecs(args, 1),
             ], ([labelC]) => `tsc_dispatch_queue_serial(${labelC})`);
         }
-        if (cls === "TextDecoder") {
-            const args = n.arguments ?? [];
-            const specs: SequencedCallArg[] = [];
-            const hasEncoding = args.length >= 1 && !this.isUndefinedExpression(args[0]);
-            if (hasEncoding) {
-                specs.push({
-                    value: this.emitExpr(args[0]),
-                    target: T_STRING,
-                    node: args[0],
-                });
-            }
-            specs.push(...this.ignoredArgumentSpecs(args, 1));
-            return this.emitSequencedExpr(
-                T_TEXT_DECODER,
-                specs,
-                (vals) => {
-                    const enc = hasEncoding ? vals[0]! : "NULL";
-                    return `tsc_text_decoder_new(${enc})`;
-                },
-            );
-        }
+
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
                 T_EVENT_EMITTER,
@@ -47395,10 +47290,6 @@ class Emitter {
                     return `tsc_value_as_url(${r.c})`;
                 case "urlsearchparams":
                     return `tsc_value_as_url_search_params(${r.c})`;
-                case "textencoder":
-                    return `tsc_value_as_text_encoder(${r.c})`;
-                case "textdecoder":
-                    return `tsc_value_as_text_decoder(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "eventemitter":
@@ -47474,10 +47365,6 @@ class Emitter {
                 return `tsc_value_url(${r.c})`;
             case "urlsearchparams":
                 return `tsc_value_url_search_params(${r.c})`;
-            case "textencoder":
-                return `tsc_value_text_encoder(${r.c})`;
-            case "textdecoder":
-                return `tsc_value_text_decoder(${r.c})`;
             case "promise":
                 return `tsc_value_promise(${this.promiseWithValueCodec(r.c, r.ty, node)})`;
             case "void":

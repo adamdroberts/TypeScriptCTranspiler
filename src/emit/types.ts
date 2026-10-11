@@ -26,8 +26,6 @@ export type CTypeKind =
     | "urlsearchparams"
     | "date"
     | "buffer"
-    | "textencoder"
-    | "textdecoder"
     | "fsstats"
 
     | "dispatchqueue"
@@ -135,8 +133,6 @@ export const T_URL: CType = { kind: "url", c: "tsc_url_t*" };
 export const T_URL_SEARCH_PARAMS: CType = { kind: "urlsearchparams", c: "tsc_url_search_params_t*" };
 export const T_DATE: CType = { kind: "date", c: "tsc_date_t*" };
 export const T_BUFFER: CType = { kind: "buffer", c: "tsc_buffer_t*" };
-export const T_TEXT_ENCODER: CType = { kind: "textencoder", c: "tsc_text_encoder_t*" };
-export const T_TEXT_DECODER: CType = { kind: "textdecoder", c: "tsc_text_decoder_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_DISPATCH_QUEUE: CType = { kind: "dispatchqueue", c: "tsc_dispatch_queue_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
@@ -501,8 +497,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "Buffer") return T_BUFFER;
         if (sym?.getName() === "ArrayBuffer") return T_VALUE;
         if (sym?.getName() === "DataView") return T_VALUE;
-        if (sym?.getName() === "TextEncoder") return T_TEXT_ENCODER;
-        if (sym?.getName() === "TextDecoder") return T_TEXT_DECODER;
+        if (sym?.getName() === "TextEncoder") return T_VALUE;
+        if (sym?.getName() === "TextDecoder") return T_VALUE;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "FSDirent") return T_VALUE;
         if (sym?.getName() === "FSDirHandleEntry") return T_VALUE;

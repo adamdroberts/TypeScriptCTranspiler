@@ -637,17 +637,22 @@ tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width);
 
 /* ------------- TextEncoder / TextDecoder ------------- */
 typedef struct tsc_text_encoder {
-    char dummy;
+    struct tsc_object* object;
 } tsc_text_encoder_t;
 
 typedef struct tsc_text_decoder {
-    char dummy;
+    struct tsc_object* object;
 } tsc_text_decoder_t;
 
+tsc_value_t tsc_text_encoder_constructor_value(void);
+tsc_value_t tsc_text_decoder_constructor_value(void);
+tsc_value_t tsc_text_encoder_prototype_value(void);
+tsc_value_t tsc_text_decoder_prototype_value(void);
 tsc_text_encoder_t* tsc_text_encoder_new(void);
 tsc_buffer_t* tsc_text_encoder_encode(const tsc_text_encoder_t* encoder, const tsc_str_t* input);
 
 tsc_text_decoder_t* tsc_text_decoder_new(const tsc_str_t* encoding);
+void tsc_text_decoder_require_encoding(const tsc_str_t* encoding);
 tsc_str_t* tsc_text_decoder_decode(const tsc_text_decoder_t* decoder, const tsc_buffer_t* input);
 
 /* ------------- JSON ------------- */

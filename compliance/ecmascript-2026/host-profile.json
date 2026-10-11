@@ -110,7 +110,9 @@
     "runtime/tsc_crypto_digest.def",
     "runtime/tsc_error_values.def",
     "runtime/tsc_buffer_statics.def",
-    "src/buffer-statics.ts"
+    "src/buffer-statics.ts",
+    "runtime/tsc_text_codec.c",
+    "runtime/tsc_text_codec.def"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
   "environmentAllowlist": [

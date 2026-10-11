@@ -1673,7 +1673,7 @@ tsc_buffer_t* tsc_buffer_swap(tsc_buffer_t* b, size_t width) {
 /* ------------- TextEncoder / TextDecoder ------------- */
 tsc_text_encoder_t* tsc_text_encoder_new(void) {
     tsc_text_encoder_t* encoder = (tsc_text_encoder_t*)TSC_GC_MALLOC(sizeof(tsc_text_encoder_t));
-    encoder->dummy = 0;
+    encoder->object = NULL;
     return encoder;
 }
 
@@ -1682,15 +1682,20 @@ tsc_buffer_t* tsc_text_encoder_encode(const tsc_text_encoder_t* encoder, const t
     if (!input) {
         return tsc_buffer_alloc(0, 0);
     }
-    return tsc_buffer_from_str(input, tsc_str_from_lit("utf8", 4));
+    tsc_str_t* volatile scalar = tsc_str_to_well_formed(input);
+    return tsc_buffer_from_str(scalar, tsc_str_from_lit("utf8", 4));
+}
+
+void tsc_text_decoder_require_encoding(const tsc_str_t* encoding) {
+    if (encoding && !buffer_encoding_is_utf8(encoding)) {
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("TextDecoder encoding cannot be represented"));
+    }
 }
 
 tsc_text_decoder_t* tsc_text_decoder_new(const tsc_str_t* encoding) {
-    if (encoding && !buffer_encoding_is_utf8(encoding)) {
-        tsc_throw_str(tsc_str_from_cstr("TextDecoder: only utf-8 encoding is supported"));
-    }
+    tsc_text_decoder_require_encoding(encoding);
     tsc_text_decoder_t* decoder = (tsc_text_decoder_t*)TSC_GC_MALLOC(sizeof(tsc_text_decoder_t));
-    decoder->dummy = 0;
+    decoder->object = NULL;
     return decoder;
 }
 
@@ -1699,7 +1704,45 @@ tsc_str_t* tsc_text_decoder_decode(const tsc_text_decoder_t* decoder, const tsc_
     if (!input) {
         return tsc_str_from_lit("", 0);
     }
-    return tsc_buffer_to_string(input, tsc_str_from_lit("utf8", 4));
+    if (input->len > (SIZE_MAX - 1) / 3)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("TextDecoder output cannot be represented"));
+    char* output = TSC_GC_MALLOC_ATOMIC(input->len * 3 + 1);
+    size_t written = 0, index = 0;
+    bool initial = true;
+    while (index < input->len) {
+        size_t start = index;
+        uint8_t first = input->data[index++];
+        size_t needed = 0;
+        uint8_t lower = 0x80, upper = 0xbf;
+        bool valid = true;
+        if (first <= 0x7f) needed = 0;
+        else if (first >= 0xc2 && first <= 0xdf) needed = 1;
+        else if (first >= 0xe0 && first <= 0xef) {
+            needed = 2;
+            if (first == 0xe0) lower = 0xa0;
+            if (first == 0xed) upper = 0x9f;
+        } else if (first >= 0xf0 && first <= 0xf4) {
+            needed = 3;
+            if (first == 0xf0) lower = 0x90;
+            if (first == 0xf4) upper = 0x8f;
+        } else valid = false;
+        for (size_t next = 0; valid && next < needed; ++next) {
+            if (index == input->len || input->data[index] < lower || input->data[index] > upper) {
+                valid = false; break;
+            }
+            ++index; lower = 0x80; upper = 0xbf;
+        }
+        if (valid) {
+            size_t width = index - start;
+            bool bom = initial && width == 3 && first == 0xef && input->data[start + 1] == 0xbb && input->data[start + 2] == 0xbf;
+            if (!bom) { memcpy(output + written, input->data + start, width); written += width; }
+        } else {
+            memcpy(output + written, "\xef\xbf\xbd", 3); written += 3;
+        }
+        initial = false;
+    }
+    output[written] = 0;
+    return tsc_str_from_lit(output, written);
 }
 
 tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {

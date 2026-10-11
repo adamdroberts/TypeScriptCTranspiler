@@ -3556,6 +3556,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE:
             return tsc_array_buffer_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_TEXT_ENCODER_PROTOTYPE: return tsc_text_encoder_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_TEXT_DECODER_PROTOTYPE: return tsc_text_decoder_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE:
             return tsc_data_view_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
@@ -9160,18 +9162,26 @@ tsc_value_t tsc_value_data_view(tsc_data_view_t* input) {
     return result;
 }
 
-tsc_value_t tsc_value_text_encoder(tsc_text_encoder_t* encoder) {
-    if (!encoder) return tsc_value_null();
-    tsc_object_t* o = tsc_object_new_class(encoder);
-    o->is_text_encoder = true;
-    return tsc_value_object(o);
+tsc_value_t tsc_value_text_encoder(tsc_text_encoder_t* input) {
+    if (!input) return tsc_value_null();
+    if (input->object) return tsc_value_object(input->object);
+    tsc_text_encoder_t* volatile encoder = input;
+    tsc_object_t* volatile object = tsc_object_new_class(encoder);
+    object->is_text_encoder = true; encoder->object = object;
+    object->prototype = tsc_text_encoder_prototype_value();
+    object->prototype_gc_root = tsc_value_gc_root(object->prototype);
+    return tsc_value_object(object);
 }
 
-tsc_value_t tsc_value_text_decoder(tsc_text_decoder_t* decoder) {
-    if (!decoder) return tsc_value_null();
-    tsc_object_t* o = tsc_object_new_class(decoder);
-    o->is_text_decoder = true;
-    return tsc_value_object(o);
+tsc_value_t tsc_value_text_decoder(tsc_text_decoder_t* input) {
+    if (!input) return tsc_value_null();
+    if (input->object) return tsc_value_object(input->object);
+    tsc_text_decoder_t* volatile decoder = input;
+    tsc_object_t* volatile object = tsc_object_new_class(decoder);
+    object->is_text_decoder = true; decoder->object = object;
+    object->prototype = tsc_text_decoder_prototype_value();
+    object->prototype_gc_root = tsc_value_gc_root(object->prototype);
+    return tsc_value_object(object);
 }
 
 bool tsc_util_types_is_date(tsc_value_t v) {

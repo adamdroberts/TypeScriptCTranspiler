@@ -27,9 +27,9 @@ console.log(`Decoded empty: "${decodedEmpty}"`);
 
 function badDecoder(): string {
     try {
-        return new TextDecoder("utf-16le").decode(encoded1);
+        return new TextDecoder("not-an-encoding").decode(encoded1);
     } catch (err) {
-        return String(err);
+        return err instanceof RangeError ? "RangeError" : String(err);
     }
 }
 console.log(`Bad decoder: ${badDecoder()}`);

@@ -1,0 +1,7 @@
+/* owner, public name, operation, getter, length */
+TSC_TEXT_CODEC_MEMBER(encoder, encoding, ENCODING, true, 0)
+TSC_TEXT_CODEC_MEMBER(encoder, encode, ENCODE, false, 0)
+TSC_TEXT_CODEC_MEMBER(decoder, decode, DECODE, false, 0)
+TSC_TEXT_CODEC_MEMBER(decoder, encoding, ENCODING, true, 0)
+TSC_TEXT_CODEC_MEMBER(decoder, fatal, FATAL, true, 0)
+TSC_TEXT_CODEC_MEMBER(decoder, ignoreBOM, IGNORE_BOM, true, 0)

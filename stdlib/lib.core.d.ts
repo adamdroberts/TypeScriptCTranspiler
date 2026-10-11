@@ -3250,18 +3250,28 @@ declare module "node:url" {
 }
 
 interface TextEncoder {
+    readonly encoding: string;
     encode(input?: string, ...ignored: any[]): Buffer;
 }
 interface TextEncoderConstructor {
-    new (): TextEncoder;
+    readonly prototype: TextEncoder;
+    readonly name: string;
+    readonly length: number;
+    new (...ignored: any[]): TextEncoder;
 }
 declare var TextEncoder: TextEncoderConstructor;
 
 interface TextDecoder {
-    decode(input?: Buffer, ...ignored: any[]): string;
+    readonly encoding: string;
+    readonly fatal: boolean;
+    readonly ignoreBOM: boolean;
+    decode(input?: Buffer | ArrayBuffer | DataView, options?: {stream?: boolean}, ...ignored: any[]): string;
 }
 interface TextDecoderConstructor {
-    new (label?: string, ...ignored: any[]): TextDecoder;
+    readonly prototype: TextDecoder;
+    readonly name: string;
+    readonly length: number;
+    new (label?: string, options?: {fatal?: boolean; ignoreBOM?: boolean}, ...ignored: any[]): TextDecoder;
 }
 declare var TextDecoder: TextDecoderConstructor;
 
