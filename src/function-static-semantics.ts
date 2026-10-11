@@ -275,11 +275,15 @@ export function earlyFunctionStaticSemanticsFailure(
 
 /** IdentifierName property positions do not consume the contextual
  * BindingIdentifier/IdentifierReference grammar parameters. */
-function isContextualGrammarIdentifier(node: ts.Identifier): boolean {
+export function isContextualGrammarIdentifier(node: ts.Identifier): boolean {
     const parent = node.parent;
     if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
-    if ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) ||
-        ts.isPropertyDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) && parent.name === node)
+    if ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isMethodSignature(parent) ||
+        ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent) || ts.isEnumMember(parent) ||
+        ts.isNamedTupleMember(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) && parent.name === node)
+        return false;
+    if (ts.isJsxAttribute(parent) && parent.name === node || ts.isJsxNamespacedName(parent)) return false;
+    if ((ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent) || ts.isJsxClosingElement(parent)) && parent.tagName === node)
         return false;
     if (ts.isBindingElement(parent) && parent.propertyName === node) return false;
     if (ts.isImportAttribute(parent) && parent.name === node) return false;

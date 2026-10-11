@@ -93,6 +93,15 @@ export function ecmaImportAttributesParserShadow(source: string): string {
     return shadow.join("");
 }
 
+/** Statement children exclude StatementListItem positions, where lexical
+ * declarations are legal. Keep that grammar distinction in one predicate. */
+export function isStatementBody(parent: ts.Node, child: ts.Node): boolean {
+    if (ts.isIfStatement(parent)) return parent.thenStatement === child || parent.elseStatement === child;
+    return (ts.isWithStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent) ||
+        ts.isForStatement(parent) || ts.isForInStatement(parent) || ts.isForOfStatement(parent) ||
+        ts.isLabeledStatement(parent)) && parent.statement === child;
+}
+
 /** Parse JavaScript or TypeScript with the ECMA-262 import-attributes trivia grammar while
  * exposing the original exact source bytes and original line map to consumers. */
 export function createEcmaSourceFile(
@@ -110,37 +119,61 @@ export function createEcmaSourceFile(
     let shadow = ecmaImportAttributesParserShadow(source);
     let sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
     goal ??= ts.isExternalModule(sourceFile) || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
-    // TypeScript speculatively parses an `await` reference followed by an
-    // expression-start token as AwaitExpression even under the Script goal.
-    // Its parser context flag distinguishes that speculation from the real
-    // async grammar. Reparse an equal-width shadow, then restore Identifier
-    // names before binding; offsets and exact source text remain unchanged.
-    const referenceTokens = new Set<number>();
-    if (goal === "script" && (scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX)) {
-        const worklist: ts.Node[] = [sourceFile];
-        while (worklist.length > 0) {
-            const node = worklist.pop()!;
-            if (ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext))
-                referenceTokens.add(node.getStart(sourceFile));
-            node.forEachChild(child => { worklist.push(child); });
-        }
-        if (referenceTokens.size > 0) {
+    // Contextual identifier tokens share one offset-preserving parser shadow.
+    // Reparse to a fixed point because correcting one Statement body can
+    // expose another body in the recovered tree. Each source token is added
+    // once; the algorithm has no nesting or statement-count bound.
+    const referenceTokens = new Map<number, string>();
+    const javascript = scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX;
+    if (javascript) {
+        for (;;) {
+            let changed = false;
+            const worklist: Array<{node: ts.Node; parent?: ts.Node; strict: boolean}> = [{
+                node: sourceFile, strict: goal === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements),
+            }];
+            while (worklist.length) {
+                const {node, parent, strict: inherited} = worklist.pop()!;
+                const strict = inherited || ts.isClassLike(node) || ts.isFunctionLike(node) &&
+                    "body" in node && !!node.body && ts.isBlock(node.body) && ecmaDirectivePrologueHasUseStrict(node.body.statements);
+                if (goal === "script" && ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext)) {
+                    const start = node.getStart(sourceFile);
+                    if (!referenceTokens.has(start)) { referenceTokens.set(start, "await"); changed = true; }
+                }
+                if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped)) {
+                    const start = node.getStart(sourceFile);
+                    const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, start);
+                    const keyword = scanner.scan(), escaped = scanner.hasUnicodeEscape(); scanner.scan();
+                    // An escaped spelling is an Identifier, so the raw `let [`
+                    // lookahead restriction does not apply. Invalid adjacent
+                    // identifiers still fail in the reparsed expression tree.
+                    const statementIdentifier = parent && isStatementBody(parent, node) &&
+                        scanner.hasPrecedingLineBreak() && scanner.getToken() !== ts.SyntaxKind.OpenBracketToken;
+                    if (!strict && keyword === ts.SyntaxKind.LetKeyword && (escaped || statementIdentifier)) {
+                        if (!referenceTokens.has(start)) { referenceTokens.set(start, "let"); changed = true; }
+                    }
+                }
+                node.forEachChild(child => { worklist.push({node: child, parent: node, strict}); });
+            }
+            if (!changed) {
+                break;
+            }
             const characters = shadow.split("");
-            for (const start of referenceTokens) {
+            for (const start of referenceTokens.keys()) {
                 const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, start);
                 scanner.scan();
-                const end = scanner.getTextPos();
-                for (let index = start; index < end; ++index) characters[index] = index === start ? "a" : "_";
+                for (let index = start; index < scanner.getTextPos(); ++index) characters[index] = index === start ? "a" : "_";
             }
             shadow = characters.join("");
             sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
-            const worklist: ts.Node[] = [sourceFile];
-            while (worklist.length > 0) {
-                const node = worklist.pop()!;
-                if (ts.isIdentifier(node) && referenceTokens.has(node.getStart(sourceFile)))
-                    (node as ts.Identifier & { escapedText: ts.__String }).escapedText = "await" as ts.__String;
-                node.forEachChild(child => { worklist.push(child); });
+        }
+        const worklist: ts.Node[] = [sourceFile];
+        while (worklist.length) {
+            const node = worklist.pop()!;
+            if (ts.isIdentifier(node)) {
+                const name = referenceTokens.get(node.getStart(sourceFile));
+                if (name) (node as ts.Identifier & {escapedText: ts.__String}).escapedText = name as ts.__String;
             }
+            node.forEachChild(child => { worklist.push(child); });
         }
     }
     if (shadow !== source) {

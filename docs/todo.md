@@ -580,6 +580,8 @@ Inherited strict eval and with Statement-body grammar now share canonical source
 
 Conservative object-environment value and receiver flow now shares the source graph and declarative binder recovery. Unknown intrinsic eval remains fail-closed. Thrown-value propagation in source analysis and CLI eval Annex B function environment migration remain open.
 
-Property base validation now shares the canonical key-preparation path. With newline-sensitive let grammar remains open, alongside the existing eval, Annex B, Realm and agent eligibility work.
+Property base validation now shares the canonical key-preparation path. With newline-sensitive let grammar now has shared parser and Statement-role validation; the existing eval, Annex B, Realm and agent eligibility work remains open.
 
 Synthetic checker declarations now preserve source-global ownership through the shared declaration predicate. Complete declaration/eval/Annex B semantics and the remaining Realm/agent host and clause evidence gates remain open.
+
+Contextual Statement-body let and escaped Identifier spellings now share offset-preserving parsing and strict grammar-role validation. Full declaration/eval/Annex B semantics, dynamic actual-callee proof, and exhaustive host/clause evidence remain open.

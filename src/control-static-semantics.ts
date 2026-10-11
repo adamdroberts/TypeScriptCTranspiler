@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { bindingNameEntries, strictModeBindingIdentifierNames } from "./module-static-semantics";
-import { ecmaParseGoal } from "./ecmascript-source";
-import { isStrictCodeContext } from "./function-static-semantics";
+import { ecmaParseGoal, isStatementBody } from "./ecmascript-source";
+import { isContextualGrammarIdentifier, isStrictCodeContext } from "./function-static-semantics";
 
 export interface ControlStaticSemanticsFailure {
     readonly node: ts.Node;
@@ -98,13 +98,19 @@ export function earlyControlFlowStaticSemanticsFailure(
             const restricted=bindingNameEntries(declarationName).find(entry=>strictModeBindingIdentifierNames.has(entry.name));
             if(restricted)return {node:restricted.node,message:`binding identifier '${restricted.name}' is not permitted in strict mode`};
         }
+        if (ts.isIdentifier(node) && /(?:\.[cm]?js|\.jsx)$/iu.test(node.getSourceFile().fileName) &&
+            node.text !== "eval" && node.text !== "arguments" &&
+            strictModeBindingIdentifierNames.has(node.text) && isStrictCodeContext(node) && isContextualGrammarIdentifier(node))
+            return {node, message:`identifier '${node.text}' is not permitted in strict mode`};
+        if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped) &&
+            node.parent && isStatementBody(node.parent, node))
+            return {node, message:"lexical declaration is not permitted as a Statement"};
         if (ts.isWithStatement(node) && isStrictCodeContext(node))
             return {node, message:"with statement is not permitted in strict mode"};
         if (ts.isWithStatement(node)) {
             let body=node.statement;
             while(ts.isLabeledStatement(body))body=body.statement;
-            if (ts.isFunctionDeclaration(body) || ts.isClassDeclaration(body) ||
-                ts.isVariableStatement(body) && (body.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0)
+            if (ts.isFunctionDeclaration(body) || ts.isClassDeclaration(body))
                 return {node:body, message:"with body must be a Statement"};
         }
         if (ts.isFunctionLike(node)) {
