@@ -1700,6 +1700,7 @@ tsc_value_t tsc_process_versions(void);
 tsc_value_t tsc_process_release(void);
 tsc_value_t tsc_process_features(void);
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name);
+tsc_value_t tsc_process_env_get_value(const tsc_str_t* name);
 void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value);
 bool tsc_process_env_unset(const tsc_str_t* name);
 tsc_str_t* tsc_process_cwd(void);

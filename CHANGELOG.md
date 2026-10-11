@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Preserve encoded string-or-undefined environment reads after deletion and static narrowing. Remove native environment-key truncation; verify aliases, long keys and suspended typed consumers against Node.
+
 - Share Proxy defineProperty invariants through actual target descriptors and extensibility. Reject false writable downgrades of non-configurable data properties, preserve nested target ordering and abrupt values, and remove duplicated representation branches.
 
 - Correct function-proxy invariant fixtures with explicit strict functions, actual accessor functions, portable TypeError identity checks and strict rejection of locked prototype assignment. Regenerate output from Node.

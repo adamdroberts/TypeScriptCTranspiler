@@ -21109,6 +21109,8 @@ class Emitter {
             if (hasCanonicalValueFormals(node) || this.sourceFormalParameterForDeclaration(node)) admitPositive(node);
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
                 (this.commonJsWrapperBindingName(node) || this.commonJsImportForIdentifier(node))) admitPositive(node);
+            if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+                this.isProcessEnvObject(node.expression)) admitPositive(node);
             if (ts.isCallExpression(node)) {
                 const specifier = this.requireCallSpecifier(node);
                 const target = specifier && this.resolvedModuleInfoForSpecifier(specifier,node.getSourceFile().fileName,"require");
@@ -46489,12 +46491,12 @@ class Emitter {
                 }
             }
         }
-        // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
+        // Host mutation can invalidate static narrowing of environment reads.
         if (this.isProcessEnvObject(pa.expression)) {
             const varName = pa.name.text;
             return {
-                c: `tsc_process_env_get(tsc_str_from_lit("${escapeCString(varName)}", ${utf8ByteLen(varName)}))`,
-                ty: T_STRING,
+                c: `tsc_process_env_get_value(tsc_str_from_lit("${escapeCString(varName)}", ${utf8ByteLen(varName)}))`,
+                ty: T_VALUE,
             };
         }
         if (
@@ -46764,7 +46766,7 @@ class Emitter {
         if (this.isSuperProperty(ea)) return this.emitSuperPropertyGet(ea);
         if (this.isProcessEnvObject(ea.expression)) {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
-            return this.emitSequencedCall("tsc_process_env_get", T_STRING, [
+            return this.emitSequencedCall("tsc_process_env_get_value", T_VALUE, [
                 { value: key, target: T_STRING, node: ea.argumentExpression },
             ]);
         }

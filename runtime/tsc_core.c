@@ -1362,12 +1362,16 @@ tsc_value_t tsc_process_features(void) {
 }
 
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name) {
-    char key[512];
-    size_t n = name->len < 511 ? name->len : 511;
-    memcpy(key, name->data, n);
-    key[n] = '\0';
+    char* key = cstr_dup(name);
     const char* v = getenv(key);
-    return v ? tsc_str_from_cstr(v) : NULL;
+    tsc_str_t* result = v ? tsc_str_from_cstr(v) : NULL;
+    free(key);
+    return result;
+}
+
+tsc_value_t tsc_process_env_get_value(const tsc_str_t* name) {
+    tsc_str_t* value = tsc_process_env_get(name);
+    return value ? tsc_value_string(value) : tsc_value_undefined();
 }
 
 void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value) {
