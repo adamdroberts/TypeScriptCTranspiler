@@ -62,7 +62,7 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown" }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "primitive-string" | "bound-name" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "bound-name" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -192,7 +192,8 @@ class SourceValueFlow {
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
     private readonly propertyWrites = new Set<string>();
-    private readonly keyPrimitives = new Map<Cell, Map<ts.Node | undefined, Cell>>();
+    private readonly hintPrimitives = new Map<Cell, Map<ts.Node | undefined, Cell>>();
+    private readonly stringConversions = new Map<Cell, Map<ts.Node, Cell>>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
@@ -248,7 +249,7 @@ class SourceValueFlow {
                 const operands = handler && conversionOperands(node);
                 if (handler && operands) {
                     const propertyKey = ts.isComputedPropertyName(node) || ts.isElementAccessExpression(node);
-                    const inputs = operands.map(operand => propertyKey ? this.propertyKeyPrimitives(this.cell(operand), node) : this.cell(operand));
+                    const inputs = operands.map(operand => propertyKey ? this.stringHintPrimitives(this.cell(operand), node) : this.cell(operand));
                     // Primitive conversion failures are Error objects. An
                     // opaque coercion can invoke user code and throw any value;
                     // it cannot disappear beside a known explicit throw.
@@ -514,9 +515,9 @@ class SourceValueFlow {
     }
     /** OrdinaryToPrimitive's string-hint method order, driven by the existing
      * property/call graph. Symbol-keyed or opaque shapes remain incomplete. */
-    private propertyKeyPrimitives(source: Cell, context?: ts.Node): Cell {
-        let contexts = this.keyPrimitives.get(source);
-        if (!contexts) { contexts = new Map(); this.keyPrimitives.set(source, contexts); }
+    private stringHintPrimitives(source: Cell, context?: ts.Node): Cell {
+        let contexts = this.hintPrimitives.get(source);
+        if (!contexts) { contexts = new Map(); this.hintPrimitives.set(source, contexts); }
         const previous = contexts.get(context); if (previous) return previous;
         const result = this.newCell(); contexts.set(context, result);
         const selected = new Set<Atom>();
@@ -584,9 +585,10 @@ class SourceValueFlow {
         });
         return result;
     }
-    /** One ToPropertyKey projection for computed reads, writes and reflection. */
-    private propertyKeyNames(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
-        key = this.propertyKeyPrimitives(key, context);
+    /** Shared text projection after ordinary string-hint conversion. Symbols
+     * remain outside this finite source domain and fail closed. */
+    private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
+        key = this.stringHintPrimitives(key, context);
         this.watchText(rule, key);
         if (!key.values.size) return undefined;
         const proof = this.primitiveChoiceProof(key);
@@ -612,6 +614,20 @@ class SourceValueFlow {
         }
         return null;
     }
+    private stringHintCell(source: Cell, context: ts.Node): Cell {
+        let contexts = this.stringConversions.get(source);
+        if (!contexts) { contexts = new Map(); this.stringConversions.set(source, contexts); }
+        const previous = contexts.get(context); if (previous) return previous;
+        const result = this.newCell(); contexts.set(context, result);
+        let rule!: Rule;
+        rule = this.rule([source], () => {
+            const choices = this.stringHintTexts(source, rule, context);
+            if (choices === null) this.publish(result, this.unknown);
+            else if (choices?.length === 0) this.publish(result, this.abrupt);
+            else for (const choice of choices ?? []) this.publish(result, this.text(choice));
+        });
+        return result;
+    }
     private projectMemberKeys(name: string | ts.PropertyName, context: ts.Node, project: (key: string | null) => void, owner?: ObjectOwner): void {
         if (typeof name === "string") { project(name); return; }
         if (!ts.isComputedPropertyName(name)) { project(propertyName(name)); return; }
@@ -619,7 +635,7 @@ class SourceValueFlow {
         if (owner) (owner.computedDefinitions ??= []).push({key,defined,context});
         let rule!: Rule;
         rule = this.rule([key], () => {
-            const keys = this.propertyKeyNames(key, rule, context);
+            const keys = this.stringHintTexts(key, rule, context);
             for (const value of keys === null ? [null] : keys ?? []) if (!selected.has(value)) {
                 selected.add(value); project(value); this.publish(defined,value===null?this.unknown:this.primitive(value));
             }
@@ -629,7 +645,7 @@ class SourceValueFlow {
         for (const definition of owner.computedDefinitions ?? []) {
             if (!rule) return false;
             this.watch(rule,definition.defined);
-            const keys=this.propertyKeyNames(definition.key,rule,definition.context);
+            const keys=this.stringHintTexts(definition.key,rule,definition.context);
             if(keys===undefined)return false;
             if(keys===null){if(!definition.defined.values.has(this.unknown))return false;}
             else if(keys.some(key=>!definition.defined.values.has(this.primitive(key))))return false;
@@ -640,7 +656,7 @@ class SourceValueFlow {
         const result = this.newCell(), selected = new Set<string>();
         let rule!: Rule;
         rule = this.rule([key], () => {
-            const names = this.propertyKeyNames(key, rule, context);
+            const names = this.stringHintTexts(key, rule, context);
             if (names === null) this.publish(result, this.unknown);
             else if (names?.length === 0) this.publish(result, this.abrupt);
             else for (const name of names ?? []) if (!selected.has(name)) {
@@ -668,7 +684,7 @@ class SourceValueFlow {
     private writeComputedProperty(base: Cell, key: Cell, value: Cell, mode: "set"|"define"|"delete" = "set", context?:ts.Node, receiver=base): void {
         let rule!: Rule;
         rule=this.rule([key],()=>{
-            const names = this.propertyKeyNames(key, rule, context);
+            const names = this.stringHintTexts(key, rule, context);
             if (names === null) this.writeProperty(base,null,value,true,mode,context,receiver);
             else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
@@ -677,7 +693,7 @@ class SourceValueFlow {
         const getter=this.property(descriptor,"get",context),setter=this.property(descriptor,"set",context),value=this.property(descriptor,"value",context);
         let rule!:Rule;
         rule=this.rule([base,key,getter,setter],()=>{
-            const keys = this.propertyKeyNames(key, rule, context);
+            const keys = this.stringHintTexts(key, rule, context);
             if (keys === undefined) return;
             const names:readonly(string|null)[]=keys ?? [null];
             const accessor=[...getter.values,...setter.values].some(atom=>atom!==this.primitive(undefined));
@@ -712,7 +728,7 @@ class SourceValueFlow {
         const incomplete=()=>{this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);};
         let rule!:Rule;
         rule=this.rule(key?[base,key]:[base],()=>{
-            const keys=key?this.propertyKeyNames(key,rule,context):undefined;
+            const keys=key?this.stringHintTexts(key,rule,context):undefined;
             if(key && keys===undefined)return;
             if(key && keys===null){incomplete();return;}
             for(const atom of base.values){
@@ -994,7 +1010,7 @@ class SourceValueFlow {
                     const instance=this.ordinaryOwner(receiver);
                     if(!instance)continue;
                     for(const initializer of initializers){
-                        const keys=this.propertyKeyNames(initializer.keys,fieldsRule);
+                        const keys=this.stringHintTexts(initializer.keys,fieldsRule);
                         if(keys===null)this.publish(instance.shape,this.unknown);
                         else for(const key of keys??[])this.defineField(instance,key,initializer.value);
                     }
@@ -1252,7 +1268,27 @@ class SourceValueFlow {
         const constructedReceiver=this.newCell();
         this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
         const boundValues = new Map<string, Atom>();
-        const primitiveTextValues = new Map<Cell, Atom>();
+        const argumentConversions = new Map<string, readonly Cell[]>();
+        const convertArguments = (args: readonly Cell[] | null): readonly Cell[] | null => {
+            if (!args) return null;
+            const identity = args.map(argument => argument.id).join(",");
+            const previous = argumentConversions.get(identity); if (previous) return previous;
+            const converted: Cell[] = [];
+            argumentConversions.set(identity, converted);
+            for (const [index, argument] of args.entries()) {
+                const input = this.newCell(), result = this.stringHintCell(input, node);
+                converted.push(result);
+                if (index === 0) this.copy(argument, input);
+                else {
+                    const predecessor = converted[index - 1]!;
+                    this.rule([predecessor], () => {
+                        if (predecessor.values.has(this.abrupt)) this.publish(result, this.abrupt);
+                        if ([...predecessor.values].some(value => value.tag !== "abrupt")) this.copy(argument, input);
+                    });
+                }
+            }
+            return converted;
+        };
         const seen = new Map<Atom, Set<string>>();
         const handled = (atom: Atom, signature: string): boolean => {
             let signatures = seen.get(atom); if (!signatures) { signatures = new Set(); seen.set(atom, signatures); }
@@ -1310,8 +1346,11 @@ class SourceValueFlow {
                             receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : constructedReceiver, args });
                         continue;
                     }
-                    if (atom.tag === "intrinsic" && atom.domain === "constructor")
-                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: argv });
+                    if (atom.tag === "intrinsic" && atom.domain === "constructor") {
+                        const converted = convertArguments(argv);
+                        for (const argument of converted ?? []) this.watchText(rule, argument);
+                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: converted });
+                    }
                     // Delegation remains an evolving graph edge: its
                     // target may acquire facts after this call is handled.
                     if (atom.tag === "function" && invocation.construct && ts.isClassLike(atom.owner.definition) && !atom.owner.node && atom.owner.base && !invocation.boundPath.has(atom)) {
@@ -1326,19 +1365,15 @@ class SourceValueFlow {
                         if (!generated) this.publish(result!,this.pendingSource);
                         for (const value of generated ?? []) this.copy(value, result!);
                     } else if (atom.tag === "builtin") {
+                        const stringValue = atom.normalResult === "primitive-string" && argv?.[0]
+                            ? this.stringHintCell(argv[0], node) : undefined;
+                        if (stringValue) this.watch(rule, stringValue);
                         if (!invocation.construct) {
                             if (atom.normalResult === "primitive-string") {
                                 if (argv === null) this.publish(result!, this.unknown);
                                 else if (argv.length === 0) this.publish(result!, this.primitive(""));
                                 else {
-                                    const source = argv[0]!;
-                                    this.watchText(rule, source);
-                                    let value = primitiveTextValues.get(source);
-                                    if (!value) {
-                                        value = {tag: "text-operation", operation: "primitive-string", parts: [source]};
-                                        primitiveTextValues.set(source, value);
-                                    }
-                                    this.publish(result!, value);
+                                    this.copy(stringValue!, result!);
                                 }
                             } else if (atom.normalResult === "boolean") {
                                 this.publish(result!, this.primitive(false));
@@ -1351,7 +1386,7 @@ class SourceValueFlow {
                             this.publish(handler, this.opaqueObject);
                             // Coercion can call arbitrary user code. A
                             // result category cannot erase its exceptions.
-                            if (atom.normalResult === "unknown" || argv === null || argv.some(argument =>
+                            if (atom.normalResult === "unknown" || argv === null || atom.normalResult !== "primitive-string" && argv.some(argument =>
                                 [...argument.values].some(value => value.tag !== "primitive" && value.tag !== "non-string")))
                                 this.publish(handler, this.unknown);
                         }
@@ -1413,7 +1448,7 @@ class SourceValueFlow {
                             this.publish(result!,this.primitive(undefined));
                             const handler=this.exceptionHandlers.get(node);
                             if(handler && (argv===null||argv.some(argument=>[...argument.values].some(value=>
-                                value.tag!=="primitive"&&value.tag!=="non-string"))))this.publish(handler,this.unknown);
+                                value.tag!=="primitive"&&value.tag!=="non-string"&&value.tag!=="abrupt"&&value.tag!=="pending-source"))))this.publish(handler,this.unknown);
                         }
                         if(PROPERTY_MUTATIONS.has(atom.operation)){
                             const handler=this.exceptionHandlers.get(node);
@@ -1492,7 +1527,7 @@ class SourceValueFlow {
                         }
                         if (atom.operation === "realm") this.publish(result!, this.realm);
                         if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {
-                            const source = argv?.[0] ?? null;
+                            const source = argv?.[0] ? atom.operation === "eval" ? argv[0] : this.stringHintCell(argv[0], node) : null;
                             const direct = atom.operation === "eval" && invocation.direct;
                             const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
                             evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
@@ -1578,7 +1613,6 @@ class SourceValueFlow {
                                 // numeric conversions contribute no normal choice.
                                 try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
                             } else if (atom.operation === "bound-name") choices.add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
-                            else if (atom.operation === "primitive-string") choices.add(String(tuple[0]));
                             else if (atom.operation === "template") choices.add(tuple.map(String).join(""));
                             else {
                                 const [left, right] = tuple;

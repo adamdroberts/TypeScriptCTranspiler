@@ -18,7 +18,7 @@ test("primitive String results stay in the shared text dependency tree across ca
  }
  sources.push('eval(String());','function value(){return "59;";}eval(String(value()));','var convert=String;var input="61;";eval(convert(input));','eval(String("67;",{toString(){throw 71;}}));','String=function(){return "73;";};eval(String(79));');
  const deep="String(".repeat(512)+'"83;"'+")".repeat(512);sources.push(`eval(${deep});`);
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
  const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of sources.entries()){
   const choices=sourceEvaluationInvocations(program(source)).filter(call=>ts.isCallExpression(call.node)&&ts.isIdentifier(call.node.expression)&&call.node.expression.text==="eval").map(call=>call.choices);
@@ -29,7 +29,7 @@ test("primitive String results stay in the shared text dependency tree across ca
    expect(sourceEvaluationInvocations(program(effect+`eval(${name});`)).map(call=>call.choices)).toEqual([[]]);
  }
  for(const source of ['eval(+external);','eval(-external);','eval(~external);','eval(!external);','eval(eval(-external));'])expect(sourceEvaluationInvocations(program(source)).every(call=>JSON.stringify(call.choices)==="[]")).toBe(true);
- for(const source of ['eval(String(external));','eval(String(flag?"89;":external));','var convert=flag?String:external;eval(convert("97;"));','eval(String({toString(){return "101;";}}));'])expect(sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)).toBe(true);
+ for(const source of ['eval(String(external));','eval(String(flag?"89;":external));','var convert=flag?String:external;eval(convert("97;"));','eval(String({toString(){return external;}}));'])expect(sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)).toBe(true);
 });
 test("closed eval consumes primitive conversion text natively in both memory modes",async()=>{
  const pieces=[

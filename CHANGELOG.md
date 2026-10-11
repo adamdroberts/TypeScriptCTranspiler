@@ -422,6 +422,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- String, dynamic-function arguments and host source operations share string-hint source conversion with computed keys. Removed the primitive-only String predecessor and retained ordered coercion, receiver effects and thrown source values; opaque sources remain closed.
+
 - Ordinary object key coercion uses the shared property/call graph for source admission, preserving receiver, fallback, accessor effects and thrown source values. Opaque coercions remain closed; Node/native properties, deep prototype lookup and typed CLI checks cover the change.
 
 - Computed object/class source definitions and callable names share evaluated primitive-key facts; native object names follow runtime keys, including accessor prefixes and early anonymous-class initialization. Differential properties and CLI eval checks cover the shared path; full target coverage remains open.
