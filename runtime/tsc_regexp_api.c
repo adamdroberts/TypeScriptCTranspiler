@@ -351,6 +351,9 @@ typedef struct {
 } regexp_string_iterator_t;
 
 static const char regexp_string_iterator_prototype_key = 0;
+static void regexp_string_iterator_complete(regexp_string_iterator_t* state) {
+    *state = (regexp_string_iterator_t){ .matcher = tsc_value_undefined(), .done = true };
+}
 
 static tsc_value_t regexp_string_iterator_next(void* env, tsc_value_t receiver, tsc_array_t* args) {
     (void)env; (void)args;
@@ -367,10 +370,10 @@ static tsc_value_t regexp_string_iterator_next(void* env, tsc_value_t receiver, 
     void* volatile match_gc_root = tsc_value_gc_root(match);
     (void)match_gc_root;
     if (match == tsc_value_null()) {
-        state->done = true;
+        regexp_string_iterator_complete(state);
         return tsc_iterator_result(tsc_value_undefined(), true);
     }
-    if (!state->global) state->done = true;
+    if (!state->global) regexp_string_iterator_complete(state);
     else {
         tsc_str_t* matched = tsc_value_to_string(tsc_value_get_index(match, 0));
         if (!tsc_str_length(matched)) {

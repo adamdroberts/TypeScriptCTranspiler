@@ -789,7 +789,7 @@ interface RegExpExecArray extends RegExpMatchArray {
     input: string;
     groups: { [key: string]: string | undefined } | undefined;
 }
-interface RegExpStringIterator<T> extends IterableIterator<T> {
+interface RegExpStringIterator<T> extends IterableIterator<T>, IteratorObject<T> {
     [Symbol.iterator](): RegExpStringIterator<T>;
 }
 interface RegExp {

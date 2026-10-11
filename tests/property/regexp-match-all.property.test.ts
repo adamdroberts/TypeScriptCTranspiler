@@ -112,10 +112,12 @@ print("stress:" + valid + ":" + snapshot(iterator));
 
 test("matchAll uses species construction and one ordinary lazy iterator state", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-match-all-"));
-    const expected: string[] = [];
-    new Function("print", source)((value: unknown) => expected.push(String(value)));
     try {
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
+        const reference = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),lines=[];new Function("print",fs.readFileSync(process.argv[1],"utf8"))(value=>lines.push(String(value)));fs.writeSync(1,JSON.stringify(lines));', entry],
+            {stdout:"pipe",stderr:"pipe",timeout:120_000});
+        expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
+        const expected: string[] = JSON.parse(reference.stdout.toString());
         for (const noGc of [false, true]) {
             const output = path.join(temporary, noGc ? "no-gc" : "gc");
             const diagnostics: string[] = [];
