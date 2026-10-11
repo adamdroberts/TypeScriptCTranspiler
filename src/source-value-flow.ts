@@ -3,20 +3,7 @@ import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
-/** Resolve the declarative candidate independently of intervening object
- * records. Source flow retains those records separately; this is not a proof
- * that the runtime Reference selects the declarative candidate. */
-export function declarativeSourceBindingSymbol(checker: ts.TypeChecker, node: ts.Identifier): ts.Symbol | undefined {
-    if (ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node)
-        return checker.getShorthandAssignmentValueSymbol(node.parent);
-    const parent = node.parent;
-    const declaration = (ts.isVariableDeclaration(parent) || ts.isBindingElement(parent) || ts.isParameter(parent) ||
-        ts.isFunctionDeclaration(parent) || ts.isFunctionExpression(parent) ||
-        ts.isClassDeclaration(parent) || ts.isClassExpression(parent)) && parent.name === node;
-    return checker.getSymbolAtLocation(node) ??
-        (declaration ? (parent as ts.Node & {symbol?: ts.Symbol}).symbol : undefined) ??
-        checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
-}
+import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding} from "./source-bindings";
 
 export interface SourceValueGraphEntries {
     readonly functions?: readonly FunctionConstructorEntry[];
@@ -201,7 +188,7 @@ class SourceValueFlow {
     }
     private binding(node: ts.Identifier): Cell {
         const symbol = this.bindingSymbol(node);
-        if (!symbol) return this.globalBinding(node.text);
+        if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) return this.globalBinding(node.text);
         let cell = this.bindings.get(symbol);
         if (!cell) {
             cell = this.newCell(); this.bindings.set(symbol, cell);
@@ -211,7 +198,9 @@ class SourceValueFlow {
         return cell;
     }
     private withBindingObjects(node: ts.Identifier): Cell[] {
-        let declaration = this.bindingSymbol(node)?.valueDeclaration;
+        const symbol = this.bindingSymbol(node);
+        let declaration = symbol?.valueDeclaration && sourceDeclarationIntroducesBinding(symbol.valueDeclaration)
+            ? symbol.valueDeclaration : symbol?.declarations?.find(sourceDeclarationIntroducesBinding);
         while (declaration && ts.isBindingElement(declaration)) declaration = declaration.parent.parent as ts.Declaration;
         let owner: ts.Node | undefined;
         if (declaration && ts.isParameter(declaration)) owner = declaration.parent;
@@ -292,10 +281,7 @@ class SourceValueFlow {
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
-            !declaration.getSourceFile().isDeclarationFile &&
-            (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration) ||
-                functionNode(declaration) || ts.isClassDeclaration(declaration) || ts.isImportClause(declaration) ||
-                ts.isImportSpecifier(declaration) || ts.isNamespaceImport(declaration)));
+            !declaration.getSourceFile().isDeclarationFile && sourceDeclarationIntroducesBinding(declaration));
     }
     private property(base: Cell, key: string): Cell {
         const result = this.newCell();

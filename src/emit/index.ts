@@ -9,6 +9,7 @@ import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { runtimeGlobalBindings } from "../global-bindings";
+import { sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
@@ -12395,27 +12396,6 @@ class Emitter {
         return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source && !this.isAmbientDeclaration(decl));
     }
 
-    private isSyntheticGlobalPropertyDeclaration(
-        declaration: ts.Declaration,
-        name: string,
-    ): boolean {
-        if (!ts.isCallExpression(declaration) || declaration.arguments.length < 2) return false;
-        const callee = declaration.expression;
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "defineProperty") {
-            return false;
-        }
-        if (!ts.isIdentifier(callee.expression) ||
-            !this.isOutOfBandGlobalBinding(callee.expression, "Object")) {
-            return false;
-        }
-        const receiver = declaration.arguments[0];
-        const key = declaration.arguments[1];
-        return !!receiver && ts.isIdentifier(receiver) &&
-            this.isOutOfBandGlobalBinding(receiver, "globalThis") &&
-            !!key && (ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) &&
-            key.text === name;
-    }
-
     /** Type-only ambient declarations do not create source runtime bindings,
      * including declarations nested in ambient namespaces. */
     private isAmbientDeclaration(node: ts.Node): boolean {
@@ -12432,10 +12412,7 @@ class Emitter {
         return !symbol || (symbol.declarations ?? []).every((declaration) =>
             this.isAmbientDeclaration(declaration) ||
             !this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) ||
-            ts.isIdentifier(declaration) ||
-            ts.isPropertyAccessExpression(declaration) ||
-            ts.isElementAccessExpression(declaration) ||
-            this.isSyntheticGlobalPropertyDeclaration(declaration, id.text)
+            !sourceDeclarationIntroducesBinding(declaration)
         );
     }
 
