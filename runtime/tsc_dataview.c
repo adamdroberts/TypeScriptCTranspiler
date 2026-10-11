@@ -64,12 +64,9 @@ static tsc_value_t view_member_apply(void* environment,tsc_value_t receiver,tsc_
     tsc_data_view_witness_t witness=tsc_data_view_witness(view);
     if(member->width>witness.length||index>(double)(witness.length-member->width))
         tsc_throw_error(TSC_ERROR_RANGE,key("DataView access is outside its view bounds"));
-    unsigned char* bytes=witness.data+(size_t)index;
-    for(size_t byte=0;byte<member->width;++byte){
-        unsigned shift=(unsigned)((little?byte:member->width-byte-1)*8);
-        if(member->setter)bytes[byte]=(unsigned char)(raw>>shift);
-        else raw|=(uint64_t)bytes[byte]<<shift;
-    }
+    size_t offset=witness.offset+(size_t)index;
+    if(member->setter)tsc_array_buffer_write_bits(view->buffer,offset,member->width,little,raw);
+    else raw=tsc_array_buffer_read_bits(view->buffer,offset,member->width,little);
     (void)receiver_root;(void)actuals;
     return member->setter?tsc_value_undefined():tsc_numeric_bits_to_value(raw,member->format,member->width);
 }
@@ -81,7 +78,7 @@ static tsc_value_t view_construct(void* environment,tsc_value_t receiver,tsc_arr
     (void)environment;(void)receiver;tsc_array_t* volatile actuals=args;
     tsc_array_buffer_t* volatile buffer=require_buffer(argument(actuals,0));
     double offset=tsc_value_to_index(argument(actuals,1));require_attached(buffer);
-    size_t initial_size=buffer->byte_length;
+    size_t initial_size=tsc_array_buffer_length(buffer);
     if(offset>(double)initial_size)tsc_throw_error(TSC_ERROR_RANGE,key("DataView offset is outside its buffer"));
     tsc_value_t length_value=argument(actuals,2);bool has_length=!tsc_value_is_undefined(length_value);
     double length=has_length?tsc_value_to_index(length_value):(double)initial_size-offset;
@@ -89,7 +86,8 @@ static tsc_value_t view_construct(void* environment,tsc_value_t receiver,tsc_arr
     tsc_value_t prototype=tsc_value_get_prototype_from_constructor(tsc_value_current_new_target(),TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE);
     void* volatile prototype_root=tsc_value_gc_root(prototype);
     require_attached(buffer);
-    if(offset>(double)buffer->byte_length||(has_length&&length>(double)buffer->byte_length-offset))
+    size_t current=tsc_array_buffer_length(buffer);
+    if(offset>(double)current||(has_length&&length>(double)current-offset))
         tsc_throw_error(TSC_ERROR_RANGE,key("DataView is outside its buffer bounds"));
     tsc_data_view_t* volatile view=tsc_data_view_new(buffer,offset,length,has_length);
     tsc_value_t result=tsc_value_data_view(view);void* volatile result_root=tsc_value_gc_root(result);

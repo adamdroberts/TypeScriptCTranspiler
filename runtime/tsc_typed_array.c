@@ -26,14 +26,14 @@ static tsc_object_t* require_typed(tsc_value_t value){
 static bool is_big(const element_t* element){return element->format==TSC_NUMERIC_BIG_SIGNED||element->format==TSC_NUMERIC_BIG_UNSIGNED;}
 tsc_typed_array_witness_t tsc_typed_array_witness(const tsc_typed_array_t* view){
     if(!view->buffer||view->buffer->detached)return (tsc_typed_array_witness_t){0};
-    size_t bytes=view->buffer->byte_length,width=elements[view->kind].width;
+    size_t bytes=tsc_array_buffer_length(view->buffer),width=elements[view->kind].width;
     if(view->offset>bytes||(!view->tracking&&view->length>(bytes-view->offset)/width))return (tsc_typed_array_witness_t){0};
     return (tsc_typed_array_witness_t){view->buffer->data+view->offset,view->tracking?(bytes-view->offset)/width:view->length,true};
 }
 bool tsc_typed_array_fixed_length(const tsc_object_t* object){
     if(object->is_buffer)return true;
     const tsc_typed_array_t* view=object->class_ptr;
-    return !view->tracking&&!view->buffer->resizable;
+    return !view->tracking&&(view->buffer->shared||!view->buffer->resizable);
 }
 static uint64_t read_bits(const uint8_t* bytes,size_t width){
     uint16_t endian=1;bool little=*(uint8_t*)&endian;uint64_t raw=0;
@@ -48,7 +48,7 @@ tsc_value_t tsc_typed_array_element_get(const tsc_object_t* object,size_t index)
     const tsc_typed_array_t* view=object->class_ptr;const element_t* element=&elements[view->kind];
     tsc_typed_array_witness_t witness=tsc_typed_array_witness(view);
     if(!witness.valid||index>=witness.length)return tsc_value_undefined();
-    return tsc_numeric_bits_to_value(read_bits(witness.data+index*element->width,element->width),element->format,element->width);
+    return tsc_numeric_bits_to_value(tsc_array_buffer_read_bits(view->buffer,view->offset+index*element->width,element->width,*(uint8_t*)&(uint16_t){1}),element->format,element->width);
 }
 void tsc_typed_array_element_set(tsc_object_t* object,double index,tsc_value_t value){
     tsc_object_t* volatile owner=object;void* volatile value_root=tsc_value_gc_root(value);
@@ -60,8 +60,25 @@ void tsc_typed_array_element_set(tsc_object_t* object,double index,tsc_value_t v
     }else raw=tsc_numeric_number_to_bits(tsc_value_to_number(value),element->format,element->width);
     tsc_typed_array_witness_t witness=tsc_typed_array_witness(view);
     if(witness.valid&&isfinite(index)&&index>=0&&!(index==0&&signbit(index))&&floor(index)==index&&index<(double)witness.length)
-        write_bits(witness.data+(size_t)index*element->width,element->width,raw);
+        tsc_array_buffer_write_bits(view->buffer,view->offset+(size_t)index*element->width,element->width,*(uint8_t*)&(uint16_t){1},raw);
     (void)value_root;
+}
+/* Scalar accesses and byte-copy consumers use the same retained block API;
+ * Buffer is the existing byte-owner adapter at this boundary. */
+static uint64_t owner_read_bits(tsc_object_t* object,size_t offset,size_t width){
+    if(object->is_buffer)return read_bits(((tsc_buffer_t*)object->class_ptr)->data+offset,width);
+    tsc_typed_array_t* view=object->class_ptr;
+    return tsc_array_buffer_read_bits(view->buffer,view->offset+offset,width,*(uint8_t*)&(uint16_t){1});
+}
+static void owner_write_bits(tsc_object_t* object,size_t offset,size_t width,uint64_t raw){
+    if(object->is_buffer){write_bits(((tsc_buffer_t*)object->class_ptr)->data+offset,width,raw);return;}
+    tsc_typed_array_t* view=object->class_ptr;
+    tsc_array_buffer_write_bits(view->buffer,view->offset+offset,width,*(uint8_t*)&(uint16_t){1},raw);
+}
+static const void* owner_block(tsc_object_t* object){
+    if(object->is_buffer){tsc_buffer_t* buffer=object->class_ptr;return buffer->data_owner?buffer->data_owner:buffer->data;}
+    tsc_array_buffer_t* buffer=((tsc_typed_array_t*)object->class_ptr)->buffer;
+    return buffer->shared?buffer->shared_storage:buffer;
 }
 static void allocate_storage(tsc_typed_array_t* view,size_t length){
     size_t width=elements[view->kind].width;
@@ -76,9 +93,10 @@ static void initialize_buffer(tsc_typed_array_t* view,tsc_array_buffer_t* buffer
     tsc_value_t length_value=argument(args,2);bool has_length=!tsc_value_is_undefined(length_value);
     double length=has_length?tsc_value_to_index(length_value):0;
     if(buffer->detached)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray buffer is detached"));
-    if(offset>(double)buffer->byte_length)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray view is outside its buffer"));
-    size_t remaining=buffer->byte_length-(size_t)offset;
-    if(!has_length&&!buffer->resizable&&buffer->byte_length%width)
+    size_t current=tsc_array_buffer_length(buffer);
+    if(offset>(double)current)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray view is outside its buffer"));
+    size_t remaining=current-(size_t)offset;
+    if(!has_length&&!buffer->resizable&&current%width)
         tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray buffer length is not aligned"));
     if(has_length&&length>(double)(remaining/width))tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray view is outside its buffer"));
     view->buffer=buffer;view->offset=(size_t)offset;view->tracking=!has_length&&buffer->resizable;
@@ -113,8 +131,7 @@ static tsc_value_t concrete_construct(void* environment,tsc_value_t receiver,tsc
             allocate_storage(view,length);
             if(is_big(element)!=is_big(&elements[source_kind]))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray content types differ"));
             if(view->kind==source_kind){
-                const uint8_t* data=source->is_buffer?((tsc_buffer_t*)source->class_ptr)->data:tsc_typed_array_witness(source->class_ptr).data;
-                if(length)memcpy(view->buffer->data,data,length*element->width);
+                for(size_t byte=0;byte<length*element->width;++byte)view->buffer->data[byte]=(uint8_t)owner_read_bits(source,byte,1);
             }else for(size_t index=0;index<length;++index)tsc_integer_indexed_set(object,(double)index,tsc_integer_indexed_get(source,(double)index));
         }else if(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_OBJECT&&((tsc_object_t*)value_ptr(first))->is_array_buffer)
             initialize_buffer(view,((tsc_object_t*)value_ptr(first))->class_ptr,actuals);
@@ -271,13 +288,19 @@ static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t recei
             tsc_typed_array_witness_t input=require_witness(source);tsc_element_kind_t source_kind=owner_kind(source);const element_t* source_element=&elements[source_kind];
             if(!isfinite(offset)||offset>(double)length||input.length>length-(size_t)offset)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray set source exceeds target length"));
             if(is_big(element)!=is_big(source_element))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray set content types differ"));
-            /* A rooted snapshot also handles differing element widths and aliased
-             * byte blocks without projecting values before the copy starts. */
-            uint8_t* volatile snapshot=TSC_GC_MALLOC_ATOMIC(input.length*source_element->width?input.length*source_element->width:1);
-            if(input.length)memcpy(snapshot,input.data,input.length*source_element->width);
-            if(kind==source_kind){if(input.length)memcpy(target.data+(size_t)offset*element->width,snapshot,input.length*element->width);}
+            /* Clone only an aliased backing block. Distinct shared sources keep
+             * each read sequenced immediately before its corresponding write. */
+            uint8_t* volatile snapshot=NULL;size_t bytes=input.length*source_element->width;
+            if(owner_block(source)==owner_block(object)){
+                snapshot=TSC_GC_MALLOC_ATOMIC(bytes?bytes:1);
+                for(size_t byte=0;byte<bytes;++byte)snapshot[byte]=(uint8_t)owner_read_bits(source,byte,1);
+            }
+            if(kind==source_kind){
+                for(size_t byte=0;byte<bytes;++byte){uint64_t raw=snapshot?snapshot[byte]:owner_read_bits(source,byte,1);owner_write_bits(object,(size_t)offset*element->width+byte,1,raw);}
+            }
             else for(size_t index=0;index<input.length;++index){
-                tsc_value_t value=tsc_numeric_bits_to_value(read_bits(snapshot+index*source_element->width,source_element->width),source_element->format,source_element->width);
+                uint64_t raw=snapshot?read_bits(snapshot+index*source_element->width,source_element->width):owner_read_bits(source,index*source_element->width,source_element->width);
+                tsc_value_t value=tsc_numeric_bits_to_value(raw,source_element->format,source_element->width);
                 tsc_integer_indexed_set(object,offset+(double)index,value);
             }
         }else{
@@ -329,7 +352,8 @@ static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t recei
             tsc_typed_array_witness_t current=require_witness(object);
             if(start>=current.length||target>=current.length)count=0;
             else{if(count>current.length-start)count=current.length-start;if(count>current.length-target)count=current.length-target;}
-            if(count)memmove(current.data+target*element->width,current.data+start*element->width,count*element->width);
+            size_t bytes=count*element->width;bool backwards=start<target&&target<start+count;
+            for(size_t step=0;step<bytes;++step){size_t byte=backwards?bytes-step-1:step;uint64_t raw=owner_read_bits(object,start*element->width+byte,1);owner_write_bits(object,target*element->width+byte,1,raw);}
         }
         return receiver;
     }
@@ -348,10 +372,10 @@ static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t recei
         tsc_typed_array_witness_t current=require_witness(object);if(end>current.length)end=current.length;count=end>start?end-start:0;
         tsc_object_t* destination=require_typed(result);
         if(kind==owner_kind(destination)){
-            tsc_typed_array_witness_t output=require_witness(destination);
+            (void)require_witness(destination);
             /* Slice's normative byte loop runs forward even for aliased custom
              * species results; an overlap-safe bulk copy would change it. */
-            for(size_t byte=0;byte<count*element->width;++byte)output.data[byte]=current.data[start*element->width+byte];
+            for(size_t byte=0;byte<count*element->width;++byte){uint64_t raw=owner_read_bits(object,start*element->width+byte,1);owner_write_bits(destination,byte,1,raw);}
         }else for(size_t index=0;index<count;++index)(void)tsc_value_set_prop(result,tsc_str_from_num((double)index),tsc_integer_indexed_get(object,(double)(start+index)));
     }
     (void)receiver_root;(void)result_root;return result;

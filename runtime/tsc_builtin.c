@@ -971,6 +971,8 @@ tsc_array_buffer_t* tsc_array_buffer_allocate(size_t length, size_t maximum, boo
     b->byte_length = length;
     b->max_byte_length = maximum;
     b->resizable = resizable;
+    b->shared = false;
+    b->shared_storage = NULL;
     b->data = array_buffer_byte_block(length);
     if (resizable) tsc_array_buffer_check_capacity(maximum);
     b->detached = false;
@@ -989,10 +991,11 @@ void tsc_array_buffer_resize_storage(tsc_array_buffer_t* input, size_t length) {
 }
 
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b) {
-    return b ? (double)b->byte_length : 0.0;
+    return b ? (double)tsc_array_buffer_length(b) : 0.0;
 }
 
 void tsc_array_buffer_detach(tsc_array_buffer_t* b) {
+    if(b&&b->shared)tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("SharedArrayBuffer cannot be detached"));
     if (!b || b->detached) return;
     b->byte_length = 0;
     b->data = NULL;
@@ -1011,10 +1014,11 @@ tsc_data_view_t* tsc_data_view_new(tsc_array_buffer_t* buffer, double byte_offse
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("DataView buffer is detached"));
     }
     size_t offset = array_buffer_to_index(byte_offset, "DataView byteOffset must be a non-negative finite integer");
-    if (offset > buffer->byte_length) {
+    size_t current = tsc_array_buffer_length(buffer);
+    if (offset > current) {
         tsc_throw_str(tsc_str_from_cstr("DataView byteOffset is outside the ArrayBuffer"));
     }
-    size_t remaining = buffer->byte_length - offset;
+    size_t remaining = current - offset;
     size_t length = has_byte_length
         ? array_buffer_to_index(byte_length, "DataView byteLength must be a non-negative finite integer")
         : remaining;
@@ -1044,7 +1048,7 @@ double tsc_data_view_byte_length(const tsc_data_view_t* v) {
 
 tsc_data_view_witness_t tsc_data_view_witness(const tsc_data_view_t* view) {
     data_view_require_attached(view);
-    size_t length = view->buffer->byte_length;
+    size_t length = tsc_array_buffer_length(view->buffer);
     if (view->byte_offset > length || (!view->length_tracking && view->byte_length > length - view->byte_offset))
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("DataView is outside its buffer bounds"));
     return (tsc_data_view_witness_t){view->buffer->data + view->byte_offset,

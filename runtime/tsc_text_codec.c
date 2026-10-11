@@ -64,18 +64,24 @@ static tsc_value_t codec_member_apply(void* environment, tsc_value_t receiver, t
                 codec_require_default_options(codec_argument(actuals, 1), false);
                 if (object->is_buffer) bytes = tsc_value_as_buffer(input);
                 else {
-                    uint8_t* data; size_t length; void* owner;
+                    uint8_t* data; size_t length, offset=0; void* owner;
+                    tsc_array_buffer_t* source;
                     if (object->is_array_buffer) {
                         tsc_array_buffer_t* buffer = tsc_value_as_array_buffer(input);
                         if (buffer->detached) tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder buffer is detached"));
-                        data = buffer->data; length = buffer->byte_length; owner = buffer->data;
+                        source=buffer;data=buffer->data;length=tsc_array_buffer_length(buffer);owner=buffer->data;
                     } else if (object->is_data_view) {
                         tsc_data_view_t* view = tsc_value_as_data_view(input);
                         tsc_data_view_witness_t witness = tsc_data_view_witness(view);
-                        data = witness.data; length = witness.length; owner = view->buffer->data;
+                        source=view->buffer;offset=witness.offset;data=witness.data;length=witness.length;owner=view->buffer->data;
                     } else tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder byte source cannot be represented"));
-                    bytes = TSC_GC_MALLOC(sizeof(*bytes)); memset(bytes, 0, sizeof(*bytes));
-                    bytes->data = data; bytes->len = length; bytes->data_owner = owner;
+                    if(source->shared){
+                        bytes=tsc_buffer_alloc((double)length,0);
+                        for(size_t index=0;index<length;++index)bytes->data[index]=(uint8_t)tsc_array_buffer_read_bits(source,offset+index,1,true);
+                    }else{
+                        bytes=TSC_GC_MALLOC(sizeof(*bytes));memset(bytes,0,sizeof(*bytes));
+                        bytes->data=data;bytes->len=length;bytes->data_owner=owner;
+                    }
                 }
             } else codec_require_default_options(codec_argument(actuals, 1), false);
             return tsc_value_string(tsc_text_decoder_decode(tsc_value_as_text_decoder(receiver), bytes));

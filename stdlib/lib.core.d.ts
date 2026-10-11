@@ -682,6 +682,22 @@ interface ArrayBufferConstructor {
     isView(value: any, ...ignored: any[]): boolean;
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
+interface SharedArrayBuffer {
+    constructor: SharedArrayBufferConstructor;
+    readonly byteLength: number;
+    readonly maxByteLength: number;
+    readonly growable: boolean;
+    grow(newLength: number, ...ignored: any[]): void;
+    slice(start?: number, end?: number, ...ignored: any[]): SharedArrayBuffer;
+}
+interface SharedArrayBufferConstructor {
+    readonly prototype: SharedArrayBuffer;
+    readonly name: string;
+    readonly length: number;
+    new(byteLength?: number, options?: ArrayBufferOptions, ...ignored: any[]): SharedArrayBuffer;
+}
+declare var SharedArrayBuffer: SharedArrayBufferConstructor;
+type ArrayBufferLike = ArrayBuffer | SharedArrayBuffer;
 interface ArrayLike<T> {
     readonly length: number;
     readonly [index: number]: T;
@@ -690,7 +706,7 @@ interface TypedArray<T> extends Iterable<T> {
     readonly length: number;
     readonly byteLength: number;
     readonly byteOffset: number;
-    readonly buffer: ArrayBuffer;
+    readonly buffer: ArrayBufferLike;
     readonly BYTES_PER_ELEMENT: number;
     [index: number]: T;
     keys(): IteratorObject<number>;
@@ -734,7 +750,7 @@ interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     readonly length: number;
     readonly BYTES_PER_ELEMENT: number;
     new(length?: number, ...ignored: any[]): V;
-    new(buffer: ArrayBuffer, byteOffset?: number, length?: number, ...ignored: any[]): V;
+    new(buffer: ArrayBufferLike, byteOffset?: number, length?: number, ...ignored: any[]): V;
     new(values: Iterable<T> | ArrayLike<T>, ...ignored: any[]): V;
     from(source: Iterable<T> | ArrayLike<T>, mapper?: undefined, thisArg?: any, ...ignored: any[]): V;
     from<U>(source: Iterable<U> | ArrayLike<U>, mapper: (value: U, index: number) => T, thisArg?: any, ...ignored: any[]): V;
@@ -766,7 +782,7 @@ interface BigUint64Array extends TypedArray<bigint> {}
 declare var BigUint64Array: TypedArrayConstructor<bigint, BigUint64Array>;
 interface DataView {
     constructor: DataViewConstructor;
-    readonly buffer: ArrayBuffer;
+    readonly buffer: ArrayBufferLike;
     readonly byteLength: number;
     readonly byteOffset: number;
     getInt8(byteOffset: number): number;
@@ -796,7 +812,7 @@ interface DataViewConstructor {
     readonly prototype: DataView;
     readonly name: string;
     readonly length: number;
-    new(buffer: ArrayBuffer, byteOffset?: number, byteLength?: number, ...ignored: any[]): DataView;
+    new(buffer: ArrayBufferLike, byteOffset?: number, byteLength?: number, ...ignored: any[]): DataView;
 }
 declare var DataView: DataViewConstructor;
 interface Function {
@@ -2549,7 +2565,7 @@ interface BufferConstructor {
     allocUnsafeSlow(size: number, ...ignored: any[]): Buffer;
     concat(list: Buffer[], totalLength?: number, ...ignored: any[]): Buffer;
     isBuffer(value: unknown, ...ignored: any[]): boolean;
-    byteLength(value: string | Buffer | ArrayBuffer | DataView, encoding?: BufferEncoding, ...ignored: any[]): number;
+    byteLength(value: string | Buffer | ArrayBufferLike | DataView, encoding?: BufferEncoding, ...ignored: any[]): number;
     isEncoding(encoding: string, ...ignored: any[]): boolean;
     compare(a: Buffer, b: Buffer, ...ignored: any[]): number;
 }
@@ -3367,7 +3383,7 @@ interface TextDecoder {
     readonly encoding: string;
     readonly fatal: boolean;
     readonly ignoreBOM: boolean;
-    decode(input?: Buffer | ArrayBuffer | DataView, options?: {stream?: boolean}, ...ignored: any[]): string;
+    decode(input?: Buffer | ArrayBufferLike | DataView, options?: {stream?: boolean}, ...ignored: any[]): string;
 }
 interface TextDecoderConstructor {
     readonly prototype: TextDecoder;

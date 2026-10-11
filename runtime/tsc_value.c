@@ -3554,6 +3554,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_bigint);
         case TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE:
             return primitive_prototype(&primitive_symbol);
+        case TSC_INTRINSIC_DEFAULT_SHARED_ARRAY_BUFFER_PROTOTYPE:
+            return tsc_shared_array_buffer_prototype_value();
         case TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE:
             return tsc_array_buffer_prototype_value();
         case TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE:
@@ -9152,7 +9154,7 @@ tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* input) {
     tsc_object_t* volatile object=tsc_object_new_class(buffer);
     object->is_array_buffer=true;buffer->object=object;
     tsc_value_t result=tsc_value_object(object);
-    (void)tsc_value_object_set_prototype_of(result,tsc_array_buffer_prototype_value());
+    (void)tsc_value_object_set_prototype_of(result,buffer->shared?tsc_shared_array_buffer_prototype_value():tsc_array_buffer_prototype_value());
     return result;
 }
 

@@ -536,6 +536,8 @@ typedef struct tsc_array_buffer {
     uint8_t* data;
     bool detached;
     bool resizable;
+    bool shared;
+    void* shared_storage;
     struct tsc_object* object;
 } tsc_array_buffer_t;
 typedef struct tsc_data_view {
@@ -548,10 +550,18 @@ typedef struct tsc_data_view {
 typedef struct { uint8_t* data; size_t length; size_t offset; } tsc_data_view_witness_t;
 tsc_data_view_witness_t tsc_data_view_witness(const tsc_data_view_t* view);
 tsc_array_buffer_t* tsc_array_buffer_allocate(size_t length, size_t maximum, bool resizable);
+tsc_array_buffer_t* tsc_shared_array_buffer_allocate(size_t length, size_t maximum, bool growable);
+size_t tsc_array_buffer_length(const tsc_array_buffer_t* buffer);
+bool tsc_shared_array_buffer_grow_storage(tsc_array_buffer_t* buffer, size_t length);
+uint64_t tsc_array_buffer_read_bits(const tsc_array_buffer_t* buffer, size_t offset, size_t width, bool little);
+void tsc_array_buffer_write_bits(tsc_array_buffer_t* buffer, size_t offset, size_t width, bool little, uint64_t raw);
+void tsc_array_buffer_copy_bytes(tsc_array_buffer_t* target, size_t target_offset, const tsc_array_buffer_t* source, size_t source_offset, size_t count, bool backwards);
 void tsc_array_buffer_check_capacity(size_t maximum);
 void tsc_array_buffer_resize_storage(tsc_array_buffer_t* buffer, size_t length);
 tsc_value_t tsc_array_buffer_constructor_value(void);
 tsc_value_t tsc_array_buffer_prototype_value(void);
+tsc_value_t tsc_shared_array_buffer_constructor_value(void);
+tsc_value_t tsc_shared_array_buffer_prototype_value(void);
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length);
 double tsc_array_buffer_byte_length(const tsc_array_buffer_t* b);
 void tsc_array_buffer_detach(tsc_array_buffer_t* b);

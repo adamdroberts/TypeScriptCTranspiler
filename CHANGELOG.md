@@ -384,6 +384,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Add ordinary SharedArrayBuffer owners through the canonical buffer operation collection, retained stable shared storage, synchronized scalar access and racing growth publication. Integrate DataView/TypedArray witnesses and raw copy consumers; verify growing views, species ordering, native concurrency and storage release. Atomics and agents remain open.
+
 - Added TypedArray string methods through one shared rooted Array/TypedArray range kernel, private view lengths, the actual Array toString alias and selected non-402 locale semantics.
 
 - Added TypedArray sort/toSorted through the shared retained stable value sorter, numeric/BigInt defaults, fresh writeback validity and intrinsic copy owners.
