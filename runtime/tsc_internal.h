@@ -927,7 +927,6 @@ tsc_atomic_wait_status_t tsc_atomic_waiter_suspend(tsc_atomic_waiter_t* waiter);
 void tsc_atomic_waiter_schedule(tsc_atomic_waiter_t* waiter);
 size_t tsc_atomic_waiter_notify(void* block, size_t offset, double count);
 size_t tsc_atomic_waiter_count(void* block, size_t offset);
-bool tsc_atomics_can_block(void);
 void tsc_atomics_set_can_block(bool value);
 void tsc_atomics_schedule_completions(void);
 bool tsc_atomics_has_completions(void);

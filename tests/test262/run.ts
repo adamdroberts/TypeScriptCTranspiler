@@ -425,7 +425,7 @@ async function sealScenarioArtifactTree(
     }
 }
 
-async function makeTemporaryTreeRemovable(root: string): Promise<void> {
+export async function makeTemporaryTreeRemovable(root: string): Promise<void> {
     let stat;
     try {
         stat = await fs.lstat(root);

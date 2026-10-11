@@ -196,8 +196,9 @@ test("eval declarations and source contexts share one retained environment tree"
                     evalScriptEntries:[{source:foreign,entry:entries.find(record=>record.source===foreign)!.entry}]},diagnosticWriter:message=>diagnostics.push(message)});
             expect({exitCode:result.exitCode,diagnostics:diagnostics.join("")}).toEqual({exitCode:0,diagnostics:""});
             const main=path.join(buildDir,"main.c"),emitted=await fs.readFile(main,"utf8");
-            expect(emitted.includes("    tsc_test262_begin();")).toBe(true);
-            await fs.writeFile(main,probe+emitted.replace("    tsc_test262_begin();","    tsc_test262_begin();\n    install_environment_probe();"));
+            const begin = /    tsc_test262_begin\([^)]*\);/;
+            expect(emitted).toMatch(begin);
+            await fs.writeFile(main,probe+emitted.replace(begin,"$&\n    install_environment_probe();"));
             const sources=(await fs.readdir(buildDir)).filter(file=>file.endsWith(".c")).sort().map(file=>path.join(buildDir,file));
             const linked=await invokeCc({sources,output,includeDirs:[buildDir],libs:[...(noGc?[]:["gc"]),"m","resolv","ssl","crypto","icui18n","icuuc","icudata","gmp"],extraFlags:noGc?["-DTSC_NO_GC"]:[],stderrWriter:message=>diagnostics.push(message)});
             expect({exitCode:linked.exitCode,diagnostics:diagnostics.join("")}).toEqual({exitCode:0,diagnostics:""});

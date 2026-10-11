@@ -494,6 +494,8 @@ export interface Test262NativeObservationPlan extends SourceEvalPlan {
     /** The root Script or Module record under test. */
     readonly testEntry: string;
     readonly async: boolean;
+    /** Selected main-agent policy; absence preserves the native agent default. */
+    readonly canBlock?: boolean | null;
     /** Exact separately parsed Script records sharing the current Realm. */
     readonly scriptEntries?: readonly string[];
 }
@@ -13034,7 +13036,10 @@ class Emitter {
                 throw new Error("Test262 observation test entry differs from the module-graph entry");
             }
             const scenario = escapeCString(observation.scenarioId);
-            out.line("    tsc_test262_begin();");
+            const canBlock = observation.canBlock == null
+                ? "tsc_atomics_can_block()" : observation.canBlock ? "true" : "false";
+            out.line(`    const bool selected_can_block = ${canBlock};`);
+            out.line("    tsc_test262_begin(selected_can_block);");
             for (const [index, modId] of startupOrder.entries()) {
                 const origin = setupIds.has(modId)
                     ? "setup-script"

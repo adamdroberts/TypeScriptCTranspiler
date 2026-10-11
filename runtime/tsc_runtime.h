@@ -1682,7 +1682,8 @@ void tsc_console_write_values(bool error, tsc_array_t* arguments);
 bool tsc_test262_capture_console(tsc_str_t* text);
 
 /* Test262 native-host observation boundary. Linked only for conformance runs. */
-void tsc_test262_begin(void);
+void tsc_test262_begin(bool can_block);
+bool tsc_atomics_can_block(void);
 tsc_value_t tsc_test262_host_object(void);
 typedef tsc_value_t (*tsc_test262_eval_script_callback_t)(tsc_str_t* source);
 void tsc_test262_set_agent_callback(tsc_test262_eval_script_callback_t callback);

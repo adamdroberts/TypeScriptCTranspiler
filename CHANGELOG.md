@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Carry Test262 can-block selection into the owning runtime agent before setup and all source goals; preserve the native agent default, Realm inheritance and independent secondary-agent blocking.
+
 - Allow independent agents to progress through a canonical agent checkpoint at job boundaries and shared-memory accesses even when a parent polls without an explicit sleep or blocking wait.
 
 - Admit current-process thread signals and thread naming in native evidence containment so GC agents can run; retain denial of foreign signals, unsafe prctl and process execution, verified through the runner-owned transcript.

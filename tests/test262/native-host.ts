@@ -877,6 +877,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 setupEntries,
                 testEntry,
                 async: request.async,
+                canBlock: request.canBlock,
                 scriptEntries,
                 agentEntries,
                 evalScriptEntries,
