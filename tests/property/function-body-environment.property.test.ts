@@ -201,22 +201,3 @@ test("function body declaration graph shares invocation bindings and separates p
         }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }, 240_000);
-
-test("unrepresented resumable binding environments fail with stable diagnostics", async () => {
-    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-function-body-admission-"));
-    try {
-        const partitions = [
-            { name: "generator", source: 'function* run() { function entry() { return 1; } yield entry; } run().next();',
-                diagnostic: "generator body declaration environment requires canonical resumable binding cells" },
-        ];
-        for (const partition of partitions) {
-            const entry = path.join(temporary, partition.name + ".js");
-            await fs.writeFile(entry, partition.source);
-            const diagnostics: string[] = [];
-            const result = await compile({ entry, output: path.join(temporary, partition.name), noGc: true,
-                diagnosticWriter: message => diagnostics.push(message) });
-            expect(result.exitCode).toBe(3);
-            expect(diagnostics.join("\n")).toContain(partition.diagnostic);
-        }
-    } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-});

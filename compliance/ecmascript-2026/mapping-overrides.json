@@ -25,6 +25,14 @@
     {
       "field": "es5id",
       "match": "prefix",
+      "value": "S11.13.1_",
+      "clauses": ["sec-assignment-operators-runtime-semantics-evaluation"],
+      "reason": "Legacy ES5 section 11.13.1 denotes simple Assignment Operator evaluation and PutValue; its semantic metadata boundary maps independently of fixture names and inventory size.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
       "value": "9.3.1_",
       "clauses": ["sec-tonumber-applied-to-the-string-type"],
       "reason": "The pinned legacy ES5 9.3.1 metadata family denotes String-input ToNumber grammar and rounding; the metadata prefix maps the semantic section independently of filenames and test inventory size.",

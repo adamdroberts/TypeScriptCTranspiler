@@ -512,7 +512,8 @@ interface CapturedSuperPropertyReference {
 
 interface SourceReferencePlan {
     readonly get: string;
-    readonly set: (value: string) => string;
+    readonly capture: string;
+    readonly set: (reference: string, value: string) => string;
     readonly remove: string;
 }
 
@@ -26939,6 +26940,13 @@ class Emitter {
                 this.structDecls.line(`void* expression_result_${slot}_gc_root;`);
             }
         }
+        const referenceSlots = new Set<number>();
+        for (const state of graph.states) {
+            if (state.kind === "resumable-expression" && state.operation.kind === "value" &&
+                state.operation.operation.kind === "binding-reference")
+                referenceSlots.add(state.slots[state.operation.output]!);
+        }
+        for (const slot of referenceSlots) this.structDecls.line(`tsc_reference_t expression_reference_${slot};`);
         for (let slot = 0; slot < graph.bindingValueCount; slot++) {
             this.structDecls.line(`tsc_value_t binding_value_${slot};`);
             this.structDecls.line(`void* binding_value_${slot}_gc_root;`);
@@ -27382,7 +27390,11 @@ class Emitter {
                         store(reference.key, this.preparePropertyReferenceName(reference.node, read(reference.base), read(reference.key)));
                     };
                     const getReference = (reference: ResumableReference): string => {
-                        if (reference.kind !== "property") return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
+                        if (reference.kind !== "property") {
+                            if (this.sourceReferencePlan(reference.identifier))
+                                return `tsc_environment_reference_get_captured(&state->expression_reference_${stateNode.slots[reference.slot]!})`;
+                            return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
+                        }
                         preparePropertyReference(reference);
                         return this.readPropertyReference(reference.node, read(reference.base), read(reference.key),
                             reference.receiver === undefined ? undefined : read(reference.receiver));
@@ -27392,6 +27404,11 @@ class Emitter {
                             preparePropertyReference(reference);
                             callback.line(this.writePropertyReference(reference.node, read(reference.base), read(reference.key), source,
                                 reference.receiver === undefined ? undefined : read(reference.receiver)) + ";");
+                            return;
+                        }
+                        const captured = this.sourceReferencePlan(reference.identifier);
+                        if (captured) {
+                            callback.line(`(void)(${captured.set(`&state->expression_reference_${stateNode.slots[reference.slot]!}`, source)});`);
                             return;
                         }
                         const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
@@ -27511,7 +27528,12 @@ class Emitter {
                     } else if (operation.kind === "value") {
                         const op = operation.operation;
                         let evaluated: string;
-                        if(op.kind==='class-start')evaluated=this.emitClassDefinitionBegin(op.definition).c;
+                        if (op.kind === "binding-reference") {
+                            const captured = this.sourceReferencePlan(op.identifier);
+                            if (captured) callback.line(`state->expression_reference_${stateNode.slots[operation.output]!} = ${captured.capture};`);
+                            evaluated = "tsc_value_undefined()";
+                        }
+                        else if(op.kind==='class-start')evaluated=this.emitClassDefinitionBegin(op.definition).c;
                         else if(op.kind==='class-heritage'){
                             callback.line(`tsc_value_class_set_heritage(${read(op.owner)}, ${read(op.superclass)});`);
                             evaluated=read(op.owner);
@@ -33265,9 +33287,10 @@ class Emitter {
         const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
         return {
             get: `tsc_environment_reference_get(${key})`,
-            set: (value) => this.emitSequencedExpr(T_VALUE, [
+            capture: `tsc_environment_reference_capture(${key}, ${strict})`,
+            set: (reference, value) => this.emitSequencedExpr(T_VALUE, [
                 { value: { c: value, ty: T_VALUE } },
-            ], ([rooted]) => `tsc_environment_reference_set(${key}, ${rooted}, ${strict})`).c,
+            ], ([rooted]) => `tsc_environment_reference_set_captured(${reference}, ${rooted})`).c,
             remove: `tsc_environment_reference_delete(${key})`,
         };
     }
@@ -33277,17 +33300,24 @@ class Emitter {
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
         prefix: boolean,
     ): EmitResult | null {
-        if (!ts.isIdentifier(operand)) return null;
-        const reference = this.sourceReferencePlan(operand);
+        const target = this.unwrapTransparentExpression(operand);
+        if (!ts.isIdentifier(target)) return null;
+        const reference = this.sourceReferencePlan(target);
         if (!reference) return null;
+        const captured = this.freshTemp("_source_reference");
         const current = this.freshTemp("_global_update_current");
+        const currentRoot = this.freshTemp("_source_update_current_root");
         const next = this.freshTemp("_global_update_next");
+        const nextRoot = this.freshTemp("_source_update_next_root");
         const operation = SOURCE_UPDATE_NUMERIC_OPERATIONS.get(op)!.kernel;
         return {
             c:
-                `({ tsc_value_t ${current} = tsc_value_to_numeric(${reference.get}); ` +
+                `({ tsc_reference_t ${captured} = ${reference.capture}; ` +
+                `tsc_value_t ${current} = tsc_value_to_numeric(tsc_environment_reference_get_captured(&${captured})); ` +
+                `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); (void)${currentRoot}; ` +
                 `tsc_value_t ${next} = ${operation}(${current}); ` +
-                `${reference.set(next)}; ${prefix ? next : current}; })`,
+                `void* volatile ${nextRoot} = tsc_value_gc_root(${next}); (void)${nextRoot}; ` +
+                `${reference.set(`&${captured}`, next)}; ${prefix ? next : current}; })`,
             ty: T_VALUE,
         };
     }
@@ -33939,13 +33969,18 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
-        if (!ts.isIdentifier(bin.left)) return null;
-        const reference = this.sourceReferencePlan(bin.left);
+        const target = this.unwrapTransparentExpression(bin.left);
+        if (!ts.isIdentifier(target)) return null;
+        const reference = this.sourceReferencePlan(target);
         if (!reference) return null;
+        const captured = this.freshTemp("_source_reference");
+        const wrap = (body: string): string => `({ tsc_reference_t ${captured} = ${reference.capture}; ${body}; })`;
+        const get = `tsc_environment_reference_get_captured(&${captured})`;
+        const set = (value: string): string => reference.set(`&${captured}`, value);
         const rhs = this.emitOrdinaryObjectExpression(bin.right);
         const value = this.coerce(rhs, T_VALUE, bin.right);
         if (op === ts.SyntaxKind.EqualsToken) {
-            return { c: reference.set(value), ty: T_VALUE };
+            return { c: wrap(set(value)), ty: T_VALUE };
         }
 
         const current = this.freshTemp("_global_current");
@@ -33963,21 +33998,22 @@ class Emitter {
                     : `tsc_value_is_nullish(${current})`;
             return {
                 c:
-                    `({ tsc_value_t ${current} = ${reference.get}; ` +
+                    wrap(`({ tsc_value_t ${current} = ${get}; ` +
                     `void* volatile ${currentRoot} = tsc_value_gc_root(${current}); ` +
                     `tsc_value_t ${next} = ${current}; ` +
-                    `if (${assign}) ${next} = ${reference.set(value)}; ` +
-                    `${next}; })`,
+                    `if (${assign}) ${next} = ${set(value)}; ` +
+                    `${next}; })`),
                 ty: T_VALUE,
             };
         }
 
         const operation = this.dynamicCompoundAssignmentOperation(op);
         if (!operation) unsupported(bin, `unsupported global assignment ${ts.SyntaxKind[op]}`);
-        return this.emitSequencedExpr(T_VALUE, [
-            { value: { c: reference.get, ty: T_VALUE } },
+        const result = this.emitSequencedExpr(T_VALUE, [
+            { value: { c: get, ty: T_VALUE } },
             { value: rhs, target: T_VALUE, node: bin.right },
-        ], ([left, right]) => reference.set(`${operation}(${left}, ${right})`));
+        ], ([left, right]) => set(`${operation}(${left}, ${right})`));
+        return { c: wrap(result.c), ty: result.ty };
     }
 
     private rootedNativeFieldReference(expression: ts.Expression): {
@@ -34057,6 +34093,15 @@ class Emitter {
         target: ts.Expression,
         owner: ts.BinaryExpression,
     ): (value: string) => string {
+        const identifier = this.unwrapTransparentExpression(target);
+        if (ts.isIdentifier(identifier) && !this.immutableImportBindingIdentifier(identifier)) {
+            const reference = this.sourceReferencePlan(identifier);
+            if (reference) {
+                const captured = this.freshTemp("_pattern_source_reference");
+                buf.line(`tsc_reference_t ${captured} = ${reference.capture};`);
+                return value => reference.set(`&${captured}`, value);
+            }
+        }
         const overrides = new Map<ts.Expression, EmitResult>();
         const retain = (expression: ts.Expression): void => {
             const value = this.emitExpr(expression);

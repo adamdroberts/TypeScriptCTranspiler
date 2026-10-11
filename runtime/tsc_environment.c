@@ -330,17 +330,31 @@ tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value
     return value;
 }
 
-tsc_value_t tsc_environment_reference_get(tsc_str_t* key) {
-    tsc_environment_binding_t* binding = environment_resolve(key);
-    return binding ? binding_read(binding) : tsc_global_reference_get(key);
+tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict) {
+    for (tsc_environment_t* environment = current_environment; environment; environment = environment->parent)
+        if (environment_own_binding(environment, key))
+            return (tsc_reference_t){ .name = key, .base = environment, .kind = TSC_REFERENCE_DECLARATIVE, .strict = strict };
+    return tsc_global_reference_capture(key, strict);
 }
 
-tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
-    tsc_environment_binding_t* binding = environment_resolve(key);
-    if (!binding) return tsc_global_reference_set(key, value, strict);
+tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference) {
+    if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_get_captured(reference);
+    tsc_environment_binding_t* binding = environment_own_binding(reference->base, reference->name);
+    if (!binding) tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
+    return binding_read(binding);
+}
+
+tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value) {
+    if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_set_captured(reference, value);
+    tsc_environment_t* environment = reference->base;
+    tsc_environment_binding_t* binding = environment_own_binding(environment, reference->name);
+    if (!binding) {
+        if (reference->strict) tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
+        binding = environment_create_binding(environment, reference->name, false, false, true);
+    }
     (void)binding_read(binding);
     if (binding->immutable) {
-        if (strict || binding->strict_immutable)
+        if (reference->strict || binding->strict_immutable)
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding"));
         return value;
     }
@@ -348,18 +362,33 @@ tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, boo
     return value;
 }
 
-bool tsc_environment_reference_delete(tsc_str_t* key) {
-    for (tsc_environment_t* environment = current_environment; environment; environment = environment->parent) {
-        tsc_environment_binding_t** cursor = &environment->bindings;
-        while (*cursor) {
-            tsc_environment_binding_t* binding = *cursor;
-            if (!tsc_str_eq(binding->name, key)) { cursor = &binding->next; continue; }
-            if (!binding->deletable) return false;
-            *cursor = binding->next;
-            return true;
-        }
+bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference) {
+    if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_delete_captured(reference);
+    tsc_environment_t* environment = reference->base;
+    tsc_environment_binding_t** cursor = &environment->bindings;
+    while (*cursor) {
+        tsc_environment_binding_t* binding = *cursor;
+        if (!tsc_str_eq(binding->name, reference->name)) { cursor = &binding->next; continue; }
+        if (!binding->deletable) return false;
+        *cursor = binding->next;
+        return true;
     }
-    return tsc_global_reference_delete(key);
+    return true;
+}
+
+tsc_value_t tsc_environment_reference_get(tsc_str_t* key) {
+    tsc_reference_t reference = tsc_environment_reference_capture(key, false);
+    return tsc_environment_reference_get_captured(&reference);
+}
+
+tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
+    tsc_reference_t reference = tsc_environment_reference_capture(key, strict);
+    return tsc_environment_reference_set_captured(&reference, value);
+}
+
+bool tsc_environment_reference_delete(tsc_str_t* key) {
+    tsc_reference_t reference = tsc_environment_reference_capture(key, false);
+    return tsc_environment_reference_delete_captured(&reference);
 }
 
 tsc_str_t* tsc_environment_reference_typeof(tsc_str_t* key) {

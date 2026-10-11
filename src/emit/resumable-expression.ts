@@ -6,7 +6,7 @@ import { normalizeAssignmentTarget } from "./binding-tree";
 export type ResumableValueSlot = number;
 export type ResumableExpressionTarget = number;
 export type ResumableReference =
-    | { readonly kind: "binding"; readonly identifier: ts.Identifier }
+    | { readonly kind: "binding"; readonly identifier: ts.Identifier; readonly slot: ResumableValueSlot }
     | { readonly kind: "property"; readonly node: ts.PropertyAccessExpression | ts.ElementAccessExpression;
         readonly base: ResumableValueSlot; readonly key: ResumableValueSlot; readonly receiver?: ResumableValueSlot };
 
@@ -16,6 +16,7 @@ export interface ResumableClassDefinition {
 }
 
 type ValueOperation =
+    | { readonly kind: "binding-reference"; readonly identifier: ts.Identifier }
     | {readonly kind:'class-start';readonly definition:ts.ClassLikeDeclaration}
     | {readonly kind:'class-heritage';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly superclass:ResumableValueSlot}
     | {readonly kind:'class-element';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly member:ts.ClassElement;readonly key:ResumableValueSlot|null}
@@ -131,7 +132,11 @@ export function planResumableExpression(expression: ts.Expression, options: { as
     const buildReference = (node: ts.Expression,
         consumer: (reference: ResumableReference) => number, chainExit?: number): number => {
         const current = transparent(node);
-        if (ts.isIdentifier(current)) return consumer({ kind: "binding", identifier: current });
+        if (ts.isIdentifier(current)) {
+            const slot = value(current);
+            return operation({ kind: "binding-reference", identifier: current }, slot,
+                consumer({ kind: "binding", identifier: current, slot }));
+        }
         if (!ts.isPropertyAccessExpression(current) && !ts.isElementAccessExpression(current)) {
             reject(current); return complete;
         }

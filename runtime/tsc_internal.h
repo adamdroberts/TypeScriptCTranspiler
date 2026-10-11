@@ -6,6 +6,11 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #include "tsc_runtime.h"
+
+tsc_reference_t tsc_global_reference_capture(tsc_str_t* key, bool strict);
+tsc_value_t tsc_global_reference_get_captured(const tsc_reference_t* reference);
+tsc_value_t tsc_global_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value);
+bool tsc_global_reference_delete_captured(const tsc_reference_t* reference);
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>

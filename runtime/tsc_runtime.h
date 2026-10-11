@@ -939,6 +939,22 @@ void tsc_environment_private_names_project(tsc_environment_t* record,
 bool tsc_environment_has_private_name(tsc_str_t* name);
 tsc_value_t tsc_environment_private_name(tsc_str_t* name);
 
+typedef enum {
+    TSC_REFERENCE_DECLARATIVE,
+    TSC_REFERENCE_GLOBAL_LEXICAL,
+    TSC_REFERENCE_GLOBAL_OBJECT,
+    TSC_REFERENCE_UNRESOLVABLE,
+} tsc_reference_kind_t;
+typedef struct {
+    tsc_str_t* name;
+    void* volatile base;
+    tsc_reference_kind_t kind;
+    bool strict;
+} tsc_reference_t;
+tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict);
+tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference);
+tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value);
+bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference);
 tsc_value_t tsc_environment_reference_get(tsc_str_t* key);
 tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
 bool tsc_environment_reference_delete(tsc_str_t* key);

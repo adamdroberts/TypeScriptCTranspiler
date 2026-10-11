@@ -38,7 +38,7 @@ function compoundAssertions(): string {
 
 function subjectSource(): string {
     return `
-        import { indirect, callableAlias, cycleTdz } from "./bridge.js";
+        import { indirect, callableAlias, cycleTdz, rejectAfterAwait } from "./bridge.js";
 
         if (cycleTdz.length !== 2 || cycleTdz[0] !== true || cycleTdz[1] !== true) {
             throw new Error("cyclic import did not observe the exporter TDZ");
@@ -122,6 +122,7 @@ function subjectSource(): string {
         }
 
         console.log("module-lexical-binding-ok");
+        rejectAfterAwait().catch(error => error instanceof TypeError).then(value => console.log("import-immutable-await:" + value));
     `;
 }
 
@@ -130,6 +131,7 @@ const bridgeSource = `
     export { local as indirect, callable as callableAlias } from "./subject.js";
 
     export const cycleTdz = [];
+    export async function rejectAfterAwait() { target = await 0; return false; }
     try { target; }
     catch (error) { cycleTdz.push(error instanceof ReferenceError); }
     try { typeof target; }
@@ -145,6 +147,10 @@ test("module lexical bindings share one TDZ-aware exporter slot plan", async () 
         fs.writeFile(bridge, bridgeSource, "utf8"),
     ]);
     try {
+        await fs.writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n');
+        const oracle = Bun.spawnSync(["node", "--no-warnings", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
+        expect(oracle.stdout.toString()).toBe("module-lexical-binding-ok\nimport-immutable-await:true\n");
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);
@@ -164,7 +170,7 @@ test("module lexical bindings share one TDZ-aware exporter slot plan", async () 
             const process = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
             expect(process.exitCode).toBe(0);
             expect(process.stderr.toString()).toBe("");
-            expect(process.stdout.toString()).toBe("module-lexical-binding-ok\n");
+            expect(process.stdout.toString()).toBe(oracle.stdout.toString());
         }
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });

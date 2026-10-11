@@ -3372,39 +3372,63 @@ tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value) {
     return value;
 }
 
-tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
+tsc_reference_t tsc_global_reference_capture(tsc_str_t* key, bool strict) {
     tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
-    if (lexical) return global_lexical_get(lexical);
+    if (lexical) return (tsc_reference_t){ .name = key, .base = lexical, .kind = TSC_REFERENCE_GLOBAL_LEXICAL, .strict = strict };
     tsc_value_t global = tsc_global_object();
-    if (!tsc_value_has_prop(global, key)) {
-        tsc_throw_error(
-            TSC_ERROR_REFERENCE,
-            tsc_str_concat(key, tsc_str_from_lit(" is not defined", 15))
-        );
-    }
-    return tsc_value_get_prop(global, key);
+    return (tsc_reference_t){ .name = key, .base = value_ptr(global),
+        .kind = tsc_value_has_prop(global, key) ? TSC_REFERENCE_GLOBAL_OBJECT : TSC_REFERENCE_UNRESOLVABLE,
+        .strict = strict };
 }
 
-tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
-    tsc_global_lexical_binding_t* lexical = global_lexical_find(key);
-    if (lexical) return global_lexical_set(lexical, value);
-    tsc_value_t global = tsc_global_object();
-    if (!tsc_value_has_prop(global, key) && strict) {
+tsc_value_t tsc_global_reference_get_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_GLOBAL_LEXICAL) return global_lexical_get(reference->base);
+    if (reference->kind == TSC_REFERENCE_UNRESOLVABLE) {
         tsc_throw_error(
             TSC_ERROR_REFERENCE,
-            tsc_str_concat(key, tsc_str_from_lit(" is not defined", 15))
+            tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15))
         );
     }
-    if (!tsc_value_set_prop(global, key, value) && strict) {
+    tsc_value_t global = tsc_value_object(reference->base);
+    if (!tsc_value_has_prop(global, reference->name) && reference->strict)
+        tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
+    return tsc_value_get_prop(global, reference->name);
+}
+
+tsc_value_t tsc_global_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value) {
+    if (reference->kind == TSC_REFERENCE_GLOBAL_LEXICAL) return global_lexical_set(reference->base, value);
+    tsc_value_t global = tsc_value_object(reference->base);
+    if (reference->strict && (reference->kind == TSC_REFERENCE_UNRESOLVABLE || !tsc_value_has_prop(global, reference->name))) {
+        tsc_throw_error(
+            TSC_ERROR_REFERENCE,
+            tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15))
+        );
+    }
+    if (!tsc_value_set_prop(global, reference->name, value) && reference->strict) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot assign global reference"));
     }
     return value;
 }
 
+bool tsc_global_reference_delete_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_GLOBAL_LEXICAL) return false;
+    if (reference->kind == TSC_REFERENCE_UNRESOLVABLE) return true;
+    return tsc_value_delete_prop(tsc_value_object(reference->base), reference->name);
+}
+
+tsc_value_t tsc_global_reference_get(tsc_str_t* key) {
+    tsc_reference_t reference = tsc_global_reference_capture(key, false);
+    return tsc_global_reference_get_captured(&reference);
+}
+
+tsc_value_t tsc_global_reference_set(tsc_str_t* key, tsc_value_t value, bool strict) {
+    tsc_reference_t reference = tsc_global_reference_capture(key, strict);
+    return tsc_global_reference_set_captured(&reference, value);
+}
+
 bool tsc_global_reference_delete(tsc_str_t* key) {
-    if (global_lexical_find(key)) return false;
-    tsc_value_t global = tsc_global_object();
-    return !tsc_value_has_prop(global, key) || tsc_value_delete_prop(global, key);
+    tsc_reference_t reference = tsc_global_reference_capture(key, false);
+    return tsc_global_reference_delete_captured(&reference);
 }
 
 tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key) {
