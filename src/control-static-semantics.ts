@@ -94,6 +94,12 @@ export function earlyControlFlowStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
+        if (ts.isDeleteExpression(node) && isStrictCodeContext(node)) {
+            let target: ts.Expression = node.expression;
+            while (ts.isParenthesizedExpression(target)) target = target.expression;
+            if (ts.isIdentifier(target))
+                return { node, message: "delete of an identifier is not permitted in strict mode" };
+        }
         if (ts.isArrayBindingPattern(node) || ts.isObjectBindingPattern(node)) {
             for (let index = 0; index < node.elements.length; index++) {
                 const element = node.elements[index]!;

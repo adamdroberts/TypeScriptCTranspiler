@@ -827,3 +827,5 @@ Rest binding grammar is validated before native lowering. The existing binding i
 Source List analysis now shares length and index locations with property analysis. Native arrays, argument Lists and Function source dispatch retain their existing runtime operations; no public runtime API changes.
 
 Protected boxed bindings reuse existing GC-backed retained value cells and companion roots. Native exception frames, iterator closing and resource disposal keep their existing operations; no public runtime API changes.
+
+Declarative binding and non-Reference delete lowering uses existing captured environment deletion and ordinary operand evaluation. Native property deletion retains its existing operations; no public runtime API changes.

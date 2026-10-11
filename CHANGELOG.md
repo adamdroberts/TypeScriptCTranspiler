@@ -5035,3 +5035,5 @@ Verify runtime SyntaxError from discarded direct and indirect eval of invalid ca
 Project mutable argument Lists through canonical length and index locations, preserving indexed extension, length writes and rest/snapshot ownership across call adapters. Refresh constructor records and fail closed on unknown or cyclic shapes.
 
 Preserve boxed local and parameter mutations across protected completion regions using the shared retained-cell plan, including finally break/continue and catch recovery in Script evaluation.
+
+Support deletion of static declarative bindings and expression values, preserving TDZ/no-GetValue behavior and operand effects; reject strict identifier deletion before evaluation.

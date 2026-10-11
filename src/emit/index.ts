@@ -33758,6 +33758,9 @@ class Emitter {
         if (ts.isIdentifier(expr)) {
             const reference = this.sourceReferencePlan(expr);
             if (reference) return { c: reference.remove, ty: T_BOOLEAN };
+            // Static declarative References are non-deletable. Delete does
+            // not perform GetValue, including for an uninitialized binding.
+            return { c: this.symbolForIdentifier(expr) ? "false" : "true", ty: T_BOOLEAN };
         }
         if (ts.isPropertyAccessExpression(expr) && this.isProcessEnvObject(expr.expression)) {
             const keyText = expr.name.text;
@@ -33795,7 +33798,8 @@ class Emitter {
                 { value: key, target: T_VALUE, node: expr.argumentExpression },
             ]));
         }
-        unsupported(del, "delete currently supports dynamic property/element access only");
+        const value = this.emitExpr(expr);
+        return { c: `({ (void)(${value.c}); true; })`, ty: T_BOOLEAN };
     }
 
     private emitPostfixUnary(pu: ts.PostfixUnaryExpression): EmitResult {
