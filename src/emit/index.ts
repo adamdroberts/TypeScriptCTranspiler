@@ -22588,14 +22588,32 @@ class Emitter {
             return captures;
         }
 
+        // Boxed mutable bindings must survive C longjmp independently of
+        // whether a finally body happens to reference them. Reuse the same
+        // retained-cell collection used by environments and closures.
+        let protectedOwner = false;
+        const protectedWorklist: ts.Node[] = [body];
+        while (protectedWorklist.length) {
+            const node = protectedWorklist.pop()!;
+            if (node !== body && (ts.isFunctionLike(node) || ts.isClassLike(node))) continue;
+            if (ts.isTryStatement(node) || ts.isForOfStatement(node) ||
+                ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Using)) protectedOwner = true;
+            node.forEachChild(child => { protectedWorklist.push(child); });
+        }
+
         const addEnvironmentBinding = (identifier: ts.Identifier): void => {
-            if (!this.sourceEnvironmentEnabled(owner.getSourceFile()) || this.test262ScriptGlobalBindingName(identifier)) return;
+            let declaration: ts.Node = identifier.parent;
+            while (ts.isBindingElement(declaration)) declaration = declaration.parent.parent;
+            const boxed = this.isJavaScriptSourceFile(identifier.getSourceFile()) ||
+                ts.isParameter(declaration) && (ts.isFunctionLike(owner) && hasCanonicalValueFormals(owner) || mapType(declaration, this.checker).kind === "value") ||
+                ts.isVariableDeclaration(declaration) && this.variableDeclarationStorageType(declaration, mapType(declaration, this.checker)).kind === "value";
+            if (!(this.sourceEnvironmentEnabled(owner.getSourceFile()) || protectedOwner && boxed) || this.test262ScriptGlobalBindingName(identifier)) return;
             const symbol = this.symbolForIdentifier(identifier);
             if (!symbol || captures.has(symbol)) return;
             if (this.isModuleBindingSymbol(symbol)) return;
             const lexical = this.localLexicalMetadataForSymbol(symbol);
-            const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
-            const parameter = declaration ? this.sourceFormalParameterForDeclaration(declaration) : null;
+            const bindingDeclaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+            const parameter = bindingDeclaration ? this.sourceFormalParameterForDeclaration(bindingDeclaration) : null;
             const cellName = this.cellNameForCapture(symbol, mangleIdent(identifier.text));
             captures.set(symbol, { type: T_VALUE, cellName, rootCellName: `${cellName}__gc_root`,
                 ...(lexical || parameter && ts.isFunctionLike(owner) && !this.sourceParameterListIsSimple(owner)

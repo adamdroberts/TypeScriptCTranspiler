@@ -605,3 +605,5 @@ Discarded direct and indirect eval calls now reject invalid catch fragments thro
 Rest binding placement, initializer and trailing-comma restrictions now use the shared source-tree validator across declaration owners. Complete opaque/intrinsic effect identities and eligible exhaustive target evidence remain open.
 
 Mutable array/rest argument List projection now shares canonical length and index locations, including constructor-record refresh and unknown/cycle boundaries. Complete Array API effect identities, precise opaque effects and eligible exhaustive target evidence remain open.
+
+Protected boxed binding storage now retains mutation across native longjmp independently of finally Reference use. Catch identifier deletion, proper tail-call behavior, complete host/intrinsic effects and eligible exhaustive target evidence remain open; the immutable full-suite runs remain regression detectors.
