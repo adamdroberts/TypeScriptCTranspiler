@@ -5,7 +5,7 @@
 TSC_GLOBAL_INTRINSIC(Object, tsc_object_constructor_value(), OBJECT)
 TSC_GLOBAL_INTRINSIC(Function, tsc_function_constructor_value(), UNKNOWN)
 TSC_GLOBAL_INTRINSIC(Array, tsc_array_constructor_value(), OBJECT)
-TSC_GLOBAL_INTRINSIC(String, tsc_string_constructor_value(), UNKNOWN)
+TSC_GLOBAL_INTRINSIC(String, tsc_string_constructor_value(), PRIMITIVE_STRING)
 TSC_GLOBAL_INTRINSIC(Number, tsc_number_constructor_value(), NON_STRING)
 TSC_GLOBAL_INTRINSIC(Boolean, tsc_boolean_constructor_value(), BOOLEAN)
 TSC_GLOBAL_INTRINSIC(BigInt, tsc_bigint_constructor_value(), NON_STRING)

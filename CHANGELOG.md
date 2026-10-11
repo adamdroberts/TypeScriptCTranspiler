@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Closed eval now admits finite primitive String conversion through canonical binding metadata and the shared dependency tree, including aliases, forwarded Lists, late results and prefix facts. Immutable global data facts now survive opaque writes according to the canonical attributes. Added Node differential model/native checks and dual-memory CLI coverage.
+
 - Strict tail calls now hand off canonical invocation records through one runtime loop, including bound/proxy/native forwarding. Removed the self-call jump and arity gate; added Node differential partitions, a deep successor graph and typed return regressions.
 
 - Optional-chain References and deletion now share the ordinary/resumable expression graph, preserving skipped operands, receivers and parenthesized boundaries. Removed separate property/call guards and added Node differential runtime/grammar checks plus dual-memory CLI regressions.

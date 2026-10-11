@@ -10,7 +10,7 @@ export interface RuntimeGlobalBinding {
     configurable: boolean;
     enumerable: boolean;
     /** Normal call result only; abrupt conversion outcomes remain separate. */
-    normalResult?: "non-string" | "boolean" | "object" | "unknown" | "not-callable";
+    normalResult?: "non-string" | "boolean" | "object" | "unknown" | "not-callable" | "primitive-string";
 }
 
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
@@ -23,7 +23,7 @@ export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = 
             const attributes = operands!.match(/, (true|false), (true|false)$/);
             const functionAttributes = kind === "FUNCTION"
                 ? operands!.match(/, (true|false), (true|false), \d+, \w+$/) : null;
-            const result = kind === "VALUE" ? undefined : operands!.match(/, (NON_STRING|BOOLEAN|OBJECT|UNKNOWN|NOT_CALLABLE)$/)?.[1];
+            const result = kind === "VALUE" ? undefined : operands!.match(/, (NON_STRING|BOOLEAN|OBJECT|UNKNOWN|NOT_CALLABLE|PRIMITIVE_STRING)$/)?.[1];
             if (kind !== "VALUE" && !result) throw new Error("invalid canonical Realm call result category");
             if (kind === "VALUE" && !attributes) throw new Error("invalid canonical Realm binding attributes");
             if (kind === "FUNCTION" && !functionAttributes) throw new Error("invalid canonical Realm function attributes");

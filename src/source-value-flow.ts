@@ -31,6 +31,12 @@ type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "set-property" | "delete-property";
 type Primitive = string | number | bigint | boolean | null | undefined;
+const PRIMITIVE_PREFIX_OPERATIONS: ReadonlyMap<ts.PrefixUnaryOperator, (value: Primitive) => Primitive> = new Map<ts.PrefixUnaryOperator, (value: Primitive) => Primitive>([
+    [ts.SyntaxKind.PlusToken, (value: Primitive) => +(value as number)],
+    [ts.SyntaxKind.MinusToken, (value: Primitive) => -(value as number)],
+    [ts.SyntaxKind.TildeToken, (value: Primitive) => ~(value as number)],
+    [ts.SyntaxKind.ExclamationToken, (value: Primitive) => !value],
+]);
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
     readonly primitiveComplete: boolean;
@@ -48,7 +54,7 @@ type Atom =
     | { readonly tag: "non-string" }
     | { readonly tag: "unknown" }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "add" | "template"; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "primitive-string" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -376,7 +382,7 @@ class SourceValueFlow {
             }
             if(atom.tag==="global"){
                 if(key===null)this.publish(this.globalMutation,this.unknown);
-                else this.copy(value,this.globalBinding(key));
+                else if (!this.immutableGlobalBinding(key)) this.copy(value,this.globalBinding(key));
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object"))this.publish(this.globalMutation,this.unknown);
         }});
@@ -391,11 +397,15 @@ class SourceValueFlow {
             else for(const name of proof.values)this.writeProperty(base,String(name),value);
         });
     }
+    private immutableGlobalBinding(key: string): boolean {
+        const binding = runtimeGlobalBindings.get(key);
+        return binding?.kind === "value" && !binding.writable && !binding.configurable;
+    }
     private globalBinding(key: string): Cell {
         let cell = this.globals.get(key);
         if (!cell) {
             cell = this.newCell();this.globals.set(key,cell);
-            this.copy(this.globalMutation,cell);
+            if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
             if (key === "eval") this.publish(cell,this.operation("eval"));
             if (key === "print") this.publish(cell,this.operation("host-print"));
@@ -589,13 +599,17 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         if (functionNode(node)) { this.publish(result, { tag: "function", owner: this.function(node) }); return; }
+        if (ts.isPrefixUnaryExpression(node) && PRIMITIVE_PREFIX_OPERATIONS.has(node.operator)) {
+            this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [this.cell(node.operand)]});
+            return;
+        }
         // These grammar operations can throw, but every normal result is
         // non-String independently of their operands and numeric magnitudes.
-        if (ts.isDeleteExpression(node) || ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken ||
+        if (ts.isDeleteExpression(node) ||
             ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
             this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
         }
-        if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node) ||
+        if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node) ||
             ts.isBinaryExpression(node) && NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind)) {
             this.publish(result, this.nonString); return;
         }
@@ -700,6 +714,7 @@ class SourceValueFlow {
             const parts = (node.arguments ?? []).map(argument => ({ cell: this.cell(ts.isSpreadElement(argument) ? argument.expression : argument), spread: ts.isSpreadElement(argument) }));
             const call: Call = { node, callee: this.cell(target), receiver, result };
             const boundValues = new Map<string, Atom>();
+            const primitiveTextValues = new Map<Cell, Atom>();
             const seen = new Map<Atom, Set<string>>();
             const handled = (atom: Atom, signature: string): boolean => {
                 let signatures = seen.get(atom); if (!signatures) { signatures = new Set(); seen.set(atom, signatures); }
@@ -750,12 +765,26 @@ class SourceValueFlow {
                         }
                         if (atom.tag === "intrinsic" && atom.domain === "constructor")
                             constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: argv });
-                        if ((atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
+                        const evolvingPrimitiveResult = atom.tag === "builtin" && atom.normalResult === "primitive-string";
+                        if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                         if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                             for (const value of this.generated.get(atom.kind) ?? []) this.copy(value, result!);
                         } else if (atom.tag === "builtin") {
                             if (!ts.isNewExpression(node)) {
-                                if (atom.normalResult === "boolean") {
+                                if (atom.normalResult === "primitive-string") {
+                                    if (argv === null) this.publish(result!, this.unknown);
+                                    else if (argv.length === 0) this.publish(result!, this.primitive(""));
+                                    else {
+                                        const source = argv[0]!;
+                                        this.watchText(rule, source);
+                                        let value = primitiveTextValues.get(source);
+                                        if (!value) {
+                                            value = {tag: "text-operation", operation: "primitive-string", parts: [source]};
+                                            primitiveTextValues.set(source, value);
+                                        }
+                                        this.publish(result!, value);
+                                    }
+                                } else if (atom.normalResult === "boolean") {
                                     this.publish(result!, this.primitive(false));
                                     this.publish(result!, this.primitive(true));
                                 } else this.publish(result!, atom.normalResult === "non-string" ? this.nonString :
@@ -842,7 +871,7 @@ class SourceValueFlow {
                                         for (const value of this.evaluations.get(String(text)) ?? []) this.copy(value, result!);
                                     }
                                     if (atom.operation === "eval") for (const value of source.values)
-                                        if (value.tag !== "text-operation" && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
+                                        if ((value.tag !== "text-operation" || value.operation === "prefix") && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
                                 } else if (argv && atom.operation === "eval") this.publish(result!, this.primitive(undefined));
                             }
                             if (atom.operation === "prototype" && argv?.[0]) {
@@ -895,11 +924,19 @@ class SourceValueFlow {
                     if (atom.tag === "primitive") choices.add(atom.value);
                     else if (atom.tag === "text-operation") {
                         const complete = atom.parts.every(part => proofs.get(part)?.primitiveComplete);
-                        primitiveComplete &&= complete; textComplete &&= complete;
+                        const booleanPrefix = atom.operation === "prefix" && atom.operator === ts.SyntaxKind.ExclamationToken;
+                        primitiveComplete &&= complete || booleanPrefix;
+                        textComplete &&= complete || atom.operation === "prefix";
+                        if (!complete && booleanPrefix) { choices.add(false); choices.add(true); continue; }
                         let combinations: Primitive[][] = [[]];
                         for (const part of atom.parts) combinations = combinations.flatMap(prefix => (proofs.get(part)?.values ?? []).map(value => [...prefix, value]));
                         for (const tuple of combinations) {
-                            if (atom.operation === "template") choices.add(tuple.map(String).join(""));
+                            if (atom.operation === "prefix") {
+                                // Primitive operators have no user callbacks. Abrupt
+                                // numeric conversions contribute no normal choice.
+                                try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
+                            } else if (atom.operation === "primitive-string") choices.add(String(tuple[0]));
+                            else if (atom.operation === "template") choices.add(tuple.map(String).join(""));
                             else {
                                 const [left, right] = tuple;
                                 if (typeof left === "string" || typeof right === "string") choices.add(String(left) + String(right));
