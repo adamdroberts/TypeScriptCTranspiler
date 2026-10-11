@@ -1,0 +1,10 @@
+/* Canonical admitted static Buffer operations and native result projections. */
+TSC_BUFFER_STATIC_METHOD(from, buffer)
+TSC_BUFFER_STATIC_METHOD(alloc, buffer)
+TSC_BUFFER_STATIC_METHOD(allocUnsafe, buffer)
+TSC_BUFFER_STATIC_METHOD(allocUnsafeSlow, buffer)
+TSC_BUFFER_STATIC_METHOD(concat, buffer)
+TSC_BUFFER_STATIC_METHOD(isBuffer, boolean)
+TSC_BUFFER_STATIC_METHOD(byteLength, number)
+TSC_BUFFER_STATIC_METHOD(isEncoding, boolean)
+TSC_BUFFER_STATIC_METHOD(compare, number)

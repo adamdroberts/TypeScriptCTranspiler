@@ -1,5 +1,6 @@
 import { consoleOperations } from "../console-operations";
 import { cryptoDigestExports } from "../crypto-digest-owners";
+import { bufferStaticResults } from "../buffer-statics";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
@@ -44725,124 +44726,11 @@ class Emitter {
     }
 
     private emitBufferStatic(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        switch (name) {
-            case "from": {
-                const specs: SequencedCallArg[] = args.map((node) => ({ value: this.emitExpr(node), target: T_VALUE, node }));
-                return this.emitSequencedExpr(T_BUFFER, specs, (values) =>
-                    `tsc_buffer_from_value(${values[0] ?? "tsc_value_undefined()"}, ${values[1] ?? "tsc_value_undefined()"})`);
-            }
-            case "alloc": {
-                if (args.length < 1) unsupported(call, "Buffer.alloc expects size");
-                const size = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, size.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: size, target: T_NUMBER, node: args[0]! },
-                ];
-                const hasFill = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasFill) {
-                    const fill = this.emitExpr(args[1]);
-                    requireNumber(args[1], fill.ty);
-                    specs.push({ value: fill, target: T_NUMBER, node: args[1] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                    const fill = hasFill ? vals[1]! : "0";
-                    return `tsc_buffer_alloc(${vals[0]}, ${fill})`;
-                });
-            }
-            case "allocUnsafe":
-            case "allocUnsafeSlow": {
-                if (args.length < 1) unsupported(call, `Buffer.${name} expects size`);
-                const size = this.emitExpr(args[0]!);
-                requireNumber(args[0]!, size.ty);
-                return this.emitSequencedExpr(T_BUFFER, [
-                    { value: size, target: T_NUMBER, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([sizeArg]) => `tsc_buffer_alloc(${sizeArg}, 0)`);
-            }
-            case "concat": {
-                if (args.length < 1) unsupported(call, "Buffer.concat expects list and optional totalLength");
-                const list = this.emitExpr(args[0]!);
-                if (list.ty.kind !== "array" || list.ty.elem?.kind !== "buffer") {
-                    unsupported(args[0]!, "Buffer.concat expects Buffer[]");
-                }
-                const specs: SequencedCallArg[] = [{ value: list }];
-                const hasTotalLength = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasTotalLength) {
-                    const totalLength = this.emitExpr(args[1]);
-                    requireNumber(args[1], totalLength.ty);
-                    specs.push({ value: totalLength, target: T_NUMBER, node: args[1] });
-                    specs.push(...this.ignoredArgumentSpecs(args, 2));
-                    return this.emitSequencedExpr(T_BUFFER, specs, ([listArg, totalLengthArg]) =>
-                        `tsc_buffer_concat_len(${listArg}, ${totalLengthArg})`,
-                    );
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_BUFFER, specs, ([listArg]) => `tsc_buffer_concat(${listArg})`);
-            }
-            case "isBuffer": {
-                if (args.length < 1) unsupported(call, "Buffer.isBuffer expects value");
-                const value = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [{ value }, ...this.ignoredArgumentSpecs(args, 1)],
-                    ([valueC]) => value.ty.kind === "buffer"
-                        ? "true"
-                        : (value.ty.kind === "value" ? `tsc_util_types_is_typed_array(${valueC})` : "false"),
-                );
-            }
-            case "byteLength": {
-                if (args.length < 1) unsupported(call, "Buffer.byteLength expects value and optional encoding");
-                const value = this.emitExpr(args[0]!);
-                if (value.ty.kind === "buffer") {
-                    return this.emitSequencedExpr(
-                        T_NUMBER,
-                        [{ value }, ...this.ignoredArgumentSpecs(args, 1)],
-                        ([buffer]) => `tsc_buffer_length(${buffer})`,
-                    );
-                }
-                if (value.ty.kind !== "string") unsupported(args[0]!, "Buffer.byteLength supports string or Buffer");
-                const specs: SequencedCallArg[] = [
-                    { value, target: T_STRING, node: args[0]! },
-                ];
-                const hasEncoding = !!args[1] && !this.isUndefinedExpression(args[1]);
-                if (hasEncoding) specs.push({ value: this.emitExpr(args[1]), target: T_STRING, node: args[1] });
-                specs.push(...this.ignoredArgumentSpecs(args, 2));
-                return this.emitSequencedExpr(T_NUMBER, specs, (vals) => {
-                    const encoding = hasEncoding ? vals[1]! : `tsc_str_from_lit("utf8", 4)`;
-                    return `tsc_buffer_byte_length_str(${vals[0]!}, ${encoding})`;
-                });
-            }
-            case "isEncoding": {
-                if (args.length < 1) unsupported(call, "Buffer.isEncoding expects encoding");
-                const encoding = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [
-                        { value: encoding, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([input]) => `tsc_buffer_is_encoding(${input})`,
-                );
-            }
-            case "compare": {
-                if (args.length < 2) unsupported(call, "Buffer.compare expects two buffers");
-                const a = this.emitExpr(args[0]!);
-                const b = this.emitExpr(args[1]!);
-                if (a.ty.kind !== "buffer" || b.ty.kind !== "buffer") unsupported(call, "Buffer.compare expects Buffer arguments");
-                return this.emitSequencedExpr(
-                    T_NUMBER,
-                    [
-                        { value: a },
-                        { value: b },
-                        ...this.ignoredArgumentSpecs(args, 2),
-                    ],
-                    ([left, right]) => `tsc_buffer_compare(${left}, ${right})`,
-                );
-            }
-        }
-        unsupported(call, `Buffer.${name}`);
+        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+        const resultKind = bufferStaticResults.get(name);
+        const resultType = resultKind === "buffer" ? T_BUFFER : resultKind === "number" ? T_NUMBER : resultKind === "boolean" ? T_BOOLEAN : T_VALUE;
+        return this.emitSequencedExpr(resultType, [{ value: argumentsList }],
+            ([actuals]) => this.coerce({ c: `tsc_buffer_static_call("${escapeCString(name)}", ${actuals})`, ty: T_VALUE }, resultType, call));
     }
 
     private emitFsStatsMethod(

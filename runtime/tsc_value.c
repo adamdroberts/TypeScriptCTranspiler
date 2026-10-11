@@ -8987,6 +8987,119 @@ tsc_value_t tsc_buffer_prototype_value(void) {
     return tsc_value_object(state->prototype);
 }
 
+typedef enum {
+#define TSC_BUFFER_STATIC_METHOD(name, result_kind) BUFFER_STATIC_##name,
+#include "tsc_buffer_statics.def"
+#undef TSC_BUFFER_STATIC_METHOD
+} buffer_static_operation_t;
+static const struct {const char* name;buffer_static_operation_t operation;} buffer_static_operations[]={
+#define TSC_BUFFER_STATIC_METHOD(name, result_kind) {#name,BUFFER_STATIC_##name},
+#include "tsc_buffer_statics.def"
+#undef TSC_BUFFER_STATIC_METHOD
+};
+static _Noreturn void buffer_static_error(tsc_error_kind_t kind,const char* message,const char* code){
+    tsc_error_t* volatile error=tsc_error_new_named(tsc_str_from_cstr(kind==TSC_ERROR_TYPE?"TypeError":"RangeError"),tsc_str_from_cstr(message));
+    if(code)tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_code,tsc_value_string(tsc_str_from_cstr(code)));
+    tsc_throw_value(tsc_value_error(error));
+}
+static double buffer_static_size(tsc_value_t value,bool integer){
+    if(value_is_box(value))buffer_static_error(TSC_ERROR_TYPE,"Buffer size must be a number","ERR_INVALID_ARG_TYPE");
+    double size=value_as_num(value);
+    if(!isfinite(size)||size<0||size>9007199254740991.0||(integer&&floor(size)!=size))
+        buffer_static_error(TSC_ERROR_RANGE,"Buffer size is outside the byte range","ERR_OUT_OF_RANGE");
+    return trunc(size);
+}
+static tsc_buffer_t* buffer_static_bytes(tsc_value_t value,const char* code){
+    if(value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_OBJECT){
+        tsc_object_t* object=value_ptr(value);
+        if(object->is_buffer)return object->class_ptr;
+    }
+    buffer_static_error(TSC_ERROR_TYPE,"Buffer byte input must be a Buffer or Uint8Array",code);
+}
+/* The source Array stays authoritative across both validation and copy passes.
+ * Its property reads may execute user code and change its contents or length. */
+static tsc_buffer_t* buffer_static_concat(tsc_value_t list,tsc_value_t requested){
+    void* volatile list_root=tsc_value_gc_root(list);
+    if(!tsc_value_is_array(list))buffer_static_error(TSC_ERROR_TYPE,"Buffer.concat list must be an Array","ERR_INVALID_ARG_TYPE");
+    tsc_str_t* volatile length_key=tsc_str_from_lit("length",6);
+    if(tsc_value_cmp(tsc_value_get_prop(list,length_key),tsc_value_num(0))<0)
+        buffer_static_error(TSC_ERROR_TYPE,"Buffer.concat list length must be non-negative","ERR_INVALID_ARG_VALUE");
+    if(tsc_value_same_value_zero(tsc_value_get_prop(list,length_key),tsc_value_num(0)))return buffer_alloc_len(0);
+    bool explicit_length=!tsc_value_is_undefined(requested);
+    size_t length=explicit_length?(size_t)buffer_static_size(requested,true):0;
+    for(size_t index=0;tsc_value_cmp(tsc_value_num((double)index),tsc_value_get_prop(list,length_key))<0;++index){
+        tsc_value_t value=tsc_value_get_index(list,(double)index);void* volatile root=tsc_value_gc_root(value);
+        tsc_buffer_t* bytes=buffer_static_bytes(value,"ERR_INVALID_ARG_TYPE");
+        if(!explicit_length){
+            if(bytes->len>SIZE_MAX-length)buffer_static_error(TSC_ERROR_RANGE,"Buffer byte length overflows","ERR_OUT_OF_RANGE");
+            length+=bytes->len;
+        }
+        (void)root;
+    }
+    tsc_buffer_t* volatile result=buffer_alloc_len(length);
+    size_t position=0;
+    for(size_t index=0;tsc_value_cmp(tsc_value_num((double)index),tsc_value_get_prop(list,length_key))<0;++index){
+        tsc_value_t value=tsc_value_get_index(list,(double)index);void* volatile root=tsc_value_gc_root(value);
+        tsc_buffer_t* bytes=buffer_static_bytes(value,NULL);size_t count=bytes->len;
+        if(count>length-position){
+            if(!explicit_length)buffer_static_error(TSC_ERROR_RANGE,"Buffer source changed beyond its allocated range",NULL);
+            count=length-position;
+            if(count)memcpy(result->data+position,bytes->data,count);
+            position=length;break;
+        }
+        if(count)memcpy(result->data+position,bytes->data,count);position+=count;(void)root;
+    }
+    if(position<length)memset(result->data+position,0,length-position);
+    (void)list_root;return result;
+}
+tsc_value_t tsc_buffer_static_call(const char* name,const tsc_array_t* arguments){
+    const tsc_array_t* volatile arguments_root=arguments;
+    const tsc_array_t* args=arguments;
+    tsc_value_t first=buffer_argument(args,0),second=buffer_argument(args,1);
+    for(size_t index=0;index<sizeof(buffer_static_operations)/sizeof(buffer_static_operations[0]);++index){
+        if(strcmp(name,buffer_static_operations[index].name))continue;
+        switch(buffer_static_operations[index].operation){
+            case BUFFER_STATIC_from:return tsc_value_buffer(tsc_buffer_from_value(first,second));
+            case BUFFER_STATIC_alloc:
+            case BUFFER_STATIC_allocUnsafe:
+            case BUFFER_STATIC_allocUnsafeSlow:{
+                size_t length=(size_t)buffer_static_size(first,false);
+                bool safe=buffer_static_operations[index].operation==BUFFER_STATIC_alloc;
+                tsc_buffer_t* volatile buffer=safe?tsc_buffer_alloc((double)length,0):buffer_alloc_len(length);
+                tsc_value_t value=tsc_value_buffer(buffer);void* volatile root=tsc_value_gc_root(value);
+                if(safe&&length&&!tsc_value_is_undefined(second)){
+                    tsc_array_t* fill=tsc_array_new(sizeof(tsc_value_t),1);
+                    tsc_value_t encoding=buffer_argument(args,2);
+                    if(value_is_box(encoding)&&value_tag(encoding)!=TSC_VALUE_TAG_STRING)encoding=tsc_value_undefined();
+                    if(!value_is_box(encoding))encoding=tsc_value_undefined();
+                    tsc_value_t operands[]={second,tsc_value_undefined(),tsc_value_undefined(),encoding};
+                    for(size_t operand=0;operand<sizeof(operands)/sizeof(operands[0]);++operand)tsc_array_push_raw(fill,&operands[operand]);
+                    for(size_t method=0;method<sizeof(buffer_methods)/sizeof(buffer_methods[0]);++method)
+                        if(buffer_methods[method].operation==BUFFER_FILL){(void)buffer_method_apply((void*)&buffer_methods[method],value,fill);break;}
+                }
+                (void)root;(void)arguments_root;return value;
+            }
+            case BUFFER_STATIC_concat:return tsc_value_buffer(buffer_static_concat(first,second));
+            case BUFFER_STATIC_isBuffer:return tsc_value_bool(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_OBJECT&&((tsc_object_t*)value_ptr(first))->is_buffer);
+            case BUFFER_STATIC_isEncoding:return tsc_value_bool(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_STRING&&tsc_buffer_is_encoding(tsc_value_as_string(first)));
+            case BUFFER_STATIC_compare:return tsc_value_num(tsc_buffer_compare(buffer_static_bytes(first,"ERR_INVALID_ARG_TYPE"),buffer_static_bytes(second,"ERR_INVALID_ARG_TYPE")));
+            case BUFFER_STATIC_byteLength:{
+                if(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_STRING){
+                    tsc_str_t* encoding=value_is_box(second)&&value_tag(second)==TSC_VALUE_TAG_STRING?tsc_value_as_string(second):NULL;
+                    return tsc_value_num(tsc_buffer_byte_length_str(tsc_value_as_string(first),encoding));
+                }
+                if(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_OBJECT){
+                    tsc_object_t* object=value_ptr(first);
+                    if(object->is_array_buffer)return tsc_value_num(tsc_array_buffer_byte_length(object->class_ptr));
+                    if(object->is_data_view)return tsc_value_num(tsc_data_view_byte_length(object->class_ptr));
+                }
+                return tsc_value_num(buffer_static_bytes(first,"ERR_INVALID_ARG_TYPE")->len);
+            }
+        }
+    }
+    tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Buffer static operation cannot be represented"));
+}
+
 tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {
     if (!b) return tsc_value_null();
     if (b->object) return tsc_value_object(b->object);

@@ -1199,42 +1199,6 @@ tsc_buffer_t* tsc_buffer_alloc(double size, double fill) {
     return b;
 }
 
-tsc_buffer_t* tsc_buffer_concat(const tsc_array_t* list) {
-    size_t total = 0;
-    for (size_t i = 0; i < list->len; i++) {
-        tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, list, i);
-        if (part) total += part->len;
-    }
-    tsc_buffer_t* out = buffer_alloc_len(total);
-    size_t pos = 0;
-    for (size_t i = 0; i < list->len; i++) {
-        tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, list, i);
-        if (!part || part->len == 0) continue;
-        memcpy(out->data + pos, part->data, part->len);
-        pos += part->len;
-    }
-    return out;
-}
-
-tsc_buffer_t* tsc_buffer_concat_len(const tsc_array_t* list, double total_length) {
-    if (isnan(total_length) || isinf(total_length) || total_length < 0) {
-        tsc_throw_str(tsc_str_from_cstr("Buffer.concat totalLength must be a non-negative finite number"));
-    }
-    size_t total = (size_t)total_length;
-    tsc_buffer_t* out = buffer_alloc_len(total);
-    if (total > 0) memset(out->data, 0, total);
-    size_t pos = 0;
-    for (size_t i = 0; i < list->len && pos < total; i++) {
-        tsc_buffer_t* part = TSC_ARR(tsc_buffer_t*, list, i);
-        if (!part || part->len == 0) continue;
-        size_t n = part->len;
-        if (n > total - pos) n = total - pos;
-        memcpy(out->data + pos, part->data, n);
-        pos += n;
-    }
-    return out;
-}
-
 tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding) {
     if (buffer_encoding_is_utf8(encoding)) {
         tsc_str_t* out = str_alloc(b->len);
@@ -1496,6 +1460,7 @@ double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encod
 }
 
 bool tsc_buffer_is_encoding(const tsc_str_t* encoding) {
+    encoding = encoding ? tsc_str_to_lower(encoding) : NULL;
     return buffer_encoding_is_utf8(encoding) || str_lit_eq(encoding, "hex") || buffer_encoding_is_base64(encoding) || buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding);
 }
 

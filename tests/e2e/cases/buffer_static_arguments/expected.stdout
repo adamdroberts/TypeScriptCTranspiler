@@ -1,0 +1,6 @@
+computed: 6 AAAAAA
+pattern: ababa
+concat: abcd abc 616263640000
+invalid: true ERR_INVALID_ARG_TYPE size|fill|encoding|extra|
+changed: 6300 2
+zero: 0 0

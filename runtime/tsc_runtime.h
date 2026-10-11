@@ -556,8 +556,7 @@ tsc_buffer_t* tsc_buffer_transcode(const tsc_buffer_t* source, const tsc_str_t* 
 tsc_buffer_t* tsc_buffer_from_array(const struct tsc_array* input);
 tsc_buffer_t* tsc_buffer_from_buffer(const tsc_buffer_t* input);
 tsc_buffer_t* tsc_buffer_alloc(double size, double fill);
-tsc_buffer_t* tsc_buffer_concat(const struct tsc_array* list);
-tsc_buffer_t* tsc_buffer_concat_len(const struct tsc_array* list, double total_length);
+tsc_value_t tsc_buffer_static_call(const char* name,const struct tsc_array* arguments);
 tsc_str_t* tsc_buffer_to_string(const tsc_buffer_t* b, const tsc_str_t* encoding);
 tsc_value_t tsc_buffer_to_json(const tsc_buffer_t* b);
 tsc_str_t* tsc_btoa(const tsc_str_t* input);

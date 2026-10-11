@@ -303,6 +303,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Lower Buffer static operations through a complete boxed argument List, with runtime numeric validation and source-observable concatenation passes.
+
 - Give Error instances ordinary property owners, shared payload roots and descriptors, and AggregateError construction through the existing IteratorRecord.
 
 - Give Hash and HMAC core digest operations shared ordinary owners, independent copies, generic calls and an OpenSSL digest registry; preserve suspended owners and reject unrepresented options/codecs.
