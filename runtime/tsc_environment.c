@@ -27,7 +27,9 @@ struct tsc_environment {
     tsc_array_t* private_names;
     bool variable_scope;
     tsc_environment_t* captured;
-    enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION } context;
+    enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION, ENV_CONTEXT_OBJECT } context;
+    tsc_value_t binding_object;
+    void* binding_object_root;
     bool this_initialized;
     tsc_value_t constructor;
     void* constructor_root;
@@ -54,6 +56,8 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->variable_scope = variable_scope;
     environment->captured = NULL;
     environment->context = ENV_CONTEXT_NONE;
+    environment->binding_object = tsc_value_undefined();
+    environment->binding_object_root = NULL;
     environment->this_initialized = true;
     environment->constructor = tsc_value_undefined();
     environment->constructor_root = NULL;
@@ -73,14 +77,6 @@ tsc_environment_t* tsc_environment_module_new(void) {
 static tsc_environment_binding_t* environment_own_binding(tsc_environment_t* environment, tsc_str_t* name) {
     for (tsc_environment_binding_t* binding = environment ? environment->bindings : NULL; binding; binding = binding->next)
         if (tsc_str_eq(binding->name, name)) return binding;
-    return NULL;
-}
-
-static tsc_environment_binding_t* environment_resolve(tsc_str_t* name) {
-    for (tsc_environment_t* environment = current_environment; environment; environment = environment->parent) {
-        tsc_environment_binding_t* binding = environment_own_binding(environment, name);
-        if (binding) return binding;
-    }
     return NULL;
 }
 
@@ -201,7 +197,7 @@ void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, 
 
 static tsc_environment_t* environment_context(void) {
     for (tsc_environment_t* record = current_environment; record; record = record->parent)
-        if (record->context != ENV_CONTEXT_NONE) return record;
+        if (record->context == ENV_CONTEXT_FUNCTION || record->context == ENV_CONTEXT_MODULE) return record;
     return NULL;
 }
 
@@ -223,6 +219,32 @@ tsc_value_t tsc_environment_eval_new_target(void) {
 
 void tsc_environment_scope_leave(tsc_environment_scope_t* scope) {
     current_environment = scope->previous;
+}
+
+void tsc_environment_object_enter(tsc_environment_scope_t* scope, tsc_value_t object) {
+    scope->previous = current_environment;
+    tsc_value_t boxed = tsc_value_to_object(object);
+    void* volatile root = tsc_value_gc_root(boxed);
+    (void)root;
+    scope->record = tsc_environment_new(scope->previous, false);
+    scope->record->context = ENV_CONTEXT_OBJECT;
+    scope->record->binding_object = boxed;
+    scope->record->binding_object_root = root;
+    current_environment = scope->record;
+}
+
+void tsc_environment_lexical_clone(void) {
+    if (!current_environment || current_environment->variable_scope || current_environment->context != ENV_CONTEXT_NONE)
+        tsc_panic("lexical cloning requires a declarative scope");
+    current_environment = tsc_environment_new(current_environment->parent, false);
+}
+
+static bool environment_object_has_binding(tsc_environment_t* environment, tsc_str_t* key) {
+    if (!tsc_value_has_prop(environment->binding_object, key)) return false;
+    tsc_value_t unscopables = tsc_value_get_symbol_prop(environment->binding_object, tsc_symbol_unscopables());
+    void* volatile root = tsc_value_gc_root(unscopables);
+    (void)root;
+    return !tsc_value_is_object(unscopables) || !tsc_value_is_truthy(tsc_value_get_prop(unscopables, key));
 }
 
 void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_binding_ref_t* reference) {
@@ -331,13 +353,28 @@ tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value
 }
 
 tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict) {
-    for (tsc_environment_t* environment = current_environment; environment; environment = environment->parent)
+    for (tsc_environment_t* environment = current_environment; environment; environment = environment->parent) {
+        if (environment->context == ENV_CONTEXT_OBJECT) {
+            if (environment_object_has_binding(environment, key))
+                return (tsc_reference_t){ .name = key, .base = environment, .kind = TSC_REFERENCE_OBJECT, .strict = strict };
+            continue;
+        }
         if (environment_own_binding(environment, key))
             return (tsc_reference_t){ .name = key, .base = environment, .kind = TSC_REFERENCE_DECLARATIVE, .strict = strict };
+    }
     return tsc_global_reference_capture(key, strict);
 }
 
 tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_OBJECT) {
+        tsc_environment_t* environment = reference->base;
+        if (!tsc_value_has_prop(environment->binding_object, reference->name)) {
+            if (reference->strict)
+                tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
+            return tsc_value_undefined();
+        }
+        return tsc_value_get_prop(environment->binding_object, reference->name);
+    }
     if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_get_captured(reference);
     tsc_environment_binding_t* binding = environment_own_binding(reference->base, reference->name);
     if (!binding) tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
@@ -345,6 +382,14 @@ tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* refere
 }
 
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value) {
+    if (reference->kind == TSC_REFERENCE_OBJECT) {
+        tsc_environment_t* environment = reference->base;
+        if (!tsc_value_has_prop(environment->binding_object, reference->name) && reference->strict)
+            tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_concat(reference->name, tsc_str_from_lit(" is not defined", 15)));
+        if (!tsc_value_set_prop(environment->binding_object, reference->name, value) && reference->strict)
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("cannot assign object environment binding"));
+        return value;
+    }
     if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_set_captured(reference, value);
     tsc_environment_t* environment = reference->base;
     tsc_environment_binding_t* binding = environment_own_binding(environment, reference->name);
@@ -363,6 +408,10 @@ tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* refere
 }
 
 bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_OBJECT) {
+        tsc_environment_t* environment = reference->base;
+        return tsc_value_delete_prop(environment->binding_object, reference->name);
+    }
     if (reference->kind != TSC_REFERENCE_DECLARATIVE) return tsc_global_reference_delete_captured(reference);
     tsc_environment_t* environment = reference->base;
     tsc_environment_binding_t** cursor = &environment->bindings;
@@ -376,8 +425,17 @@ bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference)
     return true;
 }
 
+tsc_value_t tsc_environment_reference_receiver(const tsc_reference_t* reference) {
+    return reference->kind == TSC_REFERENCE_OBJECT
+        ? ((tsc_environment_t*)reference->base)->binding_object : tsc_value_undefined();
+}
+
 tsc_value_t tsc_environment_reference_get(tsc_str_t* key) {
-    tsc_reference_t reference = tsc_environment_reference_capture(key, false);
+    return tsc_environment_reference_read(key, false);
+}
+
+tsc_value_t tsc_environment_reference_read(tsc_str_t* key, bool strict) {
+    tsc_reference_t reference = tsc_environment_reference_capture(key, strict);
     return tsc_environment_reference_get_captured(&reference);
 }
 
@@ -392,8 +450,13 @@ bool tsc_environment_reference_delete(tsc_str_t* key) {
 }
 
 tsc_str_t* tsc_environment_reference_typeof(tsc_str_t* key) {
-    tsc_environment_binding_t* binding = environment_resolve(key);
-    return binding ? tsc_value_typeof(binding_read(binding)) : tsc_global_reference_typeof(key);
+    return tsc_environment_reference_typeof_strict(key, false);
+}
+
+tsc_str_t* tsc_environment_reference_typeof_strict(tsc_str_t* key, bool strict) {
+    tsc_reference_t reference = tsc_environment_reference_capture(key, strict);
+    return reference.kind == TSC_REFERENCE_UNRESOLVABLE ? tsc_str_from_cstr("undefined")
+        : tsc_value_typeof(tsc_environment_reference_get_captured(&reference));
 }
 
 /* Private names occupy their own collection; ordinary binding lookup and

@@ -1,5 +1,33 @@
 import ts from "typescript";
 
+/** A var initializer uses assignment References, while lexical declarations
+ * initialize cells. Project its BindingName grammar onto the existing
+ * assignment tree; the shared expression graph owns all actual lowering. */
+export function assignmentTargetFromBinding(binding: ts.BindingName): ts.Expression {
+    const targets = new Map<ts.BindingName, ts.Expression>();
+    const worklist: {node:ts.BindingName;complete:boolean}[]=[{node:binding,complete:false}];
+    while(worklist.length){
+        const {node,complete}=worklist.pop()!;
+        if(ts.isIdentifier(node)){targets.set(node,node);continue;}
+        if(!complete){
+            worklist.push({node,complete:true});
+            for(const element of node.elements)if(ts.isBindingElement(element))worklist.push({node:element.name,complete:false});
+            continue;
+        }
+        const value=(element:ts.BindingElement)=>element.initializer
+            ? ts.factory.createBinaryExpression(targets.get(element.name)!,ts.SyntaxKind.EqualsToken,element.initializer)
+            : targets.get(element.name)!;
+        const target=ts.isArrayBindingPattern(node)
+            ? ts.factory.createArrayLiteralExpression(node.elements.map(element=>ts.isOmittedExpression(element)?element:
+                element.dotDotDotToken?ts.factory.createSpreadElement(value(element)):value(element)))
+            : ts.factory.createObjectLiteralExpression(node.elements.map(element=>element.dotDotDotToken
+                ? ts.factory.createSpreadAssignment(value(element))
+                : ts.factory.createPropertyAssignment(element.propertyName??element.name as ts.Identifier,value(element))));
+        ts.setTextRange(target,node);Object.assign(target,{parent:node.parent});targets.set(node,target);
+    }
+    return targets.get(binding)!;
+}
+
 function unwrapExpression(expression:ts.Expression):ts.Expression{
     while(ts.isParenthesizedExpression(expression)||ts.isAsExpression(expression)||
         ts.isTypeAssertionExpression(expression)||ts.isNonNullExpression(expression)||ts.isSatisfiesExpression(expression))

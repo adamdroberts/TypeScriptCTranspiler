@@ -918,6 +918,8 @@ typedef struct {
     tsc_environment_t* record;
 } tsc_environment_scope_t;
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict);
+void tsc_environment_object_enter(tsc_environment_scope_t* scope, tsc_value_t object);
+void tsc_environment_lexical_clone(void);
 tsc_environment_t* tsc_environment_module_new(void);
 void tsc_environment_variable_enter(tsc_environment_scope_t* scope);
 tsc_value_t tsc_environment_eval_this(void);
@@ -941,6 +943,7 @@ tsc_value_t tsc_environment_private_name(tsc_str_t* name);
 
 typedef enum {
     TSC_REFERENCE_DECLARATIVE,
+    TSC_REFERENCE_OBJECT,
     TSC_REFERENCE_GLOBAL_LEXICAL,
     TSC_REFERENCE_GLOBAL_OBJECT,
     TSC_REFERENCE_UNRESOLVABLE,
@@ -955,10 +958,13 @@ tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict);
 tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference);
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value);
 bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference);
+tsc_value_t tsc_environment_reference_receiver(const tsc_reference_t* reference);
 tsc_value_t tsc_environment_reference_get(tsc_str_t* key);
+tsc_value_t tsc_environment_reference_read(tsc_str_t* key, bool strict);
 tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, bool strict);
 bool tsc_environment_reference_delete(tsc_str_t* key);
 tsc_str_t* tsc_environment_reference_typeof(tsc_str_t* key);
+tsc_str_t* tsc_environment_reference_typeof_strict(tsc_str_t* key, bool strict);
 tsc_value_t tsc_global_binding_get(tsc_str_t* key);
 tsc_value_t tsc_global_binding_set(tsc_str_t* key, tsc_value_t value);
 tsc_value_t tsc_global_reference_get(tsc_str_t* key);
@@ -1714,7 +1720,7 @@ void tsc_test262_set_indirect_eval_callback(tsc_test262_indirect_eval_callback_t
 tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller);
 tsc_value_t tsc_eval_indirect(tsc_array_t* args);
 tsc_value_t tsc_eval_intrinsic_value(void);
-tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t args, bool strict_caller);
+tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t args, bool strict_caller);
 void tsc_test262_write_normal(const char* scenario_id, bool async_test);
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error);
 tsc_str_t* tsc_util_format_n(size_t n, ...);

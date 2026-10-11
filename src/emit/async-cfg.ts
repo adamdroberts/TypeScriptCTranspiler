@@ -1,7 +1,7 @@
 import { definitionEvaluationChildren } from "./module-evaluation";
 import {classExpressionFromDeclaration} from './class-definition';
 import ts from "typescript";
-import { normalizeAssignmentTarget } from "./binding-tree";
+import { normalizeAssignmentTarget, assignmentTargetFromBinding } from "./binding-tree";
 import { planResumableExpression, type ResumableExpressionState, type ResumableClassDefinition } from "./resumable-expression";
 import { directLexicalDeclarations, lexicalDeclarationsFromList } from "./lexical-declarations";
 import {
@@ -130,6 +130,7 @@ type AsyncControlFlowStateCore =
     | {
         readonly kind: "scope-enter";
         readonly id: number;
+        readonly retainedEnvironment?: boolean;
         readonly bindings: readonly ts.BindingName[];
         readonly functions: readonly ts.FunctionDeclaration[];
         readonly next: AsyncControlFlowTarget;
@@ -140,6 +141,10 @@ type AsyncControlFlowStateCore =
         readonly bindings: readonly ts.BindingName[];
         readonly next: AsyncControlFlowTarget;
     }
+    | { readonly kind: "object-scope-enter"; readonly id: number; readonly slot: number;
+        readonly sourceResultSlot: number; readonly next: AsyncControlFlowTarget }
+    | { readonly kind: "environment-exit"; readonly id: number; readonly slot: number;
+        readonly next: AsyncControlFlowTarget }
     | {
         readonly kind: "branch";
         readonly id: number;
@@ -351,6 +356,7 @@ export interface AsyncControlFlowGraph {
 }
 
 export interface AsyncControlFlowPlannerOptions {
+    readonly retainedSourceEnvironments?: boolean;
     readonly suspensionKind?: "async" | "generator" | "async-generator";
     readonly instantiatedRoot?: boolean;
     readonly isModuleDefaultClass?: (node: ts.ClassDeclaration) => boolean;
@@ -941,16 +947,18 @@ export function planAsyncControlFlowGraph(
         next: AsyncControlFlowTarget,
         context: BuildContext,
     ): AsyncControlFlowTarget => {
-        const entry = buildSequence(block.statements, next, context);
-        if (block === body && options.instantiatedRoot) return entry;
+        if (block === body && options.instantiatedRoot) return buildSequence(block.statements, next, context);
         const lexical = directLexicalDeclarations(block.statements);
         const bindings = lexical.map((declaration) => declaration.name);
         const functions = lexical.filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
             ts.isFunctionDeclaration(declaration));
         bindingIdentifiers.push(...lexical.filter((declaration) => !ts.isVariableDeclaration(declaration))
             .map((declaration) => declaration.name));
-        if (bindings.length === 0) return entry;
+        if (bindings.length === 0) return buildSequence(block.statements, next, context);
+        if (options.retainedSourceEnvironments) return buildLexicalRegion(block, bindings, functions, next, context,
+            (normal, protectedContext) => buildSequence(block.statements, normal, protectedContext));
         const id = reserve();
+        const entry = buildSequence(block.statements, next, context);
         return setState({ kind: "scope-enter", id, bindings, functions, next: entry }, context.exceptionTarget);
     };
 
@@ -1039,6 +1047,21 @@ export function planAsyncControlFlowGraph(
         return buildProtected(normalEnter, throwEnter, protectedContext);
     };
 
+    const retainedScopeOwners = new Set<ts.Node>();
+    const retainedSwitchDiscriminators = new Map<ts.SwitchStatement,number>();
+    const buildLexicalRegion = (owner: ts.Node, bindings: readonly ts.BindingName[], functions: readonly ts.FunctionDeclaration[],
+        next: AsyncControlFlowTarget, context: BuildContext,
+        buildBody: (normal: AsyncControlFlowTarget, context: BuildContext) => AsyncControlFlowTarget): AsyncControlFlowTarget => {
+        retainedScopeOwners.add(owner);
+        const id = reserve();
+        return buildFinalizationRegion(next, context,
+            exit => setState({kind:"environment-exit",id:reserve(),slot:id,next:exit},context.exceptionTarget),
+            (normal, thrown, protectedContext) => {
+                const entry=buildBody(normal,{...protectedContext,exceptionTarget:{target:thrown}});
+                return setState({kind:"scope-enter",id,bindings,functions,retainedEnvironment:true,next:entry},context.exceptionTarget);
+            });
+    };
+
     const buildResourceRegion = (
         resources: readonly ts.VariableDeclaration[],
         next: AsyncControlFlowTarget,
@@ -1088,6 +1111,11 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
+        if (options.retainedSourceEnvironments && !retainedScopeOwners.has(statement) && ts.isForStatement(statement) &&
+            statement.initializer && ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0)
+            return buildLexicalRegion(statement,statement.initializer.declarations.map(declaration=>declaration.name),[],next,context,
+                (normal,protectedContext)=>buildLoop(statement,normal,protectedContext,label));
         if (ts.isForStatement(statement) && statement.initializer && ts.isVariableDeclarationList(statement.initializer) &&
             (statement.initializer.flags & ts.NodeFlags.Using) !== 0 &&
             statement.initializer.declarations.some(declaration => !resourceBindings.has(declaration)))
@@ -1168,7 +1196,7 @@ export function planAsyncControlFlowGraph(
                 : ts.factory.createExpressionStatement(statement.initializer);
             entry = buildStatement(initializer, entry, context);
         }
-        if (headBindings.length > 0) {
+        if (headBindings.length > 0 && !retainedScopeOwners.has(statement)) {
             const id = reserve();
             entry = setState({ kind: "scope-enter", id, bindings: headBindings,
                 functions: [], next: entry }, context.exceptionTarget);
@@ -1182,6 +1210,10 @@ export function planAsyncControlFlowGraph(
         context: BuildContext,
         label: string | null,
     ): AsyncControlFlowTarget => {
+        if (options.retainedSourceEnvironments && !retainedScopeOwners.has(statement) && ts.isVariableDeclarationList(statement.initializer) &&
+            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0)
+            return buildLexicalRegion(statement,statement.initializer.declarations.map(declaration=>declaration.name),[],next,context,
+                (normal,protectedContext)=>buildIteratorLoop(statement,normal,protectedContext,label));
         const asynchronous = ts.isForOfStatement(statement) && !!statement.awaitModifier;
         let binding: ts.BindingName;
         const assignmentTargets = new Map<ts.Identifier, ts.Expression>();
@@ -1330,7 +1362,7 @@ export function planAsyncControlFlowGraph(
             return next;
         }
         if (ts.isVariableDeclarationList(statement.initializer) &&
-            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+            (statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0 && !retainedScopeOwners.has(statement)) {
             return setState({ kind: "scope-enter", id: reserve(), bindings: [binding], functions: [], next: sourceEntry }, context.exceptionTarget);
         }
         return sourceEntry;
@@ -1350,6 +1382,16 @@ export function planAsyncControlFlowGraph(
             statement = returned;
         }
         if (ts.isBlock(statement)) return buildLexicalBlock(statement, next, context);
+        if (ts.isWithStatement(statement)) {
+            const slot = reserve(), sourceResultSlot = expressionResults.push(statement.expression) - 1;
+            return buildFinalizationRegion(next, context,
+                exit => setState({kind: "environment-exit", id: reserve(), slot, next: exit}, context.exceptionTarget),
+                (normal, thrown, protectedContext) => {
+                    const entry = buildStatement(statement.statement, normal, {...protectedContext, exceptionTarget: {target: thrown}});
+                    const entered = setState({kind: "object-scope-enter", id: slot, slot, sourceResultSlot, next: entry}, context.exceptionTarget);
+                    return buildExpressionResult(statement.expression, sourceResultSlot, entered, context) ?? next;
+                });
+        }
         if (ts.isLabeledStatement(statement)) {
             if (ts.isWhileStatement(statement.statement) || ts.isDoStatement(statement.statement) ||
                 ts.isForStatement(statement.statement)) {
@@ -1399,6 +1441,17 @@ export function planAsyncControlFlowGraph(
             );
         }
         if (ts.isSwitchStatement(statement)) {
+            const scopeDeclarations=directLexicalDeclarations(statement.caseBlock.clauses.flatMap(clause=>[...clause.statements]));
+            if(options.retainedSourceEnvironments && scopeDeclarations.length && !retainedScopeOwners.has(statement)) {
+                const resultSlot=expressionResults.push(statement.expression)-1;
+                retainedSwitchDiscriminators.set(statement,resultSlot);
+                const entered=buildLexicalRegion(statement,scopeDeclarations.map(declaration=>declaration.name),
+                    scopeDeclarations.filter((declaration):declaration is ts.FunctionDeclaration & {name:ts.Identifier}=>ts.isFunctionDeclaration(declaration)),next,context,
+                    (normal,protectedContext)=>buildStatement(statement,normal,protectedContext));
+                // Discriminator evaluation precedes CaseBlock instantiation.
+                const entry=buildExpressionResult(statement.expression,resultSlot,entered,context);
+                return entry??next;
+            }
             const clauses: { expression: ts.Expression | null; target: AsyncControlFlowTarget }[] =
                 new Array(statement.caseBlock.clauses.length);
             let fallthrough = next;
@@ -1416,7 +1469,7 @@ export function planAsyncControlFlowGraph(
             }
             const defaultClause = clauses.find((clause) => clause.expression === null);
             const defaultTarget = defaultClause?.target ?? next;
-            const discriminatorResultSlot = expressionResults.push(statement.expression) - 1;
+            const discriminatorResultSlot = retainedSwitchDiscriminators.get(statement) ?? expressionResults.push(statement.expression) - 1;
             const hasAwaitedCase = statement.caseBlock.clauses.some(
                 (clause) => ts.isCaseClause(clause) && containsAwait(clause.expression),
             );
@@ -1473,14 +1526,14 @@ export function planAsyncControlFlowGraph(
             // The CaseBlock environment is created after the discriminator
             // and before the first case expression, even when no lexical
             // declarations contribute captured cells.
-            const scopeId = reserve();
-            selectionEntry = setState({
+            if (!retainedScopeOwners.has(statement)) selectionEntry = setState({
                 kind: "scope-enter",
-                id: scopeId,
+                id: reserve(),
                 bindings: switchBindings,
                 functions: switchFunctions,
                 next: selectionEntry,
             }, context.exceptionTarget);
+            if (retainedSwitchDiscriminators.has(statement)) return selectionEntry;
             const entry = buildExpressionResult(
                 statement.expression,
                 discriminatorResultSlot,
@@ -1497,8 +1550,11 @@ export function planAsyncControlFlowGraph(
                 catchNext: AsyncControlFlowTarget,
                 catchContext: BuildContext,
             ): AsyncControlFlowTarget => {
-                let catchEntry = buildLexicalBlock(catchClause.block, catchNext, catchContext);
                 const binding = catchClause.variableDeclaration?.name ?? null;
+                if(options.retainedSourceEnvironments && binding && !retainedScopeOwners.has(catchClause))
+                    return buildLexicalRegion(catchClause,[binding],[],catchNext,catchContext,
+                        (normal,protectedContext)=>buildCatchEntry(catchClause,normal,protectedContext));
+                let catchEntry = buildLexicalBlock(catchClause.block, catchNext, catchContext);
                 if (catchClause.variableDeclaration) {
                     if (binding && ts.isIdentifier(binding)) {
                         declarations.push(catchClause.variableDeclaration);
@@ -1645,6 +1701,17 @@ export function planAsyncControlFlowGraph(
                 const initializer = declaration.initializer
                     ? unwrapExpression(declaration.initializer)
                     : null;
+                let withInitializer=false;
+                if(initializer && (statement.declarationList.flags & ts.NodeFlags.BlockScoped)===0)
+                    for(let node:ts.Node|undefined=declaration.parent;node;node=node.parent)
+                        if(ts.isWithStatement(node)&&node.statement.pos<=declaration.pos&&node.statement.end>=declaration.end){withInitializer=true;break;}
+                if(withInitializer){
+                    const assignment=ts.factory.createBinaryExpression(assignmentTargetFromBinding(declaration.name),ts.SyntaxKind.EqualsToken,declaration.initializer!);
+                    ts.setTextRange(assignment,declaration);Object.assign(assignment,{parent:declaration.parent});
+                    const entry=buildExpressionSequence(assignment,null,next,context);
+                    if(entry)return entry;
+                    supported=false;return next;
+                }
                 if (!ts.isIdentifier(declaration.name)) {
                     if (!initializer) {
                         supported = false;
@@ -1752,6 +1819,8 @@ export function planAsyncControlFlowGraph(
             case "sync":
             case "scope-enter":
             case "scope-clone":
+            case "object-scope-enter":
+            case "environment-exit":
             case "expression-sync":
             case "resource-enter":
             case "resource-dispose":

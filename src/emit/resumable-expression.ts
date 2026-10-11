@@ -17,6 +17,7 @@ export interface ResumableClassDefinition {
 
 type ValueOperation =
     | { readonly kind: "binding-reference"; readonly identifier: ts.Identifier }
+    | { readonly kind: "binding-receiver"; readonly reference: Extract<ResumableReference, {kind: "binding"}> }
     | {readonly kind:'class-start';readonly definition:ts.ClassLikeDeclaration}
     | {readonly kind:'class-heritage';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly superclass:ResumableValueSlot}
     | {readonly kind:'class-element';readonly definition:ts.ClassLikeDeclaration;readonly owner:ResumableValueSlot;readonly member:ts.ClassElement;readonly key:ResumableValueSlot|null}
@@ -178,6 +179,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         let receiver: number | null = null;
         const targetIsProperty = ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target);
         if (targetIsProperty) receiver = value(target.expression);
+        else if (ts.isIdentifier(target)) receiver = value(target);
         const apply = operation({ kind: "call", node, callee, receiver, arguments: actuals,
             construct: ts.isNewExpression(node) }, output, next);
         let argumentsEntry = apply;
@@ -201,6 +203,11 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         }
         if (ts.isCallExpression(node) && target.kind === ts.SyntaxKind.SuperKeyword)
             return operation({ kind: "super-constructor", node }, callee, argumentsEntry);
+        if (ts.isIdentifier(target)) return buildReference(target, reference => {
+            if (reference.kind !== "binding") throw new Error("identifier call requires a binding Reference");
+            const got = operation({kind: "binding-receiver", reference}, receiver!, argumentsEntry);
+            return operation({kind: "get", reference}, callee, got);
+        });
         if (!targetIsProperty) return build(targetExpression, callee, argumentsEntry, ts.isOptionalChain(node) ? skip : undefined);
         const calleeExit = ts.isOptionalChain(node) && !ts.isParenthesizedExpression(targetExpression)
             ? skip : operation({ kind: "undefined" }, callee, argumentsEntry);

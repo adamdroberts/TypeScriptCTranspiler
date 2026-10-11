@@ -57,6 +57,7 @@ tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
 
 tsc_value_t tsc_test262_direct_eval_call(
     tsc_value_t callee,
+    tsc_value_t receiver,
     tsc_value_t args,
     bool strict_caller
 ) {
@@ -67,7 +68,7 @@ tsc_value_t tsc_test262_direct_eval_call(
                 : tsc_value_undefined();
         return tsc_test262_direct_eval(source, strict_caller);
     }
-    return tsc_value_apply_function(callee, tsc_value_undefined(), args);
+    return tsc_value_apply_function(callee, receiver, args);
 }
 
 static void test262_capture_print_args(tsc_array_t* args) {

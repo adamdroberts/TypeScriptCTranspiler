@@ -92,6 +92,8 @@ export function earlyControlFlowStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
+        if (ts.isWithStatement(node) && isStrictCodeContext(node))
+            return {node, message:"with statement is not permitted in strict mode"};
         if (ts.isFunctionLike(node)) {
             const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
             if (body) {

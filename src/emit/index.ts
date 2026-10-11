@@ -18997,6 +18997,12 @@ class Emitter {
     private symbolForIdentifier(id: ts.Identifier): ts.Symbol | undefined {
         const parameterReference = this.parameterScopeReference(id);
         let sym = parameterReference ? parameterReference.symbol : this.checker.getSymbolAtLocation(id);
+        // The checker intentionally stops lookup inside a WithStatement;
+        // binding declarations still have canonical binder identities.
+        if (!sym && !parameterReference && this.withEnvironmentReferenceName(id) &&
+            (ts.isVariableDeclaration(id.parent) || ts.isBindingElement(id.parent) ||
+                ts.isParameter(id.parent) || ts.isFunctionDeclaration(id.parent) || ts.isClassDeclaration(id.parent)) && id.parent.name === id)
+            sym = (id.parent as ts.Node & {symbol?: ts.Symbol}).symbol;
         if (!parameterReference && ts.isShorthandPropertyAssignment(id.parent) && id.parent.name === id) {
             sym =
                 this.checker.getShorthandAssignmentValueSymbol(id.parent) ??
@@ -23064,7 +23070,6 @@ class Emitter {
 
     private sourceEnvironmentEnabled(source: ts.SourceFile): boolean {
         if (this.isCommonJsSourceFile(source)) return true;
-        if (!this.options.sourceEval && (!this.options.test262Observation || !this.isJavaScriptSourceFile(source))) return false;
         if (this.isSourceModuleEnvironment(source)) return true;
         const cached = this.sourceEnvironmentFiles.get(source);
         if (cached !== undefined) return cached;
@@ -23072,7 +23077,8 @@ class Emitter {
         let enabled = false;
         while (worklist.length > 0 && !enabled) {
             const node = worklist.pop()!;
-            if (this.isDirectEvalSyntax(node)) enabled = true;
+            if (ts.isWithStatement(node) ||
+                ((this.options.sourceEval || this.options.test262Observation && this.isJavaScriptSourceFile(source)) && this.isDirectEvalSyntax(node))) enabled = true;
             else ts.forEachChild(node, child => { worklist.push(child); });
         }
         this.sourceEnvironmentFiles.set(source, enabled);
@@ -23101,6 +23107,16 @@ class Emitter {
             return declaration === node || !this.isNodeWithin(declaration, node) ? identifier.text : null;
         }
         return null;
+    }
+
+    private withEnvironmentReferenceName(identifier: ts.Identifier): string | null {
+        return this.withEnvironmentContainsNode(identifier) ? identifier.text : null;
+    }
+
+    private withEnvironmentContainsNode(subject: ts.Node): boolean {
+        for (let node: ts.Node | undefined = subject.parent; node; node = node.parent)
+            if (ts.isWithStatement(node) && this.isNodeWithin(subject, node.statement)) return true;
+        return false;
     }
 
     private nearestEnclosingNewTargetOwner(node: ts.Node): ts.FunctionLikeDeclaration | null {
@@ -26364,6 +26380,7 @@ class Emitter {
     ): boolean {
         const generator = protocol !== "async", asyncGenerator = protocol === "async-generator";
         const graph = planAsyncControlFlowGraph(body, {
+            retainedSourceEnvironments: this.sourceEnvironmentEnabled(body.getSourceFile()),
             suspensionKind: protocol,
             instantiatedRoot: !!moduleSource,
             isModuleDefaultClass: node => this.anonymousDefaultClassDeclarations.has(node),
@@ -26918,6 +26935,8 @@ class Emitter {
         this.structDecls.line("tsc_realm_t* realm;");
         this.structDecls.line("tsc_parse_unit_t* parse_unit;");
         this.structDecls.line("tsc_environment_t* lexical_environment;");
+        for (const state of graph.states) if (state.kind === "object-scope-enter" || state.kind === "scope-enter" && state.retainedEnvironment)
+            this.structDecls.line(`tsc_environment_scope_t environment_scope_${state.kind === "object-scope-enter" ? state.slot : state.id};`);
         this.structDecls.line("int pc;");
         this.structDecls.line("int exception_pc;");
         this.structDecls.line("tsc_value_t exception_value;");
@@ -27109,6 +27128,8 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(binding);
                 const field = symbol ? fieldBySymbol.get(symbol) : undefined;
                 if (field?.cell?.kind === "local") emitCfgCellAllocation(callback, field);
+                if (field?.cell && this.sourceEnvironmentEnabled(body.getSourceFile()) && field.lexical)
+                    callback.line(`tsc_environment_alias(tsc_environment_current(), &(tsc_environment_binding_ref_t){ ${this.stringLit(binding.text)}, state->${field.field}, true, ${field.lexical.immutable ? "true" : "false"}, false });`);
                 return;
             }
             for (const element of binding.elements) {
@@ -27130,6 +27151,8 @@ class Emitter {
                             ? `*state->${field.field}.initialized_cell`
                             : "false",
                     );
+                    if (this.sourceEnvironmentEnabled(body.getSourceFile()) && field.lexical)
+                        callback.line(`tsc_environment_alias(tsc_environment_current(), &(tsc_environment_binding_ref_t){ ${this.stringLit(binding.text)}, state->${field.field}, true, ${field.lexical.immutable ? "true" : "false"}, false });`);
                 }
                 return;
             }
@@ -27549,6 +27572,9 @@ class Emitter {
                             evaluated=read(op.owner);
                         }else if (op.kind === "copy") evaluated = read(op.source);
                         else if (op.kind === "undefined") evaluated = "tsc_value_undefined()";
+                        else if (op.kind === "binding-receiver") evaluated = this.sourceReferencePlan(op.reference.identifier)
+                            ? `tsc_environment_reference_receiver(&state->expression_reference_${stateNode.slots[op.reference.slot]!})`
+                            : "tsc_value_undefined()";
                         else if (op.kind === "get") evaluated = getReference(op.reference);
                         else if (op.kind === "set") {
                             setReference(op.reference, read(op.source), graph.expressionResults[stateNode.slots[op.source]!]!);
@@ -27694,6 +27720,11 @@ class Emitter {
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "scope-enter") {
+                    if (stateNode.retainedEnvironment) {
+                        callback.line(`state->environment_scope_${stateNode.id} = (tsc_environment_scope_t){ .previous = tsc_environment_current(), .record = tsc_environment_new(tsc_environment_current(), false) };`);
+                        callback.line(`(void)tsc_environment_swap(state->environment_scope_${stateNode.id}.record);`);
+                        callback.line("state->lexical_environment = tsc_environment_current();");
+                    }
                     for (const binding of stateNode.bindings) {
                         emitFreshCfgBindingCells(binding);
                     }
@@ -27715,9 +27746,22 @@ class Emitter {
                     }
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "scope-clone") {
+                    if (this.sourceEnvironmentEnabled(body.getSourceFile())) {
+                        callback.line("tsc_environment_lexical_clone();");
+                        callback.line("state->lexical_environment = tsc_environment_current();");
+                    }
                     for (const binding of stateNode.bindings) {
                         emitClonedCfgBindingCells(binding);
                     }
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "object-scope-enter") {
+                    callback.line(`tsc_environment_object_enter(&state->environment_scope_${stateNode.slot}, state->expression_result_${stateNode.sourceResultSlot});`);
+                    callback.line("state->lexical_environment = tsc_environment_current();");
+                    releaseExpressionResult(stateNode.sourceResultSlot);
+                    emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "environment-exit") {
+                    callback.line(`tsc_environment_scope_leave(&state->environment_scope_${stateNode.slot});`);
+                    callback.line("state->lexical_environment = tsc_environment_current();");
                     emitTransition(stateNode.next.id);
                 } else if (stateNode.kind === "iterator-init") {
                     const source = stateNode.sourceResultSlot === null
@@ -27736,8 +27780,13 @@ class Emitter {
                     emitTransition(stateNode.done.id);
                     callback.close();
                     if (ts.isVariableDeclarationList(stateNode.statement.initializer) &&
-                        (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0)
+                        (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                        if (this.sourceEnvironmentEnabled(body.getSourceFile())) {
+                            callback.line("tsc_environment_lexical_clone();");
+                            callback.line("state->lexical_environment = tsc_environment_current();");
+                        }
                         emitFreshCfgBindingCells(stateNode.binding);
+                    }
                     if (stateNode.bindingValueSlot === null) return false;
                     emitBindingValueAssignment(stateNode.bindingValueSlot, { c: item, ty: T_VALUE }, stateNode.binding);
                     emitTransition(stateNode.body.id);
@@ -27789,6 +27838,10 @@ class Emitter {
                     callback.line(`tsc_value_t ${item} = tsc_value_get_prop(${step}, tsc_str_from_lit("value", 5));`);
                     if (ts.isVariableDeclarationList(stateNode.statement.initializer) &&
                         (stateNode.statement.initializer.flags & ts.NodeFlags.BlockScoped) !== 0) {
+                        if (this.sourceEnvironmentEnabled(body.getSourceFile())) {
+                            callback.line("tsc_environment_lexical_clone();");
+                            callback.line("state->lexical_environment = tsc_environment_current();");
+                        }
                         emitFreshCfgBindingCells(stateNode.binding);
                     }
                     if (stateNode.bindingValueSlot === null) return false;
@@ -28969,6 +29022,18 @@ class Emitter {
         if (ts.isForOfStatement(stmt)) return this.emitSyncIteration(buf, stmt);
         if (ts.isForInStatement(stmt)) return this.emitSyncIteration(buf, stmt);
         if (ts.isBlock(stmt)) return this.emitBlock(buf, stmt);
+        if (ts.isWithStatement(stmt)) {
+            const object = this.coerce(this.emitExpr(stmt.expression), T_VALUE, stmt.expression);
+            const scope = this.freshTemp("_with_scope");
+            buf.line("{");
+            buf.indent++;
+            buf.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
+            buf.line(`tsc_environment_object_enter(&${scope}, ${object});`);
+            this.emitStmt(buf, stmt.statement);
+            buf.indent--;
+            buf.line("}");
+            return;
+        }
         if (ts.isReturnStatement(stmt)) return this.emitReturn(buf, stmt);
         if (ts.isThrowStatement(stmt)) return this.emitThrow(buf, stmt);
         if (ts.isTryStatement(stmt)) return this.emitTry(buf, stmt);
@@ -29166,6 +29231,18 @@ class Emitter {
         const isConst =
             (list.flags & ts.NodeFlags.Const) !== 0;
         for (const d of list.declarations) {
+            if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && this.withEnvironmentContainsNode(d)) {
+                if (!d.initializer) continue;
+                const references = new Map<ts.Identifier, string>();
+                this.emitBindingInitialization(buf, d.name, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer),
+                    (target, identifier, value) => target.line(`(void)(${this.sourceReferencePlan(identifier)!.set(`&${references.get(identifier)!}`, value)});`),
+                    (target, identifier) => {
+                        const reference = this.freshTemp("_with_initializer_reference");
+                        references.set(identifier, reference);
+                        target.line(`tsc_reference_t ${reference} = ${this.sourceReferencePlan(identifier)!.capture};`);
+                    });
+                continue;
+            }
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
             if (this.emitModuleVariableInitializer(buf, d)) continue;
             if (this.resourceDeclarationHint(d) !== null && !this.emittingResourceBindings.has(d)) {
@@ -31929,6 +32006,11 @@ class Emitter {
         if (declarations.length > 0 && this.sourceEnvironmentEnabled(declarations[0]!.getSourceFile())) {
             for (const [symbol, binding] of lexicalScope) if (!this.environmentBindingIsLexical(symbol))
                 buf.line(`tsc_environment_alias_variable(&${this.environmentBindingReference(symbol, binding.declaration)});`);
+            const environment = this.freshTemp("_source_lexical_scope");
+            buf.line(`tsc_environment_scope_t ${environment} __attribute__((cleanup(tsc_environment_scope_leave))) = { .previous = tsc_environment_current(), .record = tsc_environment_new(tsc_environment_current(), false) };`);
+            buf.line(`(void)tsc_environment_swap(${environment}.record);`);
+            for (const [symbol, binding] of lexicalScope) if (this.environmentBindingIsLexical(symbol))
+                buf.line(`tsc_environment_alias(${environment}.record, &(tsc_environment_binding_ref_t){ ${this.stringLit(binding.name)}, (tsc_async_cell_ref_t){ (void*)&(${binding.value}), (void**)&(${binding.gcRoot}), &(${binding.initialized}) }, true, ${binding.immutable ? "true" : "false"}, false });`);
         }
         return lexicalScope;
     }
@@ -32463,6 +32545,21 @@ class Emitter {
                     buf.line(`tsc_value_t ${name} = ${error};`);
                     if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
                 }
+                if (this.sourceEnvironmentEnabled(clause.getSourceFile())) {
+                    const scope = this.freshTemp("_source_catch_scope");
+                    const value = cell ? `*${cell.cellName}` : name;
+                    const root = cell?.rootCellName ?? this.freshTemp("_source_catch_root");
+                    const initialized = cell?.initializedCellName ?? this.freshTemp("_source_catch_initialized");
+                    if (!cell?.rootCellName) {
+                        buf.line(`void** ${root} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
+                        buf.line(`*${root} = tsc_value_gc_root(${value});`);
+                    }
+                    if (!cell?.initializedCellName) buf.line(`bool* ${initialized} = (bool*)TSC_GC_MALLOC(sizeof(bool));`);
+                    buf.line(`*${initialized} = true;`);
+                    buf.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = { .previous = tsc_environment_current(), .record = tsc_environment_new(tsc_environment_current(), false) };`);
+                    buf.line(`(void)tsc_environment_swap(${scope}.record);`);
+                    buf.line(`tsc_environment_alias(${scope}.record, &(tsc_environment_binding_ref_t){ ${this.stringLit(declaration.name.text)}, (tsc_async_cell_ref_t){ (void*)&(${value}), ${root}, ${initialized} }, true, false, false });`);
+                }
             }
             try { this.emitBlock(buf, clause.block); } finally {
                 if (symbol) this.catchValueSymbols.delete(symbol);
@@ -32573,6 +32670,8 @@ class Emitter {
 
         if (ts.isPrivateIdentifier(expr)) return this.emitPrivateNameValue(expr);
         if (ts.isIdentifier(expr)) {
+            const withName = this.withEnvironmentReferenceName(expr);
+            if (withName) return { c: this.sourceReferencePlan(expr)!.get, ty: T_VALUE };
             const wrapperBinding = this.commonJsWrapperBindingName(expr);
             if (wrapperBinding) return { c: `tsc_environment_reference_get(${this.stringLit(wrapperBinding)})`, ty: T_VALUE };
             const imported = this.commonJsImportForIdentifier(expr);
@@ -32962,6 +33061,7 @@ class Emitter {
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
         if (ts.isIdentifier(to.expression) && !this.classNameBindingForIdentifier(to.expression) && (
+            this.withEnvironmentReferenceName(to.expression) ||
             this.test262ScriptGlobalBindingName(to.expression) ||
             this.isSourceGlobalReference(to.expression) ||
             this.ordinaryNativeGlobalConstructor(to.expression) ||
@@ -32969,7 +33069,7 @@ class Emitter {
             !this.symbolForIdentifier(to.expression)
         )) {
             return {
-                c: `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(to.expression.text)})`,
+                c: `tsc_environment_reference_typeof_strict(${this.test262GlobalBindingKey(to.expression.text)}, ${this.nodeIsInStrictMode(to) ? "true" : "false"})`,
                 ty: T_STRING,
             };
         }
@@ -33148,7 +33248,7 @@ class Emitter {
             this.ordinaryNativeGlobalConstructor(expr)
         )) {
             return `tsc_str_eq(` +
-                `tsc_environment_reference_typeof(${this.test262GlobalBindingKey(expr.text)}), ` +
+                `tsc_environment_reference_typeof_strict(${this.test262GlobalBindingKey(expr.text)}, ${this.nodeIsInStrictMode(expr) ? "true" : "false"}), ` +
                 `${this.stringLit(expected)})`;
         }
         const inner = this.emitExpr(expr);
@@ -33257,6 +33357,7 @@ class Emitter {
 
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
         const tag = this.unwrapTransparentExpression(tt.tag);
+        if (ts.isIdentifier(tag) && this.withEnvironmentReferenceName(tag)) return this.emitCapturedBindingCall(tt, tag);
         if (this.isSuperProperty(tag)) return this.emitSuperPropertyCall(tt, tag);
         if (ts.isPropertyAccessExpression(tag)) {
             if (ts.isPrivateIdentifier(tag.name)) return this.emitPrivatePropertyCall(tt, tag);
@@ -33275,18 +33376,19 @@ class Emitter {
     }
 
     private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
-        if (this.classNameBindingForIdentifier(id)) return null;
+        const withName = this.withEnvironmentReferenceName(id);
+        if (!withName && this.classNameBindingForIdentifier(id)) return null;
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         const referenceName = this.test262HostGlobalBindingName(id) ??
             (this.isSourceGlobalReference(id) ? id.text : null);
-        const name = this.namedFunctionBindingName(id) ?? this.commonJsWrapperBindingName(id) ?? scriptGlobal ?? referenceName ??
+        const name = withName ?? this.namedFunctionBindingName(id) ?? this.commonJsWrapperBindingName(id) ?? scriptGlobal ?? referenceName ??
             (this.isUnresolvedParameterScopeReference(id) ? id.text : null) ?? this.environmentShadowReferenceName(id) ??
             (this.sourceEnvironmentEnabled(id.getSourceFile()) && this.isImplicitArgumentsIdentifier(id) ? "arguments" : null);
         if (!name) return null;
         const key = this.test262GlobalBindingKey(name);
         const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
         return {
-            get: `tsc_environment_reference_get(${key})`,
+            get: `tsc_environment_reference_read(${key}, ${strict})`,
             capture: `tsc_environment_reference_capture(${key}, ${strict})`,
             set: (reference, value) => this.emitSequencedExpr(T_VALUE, [
                 { value: { c: value, ty: T_VALUE } },
@@ -35076,6 +35178,10 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
+        const withTarget = this.unwrapTransparentExpression(call.expression);
+        if (ts.isIdentifier(withTarget) && this.withEnvironmentReferenceName(withTarget)) {
+            return this.emitCapturedBindingCall(call, withTarget);
+        }
         if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(call)) return this.emitDynamicValueCall(call,this.emitExpr(call.expression));
         if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
             return this.emitDynamicImportCall(call);
@@ -35819,6 +35925,15 @@ class Emitter {
         ], ([fn, receiver]) => this.emitOrdinaryCallApplication(call, fn, receiver));
     }
 
+    private emitCapturedBindingCall(call: ts.CallExpression | ts.TaggedTemplateExpression, identifier: ts.Identifier): EmitResult {
+        const reference = this.sourceReferencePlan(identifier)!;
+        const captured = this.freshTemp("_source_call_reference");
+        const invocation = this.emitDynamicValueCall(call,
+            { c: `tsc_environment_reference_get_captured(&${captured})`, ty: T_VALUE },
+            { c: `tsc_environment_reference_receiver(&${captured})`, ty: T_VALUE });
+        return { c: `({ tsc_reference_t ${captured} = ${reference.capture}; ${invocation.c}; })`, ty: T_VALUE };
+    }
+
     private signatureHasRestParameter(params: readonly ts.Symbol[]): boolean {
         return params.some((param) => {
             const decl = param.valueDeclaration;
@@ -35835,17 +35950,20 @@ class Emitter {
             return `tsc_environment_super_construct(${environment.c}, ${callee}, ${argumentsValue})`;
         }
         if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(node))
-            return this.emitDirectEvalApplication(node,callee,argumentsValue);
+            return this.emitDirectEvalApplication(node,callee,receiver,argumentsValue);
         return `tsc_value_apply_function(${callee}, ${receiver}, ${argumentsValue})`;
     }
 
-    private emitDirectEvalApplication(call: ts.CallExpression,callee: string,argumentsValue: string): string {
+    private emitDirectEvalApplication(call: ts.CallExpression,callee: string,receiver: string,argumentsValue: string): string {
         let owner: ts.FunctionLikeDeclaration | null = null;
         for (let node: ts.Node | undefined = call.parent; node; node = node.parent) {
             if (ts.isFunctionLike(node) && "body" in node) { owner = node as ts.FunctionLikeDeclaration; break; }
         }
         const references: string[] = [];
         for (const scopedSymbol of this.checker.getSymbolsInScope(call, ts.SymbolFlags.Value)) {
+            // With lookup follows the retained environment tree. Projecting
+            // checker-visible outer bindings above its object would shadow it.
+            if (this.withEnvironmentContainsNode(call)) break;
             const identifier = this.environmentBindingIdentifier(scopedSymbol);
             const symbol = identifier ? this.symbolForIdentifier(identifier) ?? scopedSymbol : scopedSymbol;
             const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
@@ -35873,7 +35991,7 @@ class Emitter {
             `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
             `tsc_environment_private_names_project(${scope}.record, ${privateProjection}, ${privateNames.length}); ` +
             `(void)tsc_environment_swap(${scope}.record); ` +
-            `tsc_test262_direct_eval_call(${callee}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
+            `tsc_test262_direct_eval_call(${callee}, ${receiver}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
     }
 
     private cStringLiteral(value: string): string {
@@ -45711,6 +45829,8 @@ class Emitter {
     }
 
     private emitNew(n: ts.NewExpression): EmitResult {
+        const target = this.unwrapTransparentExpression(n.expression);
+        if (ts.isIdentifier(target) && this.withEnvironmentReferenceName(target)) return this.emitDynamicValueConstruct(n, this.emitExpr(target));
         if (
             ts.isPropertyAccessExpression(n.expression) &&
             ts.isIdentifier(n.expression.expression) &&
