@@ -1,0 +1,22 @@
+"use strict";
+const buffer = new ArrayBuffer(16);
+const view = new DataView(buffer, 2, 12);
+view.setUint32(1, 0x12345678, true);
+console.log("bytes", view.getUint8(1), view.getUint8(4), view.getUint32(1, true), view.getUint32(1));
+view.setInt16(0, -1234);
+console.log("signed", view.getInt16(0), view.byteLength, view.byteOffset, view.buffer === buffer);
+view.setBigInt64(0, -9223372036854775808n, true);
+console.log("bigint", view.getBigInt64(0, true), view.getBigUint64(0, true));
+view.setFloat16(0, 1.00048828125);
+console.log("float16", view.getFloat16(0));
+view.setFloat32(0, -0); view.setFloat64(4, Math.PI, true);
+console.log("floats", Object.is(view.getFloat32(0), -0), view.getFloat64(4, true));
+console.log("owners", typeof DataView, view instanceof DataView, view.constructor === DataView, Object.getPrototypeOf(view) === DataView.prototype, Object.keys(view).length, Object.prototype.toString.call(view));
+const get = DataView.prototype.getUint8;
+console.log("borrowed", get.call(view, 0), get.length, get.name);
+try { get.call({} as any, 0); } catch (error) { console.log("brand", error instanceof TypeError); }
+let effects = "";
+const extra: [ArrayBuffer, number, number, number] = [buffer, 0, 1, (() => { effects += "extra"; return 9; })()];
+const spread = new DataView(...extra);
+console.log("spread", spread.byteLength, effects);
+console.log("byte lengths", Buffer.byteLength(view), Math.max(Buffer.byteLength(view), view.byteLength));

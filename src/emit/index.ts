@@ -38,7 +38,6 @@ import {
     T_BIGINT,
     T_BOOLEAN,
     T_BUFFER,
-    T_DATA_VIEW,
     T_TEXT_DECODER,
     T_TEXT_ENCODER,
     T_DATE,
@@ -5458,7 +5457,6 @@ class Emitter {
                 "Event",
                 "EventTarget",
                 "ArrayBuffer",
-                "DataView",
             ]);
             if (emptyOwnKeyBuiltins.has(name)) {
                 return this.isSideEffectFreeNewExpression(unwrapped, seenConsts) ? 0 : null;
@@ -6453,7 +6451,6 @@ class Emitter {
             if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
-            if (name === "DataView") return this.isSideEffectFreeDataViewConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
                     (
@@ -6547,23 +6544,6 @@ class Emitter {
             value >= 0
             ? value
             : null;
-    }
-
-    private isSideEffectFreeDataViewConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length < 1 || args.length > 3) return false;
-        const bufferLength = this.sideEffectFreeFreshArrayBufferByteLength(args[0]!, seenConsts);
-        if (bufferLength === null) return false;
-        const offset = this.sideEffectFreeOptionalNonnegativeInteger(args[1], seenConsts, 0);
-        if (offset === null || offset > bufferLength) return false;
-        const viewLength = this.sideEffectFreeOptionalNonnegativeInteger(
-            args[2],
-            seenConsts,
-            bufferLength - offset,
-        );
-        return viewLength !== null && offset + viewLength <= bufferLength;
     }
 
     private isSideEffectFreeEventConstructorArgs(
@@ -12317,8 +12297,7 @@ class Emitter {
                 unwrapped.expression.text === "SuppressedError" ||
                 unwrapped.expression.text === "Event" ||
                 unwrapped.expression.text === "EventTarget" ||
-                unwrapped.expression.text === "ArrayBuffer" ||
-                unwrapped.expression.text === "DataView"
+                unwrapped.expression.text === "ArrayBuffer"
             )
         ) {
             return this.isSideEffectFreeNewExpression(unwrapped, seenConsts);
@@ -21309,7 +21288,6 @@ class Emitter {
             type.kind === "urlsearchparams" ||
             type.kind === "buffer" ||
             type.kind === "arraybuffer" ||
-            type.kind === "dataview" ||
             type.kind === "textencoder" ||
             type.kind === "textdecoder" ||
             type.kind === "fsstats" ||
@@ -34913,7 +34891,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "textencoder", "textdecoder", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -34988,7 +34966,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "textencoder", "textdecoder", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -41559,7 +41537,7 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "arraybuffer", "dataview", "textencoder", "textdecoder", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "arraybuffer", "textencoder", "textdecoder", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
             unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/arraybuffer/dataview/textencoder/textdecoder/void in this subset");
         }
@@ -46180,28 +46158,6 @@ class Emitter {
                 `tsc_array_buffer_new(${hasLength ? vals[0]! : "0.0"})`,
             );
         }
-        if (cls === "DataView") {
-            const args = n.arguments ?? [];
-            if (args.length < 1) unsupported(n, "new DataView() expects buffer");
-            const specs: SequencedCallArg[] = [
-                { value: this.emitExpr(args[0]!), target: T_ARRAY_BUFFER, node: args[0]! },
-            ];
-            const hasOffset = args.length >= 2 && !this.isUndefinedExpression(args[1]);
-            const hasLength = args.length >= 3 && !this.isUndefinedExpression(args[2]);
-            if (hasOffset) {
-                specs.push({ value: this.emitExpr(args[1]!), target: T_NUMBER, node: args[1]! });
-            }
-            if (hasLength) {
-                specs.push({ value: this.emitExpr(args[2]!), target: T_NUMBER, node: args[2]! });
-            }
-            specs.push(...this.ignoredArgumentSpecs(args, 3));
-            return this.emitSequencedExpr(T_DATA_VIEW, specs, (vals) => {
-                let index = 1;
-                const offset = hasOffset ? vals[index++]! : "0.0";
-                const length = hasLength ? vals[index++]! : "0.0";
-                return `tsc_data_view_new(${vals[0]!}, ${offset}, ${length}, ${hasLength ? "true" : "false"})`;
-            });
-        }
         if (cls === "EventEmitter") {
             return this.emitSequencedExpr(
                 T_EVENT_EMITTER,
@@ -46729,16 +46685,6 @@ class Emitter {
         }
         if (recv.ty.kind === "arraybuffer" && pa.name.text === "byteLength") {
             return { c: `tsc_array_buffer_byte_length(${recv.c})`, ty: T_NUMBER };
-        }
-        if (recv.ty.kind === "dataview") {
-            switch (pa.name.text) {
-                case "buffer":
-                    return { c: `tsc_data_view_buffer(${recv.c})`, ty: T_ARRAY_BUFFER };
-                case "byteOffset":
-                    return { c: `tsc_data_view_byte_offset(${recv.c})`, ty: T_NUMBER };
-                case "byteLength":
-                    return { c: `tsc_data_view_byte_length(${recv.c})`, ty: T_NUMBER };
-            }
         }
         if (recv.ty.kind === "fsstats") {
             const numericStatsProps: Record<string, string> = {
@@ -47515,7 +47461,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "dataview", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -47551,8 +47497,6 @@ class Emitter {
                     return `tsc_value_as_url_search_params(${r.c})`;
                 case "arraybuffer":
                     return `tsc_value_as_array_buffer(${r.c})`;
-                case "dataview":
-                    return `tsc_value_as_data_view(${r.c})`;
                 case "textencoder":
                     return `tsc_value_as_text_encoder(${r.c})`;
                 case "textdecoder":
@@ -47634,8 +47578,6 @@ class Emitter {
                 return `tsc_value_url_search_params(${r.c})`;
             case "arraybuffer":
                 return `tsc_value_array_buffer(${r.c})`;
-            case "dataview":
-                return `tsc_value_data_view(${r.c})`;
             case "textencoder":
                 return `tsc_value_text_encoder(${r.c})`;
             case "textdecoder":
@@ -48175,7 +48117,7 @@ function requireNumber(node: ts.Node, t: CType): void {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "dataview", "fsstats", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "arraybuffer", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

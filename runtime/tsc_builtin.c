@@ -653,6 +653,22 @@ static double number_round_binary_format(double number, const tsc_binary_format_
     return rounded;
 }
 
+/* Shared fixed-width byte projections preserve all BigInt bits. */
+uint64_t tsc_bigint_to_uint64(const tsc_bigint_t* value) {
+    mpz_t reduced;mpz_init(reduced);mpz_fdiv_r_2exp(reduced,value->value,64);
+    uint64_t result=0;size_t count;
+    mpz_export(&result,&count,1,sizeof(result),0,0,reduced);mpz_clear(reduced);return result;
+}
+tsc_bigint_t* tsc_bigint_from_uint64(uint64_t bits,bool is_signed) {
+    tsc_bigint_t* result=bigint_alloc();
+    mpz_import(result->value,1,1,sizeof(bits),0,0,&bits);
+    if(is_signed&&(bits&(UINT64_C(1)<<63))){
+        mpz_t modulus;mpz_init_set_ui(modulus,1);mpz_mul_2exp(modulus,modulus,64);
+        mpz_sub(result->value,result->value,modulus);mpz_clear(modulus);
+    }
+    return result;
+}
+
 double tsc_bigint_to_number(const tsc_bigint_t* value) {
     return tsc_bigint_to_number_scaled(value, 0);
 }
@@ -929,8 +945,9 @@ tsc_buffer_t* buffer_alloc_len(size_t len) {
 }
 
 static size_t array_buffer_to_index(double n, const char* label) {
-    if (isnan(n) || isinf(n) || n < 0.0 || floor(n) != n || n > (double)SIZE_MAX) {
-        tsc_throw_str(tsc_str_from_cstr(label));
+    n = isnan(n) ? 0.0 : trunc(n);
+    if (n < 0.0 || n > 9007199254740991.0 || n > (double)SIZE_MAX) {
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr(label));
     }
     return (size_t)n;
 }

@@ -312,6 +312,8 @@ tsc_bigint_t* tsc_bigint_from_str(const tsc_str_t* s);
 tsc_bigint_t* tsc_bigint_try_from_str(const tsc_str_t* s);
 tsc_bigint_t* tsc_bigint_from_num(double n);
 tsc_bigint_t* tsc_bigint_from_bool(bool b);
+uint64_t tsc_bigint_to_uint64(const tsc_bigint_t* value);
+tsc_bigint_t* tsc_bigint_from_uint64(uint64_t bits, bool is_signed);
 tsc_bigint_t* tsc_bigint_as_n(const tsc_bigint_t* value, double bits, bool is_signed);
 double tsc_bigint_to_number(const tsc_bigint_t* value);
 /* Exact integer times 2^binary_scale, rounded once to binary64. */
@@ -1020,6 +1022,8 @@ tsc_value_t tsc_value_buffer(struct tsc_buffer* b);
 tsc_value_t tsc_value_url(struct tsc_url* url);
 tsc_value_t tsc_value_url_search_params(struct tsc_url_search_params* params);
 tsc_value_t tsc_value_array_buffer(struct tsc_array_buffer* buffer);
+tsc_value_t tsc_data_view_constructor_value(void);
+tsc_value_t tsc_data_view_prototype_value(void);
 tsc_value_t tsc_value_data_view(struct tsc_data_view* view);
 tsc_value_t tsc_value_text_encoder(struct tsc_text_encoder* encoder);
 tsc_value_t tsc_value_text_decoder(struct tsc_text_decoder* decoder);

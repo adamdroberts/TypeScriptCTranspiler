@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Added ordinary DataView constructor/prototype owners and shared byte access for Number, BigInt and floating-point formats, including Float16. Removed native source shortcuts; preserve conversion/detachment order, mutable property reads and boxed Buffer.byteLength getter results. Corrected numeric buffer-index truncation and RangeError identity. Differential properties and typed consumers cover fixed buffers; resizable/shared backing stores remain open.
+
 - Lower Buffer static operations through a complete boxed argument List, with runtime numeric validation and source-observable concatenation passes.
 
 - Give Error instances ordinary property owners, shared payload roots and descriptors, and AggregateError construction through the existing IteratorRecord.

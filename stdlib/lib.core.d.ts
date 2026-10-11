@@ -646,12 +646,38 @@ interface ArrayBufferConstructor {
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
 interface DataView {
+    constructor: DataViewConstructor;
     readonly buffer: ArrayBuffer;
     readonly byteLength: number;
     readonly byteOffset: number;
+    getInt8(byteOffset: number): number;
+    setInt8(byteOffset: number, value: number): void;
+    getUint8(byteOffset: number): number;
+    setUint8(byteOffset: number, value: number): void;
+    getInt16(byteOffset: number, littleEndian?: boolean): number;
+    setInt16(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getUint16(byteOffset: number, littleEndian?: boolean): number;
+    setUint16(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getInt32(byteOffset: number, littleEndian?: boolean): number;
+    setInt32(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getUint32(byteOffset: number, littleEndian?: boolean): number;
+    setUint32(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getFloat16(byteOffset: number, littleEndian?: boolean): number;
+    setFloat16(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getFloat32(byteOffset: number, littleEndian?: boolean): number;
+    setFloat32(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getFloat64(byteOffset: number, littleEndian?: boolean): number;
+    setFloat64(byteOffset: number, value: number, littleEndian?: boolean): void;
+    getBigInt64(byteOffset: number, littleEndian?: boolean): bigint;
+    setBigInt64(byteOffset: number, value: bigint, littleEndian?: boolean): void;
+    getBigUint64(byteOffset: number, littleEndian?: boolean): bigint;
+    setBigUint64(byteOffset: number, value: bigint, littleEndian?: boolean): void;
 }
 interface DataViewConstructor {
-    new(buffer: ArrayBuffer, byteOffset?: number, byteLength?: number): DataView;
+    readonly prototype: DataView;
+    readonly name: string;
+    readonly length: number;
+    new(buffer: ArrayBuffer, byteOffset?: number, byteLength?: number, ...ignored: any[]): DataView;
 }
 declare var DataView: DataViewConstructor;
 interface Function {

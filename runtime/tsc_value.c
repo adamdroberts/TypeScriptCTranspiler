@@ -3554,6 +3554,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_bigint);
         case TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE:
             return primitive_prototype(&primitive_symbol);
+        case TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE:
+            return tsc_data_view_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
         case TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE:
@@ -9090,8 +9092,8 @@ tsc_value_t tsc_buffer_static_call(const char* name,const tsc_array_t* arguments
                 }
                 if(value_is_box(first)&&value_tag(first)==TSC_VALUE_TAG_OBJECT){
                     tsc_object_t* object=value_ptr(first);
-                    if(object->is_array_buffer)return tsc_value_num(tsc_array_buffer_byte_length(object->class_ptr));
-                    if(object->is_data_view)return tsc_value_num(tsc_data_view_byte_length(object->class_ptr));
+                    if(object->is_array_buffer||object->is_data_view||object->is_typed_array)
+                        return tsc_value_get_prop(first,tsc_str_from_lit("byteLength",10));
                 }
                 return tsc_value_num(buffer_static_bytes(first,"ERR_INVALID_ARG_TYPE")->len);
             }
@@ -9143,13 +9145,15 @@ tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* buffer) {
     return tsc_value_object(o);
 }
 
-tsc_value_t tsc_value_data_view(tsc_data_view_t* view) {
+tsc_value_t tsc_value_data_view(tsc_data_view_t* input) {
+    tsc_data_view_t* volatile view=input;
     if (!view) return tsc_value_null();
     if (view->object) return tsc_value_object(view->object);
-    tsc_object_t* o = tsc_object_new_class(view);
-    o->is_data_view = true;
-    view->object = o;
-    return tsc_value_object(o);
+    tsc_object_t* volatile object=tsc_object_new_class(view);
+    object->is_data_view=true;view->object=object;
+    tsc_value_t result=tsc_value_object(object);
+    (void)tsc_value_object_set_prototype_of(result,tsc_data_view_prototype_value());
+    return result;
 }
 
 tsc_value_t tsc_value_text_encoder(tsc_text_encoder_t* encoder) {

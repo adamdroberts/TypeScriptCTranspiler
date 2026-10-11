@@ -1955,8 +1955,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-canonicalizekeyedcollectionkey` — CanonicalizeKeyedCollectionKey ( _key_: an ECMAScript language value, ): an ECMAScript language value: exact disposition and partitions missing.
 - [ ] **Structured Data** (`sec-structured-data`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ArrayBuffer; SharedArrayBuffer; DataView; Atomics; JSON.
-  - Linked local regression evidence: property: tests/property/json-parse-materialization.property.test.ts; stress: json_parse_deep_worklist; E2E: array_buffer_dataview, json, json_parse_errors, json_parse_deep_worklist.
-  - Known blockers: Shared memory, Atomics, detachment, and complete JSON semantics are not verified.
+  - Linked local regression evidence: property: tests/property/json-parse-materialization.property.test.ts, tests/property/dataview-owner.property.test.ts; stress: json_parse_deep_worklist; E2E: array_buffer_dataview, json, json_parse_errors, json_parse_deep_worklist, data_view_ordinary.
+  - Known blockers: DataView fixed-buffer owners, scalar byte access, conversion/detachment ordering and retained view/buffer graphs have local differential evidence. Resizable/shared backing stores, complete buffer witness and cross-realm semantics, Atomics, complete JSON semantics and eligible exhaustive Test262 evidence remain open.
   - [ ] `sec-structured-data` — Structured Data: exact disposition and partitions missing.
   - [ ] `sec-arraybuffer-objects` — ArrayBuffer Objects: exact disposition and partitions missing.
   - [ ] `sec-arraybuffer-notation` — Notation: exact disposition and partitions missing.

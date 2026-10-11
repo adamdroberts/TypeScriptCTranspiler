@@ -1,5 +1,6 @@
 const empty = new ArrayBuffer();
 console.log("empty:", empty.byteLength);
+console.log("numeric index:", new ArrayBuffer(3.75).byteLength, new ArrayBuffer(NaN).byteLength, new ArrayBuffer(-0.5).byteLength);
 
 const buffer = new ArrayBuffer(8);
 const view = new DataView(buffer, 2, 4);
@@ -23,17 +24,17 @@ console.log(
 try {
     console.log("bad buffer:", new ArrayBuffer(-1).byteLength);
 } catch (err: any) {
-    console.log("bad buffer:", err);
+    console.log("bad buffer:", err instanceof RangeError);
 }
 
 try {
     console.log("bad offset:", new DataView(buffer, 9).byteLength);
 } catch (err: any) {
-    console.log("bad offset:", err);
+    console.log("bad offset:", err instanceof RangeError);
 }
 
 try {
     console.log("bad length:", new DataView(buffer, 7, 2).byteLength);
 } catch (err: any) {
-    console.log("bad length:", err);
+    console.log("bad length:", err instanceof RangeError);
 }

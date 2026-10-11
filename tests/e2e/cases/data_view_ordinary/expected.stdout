@@ -1,0 +1,10 @@
+bytes 120 18 305419896 2018915346
+signed -1234 12 2 true
+bigint -9223372036854775808n 9223372036854775808n
+float16 1
+floats true 3.141592653589793
+owners function true true true 0 [object DataView]
+borrowed 128 1 getUint8
+brand true
+spread 1 extra
+byte lengths 12 12

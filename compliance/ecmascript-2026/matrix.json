@@ -3044,8 +3044,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ArrayBuffer", "SharedArrayBuffer", "DataView", "Atomics", "JSON"],
-      "localEvidence": { "property": ["tests/property/json-parse-materialization.property.test.ts"], "generatedRegression": [], "stress": ["json_parse_deep_worklist"], "e2e": ["array_buffer_dataview", "json", "json_parse_errors", "json_parse_deep_worklist"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_object.c"] },
-      "knownGaps": ["Shared memory, Atomics, detachment, and complete JSON semantics are not verified."]
+      "localEvidence": { "property": ["tests/property/json-parse-materialization.property.test.ts", "tests/property/dataview-owner.property.test.ts"], "generatedRegression": [], "stress": ["json_parse_deep_worklist"], "e2e": ["array_buffer_dataview", "json", "json_parse_errors", "json_parse_deep_worklist", "data_view_ordinary"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#DataView", "stdlib/lib.core.d.ts#DataViewConstructor"], "implementation": ["runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_dataview.c", "runtime/tsc_dataview.def"] },
+      "knownGaps": ["DataView fixed-buffer owners, scalar byte access, conversion/detachment ordering and retained view/buffer graphs have local differential evidence. Resizable/shared backing stores, complete buffer witness and cross-realm semantics, Atomics, complete JSON semantics and eligible exhaustive Test262 evidence remain open."]
     },
     {
       "id": "managing-memory",
