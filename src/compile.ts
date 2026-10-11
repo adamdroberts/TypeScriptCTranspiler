@@ -269,9 +269,7 @@ function permanentLimitDiagnostics(
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
                     if (expr.text === "eval" && isUnshadowedGlobalBindingIdentifier(expr, checker)) {
-                        const source = node.arguments[0] ? runtimeCodeStringText(node.arguments[0]!) : "";
                         const canDispatchRuntimeManifest =
-                            source === null &&
                             !!(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode));
                         const canDispatchFiniteEval = finiteEvalCalls.get(node) === true;
                         const canCompileWithoutDelegation = node.arguments.length === 0 || canDispatchFiniteEval;
@@ -524,10 +522,6 @@ function stringSpecifierTexts(expr: ts.Expression): string[] {
 }
 
 
-
-function runtimeCodeStringText(expr: ts.Expression): string | null {
-    return staticStringExpressionText(expr);
-}
 
 function addNativeAddonDiagnostics(
     node: ts.Node,

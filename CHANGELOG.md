@@ -5017,3 +5017,5 @@ Contextual JavaScript identifier parsing now uses one offset-preserving token ma
 Fixed native compilation and binding ownership for duplicate sloppy simple parameters. Ordered ABI slots initialize one source binding, preserving omitted trailing values, positional mapped arguments and retained/resumed closures.
 
 Eval now accepts non-String normal numeric and Boolean results through the shared source-value graph. Fixed its declaration to accept omitted and unknown-valued arguments; unbounded numeric conversion to source text retains explicit unknown-source admission.
+
+Retain unresolved source-value facts through joins, calls, properties and argument Lists. Mixed known/unknown source now requires explicit admission; removed the syntax-only restriction that rejected a valid eval manifest.

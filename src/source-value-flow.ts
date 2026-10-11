@@ -43,6 +43,8 @@ type Atom =
     | { readonly tag: "bound"; readonly target: Cell; readonly prefix: readonly Cell[] | null }
     | { readonly tag: "primitive"; readonly value: Primitive }
     | { readonly tag: "non-string" }
+    | { readonly tag: "unknown" }
+    | { readonly tag: "opaque-object" }
     | { readonly tag: "text-operation"; readonly operation: "add" | "template"; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
@@ -123,6 +125,8 @@ class SourceValueFlow {
     private readonly operations = new Map<Operation, Atom>();
     private readonly primitives = new Map<string, Atom>();
     private readonly nonString: Atom = { tag: "non-string" };
+    private readonly unknown: Atom = { tag: "unknown" };
+    private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly evaluations = new Map<string, Cell[]>();
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
     private readonly global: Atom = { tag: "global" };
@@ -323,6 +327,7 @@ class SourceValueFlow {
         return owner;
     }
     private read(atom: Atom, base: Cell, key: string, result: Cell): void {
+        if (atom.tag === "unknown" || atom.tag === "opaque-object") { this.publish(result, this.unknown); return; }
         const owner = this.ordinaryOwner(atom);
         if (owner) {
             this.copy(this.field(owner, key), result);
@@ -401,6 +406,7 @@ class SourceValueFlow {
             if (task.finish) {
                 active.delete(task.cell);
                 const alternatives: Array<readonly Cell[] | null> = [];
+                if ([...task.cell.values].some(atom => atom.tag === "unknown" || atom.tag === "opaque-object")) alternatives.push(null);
                 for (const atom of task.cell.values) if (atom.tag === "object" && atom.owner.list) {
                     let lists: Array<readonly Cell[] | null> = [[]];
                     for (const part of atom.owner.list) {
@@ -567,6 +573,9 @@ class SourceValueFlow {
                 while (worklist.length) {
                     const invocation = worklist.pop()!; this.watch(rule, invocation.target);
                     for (const atom of invocation.target.values) {
+                        if (atom.tag === "unknown" || atom.tag === "opaque-object") {
+                            this.publish(result!, ts.isNewExpression(node) ? this.opaqueObject : this.unknown); continue;
+                        }
                         const argv = invocation.args;
                         const signature = invocation.receiver.id + ":" + (argv?.map(cell => cell.id).join(",") ?? "unknown");
                         if (atom.tag === "bound") {
@@ -702,9 +711,22 @@ class SourceValueFlow {
         return proofs.get(root) ?? incomplete;
     }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
-        while (this.initializers.length || this.queue.length) {
-            if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
-            else { const rule = this.queue.pop()!; rule.queued = false; rule.run(); }
+        for (;;) {
+            while (this.initializers.length || this.queue.length) {
+                if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
+                else { const rule = this.queue.pop()!; rule.queued = false; rule.run(); }
+            }
+            // Empty expression facts mean unresolved value flow, not an
+            // impossible branch. Seal them only after the known graph closes,
+            // then propagate the same interned top fact through normal edges.
+            let changed = false;
+            for (const [node, cell] of this.cells) if (!cell.values.size) {
+                // [[Construct]] either throws or returns an Object. Its
+                // properties and conversion remain opaque, but eval retains
+                // the object unchanged without needing a source-text proof.
+                this.publish(cell, ts.isNewExpression(node) ? this.opaqueObject : this.unknown); changed = true;
+            }
+            if (!changed) break;
         }
         return {
             constructors: this.invocations.map(invocation => {
@@ -716,6 +738,7 @@ class SourceValueFlow {
                 const proof = source ? this.primitiveChoiceProof(source) : undefined;
                 const primitives = proof?.values ?? [];
                 const unresolved = unknown || source && (!source.values.size ||
+                    [...source.values].some(value => value.tag === "unknown") ||
                     !proof!.textComplete || operation !== "eval" && !proof!.primitiveComplete);
                 const choices = unresolved ? null : source
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]

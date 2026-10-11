@@ -813,3 +813,5 @@ Contextual let normalization and Statement-role early errors are frontend operat
 Duplicate simple formals share the existing parameter cell and mapped-arguments runtime representation. The frontend supplies unique positional ABI slots and the canonical binding identity; no new public runtime API is required.
 
 Non-String eval argument admission now uses the source graph normal-result category and the existing eval identity return path. Numeric magnitudes require no source registry entries; text-converting host and constructor consumers still require a finite source proof. No new public runtime API is added.
+
+Merged unknown source facts are frontend admission evidence. Explicit eval manifests continue to select the existing native registry, and unregistered runtime strings retain the existing dispatch guard. No public runtime API changes.

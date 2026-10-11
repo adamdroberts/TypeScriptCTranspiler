@@ -588,4 +588,6 @@ Contextual Statement-body let and escaped Identifier spellings now share offset-
 
 Duplicate sloppy simple formals now use ordered ABI slots and a canonical parameter binding identity. General declaration/eval/Annex B algorithms, object-environment actual-callee proof, and exhaustive Realm/agent host and clause evidence remain open.
 
-Non-String numeric/Boolean result admission and completeness of text-operation operands now share the source-value graph. Complete unknown-value propagation through merged paths and dynamic actual-callee selection remain open, along with declaration/eval/Annex B semantics and exhaustive host/clause evidence.
+Non-String numeric/Boolean result admission and completeness of text-operation operands now share the source-value graph. Unresolved expression facts now survive merged paths; thrown-value flow and precise dynamic actual-callee selection remain open, along with declaration/eval/Annex B semantics and exhaustive host/clause evidence.
+
+Unresolved expression joins now retain one Unknown fact through the source graph and stable admission guard. Complete thrown-value flow, declaration/eval/Annex B semantics, precise object-environment actual-callee selection, and exhaustive host/clause evidence remain open.
