@@ -576,4 +576,4 @@ Source assignments now capture one Reference Record before RHS evaluation. Decla
 
 The core with/Object Environment Record path is now implemented and tested through the shared Reference and completion representations. Complete declaration/eval/Annex B algorithms, Realm and agent host eligibility, reciprocal clause evidence and exhaustive pinned target evidence remain open; local with evidence does not close a whole execution or statement group.
 
-Inherited strict eval and with Statement-body grammar now share canonical source admission. Invalid supplied eval roots are pruned before program construction. With completion values, actual callee flow through object environments, complete eval/declaration/Annex B algorithms, host eligibility and exhaustive target evidence remain open.
+Inherited strict eval and with Statement-body grammar now share canonical source admission. Invalid supplied eval roots are pruned before program construction. Actual callee flow through object environments, complete eval/declaration/Annex B algorithms, host eligibility and exhaustive target evidence remain open.

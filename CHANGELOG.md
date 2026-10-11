@@ -5003,3 +5003,5 @@ These are AOT closure requirements, not permanent product limits.
 - Added nested awaited iterator `if/else` break routing through post-loop awaited returns for both `for…of` and `for…in`. Test: `async_await_iterator_body_multi_await_nested_await_if_break`.
 - Added nested awaited iterator branch `return await` routing alongside outer-loop fallthrough for both `for…of` and `for…in`. Test: `async_await_iterator_body_multi_await_nested_await_if_return`.
 - Added nested awaited iterator branch `throw await` routing alongside outer-loop fallthrough for both `for…of` and `for…in`. Test: `async_await_iterator_body_multi_await_nested_await_if_throw`.
+
+WithStatement now applies UpdateEmpty to the shared script completion accumulator after object-environment entry. Empty normal and abrupt bodies contribute undefined; expression values remain intact. The generated completion property uses an independent semantic model and Node observations across normal, break, continue, return and throw contexts, plus a deep nested tree. with_completion exercises CLI execution with GC enabled and disabled.

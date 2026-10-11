@@ -29029,6 +29029,14 @@ class Emitter {
             buf.indent++;
             buf.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
             buf.line(`tsc_environment_object_enter(&${scope}, ${object});`);
+            const completion = this.isTest262ScriptEvaluationNode(stmt)
+                ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1] : undefined;
+            if (completion) {
+                // WithStatement applies UpdateEmpty(C, undefined). Its body
+                // starts empty independently of the surrounding StatementList.
+                buf.line(`${completion.value} = tsc_value_undefined();`);
+                buf.line(`${completion.gcRoot} = NULL;`);
+            }
             this.emitStmt(buf, stmt.statement);
             buf.indent--;
             buf.line("}");
