@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Share integer-indexed key, validity, length and element operations across object hooks, with Buffer as the initial storage adapter. Validate after value conversion and delete direct Buffer-specific hook projections; actual TypedArray storage and full target coverage remain open.
+
 - Preserve captured next/return method Realms in the Iterator helper activation worklist, fixing cross-realm reentrancy TypeError origin and restoring callers after normal and abrupt steps. Add Node vm differential checks and a deep alternating-Realm graph; complete host Realm capability remains open.
 
 - Route RegExp source values through ordinary encoded owners from literal creation to stored calls and suspension. Delete the native source CType and fresh-shape purity predecessors; verify mutation, constructor identity, private brands and retained owners against Node.

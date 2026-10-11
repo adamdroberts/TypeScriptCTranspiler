@@ -6189,11 +6189,11 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
         tsc_value_t result = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         return proxy_complete_own_descriptor(o, key, result);
     }
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) {
-        if (!byte_valid) return tsc_value_undefined();
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) {
+        if (!tsc_integer_indexed_valid(o, byte_index)) return tsc_value_undefined();
         tsc_object_prop_t property = {0};
-        property.value = tsc_value_num(((const tsc_buffer_t*)o->class_ptr)->data[byte_index]);
+        property.value = tsc_integer_indexed_get(o, byte_index);
         property.writable = property.enumerable = property.configurable = true;
         return value_descriptor_from_prop(&property);
     }

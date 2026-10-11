@@ -723,14 +723,14 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
     (void)value_gc_root;
     void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
     (void)receiver_gc_root;
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid) && receiver == tsc_value_object(o)) {
-        // IntegerIndexedElementSet converts before checking validity.
-        tsc_buffer_t* volatile buffer = o->class_ptr;
-        void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
-        double number = tsc_value_to_number(value);
-        if (byte_valid) buffer->data[byte_index] = byte_from_double(number);
-        return true;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) {
+        if (receiver == tsc_value_object(o)) {
+            tsc_integer_indexed_set(o, byte_index, value);
+            return true;
+        }
+        if (!tsc_integer_indexed_valid(o, byte_index)) return true;
+        return value_set_receiver_own_data(receiver, key, value);
     }
 
 
@@ -790,12 +790,10 @@ bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value) {
 bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     void* volatile value_gc_root = tsc_value_gc_root(value);
     (void)value_gc_root;
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) {
-        if (!byte_valid || (has_writable && !writable) || (has_enumerable && !enumerable) || (has_configurable && !configurable)) return false;
-        tsc_buffer_t* volatile buffer = o->class_ptr;
-        void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
-        if (has_value) buffer->data[byte_index] = byte_from_double(tsc_value_to_number(value));
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) {
+        if (!tsc_integer_indexed_valid(o, byte_index) || (has_writable && !writable) || (has_enumerable && !enumerable) || (has_configurable && !configurable)) return false;
+        if (has_value) tsc_integer_indexed_set(o, byte_index, value);
         return true;
     }
 
@@ -931,8 +929,8 @@ bool tsc_object_define_native_data(tsc_object_t* o, tsc_str_t* key,
 }
 
 bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return false;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) return false;
 
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
@@ -1086,23 +1084,42 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
 }
 
 
-/* CanonicalNumericIndexString is shared by Buffer's integer-indexed
- * object hooks. Noncanonical strings and Symbols remain ordinary properties. */
-bool tsc_buffer_integer_index(const tsc_object_t* object, const tsc_str_t* key, size_t* index, bool* valid) {
-    if (!object || !object->is_buffer || tsc_property_key_symbol(key)) return false;
-    if (str_lit_eq(key, "-0")) { *valid = false; return true; }
+/* CanonicalNumericIndexString and live element operations form one shared
+ * boundary for integer-indexed owners. Buffer supplies the initial byte
+ * storage adapter; ordinary strings and Symbols never enter this path. */
+bool tsc_integer_indexed_key(const tsc_object_t* object, const tsc_str_t* key, double* index) {
+    if (!object || !object->is_typed_array || tsc_property_key_symbol(key)) return false;
+    if (str_lit_eq(key, "-0")) { *index = -0.0; return true; }
     double numeric = tsc_value_to_number(tsc_value_string((tsc_str_t*)key));
     if (!tsc_str_eq(key, tsc_str_from_num(numeric))) return false;
-    const tsc_buffer_t* buffer = object->class_ptr;
-    *valid = isfinite(numeric) && numeric >= 0 && floor(numeric) == numeric && numeric < (double)buffer->len;
-    if (*valid) *index = (size_t)numeric;
+    *index = numeric;
     return true;
+}
+size_t tsc_integer_indexed_length(const tsc_object_t* object) {
+    return object && object->is_buffer ? ((const tsc_buffer_t*)object->class_ptr)->len : 0;
+}
+bool tsc_integer_indexed_valid(const tsc_object_t* object, double index) {
+    return isfinite(index) && index >= 0 && !(index == 0 && signbit(index)) &&
+        floor(index) == index && index < (double)tsc_integer_indexed_length(object);
+}
+tsc_value_t tsc_integer_indexed_get(const tsc_object_t* object, double index) {
+    if (!tsc_integer_indexed_valid(object, index)) return tsc_value_undefined();
+    return tsc_value_num(((const tsc_buffer_t*)object->class_ptr)->data[(size_t)index]);
+}
+void tsc_integer_indexed_set(tsc_object_t* object, double index, tsc_value_t value) {
+    tsc_object_t* volatile owner_root = object;
+    void* volatile value_root = tsc_value_gc_root(value);
+    double number = tsc_value_to_number(value);
+    /* Conversion can change storage. Validate a fresh witness afterwards. */
+    if (tsc_integer_indexed_valid(object, index))
+        ((tsc_buffer_t*)object->class_ptr)->data[(size_t)index] = byte_from_double(number);
+    (void)owner_root; (void)value_root;
 }
 
 tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key, tsc_value_t receiver) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid))
-        return byte_valid ? tsc_value_num(((const tsc_buffer_t*)o->class_ptr)->data[byte_index]) : tsc_value_undefined();
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index))
+        return tsc_integer_indexed_get(o, byte_index);
 
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
@@ -1151,8 +1168,8 @@ tsc_value_t tsc_object_get(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) return tsc_integer_indexed_valid(o, byte_index);
 
     if (o->is_proxy) {
         return !tsc_value_is_undefined(tsc_value_get_own_property_descriptor(tsc_value_object((tsc_object_t*)o), (tsc_str_t*)key));
@@ -1171,8 +1188,8 @@ bool tsc_object_has_own(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* key) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) return tsc_integer_indexed_valid(o, byte_index);
 
     if (o->is_proxy) {
         tsc_value_t desc = tsc_value_get_own_property_descriptor(tsc_value_object((tsc_object_t*)o), (tsc_str_t*)key);
@@ -1189,8 +1206,8 @@ bool tsc_object_property_is_enumerable(const tsc_object_t* o, const tsc_str_t* k
 
 
 bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return byte_valid;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) return tsc_integer_indexed_valid(o, byte_index);
 
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'has' on a proxy that has been revoked"));
@@ -1265,8 +1282,8 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
 
 
 bool tsc_object_delete(tsc_object_t* o, const tsc_str_t* key) {
-    size_t byte_index = 0; bool byte_valid;
-    if (tsc_buffer_integer_index(o, key, &byte_index, &byte_valid)) return !byte_valid;
+    double byte_index = 0;
+    if (tsc_integer_indexed_key(o, key, &byte_index)) return !tsc_integer_indexed_valid(o, byte_index);
 
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'deleteProperty' on a proxy that has been revoked"));
@@ -1549,9 +1566,9 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
         return proxy_own_keys_result_to_list(o, res);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
-    if (o->is_buffer) {
-        const tsc_buffer_t* buffer = o->class_ptr;
-        for (size_t index = 0; index < buffer->len; ++index) {
+    if (o->is_typed_array) {
+        size_t length = tsc_integer_indexed_length(o);
+        for (size_t index = 0; index < length; ++index) {
             tsc_str_t* key = tsc_str_from_num((double)index);
             tsc_array_push_raw(a, &key);
         }

@@ -1,0 +1,4 @@
+valid: true true 1
+invalid: true false
+negative zero: true false
+converted: 2 1

@@ -861,7 +861,11 @@ bool tsc_re_match_at(
     size_t* match_end
 );
 
-bool tsc_buffer_integer_index(const tsc_object_t* object, const tsc_str_t* key, size_t* index, bool* valid);
+bool tsc_integer_indexed_key(const tsc_object_t* object, const tsc_str_t* key, double* index);
+bool tsc_integer_indexed_valid(const tsc_object_t* object, double index);
+size_t tsc_integer_indexed_length(const tsc_object_t* object);
+tsc_value_t tsc_integer_indexed_get(const tsc_object_t* object, double index);
+void tsc_integer_indexed_set(tsc_object_t* object, double index, tsc_value_t value);
 
 void tsc_weak_job_checkpoint(void);
 
