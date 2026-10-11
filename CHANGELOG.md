@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Closed source conversion now shares string/number/default hints, ordered primitive conversion Lists and finite Number/BigInt/unary facts. Opaque property effects preserve provably earlier captures and close later or repeated reads. Removed string-only ordering and constructor-local conversion predecessors; added Node/native semantic partitions, a deep prototype tree and dual-memory CLI coverage.
+
 - Callable source length and native boxing now share the ordered parameter-prefix calculation. Bound lengths use reactive own-property facts and actual Lists, preserving metadata getter effects and throws. Removed the emitter-only calculation and added Node/native partitions, deep bound forwarding and dual-memory CLI checks. Cache require-alias declaration facts and remove duplicate resolved-declaration fallback checks exposed by the deep bound input.
 
 - Closed eval admission now retains descriptor flags as Boolean normal results through one shared fact cell. Returned-object writes still contribute String or unresolved values; added Node/native attribute partitions and dual-memory CLI checks.

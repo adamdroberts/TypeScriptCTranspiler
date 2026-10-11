@@ -37,6 +37,15 @@ type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" 
     "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for";
 type Primitive = string | number | bigint | boolean | null | undefined | symbol;
 type SourcePropertyKey = string | symbol;
+type PrimitiveHint = "string" | "number" | "default";
+const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
+    ["string", ["toString", "valueOf"]], ["number", ["valueOf", "toString"]], ["default", ["valueOf", "toString"]],
+]);
+const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> = new Map([
+    ["Number", (value: Primitive) => Number(value)],
+    ["BigInt", (value: Primitive) => BigInt(value as string | number | bigint | boolean)],
+    ["numeric", (value: Primitive) => typeof value === "bigint" ? value : Number(value)],
+]);
 const PRIMITIVE_PREFIX_OPERATIONS: ReadonlyMap<ts.PrefixUnaryOperator, (value: Primitive) => Primitive> = new Map<ts.PrefixUnaryOperator, (value: Primitive) => Primitive>([
     [ts.SyntaxKind.PlusToken, (value: Primitive) => +(value as number)],
     [ts.SyntaxKind.MinusToken, (value: Primitive) => -(value as number)],
@@ -61,9 +70,9 @@ type Atom =
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
     | { readonly tag: "descriptor"; readonly identity: object }
-    | { readonly tag: "unknown" }
+    | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "bound-name" | "prefix"; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "bound-name" | "prefix" | "coerce"; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -92,9 +101,11 @@ const NUMERIC_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
     ts.SyntaxKind.AmpersandEqualsToken, ts.SyntaxKind.BarEqualsToken, ts.SyntaxKind.CaretEqualsToken,
 ]);
+const RELATIONAL_BINARY_OPERATIONS = new Set<ts.SyntaxKind>([
+    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
+]);
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
-    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken,
-    ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+    ...RELATIONAL_BINARY_OPERATIONS, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
     ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
@@ -203,12 +214,16 @@ class SourceValueFlow {
     private nextCell = 0;
     private readonly booleanResult = this.newCell();
     private readonly opaqueMutation = this.newCell();
+    private readonly opaqueEffects = new Map<ts.Node, Atom>();
+    private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
     private readonly propertyWrites = new Set<string>();
-    private readonly hintPrimitives = new Map<Cell, Map<ts.Node | undefined, Cell>>();
+    private readonly hintPrimitives = new Map<Cell, Map<ts.Node | undefined, Map<PrimitiveHint, Cell>>>();
     private readonly stringConversions = new Map<Cell, Map<ts.Node, Map<boolean, Cell>>>();
+    private readonly orderedConversions = new Map<ts.Node, Map<string, readonly Cell[]>>();
+    private readonly numericConversions = new Map<Cell, Map<ts.Node, Map<string, Cell>>>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
@@ -269,7 +284,14 @@ class SourceValueFlow {
                 const operands = handler && conversionOperands(node);
                 if (handler && operands) {
                     const propertyKey = ts.isComputedPropertyName(node) || ts.isElementAccessExpression(node);
-                    const inputs = operands.map(operand => propertyKey ? this.stringHintPrimitives(this.cell(operand), node) : this.cell(operand));
+                    const addition = ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken);
+                    const numeric = ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node) || ts.isBinaryExpression(node) &&
+                        NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind);
+                    const relational = ts.isBinaryExpression(node) && RELATIONAL_BINARY_OPERATIONS.has(node.operatorToken.kind);
+                    const raw = operands.map(operand => this.cell(operand));
+                    const inputs = propertyKey || ts.isTemplateSpan(node) ? this.convertList(raw, node, "string")
+                        : addition ? this.convertList(raw, node, "default") : numeric ? this.convertList(raw, node, "numeric")
+                        : relational ? this.convertList(raw, node, "number") : raw;
                     // Primitive conversion failures are Error objects. An
                     // opaque coercion can invoke user code and throw any value;
                     // it cannot disappear beside a known explicit throw.
@@ -320,7 +342,8 @@ class SourceValueFlow {
                     continue;
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
-                    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node)) this.cell(node);
+                    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node) ||
+                    ts.isExpression(node) && conversionOperands(node)) this.cell(node);
                 node.forEachChild(child => { worklist.push({node: child, handler}); });
             }
         }
@@ -362,6 +385,46 @@ class SourceValueFlow {
         if (destinations.has(into)) return;
         destinations.add(into);
         this.rule([from], () => { for (const value of from.values) this.publish(into, value); });
+    }
+    private opaqueEffect(context?: ts.Node): void {
+        if (!context) {this.publish(this.opaqueMutation, this.unknown); return;}
+        let effect = this.opaqueEffects.get(context);
+        if (!effect) {effect = {tag: "unknown", origin: context}; this.opaqueEffects.set(context, effect);}
+        this.publish(this.opaqueMutation, effect);
+    }
+    private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
+        if (atom.tag !== "unknown" || !atom.origin || !context) return true;
+        const effect = atom.origin;
+        if (effect.getSourceFile() !== context.getSourceFile()) return true;
+        // Source order proves capture only in an acyclic top-level activation.
+        // A later spelling in a function or loop may run before this read.
+        for (const node of [effect, context]) for (let parent: ts.Node | undefined = node; parent; parent = parent.parent)
+            if (ts.isFunctionLike(parent) || ts.isIterationStatement(parent, false)) return true;
+        if (context.getEnd() <= effect.getStart()) return false;
+        if (argumentsRead && effect === context) return false;
+        if (ts.isCallExpression(effect) || ts.isNewExpression(effect)) {
+            for (let parent: ts.Node | undefined = context; parent; parent = parent.parent) {
+                if (parent === effect.expression) return false;
+                if (parent === effect) break;
+            }
+        }
+        return true;
+    }
+    private opaqueShape(owner: ObjectOwner, context?: ts.Node, argumentsRead = false): boolean {
+        return [...owner.shape.values].some(atom => atom.tag === "unknown" && this.effectVisible(atom, context, argumentsRead));
+    }
+    private copyRead(from: Cell, into: Cell, context?: ts.Node, argumentsRead = false): void {
+        this.copy(this.captureRead(from,context,argumentsRead),into);
+    }
+    private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
+        let contexts = this.readCaptures.get(from);
+        if (!contexts) {contexts = new Map(); this.readCaptures.set(from,contexts);}
+        let phases = contexts.get(context);
+        if (!phases) {phases = new Map(); contexts.set(context,phases);}
+        const previous = phases.get(argumentsRead); if (previous) return previous;
+        const captured = this.newCell(); phases.set(argumentsRead,captured);
+        this.rule([from], () => {for (const value of from.values) if (this.effectVisible(value, context, argumentsRead)) this.publish(captured, value);});
+        return captured;
     }
     private bindingSymbol(node: ts.Identifier): ts.Symbol | undefined {
         // Ordinary checker lookup stops at with. Resolve the declarative
@@ -465,7 +528,7 @@ class SourceValueFlow {
         if (!cell) {
             cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
             const target = cell;
-            this.rule([owner.shape],()=>{if(owner.shape.values.has(this.unknown))this.publish(target,this.unknown);});
+            this.rule([owner.shape],()=>{for (const value of owner.shape.values) if (value.tag === "unknown") this.publish(target,value);});
         }
         return cell;
     }
@@ -512,7 +575,7 @@ class SourceValueFlow {
                     while(pending.length){
                         const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);
                         this.watch(rule,current.shape);
-                        if(handler && current.shape.values.has(this.unknown))this.publish(handler,this.unknown);
+                        if(handler && this.opaqueShape(current,context))this.publish(handler,this.unknown);
                         for(const[name,accessor]of current.accessors)if(key===null || name===key || name===null)
                             this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
                         const presence=key===null?null:this.presence(current,key);
@@ -557,22 +620,28 @@ class SourceValueFlow {
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.publish(this.globalMutation,this.unknown);if(handler)this.publish(handler,this.unknown);}
         }});
     }
-    /** ToPrimitive's string hint uses the same keyed property and call graph
-     * for the exotic hook and the ordinary method worklist. */
-    private stringHintPrimitives(source: Cell, context?: ts.Node): Cell {
+    /** One hint-driven ToPrimitive worklist uses the keyed property and call
+     * graph for the exotic hook and ordinary method order. */
+    private primitiveConversion(source: Cell, context?: ts.Node, hint: PrimitiveHint = "string"): Cell {
         let contexts = this.hintPrimitives.get(source);
         if (!contexts) { contexts = new Map(); this.hintPrimitives.set(source, contexts); }
-        const previous = contexts.get(context); if (previous) return previous;
-        const result = this.newCell(); contexts.set(context, result);
+        let conversions = contexts.get(context);
+        if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
+        const previous = conversions.get(hint); if (previous) return previous;
+        const result = this.newCell(); conversions.set(hint, result);
         const selected = new Set<Atom>();
         let rule!: Rule;
         rule = this.rule([source], () => {
             for (const atom of source.values) {
-                if (atom.tag === "primitive" || atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source") {
+                if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source") {
                     this.publish(result, atom); continue;
                 }
                 const owner = this.ordinaryOwner(atom);
-                if (!owner || !context) { this.publish(result, this.unknown); continue; }
+                if (!owner || !context) {
+                    this.publish(result, this.unknown);
+                    if (context) {const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
+                    continue;
+                }
                 const worklist = [owner], visited = new Set<ObjectOwner>();
                 let ready = true, opaque = false;
                 while (worklist.length) {
@@ -580,7 +649,7 @@ class SourceValueFlow {
                     if (visited.has(current)) continue; visited.add(current);
                     this.watch(rule, current.shape);
                     ready &&= this.definitionsReady(current, rule);
-                    opaque ||= current.shape.values.has(this.unknown);
+                    opaque ||= this.opaqueShape(current,context);
                     if (current.prototype) {
                         this.watch(rule, current.prototype);
                         ready &&= current.prototype.values.size > 0;
@@ -592,11 +661,11 @@ class SourceValueFlow {
                         }
                     }
                 }
-                if (opaque) { this.publish(result, this.unknown); continue; }
+                if (opaque) { this.publish(result, this.unknown); const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context)); continue; }
                 if (!ready || selected.has(atom)) continue;
                 selected.add(atom);
                 const receiver = this.newCell(); this.publish(receiver, atom);
-                const methods = ["toString", "valueOf"];
+                const methods = ORDINARY_PRIMITIVE_METHODS.get(hint)!;
                 const scheduled = new Set<number>();
                 const advance = (index: number): void => {
                     if (scheduled.has(index)) return; scheduled.add(index);
@@ -618,16 +687,15 @@ class SourceValueFlow {
                     });
                     this.rule([returned], () => {
                         for (const value of returned.values) {
-                            if (value.tag === "primitive" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
-                            else if (value.tag === "non-string") this.publish(result, this.unknown);
+                            if (value.tag === "primitive" || value.tag === "non-string" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
                             else advance(index + 1);
                         }
                     });
                 };
                 const hook = this.property(receiver, this.wellKnownSymbols.get("toPrimitive")!, context);
-                const callee = this.newCell(), returned = this.newCell(), hint = this.newCell();
-                this.publish(hint, this.primitive("string"));
-                this.invoke(context, callee, receiver, [{cell: hint, spread: false}], returned);
+                const callee = this.newCell(), returned = this.newCell(), hintValue = this.newCell();
+                this.publish(hintValue, this.primitive(hint));
+                this.invoke(context, callee, receiver, [{cell: hintValue, spread: false}], returned);
                 const invalid = (): void => {
                     this.publish(result, this.abrupt);
                     const handler = this.exceptionHandlers.get(context);
@@ -644,20 +712,78 @@ class SourceValueFlow {
                 });
                 this.rule([returned], () => {
                     for (const value of returned.values) {
-                        if (["primitive", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
-                        else if (value.tag === "non-string") this.publish(result, this.unknown);
+                        if (["primitive", "non-string", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
                         else invalid();
                     }
                 });
             }
         });
+        if (context) {
+            let effects!: Rule;
+            effects = this.rule([result], () => {
+                const state = this.primitiveState(result, effects, true);
+                if (state.pending || !state.unresolved) return;
+                const handler = this.exceptionHandlers.get(context);
+                if (handler) this.publish(handler, this.unknown);
+                this.onActive(context, () => this.opaqueEffect(context));
+            });
+        }
         return result;
+    }
+    private coerceCell(source: Cell, context: ts.Node, conversion: string): Cell {
+        let contexts = this.numericConversions.get(source);
+        if (!contexts) {contexts = new Map(); this.numericConversions.set(source, contexts);}
+        let conversions = contexts.get(context);
+        if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
+        const previous = conversions.get(conversion); if (previous) return previous;
+        const input = this.primitiveConversion(source, context, "number"), result = this.newCell();
+        conversions.set(conversion, result);
+        this.publish(result, {tag: "text-operation", operation: "coerce", conversion, parts: [input]});
+        let rule!: Rule;
+        rule = this.rule([input], () => {
+            const state = this.primitiveState(input, rule, true), handler = this.exceptionHandlers.get(context);
+            if (state.pending) return;
+            if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
+            if (!handler) return;
+            if (!state.proof.primitiveComplete) this.publish(handler, this.opaqueObject);
+            for (const value of state.proof.values) {
+                try {NUMERIC_CONVERSIONS.get(conversion)!(value);} catch {this.publish(handler, this.opaqueObject);}
+            }
+        });
+        return result;
+    }
+    /** The same ordered List advances only through possible normal results.
+     * An abrupt conversion suppresses every later conversion edge. */
+    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "text"): readonly Cell[] {
+        let conversions = this.orderedConversions.get(context);
+        if (!conversions) {conversions = new Map(); this.orderedConversions.set(context, conversions);}
+        const identity = mode + ":" + args.map(argument => argument.id).join(",");
+        const previous = conversions.get(identity); if (previous) return previous;
+        const converted: Cell[] = []; conversions.set(identity, converted);
+        for (const [index, argument] of args.entries()) {
+            const input = this.newCell(), result = mode === "text" ? this.stringHintCell(input, context)
+                : mode === "numeric" ? this.coerceCell(input, context, "numeric") : this.primitiveConversion(input, context, mode);
+            converted.push(result);
+            if (index === 0) this.copy(argument, input);
+            else {
+                const predecessor = converted[index - 1]!;
+                let rule!: Rule;
+                rule = this.rule([predecessor], () => {
+                    this.watchText(rule, predecessor);
+                    const proof = this.primitiveChoiceProof(predecessor);
+                    if (proof.primitiveComplete && !proof.values.length) this.publish(input, this.abrupt);
+                    if (proof.values.length || !proof.primitiveComplete && !this.primitiveState(predecessor, rule, true).pending &&
+                        [...predecessor.values].some(value => value.tag !== "abrupt" && value.tag !== "pending-source")) this.copy(argument, input);
+                });
+            }
+        }
+        return converted;
     }
     /** ToString rejects Symbol results except the String call's direct
      * Symbol argument, which uses SymbolDescriptiveString. */
     private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node, descriptiveSymbols = false): readonly string[] | null | undefined {
         const input = key;
-        key = this.stringHintPrimitives(key, context);
+        key = this.primitiveConversion(key, context);
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) {
             const values = proof.values.filter(value => typeof value !== "symbol" || descriptiveSymbols && input.values.has(this.primitive(value)));
@@ -669,21 +795,22 @@ class SourceValueFlow {
         }
         if (pending && !unresolved) return undefined;
         if (context) {
+            const opaque = this.primitiveState(key, rule, true).unresolved;
             const handler = this.exceptionHandlers.get(context);
-            if (handler) this.publish(handler, this.unknown);
-            this.onActive(context, () => this.publish(this.opaqueMutation, this.unknown));
+            if (handler) this.publish(handler, opaque ? this.unknown : this.opaqueObject);
+            if (opaque) this.onActive(context, () => this.opaqueEffect(context));
         }
         return null;
     }
     private propertyKeys(key: Cell, rule: Rule, context?: ts.Node): readonly SourcePropertyKey[] | null | undefined {
-        key = this.stringHintPrimitives(key, context);
+        key = this.primitiveConversion(key, context);
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) return [...new Set(proof.values.map(value => typeof value === "symbol" ? value : String(value)))];
         if (pending && !unresolved) return undefined;
         if (context) {
             const handler = this.exceptionHandlers.get(context);
             if (handler) this.publish(handler, this.unknown);
-            this.onActive(context, () => this.publish(this.opaqueMutation, this.unknown));
+            this.onActive(context, () => this.opaqueEffect(context));
         }
         return null;
     }
@@ -718,7 +845,7 @@ class SourceValueFlow {
             const choices = this.stringHintTexts(source, rule, context, descriptiveSymbols);
             if (choices === null) this.publish(result, this.unknown);
             else if (choices?.length === 0) this.publish(result, this.abrupt);
-            else if (choices === undefined && this.primitiveState(this.stringHintPrimitives(source, context), rule).pendingSource)
+            else if (choices === undefined && this.primitiveState(this.primitiveConversion(source, context), rule).pendingSource)
                 this.publish(result, this.pendingSource);
             else for (const choice of choices ?? []) this.publish(result, this.text(choice));
         });
@@ -766,7 +893,7 @@ class SourceValueFlow {
         const target = unwrap(raw);
         if (ts.isIdentifier(target)) { this.writeBinding(target, value); return; }
         if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
-            if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) { this.publish(this.opaqueMutation, this.unknown); return; }
+            if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) { this.opaqueEffect(context); return; }
             const base = this.cell(target.expression);
             if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base, this.cell(target.argumentExpression), value, mode, context);
             else this.writeProperty(base, target.name.text, value, true, mode, context);
@@ -775,7 +902,7 @@ class SourceValueFlow {
         const references = new Map<ts.Identifier, ts.Expression>();
         const binding = normalizeAssignmentTarget(target, references);
         if (binding) this.bind(binding, value, references, context);
-        else this.publish(this.opaqueMutation, this.unknown);
+        else this.opaqueEffect(context);
     }
     private writeComputedProperty(base: Cell, key: Cell, value: Cell, mode: "set"|"define"|"delete" = "set", context?:ts.Node, receiver=base): void {
         let rule!: Rule;
@@ -796,7 +923,7 @@ class SourceValueFlow {
             for(const name of names){
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
-                    else {this.publish(this.globalMutation,this.unknown);this.publish(this.opaqueMutation,this.unknown);}
+                    else {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
                 }}else if(getter.values.size && setter.values.size)this.writeProperty(base,name,value,true,"define",context);
             }
         });
@@ -807,7 +934,7 @@ class SourceValueFlow {
             const owner=this.ordinaryOwner(atom);
             if(!owner){if(atom.tag!=="pending-source")this.writeProperty(base,null,this.empty,true,"define",context);continue;}
             this.watch(rule,owner.shape);
-            if(owner.shape.values.has(this.unknown))this.writeProperty(base,null,this.empty,true,"define",context);
+            if(this.opaqueShape(owner,context))this.writeProperty(base,null,this.empty,true,"define",context);
             for(const name of new Set([...owner.fields.keys(),...owner.accessors.keys()])){
                 if(name===null){this.writeProperty(base,null,this.empty,true,"define",context);continue;}
                 const key=owner.shape.id+":"+this.keyIdentity(name);if(selected.has(key))continue;selected.add(key);
@@ -830,10 +957,10 @@ class SourceValueFlow {
             for(const atom of base.values){
                 if(atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 const owner=this.ordinaryOwner(atom);
-                if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.publish(this.opaqueMutation,this.unknown));continue;}
+                if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.opaqueEffect(context));continue;}
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
-                if(owner.shape.values.has(this.unknown)){incomplete();continue;}
+                if(this.opaqueShape(owner,context)){incomplete();continue;}
                 const names=key?keys!:[...new Set([...owner.fields.keys(),...owner.accessors.keys()])];
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
@@ -989,7 +1116,7 @@ class SourceValueFlow {
             visited.add(owner);
             if(rule)this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))continue;
-            this.copy(this.field(owner, key), result);
+            this.copyRead(this.field(owner, key), result, context);
             for (const name of [key,null]) {
                 const accessor=owner.accessors.get(name);
                 if(!accessor)continue;
@@ -1155,7 +1282,7 @@ class SourceValueFlow {
         }
         return owner;
     }
-    private lists(cell: Cell): Array<readonly Cell[] | null> {
+    private lists(cell: Cell, context?: ts.Node): Array<readonly Cell[] | null> {
         // Every actual List projects the owner's canonical length and index
         // locations. Literal/rest initialization and mutations publish into
         // those same cells; the rule worklist closes their dependencies.
@@ -1167,7 +1294,7 @@ class SourceValueFlow {
             }
             const owner = atom.owner;
             const proof = this.primitiveChoiceProof(owner.listLength!);
-            if (owner.shape.values.has(this.unknown) || !proof.primitiveComplete) {
+            if (this.opaqueShape(owner,context,true) || !proof.primitiveComplete) {
                 alternatives.push(null);
                 continue;
             }
@@ -1183,7 +1310,7 @@ class SourceValueFlow {
                     const existing = owner.fields.get(key);
                     const location = existing ?? this.field(owner, key);
                     if (!existing) this.publish(location, this.primitive(undefined));
-                    locations.push(location);
+                    locations.push(this.captureRead(location,context,true));
                 }
                 alternatives.push(locations);
             }
@@ -1223,18 +1350,28 @@ class SourceValueFlow {
     private initialize(node: ts.Node, result: Cell): void {
         if (callableDefinition(node)) { this.publish(result, { tag: "function", owner: this.function(node) }); return; }
         if (ts.isPrefixUnaryExpression(node) && PRIMITIVE_PREFIX_OPERATIONS.has(node.operator)) {
-            this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [this.cell(node.operand)]});
+            this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [node.operator === ts.SyntaxKind.ExclamationToken ? this.cell(node.operand) : this.primitiveConversion(this.cell(node.operand), node, "number")]});
             return;
         }
         // These grammar operations can throw, but every normal result is
         // non-String independently of their operands and numeric magnitudes.
         if (ts.isDeleteExpression(node) ||
             ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
+            if (ts.isBinaryExpression(node) && RELATIONAL_BINARY_OPERATIONS.has(node.operatorToken.kind))
+                this.convertList([this.cell(node.left), this.cell(node.right)], node, "number");
             this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
         }
         if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node) ||
             ts.isBinaryExpression(node) && NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind)) {
-            this.publish(result, this.nonString); return;
+            const operands = ts.isBinaryExpression(node) ? [this.cell(node.left), this.cell(node.right)] : [this.cell(node.operand)];
+            const converted = this.convertList(operands, node, "numeric");
+            let rule!: Rule;
+            rule = this.rule(converted, () => {
+                const states = converted.map(input => this.primitiveState(input, rule, true));
+                if (states.some(state => state.proof.primitiveComplete && !state.proof.values.length)) this.publish(result, this.abrupt);
+                else if (!states.some(state => state.pending)) this.publish(result, this.nonString);
+            });
+            return;
         }
         if (ts.isVoidExpression(node)) { this.publish(result, this.primitive(undefined)); return; }
         if (ts.isTypeOfExpression(node)) {
@@ -1324,7 +1461,7 @@ class SourceValueFlow {
                 },owner);
             }
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.onActive(node,()=>this.publish(this.opaqueMutation,this.unknown));return;}
+            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.onActive(node,()=>this.opaqueEffect(node));return;}
             if (ts.isElementAccessExpression(node) && node.argumentExpression)
                 this.copy(this.computedProperty(this.cell(node.expression), this.cell(node.argumentExpression), node), result);
             else {
@@ -1337,8 +1474,8 @@ class SourceValueFlow {
             if ([ts.SyntaxKind.CommaToken, ts.SyntaxKind.EqualsToken].includes(node.operatorToken.kind)) this.copy(this.cell(node.right), result);
             else if (NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) || [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
                 this.copy(this.cell(node.left), result); this.copy(this.cell(node.right), result);
-            } else if (node.operatorToken.kind === ts.SyntaxKind.PlusToken)
-                this.publish(result, { tag: "text-operation", operation: "add", parts: [this.cell(node.left), this.cell(node.right)] });
+            } else if (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken)
+                this.publish(result, { tag: "text-operation", operation: "add", parts: this.convertList([this.cell(node.left), this.cell(node.right)], node, "default") });
         } else if (ts.isTemplateExpression(node)) {
             const parts: Cell[] = [];
             const literal = (text: string): void => { const cell = this.newCell(); this.publish(cell, this.text(text)); parts.push(cell); };
@@ -1387,27 +1524,8 @@ class SourceValueFlow {
         this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
         const boundValues = new Map<string, Atom>();
         const omittedArgument = this.newCell(); this.publish(omittedArgument, this.primitive(undefined));
-        const argumentConversions = new Map<string, readonly Cell[]>();
-        const convertArguments = (args: readonly Cell[] | null): readonly Cell[] | null => {
-            if (!args) return null;
-            const identity = args.map(argument => argument.id).join(",");
-            const previous = argumentConversions.get(identity); if (previous) return previous;
-            const converted: Cell[] = [];
-            argumentConversions.set(identity, converted);
-            for (const [index, argument] of args.entries()) {
-                const input = this.newCell(), result = this.stringHintCell(input, node);
-                converted.push(result);
-                if (index === 0) this.copy(argument, input);
-                else {
-                    const predecessor = converted[index - 1]!;
-                    this.rule([predecessor], () => {
-                        if (predecessor.values.has(this.abrupt)) this.publish(result, this.abrupt);
-                        if ([...predecessor.values].some(value => value.tag !== "abrupt")) this.copy(argument, input);
-                    });
-                }
-            }
-            return converted;
-        };
+        const convertArguments = (args: readonly Cell[] | null): readonly Cell[] | null =>
+            args ? this.convertList(args, node, "text") : null;
         const seen = new Map<Atom, Set<string>>();
         const handled = (atom: Atom, signature: string): boolean => {
             let signatures = seen.get(atom); if (!signatures) { signatures = new Set(); seen.set(atom, signatures); }
@@ -1436,7 +1554,7 @@ class SourceValueFlow {
                         const handler = this.exceptionHandlers.get(node);
                         if (handler) this.publish(handler, this.unknown);
                         this.onActive(node,()=>{
-                            this.publish(this.opaqueMutation,this.unknown);
+                            this.opaqueEffect(node);
                             this.writeProperty(invocation.receiver,null,this.empty,false);
                             for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false);
                         });
@@ -1460,7 +1578,7 @@ class SourceValueFlow {
                         const target = atom.operation === "reflect-apply" || atom.operation === "construct" ? argv?.[0] : invocation.receiver;
                         const listIndex = atom.operation === "reflect-apply" ? 2 : 1;
                         if (argv?.[listIndex]) this.watchList(rule, argv[listIndex]!);
-                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.lists(argv[listIndex]!) : [null];
+                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.lists(argv[listIndex]!,node) : [null];
                         if (target) for (const args of actual) worklist.push({ ...invocation, target, direct: false,
                             construct: atom.operation === "construct",
                             receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : constructedReceiver, args });
@@ -1486,18 +1604,26 @@ class SourceValueFlow {
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
                     if (invocation.construct) this.publish(result!,{tag:"object",owner:this.owner(node)});
-                    const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol");
+                    const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                         const generated = this.generated.get(atom.kind);
                         if (!generated) this.publish(result!,this.pendingSource);
                         for (const value of generated ?? []) this.copy(value, result!);
                     } else if (atom.tag === "builtin") {
+                        if (NUMERIC_CONVERSIONS.has(atom.name)) {
+                            const handler = this.exceptionHandlers.get(node);
+                            if (!argv) {this.publish(result, invocation.construct ? this.opaqueObject : this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
+                            if (atom.name === "Number" && argv.length === 0) {if (!invocation.construct) this.publish(result, this.primitive(0)); continue;}
+                            const converted = this.coerceCell(argv[0] ?? omittedArgument, node, atom.name); this.watchText(rule, converted);
+                            if (!invocation.construct) this.copy(converted, result);
+                            continue;
+                        }
                         if (atom.name === "Symbol") {
                             const handler = this.exceptionHandlers.get(node);
                             if (invocation.construct) {this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); continue;}
                             this.normalResults.set(result, this.nonString);
-                            if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.publish(this.opaqueMutation, this.unknown)); continue;}
+                            if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
                             let allocations = this.symbolAllocations.get(node);
                             if (!allocations) {allocations = new Map(); this.symbolAllocations.set(node, allocations);}
                             const descriptions: (string | undefined)[] = [];
@@ -1594,7 +1720,7 @@ class SourceValueFlow {
                     } else if (atom.tag === "operation") {
                         if (atom.operation === "symbol-for") {
                             this.normalResults.set(result, this.nonString);
-                            if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.publish(this.opaqueMutation, this.unknown)); continue;}
+                            if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
                             const key = this.stringHintCell(argv[0] ?? omittedArgument, node); this.watchText(rule, key);
                             const proof = this.primitiveChoiceProof(key);
                             if (!proof.primitiveComplete) {for (const value of key.values) if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value.tag === "unknown" ? this.nonString : value);}
@@ -1631,7 +1757,7 @@ class SourceValueFlow {
                             const handler=this.exceptionHandlers.get(node);
                             if (argv === null) {if (handler) this.publish(handler, this.unknown);}
                             else for (const argument of argv) {
-                                const converted = this.stringHintPrimitives(argument, node);
+                                const converted = this.primitiveConversion(argument, node);
                                 if (handler && this.primitiveState(converted, rule, true).unresolved) this.publish(handler, this.unknown);
                                 else this.watchText(rule, converted);
                             }
@@ -1688,7 +1814,7 @@ class SourceValueFlow {
                                 });
                                 this.rule([invocation.receiver], () => {
                                     for (const target of invocation.receiver.values) {
-                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.onActive(node,()=>this.publish(this.opaqueMutation,this.unknown));
+                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.onActive(node,()=>this.opaqueEffect(node));
                                         const owner = this.ordinaryOwner(target);
                                         if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
                                         else if (target.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);
@@ -1792,7 +1918,7 @@ class SourceValueFlow {
                         const complete = atom.parts.every(part => proofs.get(part)?.primitiveComplete);
                         const booleanPrefix = atom.operation === "prefix" && atom.operator === ts.SyntaxKind.ExclamationToken;
                         primitiveComplete &&= complete || booleanPrefix;
-                        textComplete &&= complete || atom.operation === "prefix";
+                        textComplete &&= complete || atom.operation === "prefix" || atom.operation === "coerce";
                         if (!complete && booleanPrefix) { choices.add(false); choices.add(true); continue; }
                         let combinations: Primitive[][] = [[]];
                         for (const part of atom.parts) combinations = combinations.flatMap(prefix => (proofs.get(part)?.values ?? []).map(value => [...prefix, value]));
@@ -1801,6 +1927,8 @@ class SourceValueFlow {
                                 // Primitive operators have no user callbacks. Abrupt
                                 // numeric conversions contribute no normal choice.
                                 try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
+                            } else if (atom.operation === "coerce") {
+                                try {choices.add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
                             } else if (atom.operation === "bound-name") choices.add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
                             else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) choices.add(tuple.map(String).join(""));}
                             else {

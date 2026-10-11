@@ -8,7 +8,7 @@ test('one Realm binding collection supplies normal call result categories withou
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-intrinsic-model-'));
  try{const entry=path.join(directory,'source.js');
   for(const expression of nonTextResults){await fs.writeFile(entry,`eval(${expression});`);expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([[]]);}
-  for(const source of ['eval(String(input));','eval(Date());','var value=flag?Number(input):external;eval(value);','var convert=flag?Number:external;eval(convert(input));','try{if(flag)throw "31;";Number({valueOf(){throw "37;";}});}catch(source){eval(source);}',
+  for(const source of ['eval(String(input));','eval(Date());','var value=flag?Number(input):external;eval(value);','var convert=flag?Number:external;eval(convert(input));','try{if(flag)throw "31;";Number({valueOf(){throw external;}});}catch(source){eval(source);}',
     'eval(""+Number(input));','globalThis[input]=()=>"31;";eval(Number());',
     'Object.defineProperties(globalThis,external);eval(Number());',
     'Object.assign(globalThis,{Number:()=>"31;"});eval(Number());',
