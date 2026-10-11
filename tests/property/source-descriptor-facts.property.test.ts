@@ -23,6 +23,22 @@ const subjects=[
  'var reader={"1":function(){return "79;";}};eval(Reflect.getOwnPropertyDescriptor(reader,1).value());',
  'var reader=[function(){return "83;";}];eval(Object.getOwnPropertyDescriptors(reader)[0].value());',
 ];
+const booleanSubjects=[
+ ['var reader={value:1};','Object.getOwnPropertyDescriptor(reader,"value")',["writable","enumerable","configurable"]],
+ ['var reader={get value(){return 1;}};','Reflect.getOwnPropertyDescriptor(reader,"value")',["enumerable","configurable"]],
+ ['var reader={};Object.defineProperty(reader,"value",{set(value){},configurable:true});','Object.getOwnPropertyDescriptors(reader).value',["enumerable","configurable"]],
+ ['var reader={};Object.defineProperty(reader,"value",{value:1,writable:false,enumerable:false,configurable:false});','Object.getOwnPropertyDescriptor(reader,"value")',["writable","enumerable","configurable"]],
+] as const;
+const booleanSources=booleanSubjects.flatMap(([definition,descriptor,attributes])=>attributes.map(attribute=>definition+'eval('+descriptor+'.'+attribute+');'));
+test("descriptor normal attribute results are Boolean independently of their values",()=>{
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(typeof value)});return values;})));',JSON.stringify(booleanSources)],{stdout:"pipe",stderr:"pipe"});
+ expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});expect(JSON.parse(oracle.stdout.toString())).toEqual(booleanSources.map(()=>["boolean"]));
+ for(const source of booleanSources)expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([[]]);
+ for(const value of ['"101;"','external']){
+  const source='var descriptor=Object.getOwnPropertyDescriptor({value:1},"value");descriptor.writable='+value+';eval(descriptor.writable);';
+  expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([value==='external'?null:['101;']]);
+ }
+});
 test("own descriptor projections retain callable cells without activating accessors",()=>{
  const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
@@ -32,11 +48,13 @@ test("own descriptor projections retain callable cells without activating access
 });
 test("descriptor callable projection and one deep owner graph match Node in both memory modes",async()=>{
  const pieces=subjects.map((source,index)=>'{'+source.replace(/eval\((.*)\);$/,`print("case${index}:"+eval($1));`)+'}');
+ for(const[index,source]of booleanSources.entries())pieces.push('{'+source.replace(/eval\((.*)\);$/,`print("attribute${index}:"+eval($1));`)+'}');
  pieces.push('var root={value:function(){return "89;";}};');
  const depth=512;for(let index=0;index<depth;index++)pieces.push(`var box${index}={next:${index?'box'+(index-1):'root'}};`);
  pieces.push(`if(NATIVE_GC)$262.gc();var selected0=box${depth-1};`);
  for(let index=1;index<=depth;index++)pieces.push(`var selected${index}=Reflect.getOwnPropertyDescriptor(selected${index-1},"next").value;`);
  pieces.push(`print("deep:"+eval(Object.getOwnPropertyDescriptor(selected${depth},"value").value()));`);
+ pieces.push(`print("deep-attribute:"+eval(Object.getOwnPropertyDescriptor(selected${depth},"value").writable));`);
  const source=pieces.join('\n'),directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-source-descriptors-'));
  try{
   const entry=path.join(directory,'source.js');await fs.writeFile(entry,source.replaceAll('NATIVE_GC','false'));

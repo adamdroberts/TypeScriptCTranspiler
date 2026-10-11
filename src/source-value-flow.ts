@@ -184,6 +184,7 @@ class SourceValueFlow {
     private readonly agent: Atom = { tag: "agent" };
     private readonly realm: Atom = { tag: "realm-record" };
     private nextCell = 0;
+    private readonly booleanResult = this.newCell();
     private readonly opaqueMutation = this.newCell();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -412,6 +413,9 @@ class SourceValueFlow {
     private defineField(owner: ObjectOwner, key: string, value: Cell): void {
         this.publish(this.presence(owner,key),this.primitive(true));this.copy(value,this.field(owner,key));
     }
+    private defineBooleanField(owner:ObjectOwner,key:string): void {
+        this.publish(this.booleanResult,this.primitive(false));this.publish(this.booleanResult,this.primitive(true));this.defineField(owner,key,this.booleanResult);
+    }
     private defineAccessor(owner:ObjectOwner,key:string|null,kind:"get"|"set",value:Cell,context:ts.Node): void {
         let accessor=owner.accessors.get(key);
         if(!accessor){accessor={get:this.newCell(),set:this.newCell()};owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
@@ -563,14 +567,14 @@ class SourceValueFlow {
                     if(!record){
                         const descriptor:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
                         const value=this.newCell();this.publish(value,{tag:"object",owner:descriptor});record={value,owner:descriptor};entries.set(name,record);
-                        for(const attribute of ["enumerable","configurable"]){const unknown=this.newCell();this.publish(unknown,this.unknown);this.defineField(descriptor,attribute,unknown);}
+                        for(const attribute of ["enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
                     }
                     if(accessor){
                         for(const kind of ["get","set"] as const){this.watch(rule,accessor[kind]);this.defineField(record.owner,kind,accessor[kind]);if(!accessor[kind].values.size)this.publish(this.field(record.owner,kind),this.primitive(undefined));}
                     }
                     if(data.values.size || !accessor){
                         this.defineField(record.owner,"value",data);
-                        const writable=this.field(record.owner,"writable");this.publish(this.presence(record.owner,"writable"),this.primitive(true));this.publish(writable,this.unknown);
+                        this.defineBooleanField(record.owner,"writable");
                     }
                     if(key)this.copy(record.value,result);else this.defineField(collection,name,record.value);
                 }
