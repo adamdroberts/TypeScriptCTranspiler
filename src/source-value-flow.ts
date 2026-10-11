@@ -4,6 +4,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding} from "./source-bindings";
+import {runtimeGlobalBindings, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly functions?: readonly FunctionConstructorEntry[];
@@ -27,7 +28,8 @@ export interface EvaluationInvocation {
 type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction |
     ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ConstructorDeclaration;
 type Domain = "constructor" | "prototype" | "instance";
-type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
+type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+    "define-property" | "define-properties" | "set-property" | "delete-property";
 type Primitive = string | number | bigint | boolean | null | undefined;
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
@@ -36,6 +38,7 @@ interface PrimitiveChoiceProof {
 }
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
+    | { readonly tag: "builtin"; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
     | { readonly tag: "function"; readonly owner: FunctionOwner }
     | { readonly tag: "object"; readonly owner: ObjectOwner }
@@ -79,6 +82,14 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
+// Initial intrinsic member identities, installed on their canonical owners.
+// Source lookups and later writes use the ordinary field graph.
+const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
+    ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"]])],
+    ["Reflect", new Map([["getPrototypeOf", "prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
+        ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"]])],
+]);
+const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node) || ts.isTemplateSpan(node)) return [node.expression];
@@ -148,7 +159,10 @@ class SourceValueFlow {
     private readonly realm: Atom = { tag: "realm-record" };
     private nextCell = 0;
     private readonly empty = this.newCell();
+    private readonly globalMutation = this.newCell();
+    private readonly propertyWrites = new Set<string>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
+    private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
     constructor(program: ts.Program, entries: SourceValueGraphEntries) {
         this.checker = program.getTypeChecker();
@@ -209,13 +223,8 @@ class SourceValueFlow {
                     if (ts.isIdentifier(target)) this.writeBinding(target, this.cell(node.right));
                     else if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
                         const base = this.cell(target.expression), value = this.cell(node.right), name = propertyName(target);
-                        if (name !== null) this.rule([base], () => {
-                            for (const atom of base.values) {
-                                const owner = this.ordinaryOwner(atom);
-                                if (owner) this.copy(value, this.field(owner, name));
-                                if (atom.tag === "global") this.copy(value, this.globalBinding(name));
-                            }
-                        });
+                        if (name !== null) this.writeProperty(base,name,value);
+                        else if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base,this.cell(target.argumentExpression),value);
                     }
                 }
                 if (functionNode(node)) {
@@ -338,19 +347,60 @@ class SourceValueFlow {
     }
     private field(owner: ObjectOwner, key: string): Cell {
         let cell = owner.fields.get(key);
-        if (!cell) { cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.text(key)); }
+        if (!cell) {
+            cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.text(key));
+            const target = cell;
+            this.rule([owner.shape],()=>{if(owner.shape.values.has(this.unknown))this.publish(target,this.unknown);});
+        }
         return cell;
+    }
+    private writeProperty(base: Cell, key: string | null, value: Cell, unknownGlobal = true): void {
+        const signature=base.id+":"+JSON.stringify(key)+":"+value.id+":"+unknownGlobal;
+        if(this.propertyWrites.has(signature))return;
+        this.propertyWrites.add(signature);
+        this.rule([base],()=>{for(const atom of base.values){
+            const owner=this.ordinaryOwner(atom);
+            if(owner){
+                if(key===null){this.publish(owner.shape,this.unknown);for(const field of owner.fields.values())this.publish(field,this.unknown);}
+                else this.copy(value,this.field(owner,key));
+            }
+            if(atom.tag==="global"){
+                if(key===null)this.publish(this.globalMutation,this.unknown);
+                else this.copy(value,this.globalBinding(key));
+            }
+            if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object"))this.publish(this.globalMutation,this.unknown);
+        }});
+    }
+    private writeComputedProperty(base: Cell, key: Cell, value: Cell): void {
+        let rule!: Rule;
+        rule=this.rule([key],()=>{
+            if(!key.values.size)return;
+            this.watchText(rule,key);
+            const proof=this.primitiveChoiceProof(key);
+            if(!proof.primitiveComplete)this.writeProperty(base,null,value);
+            else for(const name of proof.values)this.writeProperty(base,String(name),value);
+        });
     }
     private globalBinding(key: string): Cell {
         let cell = this.globals.get(key);
         if (!cell) {
             cell = this.newCell();this.globals.set(key,cell);
+            this.copy(this.globalMutation,cell);
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
             if (key === "eval") this.publish(cell,this.operation("eval"));
+            if (key === "print") this.publish(cell,this.operation("host-print"));
             if (key === "$262") this.publish(cell,this.host);
             if (key === "undefined") this.publish(cell,this.primitive(undefined));
             if (key === "NaN") this.publish(cell,this.primitive(NaN));
             if (key === "Infinity") this.publish(cell,this.primitive(Infinity));
+            const descriptor = runtimeGlobalBindings.get(key);
+            if (descriptor?.normalResult && cell.values.size === 0) {
+                const fields: ObjectOwner = {fields:new Map(),getters:new Map(),shape:this.newCell()};
+                for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
+                    const value = this.newCell();this.publish(value,this.operation(operation));fields.fields.set(name,value);
+                }
+                this.publish(cell, {tag:"builtin", normalResult:descriptor.normalResult,fields});
+            }
         }
         return cell;
     }
@@ -366,6 +416,12 @@ class SourceValueFlow {
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
+        if(atom.tag === "builtin")return atom.fields;
+        if(atom.tag === "intrinsic"){
+            let owner=this.intrinsicOwners.get(atom);
+            if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);}
+            return owner;
+        }
         if(atom.tag !== "host" && atom.tag !== "realm-record" && atom.tag !== "agent")return null;
         const key=atom.tag === "agent" ? "agent" : "host";
         let owner=this.hostOwners.get(key);
@@ -405,13 +461,15 @@ class SourceValueFlow {
             this.copy(this.globalBinding(key),result);
         }
         if (atom.tag === "host" || atom.tag === "realm-record") {
+            if (key === "gc") this.publish(result, this.operation("host-gc"));
             if (key === "agent") this.publish(result, this.agent);
             if (key === "createRealm") this.publish(result, this.operation("realm"));
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result, this.global);
         }
         if (atom.tag === "agent" && key === "start") this.publish(result, this.operation("agent-start"));
-        if (["function", "bound", "intrinsic", "operation"].includes(atom.tag) && ["call", "apply", "bind"].includes(key))
+        if ((["function", "bound", "intrinsic", "operation"].includes(atom.tag) ||
+            atom.tag === "builtin" && atom.normalResult !== "not-callable") && ["call", "apply", "bind"].includes(key))
             this.publish(result, this.operation(key as Operation));
         if (atom.tag === "generator" && key === "constructor") this.publish(result, this.intrinsic("prototype", atom.owner.kind));
     }
@@ -576,13 +634,6 @@ class SourceValueFlow {
             const key = propertyName(node);
             if (key !== null) {
                 this.copy(this.property(this.cell(node.expression), key, node), result);
-                const base = unwrap(node.expression);
-                if (ts.isIdentifier(base) && ["Object", "Reflect"].includes(base.text) &&
-                    (this.checker.getSymbolAtLocation(base)?.declarations ?? []).every(declaration => declaration.getSourceFile().isDeclarationFile)) {
-                    if (key === "getPrototypeOf") this.publish(result, this.operation("prototype"));
-                    if (base.text === "Reflect" && key === "apply") this.publish(result, this.operation("reflect-apply"));
-                    if (base.text === "Reflect" && key === "construct") this.publish(result, this.operation("construct"));
-                }
             }
         } else if (ts.isConditionalExpression(node)) {
             this.copy(this.cell(node.whenTrue), result); this.copy(this.cell(node.whenFalse), result);
@@ -645,6 +696,8 @@ class SourceValueFlow {
                             this.publish(result!, ts.isNewExpression(node) ? this.opaqueObject : this.unknown);
                             const handler = this.exceptionHandlers.get(node);
                             if (handler) this.publish(handler, this.unknown);
+                            this.writeProperty(invocation.receiver,null,this.empty,false);
+                            for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false);
                             continue;
                         }
                         const argv = invocation.args;
@@ -666,17 +719,36 @@ class SourceValueFlow {
                                 receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : this.empty, args });
                             continue;
                         }
-                        if (atom.tag !== "operation" && handled(atom, signature)) continue;
+                        if ((atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                         if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                             this.invocations.push({ kind: atom.kind, args: argv });
                             for (const value of this.generated.get(atom.kind) ?? []) this.copy(value, result!);
+                        } else if (atom.tag === "builtin") {
+                            if (!ts.isNewExpression(node)) {
+                                if (atom.normalResult === "boolean") {
+                                    this.publish(result!, this.primitive(false));
+                                    this.publish(result!, this.primitive(true));
+                                } else this.publish(result!, atom.normalResult === "non-string" ? this.nonString :
+                                    atom.normalResult === "object" ? this.opaqueObject : this.unknown);
+                            }
+                            const handler = this.exceptionHandlers.get(node);
+                            if (handler) {
+                                this.publish(handler, this.opaqueObject);
+                                // Coercion can call arbitrary user code. A
+                                // result category cannot erase its exceptions.
+                                if (atom.normalResult === "unknown" || argv === null || argv.some(argument =>
+                                    [...argument.values].some(value => value.tag !== "primitive" && value.tag !== "non-string")))
+                                    this.publish(handler, this.unknown);
+                            }
                         } else if (atom.tag === "function") {
                             this.copy(invocation.receiver, atom.owner.receiver);
                             for (const [index, parameter] of atom.owner.node.parameters.filter(parameter => !ts.isIdentifier(parameter.name) || parameter.name.text !== "this").entries()) {
                                 if (parameter.dotDotDotToken) {
                                     const rest: Cell = this.newCell();
-                                    this.publish(rest, { tag: "object", owner: { fields: new Map((argv?.slice(index) ?? []).map((cell, offset) => [String(offset), cell])),
-                                        getters: new Map(), shape: this.newCell(), list: argv?.slice(index).map(cell => ({ cell, spread: false })) } });
+                                    const restOwner: ObjectOwner = {fields:new Map(),getters:new Map(),shape:this.newCell(),
+                                        list:argv?.slice(index).map(cell=>({cell,spread:false}))};
+                                    for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.copy(value,this.field(restOwner,String(offset)));
+                                    this.publish(rest, {tag:"object",owner:restOwner});
                                     this.bind(parameter.name, rest);
                                 } else if (argv?.[index]) this.bind(parameter.name, argv[index]!);
                                 if (parameter.initializer) this.bind(parameter.name, this.cell(parameter.initializer));
@@ -689,6 +761,34 @@ class SourceValueFlow {
                                 if (handler) this.copy(atom.owner.throws, handler);
                             }
                         } else if (atom.tag === "operation") {
+                            if(atom.operation==="host-gc")this.publish(result!,this.primitive(undefined));
+                            if(atom.operation==="host-print"){
+                                this.publish(result!,this.primitive(undefined));
+                                const handler=this.exceptionHandlers.get(node);
+                                if(handler && (argv===null||argv.some(argument=>[...argument.values].some(value=>
+                                    value.tag!=="primitive"&&value.tag!=="non-string"))))this.publish(handler,this.unknown);
+                            }
+                            if(PROPERTY_MUTATIONS.has(atom.operation)){
+                                const handler=this.exceptionHandlers.get(node);
+                                if(handler)this.publish(handler,this.unknown);
+                                const target=argv?.[0],key=argv?.[1];
+                                if(!target){this.publish(this.globalMutation,this.unknown);continue;}
+                                if(atom.operation==="define-properties")this.writeProperty(target,null,this.empty);
+                                else if(key){
+                                    const value=atom.operation==="define-property" && argv?.[2] ? this.property(argv[2],"value",node) :
+                                        atom.operation==="set-property" && argv?.[2] ? argv[2] : this.newCell();
+                                    if(atom.operation==="delete-property")this.publish(value,this.unknown);
+                                    if(atom.operation==="define-property" && argv?.[2]){
+                                        const getter=this.property(argv[2],"get",node);
+                                        this.rule([getter],()=>{if([...getter.values].some(value=>value.tag!=="primitive"||value.value!==undefined))
+                                            this.publish(value,this.unknown);});
+                                    }
+                                    this.writeComputedProperty(target,key,value);
+                                }else this.writeProperty(target,null,this.empty);
+                                if(atom.operation==="define-property"||atom.operation==="define-properties")this.copy(target,result!);
+                                else {this.publish(result!,this.primitive(false));this.publish(result!,this.primitive(true));}
+                                continue;
+                            }
                             if (atom.operation === "bind") {
                                 let value = boundValues.get(signature);
                                 if (!value) { value = { tag: "bound", target: invocation.receiver, prefix: argv?.slice(1) ?? null }; boundValues.set(signature, value); }

@@ -817,3 +817,5 @@ Non-String eval argument admission now uses the source graph normal-result categ
 Merged unknown source facts are frontend admission evidence. Explicit eval manifests continue to select the existing native registry, and unregistered runtime strings retain the existing dispatch guard. No public runtime API changes.
 
 Catch-pattern initialization reuses ordinary environment aliases, TDZ cells and GC roots. Computed object literal keys use the existing ToPropertyKey operation before initializing their values. No public runtime API changes.
+
+The canonical global binding definition includes frontend normal call-result categories; native Realm initialization consumes its existing value and attribute projections. Source reflection operations use ordinary owner fields. No public runtime API changes.

@@ -5021,3 +5021,5 @@ Eval now accepts non-String normal numeric and Boolean results through the share
 Retain unresolved source-value facts through joins, calls, properties and argument Lists. Mixed known/unknown source now requires explicit admission; removed the syntax-only restriction that rejected a valid eval manifest.
 
 Preserve caught source values through explicit throws, calls, getters and async rejection. Lower ordinary catch patterns through the shared binding tree and retain computed object key effects and conversion order.
+
+Admit intrinsic non-String eval results through canonical Realm binding metadata. Route reflection operations by intrinsic owner identity, including aliases and replaced properties. Preserve descriptor and reflected property writes through the same source graph.

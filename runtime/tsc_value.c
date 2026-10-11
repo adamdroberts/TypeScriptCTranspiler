@@ -2912,8 +2912,8 @@ typedef struct {
 } tsc_global_function_descriptor_t;
 
 static const tsc_global_function_descriptor_t global_function_descriptors[] = {
-#define TSC_GLOBAL_INTRINSIC(name, value)
-#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required) { #name, sizeof(#name) - 1, length, kind, constructible, enumerable, required },
+#define TSC_GLOBAL_INTRINSIC(name, value, source_result)
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required, source_result) { #name, sizeof(#name) - 1, length, kind, constructible, enumerable, required },
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable)
 #include "tsc_global_bindings.def"
 #undef TSC_GLOBAL_INTRINSIC
@@ -3070,8 +3070,8 @@ tsc_value_t tsc_global_object(void) {
     tsc_object_t* built = tsc_object_new();
     realm->global_object=built;
     tsc_global_intrinsic_t intrinsics[] = {
-#define TSC_GLOBAL_INTRINSIC(name, value) { #name, sizeof(#name) - 1, value },
-#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
+#define TSC_GLOBAL_INTRINSIC(name, value, source_result) { #name, sizeof(#name) - 1, value },
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required, source_result)
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable)
 #include "tsc_global_bindings.def"
 #undef TSC_GLOBAL_INTRINSIC
@@ -3079,8 +3079,8 @@ tsc_value_t tsc_global_object(void) {
 #undef TSC_GLOBAL_VALUE
     };
     tsc_value_t built_value = tsc_value_object(built);
-#define TSC_GLOBAL_INTRINSIC(name, value)
-#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
+#define TSC_GLOBAL_INTRINSIC(name, value, source_result)
+#define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required, source_result)
 #define TSC_GLOBAL_VALUE(name, value, writable, configurable) \
     (void)tsc_object_define(built, tsc_str_from_lit(#name, sizeof(#name) - 1), \
         value, writable, false, configurable);
