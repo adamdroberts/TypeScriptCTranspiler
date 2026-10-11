@@ -3074,8 +3074,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["Reflect internal-method forwarding", "Proxy traps", "invariants and revocation"],
-      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/proxy-constructor.property.test.ts", "tests/property/reflect-construct.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width", "reflect_construct_argument_width"], "e2e": ["reflect_construct_validation", "reflect_dynamic", "proxy"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
-      "knownGaps": ["The remaining Reflect operations and Proxy internal-method semantic partitions still require exact terminal clause registration and pinned verification."]
+      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/proxy-constructor.property.test.ts", "tests/property/reflect-construct.property.test.ts", "tests/property/proxy-define-descriptor.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width", "reflect_construct_argument_width"], "e2e": ["reflect_construct_validation", "reflect_dynamic", "proxy", "proxy_function_prototype_invariants", "reflect_get_receiver_typed"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ReflectConstructor"], "implementation": ["runtime/tsc_builtin.c", "runtime/tsc_object.c", "runtime/tsc_value.c", "src/emit/index.ts"] },
+      "knownGaps": ["The remaining Reflect operations and Proxy internal-method semantic partitions still require exact terminal clause registration and pinned verification.", "Proxy defineProperty target-descriptor validation has local differential evidence for writable/configurable transitions, nested target ordering, false traps and abrupt values, plus one retained proxy graph. Other Proxy internal methods and exhaustive eligible clause evidence remain open."]
     },
     {
       "id": "memory-model",

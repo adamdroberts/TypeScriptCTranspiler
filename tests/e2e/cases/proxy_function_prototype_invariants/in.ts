@@ -1,3 +1,5 @@
+"use strict";
+
 function Target(this: any): void {}
 function Base(this: any): void {}
 function SetterTarget(this: any): void {}
@@ -68,11 +70,13 @@ function extraClosedAccessorKeys(target: any): string[] {
   return ["length", "name", "prototype"];
 }
 
-function readAccessor(this: any): string {
-  return "accessor";
-}
-
-function writeAccessor(this: any, next: string): void {}
+const accessorSource = {
+  get value(): string { return "accessor"; },
+  set value(next: string) {},
+};
+const accessorSourceDescriptor: any = Object.getOwnPropertyDescriptor(accessorSource, "value");
+const readAccessor = accessorSourceDescriptor.get;
+const writeAccessor = accessorSourceDescriptor.set;
 
 function realFunctionDescriptor(target: any, prop: any): any {
   events.push("real function desc:" + String(prop));
@@ -142,7 +146,7 @@ const closedGetProxy: any = new Proxy(closedGetTarget, { getPrototypeOf: otherPr
 try {
   console.log("get closed:", Object.getPrototypeOf(closedGetProxy, mark("get closed")).marker);
 } catch (err: any) {
-  console.log("get closed:", err);
+  console.log("get closed:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const exactGetProxy: any = new Proxy(closedGetTarget, {
@@ -161,7 +165,7 @@ const closedSetProxy: any = new Proxy(closedSetTarget, { setPrototypeOf: trueSet
 try {
   console.log("set closed:", Reflect.setPrototypeOf(closedSetProxy, nextProto, mark("set closed")));
 } catch (err: any) {
-  console.log("set closed:", err);
+  console.log("set closed:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 console.log("set same:", Reflect.setPrototypeOf(closedSetProxy, baseProto, mark("set same")));
@@ -171,7 +175,7 @@ const openExtensibleProxy: any = new Proxy(openExtensibleTarget, { isExtensible:
 try {
   console.log("open ext false:", Object.isExtensible(openExtensibleProxy, mark("open ext false")));
 } catch (err: any) {
-  console.log("open ext false:", err);
+  console.log("open ext false:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const closedExtensibleTarget: any = ClosedExtensible as any;
@@ -180,7 +184,7 @@ const closedExtensibleProxy: any = new Proxy(closedExtensibleTarget, { isExtensi
 try {
   console.log("closed ext true:", Reflect.isExtensible(closedExtensibleProxy, mark("closed ext true")));
 } catch (err: any) {
-  console.log("closed ext true:", err);
+  console.log("closed ext true:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const fakePreventTarget: any = FakePrevent as any;
@@ -188,7 +192,7 @@ const fakePreventProxy: any = new Proxy(fakePreventTarget, { preventExtensions: 
 try {
   console.log("fake prevent:", Reflect.preventExtensions(fakePreventProxy, mark("fake prevent")));
 } catch (err: any) {
-  console.log("fake prevent:", err);
+  console.log("fake prevent:", err instanceof TypeError ? "TypeError" : String(err));
 }
 console.log("fake still extensible:", Object.isExtensible(fakePreventTarget));
 
@@ -198,7 +202,7 @@ const realPreventProxy: any = new Proxy(realPreventTarget, { preventExtensions: 
 try {
   console.log("real prevent:", Reflect.preventExtensions(realPreventProxy, mark("real prevent")));
 } catch (err: any) {
-  console.log("real prevent:", err);
+  console.log("real prevent:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const missingPrototypeTarget: any = MissingPrototype as any;
@@ -206,7 +210,7 @@ const missingPrototypeProxy: any = new Proxy(missingPrototypeTarget, { ownKeys: 
 try {
   console.log("missing prototype key:", Reflect.ownKeys(missingPrototypeProxy, mark("missing prototype key")).join(","));
 } catch (err: any) {
-  console.log("missing prototype key:", err);
+  console.log("missing prototype key:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const exactFunctionTarget: any = ExactFunction as any;
@@ -219,7 +223,7 @@ const extraClosedFunctionProxy: any = new Proxy(extraClosedFunctionTarget, { own
 try {
   console.log("extra closed function keys:", Reflect.ownKeys(extraClosedFunctionProxy, mark("extra closed function keys")).join(","));
 } catch (err: any) {
-  console.log("extra closed function keys:", err);
+  console.log("extra closed function keys:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const accessorHolder: any = AccessorHolder as any;
@@ -235,7 +239,7 @@ const extraClosedAccessorProxy: any = new Proxy(setterTarget, { ownKeys: extraCl
 try {
   console.log("extra closed accessor keys:", Reflect.ownKeys(extraClosedAccessorProxy, mark("extra closed accessor keys")).join(","));
 } catch (err: any) {
-  console.log("extra closed accessor keys:", err);
+  console.log("extra closed accessor keys:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const prototypeDescriptorTarget: any = PrototypeDescriptor as any;
@@ -253,28 +257,28 @@ const prototypeDefineProxy: any = new Proxy(prototypeDescriptorTarget, { defineP
 try {
   console.log("prototype define downgrade:", Reflect.defineProperty(prototypeDefineProxy, "prototype", { writable: false }, mark("prototype define downgrade")));
 } catch (err: any) {
-  console.log("prototype define downgrade:", err);
+  console.log("prototype define downgrade:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const nonWritablePrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: nonWritablePrototypeDescriptor as any });
 try {
   console.log("nonwritable prototype descriptor:", Object.getOwnPropertyDescriptor(nonWritablePrototypeProxy, "prototype", mark("nonwritable prototype descriptor"))?.writable);
 } catch (err: any) {
-  console.log("nonwritable prototype descriptor:", err);
+  console.log("nonwritable prototype descriptor:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const configurablePrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: configurablePrototypeDescriptor as any });
 try {
   console.log("configurable prototype descriptor:", Reflect.getOwnPropertyDescriptor(configurablePrototypeProxy, "prototype", mark("configurable prototype descriptor"))?.configurable);
 } catch (err: any) {
-  console.log("configurable prototype descriptor:", err);
+  console.log("configurable prototype descriptor:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const hiddenPrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: hiddenPrototypeDescriptor as any });
 try {
   console.log("hidden prototype descriptor:", Object.getOwnPropertyDescriptor(hiddenPrototypeProxy, "prototype", mark("hidden prototype descriptor"))?.value);
 } catch (err: any) {
-  console.log("hidden prototype descriptor:", err);
+  console.log("hidden prototype descriptor:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 const realFunctionDescriptorProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: realFunctionDescriptor as any });
@@ -291,8 +295,13 @@ console.log(
 );
 const lockedAfterDesc: any = Object.getOwnPropertyDescriptor(lockedPrototypeTarget, "prototype");
 console.log("locked prototype after:", lockedAfterDesc.writable, lockedAfterDesc.value === lockedOriginalPrototype);
-lockedPrototypeTarget.prototype = { marker: "changed" };
-console.log("locked prototype assign:", lockedPrototypeTarget.prototype === lockedOriginalPrototype);
+let lockedAssignmentRejected = false;
+try {
+  lockedPrototypeTarget.prototype = { marker: "changed" };
+} catch (err: any) {
+  lockedAssignmentRejected = err instanceof TypeError;
+}
+console.log("locked prototype assign:", lockedAssignmentRejected, lockedPrototypeTarget.prototype === lockedOriginalPrototype);
 const lockedPrototypeProxy: any = new Proxy(lockedPrototypeTarget, { getOwnPropertyDescriptor: realFunctionDescriptor as any });
 const lockedProxyDesc: any = Reflect.getOwnPropertyDescriptor(lockedPrototypeProxy, "prototype", mark("locked prototype descriptor"));
 console.log("locked prototype proxy descriptor:", lockedProxyDesc.writable, lockedProxyDesc.value === lockedOriginalPrototype);

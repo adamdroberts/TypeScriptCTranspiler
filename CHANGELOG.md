@@ -305,6 +305,10 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Share Proxy defineProperty invariants through actual target descriptors and extensibility. Reject false writable downgrades of non-configurable data properties, preserve nested target ordering and abrupt values, and remove duplicated representation branches.
+
+- Correct function-proxy invariant fixtures with explicit strict functions, actual accessor functions, portable TypeError identity checks and strict rejection of locked prototype assignment. Regenerate output from Node.
+
 - Correct the Reflect.get Buffer receiver regression: indexed data ignores a primitive receiver, while the inherited length getter brands its actual receiver and can read a different Buffer. Verify observable receiver effects against Node.
 
 - Install Set composition on ordinary owners through shared set-like records and insertion/iterator worklists. Preserve observable validation, mutations, copy timing and early iterator closing; accept typed set-like operands and delete fixed native/emitter predecessors.
