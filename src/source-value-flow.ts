@@ -3,6 +3,21 @@ import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
+/** Resolve the declarative candidate independently of intervening object
+ * records. Source flow retains those records separately; this is not a proof
+ * that the runtime Reference selects the declarative candidate. */
+export function declarativeSourceBindingSymbol(checker: ts.TypeChecker, node: ts.Identifier): ts.Symbol | undefined {
+    if (ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node)
+        return checker.getShorthandAssignmentValueSymbol(node.parent);
+    const parent = node.parent;
+    const declaration = (ts.isVariableDeclaration(parent) || ts.isBindingElement(parent) || ts.isParameter(parent) ||
+        ts.isFunctionDeclaration(parent) || ts.isFunctionExpression(parent) ||
+        ts.isClassDeclaration(parent) || ts.isClassExpression(parent)) && parent.name === node;
+    return checker.getSymbolAtLocation(node) ??
+        (declaration ? (parent as ts.Node & {symbol?: ts.Symbol}).symbol : undefined) ??
+        checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
+}
+
 export interface SourceValueGraphEntries {
     readonly functions?: readonly FunctionConstructorEntry[];
     readonly evaluations?: readonly { readonly source: string; readonly entry: string | null }[];
@@ -137,7 +152,7 @@ class SourceValueFlow {
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
                 if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
                     const target = unwrap(node.left);
-                    if (ts.isIdentifier(target)) this.copy(this.cell(node.right), this.binding(target));
+                    if (ts.isIdentifier(target)) this.writeBinding(target, this.cell(node.right));
                     else if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
                         const base = this.cell(target.expression), value = this.cell(node.right), name = propertyName(target);
                         if (name !== null) this.rule([base], () => {
@@ -177,10 +192,16 @@ class SourceValueFlow {
         destinations.add(into);
         this.rule([from], () => { for (const value of from.values) this.publish(into, value); });
     }
-    private binding(node: ts.Identifier): Cell {
-        let symbol = this.checker.getSymbolAtLocation(node);
+    private bindingSymbol(node: ts.Identifier): ts.Symbol | undefined {
+        // Ordinary checker lookup stops at with. Resolve the declarative
+        // fallback separately; object-record candidates remain graph edges.
+        let symbol = declarativeSourceBindingSymbol(this.checker, node);
         if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = this.checker.getAliasedSymbol(symbol);
-        if (!symbol) return this.empty;
+        return symbol;
+    }
+    private binding(node: ts.Identifier): Cell {
+        const symbol = this.bindingSymbol(node);
+        if (!symbol) return this.globalBinding(node.text);
         let cell = this.bindings.get(symbol);
         if (!cell) {
             cell = this.newCell(); this.bindings.set(symbol, cell);
@@ -188,6 +209,43 @@ class SourceValueFlow {
             if (declaration && functionNode(declaration)) this.copy(this.cell(declaration), cell);
         }
         return cell;
+    }
+    private withBindingObjects(node: ts.Identifier): Cell[] {
+        let declaration = this.bindingSymbol(node)?.valueDeclaration;
+        while (declaration && ts.isBindingElement(declaration)) declaration = declaration.parent.parent as ts.Declaration;
+        let owner: ts.Node | undefined;
+        if (declaration && ts.isParameter(declaration)) owner = declaration.parent;
+        else if (declaration && (ts.isFunctionExpression(declaration) || ts.isClassExpression(declaration))) owner = declaration;
+        else if (declaration && ts.isVariableDeclaration(declaration) && ts.isCatchClause(declaration.parent)) owner = declaration.parent;
+        else if (declaration) {
+            const variableList = ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent)
+                ? declaration.parent : undefined;
+            const functionScoped = !!variableList && !(variableList.flags & ts.NodeFlags.BlockScoped);
+            for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent) {
+                if (ts.isSourceFile(current) || ts.isFunctionLike(current) || !functionScoped &&
+                    (ts.isBlock(current) || ts.isCaseBlock(current) || ts.isForStatement(current) ||
+                        ts.isForOfStatement(current) || ts.isForInStatement(current))) { owner = current; break; }
+            }
+        }
+        const objects: Cell[] = [];
+        let child: ts.Node = node;
+        for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
+            if (ts.isWithStatement(current) && current.statement === child) objects.push(this.cell(current.expression));
+            child = current;
+        }
+        return objects;
+    }
+    private writeBinding(node: ts.Identifier, value: Cell): void {
+        this.copy(value, this.binding(node));
+        // Presence and unscopables can change during execution. Keep both
+        // object-record and declarative destinations in this may-flow graph;
+        // runtime Reference capture makes the actual selection.
+        for (const base of this.withBindingObjects(node)) this.rule([base], () => {
+            for (const atom of base.values) {
+                const owner = this.ordinaryOwner(atom);
+                if (owner) this.copy(value, this.field(owner, node.text));
+            }
+        });
     }
     private intrinsic(domain: Domain, kind: DynamicFunctionKind): Atom {
         const key = domain + ":" + kind;
@@ -233,7 +291,7 @@ class SourceValueFlow {
         return cell;
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
-        return !(this.checker.getSymbolAtLocation(node)?.declarations ?? []).some(declaration =>
+        return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !declaration.getSourceFile().isDeclarationFile &&
             (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration) ||
                 functionNode(declaration) || ts.isClassDeclaration(declaration) || ts.isImportClause(declaration) ||
@@ -292,7 +350,7 @@ class SourceValueFlow {
         const worklist = [{ name, value }];
         while (worklist.length) {
             const entry = worklist.pop()!;
-            if (ts.isIdentifier(entry.name)) { this.copy(entry.value, this.binding(entry.name)); continue; }
+            if (ts.isIdentifier(entry.name)) { this.writeBinding(entry.name, entry.value); continue; }
             for (const [index, element] of entry.name.elements.entries()) {
                 if (!ts.isBindingElement(element)) continue;
                 const key = ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
@@ -383,6 +441,7 @@ class SourceValueFlow {
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
             this.copy(this.binding(node), result);
+            for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text), result);
             if (this.isAmbientIdentifier(node)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copy(this.globalBinding(node.text),result);
@@ -456,7 +515,10 @@ class SourceValueFlow {
             // its target's implementation lies outside this source graph.
             if (ts.isNewExpression(node)) this.publish(result, {tag:"object",owner:this.owner(node)});
             const target = unwrap(node.expression);
-            const receiver = ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target) ? this.cell(target.expression) : this.empty;
+            const objects = ts.isCallExpression(node) && ts.isIdentifier(target) ? this.withBindingObjects(target) : [];
+            const receiver = ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)
+                ? this.cell(target.expression) : objects.length ? this.newCell() : this.empty;
+            for (const object of objects) this.copy(object, receiver);
             const parts = (node.arguments ?? []).map(argument => ({ cell: this.cell(ts.isSpreadElement(argument) ? argument.expression : argument), spread: ts.isSpreadElement(argument) }));
             const call: Call = { node, callee: this.cell(target), receiver, result };
             const boundValues = new Map<string, Atom>();

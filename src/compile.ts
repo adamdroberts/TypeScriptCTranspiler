@@ -24,7 +24,7 @@ import {
 import { invokeCc } from "./link/cc";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
-import { sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
+import { declarativeSourceBindingSymbol, sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
 import {
     type NativeAddonManifest,
     loadNativeAddonManifest,
@@ -393,7 +393,7 @@ function isGlobalEvalOrFunctionValueReference(node: ts.Identifier, checker: ts.T
 }
 
 function isUnshadowedGlobalBindingIdentifier(node: ts.Identifier, checker: ts.TypeChecker): boolean {
-    const sym = checker.getSymbolAtLocation(node);
+    const sym = declarativeSourceBindingSymbol(checker, node);
     if (!sym) return true;
     const source = node.getSourceFile();
     return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
