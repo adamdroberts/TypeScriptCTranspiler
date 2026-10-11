@@ -8,6 +8,12 @@ static tsc_value_t iterator_self_apply(void* env, tsc_value_t this_arg, tsc_arra
 
 static const char iterator_prototype_realm_state_key = 0;
 static const char async_iterator_prototype_realm_state_key = 0;
+typedef enum { FOR_EACH, REDUCE, SOME, EVERY, FIND, TO_ARRAY } iterator_consumer_operation_t;
+static const struct { const char* name; iterator_consumer_operation_t operation; size_t length; } consumers[] = {
+#define TSC_ITERATOR_CONSUMER(name, operation, length) {#name, operation, length},
+#include "tsc_iterator_consumers.def"
+#undef TSC_ITERATOR_CONSUMER
+};
 static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t* args);
 
 tsc_value_t tsc_async_iterator_prototype_value(void) {
@@ -30,13 +36,10 @@ tsc_value_t tsc_iterator_prototype_value(void) {
         tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_iterator()),
             tsc_value_function_builtin_named(iterator_self_apply, NULL, 0.0,
                 tsc_str_from_lit("[Symbol.iterator]", 17)), true, false, true);
-        static const struct { const char* name; bool reduce; } consumers[] = {
-            { "forEach", false }, { "reduce", true },
-        };
         for (size_t index = 0; index < sizeof(consumers) / sizeof(*consumers); ++index) {
             tsc_str_t* name = tsc_str_from_cstr(consumers[index].name);
             tsc_object_define(prototype, name, tsc_value_function_builtin_named(iterator_consume,
-                (void*)&consumers[index].reduce, 1, name), true, false, true);
+                (void*)&consumers[index].operation, consumers[index].length, name), true, false, true);
         }
     }
     return tsc_value_object(prototype);
@@ -258,24 +261,27 @@ typedef struct {
 } iterator_consumer_t;
 
 static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t* args) {
-    const bool reduce = *(const bool*)env;
+    const iterator_consumer_operation_t operation = *(const iterator_consumer_operation_t*)env;
+    const bool reduce = operation == REDUCE;
     if (!tsc_value_is_object(receiver)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator consumer receiver is not an object"));
     }
-    iterator_consumer_t* state = TSC_GC_MALLOC(sizeof(*state));
+    iterator_consumer_t* volatile state = TSC_GC_MALLOC(sizeof(*state));
     *state = (iterator_consumer_t){ .iterator = {
         .source = receiver, .iterator = receiver, .next_method = tsc_value_undefined(),
         .source_gc_root = tsc_value_gc_root(receiver), .iterator_gc_root = tsc_value_gc_root(receiver),
     }, .callback = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined(),
        .accumulator = tsc_value_undefined() };
     state->callback_root = tsc_value_gc_root(state->callback);
-    if (!tsc_value_is_callable(state->callback)) {
+    if (operation != TO_ARRAY && !tsc_value_is_callable(state->callback)) {
         tsc_sync_iterator_close_abrupt(&state->iterator,
             tsc_value_error(tsc_error_new_named(tsc_str_from_lit("TypeError", 9),
                 tsc_str_from_cstr("Iterator consumer callback is not callable"))));
     }
     state->iterator = tsc_sync_iterator_open_direct(receiver);
     state->counter = tsc_bigint_from_lit("0");
+    tsc_array_t* volatile items = operation == TO_ARRAY ? tsc_array_new(sizeof(tsc_value_t), 0) : NULL;
+    if (items) tsc_array_use_value_storage(items);
     if (reduce) {
         if (args && args->len > 1) state->accumulator = TSC_ARR(tsc_value_t, args, 1);
         else {
@@ -289,7 +295,9 @@ static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t
     tsc_value_t value;
     while (tsc_sync_iterator_step(&state->iterator, &value)) {
         void* volatile value_root = tsc_value_gc_root(value);
-        tsc_array_t* actual = tsc_array_new(sizeof(tsc_value_t), reduce ? 3 : 2);
+        if (items) { tsc_array_push_value(items, value); continue; }
+        tsc_array_t* volatile actual = tsc_array_new(sizeof(tsc_value_t), reduce ? 3 : 2);
+        tsc_array_use_value_storage(actual);
         if (reduce) tsc_array_push_raw(actual, &state->accumulator);
         tsc_array_push_raw(actual, &value);
         tsc_value_t index = tsc_value_num(tsc_bigint_to_number(state->counter));
@@ -307,9 +315,18 @@ static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t
             state->accumulator_root = tsc_value_gc_root(result);
         }
         tsc_try_pop();
+        if ((operation == SOME || operation == FIND) && tsc_value_is_truthy(result) ||
+            operation == EVERY && !tsc_value_is_truthy(result)) {
+            state->accumulator = operation == FIND ? value : tsc_value_bool(operation == SOME);
+            state->accumulator_root = tsc_value_gc_root(state->accumulator);
+            tsc_sync_iterator_close(&state->iterator);
+            return state->accumulator;
+        }
         mpz_add_ui(state->counter->value, state->counter->value, 1);
         (void)value_root;
     }
+    if (items) return tsc_value_array(items);
+    if (operation == SOME || operation == EVERY) return tsc_value_bool(operation == EVERY);
     return state->accumulator;
 }
 

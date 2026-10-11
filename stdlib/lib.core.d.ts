@@ -59,6 +59,10 @@ interface IteratorObject<T, TReturn = any, TNext = undefined> extends Iterator<T
     forEach(callback: (value: T, index: number) => void, ...ignored: any[]): void;
     reduce(reducer: (accumulator: T, value: T, index: number) => T): T;
     reduce<U>(reducer: (accumulator: U, value: T, index: number) => U, initialValue: U, ...ignored: any[]): U;
+    some(predicate: (value: T, index: number) => unknown, ...ignored: any[]): boolean;
+    every(predicate: (value: T, index: number) => unknown, ...ignored: any[]): boolean;
+    find(predicate: (value: T, index: number) => unknown, ...ignored: any[]): T | undefined;
+    toArray(...ignored: any[]): T[];
 }
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>;

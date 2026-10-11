@@ -1,0 +1,6 @@
+some: true
+every: true
+find: 2
+array: 1,2,3
+empty: false true true
+reduce: 6
