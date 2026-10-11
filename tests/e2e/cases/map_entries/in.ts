@@ -9,7 +9,7 @@ m.set("a", 1);
 m.set("b", 2);
 m.set("c", 3);
 
-const entries = m.entries();
+const entries = Array.from(m.entries());
 console.log("len:", entries.length);
 for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!;
@@ -33,8 +33,8 @@ function mark(label: string): string {
     return label;
 }
 
-const ignoredKeys = m.keys(mark("k"));
-const ignoredValues = m.values(mark("v"));
-const ignoredEntries = m.entries(mark("e"));
+const ignoredKeys = Array.from(m.keys(mark("k")));
+const ignoredValues = Array.from(m.values(mark("v")));
+const ignoredEntries = Array.from(m.entries(mark("e")));
 const firstIgnored = ignoredEntries[0];
 console.log("ignored:", ignoredKeys.join("|"), ignoredValues.join("|"), firstIgnored[0] + ":" + firstIgnored[1], seen);

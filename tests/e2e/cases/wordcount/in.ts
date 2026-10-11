@@ -25,7 +25,10 @@ console.log("tokens:", words.length);
 const counts = countWords(words);
 console.log("distinct:", counts.size);
 
-const entries: string[] = counts.keys().map((k) => k + "=" + counts.get(k));
+const entries: string[] = [];
+for (const k of counts.keys()) {
+    entries.push(k + "=" + counts.get(k));
+}
 const sorted = entries.slice(0, entries.length).sort((a, b) => a < b ? -1 : 1);
 sorted.forEach((e) => console.log("  " + e));
 
