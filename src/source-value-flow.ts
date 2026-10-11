@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
+import { normalizeAssignmentTarget } from "./emit/binding-tree";
 import { callableName, expectedArgumentCount, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
@@ -194,9 +195,17 @@ class SourceValueFlow {
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
+    private readonly invalidEvaluations = new Set<string>();
     constructor(program: ts.Program, entries: SourceValueGraphEntries) {
         this.checker = program.getTypeChecker();
         for (const entry of entries.evaluations ?? []) {
+            if (entry.entry === null) {
+                this.invalidEvaluations.add(entry.source);
+                const completion = this.newCell(); this.publish(completion, this.abrupt);
+                const values = this.evaluations.get(entry.source) ?? [];
+                values.push(completion); this.evaluations.set(entry.source, values);
+                continue;
+            }
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
             if (!file) continue;
             const completion = this.newCell();
@@ -248,17 +257,25 @@ class SourceValueFlow {
                     });
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
-                if (ts.isBinaryExpression(node) && NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind)) {
-                    const target = unwrap(node.left);
-                    if (ts.isIdentifier(target)) this.onActive(node,()=>this.writeBinding(target, this.cell(node.right)));
-                    else if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
-                        const base = this.cell(target.expression), value = this.cell(node.right), name = propertyName(target);
-                        this.onActive(node,()=>{
-                            if(ts.isPropertyAccessExpression(target)&&ts.isPrivateIdentifier(target.name)){this.publish(this.opaqueMutation,this.unknown);return;}
-                            if (name !== null) this.writeProperty(base,name,value,true,"set",node);
-                            else if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base,this.cell(target.argumentExpression),value,"set",node);
-                        });
+                if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
+                    const value = NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) ? this.cell(node.right) : this.cell(node);
+                    this.onActive(node, () => this.writeTarget(node.left, value, node));
+                }
+                if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node))
+                    this.onActive(node, () => this.writeTarget(node.operand, this.cell(node), node));
+                if (ts.isDeleteExpression(node)) {
+                    const target = unwrap(node.expression);
+                    if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
+                        const value = this.newCell(); this.publish(value, this.primitive(undefined));
+                        this.onActive(node, () => this.writeTarget(target, value, node, "delete"));
                     }
+                }
+                if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+                    const value = this.newCell(); this.publish(value, this.unknown);
+                    this.onActive(node, () => {
+                        if (ts.isVariableDeclarationList(node.initializer)) for (const declaration of node.initializer.declarations) this.bind(declaration.name, value);
+                        else this.writeTarget(node.initializer, value, node);
+                    });
                 }
                 if (functionNode(node)) {
                     const owner = this.function(node);
@@ -492,22 +509,77 @@ class SourceValueFlow {
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.publish(this.globalMutation,this.unknown);if(handler)this.publish(handler,this.unknown);}
         }});
     }
+    /** One primitive ToPropertyKey projection for computed reads, writes and reflection. */
+    private propertyKeyNames(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
+        this.watchText(rule, key);
+        if (!key.values.size) return undefined;
+        const proof = this.primitiveChoiceProof(key);
+        if (proof.primitiveComplete) return [...new Set(proof.values.map(String))];
+        const worklist = [key], visited = new Set<Cell>();
+        let pending = false, unresolved = false;
+        while (worklist.length) {
+            const cell = worklist.pop()!;
+            if (visited.has(cell)) continue;
+            visited.add(cell);
+            if (!cell.values.size) pending = true;
+            for (const value of cell.values) {
+                if (value.tag === "text-operation") worklist.push(...value.parts);
+                else if (value.tag === "pending-source") pending = true;
+                else if (value.tag !== "primitive" && value.tag !== "abrupt") unresolved = true;
+            }
+        }
+        if (pending && !unresolved) return undefined;
+        if (context) {
+            const handler = this.exceptionHandlers.get(context);
+            if (handler) this.publish(handler, this.unknown);
+            this.onActive(context, () => this.publish(this.opaqueMutation, this.unknown));
+        }
+        return null;
+    }
+    private computedProperty(base: Cell, key: Cell, context: ts.Node): Cell {
+        const result = this.newCell(), selected = new Set<string>();
+        let rule!: Rule;
+        rule = this.rule([key], () => {
+            const names = this.propertyKeyNames(key, rule, context);
+            if (names === null) this.publish(result, this.unknown);
+            else if (names?.length === 0) this.publish(result, this.abrupt);
+            else for (const name of names ?? []) if (!selected.has(name)) {
+                selected.add(name);
+                this.copy(this.property(base, name, context), result);
+            }
+        });
+        return result;
+    }
+    private writeTarget(raw: ts.Expression, value: Cell, context: ts.Node, mode: "set"|"delete" = "set"): void {
+        const target = unwrap(raw);
+        if (ts.isIdentifier(target)) { this.writeBinding(target, value); return; }
+        if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
+            if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) { this.publish(this.opaqueMutation, this.unknown); return; }
+            const base = this.cell(target.expression);
+            if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base, this.cell(target.argumentExpression), value, mode, context);
+            else this.writeProperty(base, target.name.text, value, true, mode, context);
+            return;
+        }
+        const references = new Map<ts.Identifier, ts.Expression>();
+        const binding = normalizeAssignmentTarget(target, references);
+        if (binding) this.bind(binding, value, references, context);
+        else this.publish(this.opaqueMutation, this.unknown);
+    }
     private writeComputedProperty(base: Cell, key: Cell, value: Cell, mode: "set"|"define"|"delete" = "set", context?:ts.Node, receiver=base): void {
         let rule!: Rule;
         rule=this.rule([key],()=>{
-            if(!key.values.size)return;
-            this.watchText(rule,key);
-            const proof=this.primitiveChoiceProof(key);
-            if(!proof.primitiveComplete){const handler=context?this.exceptionHandlers.get(context):undefined;if(handler)this.publish(handler,this.unknown);this.writeProperty(base,null,value,true,mode,context,receiver);}
-            else for(const name of proof.values)this.writeProperty(base,String(name),value,true,mode,context,receiver);
+            const names = this.propertyKeyNames(key, rule, context);
+            if (names === null) this.writeProperty(base,null,value,true,mode,context,receiver);
+            else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
     }
     private defineProperty(base:Cell,key:Cell,descriptor:Cell,context:ts.Node): void {
         const getter=this.property(descriptor,"get",context),setter=this.property(descriptor,"set",context),value=this.property(descriptor,"value",context);
         let rule!:Rule;
         rule=this.rule([base,key,getter,setter],()=>{
-            this.watchText(rule,key);const proof=this.primitiveChoiceProof(key);
-            const names:readonly(string|null)[]=proof.primitiveComplete?proof.values.map(String):[null];
+            const keys = this.propertyKeyNames(key, rule, context);
+            if (keys === undefined) return;
+            const names:readonly(string|null)[]=keys ?? [null];
             const accessor=[...getter.values,...setter.values].some(atom=>atom!==this.primitive(undefined));
             for(const name of names){
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
@@ -540,16 +612,16 @@ class SourceValueFlow {
         const incomplete=()=>{this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);};
         let rule!:Rule;
         rule=this.rule(key?[base,key]:[base],()=>{
-            if(key)this.watchText(rule,key);
-            const proof=key?this.primitiveChoiceProof(key):null;
-            if(proof && !proof.primitiveComplete){incomplete();this.onActive(context,()=>this.publish(this.opaqueMutation,this.unknown));return;}
+            const keys=key?this.propertyKeyNames(key,rule,context):undefined;
+            if(key && keys===undefined)return;
+            if(key && keys===null){incomplete();return;}
             for(const atom of base.values){
                 if(atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 const owner=this.ordinaryOwner(atom);
                 if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.publish(this.opaqueMutation,this.unknown));continue;}
                 this.watch(rule,owner.shape);
                 if(owner.shape.values.has(this.unknown)){incomplete();continue;}
-                const names=proof?proof.values.map(String):[...new Set([...owner.fields.keys(),...owner.accessors.keys()])];
+                const names=key?keys!:[...new Set([...owner.fields.keys(),...owner.accessors.keys()])];
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
                 if(!key && atom.tag!=="object")incomplete();
@@ -734,15 +806,21 @@ class SourceValueFlow {
             this.publish(result, this.operation(key as Operation));
         if (atom.tag === "generator" && key === "constructor") this.publish(result, this.intrinsic("prototype", atom.owner.kind));
     }
-    private bind(name: ts.BindingName, value: Cell): void {
+    private bind(name: ts.BindingName, value: Cell, references?: ReadonlyMap<ts.Identifier, ts.Expression>, context?: ts.Node): void {
         const worklist = [{ name, value }];
         while (worklist.length) {
             const entry = worklist.pop()!;
-            if (ts.isIdentifier(entry.name)) { this.writeBinding(entry.name, entry.value); continue; }
+            if (ts.isIdentifier(entry.name)) {
+                const reference = references?.get(entry.name);
+                if (reference) this.writeTarget(reference, entry.value, context!);
+                else this.writeBinding(entry.name, entry.value);
+                continue;
+            }
             for (const [index, element] of entry.name.elements.entries()) {
                 if (!ts.isBindingElement(element)) continue;
                 const key = ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
-                const selected = element.dotDotDotToken ? entry.value : key === null ? this.empty : this.property(entry.value, key, entry.name);
+                const selected = element.dotDotDotToken ? references ? this.newCell() : entry.value : key === null ? this.newCell() : this.property(entry.value, key, entry.name);
+                if (key === null || element.dotDotDotToken && references) this.publish(selected, this.unknown);
                 if (element.initializer) this.copy(this.cell(element.initializer), selected);
                 worklist.push({ name: element.name, value: selected });
             }
@@ -1002,9 +1080,11 @@ class SourceValueFlow {
             }
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
             if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.onActive(node,()=>this.publish(this.opaqueMutation,this.unknown));return;}
-            const key = propertyName(node);
-            if (key !== null) {
-                this.copy(this.property(this.cell(node.expression), key, node), result);
+            if (ts.isElementAccessExpression(node) && node.argumentExpression)
+                this.copy(this.computedProperty(this.cell(node.expression), this.cell(node.argumentExpression), node), result);
+            else {
+                const key = propertyName(node);
+                if (key !== null) this.copy(this.property(this.cell(node.expression), key, node), result);
             }
         } else if (ts.isConditionalExpression(node)) {
             this.copy(this.cell(node.whenTrue), result); this.copy(this.cell(node.whenFalse), result);
@@ -1314,6 +1394,10 @@ class SourceValueFlow {
                                     }
                                     const generated = this.evaluations.get(String(text));
                                     if (!generated) this.publish(result!,this.pendingSource);
+                                    if (this.invalidEvaluations.has(String(text))) {
+                                        const handler = this.exceptionHandlers.get(node);
+                                        if (handler) this.onActive(node, () => this.publish(handler, this.opaqueObject));
+                                    }
                                     for (const value of generated ?? []) this.copy(value, result!);
                                 }
                                 if (atom.operation === "eval") for (const value of source.values)

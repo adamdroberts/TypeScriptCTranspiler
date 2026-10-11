@@ -31,7 +31,7 @@ const writers=[
 function sources(value:string){return writers.map(([definition,write])=>'class C {}'+definition+write!.replace('VALUE',value)+'eval(C.toString());');}
 test("accessor records invoke setters through the same receiver and actual List graph as calls",()=>{
  const subjects=sources('function(){return "41;";}');
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of subjects.entries())expect({source,complete:sourceEvaluationInvocations(program(source)).filter(call=>call.node.getText()==='eval(C.toString())').some(call=>call.choices!==null&&expected[index]!.every(value=>call.choices!.includes(value)))}).toEqual({source,complete:true});
  for(const source of sources('external'))expect({source,incomplete:sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)}).toEqual({source,incomplete:true});
