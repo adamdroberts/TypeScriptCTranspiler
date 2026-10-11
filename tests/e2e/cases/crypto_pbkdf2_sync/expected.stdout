@@ -7,4 +7,3 @@ namespace import: true
 ignored args: true 42
 error: crypto.pbkdf2Sync: iterations must be a positive finite number
 error: crypto.pbkdf2Sync: keylen must be a non-negative finite number
-error: crypto.pbkdf2Sync: only sha1, sha256, and sha512 are supported

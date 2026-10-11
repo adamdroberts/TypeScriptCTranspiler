@@ -152,6 +152,8 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_FS_DIRENT_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_SET_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_WEAK_REF_PROTOTYPE,
@@ -296,6 +298,7 @@ struct tsc_object {
     bool is_date;
     bool is_regexp;
     bool is_weak_collection;
+    bool is_crypto_digest;
     bool is_map;
     bool is_set;
     bool is_error;
@@ -718,7 +721,6 @@ tsc_buffer_t* buffer_from_base64(const tsc_str_t* input);
 tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len);
 double buffer_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
 double buffer_last_index_of_bytes(const tsc_buffer_t* b, const uint8_t* needle, size_t needle_len, double offset);
-void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len);
 double child_now_millis(void);
 void child_apply_env(const tsc_array_t* env);
 bool child_has_id_option(double value);

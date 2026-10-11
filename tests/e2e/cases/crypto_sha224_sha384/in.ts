@@ -44,7 +44,7 @@ console.log("sha384 hmac base64:", hmac384_2.digest("base64"));
 // 5. Default digest and Buffer digest
 const hmac224_3 = cryptoNs.createHmac("sha224", "key");
 hmac224_3.update("xyz");
-console.log("sha224 hmac default:", hmac224_3.digest());
+console.log("sha224 hmac default:", hmac224_3.digest().toString("hex"));
 
 const hmac384_3 = cryptoNs.createHmac("sha384", "key");
 hmac384_3.update("xyz");

@@ -1,4 +1,5 @@
 import { consoleOperations } from "../console-operations";
+import { cryptoDigestExports } from "../crypto-digest-owners";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
@@ -46,8 +47,6 @@ import {
     T_EVENT_TARGET,
     T_DISPATCH_QUEUE,
     T_FS_STATS,
-    T_HASH,
-    T_HMAC,
     T_NUMBER,
     T_REGEXP,
     T_STRING,
@@ -2565,18 +2564,7 @@ class Emitter {
         method: string,
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (method === "createHash") {
-            return args.length === 1 &&
-                this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts);
-        }
-        if (method === "createHmac") {
-            return args.length === 2 &&
-                this.isSideEffectFreeCryptoHashAlgorithm(args[0]!, seenConsts) &&
-                (this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) || this.isSideEffectFreeFreshBufferOperand(args[1]!, seenConsts));
-        }
-        return false;
-    }
+    ): boolean { return false; }
 
     private isSideEffectFreePrimitiveCryptoCall(
         method: string,
@@ -2584,14 +2572,6 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         return false;
-    }
-
-    private isSideEffectFreeCryptoHashAlgorithm(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const alg = this.sideEffectFreeStringLiteralText(expr, seenConsts);
-        return alg === "md5" || alg === "sha1" || alg === "sha224" || alg === "sha256" || alg === "sha384" || alg === "sha512";
     }
 
     private isSideEffectFreeCryptoDigestEncoding(
@@ -2603,87 +2583,24 @@ class Emitter {
         return encoding === "hex" || encoding === "base64";
     }
 
-    private isSideEffectFreeHashUpdateData(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return this.isSideEffectFreeStringCoercion(expr, seenConsts) ||
-            this.isSideEffectFreeFreshBufferOperand(expr, seenConsts);
-    }
-
-    private isSideEffectFreeDirectFreshHashOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression)
-        ) {
-            const recv = unwrapped.expression.expression;
-            const method = unwrapped.expression.name.text;
-            if ((method === "createHash" || method === "createHmac") && ts.isIdentifier(recv) && this.isCryptoModuleIdentifier(recv)) {
-                return this.isSideEffectFreeCryptoCall(method, unwrapped.arguments, seenConsts);
-            }
-            if (method === "update") {
-                return unwrapped.arguments.length === 1 &&
-                    this.isSideEffectFreeDirectFreshHashOperand(recv, seenConsts) &&
-                    this.isSideEffectFreeHashUpdateData(unwrapped.arguments[0]!, seenConsts);
-            }
-        }
-        if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
-            const cryptoExport = this.namedImportExportName(unwrapped.expression, ["crypto", "node:crypto"]);
-            return cryptoExport !== null &&
-                this.isSideEffectFreeCryptoCall(cryptoExport, unwrapped.arguments, seenConsts);
-        }
-        return false;
-    }
-
     private isSideEffectFreeHashMethodCall(
         recv: ts.Expression,
         method: string,
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeDirectFreshHashOperand(recv, seenConsts)) return false;
-        switch (method) {
-            case "update":
-                return args.length === 1 &&
-                    this.isSideEffectFreeHashUpdateData(args[0]!, seenConsts);
-            case "digest":
-                return args.length <= 1 &&
-                    this.isSideEffectFreeCryptoDigestEncoding(args[0], seenConsts);
-            default:
-                return false;
-        }
-    }
+    ): boolean { return false; }
 
     private isSideEffectFreePrimitiveHashMethodCall(
         recv: ts.Expression,
         method: string,
         args: ts.NodeArray<ts.Expression>,
         seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return method === "digest" &&
-            args.length === 1 &&
-            !this.isUndefinedExpression(args[0]!) &&
-            this.isSideEffectFreeHashMethodCall(recv, method, args, seenConsts);
-    }
+    ): boolean { return false; }
 
     private isSideEffectFreeHashDigestStringMethodCall(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isCallExpression(expr) || !ts.isPropertyAccessExpression(expr.expression)) {
-            return false;
-        }
-        return this.isSideEffectFreePrimitiveHashMethodCall(
-            expr.expression.expression,
-            expr.expression.name.text,
-            expr.arguments,
-            seenConsts,
-        );
-    }
+    ): boolean { return false; }
 
     private isSideEffectFreeProcessCall(
         recv: ts.Expression,
@@ -21387,8 +21304,6 @@ class Emitter {
             type.kind === "map" ||
             type.kind === "set" ||
             type.kind === "regexp" ||
-            type.kind === "hash" ||
-            type.kind === "hmac" ||
             type.kind === "date" ||
             type.kind === "error" ||
             type.kind === "url" ||
@@ -33406,8 +33321,6 @@ class Emitter {
             case "promise":
             case "eventemitter":
             case "regexp":
-            case "hash":
-            case "hmac":
             case "url":
             case "urlsearchparams":
             case "date":
@@ -34644,10 +34557,20 @@ class Emitter {
             const member=receiver.parent;
             const direntReceiver=member && ts.isPropertyAccessExpression(member) && member.expression===receiver && member.name.text==="Dirent";
             const importCell=expr.parent && (ts.isNamespaceImport(expr.parent) || ts.isImportClause(expr.parent));
+            const cryptoNames=["crypto","node:crypto"],cryptoMembers=cryptoDigestExports;
+            const cryptoReceiver=member&&ts.isPropertyAccessExpression(member)&&member.expression===receiver&&cryptoMembers.has(member.name.text);
+            if((cryptoReceiver||importCell)&&this.isNamespaceImportFrom(expr,cryptoNames))return {c:"tsc_crypto_digest_module_value(true)",ty:T_VALUE};
+            if((cryptoReceiver||importCell)&&this.isDefaultImportFrom(expr,cryptoNames))return {c:"tsc_crypto_digest_module_value(false)",ty:T_VALUE};
+            const cryptoName=this.namedImportExportName(expr,cryptoNames);
+            if(cryptoName&&cryptoMembers.has(cryptoName))return {c:"tsc_crypto_digest_export_value("+this.stringLit(cryptoName)+")",ty:T_VALUE};
             if ((direntReceiver || importCell) && this.isNamespaceImportFrom(expr, fsNames)) return { c: "tsc_fs_dirent_module_value(true)", ty: T_VALUE };
             if ((direntReceiver || importCell) && this.isDefaultImportFrom(expr, fsNames)) return { c: "tsc_fs_dirent_module_value(false)", ty: T_VALUE };
             if (this.namedImportExportName(expr, fsNames) === "Dirent")
                 return { c: 'tsc_fs_dirent_export_value(tsc_str_from_lit("Dirent", 6))', ty: T_VALUE };
+        }
+        if(ts.isPropertyAccessExpression(expr)&&ts.isIdentifier(expr.expression)&&this.isCryptoModuleIdentifier(expr.expression)&&cryptoDigestExports.has(expr.name.text)){
+            const namespaceImport=this.isNamespaceImportFrom(expr.expression,["crypto","node:crypto"]);
+            return {c:"tsc_value_get_prop(tsc_crypto_digest_module_value("+namespaceImport+"), "+this.stringLit(expr.name.text)+")",ty:T_VALUE};
         }
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) && this.isFsModuleIdentifier(expr.expression)) {
             if (expr.name.text === "Dirent") {
@@ -34991,7 +34914,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -35066,7 +34989,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "textencoder", "textdecoder", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -37513,6 +37436,13 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr) && memberName !== "Dirent")
             return this.emitFsCall(call, memberName);
         if (this.isFsPromisesReceiver(recvExpr)) return this.emitFsPromisesCall(call, memberName);
+        if(ts.isIdentifier(recvExpr)&&this.isCryptoModuleIdentifier(recvExpr)){
+            if(cryptoDigestExports.has(memberName)){
+                const namespaceImport=this.isNamespaceImportFrom(recvExpr,["crypto","node:crypto"]);
+                return this.emitDynamicNamedPropertyCall(call,{c:"tsc_crypto_digest_module_value("+namespaceImport+")",ty:T_VALUE},memberName,!!pa.questionDotToken);
+            }
+            return this.emitCryptoCall(call,memberName);
+        }
         if (this.importedHostModuleOwner(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
@@ -38373,10 +38303,6 @@ class Emitter {
             return this.emitEventMethod(call, recv, memberName);
         if (recv.ty.kind === "regexp")
             return this.emitRegexpMethod(call, recv, memberName);
-        if (recv.ty.kind === "hash")
-            return this.emitHashMethod(call, recv, memberName);
-        if (recv.ty.kind === "hmac")
-            return this.emitHmacMethod(call, recv, memberName);
 
         if (recv.ty.kind === "error")
             return this.emitErrorMethod(call, recv, memberName);
@@ -44585,53 +44511,22 @@ class Emitter {
         unsupported(call, `path.${name} (Phase 10 subset only)`);
     }
 
+    private emitCryptoNumberArgument(value: EmitResult, node: ts.Node): EmitResult {
+        if (value.ty.kind === "value") return { c: `tsc_crypto_number_input(${value.c})`, ty: T_NUMBER };
+        requireNumber(node, value.ty);
+        return value;
+    }
+
     private emitCryptoCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name === "createHash") {
-            if (call.arguments.length < 1)
-                unsupported(call, "crypto.createHash expects 1 arg");
-            const alg = this.emitExpr(call.arguments[0]!);
-            return this.emitSequencedExpr(
-                T_HASH,
-                [
-                    { value: alg, target: T_STRING, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ],
-                ([algorithm]) => `tsc_crypto_create_hash(${algorithm})`,
-            );
-        }
-        if (name === "createHmac") {
-            if (call.arguments.length < 2)
-                unsupported(call, "crypto.createHmac expects at least 2 args");
-            const alg = this.emitExpr(call.arguments[0]!);
-            const key = this.emitExpr(call.arguments[1]!);
-            if (key.ty.kind === "string") {
-                return this.emitSequencedExpr(
-                    T_HMAC,
-                    [
-                        { value: alg, target: T_STRING, node: call.arguments[0]! },
-                        { value: key, target: T_STRING, node: call.arguments[1]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 2),
-                    ],
-                    ([algorithm, keyArg]) => `tsc_crypto_create_hmac_str(${algorithm}, ${keyArg})`,
-                );
-            } else if (key.ty.kind === "buffer") {
-                return this.emitSequencedExpr(
-                    T_HMAC,
-                    [
-                        { value: alg, target: T_STRING, node: call.arguments[0]! },
-                        { value: key, target: T_BUFFER, node: call.arguments[1]! },
-                        ...this.ignoredArgumentSpecs(call.arguments, 2),
-                    ],
-                    ([algorithm, keyArg]) => `tsc_crypto_create_hmac_buffer(${algorithm}, ${keyArg})`,
-                );
-            } else {
-                unsupported(call.arguments[1]!, "crypto.createHmac key must be a string or Buffer");
-            }
+        if (name === "createHash" || name === "createHmac") {
+            const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
+            return this.emitSequencedExpr(T_VALUE, [{ value: argumentsList }],
+                ([actuals]) => `tsc_crypto_digest_create_value(${name === "createHmac" ? "true" : "false"}, ${actuals})`);
         }
         if (name === "randomBytes") {
             if (call.arguments.length < 1)
                 unsupported(call, "crypto.randomBytes expects 1 arg");
-            const size = this.emitExpr(call.arguments[0]!);
+            const size = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[0]!), call.arguments[0]!);
             requireNumber(call.arguments[0]!, size.ty);
             return this.emitSequencedExpr(
                 T_BUFFER,
@@ -44675,8 +44570,8 @@ class Emitter {
                 unsupported(call, "crypto.pbkdf2Sync expects 5 args: password, salt, iterations, keylen, digest");
             const password = this.emitExpr(call.arguments[0]!);
             const salt = this.emitExpr(call.arguments[1]!);
-            const iterations = this.emitExpr(call.arguments[2]!);
-            const keylen = this.emitExpr(call.arguments[3]!);
+            const iterations = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]!), call.arguments[2]!);
+            const keylen = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[3]!), call.arguments[3]!);
             const digest = this.emitExpr(call.arguments[4]!);
 
             requireNumber(call.arguments[2]!, iterations.ty);
@@ -44714,7 +44609,7 @@ class Emitter {
                 unsupported(call, "crypto.scryptSync expects password, salt, keylen");
             const password = this.emitExpr(call.arguments[0]!);
             const salt = this.emitExpr(call.arguments[1]!);
-            const keylen = this.emitExpr(call.arguments[2]!);
+            const keylen = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]!), call.arguments[2]!);
 
             requireNumber(call.arguments[2]!, keylen.ty);
 
@@ -44763,10 +44658,10 @@ class Emitter {
                 }
             }
 
-            const N_val = N_expr ? this.emitExpr(N_expr) : undefined;
-            const r_val = r_expr ? this.emitExpr(r_expr) : undefined;
-            const p_val = p_expr ? this.emitExpr(p_expr) : undefined;
-            const maxmem_val = maxmem_expr ? this.emitExpr(maxmem_expr) : undefined;
+            const N_val = N_expr ? this.emitCryptoNumberArgument(this.emitExpr(N_expr), N_expr) : undefined;
+            const r_val = r_expr ? this.emitCryptoNumberArgument(this.emitExpr(r_expr), r_expr) : undefined;
+            const p_val = p_expr ? this.emitCryptoNumberArgument(this.emitExpr(p_expr), p_expr) : undefined;
+            const maxmem_val = maxmem_expr ? this.emitCryptoNumberArgument(this.emitExpr(maxmem_expr), maxmem_expr) : undefined;
 
             if (N_val) requireNumber(N_expr!, N_val.ty);
             if (r_val) requireNumber(r_expr!, r_val.ty);
@@ -44813,12 +44708,12 @@ class Emitter {
             const hasOffset = !!call.arguments[1] && !this.isUndefinedExpression(call.arguments[1]);
             const hasSize = !!call.arguments[2] && !this.isUndefinedExpression(call.arguments[2]);
             if (hasOffset) {
-                const offset = this.emitExpr(call.arguments[1]);
+                const offset = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[1]), call.arguments[1]);
                 requireNumber(call.arguments[1], offset.ty);
                 specs.push({ value: offset, target: T_NUMBER, node: call.arguments[1] });
             }
             if (hasSize) {
-                const size = this.emitExpr(call.arguments[2]);
+                const size = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]), call.arguments[2]);
                 requireNumber(call.arguments[2], size.ty);
                 specs.push({ value: size, target: T_NUMBER, node: call.arguments[2] });
             }
@@ -44863,124 +44758,6 @@ class Emitter {
                 unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
             }
         }
-    }
-
-    private emitHashMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "update": {
-                if (args.length < 1) unsupported(call, "Hash.update expects 1 arg");
-                const data = this.emitExpr(args[0]!);
-                if (data.ty.kind === "buffer") {
-                    return this.emitSequencedExpr(
-                        recv.ty,
-                        [
-                            { value: recv },
-                            { value: data },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([hash, buffer]) => `tsc_hash_update_buffer(${hash}, ${buffer})`,
-                    );
-                }
-                if (data.ty.kind !== "string") unsupported(args[0]!, "Hash.update expects string or Buffer");
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [
-                        { value: recv },
-                        { value: data, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([hash, input]) => `tsc_hash_update(${hash}, ${input})`,
-                );
-            }
-            case "digest": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasEncoding) {
-                    specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    specs,
-                    (vals) => {
-                        const encodingArg = hasEncoding ? vals[1]! : `tsc_str_from_lit("hex", 3)`;
-                        return `tsc_hash_digest(${vals[0]}, ${encodingArg})`;
-                    },
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
-        }
-        unsupported(call, `Hash.${method} (only update/digest are supported)`);
-    }
-
-    private emitHmacMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "update": {
-                if (args.length < 1) unsupported(call, "Hmac.update expects 1 arg");
-                const data = this.emitExpr(args[0]!);
-                if (data.ty.kind === "buffer") {
-                    return this.emitSequencedExpr(
-                        recv.ty,
-                        [
-                            { value: recv },
-                            { value: data },
-                            ...this.ignoredArgumentSpecs(args, 1),
-                        ],
-                        ([hmac, buffer]) => `tsc_hmac_update_buffer(${hmac}, ${buffer})`,
-                    );
-                }
-                if (data.ty.kind !== "string") unsupported(args[0]!, "Hmac.update expects string or Buffer");
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [
-                        { value: recv },
-                        { value: data, target: T_STRING, node: args[0]! },
-                        ...this.ignoredArgumentSpecs(args, 1),
-                    ],
-                    ([hmac, input]) => `tsc_hmac_update(${hmac}, ${input})`,
-                );
-            }
-            case "digest": {
-                const specs: SequencedCallArg[] = [{ value: recv }];
-                const hasEncoding = !!args[0] && !this.isUndefinedExpression(args[0]);
-                if (hasEncoding) {
-                    specs.push({ value: this.emitExpr(args[0]), target: T_STRING, node: args[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 1));
-                const encodingText = hasEncoding ? this.sideEffectFreeStringLiteralText(args[0]!, new Set()) : null;
-                const isBuffer = encodingText === "buffer";
-                return this.emitSequencedExpr(
-                    isBuffer ? T_BUFFER : T_STRING,
-                    specs,
-                    (vals) => {
-                        const encodingArg = hasEncoding ? vals[1]! : `tsc_str_from_lit("hex", 3)`;
-                        if (isBuffer) {
-                            return `tsc_hmac_digest_buffer(${vals[0]}, ${encodingArg})`;
-                        } else {
-                            return `tsc_hmac_digest(${vals[0]}, ${encodingArg})`;
-                        }
-                    },
-                );
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "Object");
-        }
-        unsupported(call, `Hmac.${method} (only update/digest are supported)`);
     }
 
     private emitBufferStatic(call: ts.CallExpression, name: string): EmitResult {
@@ -47952,7 +47729,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -48616,7 +48393,7 @@ function requireNumber(node: ts.Node, t: CType): void {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "hash", "hmac", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "error", "buffer", "arraybuffer", "dataview", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

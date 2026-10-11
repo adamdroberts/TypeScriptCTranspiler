@@ -19,202 +19,299 @@ struct tsc_fs_dirent {
 
 /* ---------------- crypto ---------------- */
 
-struct tsc_hash {
+static const EVP_MD* crypto_digest_lookup(const tsc_str_t* algorithm) {
+    char* name=cstr_dup(algorithm);
+    const EVP_MD* digest=EVP_get_digestbyname(name);free(name);
+    if(!digest)tsc_throw_error(TSC_ERROR_ERROR,tsc_str_from_cstr("Unsupported digest algorithm"));
+    return digest;
+}
+
+/* Hash and HMAC share one digest-state representation and backend lifecycle. */
+typedef struct tsc_crypto_digest_state tsc_hash_t;
+struct tsc_crypto_digest_state {
+    bool hmac,finalized;
     const EVP_MD* md;
-    EVP_MD_CTX* ctx;
-    bool finalized;
-    size_t digest_len;
-    unsigned char digest[EVP_MAX_MD_SIZE];
+    EVP_MD_CTX* hash_context;
+    HMAC_CTX* hmac_context;
+    tsc_buffer_t* digest;
 };
-
-tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm) {
-    const EVP_MD* md = NULL;
-    if (str_lit_eq(algorithm, "sha1")) {
-        md = EVP_sha1();
-    } else if (str_lit_eq(algorithm, "sha224")) {
-        md = EVP_sha224();
-    } else if (str_lit_eq(algorithm, "sha256")) {
-        md = EVP_sha256();
-    } else if (str_lit_eq(algorithm, "sha384")) {
-        md = EVP_sha384();
-    } else if (str_lit_eq(algorithm, "sha512")) {
-        md = EVP_sha512();
-    } else if (str_lit_eq(algorithm, "md5")) {
-        md = EVP_md5();
-    } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHash: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
-    }
-
-    tsc_hash_t* h = (tsc_hash_t*)TSC_GC_MALLOC(sizeof(tsc_hash_t));
-    h->md = md;
-    h->ctx = EVP_MD_CTX_new();
-    h->finalized = false;
-    memset(h->digest, 0, sizeof h->digest);
-    int digest_size = EVP_MD_size(md);
-    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
-        tsc_panic("crypto.createHash: could not initialize digest");
-    }
-    h->digest_len = (size_t)digest_size;
-    if (EVP_DigestInit_ex(h->ctx, h->md, NULL) != 1) {
-        EVP_MD_CTX_free(h->ctx);
-        h->ctx = NULL;
-        tsc_panic("crypto.createHash: could not initialize digest");
-    }
-    return h;
+#ifndef TSC_NO_GC
+static void crypto_digest_release(void* object,void* ignored) {
+    (void)ignored;tsc_hash_t* state=object;
+    if(state->hash_context)EVP_MD_CTX_free(state->hash_context);
+    if(state->hmac_context)HMAC_CTX_free(state->hmac_context);
+    state->hash_context=NULL;state->hmac_context=NULL;
 }
-
-/* ---------------- hmac ---------------- */
-
-struct tsc_hmac {
-    const EVP_MD* md;
-    HMAC_CTX* ctx;
-    bool finalized;
-    size_t digest_len;
-    unsigned char digest[EVP_MAX_MD_SIZE];
+#endif
+static _Noreturn void crypto_digest_error(const char* message,const char* code) {
+    tsc_value_t error=tsc_value_error(tsc_error_new(tsc_str_from_cstr(message)));
+    void* volatile root=tsc_value_gc_root(error);
+    if(code)tsc_value_set_prop(error,tsc_str_from_lit("code",4),tsc_value_string(tsc_str_from_cstr(code)));
+    (void)root;tsc_throw_value(error);
+}
+static tsc_hash_t* crypto_digest_new(bool hmac,const tsc_str_t* algorithm,const tsc_buffer_t* key) {
+    const EVP_MD* md=crypto_digest_lookup(algorithm);
+    tsc_hash_t* volatile state=TSC_GC_MALLOC(sizeof(*state));memset(state,0,sizeof(*state));state->hmac=hmac;state->md=md;
+    int size=EVP_MD_size(md);if(size<=0)crypto_digest_error("Unsupported digest algorithm",NULL);
+    state->digest=tsc_buffer_alloc(size,0);
+    if(hmac) {
+        if(key&&key->len>INT_MAX)tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("HMAC key is too large"));
+        state->hmac_context=HMAC_CTX_new();
+        if(!state->hmac_context||HMAC_Init_ex(state->hmac_context,key&&key->len?key->data:(const void*)"",key?(int)key->len:0,md,NULL)!=1)
+            crypto_digest_error("Could not initialize HMAC",NULL);
+    } else {
+        state->hash_context=EVP_MD_CTX_new();
+        if(!state->hash_context||EVP_DigestInit_ex(state->hash_context,md,NULL)!=1)crypto_digest_error("Could not initialize hash",NULL);
+    }
+#ifndef TSC_NO_GC
+    GC_register_finalizer_no_order(state,crypto_digest_release,NULL,NULL,NULL);
+#endif
+    return state;
+}
+static void crypto_digest_update(tsc_hash_t* state,const void* bytes,size_t length) {
+    if(!state||state->finalized)crypto_digest_error("Digest already called","ERR_CRYPTO_HASH_FINALIZED");
+    int ok=state->hmac?HMAC_Update(state->hmac_context,bytes,length):EVP_DigestUpdate(state->hash_context,bytes,length);
+    if(ok!=1)crypto_digest_error("Could not update digest",NULL);
+}
+static tsc_buffer_t* crypto_digest_finish(tsc_hash_t* state) {
+    if(state->finalized) {
+        if(state->hmac)return tsc_buffer_alloc(0,0);
+        crypto_digest_error("Digest already called","ERR_CRYPTO_HASH_FINALIZED");
+    }
+    unsigned int length=0;
+    int ok=state->hmac?HMAC_Final(state->hmac_context,state->digest->data,&length):EVP_DigestFinal_ex(state->hash_context,state->digest->data,&length);
+    if(ok!=1)crypto_digest_error("Could not finalize digest",NULL);
+    if(state->hmac){HMAC_CTX_free(state->hmac_context);state->hmac_context=NULL;}
+    else {EVP_MD_CTX_free(state->hash_context);state->hash_context=NULL;}
+    state->finalized=true;state->digest->len=length;return state->digest;
+}
+typedef enum {CRYPTO_COPY,CRYPTO_TRANSFORM,CRYPTO_FLUSH_HASH,CRYPTO_UPDATE,CRYPTO_DIGEST_HASH,CRYPTO_DIGEST_HMAC,CRYPTO_FLUSH_HMAC} crypto_operation_t;
+typedef struct {const char* name;crypto_operation_t operation;double length;size_t order[2];} crypto_member_t;
+static const crypto_member_t crypto_members[]={
+#define TSC_CRYPTO_DIGEST_METHOD(name,operation,length,hash_order,hmac_order) {#name,CRYPTO_##operation,length,{hash_order,hmac_order}},
+#include "tsc_crypto_digest.def"
+#undef TSC_CRYPTO_DIGEST_METHOD
 };
-
-tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str_t* key) {
-    const EVP_MD* md = NULL;
-    if (str_lit_eq(algorithm, "sha1")) {
-        md = EVP_sha1();
-    } else if (str_lit_eq(algorithm, "sha224")) {
-        md = EVP_sha224();
-    } else if (str_lit_eq(algorithm, "sha256")) {
-        md = EVP_sha256();
-    } else if (str_lit_eq(algorithm, "sha384")) {
-        md = EVP_sha384();
-    } else if (str_lit_eq(algorithm, "sha512")) {
-        md = EVP_sha512();
-    } else if (str_lit_eq(algorithm, "md5")) {
-        md = EVP_md5();
-    } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
-    }
-
-    tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
-    h->md = md;
-    h->ctx = HMAC_CTX_new();
-    h->finalized = false;
-    memset(h->digest, 0, sizeof h->digest);
-    int digest_size = EVP_MD_size(md);
-    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
-        tsc_panic("crypto.createHmac: could not initialize context");
-    }
-    h->digest_len = (size_t)digest_size;
-
-    const void* key_data = key ? key->data : NULL;
-    int key_len = key ? (int)key->len : 0;
-    if (HMAC_Init_ex(h->ctx, key_data, key_len, h->md, NULL) != 1) {
-        HMAC_CTX_free(h->ctx);
-        h->ctx = NULL;
-        tsc_panic("crypto.createHmac: could not initialize hmac");
-    }
-    return h;
+typedef struct {const char* constructor;const char* factory;double length;} crypto_owner_descriptor_t;
+static const crypto_owner_descriptor_t crypto_owners[]={
+#define TSC_CRYPTO_DIGEST_OWNER(constructor,factory,length) {#constructor,#factory,length},
+#include "tsc_crypto_digest.def"
+#undef TSC_CRYPTO_DIGEST_OWNER
+};
+typedef struct {
+    tsc_value_t prototype[2],constructor[2],handle_symbol,state_symbol,finalized_symbol;
+    void* prototype_root[2];void* constructor_root[2];void* symbol_root[3];
+    tsc_value_t* methods;void** method_roots;
+    tsc_value_t exports,factories[2],export_constructors[2],module_members[4];
+    void* exports_root;void* factory_roots[2];void* export_constructor_roots[2];tsc_object_t* namespace_object;
+} crypto_realm_t;
+static const char crypto_realm_key;
+static crypto_realm_t* crypto_realm(void);
+static tsc_value_t crypto_argument(tsc_array_t* args,size_t index){return args&&index<args->len?TSC_ARR(tsc_value_t,args,index):tsc_value_undefined();}
+static tsc_str_t* crypto_key(const char* name){return tsc_str_from_cstr(name);}
+static tsc_str_t* crypto_symbol_key(tsc_value_t symbol){return tsc_symbol_property_key(value_ptr(symbol));}
+static bool crypto_is_string(tsc_value_t value){return value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_STRING;}
+static tsc_str_t* crypto_encoding(tsc_value_t value){return crypto_is_string(value)?tsc_value_as_string(value):NULL;}
+static bool crypto_known_encoding(const tsc_str_t* value){
+    if(value&&(str_lit_eq(value,"base64url")||str_lit_eq(value,"ucs2")||str_lit_eq(value,"ucs-2")||str_lit_eq(value,"utf16le")||str_lit_eq(value,"utf-16le")))
+        crypto_digest_error("Crypto digest operation cannot be represented",NULL);
+    return value&&(buffer_encoding_is_utf8(value)||buffer_encoding_is_base64(value)||buffer_encoding_is_latin1(value)||buffer_encoding_is_ascii(value)||str_lit_eq(value,"hex"));
 }
-
-tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const tsc_buffer_t* key) {
-    const EVP_MD* md = NULL;
-    if (str_lit_eq(algorithm, "sha1")) {
-        md = EVP_sha1();
-    } else if (str_lit_eq(algorithm, "sha224")) {
-        md = EVP_sha224();
-    } else if (str_lit_eq(algorithm, "sha256")) {
-        md = EVP_sha256();
-    } else if (str_lit_eq(algorithm, "sha384")) {
-        md = EVP_sha384();
-    } else if (str_lit_eq(algorithm, "sha512")) {
-        md = EVP_sha512();
-    } else if (str_lit_eq(algorithm, "md5")) {
-        md = EVP_md5();
-    } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.createHmac: only md5, sha1, sha224, sha256, sha384, and sha512 are supported"));
-    }
-
-    tsc_hmac_t* h = (tsc_hmac_t*)TSC_GC_MALLOC(sizeof(tsc_hmac_t));
-    h->md = md;
-    h->ctx = HMAC_CTX_new();
-    h->finalized = false;
-    memset(h->digest, 0, sizeof h->digest);
-    int digest_size = EVP_MD_size(md);
-    if (!h->ctx || digest_size <= 0 || (size_t)digest_size > sizeof h->digest) {
-        tsc_panic("crypto.createHmac: could not initialize context");
-    }
-    h->digest_len = (size_t)digest_size;
-
-    const void* key_data = key ? key->data : NULL;
-    int key_len = key ? (int)key->len : 0;
-    if (HMAC_Init_ex(h->ctx, key_data, key_len, h->md, NULL) != 1) {
-        HMAC_CTX_free(h->ctx);
-        h->ctx = NULL;
-        tsc_panic("crypto.createHmac: could not initialize hmac");
-    }
-    return h;
+static void crypto_validate_options(bool hmac,tsc_value_t options){
+    if(hmac||!value_is_object_value(options))return;
+    static const char* keys[]={"outputLength","functionName","customization"};
+    for(size_t index=0;index<sizeof(keys)/sizeof(keys[0]);++index)
+        if(!tsc_value_is_undefined(tsc_value_get_prop(options,crypto_key(keys[index]))))
+            crypto_digest_error("Crypto digest operation cannot be represented",NULL);
 }
-
-void hmac_update_bytes(tsc_hmac_t* h, const void* data, size_t len) {
-    if (h->finalized) return;
-    if (len == 0) return;
-    if (!h->ctx || HMAC_Update(h->ctx, (const unsigned char*)data, len) != 1) {
-        tsc_panic("Hmac.update: could not update hmac");
-    }
-}
-
-tsc_hmac_t* tsc_hmac_update(tsc_hmac_t* h, const tsc_str_t* data) {
-    hmac_update_bytes(h, data->data, data->len);
-    return h;
-}
-
-tsc_hmac_t* tsc_hmac_update_buffer(tsc_hmac_t* h, const tsc_buffer_t* data) {
-    if (data) hmac_update_bytes(h, data->data, data->len);
-    return h;
-}
-
-void hmac_finalize(tsc_hmac_t* h) {
-    if (!h->finalized) {
-        unsigned int digest_len = 0;
-        if (!h->ctx || HMAC_Final(h->ctx, h->digest, &digest_len) != 1) {
-            tsc_panic("Hmac.digest: could not finalize hmac");
+static tsc_buffer_t* crypto_bytes(tsc_value_t value,tsc_value_t encoding){
+    if(crypto_is_string(value)) {
+        tsc_str_t* volatile text=tsc_value_as_string(value);
+        tsc_str_t* volatile codec=crypto_encoding(encoding);
+        if(codec) {
+            codec=tsc_str_to_lower(codec);
+            if(!crypto_known_encoding(codec))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Unknown digest encoding"));
+            if(str_lit_eq(codec,"hex")&&(tsc_str_utf16_length(text)&1))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Hex digest input must have an even length"));
         }
-        h->digest_len = (size_t)digest_len;
-        HMAC_CTX_free(h->ctx);
-        h->ctx = NULL;
-        h->finalized = true;
+        if(!codec||buffer_encoding_is_utf8(codec))text=tsc_str_to_well_formed(text);
+        return tsc_buffer_from_str(text,codec);
     }
+    if(value_is_object_value(value)) {
+        tsc_object_t* object=value_ptr(value);
+        if(object->is_buffer)return object->class_ptr;
+        if(object->is_data_view) {
+            tsc_data_view_t* view=object->class_ptr;
+            (void)tsc_data_view_byte_length(view);
+            tsc_buffer_t* bytes=TSC_GC_MALLOC(sizeof(*bytes));memset(bytes,0,sizeof(*bytes));
+            bytes->data=view->buffer->data+view->byte_offset;bytes->len=view->byte_length;bytes->data_owner=view->buffer->data;return bytes;
+        }
+    }
+    tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Digest data must be a string or byte view"));return NULL;
 }
-
-tsc_str_t* tsc_hmac_digest(tsc_hmac_t* h, const tsc_str_t* encoding) {
-    bool use_hex = str_lit_eq(encoding, "hex");
-    bool use_base64 = str_lit_eq(encoding, "base64");
-    if (!use_hex && !use_base64) {
-        tsc_throw_str(tsc_str_from_cstr("Hmac.digest: only hex and base64 encodings are supported"));
-    }
-    hmac_finalize(h);
-    if (use_base64) {
-        return str_from_base64_bytes(h->digest, h->digest_len);
-    }
-    static const char hex[] = "0123456789abcdef";
-    tsc_str_t* out = str_alloc(h->digest_len * 2);
-    char* p = (char*)out->data;
-    for (size_t i = 0; i < h->digest_len; i++) {
-        p[i * 2] = hex[h->digest[i] >> 4];
-        p[i * 2 + 1] = hex[h->digest[i] & 0x0f];
-    }
-    return out;
+static tsc_hash_t* crypto_receiver_state(tsc_value_t receiver){
+    tsc_value_t handle=tsc_value_get_prop(receiver,crypto_symbol_key(crypto_realm()->handle_symbol));
+    if(!value_is_object_value(handle)||!((tsc_object_t*)value_ptr(handle))->is_crypto_digest)
+        tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Digest method requires a crypto handle"));
+    return ((tsc_object_t*)value_ptr(handle))->class_ptr;
 }
-
-tsc_buffer_t* tsc_hmac_digest_buffer(tsc_hmac_t* h, const tsc_str_t* encoding) {
-    if (!str_lit_eq(encoding, "buffer")) {
-        tsc_throw_str(tsc_str_from_cstr("Hmac.digest: encoding must be 'buffer' when returning a Buffer"));
-    }
-    hmac_finalize(h);
-    tsc_buffer_t* out = tsc_buffer_alloc((double)h->digest_len, 0.0);
-    memcpy(out->data, h->digest, h->digest_len);
-    return out;
+static void crypto_define(tsc_value_t object,tsc_str_t* name,tsc_value_t value,bool enumerable){
+    (void)tsc_value_define_property_desc(object,name,value,true,true,true,enumerable,true,true,true);
 }
+static tsc_value_t crypto_owner(tsc_hash_t* state,tsc_value_t options,tsc_value_t prototype){
+    tsc_hash_t* volatile state_root=state;void* volatile roots[]={tsc_value_gc_root(options),tsc_value_gc_root(prototype)};
+    crypto_realm_t* realm=crypto_realm();
+    tsc_value_t owner=tsc_value_object(tsc_object_new());void* volatile owner_root=tsc_value_gc_root(owner);
+    (void)tsc_value_object_set_prototype_of(owner,prototype);
+    tsc_object_t* volatile handle=tsc_object_new();handle->is_crypto_digest=true;handle->class_ptr=state;
+    crypto_define(owner,crypto_symbol_key(realm->handle_symbol),tsc_value_object(handle),true);
+    tsc_value_t public_state=tsc_value_object(tsc_object_new());void* volatile public_root=tsc_value_gc_root(public_state);
+    crypto_define(public_state,crypto_symbol_key(realm->finalized_symbol),tsc_value_bool(false),true);
+    crypto_define(owner,crypto_symbol_key(realm->state_symbol),public_state,true);
+    crypto_define(owner,crypto_key("_options"),options,true);
+    (void)state_root;(void)roots;(void)owner_root;(void)public_root;return owner;
+}
+static tsc_value_t crypto_digest_method(void* env,tsc_value_t receiver,tsc_array_t* args){
+    const crypto_member_t* member=env;crypto_realm_t* realm=crypto_realm();tsc_value_t public_state=tsc_value_undefined();
+    void* volatile receiver_root=tsc_value_gc_root(receiver);void* volatile public_root=NULL;
+    bool finalized=false;
+    if(member->operation==CRYPTO_UPDATE||member->operation==CRYPTO_COPY||member->operation==CRYPTO_DIGEST_HASH||member->operation==CRYPTO_DIGEST_HMAC){
+        public_state=tsc_value_get_prop(receiver,crypto_symbol_key(realm->state_symbol));public_root=tsc_value_gc_root(public_state);
+        finalized=tsc_value_is_truthy(tsc_value_get_prop(public_state,crypto_symbol_key(realm->finalized_symbol)));
+        if(finalized&&member->operation!=CRYPTO_DIGEST_HMAC)crypto_digest_error("Digest already called","ERR_CRYPTO_HASH_FINALIZED");
+    }
+    tsc_hash_t* volatile state=finalized?NULL:crypto_receiver_state(receiver);
+    if(member->operation==CRYPTO_UPDATE||member->operation==CRYPTO_COPY) {
+        if(finalized)crypto_digest_error("Digest already called","ERR_CRYPTO_HASH_FINALIZED");
+        if(member->operation==CRYPTO_COPY) {
+            crypto_validate_options(false,crypto_argument(args,0));
+            tsc_hash_t* volatile copy=TSC_GC_MALLOC(sizeof(*copy));memset(copy,0,sizeof(*copy));copy->md=state->md;
+            copy->hash_context=EVP_MD_CTX_new();
+            if(!copy->hash_context||!state->hash_context||EVP_MD_CTX_copy_ex(copy->hash_context,state->hash_context)!=1)crypto_digest_error("Could not copy digest",NULL);
+            copy->digest=tsc_buffer_alloc(EVP_MD_size(copy->md),0);
+#ifndef TSC_NO_GC
+            GC_register_finalizer_no_order(copy,crypto_digest_release,NULL,NULL,NULL);
+#endif
+            return crypto_owner(copy,crypto_argument(args,0),realm->prototype[0]);
+        }
+        tsc_buffer_t* volatile bytes=crypto_bytes(crypto_argument(args,0),crypto_argument(args,1));
+        crypto_digest_update(state,bytes->data,bytes->len);return receiver;
+    }
+    if(member->operation==CRYPTO_TRANSFORM) {
+        tsc_buffer_t* volatile bytes=crypto_bytes(crypto_argument(args,0),crypto_argument(args,1));crypto_digest_update(state,bytes->data,bytes->len);
+        return tsc_value_apply_function(crypto_argument(args,2),tsc_value_undefined(),tsc_value_array(tsc_array_new(sizeof(tsc_value_t),1)));
+    }
+    if(member->operation==CRYPTO_FLUSH_HASH||member->operation==CRYPTO_FLUSH_HMAC) {
+        tsc_value_t push=tsc_value_get_prop(receiver,crypto_key("push"));void* volatile push_root=tsc_value_gc_root(push);
+        tsc_array_t* volatile actuals=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_push_value(actuals,tsc_value_buffer(crypto_digest_finish(state)));
+        (void)tsc_value_apply_function(push,receiver,tsc_value_array(actuals));
+        if(member->operation==CRYPTO_FLUSH_HMAC){
+            public_state=tsc_value_get_prop(receiver,crypto_symbol_key(realm->state_symbol));public_root=tsc_value_gc_root(public_state);
+            tsc_value_set_prop(public_state,crypto_symbol_key(realm->finalized_symbol),tsc_value_bool(true));
+        }
+        (void)push_root;return tsc_value_apply_function(crypto_argument(args,0),tsc_value_undefined(),tsc_value_array(tsc_array_new(sizeof(tsc_value_t),1)));
+    }
+    if(finalized&&member->operation==CRYPTO_DIGEST_HASH)crypto_digest_error("Digest already called","ERR_CRYPTO_HASH_FINALIZED");
+    tsc_value_t encoding_value=crypto_argument(args,0);
+    tsc_str_t* volatile encoding=tsc_value_is_truthy(encoding_value)?tsc_str_to_lower(tsc_value_to_string(encoding_value)):NULL;
+    bool known_encoding=crypto_known_encoding(encoding);
+    if(finalized&&encoding&&!str_lit_eq(encoding,"buffer")&&!known_encoding)tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Unknown digest encoding"));
+    tsc_buffer_t* volatile bytes=finalized?tsc_buffer_alloc(0,0):crypto_digest_finish(state);
+    tsc_value_t result=known_encoding?tsc_value_string(tsc_buffer_to_string(bytes,encoding)):tsc_value_buffer(bytes);
+    void* volatile result_root=tsc_value_gc_root(result);
+    tsc_value_set_prop(public_state,crypto_symbol_key(realm->finalized_symbol),tsc_value_bool(true));
+    (void)receiver_root;(void)public_root;(void)result_root;return result;
+}
+static tsc_value_t crypto_construct(void* env,tsc_value_t receiver,tsc_array_t* args){
+    (void)receiver;bool hmac=(uintptr_t)env!=0;
+    tsc_value_t prototype=tsc_value_get_prototype_from_constructor(tsc_value_current_new_target(),hmac?TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE:TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE);
+    void* volatile prototype_root=tsc_value_gc_root(prototype);
+    tsc_value_t algorithm=crypto_argument(args,0),options=crypto_argument(args,hmac?2:1);
+    if(!crypto_is_string(algorithm))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Digest algorithm must be a string"));
+    crypto_validate_options(hmac,options);
+    tsc_hash_t* volatile state;
+    if(hmac){tsc_value_t encoding=tsc_value_is_undefined(options)||value_is_null_value(options)?tsc_value_undefined():tsc_value_get_prop(options,crypto_key("encoding"));
+        tsc_buffer_t* volatile key=crypto_bytes(crypto_argument(args,1),encoding);state=crypto_digest_new(true,tsc_value_as_string(algorithm),key);
+    }else state=crypto_digest_new(false,tsc_value_as_string(algorithm),NULL);
+    (void)prototype_root;return crypto_owner(state,options,prototype);
+}
+static tsc_value_t crypto_apply(void* env,tsc_value_t receiver,tsc_array_t* args){
+    (void)receiver;bool hmac=(uintptr_t)env!=0;
+    crypto_realm_t* realm=crypto_realm();
+    tsc_value_t result=tsc_value_construct(realm->constructor[hmac],tsc_value_array(args));
+    void* volatile root=tsc_value_gc_root(result);
+    if(hmac&&tsc_value_instanceof(receiver,realm->constructor[1])){
+        tsc_str_t* keys[]={crypto_symbol_key(realm->handle_symbol),crypto_symbol_key(realm->state_symbol),crypto_key("_options")};
+        for(size_t index=0;index<sizeof(keys)/sizeof(keys[0]);++index)tsc_value_set_prop(receiver,keys[index],tsc_value_get_prop(result,keys[index]));
+        (void)root;return tsc_value_undefined();
+    }
+    (void)root;return result;
+}
+static tsc_value_t crypto_export_constructor_apply(void* env,tsc_value_t receiver,tsc_array_t* args){
+    return tsc_value_apply_function(crypto_realm()->constructor[(uintptr_t)env],receiver,tsc_value_array(args));
+}
+static tsc_value_t crypto_export_constructor_construct(void* env,tsc_value_t receiver,tsc_array_t* args){
+    (void)receiver;return tsc_value_construct_with_new_target(crypto_realm()->constructor[(uintptr_t)env],tsc_value_array(args),tsc_value_current_new_target());
+}
+static tsc_value_t crypto_factory(void* env,tsc_value_t receiver,tsc_array_t* args){
+    (void)receiver;return tsc_crypto_digest_create_value((uintptr_t)env!=0,args);
+}
+static tsc_value_t crypto_export_get(void* env,tsc_value_t receiver){(void)receiver;return *(tsc_value_t*)env;}
+static tsc_value_t crypto_default_get(void* env,tsc_value_t receiver){(void)receiver;return ((crypto_realm_t*)env)->exports;}
+static crypto_realm_t* crypto_realm(void){
+    crypto_realm_t* realm=tsc_realm_state_get(&crypto_realm_key);if(realm)return realm;
+    realm=TSC_GC_MALLOC(sizeof(*realm));memset(realm,0,sizeof(*realm));tsc_realm_state_set(&crypto_realm_key,realm);
+    realm->handle_symbol=tsc_value_symbol(tsc_symbol_new(crypto_key("kHandle")));realm->symbol_root[0]=tsc_value_gc_root(realm->handle_symbol);
+    realm->state_symbol=tsc_value_symbol(tsc_symbol_new(crypto_key("kState")));realm->symbol_root[1]=tsc_value_gc_root(realm->state_symbol);
+    realm->finalized_symbol=tsc_value_symbol(tsc_symbol_new(crypto_key("kFinalized")));realm->symbol_root[2]=tsc_value_gc_root(realm->finalized_symbol);
+    for(size_t index=0;index<2;++index){
+        realm->prototype[index]=tsc_value_object(tsc_object_new());realm->prototype_root[index]=tsc_value_gc_root(realm->prototype[index]);
+        realm->constructor[index]=tsc_value_function_named_kind(crypto_apply,crypto_construct,(void*)(uintptr_t)index,crypto_owners[index].length,crypto_key(crypto_owners[index].constructor),TSC_FUNCTION_IDENTITY_BUILTIN);
+        tsc_function_identity_t* identity=tsc_value_gc_root(realm->constructor[index]);realm->constructor_root[index]=identity;identity->construct_allocates_receiver=false;
+        identity->construct_default_prototype=index?TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE:TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE;
+        tsc_function_identity_set_own_prototype(identity,realm->prototype[index]);identity->func_prototype_writable=true;
+        crypto_define(realm->prototype[index],crypto_key("constructor"),realm->constructor[index],false);
+    }
+    size_t count=sizeof(crypto_members)/sizeof(crypto_members[0]);
+    realm->methods=TSC_GC_MALLOC(count*sizeof(*realm->methods));realm->method_roots=TSC_GC_MALLOC(count*sizeof(*realm->method_roots));
+    for(size_t index=0;index<count;++index){
+        const crypto_member_t* member=&crypto_members[index];
+        realm->methods[index]=tsc_value_function_named_kind(crypto_digest_method,crypto_digest_method,(void*)member,member->length,crypto_key(member->name),TSC_FUNCTION_IDENTITY_GENERIC);
+        realm->method_roots[index]=tsc_value_gc_root(realm->methods[index]);
+    }
+    for(size_t kind=0;kind<2;++kind)for(size_t order=1;order<=count;++order)for(size_t index=0;index<count;++index)
+        if(crypto_members[index].order[kind]==order)crypto_define(realm->prototype[kind],crypto_key(crypto_members[index].name),realm->methods[index],true);
+    realm->exports=tsc_value_object(tsc_object_new());realm->exports_root=tsc_value_gc_root(realm->exports);
+    realm->namespace_object=tsc_module_namespace_new();
+    for(size_t index=0;index<sizeof(crypto_owners)/sizeof(crypto_owners[0]);++index){
+        const crypto_owner_descriptor_t* owner=&crypto_owners[index];
+        realm->factories[index]=tsc_value_function_named_kind(crypto_factory,crypto_factory,(void*)(uintptr_t)index,owner->length,crypto_key(owner->factory),TSC_FUNCTION_IDENTITY_GENERIC);
+        realm->factory_roots[index]=tsc_value_gc_root(realm->factories[index]);
+        realm->export_constructors[index]=tsc_value_function_named_kind(crypto_export_constructor_apply,crypto_export_constructor_construct,(void*)(uintptr_t)index,owner->length,crypto_key("deprecated"),TSC_FUNCTION_IDENTITY_GENERIC);
+        tsc_function_identity_t* exported=tsc_value_gc_root(realm->export_constructors[index]);realm->export_constructor_roots[index]=exported;
+        exported->construct_allocates_receiver=false;exported->construct_default_prototype=index?TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE:TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE;
+        tsc_function_identity_set_own_prototype(exported,realm->prototype[index]);exported->func_prototype_writable=true;
+        (void)tsc_value_object_set_prototype_of(realm->export_constructors[index],realm->constructor[index]);
+        realm->module_members[index*2]=realm->export_constructors[index];realm->module_members[index*2+1]=realm->factories[index];
+        const char* names[]={owner->constructor,owner->factory};
+        for(size_t member=0;member<sizeof(names)/sizeof(names[0]);++member){
+            crypto_define(realm->exports,crypto_key(names[member]),realm->module_members[index*2+member],true);
+            (void)tsc_object_define_accessor(realm->namespace_object,crypto_key(names[member]),crypto_export_get,&realm->module_members[index*2+member],true,NULL,NULL,false,true,true,false,true);
+        }
+    }
+    (void)tsc_object_define_accessor(realm->namespace_object,crypto_key("default"),crypto_default_get,realm,true,NULL,NULL,false,true,true,false,true);
+    tsc_module_namespace_finalize(realm->namespace_object);
+    return realm;
+}
+double tsc_crypto_number_input(tsc_value_t value){
+    if(value_is_box(value))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Crypto numeric argument must be a number"));
+    return value_as_num(value);
+}
+tsc_value_t tsc_crypto_digest_prototype_value(bool hmac){return crypto_realm()->prototype[hmac];}
+tsc_value_t tsc_crypto_digest_create_value(bool hmac,tsc_array_t* args){return tsc_value_construct(crypto_realm()->constructor[hmac],tsc_value_array(args));}
 
 tsc_buffer_t* tsc_crypto_random_bytes(double size) {
     if (isnan(size) || isinf(size) || size < 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.randomBytes size must be a non-negative finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.randomBytes size must be a non-negative finite number"));
     }
     tsc_buffer_t* out = tsc_buffer_alloc(size, 0);
     if (out->len == 0) return out;
@@ -303,16 +400,7 @@ tsc_buffer_t* tsc_crypto_pbkdf2_sync_impl(const void* password_data, size_t pass
         tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: keylen must be a non-negative finite number"));
     }
 
-    const EVP_MD* md = NULL;
-    if (str_lit_eq(digest, "sha1")) {
-        md = EVP_sha1();
-    } else if (str_lit_eq(digest, "sha256")) {
-        md = EVP_sha256();
-    } else if (str_lit_eq(digest, "sha512")) {
-        md = EVP_sha512();
-    } else {
-        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: only sha1, sha256, and sha512 are supported"));
-    }
+    const EVP_MD* md = crypto_digest_lookup(digest);
 
     tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
     if (out->len == 0) {
@@ -432,69 +520,23 @@ tsc_buffer_t* tsc_crypto_scrypt_sync_bb(const tsc_buffer_t* password, const tsc_
     return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
 }
 
+static void crypto_digest_name(const OBJ_NAME* entry,void* env) {
+    const EVP_MD* digest=EVP_get_digestbyname(entry->name);
+    if(!digest||EVP_MD_size(digest)<=0)return;
+    EVP_MD_CTX* context=EVP_MD_CTX_new();
+    bool available=context&&EVP_DigestInit_ex(context,digest,NULL)==1;
+    EVP_MD_CTX_free(context);if(!available)return;
+    tsc_str_t* name=tsc_str_from_cstr(entry->name);
+    tsc_array_push_raw(env,&name);
+}
 tsc_array_t* tsc_crypto_get_hashes(void) {
-    tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), 6);
-    tsc_str_t* s1 = tsc_str_from_cstr("md5");
-    tsc_array_push_raw(a, &s1);
-    tsc_str_t* s2 = tsc_str_from_cstr("sha1");
-    tsc_array_push_raw(a, &s2);
-    tsc_str_t* s3 = tsc_str_from_cstr("sha224");
-    tsc_array_push_raw(a, &s3);
-    tsc_str_t* s4 = tsc_str_from_cstr("sha256");
-    tsc_array_push_raw(a, &s4);
-    tsc_str_t* s5 = tsc_str_from_cstr("sha384");
-    tsc_array_push_raw(a, &s5);
-    tsc_str_t* s6 = tsc_str_from_cstr("sha512");
-    tsc_array_push_raw(a, &s6);
-    return a;
+    tsc_array_t* volatile names=tsc_array_new(sizeof(tsc_str_t*),16);
+    OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_DIGESTS,NULL);
+    OBJ_NAME_do_all_sorted(OBJ_NAME_TYPE_MD_METH,crypto_digest_name,names);
+    return names;
 }
 
-void hash_update_bytes(tsc_hash_t* h, const void* data, size_t len) {
-    if (h->finalized) return;
-    if (len == 0) return;
-    if (!h->ctx || EVP_DigestUpdate(h->ctx, data, len) != 1) {
-        tsc_panic("Hash.update: could not update digest");
-    }
-}
 
-tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data) {
-    hash_update_bytes(h, data->data, data->len);
-    return h;
-}
-
-tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const tsc_buffer_t* data) {
-    if (data) hash_update_bytes(h, data->data, data->len);
-    return h;
-}
-
-tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding) {
-    bool use_hex = str_lit_eq(encoding, "hex");
-    bool use_base64 = str_lit_eq(encoding, "base64");
-    if (!use_hex && !use_base64) {
-        tsc_throw_str(tsc_str_from_cstr("Hash.digest: only hex and base64 encodings are supported"));
-    }
-    if (!h->finalized) {
-        unsigned int digest_len = 0;
-        if (!h->ctx || EVP_DigestFinal_ex(h->ctx, h->digest, &digest_len) != 1) {
-            tsc_panic("Hash.digest: could not finalize digest");
-        }
-        h->digest_len = (size_t)digest_len;
-        EVP_MD_CTX_free(h->ctx);
-        h->ctx = NULL;
-        h->finalized = true;
-    }
-    if (use_base64) {
-        return str_from_base64_bytes(h->digest, h->digest_len);
-    }
-    static const char hex[] = "0123456789abcdef";
-    tsc_str_t* out = str_alloc(h->digest_len * 2);
-    char* p = (char*)out->data;
-    for (size_t i = 0; i < h->digest_len; i++) {
-        p[i * 2] = hex[h->digest[i] >> 4];
-        p[i * 2 + 1] = hex[h->digest[i] & 0x0f];
-    }
-    return out;
-}
 
 tsc_buffer_t* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const tsc_array_t* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal) {
     if (!command) tsc_throw_str(tsc_str_from_cstr("child_process.execSync command required"));
@@ -18490,3 +18532,8 @@ void tsc_fs_futimes_sync(double fd, double atime, double mtime) {
         tsc_throw_str(tsc_str_from_cstr(err_msg));
     }
 }
+
+tsc_value_t tsc_crypto_digest_module_value(bool namespace_import){
+    crypto_realm_t* realm=crypto_realm();return namespace_import?tsc_value_object(realm->namespace_object):realm->exports;
+}
+tsc_value_t tsc_crypto_digest_export_value(tsc_str_t* name){return tsc_value_get_prop(tsc_crypto_digest_module_value(true),name);}

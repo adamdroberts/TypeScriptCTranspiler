@@ -3558,6 +3558,10 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE:
+            return tsc_crypto_digest_prototype_value(false);
+        case TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE:
+            return tsc_crypto_digest_prototype_value(true);
         case TSC_INTRINSIC_DEFAULT_FS_DIRENT_PROTOTYPE:
             return tsc_fs_dirent_prototype_value();
         case TSC_INTRINSIC_DEFAULT_WEAK_MAP_PROTOTYPE:

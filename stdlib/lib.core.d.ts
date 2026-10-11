@@ -2225,7 +2225,7 @@ declare module "node:path/win32" {
     export default defaultPath;
 }
 
-type CryptoHashAlgorithm = "md5" | "sha1" | "sha224" | "sha256" | "sha384" | "sha512";
+type CryptoHashAlgorithm = string;
 interface CryptoRandomUUIDOptions {
     disableEntropyCache?: boolean;
 }
@@ -2238,20 +2238,39 @@ interface CryptoScryptOptions {
     parallelization?: number;
     maxmem?: number;
 }
+type CryptoDigestEncoding = "hex" | "base64" | "latin1" | "binary" | "ascii" | "utf8" | "utf-8";
 interface CryptoHash {
-    update(data: string | Buffer, ...ignored: any[]): CryptoHash;
-    digest(encoding?: "hex" | "base64", ...ignored: any[]): string;
+    update(data: string | Buffer | DataView, encoding?: string, ...ignored: any[]): CryptoHash;
+    copy(options?: any, ...ignored: any[]): CryptoHash;
+    digest(): Buffer;
+    digest(encoding: CryptoDigestEncoding, ...ignored: any[]): string;
+    digest(encoding: "buffer", ...ignored: any[]): Buffer;
+    digest(encoding?: string, ...ignored: any[]): string | Buffer;
+    readonly constructor: any;
 }
 interface CryptoHmac {
-    update(data: string | Buffer, ...ignored: any[]): CryptoHmac;
-    digest(): string;
-    digest(encoding: "hex" | "base64", ...ignored: any[]): string;
+    update(data: string | Buffer | DataView, encoding?: string, ...ignored: any[]): CryptoHmac;
+    digest(): Buffer;
+    digest(encoding: CryptoDigestEncoding, ...ignored: any[]): string;
     digest(encoding: "buffer", ...ignored: any[]): Buffer;
-    digest(encoding?: "hex" | "base64" | "buffer", ...ignored: any[]): string | Buffer;
+    digest(encoding?: string, ...ignored: any[]): string | Buffer;
+    readonly constructor: any;
+}
+interface CryptoHashConstructor {
+    new(algorithm:string,options?:any,...ignored:any[]):CryptoHash;
+    (algorithm:string,options?:any,...ignored:any[]):CryptoHash;
+    readonly prototype:CryptoHash;
+}
+interface CryptoHmacConstructor {
+    new(algorithm:string,key:string|Buffer|DataView,options?:any,...ignored:any[]):CryptoHmac;
+    (algorithm:string,key:string|Buffer|DataView,options?:any,...ignored:any[]):CryptoHmac;
+    readonly prototype:CryptoHmac;
 }
 interface Crypto {
+    Hash:CryptoHashConstructor;
+    Hmac:CryptoHmacConstructor;
     createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
-    createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     getHashes(...ignored: any[]): string[];
     randomBytes(size: number, ...ignored: any[]): Buffer;
     randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
@@ -2262,8 +2281,10 @@ interface Crypto {
 }
 declare const crypto: Crypto;
 declare module "crypto" {
+    export var Hash:CryptoHashConstructor;
+    export var Hmac:CryptoHmacConstructor;
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
-    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
@@ -2275,8 +2296,10 @@ declare module "crypto" {
     export default defaultCrypto;
 }
 declare module "node:crypto" {
+    export var Hash:CryptoHashConstructor;
+    export var Hmac:CryptoHmacConstructor;
     export function createHash(algorithm: CryptoHashAlgorithm, ...ignored: any[]): CryptoHash;
-    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer, ...ignored: any[]): CryptoHmac;
+    export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
     export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;

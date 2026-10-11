@@ -29,6 +29,6 @@ console.log("named import:", makeHmac("sha256", "named-key").update("abc").diges
 // 6. Namespace import support
 console.log("namespace import:", cryptoNs.createHmac("sha512", Buffer.from("ns-key")).update("abc").digest("base64").slice(0, 24));
 
-// 7. This subset defaults missing HMAC digest encoding to a hex string, matching CryptoHash.
-const defaultDigest: string = crypto.createHmac("sha256", "key").update("xyz").digest();
-console.log("default digest:", defaultDigest.slice(0, 16));
+// Missing HMAC digest encoding returns a Buffer.
+const defaultDigest: Buffer = crypto.createHmac("sha256", "key").update("xyz").digest();
+console.log("default digest:", defaultDigest.toString("hex").slice(0, 16));

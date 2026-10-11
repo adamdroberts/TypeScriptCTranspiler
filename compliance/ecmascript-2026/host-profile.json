@@ -100,8 +100,10 @@
     "runtime/tsc_console_methods.def",
     "runtime/tsc_weak_collections.def",
     "src/console-operations.ts",
+    "src/crypto-digest-owners.ts",
     "runtime/tsc_fs_dirent.c",
-    "runtime/tsc_fs_dirent.def"
+    "runtime/tsc_fs_dirent.def",
+    "runtime/tsc_crypto_digest.def"
   ],
   "executionContract": "tsc2c-runner-owned-native-v1",
   "environmentAllowlist": [

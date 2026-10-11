@@ -365,8 +365,11 @@ struct tsc_array* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp
 struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_t* re, double limit);
 
 /* ------------- crypto ------------- */
-typedef struct tsc_hash tsc_hash_t;
-tsc_hash_t* tsc_crypto_create_hash(const tsc_str_t* algorithm);
+tsc_value_t tsc_crypto_digest_create_value(bool hmac,struct tsc_array* args);
+tsc_value_t tsc_crypto_digest_prototype_value(bool hmac);
+tsc_value_t tsc_crypto_digest_module_value(bool namespace_import);
+tsc_value_t tsc_crypto_digest_export_value(tsc_str_t* name);
+double tsc_crypto_number_input(tsc_value_t value);
 struct tsc_buffer* tsc_crypto_random_bytes(double size);
 struct tsc_buffer* tsc_crypto_random_fill_sync(struct tsc_buffer* buffer, double offset, double size, bool offset_is_null, bool size_is_null);
 tsc_str_t* tsc_crypto_random_uuid(void);
@@ -380,17 +383,7 @@ struct tsc_buffer* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const st
 struct tsc_buffer* tsc_crypto_scrypt_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
 struct tsc_buffer* tsc_crypto_scrypt_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
 struct tsc_array* tsc_crypto_get_hashes(void);
-tsc_hash_t* tsc_hash_update(tsc_hash_t* h, const tsc_str_t* data);
-tsc_hash_t* tsc_hash_update_buffer(tsc_hash_t* h, const struct tsc_buffer* data);
-tsc_str_t* tsc_hash_digest(tsc_hash_t* h, const tsc_str_t* encoding);
 
-typedef struct tsc_hmac tsc_hmac_t;
-tsc_hmac_t* tsc_crypto_create_hmac_str(const tsc_str_t* algorithm, const tsc_str_t* key);
-tsc_hmac_t* tsc_crypto_create_hmac_buffer(const tsc_str_t* algorithm, const struct tsc_buffer* key);
-tsc_hmac_t* tsc_hmac_update(tsc_hmac_t* h, const tsc_str_t* data);
-tsc_hmac_t* tsc_hmac_update_buffer(tsc_hmac_t* h, const struct tsc_buffer* data);
-tsc_str_t* tsc_hmac_digest(tsc_hmac_t* h, const tsc_str_t* encoding);
-struct tsc_buffer* tsc_hmac_digest_buffer(tsc_hmac_t* h, const tsc_str_t* encoding);
 struct tsc_buffer* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
 struct tsc_buffer* tsc_child_process_exec_file_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);
 tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const struct tsc_array* args, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool capture_stdout, bool capture_stderr, bool inherit_stdout, bool inherit_stderr, bool detached, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal, bool return_utf8);

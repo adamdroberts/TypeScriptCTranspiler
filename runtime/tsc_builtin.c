@@ -937,12 +937,12 @@ static size_t array_buffer_to_index(double n, const char* label) {
 
 tsc_array_buffer_t* tsc_array_buffer_new(double byte_length) {
     size_t len = array_buffer_to_index(byte_length, "ArrayBuffer byteLength must be a non-negative finite integer");
-    tsc_array_buffer_t* b = (tsc_array_buffer_t*)TSC_GC_MALLOC(sizeof(tsc_array_buffer_t));
+    tsc_array_buffer_t* volatile b = (tsc_array_buffer_t*)TSC_GC_MALLOC(sizeof(tsc_array_buffer_t));
     b->byte_length = len;
     b->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len ? len : 1);
     b->detached = false;
     b->object = NULL;
-    if (len == 0) b->data[0] = 0;
+    memset(b->data,0,len?len:1);
     return b;
 }
 

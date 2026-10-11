@@ -31,11 +31,11 @@ console.log("hmac3 hex from buffer:", buf.toString("hex"));
 try {
     crypto.createHash("sha384-unsupported" as any);
 } catch (e) {
-    console.log("sha384 throw caught:", String(e));
+    console.log("sha384 throw caught:", e instanceof Error);
 }
 
 try {
     crypto.createHmac("sha384-unsupported" as any, "key");
 } catch (e) {
-    console.log("hmac sha384 throw caught:", String(e));
+    console.log("hmac sha384 throw caught:", e instanceof Error);
 }

@@ -1,0 +1,14 @@
+/* name, operation, source length, Hash order, Hmac order (0 omits) */
+#ifdef TSC_CRYPTO_DIGEST_METHOD
+TSC_CRYPTO_DIGEST_METHOD(copy, COPY, 1, 1, 0)
+TSC_CRYPTO_DIGEST_METHOD(_transform, TRANSFORM, 3, 2, 4)
+TSC_CRYPTO_DIGEST_METHOD(_flush, FLUSH_HASH, 1, 3, 0)
+TSC_CRYPTO_DIGEST_METHOD(update, UPDATE, 2, 4, 1)
+TSC_CRYPTO_DIGEST_METHOD(digest, DIGEST_HASH, 1, 5, 0)
+TSC_CRYPTO_DIGEST_METHOD(digest, DIGEST_HMAC, 1, 0, 2)
+TSC_CRYPTO_DIGEST_METHOD(_flush, FLUSH_HMAC, 1, 0, 3)
+#endif
+#ifdef TSC_CRYPTO_DIGEST_OWNER
+TSC_CRYPTO_DIGEST_OWNER(Hash, createHash, 2)
+TSC_CRYPTO_DIGEST_OWNER(Hmac, createHmac, 3)
+#endif

@@ -1,31 +1,11 @@
-const badAlgorithm: any = "sha384-unsupported";
-const badDigestEncoding: any = "latin1";
-
-function badCreateHash(): string {
-    try {
-        return crypto.createHash(badAlgorithm).update("abc").digest("hex");
-    } catch (err) {
-        return String(err);
-    }
+import * as crypto from "node:crypto";
+function invalidAlgorithm():boolean{
+ try{crypto.createHash("not-a-digest");return false}catch(error){return error instanceof Error}
 }
-
-function badRandomBytes(): string {
-    try {
-        return crypto.randomBytes(-1).toString("hex");
-    } catch (err) {
-        return String(err);
-    }
+function invalidSize():boolean{
+ try{crypto.randomBytes(-1);return false}catch(error){return error instanceof RangeError}
 }
-
-function badDigest(): string {
-    try {
-        return crypto.createHash("sha256").update("abc").digest(badDigestEncoding);
-    } catch (err) {
-        return String(err);
-    }
-}
-
-console.log("createHash:", badCreateHash());
-console.log("randomBytes:", badRandomBytes());
-console.log("digest:", badDigest());
-console.log("valid:", crypto.createHash("sha1").update("abc").digest("hex").slice(0, 8), crypto.randomBytes(0).length);
+console.log("createHash:",invalidAlgorithm());
+console.log("randomBytes:",invalidSize());
+console.log("latin1:",crypto.createHash("sha256").update("abc").digest("latin1").length);
+console.log("valid:",crypto.createHash("sha1").update("abc").digest("hex").slice(0,8),crypto.randomBytes(0).length);
