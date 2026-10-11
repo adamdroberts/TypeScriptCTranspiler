@@ -37,6 +37,10 @@ export function functionConstructorSourceKey(source: FunctionConstructorSource):
     return JSON.stringify([source.kind ?? "ordinary", source.parameters, source.body]);
 }
 
+export function functionConstructorDisplaySource(source: FunctionConstructorSource): string {
+    return `${functionPrefixes[source.kind ?? "ordinary"]} anonymous(${source.parameters}\n) {\n${source.body}\n}`;
+}
+
 export function functionConstructorExpressionSource(source: FunctionConstructorSource): string {
     // An anonymous expression deliberately has no named-function binding.
     // SetFunctionName("anonymous") happens after its ordinary creation.

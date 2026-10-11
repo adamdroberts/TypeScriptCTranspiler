@@ -17,6 +17,7 @@ import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget } from "./binding-tree";
+import { callableSourceText } from "../callable-source-text";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -47389,21 +47390,8 @@ class Emitter {
                 if (declaration && ts.isClassLike(declaration)) definition = declaration;
             }
         }
-        if (!definition || definition.pos < 0) return "NULL";
-        if (ts.isConstructorDeclaration(definition)) definition = definition.parent;
-        const source = definition.getSourceFile();
-        if (!source || !this.isJavaScriptSourceFile(source)) return "NULL";
-        let start = definition.getStart(source);
-        for (const modifier of ts.canHaveModifiers(definition) ? ts.getModifiers(definition) ?? [] : []) {
-            if (modifier.kind === ts.SyntaxKind.ExportKeyword || modifier.kind === ts.SyntaxKind.DefaultKeyword ||
-                modifier.kind === ts.SyntaxKind.StaticKeyword) start = Math.max(start, modifier.end);
-        }
-        if (start !== definition.getStart(source)) {
-            const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard,
-                source.text, undefined, start, definition.end - start);
-            scanner.scan(); start = scanner.getTokenPos();
-        }
-        return this.stringLit(source.text.slice(start, definition.end));
+        const text = callableSourceText(definition);
+        return text === null ? "NULL" : this.stringLit(text);
     }
 
     private withCallableSourceText(value: string, node: ts.Node): string {

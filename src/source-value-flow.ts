@@ -1,7 +1,8 @@
 import ts from "typescript";
+import { callableSourceText } from "./callable-source-text";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
-import { functionKindForDeclaration, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
+import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding} from "./source-bindings";
 import {runtimeGlobalBindings, type RuntimeGlobalBinding} from "./global-bindings";
@@ -29,7 +30,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
     ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ConstructorDeclaration;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property";
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "function-text";
 type Primitive = string | number | bigint | boolean | null | undefined;
 const PRIMITIVE_PREFIX_OPERATIONS: ReadonlyMap<ts.PrefixUnaryOperator, (value: Primitive) => Primitive> = new Map<ts.PrefixUnaryOperator, (value: Primitive) => Primitive>([
     [ts.SyntaxKind.PlusToken, (value: Primitive) => +(value as number)],
@@ -44,12 +45,12 @@ interface PrimitiveChoiceProof {
 }
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
-    | { readonly tag: "builtin"; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
+    | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
     | { readonly tag: "function"; readonly owner: FunctionOwner }
     | { readonly tag: "object"; readonly owner: ObjectOwner }
     | { readonly tag: "operation"; readonly operation: Operation }
-    | { readonly tag: "bound"; readonly target: Cell; readonly prefix: readonly Cell[] | null }
+    | { readonly tag: "bound"; readonly target: Cell; readonly receiver: Cell; readonly prefix: readonly Cell[] | null; readonly fields: ObjectOwner }
     | { readonly tag: "primitive"; readonly value: Primitive }
     | { readonly tag: "non-string" }
     | { readonly tag: "unknown" }
@@ -60,10 +61,10 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; listLength?: Cell; listSources?: readonly Cell[]; }
+interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
 interface FunctionOwner {
     readonly node: FunctionNode; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
-    readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell;
+    readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly sourceText: string;
 }
 interface Call { readonly node: ts.CallExpression | ts.NewExpression; readonly callee: Cell; readonly receiver: Cell; readonly result: Cell; }
 interface EvaluationRecord {
@@ -158,6 +159,8 @@ class SourceValueFlow {
     private readonly unknown: Atom = { tag: "unknown" };
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly evaluations = new Map<string, Cell[]>();
+    private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
+    private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
     private readonly global: Atom = { tag: "global" };
     private readonly host: Atom = { tag: "host" };
@@ -191,6 +194,9 @@ class SourceValueFlow {
             const statement = file?.statements[0];
             if (!statement || !ts.isExpressionStatement(statement)) continue;
             const values = this.generated.get(entry.kind ?? "ordinary") ?? [];
+            let definition: ts.Expression = statement.expression;
+            while (ts.isParenthesizedExpression(definition)) definition = definition.expression;
+            if (functionNode(definition)) this.dynamicSourceTexts.set(definition, functionConstructorDisplaySource(entry));
             values.push(this.cell(statement.expression)); this.generated.set(entry.kind ?? "ordinary", values);
         }
         for (const file of program.getSourceFiles()) {
@@ -419,7 +425,8 @@ class SourceValueFlow {
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));fields.fields.set(name,value);
                 }
-                this.publish(cell, {tag:"builtin", normalResult:descriptor.normalResult,fields});
+                if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
+                this.publish(cell, {tag:"builtin", name:key, normalResult:descriptor.normalResult,fields});
             }
         }
         return cell;
@@ -428,18 +435,33 @@ class SourceValueFlow {
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !declaration.getSourceFile().isDeclarationFile && sourceDeclarationIntroducesBinding(declaration));
     }
+    private callablePrototype(kind: DynamicFunctionKind): Cell {
+        let cell = this.callablePrototypes.get(kind);
+        if (!cell) {
+            cell = this.newCell(); this.callablePrototypes.set(kind, cell);
+            this.publish(cell, this.intrinsic("prototype", kind));
+        }
+        return cell;
+    }
     private property(base: Cell, key: string, context?: ts.Node): Cell {
         const result = this.newCell();
-        this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context)); });
+        const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule); });
         return result;
     }
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
+        if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
         if(atom.tag === "intrinsic"){
             let owner=this.intrinsicOwners.get(atom);
-            if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);}
+            if(!owner){
+                owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);
+                if (atom.domain === "constructor" || atom.domain === "prototype" && atom.kind !== "ordinary")
+                    owner.prototype = this.callablePrototype("ordinary");
+                if (atom.domain === "prototype" && atom.kind === "ordinary")
+                    this.publish(this.field(owner, "toString"), this.operation("function-text"));
+            }
             return owner;
         }
         if(atom.tag !== "host" && atom.tag !== "realm-record" && atom.tag !== "agent")return null;
@@ -448,19 +470,31 @@ class SourceValueFlow {
         if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
         return owner;
     }
-    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell): void {
+    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule): void {
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.unknown);
             if (handler) this.publish(handler, this.unknown);
             return;
         }
-        const owner = this.ordinaryOwner(atom);
-        if (owner) {
+        const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
+        const visited = new Set<ObjectOwner>();
+        while (worklist.length) {
+            const owner = worklist.pop()!;
+            if (visited.has(owner)) continue;
+            visited.add(owner);
             this.copy(this.field(owner, key), result);
             const getter = owner.getters.get(key);
             if (getter) {
                 this.copy(base, getter.receiver); this.copy(getter.returns, result);
                 if (handler) this.copy(getter.throws, handler);
+            }
+            if (owner.prototype) {
+                if (rule) this.watch(rule, owner.prototype);
+                for (const prototype of owner.prototype.values) {
+                    const inherited = this.ordinaryOwner(prototype);
+                    if (inherited) worklist.push(inherited);
+                    else if (prototype.tag !== "primitive" || prototype.value !== null) this.publish(result, this.unknown);
+                }
             }
         }
         if (atom.tag === "function") {
@@ -511,8 +545,9 @@ class SourceValueFlow {
         let owner = this.functions.get(node);
         if (owner) return owner;
         owner = { node, kind: functionKindForDeclaration(node), fields: this.owner(node), returns: this.newCell(), throws: this.newCell(),
-            receiver: this.newCell() };
+            receiver: this.newCell(), sourceText: this.dynamicSourceTexts.get(node) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
+        owner.fields.prototype = this.callablePrototype(owner.kind);
         if (node.body && !ts.isBlock(node.body)) this.copy(this.cell(node.body), owner.returns);
         else if (node.body) {
             const worklist: ts.Node[] = [...node.body.statements];
@@ -729,9 +764,9 @@ class SourceValueFlow {
                 if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(node,evaluations); }
                 evaluations.clear();
                 for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
-                const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean }> = [
+                const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
                     ...this.arguments(parts).map(args => ({ target: call.callee, receiver: call.receiver, args, boundPath: new Set<Atom>(),
-                        direct: ts.isCallExpression(node) && !node.questionDotToken && ts.isIdentifier(target) && target.text === "eval" }))];
+                        construct: ts.isNewExpression(node), direct: ts.isCallExpression(node) && !node.questionDotToken && ts.isIdentifier(target) && target.text === "eval" }))];
                 const routed = new Map<Atom, Set<string>>();
                 while (worklist.length) {
                     const invocation = worklist.pop()!; this.watch(rule, invocation.target);
@@ -745,12 +780,12 @@ class SourceValueFlow {
                             continue;
                         }
                         const argv = invocation.args;
-                        const signature = invocation.receiver.id + ":" + (argv?.map(cell => cell.id).join(",") ?? "unknown");
+                        const signature = invocation.construct + ":" + invocation.receiver.id + ":" + (argv?.map(cell => cell.id).join(",") ?? "unknown");
                         if (atom.tag === "bound") {
                             if (invocation.boundPath.has(atom)) continue;
                             const boundPath = new Set(invocation.boundPath); boundPath.add(atom);
                             worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null, direct: false,
-                                boundPath }); continue;
+                                receiver: invocation.construct ? invocation.receiver : atom.receiver, boundPath }); continue;
                         }
                         if (atom.tag === "operation" && ["call", "apply", "reflect-apply", "construct"].includes(atom.operation)) {
                             const previous = routed.get(atom) ?? new Set<string>();
@@ -760,6 +795,7 @@ class SourceValueFlow {
                             if (argv?.[listIndex]) this.watchList(rule, argv[listIndex]!);
                             const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.lists(argv[listIndex]!) : [null];
                             if (target) for (const args of actual) worklist.push({ ...invocation, target, direct: false,
+                                construct: atom.operation === "construct",
                                 receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : this.empty, args });
                             continue;
                         }
@@ -852,8 +888,29 @@ class SourceValueFlow {
                             }
                             if (atom.operation === "bind") {
                                 let value = boundValues.get(signature);
-                                if (!value) { value = { tag: "bound", target: invocation.receiver, prefix: argv?.slice(1) ?? null }; boundValues.set(signature, value); }
+                                if (!value) {
+                                    const fields: ObjectOwner = {fields:new Map(),getters:new Map(),shape:this.newCell(),prototype:this.newCell()};
+                                    value = { tag: "bound", target: invocation.receiver, receiver: argv?.[0] ?? this.empty, prefix: argv?.slice(1) ?? null, fields }; boundValues.set(signature, value);
+                                    this.rule([invocation.receiver], () => {
+                                        for (const target of invocation.receiver.values) {
+                                            const owner = this.ordinaryOwner(target);
+                                            if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
+                                            else if (target.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);
+                                            else this.publish(fields.prototype!, this.unknown);
+                                        }
+                                    });
+                                }
                                 this.publish(result!, value);
+                            }
+                            if (atom.operation === "function-text") {
+                                for (const receiver of invocation.receiver.values) {
+                                    if (receiver.tag === "function") this.publish(result!, this.text(receiver.owner.sourceText));
+                                    else if (receiver.tag === "bound") this.publish(result!, this.text("function () { [native code] }"));
+                                    else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")
+                                        this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
+                                    else this.publish(result!, this.unknown);
+                                }
+                                this.watch(rule, invocation.receiver);
                             }
                             if (atom.operation === "realm") this.publish(result!, this.realm);
                             if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {

@@ -5043,3 +5043,4 @@ Project mutable argument Lists through canonical length and index locations, pre
 Preserve boxed local and parameter mutations across protected completion regions using the shared retained-cell plan, including finally break/continue and catch recovery in Script evaluation.
 
 Support deletion of static declarative bindings and expression values, preserving TDZ/no-GetValue behavior and operand effects; reject strict identifier deletion before evaluation.
+Retain inherited callable source text through the shared prototype graph, share exact JavaScript definition spans between admission and emission, and preserve bound receivers during source analysis. Nested eval sources derived from retained function text now close AOT.
