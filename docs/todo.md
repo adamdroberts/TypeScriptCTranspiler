@@ -587,3 +587,5 @@ Synthetic checker declarations now preserve source-global ownership through the 
 Contextual Statement-body let and escaped Identifier spellings now share offset-preserving parsing and strict grammar-role validation. Full declaration/eval/Annex B semantics, dynamic actual-callee proof, and exhaustive host/clause evidence remain open.
 
 Duplicate sloppy simple formals now use ordered ABI slots and a canonical parameter binding identity. General declaration/eval/Annex B algorithms, object-environment actual-callee proof, and exhaustive Realm/agent host and clause evidence remain open.
+
+Non-String numeric/Boolean result admission and completeness of text-operation operands now share the source-value graph. Complete unknown-value propagation through merged paths and dynamic actual-callee selection remain open, along with declaration/eval/Annex B semantics and exhaustive host/clause evidence.

@@ -919,7 +919,7 @@ interface ClassSetterDecoratorContext<This = unknown, Value = unknown> {
     readonly metadata: any;
     addInitializer(initializer: () => void): void;
 }
-declare function eval(source: string, ...ignored: unknown[]): unknown;
+declare function eval(source?: unknown, ...ignored: unknown[]): unknown;
 interface RegExpIndicesArray extends Array<number[] | undefined> {
     groups: { [key: string]: number[] | undefined } | undefined;
 }

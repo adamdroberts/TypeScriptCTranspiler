@@ -811,3 +811,5 @@ Source binding ownership now follows one grammar-declaration predicate shared by
 Contextual let normalization and Statement-role early errors are frontend operations. They reuse the existing Reference and completion runtime paths; this change adds no public runtime API. See statement_body_grammar and statement-body-grammar.property for scope and ASI evidence.
 
 Duplicate simple formals share the existing parameter cell and mapped-arguments runtime representation. The frontend supplies unique positional ABI slots and the canonical binding identity; no new public runtime API is required.
+
+Non-String eval argument admission now uses the source graph normal-result category and the existing eval identity return path. Numeric magnitudes require no source registry entries; text-converting host and constructor consumers still require a finite source proof. No new public runtime API is added.

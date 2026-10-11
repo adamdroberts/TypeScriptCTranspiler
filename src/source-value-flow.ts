@@ -29,6 +29,11 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
 type Primitive = string | number | bigint | boolean | null | undefined;
+interface PrimitiveChoiceProof {
+    readonly values: readonly Primitive[];
+    readonly primitiveComplete: boolean;
+    readonly textComplete: boolean;
+}
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
@@ -37,6 +42,7 @@ type Atom =
     | { readonly tag: "operation"; readonly operation: Operation }
     | { readonly tag: "bound"; readonly target: Cell; readonly prefix: readonly Cell[] | null }
     | { readonly tag: "primitive"; readonly value: Primitive }
+    | { readonly tag: "non-string" }
     | { readonly tag: "text-operation"; readonly operation: "add" | "template"; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
@@ -53,6 +59,24 @@ interface EvaluationRecord {
     readonly node: ts.CallExpression | ts.NewExpression; readonly operation: "eval" | "eval-script" | "agent-start";
     readonly direct: boolean; readonly source: Cell | null; readonly unknown: boolean;
 }
+
+// A finite grammar partition, independent of value, operand and graph counts.
+const NUMERIC_BINARY_RESULTS = new Set<ts.SyntaxKind>([
+    ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskAsteriskToken,
+    ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.LessThanLessThanToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
+    ts.SyntaxKind.MinusEqualsToken, ts.SyntaxKind.AsteriskEqualsToken, ts.SyntaxKind.AsteriskAsteriskEqualsToken,
+    ts.SyntaxKind.SlashEqualsToken, ts.SyntaxKind.PercentEqualsToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
+    ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+    ts.SyntaxKind.AmpersandEqualsToken, ts.SyntaxKind.BarEqualsToken, ts.SyntaxKind.CaretEqualsToken,
+]);
+const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
+    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken,
+    ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
+]);
 
 function unwrap(node: ts.Expression): ts.Expression {
     while (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) ||
@@ -98,6 +122,7 @@ class SourceValueFlow {
     private readonly intrinsicAtoms = new Map<string, Atom>();
     private readonly operations = new Map<Operation, Atom>();
     private readonly primitives = new Map<string, Atom>();
+    private readonly nonString: Atom = { tag: "non-string" };
     private readonly evaluations = new Map<string, Cell[]>();
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
     private readonly global: Atom = { tag: "global" };
@@ -420,6 +445,22 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         if (functionNode(node)) { this.publish(result, { tag: "function", owner: this.function(node) }); return; }
+        // These grammar operations can throw, but every normal result is
+        // non-String independently of their operands and numeric magnitudes.
+        if (ts.isDeleteExpression(node) || ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken ||
+            ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
+            this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
+        }
+        if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node) ||
+            ts.isBinaryExpression(node) && NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind)) {
+            this.publish(result, this.nonString); return;
+        }
+        if (ts.isVoidExpression(node)) { this.publish(result, this.primitive(undefined)); return; }
+        if (ts.isTypeOfExpression(node)) {
+            for (const value of ["undefined", "object", "boolean", "number", "bigint", "string", "symbol", "function"])
+                this.publish(result, this.text(value));
+            return;
+        }
         if (ts.isStringLiteralLike(node)) this.publish(result, this.text(node.text));
         else if (ts.isNumericLiteral(node)) this.publish(result, this.primitive(Number(node.text)));
         else if (ts.isBigIntLiteral(node)) this.publish(result, this.primitive(BigInt(node.text.replace(/n$/i, ""))));
@@ -577,7 +618,7 @@ class SourceValueFlow {
                                 evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
                                 if (source) {
                                     this.watchText(rule, source);
-                                    for (const text of this.primitiveChoices(source)) {
+                                    for (const text of this.primitiveChoiceProof(source).values) {
                                         if (atom.operation === "eval" && typeof text !== "string") {
                                             this.publish(result!, this.primitive(text));
                                             continue;
@@ -619,22 +660,27 @@ class SourceValueFlow {
             for (const atom of cell.values) if (atom.tag === "text-operation") worklist.push(...atom.parts);
         }
     }
-    private choices(root: Cell): string[] {
-        return [...new Set(this.primitiveChoices(root).map(String))];
+    private choices(root: Cell): string[] | null {
+        const proof = this.primitiveChoiceProof(root);
+        return proof.primitiveComplete ? [...new Set(proof.values.map(String))] : null;
     }
-    private primitiveChoices(root: Cell): Primitive[] {
-        const pending = [{ cell: root, finish: false }], active = new Set<Cell>(), values = new Map<Cell, Primitive[]>();
+    private primitiveChoiceProof(root: Cell): PrimitiveChoiceProof {
+        const incomplete: PrimitiveChoiceProof = { values: [], primitiveComplete: false, textComplete: false };
+        const pending = [{ cell: root, finish: false }], active = new Set<Cell>(), proofs = new Map<Cell, PrimitiveChoiceProof>();
         while (pending.length) {
             const task = pending.pop()!;
-            if (values.has(task.cell)) continue;
+            if (proofs.has(task.cell)) continue;
             if (task.finish) {
                 active.delete(task.cell);
                 const choices = new Set<Primitive>();
+                let primitiveComplete = task.cell.values.size > 0, textComplete = true;
                 for (const atom of task.cell.values) {
                     if (atom.tag === "primitive") choices.add(atom.value);
-                    if (atom.tag === "text-operation") {
+                    else if (atom.tag === "text-operation") {
+                        const complete = atom.parts.every(part => proofs.get(part)?.primitiveComplete);
+                        primitiveComplete &&= complete; textComplete &&= complete;
                         let combinations: Primitive[][] = [[]];
-                        for (const part of atom.parts) combinations = combinations.flatMap(prefix => (values.get(part) ?? []).map(value => [...prefix, value]));
+                        for (const part of atom.parts) combinations = combinations.flatMap(prefix => (proofs.get(part)?.values ?? []).map(value => [...prefix, value]));
                         for (const tuple of combinations) {
                             if (atom.operation === "template") choices.add(tuple.map(String).join(""));
                             else {
@@ -644,16 +690,16 @@ class SourceValueFlow {
                                 else if (typeof left !== "bigint" && typeof right !== "bigint") choices.add(Number(left) + Number(right));
                             }
                         }
-                    }
+                    } else primitiveComplete = false;
                 }
-                values.set(task.cell, [...choices]);
+                proofs.set(task.cell, {values: [...choices], primitiveComplete, textComplete});
             } else {
-                if (active.has(task.cell)) return [];
+                if (active.has(task.cell)) return incomplete;
                 active.add(task.cell); pending.push({ ...task, finish: true });
                 for (const atom of task.cell.values) if (atom.tag === "text-operation") for (const cell of atom.parts) pending.push({ cell, finish: false });
             }
         }
-        return values.get(root) ?? [];
+        return proofs.get(root) ?? incomplete;
     }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         while (this.initializers.length || this.queue.length) {
@@ -661,13 +707,16 @@ class SourceValueFlow {
             else { const rule = this.queue.pop()!; rule.queued = false; rule.run(); }
         }
         return {
-            constructors: this.invocations.map(invocation => ({ kind: invocation.kind, choices: invocation.args?.map(cell => this.choices(cell)) ?? null })),
+            constructors: this.invocations.map(invocation => {
+                const choices = invocation.args?.map(cell => this.choices(cell));
+                return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null};
+            }),
             evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const { source, operation, unknown } = invocation;
-                const primitives = source ? this.primitiveChoices(source) : [];
+                const proof = source ? this.primitiveChoiceProof(source) : undefined;
+                const primitives = proof?.values ?? [];
                 const unresolved = unknown || source && (!source.values.size ||
-                    [...source.values].some(value => value.tag === "text-operation") && !primitives.length ||
-                    operation !== "eval" && [...source.values].some(value => value.tag !== "primitive" && value.tag !== "text-operation"));
+                    !proof!.textComplete || operation !== "eval" && !proof!.primitiveComplete);
                 const choices = unresolved ? null : source
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
                     : operation !== "eval" ? ["undefined"] : [];
