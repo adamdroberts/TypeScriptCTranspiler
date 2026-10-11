@@ -15,6 +15,7 @@ interface ControlContext {
     readonly iterationDepth: number;
     readonly labels: ReadonlyMap<string, boolean>;
     readonly lexicalIterationNames: ReadonlySet<string>;
+    readonly catchPatternNames: ReadonlySet<string>;
 }
 
 /** Contextual control-flow early errors over one explicit source-tree
@@ -86,6 +87,7 @@ export function earlyControlFlowStaticSemanticsFailure(
         iterationDepth: 0,
         labels: new Map(),
         lexicalIterationNames: new Set(),
+        catchPatternNames: new Set(),
     };
     const worklist: Array<{ readonly node: ts.Node; readonly context: ControlContext }> = [
         { node: sourceFile, context: { ...rootContext, allowAwait: ecmaParseGoal(sourceFile) === "module" } },
@@ -107,6 +109,28 @@ export function earlyControlFlowStaticSemanticsFailure(
             return {node, message:"lexical declaration is not permitted as a Statement"};
         if (ts.isWithStatement(node) && isStrictCodeContext(node))
             return {node, message:"with statement is not permitted in strict mode"};
+        if(ts.isCatchClause(node)){
+            const parameter=node.variableDeclaration?.name;
+            const names=new Set<string>();
+            if(parameter)for(const entry of bindingNameEntries(parameter)){
+                if(names.has(entry.name)||isStrictCodeContext(node)&&strictModeBindingIdentifierNames.has(entry.name))
+                    return {node:entry.node,message:"catch binding has invalid or duplicate BoundNames"};
+                names.add(entry.name);
+            }
+            for(const statement of node.block.statements){
+                const entries=ts.isVariableStatement(statement)&&(statement.declarationList.flags&ts.NodeFlags.BlockScoped)
+                    ? statement.declarationList.declarations.flatMap(declaration=>bindingNameEntries(declaration.name)) :
+                    (ts.isFunctionDeclaration(statement)||ts.isClassDeclaration(statement))&&statement.name
+                        ? [{name:statement.name.text,node:statement.name}] : [];
+                for(const entry of entries)if(names.has(entry.name))
+                    return {node:entry.node,message:`catch binding '${entry.name}' conflicts with a block lexical declaration`};
+            }
+            const catchPatternNames=new Set(context.catchPatternNames);
+            if(parameter&&!ts.isIdentifier(parameter))for(const name of names)catchPatternNames.add(name);
+            worklist.push({node:node.block,context:{...context,catchPatternNames}});
+            if(node.variableDeclaration)worklist.push({node:node.variableDeclaration,context});
+            continue;
+        }
         if (ts.isWithStatement(node)) {
             let body=node.statement;
             while(ts.isLabeledStatement(body))body=body.statement;
@@ -126,6 +150,7 @@ export function earlyControlFlowStaticSemanticsFailure(
                         iterationDepth: 0,
                         labels: new Map(),
                         lexicalIterationNames: new Set(),
+                        catchPatternNames: new Set(),
                     },
                 });
             }
@@ -190,6 +215,8 @@ export function earlyControlFlowStaticSemanticsFailure(
                         return { node: entry.node,
                             message: `lexical iteration binding '${entry.name}' conflicts with a body var declaration` };
                     }
+                    if(context.catchPatternNames.has(entry.name))
+                        return {node:entry.node,message:`catch pattern binding '${entry.name}' conflicts with a body var declaration`};
                 }
             }
         }

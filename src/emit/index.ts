@@ -18971,7 +18971,10 @@ class Emitter {
         return !!reference && !reference.symbol;
     }
 
+    private readonly bindingInitializerReferences = new Map<ts.Identifier, ts.Symbol>();
     private symbolForIdentifier(id: ts.Identifier): ts.Symbol | undefined {
+        const reference=this.bindingInitializerReferences.get(id);
+        if(reference)return canonicalParameterBindingSymbol(this.checker,id,reference);
         const parameterReference = this.parameterScopeReference(id);
         let sym = parameterReference ? parameterReference.symbol : this.checker.getSymbolAtLocation(id);
         // The checker intentionally stops lookup inside a WithStatement;
@@ -29219,15 +29222,33 @@ class Emitter {
         const isConst =
             (list.flags & ts.NodeFlags.Const) !== 0;
         for (const d of list.declarations) {
-            if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && this.withEnvironmentContainsNode(d)) {
+            let catchContext = false;
+            for(let owner: ts.Node|undefined=d.parent;owner;owner=owner.parent){
+                if(ts.isFunctionLike(owner)||ts.isClassStaticBlockDeclaration(owner))break;
+                if(ts.isCatchClause(owner)){catchContext=true;break;}
+            }
+            if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && (catchContext || this.withEnvironmentContainsNode(d))) {
                 if (!d.initializer) continue;
-                const references = new Map<ts.Identifier, string>();
+                const references = new Map<ts.Identifier, (value: string)=>string>();
                 this.emitBindingInitialization(buf, d.name, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer),
-                    (target, identifier, value) => target.line(`(void)(${this.sourceReferencePlan(identifier)!.set(`&${references.get(identifier)!}`, value)});`),
+                    (target, identifier, value) => target.line(`(void)(${references.get(identifier)!(value)});`),
                     (target, identifier) => {
-                        const reference = this.freshTemp("_with_initializer_reference");
-                        references.set(identifier, reference);
-                        target.line(`tsc_reference_t ${reference} = ${this.sourceReferencePlan(identifier)!.capture};`);
+                        const symbol=this.checker.resolveName(identifier.text,identifier,ts.SymbolFlags.Value,false);
+                        const previous=this.bindingInitializerReferences.get(identifier);
+                        if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
+                        const owner=ts.factory.createBinaryExpression(identifier,ts.SyntaxKind.EqualsToken,ts.factory.createNull());
+                        Object.assign(owner,{parent:d.parent});
+                        try{
+                            const reference=this.preparePatternAssignmentReference(target,identifier,owner);
+                            references.set(identifier,value=>{
+                                if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
+                                try{return reference(value);}finally{
+                                    if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
+                                }
+                            });
+                        }finally{
+                            if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
+                        }
                     });
                 continue;
             }

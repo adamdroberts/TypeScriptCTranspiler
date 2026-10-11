@@ -597,3 +597,7 @@ Explicit thrown-value and async rejection flow now share canonical handler cells
 Canonical Realm binding metadata now supplies intrinsic normal result categories, and reflection operations follow their initial owner identities. Finite text-producing intrinsic evaluation, precise conversion/effect summaries, opaque global escapes, property descriptor-map precision, complete static member identities, declaration/eval/Annex B and exhaustive eligible host/clause evidence remain open.
 
 The E2E case lifecycle now removes successful generated artifacts and preserves failures. Fresh full runs in both memory modes remain required after the previous immutable run encountered temporary inode exhaustion; their inventories are regression detectors, separate from semantic generality and eligible target evidence.
+
+Catch BoundNames and declaration-owner early errors now follow the canonical source-tree worklist. Complete binding-pattern grammar validation, eval/Annex B declaration interactions, opaque effect precision and eligible exhaustive target evidence remain open. The full E2E runs use the immutable runner-cleanup revision.
+
+An unused eval of a compiler-known invalid catch fragment currently returns normally in the CLI probe; its runtime SyntaxError effect still needs repair. Mutable array/List location projection and complete host/intrinsic effect identities also remain open.
