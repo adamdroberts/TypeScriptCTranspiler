@@ -10,13 +10,13 @@ test('one Realm binding collection supplies normal call result categories withou
   for(const expression of nonTextResults){await fs.writeFile(entry,`eval(${expression});`);expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([[]]);}
   for(const source of ['eval(String(input));','eval(Date());','var value=flag?Number(input):external;eval(value);','var convert=flag?Number:external;eval(convert(input));','try{if(flag)throw "31;";Number({valueOf(){throw "37;";}});}catch(source){eval(source);}',
     'eval(""+Number(input));','globalThis[input]=()=>"31;";eval(Number());',
-    'Object.defineProperty(globalThis,"Number",{get(){return ()=>"31;";}});eval(Number());',
     'Object.defineProperties(globalThis,external);eval(Number());',
     'Object.assign(globalThis,{Number:()=>"31;"});eval(Number());',
     'var holder={value:"31;"};external(holder);eval(holder.value);']){
    await fs.writeFile(entry,source);expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([null]);
   }
   for(const source of ['var Number=function(){return "31;";};eval(Number());','globalThis.Number=function(){return "31;";};eval(Number());',
+    'Object.defineProperty(globalThis,"Number",{get(){return ()=>"31;";}});eval(Number());',
     'Object.defineProperty(globalThis,"Number",{value:()=>"31;"});eval(Number());','Reflect.set(globalThis,"Number",()=>"31;");eval(Number());',
     'var prototype=Object.getPrototypeOf(function(){});Object.defineProperty(prototype,"source",{value:"31;"});eval(prototype.source);',
     'var Reflect={apply(){return "31;";}};eval(Reflect.apply());','Reflect.apply=function(){return "31;";};eval(Reflect.apply());',

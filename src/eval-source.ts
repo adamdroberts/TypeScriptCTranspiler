@@ -56,7 +56,7 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
         }
         for (const source of invocation.choices) {
             const file = invocation.node.getSourceFile();
-            const strictCaller = invocation.direct && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
+            const strictCaller = invocation.direct && ts.isCallExpression(invocation.node) && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
             const request = evalSourceRequest(invocation.operation === "agent-start" ? "agent" : invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
                 source, strictCaller);
             requests.set(evalSourceKey(request), request);
