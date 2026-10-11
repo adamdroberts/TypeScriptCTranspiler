@@ -68,7 +68,7 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<string, Cell>; readonly accessors: Map<string|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell}[]; own?: Map<string, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
+interface ObjectOwner { readonly fields: Map<string, Cell>; readonly accessors: Map<string|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<string, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -192,6 +192,7 @@ class SourceValueFlow {
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
     private readonly propertyWrites = new Set<string>();
+    private readonly keyPrimitives = new Map<Cell, Map<ts.Node | undefined, Cell>>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
@@ -246,13 +247,15 @@ class SourceValueFlow {
                 if (ts.isThrowStatement(node) && handler) this.copy(this.cell(node.expression), handler);
                 const operands = handler && conversionOperands(node);
                 if (handler && operands) {
-                    const inputs = operands.map(operand => this.cell(operand));
+                    const propertyKey = ts.isComputedPropertyName(node) || ts.isElementAccessExpression(node);
+                    const inputs = operands.map(operand => propertyKey ? this.propertyKeyPrimitives(this.cell(operand), node) : this.cell(operand));
                     // Primitive conversion failures are Error objects. An
                     // opaque coercion can invoke user code and throw any value;
                     // it cannot disappear beside a known explicit throw.
                     this.publish(handler, this.opaqueObject);
                     this.rule(inputs, () => {
-                        if (inputs.some(input => [...input.values].some(atom => atom.tag !== "primitive" && atom.tag !== "non-string")))
+                        if (inputs.some(input => [...input.values].some(atom => atom.tag !== "primitive" && atom.tag !== "non-string" &&
+                            !(propertyKey && (atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source")))))
                             this.publish(handler, this.unknown);
                     });
                 }
@@ -509,8 +512,81 @@ class SourceValueFlow {
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.publish(this.globalMutation,this.unknown);if(handler)this.publish(handler,this.unknown);}
         }});
     }
-    /** One primitive ToPropertyKey projection for computed reads, writes and reflection. */
+    /** OrdinaryToPrimitive's string-hint method order, driven by the existing
+     * property/call graph. Symbol-keyed or opaque shapes remain incomplete. */
+    private propertyKeyPrimitives(source: Cell, context?: ts.Node): Cell {
+        let contexts = this.keyPrimitives.get(source);
+        if (!contexts) { contexts = new Map(); this.keyPrimitives.set(source, contexts); }
+        const previous = contexts.get(context); if (previous) return previous;
+        const result = this.newCell(); contexts.set(context, result);
+        const selected = new Set<Atom>();
+        let rule!: Rule;
+        rule = this.rule([source], () => {
+            for (const atom of source.values) {
+                if (atom.tag === "primitive" || atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source") {
+                    this.publish(result, atom); continue;
+                }
+                const owner = this.ordinaryOwner(atom);
+                if (!owner || !context) { this.publish(result, this.unknown); continue; }
+                const worklist = [owner], visited = new Set<ObjectOwner>();
+                let ready = true, opaque = false;
+                while (worklist.length) {
+                    const current = worklist.pop()!;
+                    if (visited.has(current)) continue; visited.add(current);
+                    this.watch(rule, current.shape);
+                    ready &&= this.definitionsReady(current, rule);
+                    opaque ||= current.shape.values.has(this.unknown);
+                    if (current.prototype) {
+                        this.watch(rule, current.prototype);
+                        ready &&= current.prototype.values.size > 0;
+                        for (const prototype of current.prototype.values) {
+                            const parent = this.ordinaryOwner(prototype);
+                            if (parent) worklist.push(parent);
+                            else if (prototype.tag === "pending-source") ready = false;
+                            else if (prototype !== this.primitive(null)) opaque = true;
+                        }
+                    }
+                }
+                if (opaque) { this.publish(result, this.unknown); continue; }
+                if (!ready || selected.has(atom)) continue;
+                selected.add(atom);
+                const receiver = this.newCell(); this.publish(receiver, atom);
+                const methods = ["toString", "valueOf"];
+                const scheduled = new Set<number>();
+                const advance = (index: number): void => {
+                    if (scheduled.has(index)) return; scheduled.add(index);
+                    if (index === methods.length) {
+                        this.publish(result, this.abrupt);
+                        const handler = this.exceptionHandlers.get(context);
+                        if (handler) this.publish(handler, this.opaqueObject);
+                        return;
+                    }
+                    const method = this.property(receiver, methods[index]!, context), callee = this.newCell(), returned = this.newCell();
+                    this.invoke(context, callee, receiver, [], returned);
+                    this.rule([method], () => {
+                        for (const value of method.values) {
+                            if (value.tag === "pending-source" || value.tag === "unknown" || value.tag === "opaque-object") this.publish(result, value);
+                            else if (value.tag === "function" || value.tag === "bound" || value.tag === "operation" ||
+                                value.tag === "intrinsic" || value.tag === "builtin" && value.normalResult !== "not-callable") this.publish(callee, value);
+                            else advance(index + 1);
+                        }
+                    });
+                    this.rule([returned], () => {
+                        for (const value of returned.values) {
+                            if (value.tag === "primitive" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
+                            else if (value.tag === "non-string") this.publish(result, this.unknown);
+                            else advance(index + 1);
+                        }
+                    });
+                };
+                advance(0);
+            }
+        });
+        return result;
+    }
+    /** One ToPropertyKey projection for computed reads, writes and reflection. */
     private propertyKeyNames(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
+        key = this.propertyKeyPrimitives(key, context);
         this.watchText(rule, key);
         if (!key.values.size) return undefined;
         const proof = this.primitiveChoiceProof(key);
@@ -540,7 +616,7 @@ class SourceValueFlow {
         if (typeof name === "string") { project(name); return; }
         if (!ts.isComputedPropertyName(name)) { project(propertyName(name)); return; }
         const key = this.cell(name.expression), selected = new Set<string | null>(), defined = this.newCell();
-        if (owner) (owner.computedDefinitions ??= []).push({key,defined});
+        if (owner) (owner.computedDefinitions ??= []).push({key,defined,context});
         let rule!: Rule;
         rule = this.rule([key], () => {
             const keys = this.propertyKeyNames(key, rule, context);
@@ -553,7 +629,7 @@ class SourceValueFlow {
         for (const definition of owner.computedDefinitions ?? []) {
             if (!rule) return false;
             this.watch(rule,definition.defined);
-            const keys=this.propertyKeyNames(definition.key,rule);
+            const keys=this.propertyKeyNames(definition.key,rule,definition.context);
             if(keys===undefined)return false;
             if(keys===null){if(!definition.defined.values.has(this.unknown))return false;}
             else if(keys.some(key=>!definition.defined.values.has(this.primitive(key))))return false;

@@ -37,7 +37,7 @@ test('one exception-value graph routes protected throws, call/getter outcomes an
   }
   for(const body of ['if(flag)throw "31;";external();','var object=flag?{get value(){throw "31;";}}:external;object.value;',
       'if(flag)throw "31;";var object={valueOf(){throw "37;";}};object-1;',
-      'if(flag)throw "31;";var key={toString(){throw "37;";}};({[key]:0});']){
+      'if(flag)throw "31;";var key={toString(){throw external;}};({[key]:0});']){
    await fs.writeFile(entry,`try{${body}}catch(source){eval(source);}`);
    expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([null]);
   }

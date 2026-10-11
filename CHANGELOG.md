@@ -422,6 +422,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Ordinary object key coercion uses the shared property/call graph for source admission, preserving receiver, fallback, accessor effects and thrown source values. Opaque coercions remain closed; Node/native properties, deep prototype lookup and typed CLI checks cover the change.
+
 - Computed object/class source definitions and callable names share evaluated primitive-key facts; native object names follow runtime keys, including accessor prefixes and early anonymous-class initialization. Differential properties and CLI eval checks cover the shared path; full target coverage remains open.
 
 - Add ordinary Atomics word owners from one operation collection and integer-view validation path, with ordered conversions and native sequentially consistent modular operations. Replace shared scalar mutex accesses with compatible native atomic words/bytes; verify contention, old values, lock freedom and retained stored consumers. Waiters, agents and full target conformance remain open.
