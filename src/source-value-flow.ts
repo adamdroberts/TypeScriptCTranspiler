@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
+import { expectedArgumentCount } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
@@ -469,6 +470,7 @@ class SourceValueFlow {
                 if(key===null){this.publish(owner.shape,this.unknown);for(const field of owner.fields.values())this.publish(field,this.unknown);}
                 else {
                     const presence=this.presence(owner,key);
+                    if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.size) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
                     this.copy(value,this.field(owner,key));
@@ -636,9 +638,9 @@ class SourceValueFlow {
         }
         return this.ordinaryObjectPrototype;
     }
-    private property(base: Cell, key: string, context?: ts.Node): Cell {
+    private property(base: Cell, key: string, context?: ts.Node, ownOnly=false): Cell {
         const result = this.newCell();
-        const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context); });
+        const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
     }
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
@@ -668,7 +670,7 @@ class SourceValueFlow {
         if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
         return owner;
     }
-    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node): void {
+    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.unknown);
@@ -693,6 +695,7 @@ class SourceValueFlow {
             }
             const presence=owner.own?.get(key);
             if (rule) this.watch(rule,this.presence(owner,key));
+            if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
             if (presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))) continue;
             if (owner.prototype) {
                 if (rule) this.watch(rule, owner.prototype);
@@ -754,6 +757,8 @@ class SourceValueFlow {
             returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.newCell(),
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
+        const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
+        this.publish(this.presence(owner.fields,"name"),this.primitive(true));this.field(owner.fields,"name");
         owner.fields.prototype = this.callablePrototype(owner.kind);
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
@@ -1236,9 +1241,28 @@ class SourceValueFlow {
                             let value = boundValues.get(signature);
                             if (!value) {
                                 const fields: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
+                                this.copy(this.opaqueMutation,fields.shape);
                                 value = { tag: "bound", target: invocation.receiver, receiver: argv?.[0] ?? this.empty, prefix: argv?.slice(1) ?? null, fields }; boundValues.set(signature, value);
+                                const length=this.property(invocation.receiver,"length",node,true),boundLength=this.newCell();
+                                this.property(invocation.receiver,"name",node);
+                                this.defineField(fields,"length",boundLength);
+                                let lengthRule!:Rule;
+                                lengthRule=this.rule([length],()=>{
+                                    if(!length.values.size)return;
+                                    this.watchText(lengthRule,length);
+                                    const proof=this.primitiveChoiceProof(length);
+                                    if(!argv || [...length.values].some(value=>value.tag==="unknown"||value.tag==="non-string"))this.publish(boundLength,this.nonString);
+                                    for(const count of length.values){
+                                        if(count.tag!=="primitive" && count.tag!=="text-operation" && count.tag!=="pending-source" && count.tag!=="unknown" && count.tag!=="non-string" && count.tag!=="abrupt")this.publish(boundLength,this.primitive(0));
+                                    }
+                                    for(const count of proof.values){
+                                        const integer=typeof count==="number"?(Number.isNaN(count)?0:Math.trunc(count)):0;
+                                        this.publish(boundLength,this.primitive(Math.max(integer-(argv?Math.max(argv.length-1,0):0),0)));
+                                    }
+                                });
                                 this.rule([invocation.receiver], () => {
                                     for (const target of invocation.receiver.values) {
+                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.onActive(node,()=>this.publish(this.opaqueMutation,this.unknown));
                                         const owner = this.ordinaryOwner(target);
                                         if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
                                         else if (target.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);

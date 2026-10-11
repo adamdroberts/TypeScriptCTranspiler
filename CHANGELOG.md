@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Callable source length and native boxing now share the ordered parameter-prefix calculation. Bound lengths use reactive own-property facts and actual Lists, preserving metadata getter effects and throws. Removed the emitter-only calculation and added Node/native partitions, deep bound forwarding and dual-memory CLI checks. Cache require-alias declaration facts and remove duplicate resolved-declaration fallback checks exposed by the deep bound input.
+
 - Closed eval admission now retains descriptor flags as Boolean normal results through one shared fact cell. Returned-object writes still contribute String or unresolved values; added Node/native attribute partitions and dual-memory CLI checks.
 
 - Closed eval source analysis now projects represented own descriptors through the canonical owner graph, retaining data/accessor callable identities without executing getters. Added independent Node/native partitions, deep owner projection and dual-memory CLI checks; unresolved attributes, coercions, spread and exotic metadata still fail closed.

@@ -18,6 +18,7 @@ import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
+import { expectedArgumentCount } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -17868,8 +17869,8 @@ class Emitter {
         if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleRequireAliasBindingElement(decl)) {
             return true;
         }
-        if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsRequireAliasDeclaration(decl)) {
-            return true;
+        if (decl && ts.isVariableDeclaration(decl)) {
+            return this.isCommonJsRequireAliasDeclaration(decl);
         }
         for (const stmt of id.getSourceFile().statements) {
             if (!ts.isVariableStatement(stmt)) continue;
@@ -17913,12 +17914,16 @@ class Emitter {
         return false;
     }
 
+    private readonly commonJsRequireAliasResults = new Map<ts.VariableDeclaration,boolean>();
     private isCommonJsRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        const known=this.commonJsRequireAliasResults.get(decl);if(known!==undefined)return known;
+        this.commonJsRequireAliasResults.set(decl,false);
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
         const init = this.unwrapSideEffectFreeStaticExpression(decl.initializer);
-        return (ts.isIdentifier(init) && init.text === "require") ||
+        const result=(ts.isIdentifier(init) && init.text === "require") ||
             (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init)) ||
             this.isCommonJsRequireBindExpression(init);
+        this.commonJsRequireAliasResults.set(decl,result);return result;
     }
 
     private isCommonJsModuleRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
@@ -22405,16 +22410,6 @@ class Emitter {
             runtimeParams.findIndex(parameter => !!parameter.dotDotDotToken)));
     }
 
-    private javaScriptFunctionLength(fn: ts.FunctionLikeDeclaration): number {
-        let length = 0;
-        for (const parameter of fn.parameters) {
-            if (this.isThisParameter(parameter)) continue;
-            if (parameter.initializer || parameter.dotDotDotToken) break;
-            length++;
-        }
-        return length;
-    }
-
     /** Resolve the source function behind a direct callable expression.  This
      * is identity-based (checker symbols), so a same-spelled global or local
      * does not accidentally determine the runtime call ABI. */
@@ -25474,7 +25469,7 @@ class Emitter {
             this.closureDefs.write(buf.toString());
         }
         const constructor = this.withCallableSourceText(
-            `tsc_value_function_class_named(${adapter}, NULL, ${ctor ? this.javaScriptFunctionLength(ctor) : 0}.0, ` +
+            `tsc_value_function_class_named(${adapter}, NULL, ${ctor ? expectedArgumentCount(ctor) : 0}.0, ` +
             `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
         if (!initializeMembers) return { c: constructor, ty: T_VALUE };
         const definitions: string[] = [];
@@ -47312,7 +47307,7 @@ class Emitter {
             case "function": {
                 const sourceFunction = this.sourceFunctionForCallableNode(node);
                 const length = sourceFunction
-                    ? this.javaScriptFunctionLength(sourceFunction)
+                    ? expectedArgumentCount(sourceFunction)
                     : (r.ty.params ?? []).length;
                 const owner = this.freshTemp("_callable_owner");
                 const value = `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;

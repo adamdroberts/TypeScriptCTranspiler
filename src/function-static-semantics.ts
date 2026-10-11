@@ -10,6 +10,18 @@ export interface FunctionStaticSemanticsFailure {
     readonly message: string;
 }
 
+/** ExpectedArgumentCount uses the canonical ordered parameter collection.
+ * TypeScript's erased this parameter does not contribute to ECMAScript length. */
+export function expectedArgumentCount(node: ts.FunctionLikeDeclaration): number {
+    let length = 0;
+    for (const parameter of node.parameters) {
+        if (ts.isIdentifier(parameter.name) && parameter.name.text === "this") continue;
+        if (parameter.initializer || parameter.dotDotDotToken) break;
+        length++;
+    }
+    return length;
+}
+
 function pushChildren(worklist: ts.Node[], node: ts.Node): void {
     const children: ts.Node[] = [];
     node.forEachChild((child) => { children.push(child); });
