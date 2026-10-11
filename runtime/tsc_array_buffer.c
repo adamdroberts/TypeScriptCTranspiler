@@ -6,7 +6,7 @@
 
 /* Shared blocks have one stable address for their entire maximum extent.
  * The retained block, not an individual view, owns the mapping. */
-typedef struct {uint8_t* bytes;size_t capacity;} shared_block_t;
+typedef struct {uint8_t* bytes;size_t capacity,length;} shared_block_t;
 static void shared_block_release(void* object,void* unused){
     (void)unused;shared_block_t* block=object;
     if(block->bytes){(void)munmap(block->bytes,block->capacity);block->bytes=NULL;}
@@ -80,7 +80,8 @@ static uint64_t reorder_word(uint64_t raw,size_t width,bool little){
     return reordered;
 }
 size_t tsc_array_buffer_length(const tsc_array_buffer_t* buffer){
-    return buffer->shared?__atomic_load_n(&buffer->byte_length,__ATOMIC_SEQ_CST):buffer->byte_length;
+    if(buffer->shared)tsc_agent_checkpoint();
+    return buffer->shared?__atomic_load_n(&((shared_block_t*)buffer->shared_storage)->length,__ATOMIC_SEQ_CST):buffer->byte_length;
 }
 tsc_array_buffer_t* tsc_shared_array_buffer_allocate(size_t length,size_t maximum,bool growable){
     if(length>maximum)tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("SharedArrayBuffer length exceeds its maximum"));
@@ -90,6 +91,7 @@ tsc_array_buffer_t* tsc_shared_array_buffer_allocate(size_t length,size_t maximu
     void* bytes=mmap(NULL,block->capacity,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE,-1,0);
     if(bytes==MAP_FAILED)tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("SharedArrayBuffer maximum cannot be represented by native storage"));
     block->bytes=bytes;
+    block->length=length;
 #ifndef TSC_NO_GC
     GC_register_finalizer_no_order(block,shared_block_release,NULL,NULL,NULL);
 #endif
@@ -103,16 +105,24 @@ bool tsc_shared_array_buffer_grow_storage(tsc_array_buffer_t* buffer,size_t leng
     for(;;){
         if(length==current)return true;
         if(length<current||length>buffer->max_byte_length)return false;
-        if(__atomic_compare_exchange_n(&buffer->byte_length,&current,length,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST))return true;
+        if(__atomic_compare_exchange_n(&((shared_block_t*)buffer->shared_storage)->length,&current,length,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST))return true;
     }
 }
+tsc_array_buffer_t* tsc_shared_array_buffer_clone(tsc_array_buffer_t* source){
+    if(!source||!source->shared)tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("agent.broadcast requires shared storage"));
+    tsc_array_buffer_t* clone=TSC_GC_MALLOC(sizeof(*clone));memset(clone,0,sizeof(*clone));
+    clone->shared=true;clone->resizable=source->resizable;clone->max_byte_length=source->max_byte_length;
+    clone->byte_length=tsc_array_buffer_length(source);clone->data=source->data;clone->shared_storage=source->shared_storage;return clone;
+}
 uint64_t tsc_array_buffer_read_bits(const tsc_array_buffer_t* buffer,size_t offset,size_t width,bool little){
+    if(buffer->shared)tsc_agent_checkpoint();
     const uint8_t* bytes=buffer->data+offset;
     if(buffer->shared&&((uintptr_t)bytes%width)==0)return reorder_word(word_load(bytes,width,__ATOMIC_RELAXED),width,little);
     uint64_t raw=0;for(size_t byte=0;byte<width;++byte){uint8_t value=buffer->shared?(uint8_t)word_load(bytes+byte,1,__ATOMIC_RELAXED):bytes[byte];raw|=(uint64_t)value<<((little?byte:width-byte-1)*8);}
     return raw;
 }
 void tsc_array_buffer_write_bits(tsc_array_buffer_t* buffer,size_t offset,size_t width,bool little,uint64_t raw){
+    if(buffer->shared)tsc_agent_checkpoint();
     uint8_t* bytes=buffer->data+offset;
     if(buffer->shared&&((uintptr_t)bytes%width)==0){word_store(bytes,width,reorder_word(raw,width,little),__ATOMIC_RELAXED);return;}
     for(size_t byte=0;byte<width;++byte){uint8_t value=(uint8_t)(raw>>((little?byte:width-byte-1)*8));if(buffer->shared)word_store(bytes+byte,1,value,__ATOMIC_RELAXED);else bytes[byte]=value;}

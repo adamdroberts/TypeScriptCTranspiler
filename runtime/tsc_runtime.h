@@ -809,6 +809,7 @@ typedef struct {
     bool initialized;
 } tsc_callable_owner_t;
 void tsc_callable_owner_capture(tsc_callable_owner_t* owner);
+void tsc_callable_owner_bind_name(tsc_callable_owner_t* owner, tsc_str_t* name);
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
     void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source);
 void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value);
@@ -931,6 +932,7 @@ void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_bind
 void tsc_environment_alias_variable(const tsc_environment_binding_ref_t* reference);
 void tsc_environment_alias_capture(const tsc_environment_binding_ref_t* reference);
 tsc_environment_t* tsc_environment_project(const tsc_environment_binding_ref_t* references, size_t length);
+tsc_environment_t* tsc_environment_named_function_new(tsc_environment_t* parent, tsc_str_t* name, tsc_value_t function);
 typedef struct { tsc_str_t* name; tsc_value_t identity; } tsc_environment_private_name_ref_t;
 void tsc_environment_private_names_project(tsc_environment_t* record,
     const tsc_environment_private_name_ref_t* references, size_t length);
@@ -1683,6 +1685,9 @@ bool tsc_test262_capture_console(tsc_str_t* text);
 void tsc_test262_begin(void);
 tsc_value_t tsc_test262_host_object(void);
 typedef tsc_value_t (*tsc_test262_eval_script_callback_t)(tsc_str_t* source);
+void tsc_test262_set_agent_callback(tsc_test262_eval_script_callback_t callback);
+void tsc_test262_agents_finish(void);
+void tsc_test262_install_current_realm_globals(void);
 void tsc_test262_set_eval_script_callback(tsc_test262_eval_script_callback_t callback);
 typedef tsc_value_t (*tsc_test262_direct_eval_callback_t)(tsc_str_t* source, bool strict_caller);
 void tsc_test262_set_direct_eval_callback(tsc_test262_direct_eval_callback_t callback);

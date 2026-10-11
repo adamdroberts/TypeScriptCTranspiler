@@ -47,6 +47,8 @@
     "runtime/tsc_runtime.h",
     "runtime/tsc_string.c",
     "runtime/tsc_test262.c",
+    "runtime/tsc_test262_agent.c",
+    "runtime/tsc_test262_agent.def",
     "runtime/tsc_value.c",
     "src/cli.ts",
     "src/commonjs-resolve.ts",

@@ -11,12 +11,13 @@ export interface DirectEvalSourceEntry extends EvalSourceEntry { readonly strict
 export interface IndirectEvalSourceEntry extends EvalSourceEntry { readonly strict: boolean; }
 export interface SourceEvalPlan {
     readonly unresolvedCalls?: readonly ts.Node[];
+    readonly agentEntries?: readonly EvalSourceEntry[];
     readonly evalScriptEntries?: readonly EvalSourceEntry[];
     readonly directEvalEntries?: readonly DirectEvalSourceEntry[];
     readonly indirectEvalEntries?: readonly IndirectEvalSourceEntry[];
 }
 export interface EvalSourceRequest {
-    readonly kind: "script" | "direct" | "indirect";
+    readonly kind: "script" | "direct" | "indirect" | "agent";
     readonly source: string;
     readonly strictCaller: boolean;
     readonly strict: boolean;
@@ -44,7 +45,7 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
     strictContexts: ReadonlyMap<string, boolean> = new Map()): {
         hasEvaluations: boolean;
         requests: readonly EvalSourceRequest[];
-        unresolved: readonly { node: ts.Node; direct: boolean; operation: "eval" | "eval-script" }[];
+        unresolved: readonly { node: ts.Node; direct: boolean; operation: "eval" | "eval-script" | "agent-start" }[];
     } {
     const requests = new Map<string, EvalSourceRequest>(), unresolved = [];
     const invocations = sourceEvaluationInvocations(program, entries);
@@ -56,7 +57,7 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
         for (const source of invocation.choices) {
             const file = invocation.node.getSourceFile();
             const strictCaller = invocation.direct && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
-            const request = evalSourceRequest(invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
+            const request = evalSourceRequest(invocation.operation === "agent-start" ? "agent" : invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
                 source, strictCaller);
             requests.set(evalSourceKey(request), request);
         }

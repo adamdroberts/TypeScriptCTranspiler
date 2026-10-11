@@ -7,7 +7,7 @@ static tsc_test262_direct_eval_callback_t g_test262_direct_eval_callback = NULL;
 static tsc_test262_indirect_eval_callback_t g_test262_indirect_eval_callback = NULL;
 static const char test262_host_realm_state_key;
 
-static void test262_install_current_realm_globals(void);
+void tsc_test262_install_current_realm_globals(void);
 
 tsc_value_t tsc_eval_indirect(tsc_array_t* args) {
     tsc_value_t source = args && args->len > 0
@@ -148,7 +148,7 @@ static tsc_value_t test262_host_create_realm(void* env, tsc_value_t this_arg, ts
     tsc_realm_t* realm = tsc_realm_new();
     tsc_realm_t* previous = tsc_realm_swap(realm);
     tsc_value_t host = tsc_test262_host_object();
-    test262_install_current_realm_globals();
+    tsc_test262_install_current_realm_globals();
     (void)tsc_realm_swap(previous);
     return host;
 }
@@ -270,6 +270,7 @@ tsc_value_t tsc_test262_host_object(void) {
                 true,
                 true
             );
+            (void)tsc_object_define_desc(object,tsc_str_from_cstr("agent"),tsc_test262_agent_object(),true,true,true,true,true,true,true);
             (void)tsc_object_define_desc(
                 object,
                 tsc_str_from_lit("gc", 2),
@@ -486,7 +487,7 @@ static async_markers_t scan_async_markers(void) {
     return markers;
 }
 
-static void test262_install_current_realm_globals(void) {
+void tsc_test262_install_current_realm_globals(void) {
     tsc_realm_t* realm = tsc_realm_current();
     typedef struct {
         const char* name;
@@ -536,7 +537,7 @@ void tsc_test262_begin(void) {
         tsc_jsonbuf_init(&g_test262_stdout);
         g_test262_started = true;
     }
-    test262_install_current_realm_globals();
+    tsc_test262_install_current_realm_globals();
 }
 
 void tsc_test262_write_normal(const char* scenario_id, bool async_test) {
@@ -576,5 +577,6 @@ void tsc_test262_write_normal(const char* scenario_id, bool async_test) {
 }
 
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error) {
+    tsc_test262_agents_abort();
     write_throw_with_name(scenario_id, origin, error_constructor_name(error));
 }

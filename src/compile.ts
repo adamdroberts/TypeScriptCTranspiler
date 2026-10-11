@@ -124,6 +124,7 @@ const RUNTIME_SOURCES = [
     "tsc_array_buffer.c",
     "tsc_atomics.c",
     "tsc_atomics_wait.c",
+    "tsc_test262_agent.c",
     "tsc_text_codec.c",
     "tsc_regexp.c",
     "tsc_regexp_api.c",
@@ -137,7 +138,7 @@ const RUNTIME_SOURCES = [
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
 const DISPATCH_RUNTIME_SOURCES = ["tsc_dispatch.c"];
 const TEST262_RUNTIME_SOURCES = ["tsc_test262.c"];
-const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h", "tsc_array_abi.h", "tsc_global_bindings.def", "tsc_timers_promises.def", "tsc_console_methods.def", "tsc_weak_collections.def", "tsc_fs_dirent.def", "tsc_crypto_digest.def", "tsc_error_values.def", "tsc_buffer_statics.def", "tsc_dataview.def", "tsc_typed_array.def", "tsc_typed_array_methods.def", "tsc_array_buffer.def", "tsc_atomics.def", "tsc_text_codec.def", "tsc_iterator_consumers.def", "tsc_iterator_helpers.def"];
+const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h", "tsc_array_abi.h", "tsc_global_bindings.def", "tsc_timers_promises.def", "tsc_console_methods.def", "tsc_weak_collections.def", "tsc_fs_dirent.def", "tsc_crypto_digest.def", "tsc_error_values.def", "tsc_buffer_statics.def", "tsc_dataview.def", "tsc_typed_array.def", "tsc_typed_array_methods.def", "tsc_array_buffer.def", "tsc_atomics.def", "tsc_test262_agent.def", "tsc_text_codec.def", "tsc_iterator_consumers.def", "tsc_iterator_helpers.def"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";
@@ -215,6 +216,7 @@ function permanentLimitDiagnostics(
     const finiteEvalCalls = new Map<ts.Node, boolean>();
     const sourceEval = opts.sourceEval ?? opts.test262Observation;
     if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{functions: opts.functionEntries, evaluations:[
+        ...(sourceEval.agentEntries ?? []),
         ...(sourceEval.evalScriptEntries ?? []),
         ...(sourceEval.directEvalEntries ?? []),
         ...(sourceEval.indirectEvalEntries ?? []),
@@ -753,8 +755,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     let built = buildProgram(programOptions);
     const functionEntries = new Map<string, FunctionConstructorEntry>();
     const evalEntries = new Map<string, EvalSourceRequest & { entry: string | null }>();
-    for (const kind of ["script", "direct", "indirect"] as const) {
-        const entries = kind === "script" ? opts.test262Observation?.evalScriptEntries :
+    for (const kind of ["script", "direct", "indirect", "agent"] as const) {
+        const entries = kind === "agent" ? opts.test262Observation?.agentEntries : kind === "script" ? opts.test262Observation?.evalScriptEntries :
             kind === "direct" ? opts.test262Observation?.directEvalEntries : opts.test262Observation?.indirectEvalEntries;
         for (const entry of entries ?? []) {
             const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false);
@@ -765,6 +767,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     let unresolvedCalls: readonly ts.Node[] = [];
     const refreshEvalPlan = (): SourceEvalPlan => ({
         unresolvedCalls,
+        agentEntries: [...evalEntries.values()].filter(e => e.kind === "agent"),
         evalScriptEntries: [...evalEntries.values()].filter(e => e.kind === "script"),
         directEvalEntries: [...evalEntries.values()].filter(e => e.kind === "direct"),
         indirectEvalEntries: [...evalEntries.values()].filter(e => e.kind === "indirect"),
@@ -959,7 +962,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
             ...(usesLibuv ? ["-DTSC_HAS_LIBUV"] : []),
             ...(usesDispatch && dispatchMode === "serial" ? ["-DTSC_DISPATCH_SERIAL"] : []),
-            ...(dispatchLink ? ["-DTSC_THREADS", "-pthread", `-I${dispatchLink.includeDir}`] : []),
+            ...(!dispatchLink && sourceEval?.agentEntries?.length ? ["-DTSC_THREADS", "-DGC_THREADS=1", "-pthread"] : []),
+            ...(dispatchLink ? ["-DTSC_THREADS", "-DGC_THREADS=1", "-pthread", `-I${dispatchLink.includeDir}`] : []),
         ],
         linkFlags: [
             ...(dispatchLink

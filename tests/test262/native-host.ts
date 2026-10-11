@@ -73,6 +73,7 @@ type ExportResolution =
     | null;
 
 export interface FiniteEvalScriptSourceGraph {
+    readonly agentSources: readonly string[];
     readonly sources: readonly string[];
     readonly indirectEvalSources: readonly {
         readonly source: string;
@@ -94,6 +95,7 @@ export function finiteEvalScriptSourceGraph(
     moduleSources: readonly { readonly path: string; readonly source: string; readonly goal?: EcmaParseGoal }[] = [],
 ): FiniteEvalScriptSourceGraph {
     const sources = new Set<string>();
+    const agentSources = new Set<string>();
     const directSources = new Map<string, {source:string;strictCaller:boolean;strict:boolean}>();
     const indirectSources = new Map<string, {source:string;strict:boolean}>();
     const records: Array<{path:string;source:string;goal?:EcmaParseGoal;root?:boolean;strictContext?:boolean;evaluation?:boolean}> = [
@@ -134,12 +136,15 @@ export function finiteEvalScriptSourceGraph(
             if (invocation.operation === "eval" && !invocation.direct) continue;
             const file = invocation.node.getSourceFile(), record = byPath.get(path.resolve(file.fileName))!;
             const location = file.getLineAndCharacterOfPosition(invocation.node.getStart(file));
-            const label = invocation.operation === "eval-script" ? "evalScript" : "direct eval";
+            const label = invocation.operation === "agent-start" ? "agent.start" : invocation.operation === "eval-script" ? "evalScript" : "direct eval";
             unresolved ??= `${record.path}:${location.line+1}:${location.character+1}: ${label} source is not a finite static string expression`;
         }
         for (const request of projected.requests) {
             const {source, strict, strictCaller} = request;
-            if (request.kind === "script") {
+            if (request.kind === "agent") {
+                if(agentSources.has(source))continue;agentSources.add(source);
+                records.push({path:`__tsc2c_agent__/${sha256Text(JSON.stringify(source))}.js`,source,goal:"script",root:true,evaluation:true});
+            } else if (request.kind === "script") {
                 if (sources.has(source)) continue;
                 sources.add(source);
                 records.push({path:`__tsc2c_eval_script__/${sha256Text(JSON.stringify(source))}.js`,source,goal:"script",root:true,evaluation:true});
@@ -157,11 +162,11 @@ export function finiteEvalScriptSourceGraph(
             }
         }
         if (records.length === before) {
-            if (unresolved) return {sources:[],directEvalSources:[],indirectEvalSources:[],error:unresolved};
+            if (unresolved) return {agentSources:[],sources:[],directEvalSources:[],indirectEvalSources:[],error:unresolved};
             break;
         }
     }
-    return {sources:[...sources].sort(),indirectEvalSources:[...indirectSources.values()].sort((left,right) =>
+    return {agentSources:[...agentSources].sort(),sources:[...sources].sort(),indirectEvalSources:[...indirectSources.values()].sort((left,right) =>
         Number(left.strict)-Number(right.strict) || left.source.localeCompare(right.source)),
         directEvalSources:[...directSources.values()].sort((left,right) =>
             Number(left.strictCaller)-Number(right.strictCaller) || left.source.localeCompare(right.source)),error:null};
@@ -777,8 +782,15 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             const filename = await writeExclusive(sourceRoot, moduleFile.path, bytes);
             if (/\.[cm]?js$/i.test(moduleFile.path)) moduleRoots.push(filename);
         }
-        const evalScriptEntries: Array<{ source: string; entry: string | null }> = [];
         const evalScriptRoots: string[] = [];
+        const evalScriptEntries: Array<{ source: string; entry: string | null }> = [];
+        const agentEntries: Array<{source:string;entry:string|null}>=[];
+        for(const source of evalScriptGraph.agentSources){
+            const entry=path.join(sourceRoot,`agent-${sha256Text(source)}.js`);
+            const valid=!parseFailure(source,entry,"parse","test-source","script");
+            if(valid){await fs.writeFile(entry,Buffer.from("\ufeff"+source,"utf16le"));evalScriptRoots.push(entry);}
+            agentEntries.push({source,entry:valid?entry:null});
+        }
         for (const source of evalScriptGraph.sources) {
             const relative = `__tsc2c_eval_script__/${sha256Text(JSON.stringify(source))}.js`;
             const failure = parseFailure(source, relative, "parse", "test-source", "script");
@@ -866,6 +878,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
                 testEntry,
                 async: request.async,
                 scriptEntries,
+                agentEntries,
                 evalScriptEntries,
                 directEvalEntries,
                 indirectEvalEntries,

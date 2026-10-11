@@ -776,6 +776,7 @@ class Emitter {
         this.test262ScriptEntryPaths = new Set(
             [
                 ...(options.test262Observation?.scriptEntries ?? []),
+                ...((options.sourceEval ?? options.test262Observation)?.agentEntries ?? []).flatMap(entry=>entry.entry?[entry.entry]:[]),
                 ...((options.sourceEval ?? options.test262Observation)?.evalScriptEntries ?? [])
                     .flatMap((entry) => entry.entry ? [entry.entry] : []),
                 ...((options.sourceEval ?? options.test262Observation)?.directEvalEntries ?? [])
@@ -12899,6 +12900,18 @@ class Emitter {
         out.line("    return mod_retained_graph;"); out.line("}");
         out.line("static tsc_promise_t* mod_runtime_evaluation(size_t index) {");
         out.line("    return tsc_module_evaluate(mod_runtime_graph(), index);"); out.line("}"); out.line();
+        const agentEntries=(this.options.sourceEval??this.options.test262Observation)?.agentEntries??[];
+        if(agentEntries.length){
+            out.line("static tsc_value_t test262_agent_dispatch(tsc_str_t* source) {");
+            for(const entry of agentEntries){
+                out.line(`    if(tsc_str_eq(source,${this.cStringLiteral(entry.source)})) {`);
+                if(entry.entry===null)out.line('        tsc_throw_error(TSC_ERROR_SYNTAX,tsc_str_from_cstr("invalid agent source"));');
+                else {const id=this.graph.fileToModuleId.get(path.resolve(entry.entry));if(!id)throw new Error("Agent source is absent from the module graph");out.line(`        return mod_evaluate_${id}();`);}
+                out.line("    }");
+            }
+            out.line('    tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("agent.start source is outside the finite AOT graph"));');
+            out.line("    return tsc_value_undefined();");out.line("}");
+        }
         const evalScriptEntries = (this.options.sourceEval ?? this.options.test262Observation)?.evalScriptEntries ?? [];
         if (evalScriptEntries.length > 0) {
             out.line("static tsc_value_t test262_eval_script_dispatch(tsc_str_t* source) {");
@@ -12998,6 +13011,7 @@ class Emitter {
         // main(): bootstrap, then evaluate one canonical ordered root graph.
         out.line("int main(int argc, char** argv) {");
         out.line("    tsc_bootstrap(argc, argv);");
+        if(agentEntries.length){out.line("    tsc_test262_set_agent_callback(test262_agent_dispatch);");out.line("    tsc_runtime_lock();");if(!this.options.test262Observation)out.line("    tsc_test262_install_current_realm_globals();");}
         if (functionEntries.length) out.line("    tsc_function_set_source_callback(function_source_dispatch);");
         if (evalScriptEntries.length > 0) {
             out.line("    tsc_test262_set_eval_script_callback(test262_eval_script_dispatch);");
@@ -13066,6 +13080,7 @@ class Emitter {
             out.line("        tsc_try_push(&_test262_event_frame);");
             out.line("        if (setjmp(_test262_event_frame.jb) == 0) {");
             out.line("            tsc_run_event_loop();");
+            if(agentEntries.length)out.line("            tsc_test262_agents_finish();");
             for (const modId of evaluationRoots)
                 out.line(`            { tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)}); if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion)); if (tsc_promise_is_pending(completion)) return 13; }`);
             out.line("            tsc_try_pop();");
@@ -13082,9 +13097,11 @@ class Emitter {
             }
             for (const modId of evaluationRoots) out.line(`    mod_init_${modId}();`);
             out.line("    tsc_run_event_loop();");
+            if(agentEntries.length)out.line("    tsc_test262_agents_finish();");
             for (const modId of evaluationRoots)
                 out.line(`    { tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)}); if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion)); if (tsc_promise_is_pending(completion)) return 13; }`);
         }
+        if(agentEntries.length)out.line("    tsc_runtime_unlock();");
         out.line("    return 0;");
         out.line("}");
         return {
@@ -32555,7 +32572,7 @@ class Emitter {
                 return { c: this.localLexicalRead(reference), ty: reference.type };
             }
 
-            const evalShadow = this.environmentShadowReferenceName(expr);
+            const evalShadow = this.namedFunctionBindingName(expr) ?? this.environmentShadowReferenceName(expr);
             if (evalShadow) return { c: `tsc_environment_reference_get(${this.stringLit(evalShadow)})`, ty: T_VALUE };
             if (this.isUnresolvedParameterScopeReference(expr)) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
@@ -33207,6 +33224,7 @@ class Emitter {
             this.globalDecls.line(`static const tsc_template_segment_t ${site}_segments[] = { ${segments.join(", ")} };`);
             const filename = path.resolve(template.getSourceFile().fileName);
             const runtimeParse = this.functionSourcePaths.has(filename) || [
+                ...((this.options.sourceEval ?? this.options.test262Observation)?.agentEntries ?? []),
                 ...((this.options.sourceEval ?? this.options.test262Observation)?.evalScriptEntries ?? []),
                 ...((this.options.sourceEval ?? this.options.test262Observation)?.directEvalEntries ?? []),
                 ...((this.options.sourceEval ?? this.options.test262Observation)?.indirectEvalEntries ?? []),
@@ -33229,12 +33247,18 @@ class Emitter {
         return this.emitDynamicValueCall(tt, this.emitExpr(tt.tag));
     }
 
+    private namedFunctionBindingName(id: ts.Identifier): string | null {
+        const declaration = this.symbolForIdentifier(id)?.valueDeclaration;
+        return declaration && ts.isFunctionExpression(declaration) && declaration.name
+            ? declaration.name.text : null;
+    }
+
     private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
         if (this.classNameBindingForIdentifier(id)) return null;
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         const referenceName = this.test262HostGlobalBindingName(id) ??
             (this.isSourceGlobalReference(id) ? id.text : null);
-        const name = this.commonJsWrapperBindingName(id) ?? scriptGlobal ?? referenceName ??
+        const name = this.namedFunctionBindingName(id) ?? this.commonJsWrapperBindingName(id) ?? scriptGlobal ?? referenceName ??
             (this.isUnresolvedParameterScopeReference(id) ? id.text : null) ?? this.environmentShadowReferenceName(id) ??
             (this.sourceEnvironmentEnabled(id.getSourceFile()) && this.isImplicitArgumentsIdentifier(id) ? "arguments" : null);
         if (!name) return null;
@@ -35782,6 +35806,10 @@ class Emitter {
             if (!declaration || !identifier || this.isAmbientDeclaration(declaration) ||
                 this.test262ScriptGlobalBindingName(identifier)) continue;
             if (this.isModuleBindingSymbol(symbol)) continue;
+            // Named expression bindings already belong to the callable's
+            // retained environment tree. Projecting a second C cell would
+            // lose both identity and the binding's sloppy assignment rule.
+            if (ts.isFunctionExpression(declaration)) continue;
             const outer = !!owner && !this.isNodeWithin(declaration, owner);
             if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
             references.push(this.environmentBindingReference(symbol, call, outer));
@@ -36244,6 +36272,9 @@ class Emitter {
             pieces.push(`${tmp}->env = NULL`);
         }
         pieces.push(this.boxPhysicalValue({ c: tmp, ty: type }, fn));
+        if (ts.isFunctionExpression(fn) && fn.name) {
+            pieces.push(`tsc_callable_owner_bind_name(&${tmp}->callable, ${this.stringLit(fn.name.text)})`);
+        }
         pieces.push(tmp);
         return {
             c: `({ ${pieces.join("; ")}; })`,

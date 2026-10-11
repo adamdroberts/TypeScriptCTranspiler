@@ -8,6 +8,7 @@ typedef struct tsc_environment_binding {
     void* value_root;
     bool initialized;
     bool immutable;
+    bool strict_immutable;
     bool lexical;
     bool deletable;
     tsc_async_cell_ref_t cell;
@@ -91,6 +92,7 @@ static tsc_environment_binding_t* environment_create_binding(tsc_environment_t* 
     binding->value_root = NULL;
     binding->initialized = !lexical;
     binding->immutable = immutable;
+    binding->strict_immutable = true;
     binding->lexical = lexical;
     binding->deletable = deletable;
     binding->cell = (tsc_async_cell_ref_t){ &binding->value, &binding->value_root, &binding->initialized };
@@ -102,6 +104,16 @@ static tsc_environment_binding_t* environment_create_binding(tsc_environment_t* 
 static void binding_store(tsc_environment_binding_t* binding, tsc_value_t value) {
     *(volatile tsc_value_t*)binding->cell.value_cell = value;
     if (binding->cell.gc_root_cell) *binding->cell.gc_root_cell = tsc_value_gc_root(value);
+}
+
+tsc_environment_t* tsc_environment_named_function_new(tsc_environment_t* parent,
+    tsc_str_t* name, tsc_value_t function) {
+    tsc_environment_t* environment = tsc_environment_new(parent, false);
+    tsc_environment_binding_t* binding = environment_create_binding(environment, name, true, true, false);
+    binding->strict_immutable = false;
+    binding_store(binding, function);
+    binding->initialized = true;
+    return environment;
 }
 
 static tsc_value_t binding_read(tsc_environment_binding_t* binding) {
@@ -327,7 +339,11 @@ tsc_value_t tsc_environment_reference_set(tsc_str_t* key, tsc_value_t value, boo
     tsc_environment_binding_t* binding = environment_resolve(key);
     if (!binding) return tsc_global_reference_set(key, value, strict);
     (void)binding_read(binding);
-    if (binding->immutable) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding"));
+    if (binding->immutable) {
+        if (strict || binding->strict_immutable)
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("assignment to immutable lexical binding"));
+        return value;
+    }
     binding_store(binding, value);
     return value;
 }

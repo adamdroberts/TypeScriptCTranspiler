@@ -123,7 +123,13 @@ static int install_guard(void) {
         DENY_SYSCALL(__NR_userfaultfd, EPERM),
 #endif
 #ifdef __NR_prctl
-        DENY_SYSCALL(__NR_prctl, EPERM),
+        /* Naming the current thread does not alter the containment policy. */
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_prctl, 0, 4),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, PR_SET_NAME, 1, 0),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
 #endif
 #ifdef __NR_setsid
         DENY_SYSCALL(__NR_setsid, EPERM),
@@ -138,7 +144,15 @@ static int install_guard(void) {
         DENY_SYSCALL(__NR_tkill, EPERM),
 #endif
 #ifdef __NR_tgkill
-        DENY_SYSCALL(__NR_tgkill, EPERM),
+        /* GC suspends threads with pthread_kill. The kernel validates the
+         * target TID belongs to this captured thread group; foreign process
+         * signals remain denied, including the runner/supervisor. */
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_tgkill, 0, 4),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (unsigned)raw_syscall1(__NR_getpid, 0), 1, 0),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
 #endif
 #ifdef __NR_pidfd_send_signal
         DENY_SYSCALL(__NR_pidfd_send_signal, EPERM),

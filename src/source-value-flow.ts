@@ -15,7 +15,7 @@ export interface ConstructorInvocation {
 }
 export interface EvaluationInvocation {
     readonly node: ts.CallExpression | ts.NewExpression;
-    readonly operation: "eval" | "eval-script";
+    readonly operation: "eval" | "eval-script" | "agent-start";
     readonly direct: boolean;
     /** Eval retains non-String values; evalScript converts primitives to text.
      * Null keeps the existing unknown-source diagnostic/registry boundary. */
@@ -25,7 +25,7 @@ export interface EvaluationInvocation {
 type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction |
     ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ConstructorDeclaration;
 type Domain = "constructor" | "prototype" | "instance";
-type Operation = "prototype" | "eval" | "eval-script" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
+type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "call" | "apply" | "bind" | "reflect-apply" | "construct";
 type Primitive = string | number | bigint | boolean | null | undefined;
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
@@ -38,7 +38,7 @@ type Atom =
     | { readonly tag: "text-operation"; readonly operation: "add" | "template"; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
-    | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "realm-record" };
+    | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
 interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; list?: readonly ListPart[]; }
@@ -48,7 +48,7 @@ interface FunctionOwner {
 }
 interface Call { readonly node: ts.CallExpression | ts.NewExpression; readonly callee: Cell; readonly receiver: Cell; readonly result: Cell; }
 interface EvaluationRecord {
-    readonly node: ts.CallExpression | ts.NewExpression; readonly operation: "eval" | "eval-script";
+    readonly node: ts.CallExpression | ts.NewExpression; readonly operation: "eval" | "eval-script" | "agent-start";
     readonly direct: boolean; readonly source: Cell | null; readonly unknown: boolean;
 }
 
@@ -100,9 +100,11 @@ class SourceValueFlow {
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
     private readonly global: Atom = { tag: "global" };
     private readonly host: Atom = { tag: "host" };
+    private readonly agent: Atom = { tag: "agent" };
     private readonly realm: Atom = { tag: "realm-record" };
     private nextCell = 0;
     private readonly empty = this.newCell();
+    private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly checker: ts.TypeChecker;
     constructor(program: ts.Program, entries: SourceValueGraphEntries) {
         this.checker = program.getTypeChecker();
@@ -140,7 +142,7 @@ class SourceValueFlow {
                         const base = this.cell(target.expression), value = this.cell(node.right), name = propertyName(target);
                         if (name !== null) this.rule([base], () => {
                             for (const atom of base.values) {
-                                const owner = atom.tag === "object" ? atom.owner : atom.tag === "function" ? atom.owner.fields : null;
+                                const owner = this.ordinaryOwner(atom);
                                 if (owner) this.copy(value, this.field(owner, name));
                                 if (atom.tag === "global") this.copy(value, this.globalBinding(name));
                             }
@@ -242,8 +244,17 @@ class SourceValueFlow {
         this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result); });
         return result;
     }
+    private ordinaryOwner(atom: Atom): ObjectOwner | null {
+        if(atom.tag === "object")return atom.owner;
+        if(atom.tag === "function")return atom.owner.fields;
+        if(atom.tag !== "host" && atom.tag !== "realm-record" && atom.tag !== "agent")return null;
+        const key=atom.tag === "agent" ? "agent" : "host";
+        let owner=this.hostOwners.get(key);
+        if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
+        return owner;
+    }
     private read(atom: Atom, base: Cell, key: string, result: Cell): void {
-        const owner = atom.tag === "object" ? atom.owner : atom.tag === "function" ? atom.owner.fields : null;
+        const owner = this.ordinaryOwner(atom);
         if (owner) {
             this.copy(this.field(owner, key), result);
             const getter = owner.getters.get(key);
@@ -266,15 +277,13 @@ class SourceValueFlow {
         if (atom.tag === "global") {
             this.copy(this.globalBinding(key),result);
         }
-        if (atom.tag === "host") {
+        if (atom.tag === "host" || atom.tag === "realm-record") {
+            if (key === "agent") this.publish(result, this.agent);
             if (key === "createRealm") this.publish(result, this.operation("realm"));
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result, this.global);
         }
-        if (atom.tag === "realm-record") {
-            if (key === "global") this.publish(result, this.global);
-            if (key === "evalScript") this.publish(result, this.operation("eval-script"));
-        }
+        if (atom.tag === "agent" && key === "start") this.publish(result, this.operation("agent-start"));
         if (["function", "bound", "intrinsic", "operation"].includes(atom.tag) && ["call", "apply", "bind"].includes(key))
             this.publish(result, this.operation(key as Operation));
         if (atom.tag === "generator" && key === "constructor") this.publish(result, this.intrinsic("prototype", atom.owner.kind));
@@ -513,7 +522,7 @@ class SourceValueFlow {
                                 this.publish(result!, value);
                             }
                             if (atom.operation === "realm") this.publish(result!, this.realm);
-                            if (atom.operation === "eval" || atom.operation === "eval-script") {
+                            if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {
                                 const source = argv?.[0] ?? null;
                                 const direct = atom.operation === "eval" && invocation.direct;
                                 const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
@@ -610,10 +619,10 @@ class SourceValueFlow {
                 const primitives = source ? this.primitiveChoices(source) : [];
                 const unresolved = unknown || source && (!source.values.size ||
                     [...source.values].some(value => value.tag === "text-operation") && !primitives.length ||
-                    operation === "eval-script" && [...source.values].some(value => value.tag !== "primitive" && value.tag !== "text-operation"));
+                    operation !== "eval" && [...source.values].some(value => value.tag !== "primitive" && value.tag !== "text-operation"));
                 const choices = unresolved ? null : source
-                    ? [...new Set(primitives.filter(value => operation === "eval-script" || typeof value === "string").map(String))]
-                    : operation === "eval-script" ? ["undefined"] : [];
+                    ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
+                    : operation !== "eval" ? ["undefined"] : [];
                 return { node: invocation.node, operation, direct: invocation.direct, choices };
             }),
         };

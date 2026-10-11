@@ -5,6 +5,71 @@ import * as path from "node:path";
 import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
 
+test("named function expressions retain private callable identities", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-named-function-"));
+    try {
+        for (const environment of [false, true]) for (const strict of [false, true]) {
+            const source = (strict ? '"use strict";\n' : "") + String.raw`
+function check(value) { if (!value) throw new Error("named function invariant"); }
+function make(previous, value) {
+    return function self(depth) {
+        if (depth > 0) return self(depth - 1);
+        return [self, previous, value, function () { return self; }];
+    };
+}
+for (let depth = 0; depth < 5; ++depth) {
+    const f = make(null, depth), pair = f(depth);
+    check(pair[0] === f && pair[2] === depth && pair[3]() === f);
+}
+const read = function own() {
+    let threw = false;
+    try { own = 0; } catch (error) { threw = error instanceof TypeError; }
+    return [typeof own, threw];
+};
+const immutable = read();
+check(immutable[0] === "function" && immutable[1] === STRICT);
+check(typeof own === "undefined");
+const shadow = function own(own) { return own; };
+check(shadow(23) === 23);
+const defaulted = function own(value = own) { return value; };
+check(defaulted() === defaulted);
+let chain = null;
+for (let index = 0; index < 4096; ++index) {
+    chain = make(chain, index);
+    if (NATIVE_GC && index % 257 === 0) $262.gc();
+}
+if (NATIVE_GC) $262.gc();
+for (let index = 4095; index >= 0; --index) {
+    const current = chain, pair = current(0);
+    check(pair[0] === current && pair[2] === index && pair[3]() === current);
+    chain = pair[1];
+}
+check(chain === null);
+ENVIRONMENT_CHECK
+console.log("named function identities");
+`.replaceAll("STRICT", String(strict)).replace("ENVIRONMENT_CHECK", environment
+                ? 'const evaluated = function own() { return eval("own"); }; check(evaluated() === evaluated);'
+                : "");
+            const oracle = Bun.spawnSync(["node", "-e", source.replaceAll("NATIVE_GC", "false")], { stdout: "pipe", stderr: "pipe" });
+            expect({ code: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+            for (const noGc of [false, true]) {
+                const name = `${environment}-${strict}-${noGc}`, entry = path.join(root, name + ".js"), output = path.join(root, name);
+                await fs.writeFile(entry, source.replaceAll("NATIVE_GC", String(!noGc)));
+                const diagnostics: string[] = [];
+                const result = await compile({ entry, output, noGc, buildDir: output + "-build",
+                    test262Observation: { kind: "test262-native-observation", scenarioId: name, setupEntries: [], testEntry: entry, async: false },
+                    diagnosticWriter: message => diagnostics.push(message) });
+                expect({ code: result.exitCode, diagnostics: diagnostics.join("") }).toEqual({ code: 0, diagnostics: "" });
+                const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+                expect({ code: native.exitCode, stderr: native.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+                const observation = parseHostObservation(JSON.parse(native.stdout.toString()));
+                expect(observation.kind).toBe("normal");
+                if (observation.kind === "normal") expect(observation.stdout).toBe(oracle.stdout.toString());
+            }
+        }
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+}, 600_000);
+
 // The host derives an arbitrary declaration graph independently of lowering.
 // Every node captures its invocation's seed and returns its modeled successor.
 let seed = 0x41c0ffee;

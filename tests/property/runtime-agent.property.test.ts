@@ -119,6 +119,10 @@ int main(int argc,char** argv){
  tsc_bootstrap(argc,argv);primary=tsc_agent_current();tsc_realm_t* primary_realm=tsc_realm_current();tsc_atomics_set_can_block(false);
  check_execution_state();
  tsc_queue_microtask(primary_job,NULL);
+ tsc_promise_t* volatile fulfilled=tsc_promise_resolve(tsc_value_num(1));
+ tsc_promise_t* volatile rejected=tsc_promise_reject(tsc_value_num(2));
+ tsc_promise_add_callback(fulfilled,primary_job,NULL);tsc_promise_add_callback(rejected,primary_job,NULL);
+ if(primary_jobs)return 8;
  for(size_t n=0;n<9;++n)check_graph(n,false);
 #ifdef TSC_THREADS
  check_graph(7,true);
@@ -126,11 +130,11 @@ int main(int argc,char** argv){
  puts("agent-state-jobs-waiters-isolated:true");
  check_graph(4096,false);puts("deep-retained-agent-graph:true");
  if(tsc_realm_current()!=primary_realm||tsc_atomics_can_block())return 1;
- tsc_drain_microtasks_and_next_ticks();if(primary_jobs!=1)return 2;
+ tsc_drain_microtasks_and_next_ticks();if(primary_jobs!=3)return 2;
 #ifdef TSC_THREADS
  pthread_t legacy;if(pthread_create(&legacy,NULL,legacy_worker,primary_realm)||pthread_join(legacy,NULL))return 5;
- if(primary_jobs!=1)return 6;
- tsc_run_event_loop();if(primary_jobs!=2)return 7;
+ if(primary_jobs!=3)return 6;
+ tsc_run_event_loop();if(primary_jobs!=4)return 7;
 #endif
 #ifndef TSC_NO_GC
  setup_retired();collect();if(!retained())return 3;

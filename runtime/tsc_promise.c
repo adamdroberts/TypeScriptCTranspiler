@@ -73,6 +73,7 @@ void tsc_promise_trigger_callbacks(tsc_promise_t* p) {
 
 void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
     if (!p || !fn) return;
+    if(p->state!=TSC_PROMISE_PENDING){tsc_queue_microtask(fn,env);return;}
     if (p->callbacks_len == p->callbacks_cap) {
         size_t next = p->callbacks_cap ? p->callbacks_cap * 2 : 4;
         tsc_promise_callback_t* entries = (tsc_promise_callback_t*)TSC_GC_REALLOC(p->callbacks, next * sizeof(tsc_promise_callback_t));

@@ -1,5 +1,6 @@
 #include "tsc_internal.h"
 #include <pthread.h>
+#include <sched.h>
 
 typedef struct {
     tsc_function_identity_key_t key;
@@ -50,6 +51,7 @@ struct tsc_agent {
     size_t immediate_len,immediate_cap,timeout_len,timeout_cap;
     double next_timer_id;
     bool owns_jobs,can_block,retired;
+    bool held;
     struct tsc_agent* next;
 };
 static tsc_agent_t *g_agents,*g_main_agent;
@@ -71,6 +73,8 @@ tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent){
     tsc_agent_t* previous=g_current_agent;g_current_agent=agent;return previous;
 }
 bool tsc_agent_owns_jobs(void){return tsc_agent_current()->owns_jobs;}
+void tsc_agent_hold(tsc_agent_t* agent,bool value){__atomic_store_n(&agent->held,value,__ATOMIC_SEQ_CST);tsc_runtime_wake_event_loop();}
+static bool agent_held(void){return __atomic_load_n(&tsc_agent_current()->held,__ATOMIC_SEQ_CST);}
 tsc_environment_t** tsc_agent_environment_slot(void){return &tsc_agent_current()->environment;}
 struct tsc_callee_frame** tsc_agent_callee_slot(void){return &tsc_agent_current()->callee;}
 bool tsc_atomics_can_block(void){return tsc_agent_current()->can_block;}
@@ -867,6 +871,11 @@ void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex);++g_runtime_l
 void tsc_runtime_unlock(void) { --g_runtime_lock_depth;pthread_mutex_unlock(&g_runtime_mutex); }
 size_t tsc_runtime_suspend(void){size_t depth=g_runtime_lock_depth;while(g_runtime_lock_depth)tsc_runtime_unlock();return depth;}
 void tsc_runtime_resume(size_t depth){while(depth--)tsc_runtime_lock();}
+void tsc_agent_checkpoint(void){
+    size_t depth=tsc_runtime_suspend();
+    if(depth)sched_yield();
+    tsc_runtime_resume(depth);
+}
 void tsc_runtime_wake_event_loop(void){pthread_mutex_lock(&g_loop_mutex);pthread_cond_broadcast(&g_loop_cond);pthread_mutex_unlock(&g_loop_mutex);}
 
 bool tsc_is_main_thread(void) {
@@ -944,6 +953,7 @@ void tsc_runtime_lock(void) {}
 void tsc_runtime_unlock(void) {}
 size_t tsc_runtime_suspend(void){return 0;}
 void tsc_runtime_resume(size_t depth){(void)depth;}
+void tsc_agent_checkpoint(void){}
 void tsc_runtime_wake_event_loop(void){}
 bool tsc_is_main_thread(void) { return true; }
 void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error) {
@@ -1927,6 +1937,11 @@ void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
     g_next_tick_queue[g_next_tick_len++] = (tsc_next_tick_entry_t){ fn, env };
 }
 
+static void tsc_job_checkpoint(void) {
+    tsc_weak_job_checkpoint();
+    tsc_agent_checkpoint();
+}
+
 void tsc_process_drain_next_ticks(void) {
     size_t idx = 0;
     while (idx < g_next_tick_len) {
@@ -1934,7 +1949,7 @@ void tsc_process_drain_next_ticks(void) {
         g_next_tick_queue[idx++] = (tsc_next_tick_entry_t){0};
         if (entry.fn) {
             entry.fn(entry.env);
-            tsc_weak_job_checkpoint();
+            tsc_job_checkpoint();
         }
     }
     g_next_tick_len = 0;
@@ -1969,14 +1984,14 @@ void tsc_drain_microtasks(void) {
         tsc_microtask_entry_t entry = g_microtask_queue[idx];
         g_microtask_queue[idx++] = (tsc_microtask_entry_t){0};
         if (entry.fn) entry.fn(entry.env);
-        tsc_weak_job_checkpoint();
+        tsc_job_checkpoint();
     }
     g_microtask_len = 0;
 }
 
 void tsc_drain_microtasks_and_next_ticks(void) {
     tsc_atomics_schedule_completions();
-    tsc_weak_job_checkpoint();
+    tsc_job_checkpoint();
     while (g_next_tick_len > 0 || g_microtask_len > 0) {
         if (g_next_tick_len > 0) {
             tsc_process_drain_next_ticks();
@@ -2043,7 +2058,7 @@ void tsc_drain_immediates(void) {
         tsc_immediate_entry_t entry = g_immediate_queue[idx++];
         if (!g_immediate_queue[idx - 1].canceled && entry.fn) {
             entry.fn(entry.env);
-            tsc_weak_job_checkpoint();
+            tsc_job_checkpoint();
         }
         tsc_drain_microtasks_and_next_ticks();
     }
@@ -2163,7 +2178,7 @@ void tsc_drain_timeouts(void) {
         tsc_timeout_entry_t entry = g_timeout_queue[idx++];
         if (!g_timeout_queue[idx - 1].canceled && entry.fn && tsc_timeout_ready(&entry, now_ms)) {
             entry.fn(entry.env);
-            tsc_weak_job_checkpoint();
+            tsc_job_checkpoint();
             if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
                 entry.refed = g_timeout_queue[idx - 1].refed;
                 tsc_append_interval(&entry);
@@ -2185,7 +2200,7 @@ void tsc_drain_timeouts(void) {
             continue;
         }
         entry.fn(entry.env);
-        tsc_weak_job_checkpoint();
+        tsc_job_checkpoint();
         if (!g_timeout_queue[current_idx].canceled) {
             entry.refed = g_timeout_queue[current_idx].refed;
             tsc_append_interval(&entry);
@@ -2257,8 +2272,9 @@ static void tsc_sleep_ms(double delay_ms) {
 /* Wait until a worker posts cross-thread work or the next timer is due. */
 static void tsc_loop_idle_wait(double delay_ms) {
     if(delay_ms>5000)delay_ms=5000;
+    size_t depth=tsc_runtime_suspend();
     pthread_mutex_lock(&g_loop_mutex);
-    if (g_cross_len == 0 && !tsc_atomics_has_completions()) {
+    if ((tsc_agent_owns_jobs()||g_cross_len == 0) && !tsc_atomics_has_completions() && (!tsc_agent_owns_jobs()||delay_ms>=0||agent_held())) {
         if (delay_ms < 0.0) {
             pthread_cond_wait(&g_loop_cond, &g_loop_mutex);
         } else if (delay_ms > 0.0) {
@@ -2273,11 +2289,12 @@ static void tsc_loop_idle_wait(double delay_ms) {
         }
     }
     pthread_mutex_unlock(&g_loop_mutex);
+    tsc_runtime_resume(depth);
 }
 #endif
 
 static bool tsc_has_referenced_event_source(void) {
-    return tsc_has_active_timeout() || tsc_has_active_immediate()
+    return agent_held() || tsc_has_active_timeout() || tsc_has_active_immediate()
 #ifdef TSC_HAS_LIBUV
            || tsc_fs_libuv_pending()
 #endif
@@ -2288,7 +2305,7 @@ static bool tsc_has_referenced_event_source(void) {
 }
 
 void tsc_run_event_loop(void) {
-    tsc_weak_job_checkpoint();
+    tsc_job_checkpoint();
     while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_referenced_event_source()) {
 #ifdef TSC_THREADS
         tsc_drain_cross_queue();
@@ -2342,7 +2359,7 @@ void tsc_run_event_loop(void) {
             }
 #endif
 #ifdef TSC_THREADS
-            if (tsc_dispatch_pending() || tsc_has_pending_timeout()) {
+            if (agent_held() || tsc_dispatch_pending() || tsc_has_pending_timeout()) {
                 tsc_loop_idle_wait(tsc_has_pending_timeout() ? tsc_next_timeout_delay_ms() : -1.0);
             }
 #else

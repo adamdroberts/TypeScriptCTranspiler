@@ -727,6 +727,22 @@ interface Atomics {
     xor(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
 }
 declare var Atomics: Atomics;
+interface Test262Agent {
+    start(source: string, ...ignored: unknown[]): void;
+    broadcast(buffer: SharedArrayBuffer, value?: number | bigint, ...ignored: unknown[]): void;
+    getReport(...ignored: unknown[]): string | null;
+    sleep(milliseconds: number, ...ignored: unknown[]): void;
+    monotonicNow(...ignored: unknown[]): number;
+}
+interface Test262Host {
+    readonly global: any;
+    agent: Test262Agent;
+    createRealm(...ignored: unknown[]): Test262Host;
+    evalScript(source: unknown, ...ignored: unknown[]): any;
+    gc(...ignored: unknown[]): void;
+    detachArrayBuffer(buffer: ArrayBuffer, ...ignored: unknown[]): void;
+}
+declare var $262: Test262Host;
 type AtomicsWaitAsyncResult = {async: false; value: "not-equal" | "timed-out"} | {async: true; value: Promise<"ok" | "timed-out">};
 
 interface ArrayLike<T> {

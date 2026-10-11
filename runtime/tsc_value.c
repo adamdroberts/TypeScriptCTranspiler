@@ -481,6 +481,19 @@ void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value) {
     owner->initialized = true;
 }
 
+void tsc_callable_owner_bind_name(tsc_callable_owner_t* owner, tsc_str_t* name) {
+    tsc_runtime_lock();
+    if (!owner->initialized || !value_is_box(owner->value) ||
+        value_tag(owner->value) != TSC_VALUE_TAG_FUNCTION)
+        tsc_panic("named function requires an initialized callable owner");
+    tsc_function_identity_t* identity = value_ptr(owner->value);
+    tsc_environment_t* environment = tsc_environment_named_function_new(
+        identity->lexical_environment, name, owner->value);
+    identity->lexical_environment = environment;
+    owner->lexical_environment = environment;
+    tsc_runtime_unlock();
+}
+
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
     void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source) {
     if (!env) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native callable has no value owner"));
@@ -3049,11 +3062,13 @@ static void global_define_intrinsic(tsc_object_t* global, const tsc_global_intri
 
 tsc_value_t tsc_global_object(void) {
     tsc_realm_t* realm = tsc_realm_current();
-    if (realm->global_object) return tsc_value_object(realm->global_object);
+    tsc_runtime_lock();
+    if (realm->global_object){tsc_value_t value=tsc_value_object(realm->global_object);tsc_runtime_unlock();return value;}
 
-    /* Build every dependency before publishing the object.  Several intrinsic
-     * constructors have their own singleton locks, so this ordering also keeps
-     * the global initializer free of nested runtime-lock acquisition. */
+    /* Publish the retained owner before traversing intrinsic dependencies.
+     * Recursive builders such as the host global then observe this same object. */
+    tsc_object_t* built = tsc_object_new();
+    realm->global_object=built;
     tsc_global_intrinsic_t intrinsics[] = {
 #define TSC_GLOBAL_INTRINSIC(name, value) { #name, sizeof(#name) - 1, value },
 #define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
@@ -3063,7 +3078,6 @@ tsc_value_t tsc_global_object(void) {
 #undef TSC_GLOBAL_FUNCTION
 #undef TSC_GLOBAL_VALUE
     };
-    tsc_object_t* built = tsc_object_new();
     tsc_value_t built_value = tsc_value_object(built);
 #define TSC_GLOBAL_INTRINSIC(name, value)
 #define TSC_GLOBAL_FUNCTION(name, length, kind, constructible, enumerable, required)
@@ -3095,7 +3109,6 @@ tsc_value_t tsc_global_object(void) {
         );
     }
 
-    tsc_runtime_lock();
     if (!realm->global_object) realm->global_object = built;
     tsc_runtime_unlock();
     return tsc_value_object(realm->global_object);

@@ -305,6 +305,14 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Allow independent agents to progress through a canonical agent checkpoint at job boundaries and shared-memory accesses even when a parent polls without an explicit sleep or blocking wait.
+
+- Admit current-process thread signals and thread naming in native evidence containment so GC agents can run; retain denial of foreign signals, unsafe prctl and process execution, verified through the runner-owned transcript.
+
+- Retain named function expression identities in the canonical environment tree, including recursive callbacks, captured references, parameter defaults and strict/sloppy immutable assignment semantics.
+
+- Add ordinary Test262 agent operations over the canonical AOT source graph and retained concurrent worker/mailbox/report lifecycle. Broadcast clones receiving-Realm wrappers over shared storage; shared growth now publishes length on the backing block. Preserve agent liveness for async waits, release locks during sleep/wait, retire workers on normal/abrupt teardown, propagate async callback rejection through deferred settled-Promise callbacks and repair recursive host/global initialization. Verify Node worker differentials, typed E2E and retained report stress; eligible host/full target evidence remains open.
+
 - Replace process-global job queues and callable identities plus thread-local execution slots with one retained runtime agent context. Isolate independent-agent Realm, call/exception/callee state, blocking policy, jobs and waiter completion; preserve dispatch delivery and release retired roots. Add generated isolation, real threaded execution and deep retained-graph checks. Full Test262 agent lifecycle and eligible coverage remain open.
 
 - Add ordinary Atomics wait/waitAsync/notify owners backed by one retained shared-location FIFO, blocking lock release, owning-agent Promise completion and unbounded unreferenced deadlines. Verify conversion order, mixed waiters, foreign-thread wakeups and terminal GC roots; honor the Test262 main-agent blocking policy. Full agent/Realm/memory-model and eligible exhaustive coverage remain open.

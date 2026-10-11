@@ -764,9 +764,44 @@ describe("host result contract", () => {
         try {
             await fs.writeFile(
                 generatedCPath,
-                `#define _GNU_SOURCE\n#include <errno.h>\n#include <stdio.h>\n#include <sys/syscall.h>\n#include <unistd.h>\nextern char **environ;\nint main(void) { char *const arguments[] = { (char *)"true", NULL }; if (syscall(SYS_execve, "/bin/true", arguments, environ) != -1 || errno != EPERM) return 9; fputs("${escaped}", stdout); return 0; }\n`,
+                `#define _GNU_SOURCE
+#include <errno.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdatomic.h>
+#include <sched.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+extern char **environ;
+static _Atomic int ready, signals;
+static void signal_handler(int value) { (void)value; atomic_fetch_add(&signals, 1); }
+static void *worker(void *value) {
+    (void)value; atomic_store(&ready, 1);
+    while (atomic_load(&signals) < 2) sched_yield();
+    return NULL;
+}
+int main(void) {
+    char *const arguments[] = { (char *)"true", NULL };
+    if (syscall(SYS_execve, "/bin/true", arguments, environ) != -1 || errno != EPERM) return 9;
+    if (prctl(PR_SET_NAME, "guard-agent") != 0) return 10;
+    if (prctl(PR_SET_DUMPABLE, 1) != -1 || errno != EPERM) return 11;
+    if (syscall(SYS_tgkill, getppid(), syscall(SYS_gettid), 0) != -1 || errno != EPERM) return 12;
+    if (syscall(SYS_kill, getpid(), 0) != -1 || errno != EPERM) return 13;
+    if (syscall(SYS_tkill, syscall(SYS_gettid), 0) != -1 || errno != EPERM) return 14;
+    if (signal(SIGUSR1, signal_handler) == SIG_ERR) return 15;
+    if (syscall(SYS_tgkill, getpid(), syscall(SYS_gettid), SIGUSR1) != 0 || atomic_load(&signals) != 1) return 16;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, worker, NULL) != 0) return 17;
+    while (!atomic_load(&ready)) sched_yield();
+    if (pthread_kill(thread, SIGUSR1) != 0 || pthread_join(thread, NULL) != 0) return 18;
+    if (atomic_load(&signals) != 2) return 19;
+    fputs("${escaped}", stdout); return 0;
+}
+`,
             );
-            const compiler = Bun.spawn(["gcc", generatedCPath, "-o", executablePath], {
+            const compiler = Bun.spawn(["gcc", generatedCPath, "-pthread", "-o", executablePath], {
                 stdout: "pipe",
                 stderr: "pipe",
             });

@@ -15,6 +15,7 @@ TSC_GLOBAL_INTRINSIC(DataView, tsc_data_view_constructor_value())
 TSC_GLOBAL_INTRINSIC(ArrayBuffer, tsc_array_buffer_constructor_value())
 TSC_GLOBAL_INTRINSIC(SharedArrayBuffer, tsc_shared_array_buffer_constructor_value())
 TSC_GLOBAL_INTRINSIC(Atomics, tsc_atomics_object_value())
+TSC_GLOBAL_INTRINSIC($262, tsc_test262_host_object())
 #define TSC_TYPED_ARRAY(name, width, format) TSC_GLOBAL_INTRINSIC(name, tsc_typed_array_constructor_value(TSC_ELEMENT_##name))
 #include "tsc_typed_array.def"
 #undef TSC_TYPED_ARRAY

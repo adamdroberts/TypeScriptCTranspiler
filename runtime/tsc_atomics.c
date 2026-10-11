@@ -69,6 +69,7 @@ static tsc_value_t member_apply(void* environment,tsc_value_t receiver,tsc_array
     void* volatile expected_root=NULL;void* volatile replacement_root=NULL;
     if(member->operation==TSC_ATOMIC_COMPARE_EXCHANGE){expected=integer_value(argument(actuals,2),record.format);expected_root=tsc_value_gc_root(expected);}
     if(member->operation!=TSC_ATOMIC_LOAD){replacement=integer_value(argument(actuals,member->operation==TSC_ATOMIC_COMPARE_EXCHANGE?3:2),record.format);replacement_root=tsc_value_gc_root(replacement);}
+    if(record.buffer&&record.buffer->shared)tsc_agent_checkpoint();
     tsc_typed_array_atomic_revalidate(&record,index);
     uint8_t* bytes=record.buffer?record.buffer->data+record.offset:((tsc_buffer_t*)record.object->class_ptr)->data;
     uint64_t read=tsc_atomic_word_update(bytes+index*record.width,record.width,member->operation,member->operation==TSC_ATOMIC_COMPARE_EXCHANGE?raw_value(expected,&record):0,member->operation==TSC_ATOMIC_LOAD?0:raw_value(replacement,&record));
