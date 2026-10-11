@@ -20285,7 +20285,6 @@ class Emitter {
     ): { id: ts.Identifier; reference: LocalLexicalReference } | null {
         const target = this.unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
-        if (!this.classNameBindingForIdentifier(target) && this.environmentShadowReferenceName(target)) return null;
         const raw = this.checker.getSymbolAtLocation(target);
         if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
         const reference = this.localLexicalReferenceForIdentifier(target);
@@ -33567,12 +33566,12 @@ class Emitter {
         const operand = expression.operand;
         const importUpdate = this.emitImmutableImportUpdate(operand, op);
         if (importUpdate) return importUpdate;
+        const sourceUpdate = this.emitSourceReferenceUpdate(operand, op, prefix);
+        if (sourceUpdate) return sourceUpdate;
         const localUpdate = this.emitLocalLexicalUpdate(operand, op, prefix);
         if (localUpdate) return localUpdate;
         const moduleUpdate = this.emitModuleLexicalUpdate(operand, op, prefix);
         if (moduleUpdate) return moduleUpdate;
-        const sourceUpdate = this.emitSourceReferenceUpdate(operand, op, prefix);
-        if (sourceUpdate) return sourceUpdate;
         const nativeUpdate = this.emitRootedNativeFieldUpdate(operand, op, prefix);
         if (nativeUpdate) return nativeUpdate;
         const propertyUpdate = this.emitDynamicPropertyUpdate(operand, op, prefix);
@@ -33941,7 +33940,7 @@ class Emitter {
             op === ts.SyntaxKind.QuestionQuestionEqualsToken;
     }
 
-    private emitTest262GlobalAssignment(
+    private emitSourceReferenceAssignment(
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
@@ -34146,6 +34145,11 @@ class Emitter {
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
         if (immutableImportAssignment) return immutableImportAssignment;
 
+        // GetValue and PutValue must use the same retained source Reference.
+        // Its environment cell takes precedence over static C lexical slots.
+        const sourceAssignment = this.emitSourceReferenceAssignment(bin, op);
+        if (sourceAssignment) return sourceAssignment;
+
         const nativeConstAssignment = this.emitNativeConstAssignment(bin, op);
         if (nativeConstAssignment) return nativeConstAssignment;
 
@@ -34154,9 +34158,6 @@ class Emitter {
 
         const moduleLexicalAssignment = this.emitModuleLexicalAssignment(bin, op);
         if (moduleLexicalAssignment) return moduleLexicalAssignment;
-
-        const globalAssignment = this.emitTest262GlobalAssignment(bin, op);
-        if (globalAssignment) return globalAssignment;
 
         const eventDefaultAssignment = this.emitEventEmitterDefaultMaxListenersAssignment(bin, op);
         if (eventDefaultAssignment) return eventDefaultAssignment;

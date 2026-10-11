@@ -1,6 +1,6 @@
 The selected can-block capability is now reviewed independently of host eligibility. tests/property/test262-can-block.property.test.ts verifies request-to-agent startup before setup, all source modes, ordered wait coercions, waitAsync independence, Realm inheritance, secondary-agent policy, actual wakeup and a retained evaluation stress. Remaining Realm/module/environment work and eligible exhaustive target evidence stay open.
 
-The evaluation-environment semantic property currently throws a primitive during its checks; the same failure reproduces at prior commit a92772300 before the selected can-block field was added. This retained-environment regression remains open alongside the module-origin mismatch and must be repaired before full target evidence.
+Retained source binding writes now follow the same environment Reference as reads, before static C lexical lowering. The prior immutable-binding regression is repaired; generated write partitions and the retained environment tree remain regression evidence. The module-dependency error-origin mismatch and eligible exhaustive target evidence remain open.
 
 Native Test262 startup now carries the selected can-block Boolean from the scenario request into the canonical owning agent record before harness or test execution. Missing/null selection preserves the native CLI agent’s blocking default; Realm evaluation inherits its owning agent’s policy and secondary agents keep their independent blocking policy. Script, strict, raw and Module source goals share this startup path.
 

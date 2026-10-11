@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Give retained source References priority for assignment and updates, matching reads; preserve const errors, short-circuiting and destructuring writes after eval environments escape.
+
 - Carry Test262 can-block selection into the owning runtime agent before setup and all source goals; preserve the native agent default, Realm inheritance and independent secondary-agent blocking.
 
 - Allow independent agents to progress through a canonical agent checkpoint at job boundaries and shared-memory accesses even when a parent polls without an explicit sleep or blocking wait.

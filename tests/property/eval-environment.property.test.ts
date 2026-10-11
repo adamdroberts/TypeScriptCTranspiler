@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as vm from "node:vm";
 import { compile } from "../../src/compile";
 import { invokeCc } from "../../src/link/cc";
 import { parseHostObservation } from "../test262/protocol";
@@ -32,10 +31,27 @@ localFunction;`;
 const dynamic = `let isolatedByFunction = 67; Function("return typeof isolatedByFunction;");`;
 const indirect = `let isolatedByIndirect = 71; (0, eval)("typeof isolatedByIndirect");`;
 const foreign = `let foreignLocal = {value:73}; (() => foreignLocal);`;
+const writeOperations = [
+    ["assign", "binding = rhs()"],
+    ["compound", "binding += rhs()"],
+    ["postfix", "binding++"],
+    ["prefix", "--binding"],
+    ["logical-and", "binding &&= rhs()"],
+    ["logical-or", "binding ||= rhs()"],
+    ["nullish", "binding ??= rhs()"],
+    ["pattern", "[binding] = [rhs()]"],
+] as const;
 const declarationPartitions = ["let", "const", "var"].flatMap(kind => [false, true].map(strict => {
     const name = `partition_${kind}_${strict ? "strict" : "sloppy"}`;
+    const bindings = writeOperations.map((_, index) => `${kind} ${name}_write_${index} = 89;`).join("\n");
+    const operations = writeOperations.map(([label, expression], index) => {
+        const binding = `${name}_write_${index}`;
+        return `{name:${JSON.stringify(label)},read:function(){return ${binding};},
+            write:function(rhs){return (${expression.replaceAll("binding", binding)});}}`;
+    }).join(",\n");
     return {kind, strict, name, source:`${strict ? '"use strict";' : ''} ${kind} ${name} = {value:89};
-        ({read:function(){return ${name};},write:function(value){${name}=value;}});`};
+        ${bindings}
+        ({read:function(){return ${name};},write:function(value){${name}=value;},operations:[${operations}]});`};
 }));
 const declarationChecks = declarationPartitions.map(({kind, strict, name, source}, index) => `
 var partition${index} = eval(${JSON.stringify(source)}), replacement${index} = {value:97};
@@ -43,6 +59,12 @@ var rejected${index} = false;
 try {partition${index}.write(replacement${index});} catch(reason){rejected${index}=reason instanceof TypeError;}
 check(rejected${index} === ${kind === "const"} && partition${index}.read().value === ${kind === "const" ? 89 : 97} &&
     Object.prototype.hasOwnProperty.call(host,${JSON.stringify(name)}) === ${kind === "var" && !strict}, ${JSON.stringify("declaration-" + name)});
+for(const operation of partition${index}.operations){
+    const trace=[]; let result="none", error="none";
+    try{result=operation.write(function(){trace.push("rhs");return 3;});}
+    catch(reason){error=reason.constructor.name;}
+    print(${JSON.stringify("write-" + name + ":")} + operation.name + ":" + error + ":" + result + ":" + operation.read() + ":" + trace.join(","));
+}
 `).join("\n");
 const scripts = [lexical, strict, tdz, destructuring, shadow, nonStrictVar, nested, nestedCaller, declaredFunction, dynamic, indirect, foreign,
     ...declarationPartitions.map(partition => partition.source)];
@@ -158,22 +180,27 @@ static void install_environment_probe(void) {
 `;
 
 async function oracle(): Promise<string[]> {
-    const lines: string[] = [];
-    const context = vm.createContext({print:(line:string)=>lines.push(line), $262:{gc(){},createRealm(){
-        const realm = vm.createContext({}); return {global:new vm.Script("globalThis").runInContext(realm),evalScript:(code:string)=>new vm.Script(code).runInContext(realm)};
-    }}, __environmentChild(previous:any,own:number){const root=previous===null?own:previous()[1];return ()=>[own,root,previous];},
+    const reference = Bun.spawnSync(["node", "-e", `
+    const vm=require("node:vm"),fs=require("node:fs"),lines=[];
+    const context = vm.createContext({print:line=>lines.push(line), $262:{gc(){},createRealm(){
+        const realm = vm.createContext({}); return {global:new vm.Script("globalThis").runInContext(realm),evalScript:code=>new vm.Script(code).runInContext(realm)};
+    }}, __environmentChild(previous,own){const root=previous===null?own:previous()[1];return ()=>[own,root,previous];},
     __environmentPreflight(){
         for(const left of ["let shared;", "const shared = 0;", "var shared;", "function shared(){}"]){
             for(const right of ["let shared;", "const shared = 0;", "var shared;", "function shared(){}"]){
                 if(!/^(let|const)/.test(left) && !/^(let|const)/.test(right))continue;
-                const sandbox:Record<string,unknown>={};let rejected=false;
-                try{vm.runInNewContext("var unpublished;"+left+right,sandbox);}catch(reason){rejected=(reason as Error).name==="SyntaxError";}
+                const sandbox={};let rejected=false;
+                try{vm.runInNewContext("var unpublished;"+left+right,sandbox);}catch(reason){rejected=reason.name==="SyntaxError";}
                 if(!rejected||Object.prototype.hasOwnProperty.call(sandbox,"unpublished"))return false;
             }
         }
         return true;
     }});
-    await new vm.Script(text.replaceAll("NATIVE_GC","false")).runInContext(context); return lines;
+    Promise.resolve(new vm.Script(${JSON.stringify(text.replaceAll("NATIVE_GC","false"))}).runInContext(context))
+        .then(()=>fs.writeSync(1,JSON.stringify(lines))).catch(reason=>{console.error(reason);process.exitCode=1;});
+    `], {stdout:"pipe",stderr:"pipe",timeout:120_000});
+    expect(reference.exitCode).toBe(0);expect(reference.stderr.toString()).toBe("");
+    return JSON.parse(reference.stdout.toString());
 }
 
 test("eval declarations and source contexts share one retained environment tree", async()=>{
