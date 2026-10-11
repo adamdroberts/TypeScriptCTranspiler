@@ -697,6 +697,23 @@ interface TypedArray<T> extends Iterable<T> {
     values(): IteratorObject<T>;
     entries(): IteratorObject<[number, T]>;
     [Symbol.iterator](): IteratorObject<T>;
+    at(index?: number, ...ignored: any[]): T | undefined;
+    includes(value: T, fromIndex?: number, ...ignored: any[]): boolean;
+    indexOf(value: T, fromIndex?: number, ...ignored: any[]): number;
+    lastIndexOf(value: T, fromIndex?: number, ...ignored: any[]): number;
+    forEach(callback: (value: T, index: number, array: this) => void, thisArg?: any, ...ignored: any[]): void;
+    map(callback: (value: T, index: number, array: this) => T, thisArg?: any, ...ignored: any[]): this;
+    filter(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): this;
+    some(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): boolean;
+    every(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): boolean;
+    find(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): T | undefined;
+    findIndex(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): number;
+    findLast(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): T | undefined;
+    findLastIndex(callback: (value: T, index: number, array: this) => unknown, thisArg?: any, ...ignored: any[]): number;
+    reduce(callback: (previous: T, value: T, index: number, array: this) => T): T;
+    reduce<U>(callback: (previous: U, value: T, index: number, array: this) => U, initial: U, ...ignored: any[]): U;
+    reduceRight(callback: (previous: T, value: T, index: number, array: this) => T): T;
+    reduceRight<U>(callback: (previous: U, value: T, index: number, array: this) => U, initial: U, ...ignored: any[]): U;
 }
 interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     readonly prototype: V;

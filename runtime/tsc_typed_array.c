@@ -227,6 +227,87 @@ static tsc_value_t define_member(tsc_value_t owner,const member_t* member,tsc_st
     }else define_value(owner,name,function,true,true);
     (void)function_root;return function;
 }
+typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE} traversal_kind_t;
+typedef struct {const char* name;traversal_kind_t kind;bool reverse;size_t arity;} traversal_t;
+static const traversal_t traversals[]={
+#define TSC_TYPED_METHOD(name, kind, reverse, arity) {#name,kind,reverse,arity},
+#include "tsc_typed_array_methods.def"
+#undef TSC_TYPED_METHOD
+};
+static tsc_element_kind_t owner_kind(const tsc_object_t* object){return object->is_buffer?TSC_ELEMENT_Uint8Array:((tsc_typed_array_t*)object->class_ptr)->kind;}
+static tsc_value_t species_create(tsc_value_t exemplar,size_t length){
+    void* volatile exemplar_root=tsc_value_gc_root(exemplar);tsc_element_kind_t kind=owner_kind(require_typed(exemplar));
+    tsc_value_t constructor=tsc_value_species_constructor(exemplar,tsc_typed_array_constructor_value(kind));void* volatile constructor_root=tsc_value_gc_root(constructor);
+    tsc_array_t* volatile args=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(args);tsc_value_t count=tsc_value_num((double)length);tsc_array_push_raw(args,&count);
+    tsc_value_t result=tsc_typed_array_create_from_constructor(constructor,args);void* volatile result_root=tsc_value_gc_root(result);
+    if(is_big(&elements[kind])!=is_big(&elements[owner_kind(require_typed(result))]))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray species content types differ"));
+    (void)exemplar_root;(void)constructor_root;(void)result_root;return result;
+}
+static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
+    const traversal_t* operation=environment;void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;
+    tsc_object_t* object=require_typed(receiver);
+    if(!object->is_buffer&&!tsc_typed_array_witness(object->class_ptr).valid)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray traversal view is outside its buffer"));
+    size_t length=tsc_integer_indexed_length(object);tsc_value_t first=argument(actuals,0);void* volatile first_root=tsc_value_gc_root(first);
+    if(operation->kind==AT){
+        double relative=tsc_value_to_integer_or_infinity(first),index=relative<0?(double)length+relative:relative;
+        return index<0||index>=(double)length?tsc_value_undefined():tsc_value_get_prop(receiver,tsc_str_from_num(index));
+    }
+    if(operation->kind==INCLUDES||operation->kind==INDEX_OF){
+        tsc_value_t absent=operation->kind==INCLUDES?tsc_value_bool(false):tsc_value_num(-1);
+        if(!length)return absent;
+        double relative=operation->reverse&&(!actuals||actuals->len<2)?(double)length-1:tsc_value_to_integer_or_infinity(argument(actuals,1));
+        double start=relative<0?(double)length+relative:relative;
+        if(operation->reverse)start=fmin(start,(double)length-1);else start=fmax(start,0);
+        if(start<0||start>=(double)length)return absent;
+        size_t index=(size_t)start;
+        for(;;){
+            tsc_str_t* property=tsc_str_from_num((double)index);
+            if(operation->kind==INCLUDES||tsc_value_has_prop(receiver,property)){
+                tsc_value_t value=tsc_value_get_prop(receiver,property);void* volatile value_root=tsc_value_gc_root(value);
+                bool equal=operation->kind==INCLUDES?tsc_value_same_value_zero(first,value):tsc_value_eq(first,value);
+                if(equal)return operation->kind==INCLUDES?tsc_value_bool(true):tsc_value_num((double)index);
+                (void)value_root;
+            }
+            if(operation->reverse){if(!index)break;--index;}else if(++index==length)break;
+        }
+        return absent;
+    }
+    if(!tsc_value_is_callable(first))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray callback is not callable"));
+    bool reduce=operation->kind==REDUCE,has_initial=actuals&&actuals->len>1;
+    if(reduce&&!length&&!has_initial)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray reduce requires an initial value for an empty view"));
+    tsc_value_t accumulator=reduce&&has_initial?argument(actuals,1):tsc_value_undefined();void* volatile accumulator_root=tsc_value_gc_root(accumulator);
+    tsc_value_t result=operation->kind==MAP?species_create(receiver,length):tsc_value_undefined();void* volatile result_root=tsc_value_gc_root(result);
+    tsc_array_t* volatile kept=NULL;if(operation->kind==FILTER){kept=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(kept);}
+    size_t consumed=0;
+    if(reduce&&!has_initial){size_t index=operation->reverse?length-1:0;accumulator=tsc_value_get_prop(receiver,tsc_str_from_num((double)index));accumulator_root=tsc_value_gc_root(accumulator);consumed=1;}
+    for(;consumed<length;++consumed){
+        size_t index=operation->reverse?length-1-consumed:consumed;tsc_str_t* property=tsc_str_from_num((double)index);
+        tsc_value_t value=tsc_value_get_prop(receiver,property);void* volatile value_root=tsc_value_gc_root(value);
+        tsc_array_t* volatile parameters=tsc_array_new(sizeof(tsc_value_t),reduce?4:3);tsc_array_use_value_storage(parameters);
+        if(reduce)tsc_array_push_raw(parameters,&accumulator);tsc_array_push_raw(parameters,&value);
+        tsc_value_t position=tsc_value_num((double)index);tsc_array_push_raw(parameters,&position);tsc_array_push_raw(parameters,&receiver);
+        tsc_value_t selected=tsc_value_apply_function(first,reduce?tsc_value_undefined():argument(actuals,1),tsc_value_array(parameters));void* volatile selected_root=tsc_value_gc_root(selected);
+        bool truth=tsc_value_is_truthy(selected);
+        switch(operation->kind){
+            case REDUCE:accumulator=selected;accumulator_root=tsc_value_gc_root(accumulator);break;
+            case MAP:if(!tsc_value_set_prop(result,property,selected))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray mapped element assignment failed"));break;
+            case FILTER:if(truth)tsc_array_push_raw(kept,&value);break;
+            case SOME:if(truth)return tsc_value_bool(true);break;
+            case EVERY:if(!truth)return tsc_value_bool(false);break;
+            case FIND:if(truth)return value;break;
+            case FIND_INDEX:if(truth)return tsc_value_num((double)index);break;
+            default:break;
+        }
+        (void)value_root;(void)selected_root;
+    }
+    if(operation->kind==FILTER){
+        result=species_create(receiver,kept->len);result_root=tsc_value_gc_root(result);
+        for(size_t index=0;index<kept->len;++index)if(!tsc_value_set_prop(result,tsc_str_from_num((double)index),TSC_ARR(tsc_value_t,kept,index)))
+            tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray filtered element assignment failed"));
+    }
+    (void)receiver_root;(void)first_root;(void)accumulator_root;(void)result_root;
+    return reduce?accumulator:operation->kind==MAP||operation->kind==FILTER?result:operation->kind==SOME?tsc_value_bool(false):operation->kind==EVERY?tsc_value_bool(true):operation->kind==FIND_INDEX?tsc_value_num(-1):tsc_value_undefined();
+}
 static void initialize_intrinsic(intrinsic_t* intrinsic,const char* name,size_t arity,tsc_generic_function_t construct,void* environment,tsc_value_t parent,tsc_value_t prototype_parent){
     intrinsic->prototype=tsc_value_object(tsc_object_new_with_prototype(prototype_parent));intrinsic->prototype_root=tsc_value_gc_root(intrinsic->prototype);
     intrinsic->constructor=tsc_value_function_named_kind(constructor_call,construct,environment,arity,key(name),TSC_FUNCTION_IDENTITY_BUILTIN);
@@ -246,6 +327,10 @@ static typed_realm_t* typed_realm(void){
         const member_t* member=&members[index];tsc_str_t* name=member->kind==TAG?tsc_symbol_property_key(tsc_symbol_to_string_tag()):key(member->name);
         tsc_value_t function=define_member(realm->abstract.prototype,member,name);
         if(member->kind==VALUES)define_value(realm->abstract.prototype,tsc_symbol_property_key(tsc_symbol_iterator()),function,true,true);
+    }
+    for(size_t index=0;index<sizeof(traversals)/sizeof(traversals[0]);++index){
+        const traversal_t* operation=&traversals[index];tsc_value_t function=tsc_value_function_named_kind(traversal_apply,NULL,(void*)operation,operation->arity,key(operation->name),TSC_FUNCTION_IDENTITY_BUILTIN);
+        void* volatile function_root=tsc_value_gc_root(function);define_value(realm->abstract.prototype,key(operation->name),function,true,true);(void)function_root;
     }
     for(size_t index=0;index<TSC_ELEMENT_COUNT;++index){
         intrinsic_t* intrinsic=&realm->concrete[index];const element_t* element=&elements[index];

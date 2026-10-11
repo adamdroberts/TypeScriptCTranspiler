@@ -384,6 +384,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Added shared TypedArray search, predicate, mapping/filtering and reduction traversals with captured ranges, live indexed Reads and species validation.
+
 - Added shared ordinary TypedArray.from/of factories with eager iterable Lists, typed constructor-result validation and inferred mapper declarations.
 
 - Added ordinary TypedArray constructors and shared numeric element storage with live resizable/detached ArrayBuffer witnesses, generic integer-indexed hooks and retained iterators.

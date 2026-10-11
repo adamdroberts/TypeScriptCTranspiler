@@ -17,6 +17,7 @@
     "runtime/tsc_numeric_storage.c",
     "runtime/tsc_typed_array.c",
     "runtime/tsc_typed_array.def",
+    "runtime/tsc_typed_array_methods.def",
     "runtime/tsc_array_buffer.c",
     "runtime/tsc_array_buffer.def",
     "runtime/tsc_dataview.def",
