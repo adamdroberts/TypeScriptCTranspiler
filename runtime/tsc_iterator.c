@@ -7,7 +7,100 @@ static tsc_value_t iterator_self_apply(void* env, tsc_value_t this_arg, tsc_arra
 }
 
 static const char iterator_prototype_realm_state_key = 0;
+static const char iterator_constructor_realm_state_key = 0;
+static const char iterator_wrapper_prototype_realm_state_key = 0;
 static const char async_iterator_prototype_realm_state_key = 0;
+static const bool iterator_accessor_keys[] = {false, true};
+static tsc_str_t* iterator_accessor_key(bool tag) {
+    return tag ? tsc_symbol_property_key(tsc_symbol_to_string_tag()) : tsc_str_from_lit("constructor", 11);
+}
+static tsc_value_t iterator_metadata_get(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver; (void)args;
+    return *(const bool*)env ? tsc_value_string(tsc_str_from_lit("Iterator", 8)) : tsc_iterator_constructor_value();
+}
+static tsc_value_t iterator_metadata_set(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    if (!tsc_value_is_object(receiver) || receiver == tsc_iterator_prototype_value())
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator prototype metadata cannot be assigned on this receiver"));
+    bool tag = *(const bool*)env;
+    tsc_str_t* key = iterator_accessor_key(tag);
+    tsc_value_t value = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    void* volatile value_root = tsc_value_gc_root(value);
+    tsc_value_t descriptor = tsc_value_get_own_property_descriptor(receiver, key);
+    bool success = tsc_value_is_undefined(descriptor)
+        ? tsc_value_create_data_property(receiver, tag ? tsc_value_symbol(tsc_symbol_to_string_tag()) : tsc_value_string(key), value)
+        : tsc_value_set_prop(receiver, key, value);
+    if (!success) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator metadata assignment failed"));
+    (void)value_root;
+    return tsc_value_undefined();
+}
+static tsc_value_t iterator_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver; (void)args;
+    tsc_value_t new_target = tsc_value_current_new_target();
+    if (tsc_value_is_undefined(new_target) || new_target == tsc_iterator_constructor_value())
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator requires a derived constructor"));
+    tsc_value_t prototype = tsc_value_get_prototype_from_constructor(new_target, TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE);
+    void* volatile prototype_root = tsc_value_gc_root(prototype);
+    tsc_value_t result = tsc_value_object(tsc_object_new_with_prototype(prototype));
+    (void)prototype_root;
+    return result;
+}
+static tsc_value_t iterator_wrapper_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)args;
+    tsc_object_t* object = value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_OBJECT ? value_ptr(receiver) : NULL;
+    tsc_iterator_record_t* record = object ? object->wrapped_iterator : NULL;
+    if (!record) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator wrapper receiver lacks its internal slot"));
+    tsc_value_t method = record->next_method;
+    if (env) {
+        method = tsc_value_get_prop(record->iterator, tsc_str_from_lit("return", 6));
+        if (tsc_value_is_nullish(method)) return tsc_iterator_result(tsc_value_undefined(), true);
+    }
+    void* volatile method_root = tsc_value_gc_root(method);
+    tsc_value_t result = tsc_value_apply_function(method, record->iterator,
+        tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 0)));
+    (void)method_root;
+    return result;
+}
+static tsc_value_t iterator_from_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    tsc_value_t source = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!tsc_value_is_object(source) && !(value_is_box(source) && value_tag(source) == TSC_VALUE_TAG_STRING))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator.from requires an object or string"));
+    tsc_iterator_record_t* volatile record = TSC_GC_MALLOC(sizeof(*record));
+    *record = (tsc_iterator_record_t){ .source = source, .source_gc_root = tsc_value_gc_root(source) };
+    tsc_value_t method = tsc_value_get_symbol_prop(source, tsc_symbol_iterator());
+    *record = tsc_value_is_nullish(method) ? tsc_sync_iterator_open_direct(source)
+        : tsc_sync_iterator_open_with_method(source, method);
+    if (tsc_value_instanceof(record->iterator, tsc_iterator_constructor_value())) return record->iterator;
+    tsc_object_t* prototype = tsc_realm_state_get(&iterator_wrapper_prototype_realm_state_key);
+    if (!prototype) {
+        prototype = tsc_object_new_with_prototype(tsc_iterator_prototype_value());
+        tsc_realm_state_set(&iterator_wrapper_prototype_realm_state_key, prototype);
+        tsc_object_define(prototype, tsc_str_from_lit("next", 4),
+            tsc_value_function_builtin_named(iterator_wrapper_apply, NULL, 0, tsc_str_from_lit("next", 4)), true, false, true);
+        tsc_object_define(prototype, tsc_str_from_lit("return", 6),
+            tsc_value_function_builtin_named(iterator_wrapper_apply, (void*)1, 0, tsc_str_from_lit("return", 6)), true, false, true);
+    }
+    tsc_object_t* object = tsc_object_new_with_prototype(tsc_value_object(prototype));
+    object->wrapped_iterator = record;
+    return tsc_value_object(object);
+}
+tsc_value_t tsc_iterator_constructor_value(void) {
+    tsc_function_identity_t* identity = tsc_realm_state_get(&iterator_constructor_realm_state_key);
+    if (!identity) {
+        tsc_value_t constructor = tsc_value_function_named_kind(iterator_constructor_apply, iterator_constructor_apply, NULL,
+            0, tsc_str_from_lit("Iterator", 8), TSC_FUNCTION_IDENTITY_BUILTIN);
+        identity = value_ptr(constructor);
+        tsc_realm_state_set(&iterator_constructor_realm_state_key, identity);
+        identity->construct_allocates_receiver = false;
+        identity->construct_default_prototype = TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE;
+        tsc_function_identity_set_own_prototype(identity, tsc_iterator_prototype_value());
+        identity->func_prototype_writable = false;
+        (void)tsc_value_define_property_desc(constructor, tsc_str_from_lit("from", 4),
+            tsc_value_function_builtin_named(iterator_from_apply, NULL, 1, tsc_str_from_lit("from", 4)),
+            true, true, true, false, true, true, true);
+    }
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)identity);
+}
 typedef enum { FOR_EACH, REDUCE, SOME, EVERY, FIND, TO_ARRAY } iterator_consumer_operation_t;
 static const struct { const char* name; iterator_consumer_operation_t operation; size_t length; } consumers[] = {
 #define TSC_ITERATOR_CONSUMER(name, operation, length) {#name, operation, length},
@@ -40,6 +133,21 @@ tsc_value_t tsc_iterator_prototype_value(void) {
             tsc_str_t* name = tsc_str_from_cstr(consumers[index].name);
             tsc_object_define(prototype, name, tsc_value_function_builtin_named(iterator_consume,
                 (void*)&consumers[index].operation, consumers[index].length, name), true, false, true);
+        }
+        for (size_t index = 0; index < sizeof(iterator_accessor_keys) / sizeof(*iterator_accessor_keys); ++index) {
+            const bool* tag = &iterator_accessor_keys[index];
+            const char* name = *tag ? "[Symbol.toStringTag]" : "constructor";
+            tsc_object_t* volatile descriptor = tsc_object_new();
+            tsc_object_set(descriptor, tsc_str_from_lit("get", 3),
+                tsc_value_function_builtin_named(iterator_metadata_get, (void*)tag, 0,
+                    tsc_str_concat(tsc_str_from_lit("get ", 4), tsc_str_from_cstr(name))));
+            tsc_object_set(descriptor, tsc_str_from_lit("set", 3),
+                tsc_value_function_builtin_named(iterator_metadata_set, (void*)tag, 1,
+                    tsc_str_concat(tsc_str_from_lit("set ", 4), tsc_str_from_cstr(name))));
+            tsc_object_set(descriptor, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
+            (void)tsc_value_define_computed_property_descriptor(tsc_value_object(prototype),
+                *tag ? tsc_value_symbol(tsc_symbol_to_string_tag()) : tsc_value_string(tsc_str_from_lit("constructor", 11)),
+                tsc_value_object(descriptor));
         }
     }
     return tsc_value_object(prototype);

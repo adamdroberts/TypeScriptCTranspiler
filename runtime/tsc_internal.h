@@ -153,6 +153,7 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE,
+    TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TEXT_ENCODER_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TEXT_DECODER_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_FS_DIRENT_PROTOTYPE,
@@ -299,6 +300,7 @@ struct tsc_object {
     bool is_promise;
     struct tsc_generator* generator;
     tsc_iterator_record_t* async_from_sync_iterator;
+    tsc_iterator_record_t* wrapped_iterator;
     bool is_date;
     bool is_regexp;
     bool is_weak_collection;

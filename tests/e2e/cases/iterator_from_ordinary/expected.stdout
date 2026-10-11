@@ -1,0 +1,5 @@
+identity: true true
+values: 1,2,3
+string: a,b,c
+direct: 3
+abstract: true

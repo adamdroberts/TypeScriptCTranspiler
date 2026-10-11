@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Add the ordinary Iterator constructor/from owners, retained raw-result wrappers and shared constructor/toStringTag accessor semantics. Verify derived construction, captured next and private slots against Node; lazy helpers, Iterator.concat and exhaustive eligible conformance remain open.
+
 - Share eager Iterator consumers through one operation collection and rooted direct record algorithm, adding some, every, find and toArray with callback/close completion semantics and encoded item Lists. Lazy helpers and complete Iterator ownership remain open.
 
 - Give the supported UTF-8 text-codec surface ordinary owners across suspension and remove native source shortcuts. Replace lone surrogates on encode, decode malformed UTF-8 with replacement and initial BOM removal, and read current byte-view witnesses after options conversion. Full Encoding API labels/options, streaming, encodeInto and Uint8Array result fidelity remain open.

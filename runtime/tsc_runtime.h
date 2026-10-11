@@ -1193,6 +1193,8 @@ typedef struct {
     bool done;
 } tsc_iterator_record_t;
 typedef tsc_iterator_record_t tsc_sync_iterator_t;
+tsc_value_t tsc_iterator_constructor_value(void);
+tsc_value_t tsc_iterator_prototype_value(void);
 double tsc_math_sum_precise(tsc_value_t items);
 tsc_sync_iterator_t tsc_sync_iterator_open(tsc_value_t source);
 tsc_sync_iterator_t tsc_for_in_iterator_open(tsc_value_t source);

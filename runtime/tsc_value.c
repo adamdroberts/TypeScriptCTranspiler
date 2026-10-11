@@ -3556,6 +3556,8 @@ static tsc_value_t value_intrinsic_default_prototype(
             return primitive_prototype(&primitive_symbol);
         case TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE:
             return tsc_array_buffer_prototype_value();
+        case TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE:
+            return tsc_iterator_prototype_value();
         case TSC_INTRINSIC_DEFAULT_TEXT_ENCODER_PROTOTYPE: return tsc_text_encoder_prototype_value();
         case TSC_INTRINSIC_DEFAULT_TEXT_DECODER_PROTOTYPE: return tsc_text_decoder_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE:

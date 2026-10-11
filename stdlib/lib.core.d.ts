@@ -56,6 +56,7 @@ interface Iterator<T, TReturn = any, TNext = undefined> {
     next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
 }
 interface IteratorObject<T, TReturn = any, TNext = undefined> extends Iterator<T, TReturn, TNext> {
+    [Symbol.iterator](): IteratorObject<T, TReturn, TNext>;
     forEach(callback: (value: T, index: number) => void, ...ignored: any[]): void;
     reduce(reducer: (accumulator: T, value: T, index: number) => T): T;
     reduce<U>(reducer: (accumulator: U, value: T, index: number) => U, initialValue: U, ...ignored: any[]): U;
@@ -64,6 +65,12 @@ interface IteratorObject<T, TReturn = any, TNext = undefined> extends Iterator<T
     find(predicate: (value: T, index: number) => unknown, ...ignored: any[]): T | undefined;
     toArray(...ignored: any[]): T[];
 }
+interface IteratorConstructor {
+    new <T, TReturn = any, TNext = undefined>(): IteratorObject<T, TReturn, TNext>;
+    readonly prototype: IteratorObject<unknown>;
+    from<T>(value: Iterable<T> | Iterator<T>, ...ignored: any[]): IteratorObject<T>;
+}
+declare var Iterator: IteratorConstructor;
 interface Iterable<T> {
     [Symbol.iterator](): Iterator<T>;
 }
@@ -79,7 +86,7 @@ interface MapIterator<T> extends IterableIterator<T>, IteratorObject<T> {
 interface SetIterator<T> extends IterableIterator<T>, IteratorObject<T> {
     [Symbol.iterator](): SetIterator<T>;
 }
-interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
+interface Generator<T = unknown, TReturn = any, TNext = unknown> extends IteratorObject<T, TReturn, TNext> {
     next(value?: TNext, ...ignored: any[]): IteratorResult<T, TReturn>;
     return(value?: TReturn, ...ignored: any[]): IteratorResult<T, TReturn>;
     throw(e: any, ...ignored: any[]): IteratorResult<T, TReturn>;
