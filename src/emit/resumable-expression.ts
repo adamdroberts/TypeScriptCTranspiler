@@ -284,7 +284,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         const anchor = reserve();
         worklist.push(() => {
             const node = transparent(source);
-            if (ts.isClassExpression(node) && (suspending.get(source) || ts.isClassDeclaration(ts.getOriginalNode(node)))) {
+            if (ts.isClassExpression(node) && (decomposed.get(source) || ts.isClassDeclaration(ts.getOriginalNode(node)))) {
                 const definition=sourceClassDefinition(node);
                 classDefinitions.push({definition,owner:output});
                 let entry=next;
@@ -308,7 +308,7 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                 }
                 jump(anchor,entry);return;
             }
-            if (!suspending.get(source)) {
+            if (!decomposed.get(source)) {
                 jump(anchor, operation({ kind: "evaluate", expression: source, inputs: [] }, output, next));
                 return;
             }
@@ -395,6 +395,10 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             }
             if (ts.isDeleteExpression(node)) {
                 const skipped = operation({ kind: "evaluate", expression: ts.factory.createTrue(), inputs: [] }, output, next);
+                const operand = transparent(node.expression);
+                if (!(ts.isIdentifier(operand) || ts.isPropertyAccessExpression(operand) || ts.isElementAccessExpression(operand))) {
+                    jump(anchor, build(node.expression, value(node.expression), skipped)); return;
+                }
                 jump(anchor, buildReference(node.expression, reference => operation({ kind: "delete", reference }, output, next), skipped)); return;
             }
             if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) ||
@@ -435,9 +439,9 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         return anchor;
     };
 
-    // Mark maximal synchronous subtrees once. Their ordinary evaluator already
-    // owns native call adapters and synchronous internal evaluation order.
-    const suspending = new Map<ts.Node, boolean>();
+    // Mark control-bearing subtrees once. Suspension and optional-chain guards
+    // share this graph; ordinary atomic subtrees retain native call adapters.
+    const decomposed = new Map<ts.Node, boolean>();
     const sourceWorklist: { node: ts.Node; expanded: boolean }[] = [{ node: expression, expanded: false }];
     while (sourceWorklist.length) {
         const item = sourceWorklist.pop()!, node = item.node;
@@ -446,9 +450,9 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             sourceWorklist.push({ node, expanded: true });
             for(const child of children)sourceWorklist.push({node:child,expanded:false});
         } else {
-            let found = ts.isAwaitExpression(node) || ts.isYieldExpression(node);
-            for(const child of children)found ||= suspending.get(child)??false;
-            suspending.set(node, found);
+            let found = ts.isAwaitExpression(node) || ts.isYieldExpression(node) || !!(node.flags & ts.NodeFlags.OptionalChain);
+            for(const child of children)found ||= decomposed.get(child)??false;
+            decomposed.set(node, found);
         }
     }
     const entry = build(expression, result, complete);

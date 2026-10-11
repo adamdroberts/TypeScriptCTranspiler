@@ -608,4 +608,4 @@ Mutable array/rest argument List projection now shares canonical length and inde
 
 Protected boxed binding storage now retains mutation across native longjmp independently of finally Reference use. Proper tail-call behavior, complete host/intrinsic effects and eligible exhaustive target evidence remain open; the immutable full-suite runs remain regression detectors.
 
-Catch/local identifier deletion and non-Reference delete evaluation now use the shared Reference/value partitions. Optional-chain deletion still requires shared short-circuit Reference lowering. Proper tail calls, complete host/intrinsic effects and eligible exhaustive target evidence remain open.
+Catch/local identifier deletion and non-Reference delete evaluation now use the shared Reference/value partitions. Optional-chain deletion now shares the ordinary/resumable expression graph with retained References and nullish guards; generated Node partitions, yielded operands and a deep chain provide scoped evidence. Complete reciprocal optional-chain clause evidence remains open. Proper tail calls, complete host/intrinsic effects and eligible exhaustive target evidence remain open.

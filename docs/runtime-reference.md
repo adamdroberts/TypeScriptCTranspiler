@@ -829,3 +829,5 @@ Source List analysis now shares length and index locations with property analysi
 Protected boxed bindings reuse existing GC-backed retained value cells and companion roots. Native exception frames, iterator closing and resource disposal keep their existing operations; no public runtime API changes.
 
 Declarative binding and non-Reference delete lowering uses existing captured environment deletion and ordinary operand evaluation. Native property deletion retains its existing operations; no public runtime API changes.
+
+Optional chains reuse existing ordinary property, captured environment Reference, call argument List and deletion operations through the canonical expression graph. Ordinary and resumable execution share operation emission; no public runtime API changes.

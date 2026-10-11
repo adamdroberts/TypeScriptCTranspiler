@@ -17,7 +17,7 @@ import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget } from "./binding-tree";
-import type { ResumableReference } from "./resumable-expression";
+import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
     CType,
     arrayType,
@@ -27406,46 +27406,6 @@ class Emitter {
                     const transition = (id: number): void => {
                         callback.line(`goto __tsc_cfg_operation_${stateNode.targets.get(id)!.id};`);
                     };
-                    const preparePropertyReference = (reference: Extract<ResumableReference, { kind: "property" }>): void => {
-                        // GetValue/PutValue retain the same normalized name in
-                        // the Reference, including across await/yield edges.
-                        store(reference.key, this.preparePropertyReferenceName(reference.node, read(reference.base), read(reference.key)));
-                    };
-                    const getReference = (reference: ResumableReference): string => {
-                        if (reference.kind !== "property") {
-                            if (this.sourceReferencePlan(reference.identifier))
-                                return `tsc_environment_reference_get_captured(&state->expression_reference_${stateNode.slots[reference.slot]!})`;
-                            return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
-                        }
-                        preparePropertyReference(reference);
-                        return this.readPropertyReference(reference.node, read(reference.base), read(reference.key),
-                            reference.receiver === undefined ? undefined : read(reference.receiver));
-                    };
-                    const setReference = (reference: ResumableReference, source: string, sourceNode: ts.Expression): void => {
-                        if (reference.kind === "property") {
-                            preparePropertyReference(reference);
-                            callback.line(this.writePropertyReference(reference.node, read(reference.base), read(reference.key), source,
-                                reference.receiver === undefined ? undefined : read(reference.receiver)) + ";");
-                            return;
-                        }
-                        const captured = this.sourceReferencePlan(reference.identifier);
-                        if (captured) {
-                            callback.line(`(void)(${captured.set(`&state->expression_reference_${stateNode.slots[reference.slot]!}`, source)});`);
-                            return;
-                        }
-                        const symbol = this.symbolForIdentifier(reference.identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
-                        if (field && !this.classNameBindingForIdentifier(reference.identifier)) {
-                            emitCfgFieldAssignment(callback, field, { c: source, ty: T_VALUE }, reference.identifier);
-                            return;
-                        }
-                        const assignment = ts.factory.createBinaryExpression(reference.identifier, ts.SyntaxKind.EqualsToken, sourceNode);
-                        Object.assign(assignment, { parent: reference.identifier.parent });
-                        ts.setTextRange(assignment, reference.identifier);
-                        const overrides = new Map([[sourceNode, { c: source, ty: T_VALUE }]]);
-                        this.conditionValueScopes.push(overrides);
-                        try { callback.line(`(void)(${this.emitExpr(assignment).c});`); }
-                        finally { this.conditionValueScopes.pop(); }
-                    };
                     if (operation.kind === "complete") emitTransition(stateNode.next.id);
                     else if (operation.kind === "jump") transition(operation.next);
                     else if (operation.kind === "branch") {
@@ -27547,129 +27507,17 @@ class Emitter {
                         store(operation.output, this.coerce(awaitFulfilledValue(T_VALUE), T_VALUE, operation.node));
                         callback.line("state->awaiting = false;");
                         transition(operation.next);
-                    } else if (operation.kind === "value") {
-                        const op = operation.operation;
-                        let evaluated: string;
-                        if (op.kind === "binding-reference") {
-                            const captured = this.sourceReferencePlan(op.identifier);
-                            if (captured) callback.line(`state->expression_reference_${stateNode.slots[operation.output]!} = ${captured.capture};`);
-                            evaluated = "tsc_value_undefined()";
-                        }
-                        else if(op.kind==='class-start')evaluated=this.emitClassDefinitionBegin(op.definition).c;
-                        else if(op.kind==='class-heritage'){
-                            callback.line(`tsc_value_class_set_heritage(${read(op.owner)}, ${read(op.superclass)});`);
-                            evaluated=read(op.owner);
-                        }else if(op.kind==='class-element'){
-                            for(const piece of this.emitClassElementDefinition(op.member,read(op.owner),
-                                `tsc_value_get_prop(${read(op.owner)}, ${this.stringLit("prototype")})`,false,
-                                op.key===null?undefined:read(op.key)))callback.line(piece+';');
-                            evaluated=read(op.owner);
-                        }else if(op.kind==='class-complete'){
-                            const inner=this.createClassNameEnvironment(op.definition,read(op.owner));
-                            for(const piece of this.initializeClassNameEnvironment(inner,read(op.owner)))callback.line(piece+';');
-                            callback.line(`tsc_value_class_initialize_elements(${read(op.owner)}, ${read(op.owner)}, true);`);
-                            evaluated=read(op.owner);
-                        }else if (op.kind === "copy") evaluated = read(op.source);
-                        else if (op.kind === "undefined") evaluated = "tsc_value_undefined()";
-                        else if (op.kind === "binding-receiver") evaluated = this.sourceReferencePlan(op.reference.identifier)
-                            ? `tsc_environment_reference_receiver(&state->expression_reference_${stateNode.slots[op.reference.slot]!})`
-                            : "tsc_value_undefined()";
-                        else if (op.kind === "get") evaluated = getReference(op.reference);
-                        else if (op.kind === "set") {
-                            setReference(op.reference, read(op.source), graph.expressionResults[stateNode.slots[op.source]!]!);
-                            evaluated = read(op.source);
-                        } else if (op.kind === "property-key") evaluated = `tsc_value_to_property_key(${read(op.source)})`;
-                        else if (op.kind === "super-constructor") {
-                            const environment = this.constructorThisEnvironment(op.node);
-                            if (!environment) unsupported(op.node, "super call requires a constructor environment");
-                            evaluated = `tsc_environment_super_constructor(${environment.c})`;
-                        }
-                        else if (op.kind === "super-this") evaluated = this.coerce(this.superThisValue(op.node), T_VALUE, op.node);
-                        else if (op.kind === "super-base") evaluated = `tsc_value_get_prototype_of(${this.superHomeObject(op.node).c})`;
-                        else if (op.kind === "template-object") evaluated = this.emitTemplateObject(op.template).c;
-                        else if (op.kind === "arguments" || op.kind === "array") {
-                            evaluated = "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))";
-                        } else if (op.kind === "object") evaluated = "tsc_value_object(tsc_object_new())";
-                        else if (op.kind === "compound") {
-                            const fn = this.dynamicCompoundAssignmentOperation(op.operator);
-                            if (!fn) return false;
-                            evaluated = `${fn}(${read(op.left)}, ${read(op.right)})`;
-                        } else if (op.kind === "delete") {
-                            if (op.reference.kind !== "property") return false;
-                            if (op.reference.receiver !== undefined)
-                                callback.line(`tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot delete a super property"));`);
-                            preparePropertyReference(op.reference);
-                            const result = this.freshTemp("_resumable_delete");
-                            callback.line(`bool const ${result} = tsc_value_delete_computed_prop(${read(op.reference.base)}, ${read(op.reference.key)});`);
-                            if (this.nodeIsInStrictMode(op.reference.node)) callback.line(`if (!${result}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("property deletion failed"));`);
-                            evaluated = `tsc_value_bool(${result})`;
-                        } else if (op.kind === "update") {
-                            const old = this.freshTemp("_resumable_numeric"), updated = this.freshTemp("_resumable_updated");
-                            callback.line(`tsc_value_t const ${old} = tsc_value_to_numeric(${getReference(op.reference)});`);
-                            callback.line(`void* volatile ${old}_root = tsc_value_gc_root(${old}); (void)${old}_root;`);
-                            callback.line(`tsc_value_t const ${updated} = ${op.increment ? "tsc_value_inc" : "tsc_value_dec"}(${old});`);
-                            callback.line(`void* volatile ${updated}_root = tsc_value_gc_root(${updated}); (void)${updated}_root;`);
-                            setReference(op.reference, updated, graph.expressionResults[stateNode.slots[operation.output]!]!);
-                            evaluated = op.prefix ? updated : old;
-                        } else if (op.kind === "call") {
-                            evaluated = this.emitCallApplication(op.node,read(op.callee),
-                                op.receiver === null ? "tsc_value_undefined()" : read(op.receiver),read(op.arguments));
-                        } else {
-                            const overrides = new Map(op.inputs.map(input => [input.expression, { c: read(input.slot), ty: T_VALUE }]));
-                            this.conditionValueScopes.push(overrides);
-                            try { evaluated = this.coerce(this.emitExpr(op.expression), T_VALUE, op.expression); }
-                            finally { this.conditionValueScopes.pop(); }
-                        }
-                        store(operation.output, evaluated);
-                        transition(operation.next);
-                    } else if (operation.kind === "append") {
-                        const target = read(operation.target);
-                        const append = (item: string): void => {
-                            if (operation.container === "arguments") callback.line(`tsc_array_push_value(tsc_value_as_array(${target}), ${item});`);
-                            else callback.line(`if (!tsc_value_create_data_property(${target}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target}))), ${item})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("array literal element definition failed"));`);
-                        };
-                        if (operation.source === null) {
-                            callback.line(`(void)tsc_value_set_prop(${target}, ${this.stringLit("length")}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target})) + 1.0));`);
-                        } else if (!operation.spread) append(read(operation.source));
-                        else {
-                            const iterator = this.freshTemp("_resumable_spread"), item = this.freshTemp("_resumable_spread_value"), frame = this.freshTemp("_resumable_spread_frame");
-                            callback.line(`tsc_sync_iterator_t* const ${iterator} = (tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`);
-                            callback.line(`*${iterator} = tsc_sync_iterator_open(${read(operation.source)});`);
-                            callback.line(`TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame});`);
-                            callback.open(`if (setjmp(${frame}.jb) == 0)`);
-                            callback.line(`tsc_value_t ${item};`);
-                            callback.open(`while (tsc_sync_iterator_step(${iterator}, &${item}))`);
-                            callback.line(`void* volatile ${item}_root = tsc_value_gc_root(${item}); (void)${item}_root;`);
-                            append(item);
-                            callback.close(); callback.line("tsc_try_pop();"); callback.close(); callback.open("else");
-                            const error = this.freshTemp("_resumable_spread_error");
-                            callback.line(`tsc_value_t const ${error} = tsc_current_error_value(); tsc_try_pop();`);
-                            callback.line(`tsc_sync_iterator_close_abrupt(${iterator}, ${error});`);
-                            callback.close();
-                        }
-                        transition(operation.next);
-                    } else if (operation.kind === "define") {
-                        callback.line(`if (!tsc_value_create_data_property(${read(operation.target)}, ${read(operation.key)}, ${read(operation.source)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"));`);
-                        transition(operation.next);
-                    } else if (operation.kind === "define-member") {
-                        const closure = this.emitClosureExpression(operation.member);
-                        const fn = ts.isGetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_getter"
-                            : ts.isSetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_setter"
-                                : "tsc_value_create_data_property";
-                        callback.line(`if (!${fn}(${read(operation.target)}, ${read(operation.key)}, ${this.coerce(closure, T_VALUE, operation.member)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal member definition failed"));`);
-                        transition(operation.next);
-                    } else if (operation.kind === "spread-object") {
-                        callback.line(`tsc_value_copy_data_properties_into(${read(operation.target)}, ${read(operation.source)}, NULL);`);
-                        transition(operation.next);
-                    } else if (operation.kind === "prototype") {
-                        callback.line(`if (tsc_value_is_object(${read(operation.source)}) || tsc_value_eq(${read(operation.source)}, tsc_value_null())) (void)tsc_value_set_prototype_of(${read(operation.target)}, ${read(operation.source)});`);
-                        transition(operation.next);
-                    } else {
-                        const string = this.freshTemp("_resumable_template");
-                        callback.line(`tsc_str_t* volatile ${string} = tsc_value_to_string(${read(operation.source)});`);
-                        store(operation.target, `tsc_value_string(tsc_str_concat(tsc_value_as_string(${read(operation.target)}), tsc_str_concat(${string}, ${this.stringLit(operation.tail)})))`);
-                        transition(operation.next);
-                    }
+                    } else if (!this.emitCanonicalExpressionOperation(callback, operation, {
+                        read, store, transition,
+                        bindingReference: slot => `state->expression_reference_${stateNode.slots[slot]!}`,
+                        nodeForSlot: slot => graph.expressionResults[stateNode.slots[slot]!]!,
+                        setNativeBinding: (identifier, value) => {
+                            const symbol = this.symbolForIdentifier(identifier), field = symbol ? fieldBySymbol.get(symbol) : undefined;
+                            if (!field || this.classNameBindingForIdentifier(identifier)) return false;
+                            emitCfgFieldAssignment(callback, field, { c: value, ty: T_VALUE }, identifier);
+                            return true;
+                        },
+                    })) return false;
                     } finally { this.closureEnvScopes.pop(); }
                 } else if (stateNode.kind === "sync") {
                     if (ts.isVariableStatement(stateNode.statement)) {
@@ -31808,7 +31656,7 @@ class Emitter {
         ], ([base, key]) => {
             const value = { c: `tsc_value_private_get(${base}, ${key})`, ty: T_VALUE };
             const invoked = this.emitDynamicValueCall(call, value, { c: base, ty: T_VALUE }).c;
-            return member.questionDotToken ? `tsc_value_is_nullish(${base}) ? tsc_value_undefined() : (${invoked})` : invoked;
+            return invoked;
         });
     }
 
@@ -32621,6 +32469,7 @@ class Emitter {
     private emitExpr(expr: ts.Expression): EmitResult {
         const override = this.expressionOverride(expr);
         if (override) return override;
+        if (expr.flags & ts.NodeFlags.OptionalChain) return this.emitOrdinaryExpressionGraph(expr);
         if (ts.isNumericLiteral(expr)) {
             return { c: formatNumericLiteral(expr.text), ty: T_NUMBER };
         }
@@ -33371,12 +33220,14 @@ class Emitter {
     }
 
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
+        if (this.unwrapTransparentExpression(tt.tag).flags & ts.NodeFlags.OptionalChain)
+            return this.emitOrdinaryExpressionGraph(tt);
         const tag = this.unwrapTransparentExpression(tt.tag);
         if (ts.isIdentifier(tag) && this.withEnvironmentReferenceName(tag)) return this.emitCapturedBindingCall(tt, tag);
         if (this.isSuperProperty(tag)) return this.emitSuperPropertyCall(tt, tag);
         if (ts.isPropertyAccessExpression(tag)) {
             if (ts.isPrivateIdentifier(tag.name)) return this.emitPrivatePropertyCall(tt, tag);
-            return this.emitDynamicNamedPropertyCall(tt, this.emitExpr(tag.expression), tag.name.text, !!tag.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(tt, this.emitExpr(tag.expression), tag.name.text);
         }
         if (ts.isElementAccessExpression(tag)) {
             return this.emitDynamicComputedPropertyCall(tt, tag);
@@ -33739,22 +33590,11 @@ class Emitter {
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
         const expr = this.unwrapTransparentExpression(del.expression);
+        if (expr.flags & ts.NodeFlags.OptionalChain) return this.emitOrdinaryExpressionGraph(del);
         if (this.isSuperProperty(expr)) return this.emitCapturedPropertyReference(expr, () =>
             `(tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot delete a super property")), tsc_value_undefined())`)!;
-        const finishPropertyDelete = (
-            receiver: ts.Expression,
-            result: EmitResult,
-        ): EmitResult => {
-            const namespace = !!this.moduleNamespacePlanForExpression(receiver);
-            if (!namespace && !this.nodeIsInStrictMode(del)) return result;
-            const deleted = this.freshTemp("_namespace_deleted");
-            return {
-                c: `({ bool ${deleted} = ${result.c}; if (!${deleted}) ` +
-                    `tsc_throw_error(TSC_ERROR_TYPE, ` +
-                    `tsc_str_from_cstr("${namespace ? "Cannot delete module namespace export" : "property deletion failed"}")); ${deleted}; })`,
-                ty: T_BOOLEAN,
-            };
-        };
+        const finishPropertyDelete = (receiver: ts.Expression, result: EmitResult): EmitResult =>
+            this.finishPropertyDelete(receiver, result, del);
         if (ts.isIdentifier(expr)) {
             const reference = this.sourceReferencePlan(expr);
             if (reference) return { c: reference.remove, ty: T_BOOLEAN };
@@ -33800,6 +33640,270 @@ class Emitter {
         }
         const value = this.emitExpr(expr);
         return { c: `({ (void)(${value.c}); true; })`, ty: T_BOOLEAN };
+    }
+
+    private emitCanonicalExpressionOperation(
+        buf: CBuf,
+        operation: ResumableExpressionState,
+        context: {
+            read(slot: number): string;
+            store(slot: number, value: string): void;
+            transition(target: number): void;
+            bindingReference(slot: number): string;
+            nodeForSlot(slot: number): ts.Expression;
+            setNativeBinding?(identifier: ts.Identifier, value: string): boolean;
+        },
+    ): boolean {
+        const { read, store, transition, bindingReference, nodeForSlot } = context;
+        if (operation.kind === "complete" || operation.kind === "jump" || operation.kind === "branch" ||
+            operation.kind === "suspend") return false;
+        if (operation.kind === "binding") {
+            const references = new Map<ts.Identifier, (value: string) => string>();
+            this.emitBindingInitialization(buf, operation.binding, read(operation.source),
+                (target, identifier, value) => target.line(`(void)(${references.get(identifier)!(value)});`),
+                (target, identifier) => references.set(identifier, this.preparePatternAssignmentReference(target,
+                    operation.assignmentTargets.get(identifier) ?? identifier, operation.node)));
+            store(operation.output, read(operation.source));
+            transition(operation.next);
+            return true;
+        }
+        const preparePropertyReference = (reference: Extract<ResumableReference, { kind: "property" }>): void => {
+            // GetValue/PutValue retain the same normalized name in
+            // the Reference, including across await/yield edges.
+            store(reference.key, this.preparePropertyReferenceName(reference.node, read(reference.base), read(reference.key)));
+        };
+        const getReference = (reference: ResumableReference): string => {
+            if (reference.kind !== "property") {
+                if (this.sourceReferencePlan(reference.identifier))
+                    return `tsc_environment_reference_get_captured(&${bindingReference(reference.slot)})`;
+                return this.coerce(this.emitExpr(reference.identifier), T_VALUE, reference.identifier);
+            }
+            preparePropertyReference(reference);
+            return this.readPropertyReference(reference.node, read(reference.base), read(reference.key),
+                reference.receiver === undefined ? undefined : read(reference.receiver));
+        };
+        const setReference = (reference: ResumableReference, source: string, sourceNode: ts.Expression): void => {
+            if (reference.kind === "property") {
+                preparePropertyReference(reference);
+                buf.line(this.writePropertyReference(reference.node, read(reference.base), read(reference.key), source,
+                    reference.receiver === undefined ? undefined : read(reference.receiver)) + ";");
+                return;
+            }
+            const captured = this.sourceReferencePlan(reference.identifier);
+            if (captured) {
+                buf.line(`(void)(${captured.set(`&${bindingReference(reference.slot)}`, source)});`);
+                return;
+            }
+            if (context.setNativeBinding?.(reference.identifier, source)) return;
+            const assignment = ts.factory.createBinaryExpression(reference.identifier, ts.SyntaxKind.EqualsToken, sourceNode);
+            Object.assign(assignment, { parent: reference.identifier.parent });
+            ts.setTextRange(assignment, reference.identifier);
+            const overrides = new Map([[sourceNode, { c: source, ty: T_VALUE }]]);
+            this.conditionValueScopes.push(overrides);
+            try { buf.line(`(void)(${this.emitExpr(assignment).c});`); }
+            finally { this.conditionValueScopes.pop(); }
+        };
+        if (operation.kind === "value") {
+            const op = operation.operation;
+            let evaluated: string;
+            if (op.kind === "binding-reference") {
+                const captured = this.sourceReferencePlan(op.identifier);
+                if (captured) buf.line(`${bindingReference(operation.output)} = ${captured.capture};`);
+                evaluated = "tsc_value_undefined()";
+            }
+            else if(op.kind==='class-start')evaluated=this.emitClassDefinitionBegin(op.definition).c;
+            else if(op.kind==='class-heritage'){
+                buf.line(`tsc_value_class_set_heritage(${read(op.owner)}, ${read(op.superclass)});`);
+                evaluated=read(op.owner);
+            }else if(op.kind==='class-element'){
+                for(const piece of this.emitClassElementDefinition(op.member,read(op.owner),
+                    `tsc_value_get_prop(${read(op.owner)}, ${this.stringLit("prototype")})`,false,
+                    op.key===null?undefined:read(op.key)))buf.line(piece+';');
+                evaluated=read(op.owner);
+            }else if(op.kind==='class-complete'){
+                const inner=this.createClassNameEnvironment(op.definition,read(op.owner));
+                for(const piece of this.initializeClassNameEnvironment(inner,read(op.owner)))buf.line(piece+';');
+                buf.line(`tsc_value_class_initialize_elements(${read(op.owner)}, ${read(op.owner)}, true);`);
+                evaluated=read(op.owner);
+            }else if (op.kind === "copy") evaluated = read(op.source);
+            else if (op.kind === "undefined") evaluated = "tsc_value_undefined()";
+            else if (op.kind === "binding-receiver") evaluated = this.sourceReferencePlan(op.reference.identifier)
+                ? `tsc_environment_reference_receiver(&${bindingReference(op.reference.slot)})`
+                : "tsc_value_undefined()";
+            else if (op.kind === "get") evaluated = getReference(op.reference);
+            else if (op.kind === "set") {
+                setReference(op.reference, read(op.source), nodeForSlot(op.source));
+                evaluated = read(op.source);
+            } else if (op.kind === "property-key") evaluated = `tsc_value_to_property_key(${read(op.source)})`;
+            else if (op.kind === "super-constructor") {
+                const environment = this.constructorThisEnvironment(op.node);
+                if (!environment) unsupported(op.node, "super call requires a constructor environment");
+                evaluated = `tsc_environment_super_constructor(${environment.c})`;
+            }
+            else if (op.kind === "super-this") evaluated = this.coerce(this.superThisValue(op.node), T_VALUE, op.node);
+            else if (op.kind === "super-base") evaluated = `tsc_value_get_prototype_of(${this.superHomeObject(op.node).c})`;
+            else if (op.kind === "template-object") evaluated = this.emitTemplateObject(op.template).c;
+            else if (op.kind === "arguments" || op.kind === "array") {
+                evaluated = "tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1))";
+            } else if (op.kind === "object") evaluated = "tsc_value_object(tsc_object_new())";
+            else if (op.kind === "compound") {
+                const fn = this.dynamicCompoundAssignmentOperation(op.operator);
+                if (!fn) return false;
+                evaluated = `${fn}(${read(op.left)}, ${read(op.right)})`;
+            } else if (op.kind === "delete") {
+                if (op.reference.kind === "binding") {
+                    const captured = this.sourceReferencePlan(op.reference.identifier);
+                    evaluated = `tsc_value_bool(${captured
+                        ? `tsc_environment_reference_delete_captured(&${bindingReference(op.reference.slot)})`
+                        : this.symbolForIdentifier(op.reference.identifier) ? "false" : "true"})`;
+                    store(operation.output, evaluated);
+                    transition(operation.next);
+                    return true;
+                }
+                if (op.reference.receiver !== undefined)
+                    buf.line(`tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot delete a super property"));`);
+                preparePropertyReference(op.reference);
+                const result = this.freshTemp("_resumable_delete");
+                buf.line(`bool const ${result} = tsc_value_delete_computed_prop(${read(op.reference.base)}, ${read(op.reference.key)});`);
+                if (this.nodeIsInStrictMode(op.reference.node)) buf.line(`if (!${result}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("property deletion failed"));`);
+                evaluated = `tsc_value_bool(${result})`;
+            } else if (op.kind === "update") {
+                const old = this.freshTemp("_resumable_numeric"), updated = this.freshTemp("_resumable_updated");
+                buf.line(`tsc_value_t const ${old} = tsc_value_to_numeric(${getReference(op.reference)});`);
+                buf.line(`void* volatile ${old}_root = tsc_value_gc_root(${old}); (void)${old}_root;`);
+                buf.line(`tsc_value_t const ${updated} = ${op.increment ? "tsc_value_inc" : "tsc_value_dec"}(${old});`);
+                buf.line(`void* volatile ${updated}_root = tsc_value_gc_root(${updated}); (void)${updated}_root;`);
+                setReference(op.reference, updated, nodeForSlot(operation.output));
+                evaluated = op.prefix ? updated : old;
+            } else if (op.kind === "call") {
+                evaluated = this.emitCallApplication(op.node,read(op.callee),
+                    op.receiver === null ? "tsc_value_undefined()" : read(op.receiver),read(op.arguments));
+            } else {
+                const overrides = new Map(op.inputs.map(input => [input.expression, { c: read(input.slot), ty: T_VALUE }]));
+                this.conditionValueScopes.push(overrides);
+                try { evaluated = this.coerce(this.emitExpr(op.expression), T_VALUE, op.expression); }
+                finally { this.conditionValueScopes.pop(); }
+            }
+            store(operation.output, evaluated);
+            transition(operation.next);
+        } else if (operation.kind === "append") {
+            const target = read(operation.target);
+            const append = (item: string): void => {
+                if (operation.container === "arguments") buf.line(`tsc_array_push_value(tsc_value_as_array(${target}), ${item});`);
+                else buf.line(`if (!tsc_value_create_data_property(${target}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target}))), ${item})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("array literal element definition failed"));`);
+            };
+            if (operation.source === null) {
+                buf.line(`(void)tsc_value_set_prop(${target}, ${this.stringLit("length")}, tsc_value_num(tsc_array_length(tsc_value_as_array(${target})) + 1.0));`);
+            } else if (!operation.spread) append(read(operation.source));
+            else {
+                const iterator = this.freshTemp("_resumable_spread"), item = this.freshTemp("_resumable_spread_value"), frame = this.freshTemp("_resumable_spread_frame");
+                buf.line(`tsc_sync_iterator_t* const ${iterator} = (tsc_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_sync_iterator_t));`);
+                buf.line(`*${iterator} = tsc_sync_iterator_open(${read(operation.source)});`);
+                buf.line(`TSC_TRY_FRAME(${frame}); tsc_try_push(&${frame});`);
+                buf.open(`if (setjmp(${frame}.jb) == 0)`);
+                buf.line(`tsc_value_t ${item};`);
+                buf.open(`while (tsc_sync_iterator_step(${iterator}, &${item}))`);
+                buf.line(`void* volatile ${item}_root = tsc_value_gc_root(${item}); (void)${item}_root;`);
+                append(item);
+                buf.close(); buf.line("tsc_try_pop();"); buf.close(); buf.open("else");
+                const error = this.freshTemp("_resumable_spread_error");
+                buf.line(`tsc_value_t const ${error} = tsc_current_error_value(); tsc_try_pop();`);
+                buf.line(`tsc_sync_iterator_close_abrupt(${iterator}, ${error});`);
+                buf.close();
+            }
+            transition(operation.next);
+        } else if (operation.kind === "define") {
+            buf.line(`if (!tsc_value_create_data_property(${read(operation.target)}, ${read(operation.key)}, ${read(operation.source)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"));`);
+            transition(operation.next);
+        } else if (operation.kind === "define-member") {
+            const closure = this.emitClosureExpression(operation.member);
+            const fn = ts.isGetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_getter"
+                : ts.isSetAccessorDeclaration(operation.member) ? "tsc_value_object_define_computed_setter"
+                    : "tsc_value_create_data_property";
+            buf.line(`if (!${fn}(${read(operation.target)}, ${read(operation.key)}, ${this.coerce(closure, T_VALUE, operation.member)})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal member definition failed"));`);
+            transition(operation.next);
+        } else if (operation.kind === "spread-object") {
+            buf.line(`tsc_value_copy_data_properties_into(${read(operation.target)}, ${read(operation.source)}, NULL);`);
+            transition(operation.next);
+        } else if (operation.kind === "prototype") {
+            buf.line(`if (tsc_value_is_object(${read(operation.source)}) || tsc_value_eq(${read(operation.source)}, tsc_value_null())) (void)tsc_value_set_prototype_of(${read(operation.target)}, ${read(operation.source)});`);
+            transition(operation.next);
+        } else {
+            const string = this.freshTemp("_resumable_template");
+            buf.line(`tsc_str_t* volatile ${string} = tsc_value_to_string(${read(operation.source)});`);
+            store(operation.target, `tsc_value_string(tsc_str_concat(tsc_value_as_string(${read(operation.target)}), tsc_str_concat(${string}, ${this.stringLit(operation.tail)})))`);
+            transition(operation.next);
+        }
+        return true;
+    }
+
+    private emitOrdinaryExpressionGraph(expression: ts.Expression): EmitResult {
+        const plan = planResumableExpression(expression);
+        if (plan.kind === "unsupported") unsupported(plan.failure.node, plan.failure.message);
+        const graph = plan.graph;
+        const values = this.freshTemp("_expression_values"), roots = this.freshTemp("_expression_roots");
+        const references = this.freshTemp("_expression_references"), prefix = this.freshTemp("_expression_operation");
+        const end = this.freshTemp("_expression_end"), buf = new CBuf();
+        buf.line(`volatile tsc_value_t ${values}[${graph.values.length}];`);
+        buf.line(`void* volatile ${roots}[${graph.values.length}] = {0};`);
+        buf.line(`tsc_reference_t ${references}[${graph.values.length}] = {0};`);
+        const initialized = this.freshTemp("_expression_initialized");
+        buf.line(`for (size_t ${initialized} = 0; ${initialized} < ${graph.values.length}; ++${initialized}) ${values}[${initialized}] = tsc_value_undefined();`);
+        const read = (slot: number): string => `${values}[${slot}]`;
+        const store = (slot: number, value: string): void => {
+            buf.line(`${read(slot)} = ${value};`);
+            buf.line(`${roots}[${slot}] = tsc_value_gc_root(${read(slot)});`);
+        };
+        const transition = (target: number): void => { buf.line(`goto ${prefix}_${target};`); };
+        const context = { read, store, transition,
+            bindingReference: (slot: number) => `${references}[${slot}]`,
+            nodeForSlot: (slot: number) => graph.values[slot]!,
+        };
+        transition(graph.entry);
+        for (const operation of graph.states) {
+            buf.line(`${prefix}_${operation.id}:;`);
+            buf.open("");
+            if (operation.kind === "complete") buf.line(`goto ${end};`);
+            else if (operation.kind === "jump") transition(operation.next);
+            else if (operation.kind === "branch") {
+                const test = operation.mode === "nullish" ? `tsc_value_is_nullish(${read(operation.source)})`
+                    : `tsc_value_is_truthy(${read(operation.source)})`;
+                buf.line(`if (${test}) goto ${prefix}_${operation.yes};`);
+                transition(operation.no);
+            } else {
+                const scopeNode: ts.Node = operation.kind === "value"
+                    ? "definition" in operation.operation
+                        ? operation.operation.kind === "class-start" ? operation.operation.definition.parent
+                            : operation.operation.kind === "class-element" ? operation.operation.member : operation.operation.definition
+                        : graph.values[operation.output]!
+                    : "node" in operation ? operation.node
+                        : "target" in operation ? graph.values[operation.target]!
+                        : expression;
+                const ancestors = new Set<ts.Node>();
+                for (let node: ts.Node | undefined = scopeNode; node; node = node.parent) ancestors.add(node);
+                const classEnvironment = new Map<ts.Symbol, ClosureEnvBinding>();
+                for (const definition of graph.classDefinitions) if (ancestors.has(definition.definition))
+                    for (const [symbol, binding] of this.createClassNameEnvironment(definition.definition, read(definition.owner)))
+                        classEnvironment.set(symbol, binding);
+                this.closureEnvScopes.push(classEnvironment);
+                try {
+                    if (!this.emitCanonicalExpressionOperation(buf, operation, context))
+                        unsupported(expression, "resumable expression requires a canonical operation");
+                } finally { this.closureEnvScopes.pop(); }
+            }
+            buf.close();
+        }
+        buf.line(`${end}:;`);
+        buf.line(`(void)${roots}; (void)${references};`);
+        return { c: `({ ${buf.toString()} ${read(graph.result)}; })`, ty: T_VALUE };
+    }
+
+    private finishPropertyDelete(receiver: ts.Expression, result: EmitResult, node: ts.Node): EmitResult {
+        const namespace = !!this.moduleNamespacePlanForExpression(receiver);
+        if (!namespace && !this.nodeIsInStrictMode(node)) return result;
+        const deleted = this.freshTemp("_property_deleted");
+        return { c: `({ bool ${deleted} = ${result.c}; if (!${deleted}) ` +
+            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("${namespace ? "Cannot delete module namespace export" : "property deletion failed"}")); ${deleted}; })`, ty: T_BOOLEAN };
     }
 
     private emitPostfixUnary(pu: ts.PostfixUnaryExpression): EmitResult {
@@ -35202,6 +35306,8 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
+        if ((call.flags | this.unwrapTransparentExpression(call.expression).flags) & ts.NodeFlags.OptionalChain)
+            return this.emitOrdinaryExpressionGraph(call);
         const withTarget = this.unwrapTransparentExpression(call.expression);
         if (ts.isIdentifier(withTarget) && this.withEnvironmentReferenceName(withTarget)) {
             return this.emitCapturedBindingCall(call, withTarget);
@@ -35933,9 +36039,7 @@ class Emitter {
         const list = this.freshTemp("_dyn_call_args");
         const invoke = `({ tsc_array_t* volatile ${list} = ${argumentsList.c}; ` +
             `${this.emitCallApplication(call,fn,receiver,`tsc_value_array(${list})`)}; })`;
-        return ts.isCallExpression(call) && call.questionDotToken
-            ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
-            : invoke;
+        return invoke;
     }
 
     private emitDynamicValueCall(
@@ -37369,21 +37473,21 @@ class Emitter {
         if(ts.isIdentifier(recvExpr)&&this.isCryptoModuleIdentifier(recvExpr)){
             if(cryptoDigestExports.has(memberName)){
                 const namespaceImport=this.isNamespaceImportFrom(recvExpr,["crypto","node:crypto"]);
-                return this.emitDynamicNamedPropertyCall(call,{c:"tsc_crypto_digest_module_value("+namespaceImport+")",ty:T_VALUE},memberName,!!pa.questionDotToken);
+                return this.emitDynamicNamedPropertyCall(call,{c:"tsc_crypto_digest_module_value("+namespaceImport+")",ty:T_VALUE},memberName);
             }
             return this.emitCryptoCall(call,memberName);
         }
         if (this.importedHostModuleOwner(recvExpr))
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
         if (ts.isIdentifier(recvExpr) && this.isRuntimeGlobalReference(recvExpr))
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
 
         if (ORDINARY_OBJECT_PROTOTYPE_METHODS.has(memberName) ||
             (ts.isIdentifier(recvExpr) && runtimeGlobalBindings.has(recvExpr.text) &&
                 this.isUnshadowedGlobalIdentifier(recvExpr, recvExpr.text))) {
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
         }
 
         // Must run before the generic namespace-receiver path: `dispatch` is a
@@ -37744,7 +37848,7 @@ class Emitter {
         // Static class values retain the actual alias/TDZ binding and mutable
         // method surface. Native ABI selection belongs to their value adapters.
         if (this.staticClassReceiver(recvExpr)) {
-            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
         }
         if (
             ts.isIdentifier(recvExpr) &&
@@ -38141,7 +38245,7 @@ class Emitter {
         if (recv.ty.kind === "array")
             return this.emitDynamicNamedPropertyCall(call,
                 { c: this.boxObjectIdentity(recv.c, recv.ty, recvExpr), ty: T_VALUE },
-                memberName, !!pa.questionDotToken);
+                memberName);
         if (recv.ty.kind === "value" && memberName === "stat" && this.isFsFileHandleExpression(recvExpr)) {
             const dynamic = this.emitDynamicMethod(call, recv, memberName);
             return { c: `tsc_value_as_promise(${dynamic.c})`, ty: promiseType(T_FS_STATS) };
@@ -38162,9 +38266,9 @@ class Emitter {
         if (recv.ty.kind === "string")
             return this.emitStringMethod(call, recv, memberName);
         if (recv.ty.kind === "bigint")
-            return this.emitDynamicNamedPropertyCall(call, recv, memberName, !!pa.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName);
         if (recv.ty.kind === "symbol")
-            return this.emitDynamicNamedPropertyCall(call, recv, memberName, ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName);
         if (recv.ty.kind === "map")
             return this.emitMapMethod(call, recv, memberName);
         if (recv.ty.kind === "set")
@@ -38178,8 +38282,7 @@ class Emitter {
         if (recv.ty.kind === "event")
             return this.emitEventMethod(call, recv, memberName);
         if (this.ordinaryNativeOwners.has(recv.ty.kind))
-            return this.emitDynamicNamedPropertyCall(call, recv, memberName,
-                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, recv, memberName);
 
         if (recv.ty.kind === "fsstats")
             return this.emitFsStatsMethod(call, recv, memberName);
@@ -38390,10 +38493,8 @@ class Emitter {
             const callee = this.emitSequencedExpr(T_VALUE, [
                 { value: this.emitExpr(reference.argumentExpression), target: T_VALUE, node: reference.argumentExpression },
             ], ([key]) => `tsc_value_get_computed_prop(${receiver}, ${key})`);
-            if (reference.questionDotToken) callee.c = `tsc_value_is_nullish(${receiver}) ? tsc_value_undefined() : ${callee.c}`;
             const invocation = this.emitDynamicValueCall(call, callee, { c: receiver!, ty: T_VALUE }).c;
-            return reference.questionDotToken && ts.isCallExpression(call)
-                ? `tsc_value_is_nullish(${receiver}) ? tsc_value_undefined() : ${invocation}` : invocation;
+            return invocation;
         });
     }
 
@@ -38401,7 +38502,6 @@ class Emitter {
         call: ts.CallExpression | ts.TaggedTemplateExpression,
         recv: EmitResult,
         method: string,
-        optionalReceiver: boolean,
     ): EmitResult {
         const target = this.freshTemp("_dyn_call_receiver");
         const targetRoot = this.freshTemp("_dyn_call_receiver_gc_root");
@@ -38410,18 +38510,15 @@ class Emitter {
         const cache = this.freshTemp("_prop_cache");
         const prefix = [
             `static tsc_prop_cache_t ${cache}`,
-            `tsc_value_t ${fn} = ${optionalReceiver ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`,
+            `tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`,
             `void* volatile ${fnRoot} = tsc_value_gc_root(${fn})`,
             `(void)${fnRoot}`,
         ];
         const invocation = `({ ${prefix.join("; ")}; ` +
             `${this.emitOrdinaryCallApplication(call, fn, target)}; })`;
-        const body = optionalReceiver && ts.isCallExpression(call)
-            ? `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invocation}`
-            : invocation;
         return {
             c: `({ tsc_value_t ${target} = ${this.coerce(recv, T_VALUE, ts.isTaggedTemplateExpression(call) ? call.tag : call.expression)}; ` +
-                `void* volatile ${targetRoot} = tsc_value_gc_root(${target}); (void)${targetRoot}; ${body}; })`,
+                `void* volatile ${targetRoot} = tsc_value_gc_root(${target}); (void)${targetRoot}; ${invocation}; })`,
             ty: T_VALUE,
         };
     }
@@ -38431,8 +38528,7 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
-        return this.emitDynamicNamedPropertyCall(call, recv, method,
-            ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+        return this.emitDynamicNamedPropertyCall(call, recv, method);
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
@@ -41668,8 +41764,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
-            return this.emitDynamicNamedPropertyCall(call, recv, method,
-                ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+            return this.emitDynamicNamedPropertyCall(call, recv, method);
         }
         switch (method) {
 
@@ -41689,8 +41784,7 @@ class Emitter {
             case "toPrecision":
             case "toLocaleString":
             case "valueOf":
-                return this.emitDynamicNamedPropertyCall(call, recv, method,
-                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+                return this.emitDynamicNamedPropertyCall(call, recv, method);
         }
         unsupported(call, `Number method .${method}`);
     }
@@ -41746,8 +41840,7 @@ class Emitter {
         const args = call.arguments;
         switch (method) {
             case "toLocaleString":
-                return this.emitDynamicNamedPropertyCall(call, recv, method,
-                    ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
+                return this.emitDynamicNamedPropertyCall(call, recv, method);
             case "toString":
                 return this.emitSequencedExpr(
                     T_STRING,
@@ -41768,7 +41861,7 @@ class Emitter {
     }
 
     private emitClassMethodCall(call: ts.CallExpression, receiver: EmitResult, name: string): EmitResult {
-        return this.emitDynamicNamedPropertyCall(call, receiver, name, false);
+        return this.emitDynamicNamedPropertyCall(call, receiver, name);
     }
 
     private emitFsCall(call: ts.CallExpression, name: string): EmitResult {
@@ -45853,6 +45946,8 @@ class Emitter {
     }
 
     private emitNew(n: ts.NewExpression): EmitResult {
+        if (this.unwrapTransparentExpression(n.expression).flags & ts.NodeFlags.OptionalChain)
+            return this.emitOrdinaryExpressionGraph(n);
         const target = this.unwrapTransparentExpression(n.expression);
         if (ts.isIdentifier(target) && this.withEnvironmentReferenceName(target)) return this.emitDynamicValueConstruct(n, this.emitExpr(target));
         if (
@@ -46104,14 +46199,17 @@ class Emitter {
     }
 
     private emitPropertyAccess(pa: ts.PropertyAccessExpression, precomputedReceiver?: EmitResult): EmitResult {
+        if (pa.flags & ts.NodeFlags.OptionalChain) {
+            this.conditionValueScopes.push(new Map(precomputedReceiver ? [[pa.expression, precomputedReceiver]] : []));
+            try { return this.emitOrdinaryExpressionGraph(pa); }
+            finally { this.conditionValueScopes.pop(); }
+        }
         if (ts.isPrivateIdentifier(pa.name)) {
             const receiver = precomputedReceiver ?? this.emitExpr(pa.expression), name = this.emitPrivateNameValue(pa.name);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: receiver, target: T_VALUE, node: pa.expression },
                 { value: name, target: T_VALUE, node: pa.name },
-            ], ([base, key]) => pa.questionDotToken
-                ? `tsc_value_is_nullish(${base}) ? tsc_value_undefined() : tsc_value_private_get(${base}, ${key})`
-                : `tsc_value_private_get(${base}, ${key})`);
+            ], ([base, key]) => `tsc_value_private_get(${base}, ${key})`);
         }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
         const importedHostModuleOwner = this.importedHostModuleOwner(pa);
@@ -46126,7 +46224,7 @@ class Emitter {
         if (this.expressionHasCanonicalSourceValue(pa.expression) || ts.isIdentifier(pa.expression) && this.isRuntimeGlobalReference(pa.expression)) {
             const receiver = precomputedReceiver ?? this.emitExpr(pa.expression);
             return this.emitSequencedExpr(T_VALUE, [{value: receiver, target: T_VALUE, node: pa.expression}],
-                ([value]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${value}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
+                ([value]) => `tsc_value_get_prop(${value}, ${this.stringLit(pa.name.text)})`);
         }
         const fsConst = this.fsNumericConstantValue(pa.name.text);
         if (
@@ -46416,7 +46514,6 @@ class Emitter {
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
             : rawRecv;
-        const isOpt = !!pa.questionDotToken;
         if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
             const cache = this.freshTemp("_primitive_prop_cache");
             return {
@@ -46430,15 +46527,6 @@ class Emitter {
         }
         if (recv.ty.kind === "string" && ORDINARY_STRING_PROTOTYPE_METHODS.has(pa.name.text)) {
             const key = this.stringLit(pa.name.text);
-            if (isOpt) {
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: recv }],
-                    ([value]) => `${value} != NULL ? ` +
-                        `tsc_value_get_prop(tsc_value_string(${value}), ${key}) : ` +
-                        "tsc_value_undefined()",
-                );
-            }
             return {
                 c: `tsc_value_get_prop(tsc_value_string(${recv.c}), ${key})`,
                 ty: T_VALUE,
@@ -46476,7 +46564,7 @@ class Emitter {
         }
         if (this.ordinaryNativeOwners.has(recv.ty.kind)) {
             return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
-                ([owner]) => `${pa.questionDotToken ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
+                ([owner]) => `tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
         if (recv.ty.kind === "fsstats") {
             const numericStatsProps: Record<string, string> = {
@@ -46513,26 +46601,11 @@ class Emitter {
         if (recv.ty.kind === "value") {
             if (this.moduleNamespacePlanForExpression(pa.expression)) {
                 const key = this.stringLit(pa.name.text);
-                if (isOpt) {
-                    return this.emitSequencedExpr(
-                        T_VALUE,
-                        [{ value: recv }],
-                        ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_get_prop(${obj}, ${key})`,
-                    );
-                }
                 const cache = this.freshTemp("_module_namespace_prop_cache");
                 return {
                     c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, ${key}, &${cache}); })`,
                     ty: T_VALUE,
                 };
-            }
-            if (isOpt) {
-                const key = this.stringLit(pa.name.text);
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    [{ value: recv }],
-                    ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_get_prop(${obj}, ${key})`,
-                );
             }
             if (recv.ty.resolverElem) {
                 const key = pa.name.text;
@@ -46567,17 +46640,9 @@ class Emitter {
         if (recv.ty.kind === "class") {
             if (this.findClassDecl(recv.ty.className!)) {
                 return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
-                    ([owner]) => `${isOpt ? `tsc_value_is_nullish(${owner}) ? tsc_value_undefined() : ` : ""}tsc_value_get_prop(${owner}, ${this.stringLit(pa.name.text)})`);
+                    ([owner]) => `tsc_value_get_prop(${owner}, ${this.stringLit(pa.name.text)})`);
             }
             const type = this.propertyDeclaredType(pa) ?? mapType(pa, this.checker);
-            if (isOpt) {
-                const object = this.freshTemp("_optional_native_owner");
-                const value = this.coerce({ c: `${object}->${mangleIdent(pa.name.text)}`, ty: type }, T_VALUE, pa);
-                return {
-                    c: `({ ${recv.ty.c} ${object} = ${recv.c}; ${object} != NULL ? ${value} : tsc_value_undefined(); })`,
-                    ty: T_VALUE,
-                };
-            }
             return { c: `${recv.c}->${mangleIdent(pa.name.text)}`, ty: type };
         }
         unsupported(pa, `property .${pa.name.text} on ${recv.ty.c}`);
@@ -46641,6 +46706,14 @@ class Emitter {
         precomputedReceiver?: EmitResult,
         precomputedArgument?: EmitResult,
     ): EmitResult {
+        if (ea.flags & ts.NodeFlags.OptionalChain) {
+            const overrides = new Map<ts.Expression, EmitResult>();
+            if (precomputedReceiver) overrides.set(ea.expression, precomputedReceiver);
+            if (precomputedArgument) overrides.set(ea.argumentExpression, precomputedArgument);
+            this.conditionValueScopes.push(overrides);
+            try { return this.emitOrdinaryExpressionGraph(ea); }
+            finally { this.conditionValueScopes.pop(); }
+        }
         if (this.isSuperProperty(ea)) return this.emitSuperPropertyGet(ea);
         if (this.isProcessEnvObject(ea.expression)) {
             const key = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
@@ -46670,14 +46743,12 @@ class Emitter {
                 { value: recv, target: T_VALUE, node: ea.expression },
             ], ([object]) => {
                 // The saved receiver remains rooted while a computed key is
-                // evaluated. Optional access skips that entire evaluation.
+                // evaluated through the ordinary property path.
                 const access = this.emitSequencedCall("tsc_value_get_computed_prop", T_VALUE, [
                     { value: { c: object!, ty: T_VALUE }, target: T_VALUE, node: ea.expression },
                     { value: key, target: T_VALUE, node: ea.argumentExpression },
                 ]).c;
-                return ea.questionDotToken
-                    ? `tsc_value_is_nullish(${object}) ? tsc_value_undefined() : ${access}`
-                    : access;
+                return access;
             });
         }
         unsupported(ea, `index access on ${recv.ty.c}`);

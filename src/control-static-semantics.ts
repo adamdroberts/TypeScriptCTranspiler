@@ -94,6 +94,10 @@ export function earlyControlFlowStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, context } = worklist.pop()!;
+        if (ts.isTaggedTemplateExpression(node) && ((node.flags | node.tag.flags) & ts.NodeFlags.OptionalChain))
+            return { node, message: "optional chain is not permitted as a template tag" };
+        if (ts.isNewExpression(node) && (node.expression.flags & ts.NodeFlags.OptionalChain))
+            return { node, message: "optional chain is not permitted as a constructor target" };
         if (ts.isDeleteExpression(node) && isStrictCodeContext(node)) {
             let target: ts.Expression = node.expression;
             while (ts.isParenthesizedExpression(target)) target = target.expression;

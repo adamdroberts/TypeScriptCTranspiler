@@ -68,7 +68,9 @@ function* execute(plan: ResumableExpressionGraph, environment: Record<string, an
         } else if (state.kind === "value") {
             const op = state.operation;
             let result: any;
-            if (op.kind === "copy") result = values[op.source];
+            if (op.kind === "binding-reference") result = op.identifier.text;
+            else if (op.kind === "binding-receiver") result = undefined;
+            else if (op.kind === "copy") result = values[op.source];
             else if (op.kind === "undefined") result = undefined;
             else if (op.kind === "template-object") result = engineTemplateObject(op.template);
             else if (op.kind === "property-key") result = key(values[op.source]);
