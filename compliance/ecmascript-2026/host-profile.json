@@ -58,6 +58,7 @@
     "src/dynamic-require.ts",
     "src/ecmascript-source.ts",
     "src/function-static-semantics.ts",
+    "src/tail-position.ts",
     "src/function-constructor-source.ts",
     "src/eval-source.ts",
     "src/emit/async-cfg.ts",

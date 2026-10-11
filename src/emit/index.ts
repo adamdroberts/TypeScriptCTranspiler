@@ -17,6 +17,7 @@ import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget } from "./binding-tree";
+import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
     CType,
@@ -301,12 +302,6 @@ interface EventEmitterOnOptionSpecs {
     closeIndex: number | null;
     highWaterMarkIndex: number | null;
     lowWaterMarkIndex: number | null;
-}
-
-interface TailFunctionContext {
-    name: string;
-    label: string;
-    params: { name: string; type: CType }[];
 }
 
 interface AsyncFunctionContext {
@@ -628,7 +623,6 @@ class Emitter {
     private sourceRecordCompletionValues = new Map<string, string>();
     private scriptCompletionTargets: Array<{ value: string; gcRoot: string }> = [];
     private returnStack: CType[] = [];
-    private tailFunctionStack: TailFunctionContext[] = [];
     private activeBreakTargets: Array<string | null> = [];
     private activeContinueTargets: Array<string | null> = [];
     private activeLabeledBreakTargets: Array<Map<string, string>> = [];
@@ -26326,18 +26320,6 @@ class Emitter {
         if (thisType) {
             this.functionThisStack.push({ c: "__tsc_this", ty: thisType });
         }
-        const tailCtx = fd.name && capturedCells.size === 0 && !thisType && !this.sourceEnvironmentEnabled(fd.getSourceFile()) &&
-            (!sourceFormalPlans || this.sourceParameterListIsSimple(fd))
-            ? {
-                name: this.declaredName(fd.name),
-                label: this.freshTemp("_tail"),
-                params: this.collectParamInfos(fd.parameters),
-            }
-            : null;
-        if (tailCtx) {
-            this.tailFunctionStack.push(tailCtx);
-            this.defs.line(`${tailCtx.label}: __attribute__((unused));`);
-        }
         if (sourceFormalPlans) {
             this.emitSourceFormalParameterInitialization(
                 this.defs,
@@ -26357,7 +26339,6 @@ class Emitter {
                 this.defs.line(`return ${this.zeroValue(returnType)};`);
             }
         } finally {
-            if (tailCtx) this.tailFunctionStack.pop();
             if (thisType) this.functionThisStack.pop();
             this.cellScopes.pop();
             if (sourceFormalPlans) this.formalParameterScopes.pop();
@@ -31458,13 +31439,10 @@ class Emitter {
             this.emitSyncCompletionExit(buf, r);
             if (completionRoot) buf.line(`(void)${completionRoot};`);
             const scopes = this.syncCompletionScopes;
-            const tails = this.tailFunctionStack;
             this.syncCompletionScopes = [];
-            this.tailFunctionStack = [];
             this.conditionValueScopes.push(overrides);
             try { this.emitReturn(buf, r); } finally {
                 this.conditionValueScopes.pop();
-                this.tailFunctionStack = tails;
                 this.syncCompletionScopes = scopes;
             }
             return;
@@ -31524,46 +31502,9 @@ class Emitter {
                 : `return ${this.zeroValue(ret)};`);
             return;
         }
-        if (this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitResultExpression(r.expression, ret);
         const coerced = this.coerce(expr, ret, r.expression);
         buf.line(`return ${coerced};`);
-    }
-
-    private emitTailCallReturn(
-        buf: CBuf,
-        expr: ts.Expression,
-    ): boolean {
-        const ctx = this.tailFunctionStack[this.tailFunctionStack.length - 1];
-        if (!ctx || !ts.isCallExpression(expr) || !ts.isIdentifier(expr.expression)) {
-            return false;
-        }
-        if (!this.isDirectCallableIdentifier(expr.expression)) return false;
-        if (this.identifierName(expr.expression) !== ctx.name) return false;
-        if (expr.arguments.length !== ctx.params.length) return false;
-
-        const temps: { name: string; type: CType; init: string }[] = [];
-        for (let i = 0; i < expr.arguments.length; i++) {
-            const arg = expr.arguments[i]!;
-            const param = ctx.params[i]!;
-            const r = this.emitExpr(arg);
-            temps.push({
-                name: this.freshTemp("_tailarg"),
-                type: param.type,
-                init: this.coerce(r, param.type, arg),
-            });
-        }
-
-        buf.open("");
-        for (const temp of temps) {
-            buf.line(`${temp.type.c} ${temp.name} = ${temp.init};`);
-        }
-        for (let i = 0; i < temps.length; i++) {
-            buf.line(`${ctx.params[i]!.name} = ${temps[i]!.name};`);
-        }
-        buf.line(`goto ${ctx.label};`);
-        buf.close();
-        return true;
     }
 
     private directSwitchLexicalDeclarations(sw: ts.SwitchStatement): ScopeLexicalDeclaration[] {
@@ -32469,7 +32410,7 @@ class Emitter {
     private emitExpr(expr: ts.Expression): EmitResult {
         const override = this.expressionOverride(expr);
         if (override) return override;
-        if (expr.flags & ts.NodeFlags.OptionalChain) return this.emitOrdinaryExpressionGraph(expr);
+        if ((expr.flags & ts.NodeFlags.OptionalChain) || isTailPositionCall(expr)) return this.emitOrdinaryExpressionGraph(expr);
         if (ts.isNumericLiteral(expr)) {
             return { c: formatNumericLiteral(expr.text), ty: T_NUMBER };
         }
@@ -36079,7 +36020,7 @@ class Emitter {
         }
         if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(node))
             return this.emitDirectEvalApplication(node,callee,receiver,argumentsValue);
-        return `tsc_value_apply_function(${callee}, ${receiver}, ${argumentsValue})`;
+        return `${isTailPositionCall(node) ? "tsc_value_tail_call" : "tsc_value_apply_function"}(${callee}, ${receiver}, ${argumentsValue})`;
     }
 
     private emitDirectEvalApplication(call: ts.CallExpression,callee: string,receiver: string,argumentsValue: string): string {
@@ -36831,13 +36772,11 @@ class Emitter {
         this.functionActivationBindings = [];
         const outerContinuationReturnTargets = this.asyncAwaitContinuationReturnTargets;
         const outerContinuationAdapterDepth = this.asyncAwaitContinuationAdapterDepth;
-        const outerTailFunctionStack = this.tailFunctionStack;
         const outerSyncCompletionScopes = this.syncCompletionScopes;
         const outerTryDepth = this.tryDepth;
         this.asyncFunctionStack = [];
         this.asyncAwaitContinuationReturnTargets = [];
         this.asyncAwaitContinuationAdapterDepth = 0;
-        this.tailFunctionStack = [];
         this.syncCompletionScopes = [];
         this.tryDepth = 0;
         try {
@@ -36935,7 +36874,6 @@ class Emitter {
         } finally {
             this.tryDepth = outerTryDepth;
             this.syncCompletionScopes = outerSyncCompletionScopes;
-            this.tailFunctionStack = outerTailFunctionStack;
             this.asyncAwaitContinuationAdapterDepth = outerContinuationAdapterDepth;
             this.asyncAwaitContinuationReturnTargets = outerContinuationReturnTargets;
             this.asyncFunctionStack = outerAsyncFunctionStack;
@@ -37214,24 +37152,12 @@ class Emitter {
             this.protos.line(signature + ";");
             this.genericDefs.open(signature);
             this.returnStack.push(returnType);
-            const tailCtx = fd.name
-                ? {
-                    name: this.declaredName(fd.name),
-                    label: this.freshTemp("_tail"),
-                    params: this.collectParamInfos(fd.parameters),
-                }
-                : null;
-            if (tailCtx) {
-                this.tailFunctionStack.push(tailCtx);
-                this.genericDefs.line(`${tailCtx.label}: __attribute__((unused));`);
-            }
             try {
                 if (!fd.body) unsupported(fd, "function without body");
                 for (const s of fd.body.statements) {
                     this.emitStmt(this.genericDefs, s);
                 }
             } finally {
-                if (tailCtx) this.tailFunctionStack.pop();
                 this.returnStack.pop();
             }
             this.genericDefs.close();

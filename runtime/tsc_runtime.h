@@ -1084,6 +1084,7 @@ bool tsc_util_types_is_typed_array(tsc_value_t v);
 bool tsc_util_types_is_any_array_buffer(tsc_value_t v);
 bool tsc_util_types_is_array_buffer_view(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
+tsc_value_t tsc_value_tail_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t arguments);
 tsc_value_t tsc_value_invoke(tsc_value_t receiver, const tsc_str_t* name, tsc_array_t* args);
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target);

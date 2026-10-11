@@ -467,7 +467,7 @@ static tsc_value_t function_prototype_call(void* env, tsc_value_t this_arg, tsc_
     tsc_value_t receiver = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_undefined();
-    return tsc_value_apply_function(
+    return tsc_value_tail_call(
         this_arg,
         receiver,
         tsc_value_array(function_argument_tail(args, 1))
@@ -486,7 +486,7 @@ static tsc_value_t function_prototype_apply(void* env, tsc_value_t this_arg, tsc
     if (tsc_value_is_nullish(argument_list)) {
         argument_list = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
     }
-    return tsc_value_apply_function(this_arg, receiver, argument_list);
+    return tsc_value_tail_call(this_arg, receiver, argument_list);
 }
 
 static tsc_value_t function_prototype_bind(void* env, tsc_value_t this_arg, tsc_array_t* args) {

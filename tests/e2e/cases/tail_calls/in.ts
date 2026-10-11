@@ -1,3 +1,4 @@
+"use strict";
 function countDown(n: number, acc: number): number {
     if (n <= 0) return acc;
     return countDown(n - 1, acc + 1);

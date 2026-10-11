@@ -720,7 +720,7 @@ static tsc_array_t* bound_function_arguments(
 static tsc_value_t bound_function_apply(void* raw_env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)raw_env;
-    return tsc_value_apply_function(
+    return tsc_value_tail_call(
         bound->target,
         bound->bound_this,
         tsc_value_array(bound_function_arguments(bound, args))
@@ -3535,9 +3535,30 @@ typedef struct tsc_callee_frame {
     tsc_value_t value;
     tsc_value_t new_target;
     tsc_environment_t* constructor_environment;
+    bool tail_call;
+    tsc_value_t tail_callee, tail_receiver, tail_arguments;
+    void* volatile tail_roots[3];
 } tsc_callee_frame_t;
 
 #define value_current_callee (*tsc_agent_callee_slot())
+
+tsc_value_t tsc_value_tail_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t arguments) {
+    if (!tsc_value_is_callable(callee))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("tail call target is not callable"));
+    tsc_callee_frame_t* frame = value_current_callee;
+    if (!frame) tsc_panic("tail call requires a canonical invocation record");
+    void* volatile roots[] = { tsc_value_gc_root(callee), tsc_value_gc_root(receiver), tsc_value_gc_root(arguments) };
+    (void)roots;
+    tsc_array_t* list = value_to_argument_list(arguments, "tail call argumentsList must be an array or array-like object");
+    frame->tail_callee = callee;
+    frame->tail_receiver = receiver;
+    frame->tail_arguments = tsc_value_array(list);
+    frame->tail_roots[0] = tsc_value_gc_root(callee);
+    frame->tail_roots[1] = tsc_value_gc_root(receiver);
+    frame->tail_roots[2] = list;
+    frame->tail_call = true;
+    return tsc_value_undefined();
+}
 
 tsc_value_t tsc_value_current_callee(void) {
     return value_current_callee
@@ -3764,113 +3785,131 @@ static tsc_value_t tsc_value_apply_with_activation(
     tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
     tsc_value_t callee, tsc_value_t new_target, tsc_environment_t* constructor_environment
 ) {
-    // The canonical invocation owns its encoded operands across argument-list
-    // materialization and arbitrary user callbacks, including native callers.
-    void* volatile invocation_roots[] = {
-        tsc_value_gc_root(fn), tsc_value_gc_root(this_arg), tsc_value_gc_root(args),
-        tsc_value_gc_root(callee), tsc_value_gc_root(new_target)
-    };
-    (void)invocation_roots;
-    if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
-        tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
-        if (o->is_proxy) {
-            if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
-            if (!value_is_callable_function(o->proxy_target)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply target must be callable"));
-            }
-            tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
-            tsc_array_t* volatile arguments_root = list;
-            (void)arguments_root;
-            tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
-            void* volatile trap_root = tsc_value_gc_root(trap);
-            (void)trap_root;
-            if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-                return tsc_value_apply_function(o->proxy_target, this_arg, tsc_value_array(list));
-            }
-            if (!value_is_callable_function(trap)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply trap must be callable"));
-            }
-            tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
-            tsc_array_push_value(trap_args, o->proxy_target);
-            tsc_array_push_value(trap_args, this_arg);
-            tsc_array_push_value(trap_args, tsc_value_array(list));
-            return tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(trap_args));
-        }
-    }
-    if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
-        tsc_throw_error(
-            TSC_ERROR_TYPE,
-            tsc_str_from_cstr("Reflect.apply target is not a function")
-        );
-    }
-    tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
-    tsc_array_t* volatile arguments_root = list;
-    (void)arguments_root;
-    tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
-    tsc_realm_t* previous_realm = tsc_realm_swap(
-        ident->realm ? ident->realm : tsc_realm_current()
-    );
-    /* Native built-ins and bound forwarding have no source Parse Nodes of
-     * their own. Their source callbacks enter their retained owner context. */
-    tsc_parse_unit_t* previous_unit = tsc_parse_unit_current();
-    tsc_environment_t* previous_environment = tsc_environment_current();
-    if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN && ident->kind != TSC_FUNCTION_IDENTITY_BOUND)
-        (void)tsc_parse_unit_swap(ident->parse_unit);
-    if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN && ident->kind != TSC_FUNCTION_IDENTITY_BOUND)
-        (void)tsc_environment_swap(ident->lexical_environment);
-    if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
-        tsc_value_t result = ident->code.getter(ident->env, this_arg);
-        (void)tsc_parse_unit_swap(previous_unit);
-        (void)tsc_environment_swap(previous_environment);
-        (void)tsc_realm_swap(previous_realm);
-        return result;
-    }
-    if (
-        ident->kind == TSC_FUNCTION_IDENTITY_GENERIC ||
-        ident->kind == TSC_FUNCTION_IDENTITY_CLOSURE ||
-        ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN ||
-        ident->kind == TSC_FUNCTION_IDENTITY_BOUND
-    ) {
-        tsc_callee_frame_t frame = {
-            .prev = value_current_callee,
-            .value = callee,
-            .new_target = new_target,
-            .constructor_environment = constructor_environment,
+    for (;;) {
+        // The canonical invocation owns its encoded operands across argument-list
+        // materialization and arbitrary user callbacks, including native callers.
+        void* volatile invocation_roots[] = {
+            tsc_value_gc_root(fn), tsc_value_gc_root(this_arg), tsc_value_gc_root(args),
+            tsc_value_gc_root(callee), tsc_value_gc_root(new_target)
         };
-        value_current_callee = &frame;
-        tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
-        value_current_callee = frame.prev;
-        (void)tsc_parse_unit_swap(previous_unit);
-        (void)tsc_environment_swap(previous_environment);
-        (void)tsc_realm_swap(previous_realm);
-        return result;
-    }
-    if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
-        ident->code.event_listener.fn(ident->env, NULL, list);
+        (void)invocation_roots;
+        if (value_is_box(fn) && value_tag(fn) == TSC_VALUE_TAG_OBJECT) {
+            tsc_object_t* o = (tsc_object_t*)value_ptr(fn);
+            if (o->is_proxy) {
+                if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'apply' on a proxy that has been revoked"));
+                if (!value_is_callable_function(o->proxy_target)) {
+                    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply target must be callable"));
+                }
+                tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
+                tsc_array_t* volatile arguments_root = list;
+                (void)arguments_root;
+                tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("apply", 5));
+                void* volatile trap_root = tsc_value_gc_root(trap);
+                (void)trap_root;
+                if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+                    fn = o->proxy_target;
+                    callee = fn;
+                    args = tsc_value_array(list);
+                    continue;
+                }
+                if (!value_is_callable_function(trap)) {
+                    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Proxy apply trap must be callable"));
+                }
+                tsc_array_t* trap_args = tsc_array_new(sizeof(tsc_value_t), 4);
+                tsc_array_push_value(trap_args, o->proxy_target);
+                tsc_array_push_value(trap_args, this_arg);
+                tsc_array_push_value(trap_args, tsc_value_array(list));
+                fn = trap;
+                callee = fn;
+                this_arg = o->proxy_handler;
+                args = tsc_value_array(trap_args);
+                continue;
+            }
+        }
+        if (!value_is_box(fn) || value_tag(fn) != TSC_VALUE_TAG_FUNCTION) {
+            tsc_throw_error(
+                TSC_ERROR_TYPE,
+                tsc_str_from_cstr("Reflect.apply target is not a function")
+            );
+        }
+        tsc_array_t* list = value_to_argument_list(args, "Reflect.apply argumentsList must be an array or array-like object");
+        tsc_array_t* volatile arguments_root = list;
+        (void)arguments_root;
+        tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(fn);
+        tsc_realm_t* previous_realm = tsc_realm_swap(
+            ident->realm ? ident->realm : tsc_realm_current()
+        );
+        /* Native built-ins and bound forwarding have no source Parse Nodes of
+         * their own. Their source callbacks enter their retained owner context. */
+        tsc_parse_unit_t* previous_unit = tsc_parse_unit_current();
+        tsc_environment_t* previous_environment = tsc_environment_current();
+        if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN && ident->kind != TSC_FUNCTION_IDENTITY_BOUND)
+            (void)tsc_parse_unit_swap(ident->parse_unit);
+        if (ident->kind != TSC_FUNCTION_IDENTITY_BUILTIN && ident->kind != TSC_FUNCTION_IDENTITY_BOUND)
+            (void)tsc_environment_swap(ident->lexical_environment);
+        if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
+            tsc_value_t result = ident->code.getter(ident->env, this_arg);
+            (void)tsc_parse_unit_swap(previous_unit);
+            (void)tsc_environment_swap(previous_environment);
+            (void)tsc_realm_swap(previous_realm);
+            return result;
+        }
+        if (
+            ident->kind == TSC_FUNCTION_IDENTITY_GENERIC ||
+            ident->kind == TSC_FUNCTION_IDENTITY_CLOSURE ||
+            ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN ||
+            ident->kind == TSC_FUNCTION_IDENTITY_BOUND
+        ) {
+            tsc_callee_frame_t frame = {
+                .prev = value_current_callee,
+                .value = callee,
+                .new_target = new_target,
+                .constructor_environment = constructor_environment,
+            };
+            value_current_callee = &frame;
+            tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
+            value_current_callee = frame.prev;
+            (void)tsc_parse_unit_swap(previous_unit);
+            (void)tsc_environment_swap(previous_environment);
+            (void)tsc_realm_swap(previous_realm);
+            if (frame.tail_call) {
+                fn = frame.tail_callee;
+                this_arg = frame.tail_receiver;
+                args = frame.tail_arguments;
+                callee = fn;
+                new_target = tsc_value_undefined();
+                constructor_environment = NULL;
+                continue;
+            }
+            return result;
+        }
+        if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
+            ident->code.event_listener.fn(ident->env, NULL, list);
+            (void)tsc_parse_unit_swap(previous_unit);
+            (void)tsc_environment_swap(previous_environment);
+            (void)tsc_realm_swap(previous_realm);
+            return tsc_value_undefined();
+        }
+        if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER) {
+            ident->code.event_raw_identity.fn(ident->env, NULL, list);
+            (void)tsc_parse_unit_swap(previous_unit);
+            (void)tsc_environment_swap(previous_environment);
+            (void)tsc_realm_swap(previous_realm);
+            return tsc_value_undefined();
+        }
+        if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
+            (void)tsc_parse_unit_swap(previous_unit);
+            (void)tsc_environment_swap(previous_environment);
+            (void)tsc_realm_swap(previous_realm);
+            tsc_panic("Reflect.apply target is not a callable function identity");
+        }
+        tsc_value_t value = list->len > 0 ? TSC_ARR(tsc_value_t, list, 0) : tsc_value_undefined();
+        ident->code.setter(ident->env, this_arg, value);
         (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_environment_swap(previous_environment);
         (void)tsc_realm_swap(previous_realm);
         return tsc_value_undefined();
     }
-    if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER) {
-        ident->code.event_raw_identity.fn(ident->env, NULL, list);
-        (void)tsc_parse_unit_swap(previous_unit);
-        (void)tsc_environment_swap(previous_environment);
-        (void)tsc_realm_swap(previous_realm);
-        return tsc_value_undefined();
-    }
-    if (ident->kind != TSC_FUNCTION_IDENTITY_SETTER) {
-        (void)tsc_parse_unit_swap(previous_unit);
-        (void)tsc_environment_swap(previous_environment);
-        (void)tsc_realm_swap(previous_realm);
-        tsc_panic("Reflect.apply target is not a callable function identity");
-    }
-    tsc_value_t value = list->len > 0 ? TSC_ARR(tsc_value_t, list, 0) : tsc_value_undefined();
-    ident->code.setter(ident->env, this_arg, value);
-    (void)tsc_parse_unit_swap(previous_unit);
-    (void)tsc_environment_swap(previous_environment);
-    (void)tsc_realm_swap(previous_realm);
-    return tsc_value_undefined();
 }
 
 tsc_value_t tsc_value_species_constructor(tsc_value_t object, tsc_value_t default_constructor) {
@@ -3946,6 +3985,8 @@ static tsc_value_t construct_from_argument_list(
             (void)tsc_parse_unit_swap(previous_unit);
             (void)tsc_environment_swap(previous_environment);
             (void)tsc_realm_swap(previous_realm);
+            if (frame.tail_call)
+                result = tsc_value_apply_function(frame.tail_callee, frame.tail_receiver, frame.tail_arguments);
             if (
                 value_is_box(result) &&
                 (
@@ -9564,7 +9605,7 @@ static tsc_value_t reflect_apply_method(void* env, tsc_value_t this_arg, tsc_arr
     tsc_value_t target = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_value_t receiver = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
     tsc_value_t arguments = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
-    return tsc_value_apply_function(target, receiver, arguments);
+    return tsc_value_tail_call(target, receiver, arguments);
 }
 
 static tsc_value_t reflect_construct_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
