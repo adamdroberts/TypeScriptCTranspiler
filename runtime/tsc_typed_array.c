@@ -227,7 +227,7 @@ static tsc_value_t define_member(tsc_value_t owner,const member_t* member,tsc_st
     }else define_value(owner,name,function,true,true);
     (void)function_root;return function;
 }
-typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE} traversal_kind_t;
+typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE,COPY_WITHIN,FILL,REVERSE,SLICE,SUBARRAY,SET,TO_REVERSED,WITH} traversal_kind_t;
 typedef struct {const char* name;traversal_kind_t kind;bool reverse;size_t arity;} traversal_t;
 static const traversal_t traversals[]={
 #define TSC_TYPED_METHOD(name, kind, reverse, arity) {#name,kind,reverse,arity},
@@ -235,16 +235,130 @@ static const traversal_t traversals[]={
 #undef TSC_TYPED_METHOD
 };
 static tsc_element_kind_t owner_kind(const tsc_object_t* object){return object->is_buffer?TSC_ELEMENT_Uint8Array:((tsc_typed_array_t*)object->class_ptr)->kind;}
-static tsc_value_t species_create(tsc_value_t exemplar,size_t length){
+static tsc_array_t* length_arguments(size_t length){
+    tsc_array_t* args=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(args);tsc_value_t count=tsc_value_num((double)length);tsc_array_push_raw(args,&count);return args;
+}
+static tsc_value_t species_create(tsc_value_t exemplar,tsc_array_t* args){
     void* volatile exemplar_root=tsc_value_gc_root(exemplar);tsc_element_kind_t kind=owner_kind(require_typed(exemplar));
+    tsc_array_t* volatile actuals=args;
     tsc_value_t constructor=tsc_value_species_constructor(exemplar,tsc_typed_array_constructor_value(kind));void* volatile constructor_root=tsc_value_gc_root(constructor);
-    tsc_array_t* volatile args=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(args);tsc_value_t count=tsc_value_num((double)length);tsc_array_push_raw(args,&count);
-    tsc_value_t result=tsc_typed_array_create_from_constructor(constructor,args);void* volatile result_root=tsc_value_gc_root(result);
+    tsc_value_t result=tsc_typed_array_create_from_constructor(constructor,actuals);void* volatile result_root=tsc_value_gc_root(result);
     if(is_big(&elements[kind])!=is_big(&elements[owner_kind(require_typed(result))]))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray species content types differ"));
     (void)exemplar_root;(void)constructor_root;(void)result_root;return result;
 }
+static tsc_typed_array_witness_t owner_witness(const tsc_object_t* object){
+    if(object->is_buffer){const tsc_buffer_t* buffer=object->class_ptr;return (tsc_typed_array_witness_t){buffer->data,buffer->len,true};}
+    return tsc_typed_array_witness(object->class_ptr);
+}
+static tsc_typed_array_witness_t require_witness(const tsc_object_t* object){
+    tsc_typed_array_witness_t witness=owner_witness(object);
+    if(!witness.valid)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray view is outside its buffer"));return witness;
+}
+static size_t relative_index(tsc_value_t value,size_t length){
+    double relative=tsc_value_to_integer_or_infinity(value);
+    return (size_t)(relative<0?fmax((double)length+relative,0):fmin(relative,(double)length));
+}
+static tsc_value_t numeric_value(tsc_value_t value,const element_t* element){return is_big(element)?tsc_value_to_bigint(value):tsc_value_num(tsc_value_to_number(value));}
+static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t receiver,tsc_array_t* args){
+    void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;tsc_object_t* volatile object=require_typed(receiver);
+    tsc_element_kind_t kind=owner_kind(object);const element_t* element=&elements[kind];
+    if(operation->kind==SET){
+        double offset=tsc_value_to_integer_or_infinity(argument(actuals,1));
+        if(offset<0)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray set offset is negative"));
+        tsc_typed_array_witness_t target=require_witness(object);size_t length=target.length;
+        tsc_value_t source_value=argument(actuals,0);void* volatile source_root=tsc_value_gc_root(source_value);tsc_object_t* source=typed_object(source_value);
+        if(source){
+            tsc_typed_array_witness_t input=require_witness(source);tsc_element_kind_t source_kind=owner_kind(source);const element_t* source_element=&elements[source_kind];
+            if(!isfinite(offset)||offset>(double)length||input.length>length-(size_t)offset)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray set source exceeds target length"));
+            if(is_big(element)!=is_big(source_element))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray set content types differ"));
+            /* A rooted snapshot also handles differing element widths and aliased
+             * byte blocks without projecting values before the copy starts. */
+            uint8_t* volatile snapshot=TSC_GC_MALLOC_ATOMIC(input.length*source_element->width?input.length*source_element->width:1);
+            if(input.length)memcpy(snapshot,input.data,input.length*source_element->width);
+            if(kind==source_kind){if(input.length)memcpy(target.data+(size_t)offset*element->width,snapshot,input.length*element->width);}
+            else for(size_t index=0;index<input.length;++index){
+                tsc_value_t value=tsc_numeric_bits_to_value(read_bits(snapshot+index*source_element->width,source_element->width),source_element->format,source_element->width);
+                tsc_integer_indexed_set(object,offset+(double)index,value);
+            }
+        }else{
+            tsc_value_t source_object=tsc_value_to_object(source_value);void* volatile source_object_root=tsc_value_gc_root(source_object);
+            size_t input_length=tsc_value_length_of_array_like(source_object);
+            if(!isfinite(offset)||offset>(double)length||input_length>length-(size_t)offset)tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray set source exceeds target length"));
+            for(size_t index=0;index<input_length;++index)tsc_integer_indexed_set(object,offset+(double)index,tsc_value_get_prop(source_object,tsc_str_from_num((double)index)));
+            (void)source_object_root;
+        }
+        (void)source_root;return tsc_value_undefined();
+    }
+    tsc_typed_array_witness_t initial=operation->kind==SUBARRAY?owner_witness(object):require_witness(object);size_t length=initial.length;
+    if(operation->kind==REVERSE){
+        for(size_t index=0;index<length/2;++index){
+            size_t upper=length-1-index;tsc_value_t lower_value=tsc_integer_indexed_get(object,(double)index);void* volatile lower_root=tsc_value_gc_root(lower_value);
+            tsc_value_t upper_value=tsc_integer_indexed_get(object,(double)upper);void* volatile upper_root=tsc_value_gc_root(upper_value);
+            tsc_integer_indexed_set(object,(double)index,upper_value);tsc_integer_indexed_set(object,(double)upper,lower_value);(void)lower_root;(void)upper_root;
+        }
+        return receiver;
+    }
+    if(operation->kind==TO_REVERSED||operation->kind==WITH){
+        double replacement_index=-1;tsc_value_t replacement=tsc_value_undefined();void* volatile replacement_root=NULL;
+        if(operation->kind==WITH){
+            double relative=tsc_value_to_integer_or_infinity(argument(actuals,0));replacement_index=relative<0?(double)length+relative:relative;
+            replacement=numeric_value(argument(actuals,1),element);replacement_root=tsc_value_gc_root(replacement);
+            if(!tsc_integer_indexed_valid(object,replacement_index))tsc_throw_error(TSC_ERROR_RANGE,key("TypedArray replacement index is invalid"));
+        }
+        tsc_value_t result=tsc_typed_array_create_from_constructor(tsc_typed_array_constructor_value(kind),length_arguments(length));void* volatile result_root=tsc_value_gc_root(result);
+        for(size_t index=0;index<length;++index){
+            size_t source_index=operation->kind==TO_REVERSED?length-1-index:index;
+            tsc_value_t value=(double)index==replacement_index?replacement:tsc_integer_indexed_get(object,(double)source_index);
+            (void)tsc_value_set_prop(result,tsc_str_from_num((double)index),value);
+        }
+        (void)replacement_root;(void)result_root;return result;
+    }
+    if(operation->kind==FILL){
+        tsc_value_t value=numeric_value(argument(actuals,0),element);void* volatile value_root=tsc_value_gc_root(value);
+        size_t start=relative_index(argument(actuals,1),length);tsc_value_t end_value=argument(actuals,2);
+        size_t end=tsc_value_is_undefined(end_value)?length:relative_index(end_value,length);tsc_typed_array_witness_t current=require_witness(object);
+        if(end>current.length)end=current.length;
+        for(size_t index=start;index<end;++index)tsc_integer_indexed_set(object,(double)index,value);
+        (void)value_root;return receiver;
+    }
+    if(operation->kind==COPY_WITHIN){
+        size_t target=relative_index(argument(actuals,0),length),start=relative_index(argument(actuals,1),length);
+        tsc_value_t end_value=argument(actuals,2);size_t end=tsc_value_is_undefined(end_value)?length:relative_index(end_value,length);
+        size_t count=end>start?end-start:0;if(count>length-target)count=length-target;
+        if(count){
+            tsc_typed_array_witness_t current=require_witness(object);
+            if(start>=current.length||target>=current.length)count=0;
+            else{if(count>current.length-start)count=current.length-start;if(count>current.length-target)count=current.length-target;}
+            if(count)memmove(current.data+target*element->width,current.data+start*element->width,count*element->width);
+        }
+        return receiver;
+    }
+    size_t start=relative_index(argument(actuals,0),length);
+    tsc_value_t end_value=argument(actuals,1);
+    if(operation->kind==SUBARRAY){
+        if(object->is_buffer)tsc_throw_error(TSC_ERROR_TYPE,key("Buffer backing ArrayBuffer integration is not represented"));
+        tsc_typed_array_t* view=object->class_ptr;tsc_array_t* volatile parameters=tsc_array_new(sizeof(tsc_value_t),3);tsc_array_use_value_storage(parameters);
+        tsc_value_t buffer=tsc_value_array_buffer(view->buffer);tsc_array_push_raw(parameters,&buffer);tsc_value_t offset=tsc_value_num((double)(view->offset+start*element->width));tsc_array_push_raw(parameters,&offset);
+        if(!view->tracking||!tsc_value_is_undefined(end_value)){size_t end=tsc_value_is_undefined(end_value)?length:relative_index(end_value,length);tsc_value_t count=tsc_value_num((double)(end>start?end-start:0));tsc_array_push_raw(parameters,&count);}
+        return species_create(receiver,parameters);
+    }
+    size_t end=tsc_value_is_undefined(end_value)?length:relative_index(end_value,length),count=end>start?end-start:0;
+    tsc_value_t result=species_create(receiver,length_arguments(count));void* volatile result_root=tsc_value_gc_root(result);
+    if(count){
+        tsc_typed_array_witness_t current=require_witness(object);if(end>current.length)end=current.length;count=end>start?end-start:0;
+        tsc_object_t* destination=require_typed(result);
+        if(kind==owner_kind(destination)){
+            tsc_typed_array_witness_t output=require_witness(destination);
+            /* Slice's normative byte loop runs forward even for aliased custom
+             * species results; an overlap-safe bulk copy would change it. */
+            for(size_t byte=0;byte<count*element->width;++byte)output.data[byte]=current.data[start*element->width+byte];
+        }else for(size_t index=0;index<count;++index)(void)tsc_value_set_prop(result,tsc_str_from_num((double)index),tsc_integer_indexed_get(object,(double)(start+index)));
+    }
+    (void)receiver_root;(void)result_root;return result;
+}
 static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
     const traversal_t* operation=environment;void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;
+    if(operation->kind>=COPY_WITHIN)return mutation_apply(operation,receiver,actuals);
     tsc_object_t* object=require_typed(receiver);
     if(!object->is_buffer&&!tsc_typed_array_witness(object->class_ptr).valid)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray traversal view is outside its buffer"));
     size_t length=tsc_integer_indexed_length(object);tsc_value_t first=argument(actuals,0);void* volatile first_root=tsc_value_gc_root(first);
@@ -276,7 +390,7 @@ static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_ar
     bool reduce=operation->kind==REDUCE,has_initial=actuals&&actuals->len>1;
     if(reduce&&!length&&!has_initial)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray reduce requires an initial value for an empty view"));
     tsc_value_t accumulator=reduce&&has_initial?argument(actuals,1):tsc_value_undefined();void* volatile accumulator_root=tsc_value_gc_root(accumulator);
-    tsc_value_t result=operation->kind==MAP?species_create(receiver,length):tsc_value_undefined();void* volatile result_root=tsc_value_gc_root(result);
+    tsc_value_t result=operation->kind==MAP?species_create(receiver,length_arguments(length)):tsc_value_undefined();void* volatile result_root=tsc_value_gc_root(result);
     tsc_array_t* volatile kept=NULL;if(operation->kind==FILTER){kept=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_use_value_storage(kept);}
     size_t consumed=0;
     if(reduce&&!has_initial){size_t index=operation->reverse?length-1:0;accumulator=tsc_value_get_prop(receiver,tsc_str_from_num((double)index));accumulator_root=tsc_value_gc_root(accumulator);consumed=1;}
@@ -301,7 +415,7 @@ static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_ar
         (void)value_root;(void)selected_root;
     }
     if(operation->kind==FILTER){
-        result=species_create(receiver,kept->len);result_root=tsc_value_gc_root(result);
+        result=species_create(receiver,length_arguments(kept->len));result_root=tsc_value_gc_root(result);
         for(size_t index=0;index<kept->len;++index)if(!tsc_value_set_prop(result,tsc_str_from_num((double)index),TSC_ARR(tsc_value_t,kept,index)))
             tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray filtered element assignment failed"));
     }

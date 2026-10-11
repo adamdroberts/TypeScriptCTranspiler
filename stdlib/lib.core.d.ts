@@ -714,6 +714,14 @@ interface TypedArray<T> extends Iterable<T> {
     reduce<U>(callback: (previous: U, value: T, index: number, array: this) => U, initial: U, ...ignored: any[]): U;
     reduceRight(callback: (previous: T, value: T, index: number, array: this) => T): T;
     reduceRight<U>(callback: (previous: U, value: T, index: number, array: this) => U, initial: U, ...ignored: any[]): U;
+    copyWithin(target: number, start: number, end?: number, ...ignored: any[]): this;
+    fill(value: T, start?: number, end?: number, ...ignored: any[]): this;
+    reverse(...ignored: any[]): this;
+    slice(start?: number, end?: number, ...ignored: any[]): this;
+    subarray(start?: number, end?: number, ...ignored: any[]): this;
+    set(source: ArrayLike<T>, offset?: number, ...ignored: any[]): void;
+    toReversed(...ignored: any[]): TypedArray<T>;
+    with(index: number, value: T, ...ignored: any[]): TypedArray<T>;
 }
 interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     readonly prototype: V;
