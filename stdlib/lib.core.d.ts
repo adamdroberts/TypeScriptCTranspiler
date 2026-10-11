@@ -701,6 +701,11 @@ type ArrayBufferLike = ArrayBuffer | SharedArrayBuffer;
 type AtomicNumberArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array;
 type AtomicBigIntArray = BigInt64Array | BigUint64Array;
 interface Atomics {
+    wait(typedArray: Int32Array, index: number, value: number, timeout?: number, ...ignored: any[]): "ok" | "not-equal" | "timed-out";
+    wait(typedArray: BigInt64Array, index: number, value: bigint, timeout?: number, ...ignored: any[]): "ok" | "not-equal" | "timed-out";
+    waitAsync(typedArray: Int32Array, index: number, value: number, timeout?: number, ...ignored: any[]): AtomicsWaitAsyncResult;
+    waitAsync(typedArray: BigInt64Array, index: number, value: bigint, timeout?: number, ...ignored: any[]): AtomicsWaitAsyncResult;
+    notify(typedArray: Int32Array | BigInt64Array, index: number, count?: number, ...ignored: any[]): number;
     add(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
     add(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
     and(typedArray: AtomicNumberArray, index: number, value: number, ...ignored: any[]): number;
@@ -722,6 +727,7 @@ interface Atomics {
     xor(typedArray: AtomicBigIntArray, index: number, value: bigint, ...ignored: any[]): bigint;
 }
 declare var Atomics: Atomics;
+type AtomicsWaitAsyncResult = {async: false; value: "not-equal" | "timed-out"} | {async: true; value: Promise<"ok" | "timed-out">};
 
 interface ArrayLike<T> {
     readonly length: number;

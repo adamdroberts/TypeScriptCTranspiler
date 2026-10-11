@@ -1,4 +1,4 @@
-/* Canonical word-operation metadata. Waiter operations are separate open work. */
+/* Canonical Atomics operation metadata. */
 TSC_ATOMICS_MEMBER(add, ADD, 3)
 TSC_ATOMICS_MEMBER(and, AND, 3)
 TSC_ATOMICS_MEMBER(compareExchange, COMPARE_EXCHANGE, 4)
@@ -9,3 +9,6 @@ TSC_ATOMICS_MEMBER(or, OR, 3)
 TSC_ATOMICS_MEMBER(store, STORE, 3)
 TSC_ATOMICS_MEMBER(sub, SUB, 3)
 TSC_ATOMICS_MEMBER(xor, XOR, 3)
+TSC_ATOMICS_MEMBER(wait, WAIT, 4)
+TSC_ATOMICS_MEMBER(waitAsync, WAIT_ASYNC, 4)
+TSC_ATOMICS_MEMBER(notify, NOTIFY, 3)

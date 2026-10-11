@@ -531,6 +531,7 @@ static void test262_install_current_realm_globals(void) {
 }
 
 void tsc_test262_begin(void) {
+    tsc_atomics_set_can_block(false);
     if (!g_test262_started) {
         tsc_jsonbuf_init(&g_test262_stdout);
         g_test262_started = true;

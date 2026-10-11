@@ -123,6 +123,7 @@ const RUNTIME_SOURCES = [
     "tsc_typed_array.c",
     "tsc_array_buffer.c",
     "tsc_atomics.c",
+    "tsc_atomics_wait.c",
     "tsc_text_codec.c",
     "tsc_regexp.c",
     "tsc_regexp_api.c",

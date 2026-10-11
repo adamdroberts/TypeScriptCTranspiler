@@ -751,6 +751,7 @@ typedef enum {
     TSC_CROSS_NEXT_TICK,
     TSC_CROSS_IMMEDIATE,
     TSC_CROSS_TIMEOUT,
+    TSC_CROSS_RAW_TIMEOUT,
 } tsc_cross_kind_t;
 typedef struct {
     tsc_cross_kind_t kind;
@@ -768,8 +769,12 @@ static size_t g_cross_cap = 0;
 /* Dispatch tasks scheduled but not yet settled on the main loop. */
 static size_t g_dispatch_outstanding = 0;
 
-void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex); }
-void tsc_runtime_unlock(void) { pthread_mutex_unlock(&g_runtime_mutex); }
+static _Thread_local size_t g_runtime_lock_depth;
+void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex);++g_runtime_lock_depth; }
+void tsc_runtime_unlock(void) { --g_runtime_lock_depth;pthread_mutex_unlock(&g_runtime_mutex); }
+size_t tsc_runtime_suspend(void){size_t depth=g_runtime_lock_depth;while(g_runtime_lock_depth)tsc_runtime_unlock();return depth;}
+void tsc_runtime_resume(size_t depth){while(depth--)tsc_runtime_lock();}
+void tsc_runtime_wake_event_loop(void){pthread_mutex_lock(&g_loop_mutex);pthread_cond_signal(&g_loop_cond);pthread_mutex_unlock(&g_loop_mutex);}
 
 bool tsc_is_main_thread(void) {
     return !g_main_thread_set || pthread_equal(pthread_self(), g_main_thread);
@@ -835,12 +840,16 @@ static void tsc_drain_cross_queue(void) {
             case TSC_CROSS_NEXT_TICK: tsc_process_next_tick(entry.fn, entry.env); break;
             case TSC_CROSS_IMMEDIATE: tsc_set_immediate(entry.fn, entry.env); break;
             case TSC_CROSS_TIMEOUT: tsc_set_timeout(entry.fn, entry.env, entry.delay); break;
+            case TSC_CROSS_RAW_TIMEOUT: tsc_set_timeout_unbounded(entry.fn,entry.env,entry.delay);break;
         }
     }
 }
 #else
 void tsc_runtime_lock(void) {}
 void tsc_runtime_unlock(void) {}
+size_t tsc_runtime_suspend(void){return 0;}
+void tsc_runtime_resume(size_t depth){(void)depth;}
+void tsc_runtime_wake_event_loop(void){}
 bool tsc_is_main_thread(void) { return true; }
 void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error) {
     if (is_error) tsc_promise_reject_in_place(p, value);
@@ -1914,6 +1923,7 @@ void tsc_drain_microtasks(void) {
 }
 
 void tsc_drain_microtasks_and_next_ticks(void) {
+    tsc_atomics_schedule_completions();
     tsc_weak_job_checkpoint();
     while (g_next_tick_len > 0 || g_microtask_len > 0) {
         if (g_next_tick_len > 0) {
@@ -2008,12 +2018,12 @@ static bool tsc_timeout_ready(const tsc_timeout_entry_t* entry, double now_ms) {
     return entry->trigger_ms <= now_ms;
 }
 
-double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
+static double tsc_make_timeout(tsc_timeout_fn_t fn, void* env, double delay,bool raw) {
     if (!fn) return 0.0;
 #ifdef TSC_THREADS
     if (!tsc_is_main_thread()) {
         tsc_cross_entry_t entry = {0};
-        entry.kind = TSC_CROSS_TIMEOUT;
+        entry.kind = raw?TSC_CROSS_RAW_TIMEOUT:TSC_CROSS_TIMEOUT;
         entry.value = tsc_value_undefined();
         entry.fn = fn;
         entry.env = env;
@@ -2030,10 +2040,13 @@ double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
         g_timeout_cap = next;
     }
     double id = g_next_timer_id++;
-    double delay_ms = tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, true, delay_ms, tsc_now_ms() + delay_ms };
+    double delay_ms = raw?delay:tsc_timer_delay_ms(delay);
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, !raw, delay_ms, tsc_now_ms() + delay_ms };
     return id;
 }
+
+double tsc_set_timeout(tsc_timeout_fn_t fn,void* env,double delay){return tsc_make_timeout(fn,env,delay,false);}
+double tsc_set_timeout_unbounded(tsc_timeout_fn_t fn,void* env,double delay){return tsc_make_timeout(fn,env,delay,true);}
 
 double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay) {
     if (!fn) return 0.0;
@@ -2135,6 +2148,7 @@ void tsc_drain_timeouts(void) {
             g_timeout_queue[live++] = g_timeout_queue[i];
         }
     }
+    if(g_timeout_len>live)memset(g_timeout_queue+live,0,(g_timeout_len-live)*sizeof(*g_timeout_queue));
     g_timeout_len = live;
 }
 
@@ -2157,6 +2171,11 @@ static bool tsc_has_active_timeout(void) {
     return false;
 }
 
+static bool tsc_has_pending_timeout(void){
+    for(size_t i=0;i<g_timeout_len;++i)if(!g_timeout_queue[i].canceled&&g_timeout_queue[i].fn)return true;
+    return false;
+}
+
 static double tsc_next_timeout_delay_ms(void) {
     double now_ms = tsc_now_ms();
     double delay = -1.0;
@@ -2166,6 +2185,9 @@ static double tsc_next_timeout_delay_ms(void) {
         if (candidate < 0.0) candidate = 0.0;
         if (delay < 0.0 || candidate < delay) delay = candidate;
     }
+#ifdef TSC_HAS_LIBUV
+    if(tsc_fs_libuv_pending()&&(delay<0||delay>1))delay=1;
+#endif
     return delay;
 }
 
@@ -2182,8 +2204,9 @@ static void tsc_sleep_ms(double delay_ms) {
 #ifdef TSC_THREADS
 /* Wait until a worker posts cross-thread work or the next timer is due. */
 static void tsc_loop_idle_wait(double delay_ms) {
+    if(delay_ms>5000)delay_ms=5000;
     pthread_mutex_lock(&g_loop_mutex);
-    if (g_cross_len == 0) {
+    if (g_cross_len == 0 && !tsc_atomics_has_completions()) {
         if (delay_ms < 0.0) {
             pthread_cond_wait(&g_loop_cond, &g_loop_mutex);
         } else if (delay_ms > 0.0) {
@@ -2230,7 +2253,7 @@ void tsc_run_event_loop(void) {
          * preserves the existing ordering for a queued read while still
          * allowing a timer to make progress through UV_RUN_NOWAIT. */
         if (tsc_fs_libuv_pending()) {
-            if (!tsc_has_active_timeout()) {
+            if (!tsc_has_pending_timeout()) {
                 while (tsc_fs_libuv_pending()) {
                     tsc_fs_libuv_run_once(true);
                     tsc_drain_microtasks_and_next_ticks();
@@ -2248,7 +2271,7 @@ void tsc_run_event_loop(void) {
         if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0) {
 #ifdef TSC_HAS_LIBUV
             if (tsc_fs_libuv_pending()) {
-                if (!tsc_has_active_timeout()) {
+                if (!tsc_has_pending_timeout()) {
                     while (tsc_fs_libuv_pending()) {
                         tsc_fs_libuv_run_once(true);
                         tsc_drain_microtasks_and_next_ticks();
@@ -2267,12 +2290,12 @@ void tsc_run_event_loop(void) {
             }
 #endif
 #ifdef TSC_THREADS
-            if (tsc_dispatch_pending() || tsc_has_active_timeout()) {
-                tsc_loop_idle_wait(tsc_has_active_timeout() ? tsc_next_timeout_delay_ms() : -1.0);
+            if (tsc_dispatch_pending() || tsc_has_pending_timeout()) {
+                tsc_loop_idle_wait(tsc_has_pending_timeout() ? tsc_next_timeout_delay_ms() : -1.0);
             }
 #else
-            if (tsc_has_active_timeout()) {
-                tsc_sleep_ms(tsc_next_timeout_delay_ms());
+            if (tsc_has_pending_timeout()) {
+                tsc_atomics_idle_wait(tsc_next_timeout_delay_ms());
             }
 #endif
         }

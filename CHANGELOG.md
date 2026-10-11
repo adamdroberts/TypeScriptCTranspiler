@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Add ordinary Atomics wait/waitAsync/notify owners backed by one retained shared-location FIFO, blocking lock release, owning-agent Promise completion and unbounded unreferenced deadlines. Verify conversion order, mixed waiters, foreign-thread wakeups and terminal GC roots; honor the Test262 main-agent blocking policy. Full agent/Realm/memory-model and eligible exhaustive coverage remain open.
+
 - Share integer-indexed key, validity, length and element operations across object hooks, with Buffer as the initial storage adapter. Validate after value conversion and delete direct Buffer-specific hook projections; actual TypedArray storage and full target coverage remain open.
 
 - Preserve captured next/return method Realms in the Iterator helper activation worklist, fixing cross-realm reentrancy TypeError origin and restoring callers after normal and abrupt steps. Add Node vm differential checks and a deep alternating-Realm graph; complete host Realm capability remains open.

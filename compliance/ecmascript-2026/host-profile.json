@@ -21,6 +21,7 @@
     "runtime/tsc_array_buffer.c",
     "runtime/tsc_array_buffer.def",
     "runtime/tsc_atomics.c",
+    "runtime/tsc_atomics_wait.c",
     "runtime/tsc_atomics.def",
     "runtime/tsc_dataview.def",
     "runtime/tsc_core.c",
