@@ -8,7 +8,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly functions?: readonly FunctionConstructorEntry[];
@@ -34,8 +34,9 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text";
-type Primitive = string | number | bigint | boolean | null | undefined;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for";
+type Primitive = string | number | bigint | boolean | null | undefined | symbol;
+type SourcePropertyKey = string | symbol;
 const PRIMITIVE_PREFIX_OPERATIONS: ReadonlyMap<ts.PrefixUnaryOperator, (value: Primitive) => Primitive> = new Map<ts.PrefixUnaryOperator, (value: Primitive) => Primitive>([
     [ts.SyntaxKind.PlusToken, (value: Primitive) => +(value as number)],
     [ts.SyntaxKind.MinusToken, (value: Primitive) => -(value as number)],
@@ -68,7 +69,7 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<string, Cell>; readonly accessors: Map<string|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<string, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
+interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -107,6 +108,9 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
+const CALLABLE_FORWARDING_OPERATIONS: ReadonlyMap<string, Operation> = new Map([
+    ["call", "call"], ["apply", "apply"], ["bind", "bind"],
+]);
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node) || ts.isTemplateSpan(node)) return [node.expression];
@@ -155,6 +159,7 @@ function propertyName(node: ts.Node | undefined): string | null {
  * Property discovery never asks TypeScript to infer a receiver/member type. */
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
+    private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
@@ -166,12 +171,20 @@ class SourceValueFlow {
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
     private readonly accessorDefinitions = new Map<Cell,ts.Node>();
     private readonly accessorCallees = new Map<Cell,Cell>();
+    private readonly accessorSlots = new Set<Cell>();
     private readonly callResults = new Map<ts.Node,Map<string,Cell>>();
     private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
     private readonly evaluationInvocations = new Map<Rule, Map<string, EvaluationRecord>>();
     private readonly intrinsicAtoms = new Map<string, Atom>();
     private readonly operations = new Map<Operation, Atom>();
     private readonly primitives = new Map<string, Atom>();
+    private readonly symbolPrimitives = new Map<symbol, Atom>();
+    private readonly symbolIdentities = new Map<symbol, number>();
+    private readonly freshSymbols = new Set<symbol>();
+    private readonly symbolAllocations = new Map<ts.Node, Map<string | undefined, symbol>>();
+    private readonly symbolDescriptionInputs = new Map<Cell, Cell>();
+    private readonly symbolRegistry = new Map<string, symbol>();
+    private readonly wellKnownSymbols = new Map([...runtimeWellKnownSymbolDescriptions].map(([name, description]) => [name, Symbol(description)]));
     private readonly nonString: Atom = { tag: "non-string" };
     private readonly unknown: Atom = { tag: "unknown" };
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
@@ -195,7 +208,7 @@ class SourceValueFlow {
     private readonly globalReceiver = this.newCell();
     private readonly propertyWrites = new Set<string>();
     private readonly hintPrimitives = new Map<Cell, Map<ts.Node | undefined, Cell>>();
-    private readonly stringConversions = new Map<Cell, Map<ts.Node, Cell>>();
+    private readonly stringConversions = new Map<Cell, Map<ts.Node, Map<boolean, Cell>>>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
@@ -272,7 +285,8 @@ class SourceValueFlow {
                         const plus = ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken);
                         const mixedBigInt = plus && states[0]!.proof.values.some(left => states[1]!.proof.values.some(right =>
                             typeof left !== "string" && typeof right !== "string" && (typeof left === "bigint") !== (typeof right === "bigint")));
-                        if (states.some(state => !state.proof.primitiveComplete) || mixedBigInt ||
+                        const symbolConversion = !propertyKey && states.some(state => state.proof.values.some(value => typeof value === "symbol"));
+                        if (states.some(state => !state.proof.primitiveComplete) || mixedBigInt || symbolConversion ||
                             !propertyKey && !plus && !ts.isTemplateSpan(node)) this.publish(handler, this.opaqueObject);
                     });
                 }
@@ -425,43 +439,56 @@ class SourceValueFlow {
         return this.primitive(text);
     }
     private primitive(value: Primitive): Atom {
+        if (typeof value === "symbol") {
+            let atom = this.symbolPrimitives.get(value);
+            if (!atom) {atom = {tag: "primitive", value}; this.symbolPrimitives.set(value, atom);}
+            return atom;
+        }
         const key = typeof value + ":" + String(value);
         let atom = this.primitives.get(key);
         if (!atom) { atom = { tag: "primitive", value }; this.primitives.set(key, atom); }
         return atom;
+    }
+    private keyIdentity(key: SourcePropertyKey | null): string {
+        if (typeof key !== "symbol") return JSON.stringify(key);
+        let identity = this.symbolIdentities.get(key);
+        if (identity === undefined) {identity = this.symbolIdentities.size; this.symbolIdentities.set(key, identity);}
+        return "symbol:" + identity;
     }
     private owner(node: ts.Node): ObjectOwner {
         let owner = this.objects.get(node);
         if (!owner) { owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner); this.copy(this.opaqueMutation,owner.shape); }
         return owner;
     }
-    private field(owner: ObjectOwner, key: string): Cell {
+    private field(owner: ObjectOwner, key: SourcePropertyKey): Cell {
         let cell = owner.fields.get(key);
         if (!cell) {
-            cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.text(key));
+            cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
             const target = cell;
             this.rule([owner.shape],()=>{if(owner.shape.values.has(this.unknown))this.publish(target,this.unknown);});
         }
         return cell;
     }
-    private presence(owner: ObjectOwner, key: string): Cell {
+    private presence(owner: ObjectOwner, key: SourcePropertyKey): Cell {
         owner.own ??= new Map();let cell=owner.own.get(key);
         if (!cell) {cell=this.newCell();owner.own.set(key,cell);}
         return cell;
     }
-    private defineField(owner: ObjectOwner, key: string, value: Cell): void {
+    private defineField(owner: ObjectOwner, key: SourcePropertyKey, value: Cell): void {
+        if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
         this.publish(this.presence(owner,key),this.primitive(true));this.copy(value,this.field(owner,key));
     }
     private defineBooleanField(owner:ObjectOwner,key:string): void {
         this.publish(this.booleanResult,this.primitive(false));this.publish(this.booleanResult,this.primitive(true));this.defineField(owner,key,this.booleanResult);
     }
-    private defineAccessor(owner:ObjectOwner,key:string|null,kind:"get"|"set",value:Cell,context:ts.Node): void {
+    private defineAccessor(owner:ObjectOwner,key:SourcePropertyKey|null,kind:"get"|"set",value:Cell,context:ts.Node): void {
         let accessor=owner.accessors.get(key);
-        if(!accessor){accessor={get:this.newCell(),set:this.newCell()};owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
+        if(!accessor){accessor={get:this.newCell(),set:this.newCell()};this.accessorSlots.add(accessor.get);this.accessorSlots.add(accessor.set);owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
         this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);
         this.copy(value,accessor[kind]);
         if(key===null)this.publish(owner.shape,this.unknown);
         else this.publish(this.presence(owner,key),this.primitive(true));
+        if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
     }
     private accessorCallee(source:Cell): Cell {
         let callee=this.accessorCallees.get(source);
@@ -469,10 +496,10 @@ class SourceValueFlow {
             this.rule([source],()=>{for(const value of source.values)if(value!==this.primitive(undefined))this.publish(target,value);});}
         return callee;
     }
-    private writeProperty(base: Cell, key: string | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base): void {
+    private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base): void {
         const handler=context?this.exceptionHandlers.get(context):undefined;
         if(handler)this.publish(handler,this.opaqueObject);
-        const signature=base.id+":"+JSON.stringify(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id;
+        const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
         let rule!:Rule;
@@ -512,7 +539,7 @@ class SourceValueFlow {
                     if (!presence.values.size) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
                     this.copy(value,this.field(owner,key));
-                    const index = Number(key);
+                    const index = typeof key === "string" ? Number(key) : NaN;
                     if (owner.listLength && String(index) === key && Number.isInteger(index) && index >= 0 && index < 0xffffffff) {
                         const length = owner.listLength;
                         this.rule([length], () => {
@@ -525,13 +552,13 @@ class SourceValueFlow {
             }
             if(atom.tag==="global"){
                 if(key===null)this.publish(this.globalMutation,this.unknown);
-                else if (!this.immutableGlobalBinding(key)) this.copy(value,this.globalBinding(key));
+                else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copy(value,this.globalBinding(key));
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.publish(this.globalMutation,this.unknown);if(handler)this.publish(handler,this.unknown);}
         }});
     }
-    /** OrdinaryToPrimitive's string-hint method order, driven by the existing
-     * property/call graph. Symbol-keyed or opaque shapes remain incomplete. */
+    /** ToPrimitive's string hint uses the same keyed property and call graph
+     * for the exotic hook and the ordinary method worklist. */
     private stringHintPrimitives(source: Cell, context?: ts.Node): Cell {
         let contexts = this.hintPrimitives.get(source);
         if (!contexts) { contexts = new Map(); this.hintPrimitives.set(source, contexts); }
@@ -597,17 +624,61 @@ class SourceValueFlow {
                         }
                     });
                 };
-                advance(0);
+                const hook = this.property(receiver, this.wellKnownSymbols.get("toPrimitive")!, context);
+                const callee = this.newCell(), returned = this.newCell(), hint = this.newCell();
+                this.publish(hint, this.primitive("string"));
+                this.invoke(context, callee, receiver, [{cell: hint, spread: false}], returned);
+                const invalid = (): void => {
+                    this.publish(result, this.abrupt);
+                    const handler = this.exceptionHandlers.get(context);
+                    if (handler) this.publish(handler, this.opaqueObject);
+                };
+                this.rule([hook], () => {
+                    for (const value of hook.values) {
+                        if (value === this.primitive(undefined) || value === this.primitive(null)) advance(0);
+                        else if (value.tag === "function" || value.tag === "bound" || value.tag === "operation" ||
+                            value.tag === "intrinsic" || value.tag === "builtin" && value.normalResult !== "not-callable") this.publish(callee, value);
+                        else if (["abrupt", "pending-source", "unknown", "opaque-object"].includes(value.tag)) this.publish(result, value);
+                        else invalid();
+                    }
+                });
+                this.rule([returned], () => {
+                    for (const value of returned.values) {
+                        if (["primitive", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
+                        else if (value.tag === "non-string") this.publish(result, this.unknown);
+                        else invalid();
+                    }
+                });
             }
         });
         return result;
     }
-    /** Shared text projection after ordinary string-hint conversion. Symbols
-     * remain outside this finite source domain and fail closed. */
-    private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
+    /** ToString rejects Symbol results except the String call's direct
+     * Symbol argument, which uses SymbolDescriptiveString. */
+    private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node, descriptiveSymbols = false): readonly string[] | null | undefined {
+        const input = key;
         key = this.stringHintPrimitives(key, context);
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
-        if (proof.primitiveComplete) return [...new Set(proof.values.map(String))];
+        if (proof.primitiveComplete) {
+            const values = proof.values.filter(value => typeof value !== "symbol" || descriptiveSymbols && input.values.has(this.primitive(value)));
+            if (values.length !== proof.values.length && context) {
+                const handler = this.exceptionHandlers.get(context);
+                if (handler) this.publish(handler, this.opaqueObject);
+            }
+            return [...new Set(values.map(String))];
+        }
+        if (pending && !unresolved) return undefined;
+        if (context) {
+            const handler = this.exceptionHandlers.get(context);
+            if (handler) this.publish(handler, this.unknown);
+            this.onActive(context, () => this.publish(this.opaqueMutation, this.unknown));
+        }
+        return null;
+    }
+    private propertyKeys(key: Cell, rule: Rule, context?: ts.Node): readonly SourcePropertyKey[] | null | undefined {
+        key = this.stringHintPrimitives(key, context);
+        const {proof, pending, unresolved} = this.primitiveState(key, rule);
+        if (proof.primitiveComplete) return [...new Set(proof.values.map(value => typeof value === "symbol" ? value : String(value)))];
         if (pending && !unresolved) return undefined;
         if (context) {
             const handler = this.exceptionHandlers.get(context);
@@ -635,14 +706,16 @@ class SourceValueFlow {
         }
         return {proof, pending, pendingSource, unresolved};
     }
-    private stringHintCell(source: Cell, context: ts.Node): Cell {
+    private stringHintCell(source: Cell, context: ts.Node, descriptiveSymbols = false): Cell {
         let contexts = this.stringConversions.get(source);
         if (!contexts) { contexts = new Map(); this.stringConversions.set(source, contexts); }
-        const previous = contexts.get(context); if (previous) return previous;
-        const result = this.newCell(); contexts.set(context, result);
+        let conversions = contexts.get(context);
+        if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
+        const previous = conversions.get(descriptiveSymbols); if (previous) return previous;
+        const result = this.newCell(); conversions.set(descriptiveSymbols, result);
         let rule!: Rule;
         rule = this.rule([source], () => {
-            const choices = this.stringHintTexts(source, rule, context);
+            const choices = this.stringHintTexts(source, rule, context, descriptiveSymbols);
             if (choices === null) this.publish(result, this.unknown);
             else if (choices?.length === 0) this.publish(result, this.abrupt);
             else if (choices === undefined && this.primitiveState(this.stringHintPrimitives(source, context), rule).pendingSource)
@@ -651,14 +724,14 @@ class SourceValueFlow {
         });
         return result;
     }
-    private projectMemberKeys(name: string | ts.PropertyName, context: ts.Node, project: (key: string | null) => void, owner?: ObjectOwner): void {
+    private projectMemberKeys(name: string | ts.PropertyName, context: ts.Node, project: (key: SourcePropertyKey | null) => void, owner?: ObjectOwner): void {
         if (typeof name === "string") { project(name); return; }
         if (!ts.isComputedPropertyName(name)) { project(propertyName(name)); return; }
-        const key = this.cell(name.expression), selected = new Set<string | null>(), defined = this.newCell();
+        const key = this.cell(name.expression), selected = new Set<SourcePropertyKey | null>(), defined = this.newCell();
         if (owner) (owner.computedDefinitions ??= []).push({key,defined,context});
         let rule!: Rule;
         rule = this.rule([key], () => {
-            const keys = this.stringHintTexts(key, rule, context);
+            const keys = this.propertyKeys(key, rule, context);
             for (const value of keys === null ? [null] : keys ?? []) if (!selected.has(value)) {
                 selected.add(value); project(value); this.publish(defined,value===null?this.unknown:this.primitive(value));
             }
@@ -668,7 +741,7 @@ class SourceValueFlow {
         for (const definition of owner.computedDefinitions ?? []) {
             if (!rule) return false;
             this.watch(rule,definition.defined);
-            const keys=this.stringHintTexts(definition.key,rule,definition.context);
+            const keys=this.propertyKeys(definition.key,rule,definition.context);
             if(keys===undefined)return false;
             if(keys===null){if(!definition.defined.values.has(this.unknown))return false;}
             else if(keys.some(key=>!definition.defined.values.has(this.primitive(key))))return false;
@@ -676,10 +749,10 @@ class SourceValueFlow {
         return true;
     }
     private computedProperty(base: Cell, key: Cell, context: ts.Node): Cell {
-        const result = this.newCell(), selected = new Set<string>();
+        const result = this.newCell(), selected = new Set<SourcePropertyKey>();
         let rule!: Rule;
         rule = this.rule([key], () => {
-            const names = this.stringHintTexts(key, rule, context);
+            const names = this.propertyKeys(key, rule, context);
             if (names === null) this.publish(result, this.unknown);
             else if (names?.length === 0) this.publish(result, this.abrupt);
             else for (const name of names ?? []) if (!selected.has(name)) {
@@ -707,7 +780,7 @@ class SourceValueFlow {
     private writeComputedProperty(base: Cell, key: Cell, value: Cell, mode: "set"|"define"|"delete" = "set", context?:ts.Node, receiver=base): void {
         let rule!: Rule;
         rule=this.rule([key],()=>{
-            const names = this.stringHintTexts(key, rule, context);
+            const names = this.propertyKeys(key, rule, context);
             if (names === null) this.writeProperty(base,null,value,true,mode,context,receiver);
             else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
@@ -716,10 +789,10 @@ class SourceValueFlow {
         const getter=this.property(descriptor,"get",context),setter=this.property(descriptor,"set",context),value=this.property(descriptor,"value",context);
         let rule!:Rule;
         rule=this.rule([base,key,getter,setter],()=>{
-            const keys = this.stringHintTexts(key, rule, context);
+            const keys = this.propertyKeys(key, rule, context);
             if (keys === undefined) return;
-            const names:readonly(string|null)[]=keys ?? [null];
-            const accessor=[...getter.values,...setter.values].some(atom=>atom!==this.primitive(undefined));
+            const names:readonly(SourcePropertyKey|null)[]=keys ?? [null];
+            const accessor=[...getter.values,...setter.values].some(atom=>atom.tag !== "abrupt" && atom!==this.primitive(undefined));
             for(const name of names){
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
@@ -737,21 +810,21 @@ class SourceValueFlow {
             if(owner.shape.values.has(this.unknown))this.writeProperty(base,null,this.empty,true,"define",context);
             for(const name of new Set([...owner.fields.keys(),...owner.accessors.keys()])){
                 if(name===null){this.writeProperty(base,null,this.empty,true,"define",context);continue;}
-                const key=owner.shape.id+":"+name;if(selected.has(key))continue;selected.add(key);
+                const key=owner.shape.id+":"+this.keyIdentity(name);if(selected.has(key))continue;selected.add(key);
                 const propertyKey=this.newCell();this.publish(propertyKey,this.primitive(name));
                 this.defineProperty(base,propertyKey,this.property(descriptors,name,context),context);
             }
         }});
     }
     private ownDescriptors(base:Cell,key:Cell|null,context:ts.Node,result:Cell): void {
-        const records=new Map<ObjectOwner,Map<string,{value:Cell;owner:ObjectOwner}>>();
+        const records=new Map<ObjectOwner,Map<SourcePropertyKey,{value:Cell;owner:ObjectOwner}>>();
         const collection:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
         if(!key)this.publish(result,{tag:"object",owner:collection});
         const handler=this.exceptionHandlers.get(context);
         const incomplete=()=>{this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);};
         let rule!:Rule;
         rule=this.rule(key?[base,key]:[base],()=>{
-            const keys=key?this.stringHintTexts(key,rule,context):undefined;
+            const keys=key?this.propertyKeys(key,rule,context):undefined;
             if(key && keys===undefined)return;
             if(key && keys===null){incomplete();return;}
             for(const atom of base.values){
@@ -784,7 +857,7 @@ class SourceValueFlow {
                         for(const attribute of ["enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
                     }
                     if(accessor){
-                        for(const kind of ["get","set"] as const){this.watch(rule,accessor[kind]);this.defineField(record.owner,kind,accessor[kind]);if(!accessor[kind].values.size)this.publish(this.field(record.owner,kind),this.primitive(undefined));}
+                        for(const kind of ["get","set"] as const){this.watch(rule,accessor[kind]);this.defineField(record.owner,kind,accessor[kind]);}
                     }
                     if(data.values.size || !accessor){
                         this.defineField(record.owner,"value",data);
@@ -819,6 +892,14 @@ class SourceValueFlow {
                 }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
+                if(key==="Symbol") {
+                    for (const [name, symbol] of this.wellKnownSymbols) {
+                        const value = this.newCell(); this.publish(value, this.primitive(symbol)); this.defineField(fields, name, value);
+                    }
+                    for (const [name, operation] of [["for", "symbol-for"], ["keyFor", "symbol-key-for"]] as const) {
+                        const value = this.newCell(); this.publish(value, this.operation(operation)); this.defineField(fields, name, value);
+                    }
+                }
                 this.publish(cell, {tag:"builtin", name:key, normalResult:descriptor.normalResult,fields});
             }
         }
@@ -850,7 +931,7 @@ class SourceValueFlow {
         }
         return this.ordinaryObjectPrototype;
     }
-    private property(base: Cell, key: string, context?: ts.Node, ownOnly=false): Cell {
+    private property(base: Cell, key: SourcePropertyKey, context?: ts.Node, ownOnly=false): Cell {
         const result = this.newCell();
         const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
@@ -870,8 +951,11 @@ class SourceValueFlow {
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);
                 if (atom.domain === "constructor") owner.prototype = atom.kind === "ordinary" ? this.callablePrototype("ordinary") : this.globalBinding("Function");
                 if (atom.domain === "prototype" && atom.kind !== "ordinary") owner.prototype = this.callablePrototype("ordinary");
-                if (atom.domain === "prototype" && atom.kind === "ordinary")
-                    {this.publish(this.field(owner, "toString"), this.operation("function-text"));this.publish(this.presence(owner,"toString"),this.primitive(true));}
+                if (atom.domain === "prototype" && atom.kind === "ordinary") {
+                    owner.prototype = this.objectPrototype();
+                    this.publish(this.field(owner, "toString"), this.operation("function-text"));this.publish(this.presence(owner,"toString"),this.primitive(true));
+                    this.defineField(owner, "constructor", this.globalBinding("Function"));
+                }
                 this.copy(this.opaqueMutation,owner.shape);
             }
             return owner;
@@ -882,7 +966,10 @@ class SourceValueFlow {
         if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
         return owner;
     }
-    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
+    private read(atom: Atom, base: Cell, key: SourcePropertyKey, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
+        if (atom.tag === "primitive" && typeof atom.value === "symbol" && key === "description") {
+            this.publish(result, this.primitive(atom.value.description)); return;
+        }
         if (atom.tag === "abrupt") {this.publish(result, atom); return;}
         if (atom.tag === "primitive" && (atom.value === null || atom.value === undefined)) {
             this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); return;
@@ -894,7 +981,7 @@ class SourceValueFlow {
             return;
         }
         const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
-        if(atom.tag==="global" && !firstOwner!.accessors.has(key))this.copy(this.globalBinding(key),this.field(firstOwner!,key));
+        if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key))this.copy(this.globalBinding(key),this.field(firstOwner!,key));
         const visited = new Set<ObjectOwner>();
         while (worklist.length) {
             const owner = worklist.pop()!;
@@ -907,11 +994,18 @@ class SourceValueFlow {
                 const accessor=owner.accessors.get(name);
                 if(!accessor)continue;
                 if(rule)this.watch(rule,accessor.get);
-                if(!accessor.get.values.size || accessor.get.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
+                if(accessor.get.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
                 this.invoke(context ?? this.accessorDefinitions.get(accessor.get)!,this.accessorCallee(accessor.get),base,[],result);
             }
             const presence=owner.own?.get(key);
             if (rule) this.watch(rule,this.presence(owner,key));
+            // The native builtin's unrepresented own members are opaque.
+            // A closed prototype chain must not turn them into known absence.
+            if (owner === firstOwner && atom.tag === "builtin" && !presence?.values.has(this.primitive(true)) &&
+                !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
+                    atom.normalResult !== "not-callable" && CALLABLE_FORWARDING_OPERATIONS.has(key)))) {
+                this.publish(result, this.unknown); if (handler) this.publish(handler, this.unknown);
+            }
             if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
             if (presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))) continue;
             if (owner.prototype) {
@@ -947,8 +1041,8 @@ class SourceValueFlow {
         }
         if (atom.tag === "agent" && key === "start") this.publish(result, this.operation("agent-start"));
         if ((["function", "bound", "intrinsic", "operation"].includes(atom.tag) ||
-            atom.tag === "builtin" && atom.normalResult !== "not-callable") && ["call", "apply", "bind"].includes(key))
-            this.publish(result, this.operation(key as Operation));
+            atom.tag === "builtin" && atom.normalResult !== "not-callable") && typeof key === "string" && CALLABLE_FORWARDING_OPERATIONS.has(key))
+            this.publish(result, this.operation(CALLABLE_FORWARDING_OPERATIONS.get(key)!));
         if (atom.tag === "generator" && key === "constructor") this.publish(result, this.intrinsic("prototype", atom.owner.kind));
     }
     private bind(name: ts.BindingName, value: Cell, references?: ReadonlyMap<ts.Identifier, ts.Expression>, context?: ts.Node): void {
@@ -964,8 +1058,9 @@ class SourceValueFlow {
             for (const [index, element] of entry.name.elements.entries()) {
                 if (!ts.isBindingElement(element)) continue;
                 const key = ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
-                const selected = element.dotDotDotToken ? references ? this.newCell() : entry.value : key === null ? this.newCell() : this.property(entry.value, key, entry.name);
-                if (key === null || element.dotDotDotToken && references) this.publish(selected, this.unknown);
+                const computed = ts.isObjectBindingPattern(entry.name) && element.propertyName && ts.isComputedPropertyName(element.propertyName) ? element.propertyName.expression : null;
+                const selected = element.dotDotDotToken ? references ? this.newCell() : entry.value : computed ? this.computedProperty(entry.value, this.cell(computed), context ?? entry.name) : key === null ? this.newCell() : this.property(entry.value, key, entry.name);
+                if (!computed && key === null || element.dotDotDotToken && references) this.publish(selected, this.unknown);
                 if (element.initializer) this.copy(this.cell(element.initializer), selected);
                 worklist.push({ name: element.name, value: selected });
             }
@@ -983,8 +1078,10 @@ class SourceValueFlow {
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
         const name = this.newCell(), input = callableNameInput(node);
         this.defineField(owner.fields, "name", name);
-        this.projectMemberKeys(input.key, input.definition ?? node, key =>
-            this.publish(name, key === null ? this.unknown : this.primitive(input.prefix ? `${input.prefix} ${key}` : key)));
+        this.projectMemberKeys(input.key, input.definition ?? node, key => {
+            const text = typeof key === "symbol" ? key.description === undefined ? "" : "[" + key.description + "]" : key;
+            this.publish(name, text === null ? this.unknown : this.primitive(input.prefix ? `${input.prefix} ${text}` : text));
+        });
         owner.fields.prototype = this.callablePrototype(owner.kind);
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
@@ -1037,7 +1134,7 @@ class SourceValueFlow {
                     const instance=this.ordinaryOwner(receiver);
                     if(!instance)continue;
                     for(const initializer of initializers){
-                        const keys=this.stringHintTexts(initializer.keys,fieldsRule);
+                        const keys=this.propertyKeys(initializer.keys,fieldsRule);
                         if(keys===null)this.publish(instance.shape,this.unknown);
                         else for(const key of keys??[])this.defineField(instance,key,initializer.value);
                     }
@@ -1289,6 +1386,7 @@ class SourceValueFlow {
         const constructedReceiver=this.newCell();
         this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
         const boundValues = new Map<string, Atom>();
+        const omittedArgument = this.newCell(); this.publish(omittedArgument, this.primitive(undefined));
         const argumentConversions = new Map<string, readonly Cell[]>();
         const convertArguments = (args: readonly Cell[] | null): readonly Cell[] | null => {
             if (!args) return null;
@@ -1388,15 +1486,44 @@ class SourceValueFlow {
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
                     if (invocation.construct) this.publish(result!,{tag:"object",owner:this.owner(node)});
-                    const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && atom.normalResult === "primitive-string";
+                    const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol");
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                         const generated = this.generated.get(atom.kind);
                         if (!generated) this.publish(result!,this.pendingSource);
                         for (const value of generated ?? []) this.copy(value, result!);
                     } else if (atom.tag === "builtin") {
+                        if (atom.name === "Symbol") {
+                            const handler = this.exceptionHandlers.get(node);
+                            if (invocation.construct) {this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); continue;}
+                            this.normalResults.set(result, this.nonString);
+                            if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.publish(this.opaqueMutation, this.unknown)); continue;}
+                            let allocations = this.symbolAllocations.get(node);
+                            if (!allocations) {allocations = new Map(); this.symbolAllocations.set(node, allocations);}
+                            const descriptions: (string | undefined)[] = [];
+                            if (!argv[0] || argv[0].values.has(this.primitive(undefined))) descriptions.push(undefined);
+                            if (argv[0]) {
+                                let input = this.symbolDescriptionInputs.get(argv[0]);
+                                if (!input) {
+                                    input = this.newCell(); this.symbolDescriptionInputs.set(argv[0], input);
+                                    const description = input, argument = argv[0];
+                                    this.rule([argument], () => {for (const value of argument.values) if (value !== this.primitive(undefined)) this.publish(description, value);});
+                                }
+                                const converted = this.stringHintCell(input, node); this.watchText(rule, converted);
+                                const proof = this.primitiveChoiceProof(converted);
+                                if (!proof.primitiveComplete) {for (const value of converted.values) if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value.tag === "unknown" ? this.nonString : value);}
+                                else descriptions.push(...proof.values.map(String));
+                                if (proof.primitiveComplete && !proof.values.length) this.publish(result, this.abrupt);
+                            }
+                            for (const description of descriptions) {
+                                let symbol = allocations.get(description);
+                                if (!symbol) {symbol = Symbol(description); allocations.set(description, symbol); this.freshSymbols.add(symbol);}
+                                this.publish(result, this.primitive(symbol));
+                            }
+                            continue;
+                        }
                         const stringValue = atom.normalResult === "primitive-string" && argv?.[0]
-                            ? this.stringHintCell(argv[0], node) : undefined;
+                            ? this.stringHintCell(argv[0], node, !invocation.construct) : undefined;
                         if (stringValue) this.watch(rule, stringValue);
                         if (!invocation.construct) {
                             if (atom.normalResult === "primitive-string") {
@@ -1465,6 +1592,31 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if (atom.operation === "symbol-for") {
+                            this.normalResults.set(result, this.nonString);
+                            if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.publish(this.opaqueMutation, this.unknown)); continue;}
+                            const key = this.stringHintCell(argv[0] ?? omittedArgument, node); this.watchText(rule, key);
+                            const proof = this.primitiveChoiceProof(key);
+                            if (!proof.primitiveComplete) {for (const value of key.values) if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value.tag === "unknown" ? this.nonString : value);}
+                            else if (!proof.values.length) this.publish(result, this.abrupt);
+                            for (const value of proof.values) {
+                                const text = String(value); let symbol = this.symbolRegistry.get(text);
+                                if (!symbol) {symbol = Symbol(text); this.symbolRegistry.set(text, symbol);}
+                                this.publish(result, this.primitive(symbol));
+                            }
+                            continue;
+                        }
+                        if (atom.operation === "symbol-key-for") {
+                            if (!argv) {this.publish(result, this.unknown); continue;}
+                            const input = argv[0] ?? omittedArgument; this.watch(rule, input);
+                            for (const value of input.values) {
+                                if (value.tag === "primitive" && typeof value.value === "symbol")
+                                    this.publish(result, this.primitive([...this.symbolRegistry].find(([, symbol]) => symbol === value.value)?.[0]));
+                                else if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value);
+                                else {this.publish(result, this.abrupt); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.opaqueObject);}
+                            }
+                            continue;
+                        }
                         if(atom.operation==="own-descriptor"||atom.operation==="own-descriptors"){
                             if(argv?.[0]){
                                 const key=atom.operation==="own-descriptor"?argv?.[1]??this.newCell():null;
@@ -1568,7 +1720,9 @@ class SourceValueFlow {
                             if (noArguments) {this.publish(result!, this.abrupt); continue;}
                             if (source) {
                                 this.watchText(rule, source);
-                                for (const text of this.primitiveChoiceProof(source).values) {
+                                const proof = this.primitiveChoiceProof(source);
+                                if (proof.primitiveComplete && !proof.values.length) this.publish(result!, this.abrupt);
+                                for (const text of proof.values) {
                                     if (atom.operation === "eval" && typeof text !== "string") {
                                         this.publish(result!, this.primitive(text));
                                         continue;
@@ -1648,9 +1802,10 @@ class SourceValueFlow {
                                 // numeric conversions contribute no normal choice.
                                 try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
                             } else if (atom.operation === "bound-name") choices.add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
-                            else if (atom.operation === "template") choices.add(tuple.map(String).join(""));
+                            else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) choices.add(tuple.map(String).join(""));}
                             else {
                                 const [left, right] = tuple;
+                                if (typeof left === "symbol" || typeof right === "symbol") continue;
                                 if (typeof left === "string" || typeof right === "string") choices.add(String(left) + String(right));
                                 else if (typeof left === "bigint" && typeof right === "bigint") choices.add(left + right);
                                 else if (typeof left !== "bigint" && typeof right !== "bigint") choices.add(Number(left) + Number(right));
@@ -1678,6 +1833,7 @@ class SourceValueFlow {
             // then propagate the same interned top fact through normal edges.
             let changed = false;
             for (const cell of this.exceptionCells) if (!cell.values.size) {this.publish(cell, this.abrupt); changed = true;}
+            for (const cell of this.accessorSlots) if (!cell.values.size) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
             for (const [node, cell] of this.cells) if (!cell.values.size) {
                 const activation = this.enclosingActivation(node);
@@ -1685,7 +1841,7 @@ class SourceValueFlow {
                 // [[Construct]] either throws or returns an Object. Its
                 // properties and conversion remain opaque, but eval retains
                 // the object unchanged without needing a source-text proof.
-                this.publish(cell, ts.isNewExpression(node) ? this.opaqueObject : this.unknown); changed = true;
+                this.publish(cell, this.normalResults.get(cell) ?? (ts.isNewExpression(node) ? this.opaqueObject : this.unknown)); changed = true;
             }
             if (!changed) break;
         }

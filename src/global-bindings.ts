@@ -23,6 +23,17 @@ export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<Runt
         }),
 );
 
+/** The native well-known Symbol table is the canonical identity collection. */
+export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_builtin.c"), "utf8")
+        .split(/\r?\n/).filter(line => line.includes(" = TSC_WELL_KNOWN_SYMBOL_ENTRY("))
+        .map(line => {
+            const row = /TSC_WELL_KNOWN_SYMBOL_ENTRY\("([^"\n]+)", "([^"\n]+)", "[^"\n]+"\)/.exec(line);
+            if (!row) throw new Error("invalid canonical well-known Symbol descriptor");
+            return [row[1]!, row[2]!] as const;
+        }),
+);
+
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
     [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
         + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_typed_array.def"), "utf8")
