@@ -585,3 +585,5 @@ Property base validation now shares the canonical key-preparation path. With new
 Synthetic checker declarations now preserve source-global ownership through the shared declaration predicate. Complete declaration/eval/Annex B semantics and the remaining Realm/agent host and clause evidence gates remain open.
 
 Contextual Statement-body let and escaped Identifier spellings now share offset-preserving parsing and strict grammar-role validation. Full declaration/eval/Annex B semantics, dynamic actual-callee proof, and exhaustive host/clause evidence remain open.
+
+Duplicate sloppy simple formals now use ordered ABI slots and a canonical parameter binding identity. General declaration/eval/Annex B algorithms, object-environment actual-callee proof, and exhaustive Realm/agent host and clause evidence remain open.

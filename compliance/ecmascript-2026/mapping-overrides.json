@@ -25,6 +25,14 @@
     {
       "field": "es5id",
       "match": "prefix",
+      "value": "10.2.1_",
+      "clauses": ["sec-functiondeclarationinstantiation"],
+      "reason": "The historical function activation instantiation section maps to FunctionDeclarationInstantiation, including ordered parameter binding initialization and body declaration ownership.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
       "value": "12.10_",
       "clauses": [
         "sec-with-statement-runtime-semantics-evaluation"

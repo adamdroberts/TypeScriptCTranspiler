@@ -10,6 +10,18 @@ export function sourceDeclarationIntroducesBinding(node: ts.Declaration): boolea
             ts.isClassDeclaration(node) || ts.isClassExpression(node)) && !!node.name;
 }
 
+/** Duplicate simple formals are one Function Environment Record binding.
+ * The checker creates recovery symbols for later declarations; resolve the
+ * owner's actual binding rather than treating those symbols as new cells. */
+export function canonicalParameterBindingSymbol(
+    checker: ts.TypeChecker, node: ts.Identifier, symbol: ts.Symbol | undefined,
+): ts.Symbol | undefined {
+    const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+    return declaration && ts.isParameter(declaration)
+        ? checker.resolveName(node.text, declaration, ts.SymbolFlags.Value, false) ?? symbol
+        : symbol;
+}
+
 /** Object records remain independent candidates in source flow. Resolving
  * this fallback does not select the runtime Reference's actual base. */
 export function declarativeSourceBindingSymbol(checker: ts.TypeChecker, node: ts.Identifier): ts.Symbol | undefined {
@@ -19,7 +31,8 @@ export function declarativeSourceBindingSymbol(checker: ts.TypeChecker, node: ts
     const declaration = (ts.isVariableDeclaration(parent) || ts.isBindingElement(parent) || ts.isParameter(parent) ||
         ts.isFunctionDeclaration(parent) || ts.isFunctionExpression(parent) ||
         ts.isClassDeclaration(parent) || ts.isClassExpression(parent)) && parent.name === node;
-    return checker.getSymbolAtLocation(node) ??
+    const symbol = checker.getSymbolAtLocation(node) ??
         (declaration ? (parent as ts.Node & {symbol?: ts.Symbol}).symbol : undefined) ??
         checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
+    return canonicalParameterBindingSymbol(checker, node, symbol);
 }

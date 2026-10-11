@@ -9,7 +9,7 @@ import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { runtimeGlobalBindings } from "../global-bindings";
-import { sourceDeclarationIntroducesBinding } from "../source-bindings";
+import { canonicalParameterBindingSymbol, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
@@ -18986,6 +18986,7 @@ class Emitter {
                 this.checker.getShorthandAssignmentValueSymbol(id) ??
                 sym;
         }
+        sym = canonicalParameterBindingSymbol(this.checker, id, sym);
         // FunctionDeclarationInstantiation unifies body var/function names
         // and simple parameter names even when the checker separates symbols.
         const declaration = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -25860,9 +25861,9 @@ class Emitter {
         parameter: ts.ParameterDeclaration,
         index: number,
     ): string {
-        if (ts.isIdentifier(parameter.name) && !parameter.dotDotDotToken) {
-            return mangleIdent(parameter.name.text);
-        }
+        // ABI slots belong to ordered arguments, not source binding names.
+        // Duplicate sloppy formals share one binding plan while every raw
+        // argument must remain independently addressable during initialization.
         return `__tsc_formal_${Math.max(0, parameter.pos)}_${index}`;
     }
 
