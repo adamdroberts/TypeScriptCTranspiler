@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Install Set composition on ordinary owners through shared set-like records and insertion/iterator worklists. Preserve observable validation, mutations, copy timing and early iterator closing; accept typed set-like operands and delete fixed native/emitter predecessors.
+
 - Correct stale collection consumers to materialize Map/Set iterators before using array indexing or joins, and iterate Map keys explicitly in wordcount. Node confirms the existing output contracts.
 
 - Added ordinary ArrayBuffer owners, resizable storage, species-aware slice and transfers. Share DataView witnesses for current bounds and retain native byte snapshots across storage transitions. Removed source shortcuts and premature scalar narrowing of ordinary property reads. Differential properties, native storage-lifetime checks and typed consumers cover the change.

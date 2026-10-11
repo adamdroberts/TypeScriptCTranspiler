@@ -515,6 +515,11 @@ interface MapConstructor {
 }
 declare var Map: MapConstructor;
 
+interface ReadonlySetLike<T> {
+    readonly size: number;
+    has(value: T): boolean;
+    keys(): Iterator<T>;
+}
 interface Set<T> extends Iterable<T> {
     readonly size: number;
     add(value: T): this;
@@ -525,13 +530,13 @@ interface Set<T> extends Iterable<T> {
     values(...ignored: any[]): SetIterator<T>;
     entries(...ignored: any[]): SetIterator<[T, T]>;
     forEach(cb: (value: T, value2: T, set: Set<T>) => void, thisArg?: any, ...ignored: any[]): void;
-    union(other: Set<T>, ...ignored: any[]): Set<T>;
-    intersection(other: Set<T>, ...ignored: any[]): Set<T>;
-    difference(other: Set<T>, ...ignored: any[]): Set<T>;
-    symmetricDifference(other: Set<T>, ...ignored: any[]): Set<T>;
-    isSubsetOf(other: Set<T>, ...ignored: any[]): boolean;
-    isSupersetOf(other: Set<T>, ...ignored: any[]): boolean;
-    isDisjointFrom(other: Set<T>, ...ignored: any[]): boolean;
+    union(other: ReadonlySetLike<T>, ...ignored: any[]): Set<T>;
+    intersection(other: ReadonlySetLike<T>, ...ignored: any[]): Set<T>;
+    difference(other: ReadonlySetLike<T>, ...ignored: any[]): Set<T>;
+    symmetricDifference(other: ReadonlySetLike<T>, ...ignored: any[]): Set<T>;
+    isSubsetOf(other: ReadonlySetLike<T>, ...ignored: any[]): boolean;
+    isSupersetOf(other: ReadonlySetLike<T>, ...ignored: any[]): boolean;
+    isDisjointFrom(other: ReadonlySetLike<T>, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): Set<T>;

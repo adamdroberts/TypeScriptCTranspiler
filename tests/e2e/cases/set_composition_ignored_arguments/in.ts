@@ -6,7 +6,7 @@ function mark(label: string): string {
 }
 
 function show(label: string, set: Set<number>): void {
-    console.log(label + ":", set.values().join(","));
+    console.log(label + ":", Array.from(set.values()).join(","));
 }
 
 const a = new Set([1, 2, 3]);

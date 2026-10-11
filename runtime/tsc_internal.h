@@ -701,7 +701,6 @@ void set_rebuild_buckets(tsc_set_t* s, size_t new_bucket_cap);
 void set_grow_ordered(tsc_set_t* s, size_t want);
 size_t set_lookup(const tsc_set_t* s, const void* v, size_t* slot_out);
 size_t set_lookup_num(const tsc_set_t* s, double v, size_t* slot_out);
-void set_copy_into(tsc_set_t* dst, const tsc_set_t* src);
 uint32_t tsc_to_uint32(double n);
 int32_t tsc_to_int32(double n);
 int32_t tsc_int32_from_uint32(uint32_t u);

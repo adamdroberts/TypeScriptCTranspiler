@@ -38664,38 +38664,12 @@ class Emitter {
             case "union":
             case "intersection":
             case "difference":
-            case "symmetricDifference": {
-                if (args.length < 1)
-                    unsupported(call, `Set.${method} expects one Set<T> argument`);
-                const other = this.emitExpr(args[0]!);
-                if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
-                    unsupported(args[0]!, `Set.${method} expects a Set<T> with the same element type`);
-                const fn = method === "symmetricDifference" ? "tsc_set_symmetric_difference" : `tsc_set_${method}`;
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
-                    ([a, b]) => `${fn}(${a!}, ${b!})`,
-                );
-            }
+            case "symmetricDifference":
             case "isSubsetOf":
             case "isSupersetOf":
-            case "isDisjointFrom": {
-                if (args.length < 1)
-                    unsupported(call, `Set.${method} expects one Set<T> argument`);
-                const other = this.emitExpr(args[0]!);
-                if (other.ty.kind !== "set" || !sameCType(other.ty.elem!, e))
-                    unsupported(args[0]!, `Set.${method} expects a Set<T> with the same element type`);
-                const fnName = method === "isSubsetOf"
-                    ? "tsc_set_is_subset_of"
-                    : method === "isSupersetOf"
-                        ? "tsc_set_is_superset_of"
-                        : "tsc_set_is_disjoint_from";
-                return this.emitSequencedExpr(
-                    T_BOOLEAN,
-                    [{ value: recv }, { value: other }, ...this.ignoredArgumentSpecs(args, 1)],
-                    ([a, b]) => `${fnName}(${a!}, ${b!})`,
-                );
-            }
+            case "isDisjointFrom":
+                return this.emitDynamicMethod(call,
+                    { c: this.coerce(recv, T_VALUE, call.expression), ty: T_VALUE }, method);
             case "toLocaleString":
             case "toString":
             case "valueOf":

@@ -367,76 +367,6 @@ tsc_array_t* tsc_set_values(const tsc_set_t* s) {
     return tsc_array_from_buf(s->es, s->data, s->len);
 }
 
-void set_copy_into(tsc_set_t* dst, const tsc_set_t* src) {
-    for (size_t i = 0; i < src->len; i++) {
-        tsc_set_add_raw(dst, (const char*)src->data + i * src->es);
-    }
-}
-
-tsc_set_t* tsc_set_union(const tsc_set_t* a, const tsc_set_t* b) {
-    tsc_set_t* out = tsc_set_new(a->es, (int)a->kk, a->len + b->len);
-    set_copy_into(out, a);
-    set_copy_into(out, b);
-    return out;
-}
-
-tsc_set_t* tsc_set_intersection(const tsc_set_t* a, const tsc_set_t* b) {
-    /* Iterate the smaller set to keep this O(min(|a|,|b|)). */
-    const tsc_set_t* small = a->len <= b->len ? a : b;
-    const tsc_set_t* large = small == a ? b : a;
-    tsc_set_t* out = tsc_set_new(a->es, (int)a->kk, small->len);
-    for (size_t i = 0; i < small->len; i++) {
-        const void* v = (const char*)small->data + i * small->es;
-        if (tsc_set_has_raw(large, v)) tsc_set_add_raw(out, v);
-    }
-    return out;
-}
-
-tsc_set_t* tsc_set_difference(const tsc_set_t* a, const tsc_set_t* b) {
-    tsc_set_t* out = tsc_set_new(a->es, (int)a->kk, a->len);
-    for (size_t i = 0; i < a->len; i++) {
-        const void* v = (const char*)a->data + i * a->es;
-        if (!tsc_set_has_raw(b, v)) tsc_set_add_raw(out, v);
-    }
-    return out;
-}
-
-tsc_set_t* tsc_set_symmetric_difference(const tsc_set_t* a, const tsc_set_t* b) {
-    tsc_set_t* out = tsc_set_new(a->es, (int)a->kk, a->len + b->len);
-    for (size_t i = 0; i < a->len; i++) {
-        const void* v = (const char*)a->data + i * a->es;
-        if (!tsc_set_has_raw(b, v)) tsc_set_add_raw(out, v);
-    }
-    for (size_t i = 0; i < b->len; i++) {
-        const void* v = (const char*)b->data + i * b->es;
-        if (!tsc_set_has_raw(a, v)) tsc_set_add_raw(out, v);
-    }
-    return out;
-}
-
-bool tsc_set_is_subset_of(const tsc_set_t* a, const tsc_set_t* b) {
-    if (a->len > b->len) return false;
-    for (size_t i = 0; i < a->len; i++) {
-        const void* v = (const char*)a->data + i * a->es;
-        if (!tsc_set_has_raw(b, v)) return false;
-    }
-    return true;
-}
-
-bool tsc_set_is_superset_of(const tsc_set_t* a, const tsc_set_t* b) {
-    return tsc_set_is_subset_of(b, a);
-}
-
-bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b) {
-    const tsc_set_t* small = a->len <= b->len ? a : b;
-    const tsc_set_t* large = small == a ? b : a;
-    for (size_t i = 0; i < small->len; i++) {
-        const void* v = (const char*)small->data + i * small->es;
-        if (tsc_set_has_raw(large, v)) return false;
-    }
-    return true;
-}
-
 /* Ordinary collection objects and iterators share one operation collection
  * and insertion-link cursor algorithm. Native dense layouts cross this
  * boundary through the same element codecs as ordinary Array consumers. */
@@ -662,6 +592,114 @@ static tsc_value_t collection_iterator_next(void* env, tsc_value_t receiver, tsc
     return tsc_iterator_result(result, false);
 }
 
+typedef enum {
+    SET_UNION, SET_INTERSECTION, SET_DIFFERENCE, SET_SYMMETRIC_DIFFERENCE,
+    SET_SUBSET, SET_SUPERSET, SET_DISJOINT,
+} set_composition_operation_t;
+static const struct { const char* name; set_composition_operation_t operation; } set_composition_methods[] = {
+    {"union", SET_UNION}, {"intersection", SET_INTERSECTION},
+    {"difference", SET_DIFFERENCE}, {"symmetricDifference", SET_SYMMETRIC_DIFFERENCE},
+    {"isSubsetOf", SET_SUBSET}, {"isSupersetOf", SET_SUPERSET}, {"isDisjointFrom", SET_DISJOINT},
+};
+typedef struct {
+    tsc_value_t object, has, keys;
+    void *object_root, *has_root, *keys_root;
+    double size;
+} set_like_record_t;
+static set_like_record_t* set_like_record(tsc_value_t object) {
+    if (!tsc_value_is_object(object))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Set operand is not an object"));
+    set_like_record_t* volatile record = TSC_GC_MALLOC(sizeof(*record));
+    memset(record, 0, sizeof(*record));
+    record->object = object; record->object_root = tsc_value_gc_root(object);
+    double size = tsc_value_to_number(tsc_value_get_prop(object, tsc_str_from_lit("size", 4)));
+    if (isnan(size)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Set operand size is NaN"));
+    record->size = trunc(size);
+    if (record->size < 0) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Set operand size is negative"));
+    record->has = tsc_value_get_prop(object, tsc_str_from_lit("has", 3));
+    record->has_root = tsc_value_gc_root(record->has);
+    if (!tsc_value_is_callable(record->has))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Set operand has is not callable"));
+    record->keys = tsc_value_get_prop(object, tsc_str_from_lit("keys", 4));
+    record->keys_root = tsc_value_gc_root(record->keys);
+    if (!tsc_value_is_callable(record->keys))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Set operand keys is not callable"));
+    return record;
+}
+static bool set_like_has(set_like_record_t* record, tsc_value_t value) {
+    void* volatile root = tsc_value_gc_root(value);
+    tsc_array_t* volatile args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_use_value_storage(args); tsc_array_push_raw(args, &value);
+    bool found = tsc_value_is_truthy(tsc_value_apply_function(record->has, record->object, tsc_value_array(args)));
+    (void)root; return found;
+}
+static void set_composition_add(tsc_set_t* result, tsc_value_t value) {
+    if (!value_is_box(value) && value_as_num(value) == 0) value = tsc_value_num(0);
+    tsc_set_add_raw(result, &value);
+}
+static void set_composition_delete(tsc_set_t* result, tsc_value_t value) {
+    (void)tsc_set_delete_raw(result, &value);
+}
+static void set_composition_copy(tsc_set_t* result, tsc_value_t receiver) {
+    collection_iterator_t* volatile cursor = collection_cursor(false, receiver, COLLECTION_VALUES);
+    tsc_value_t key, value;
+    while (collection_step(cursor, &key, &value)) set_composition_add(result, value);
+}
+static tsc_value_t set_composition_apply(void* environment, tsc_value_t receiver, tsc_array_t* args) {
+    set_composition_operation_t operation = *(const set_composition_operation_t*)environment;
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    tsc_array_t* volatile actuals = args;
+    collection_iterator_t* volatile source = collection_cursor(false, receiver, COLLECTION_VALUES);
+    tsc_set_t* volatile original = source->set;
+    set_like_record_t* volatile other = set_like_record(collection_argument(actuals, 0));
+    source = collection_cursor(false, receiver, COLLECTION_VALUES);
+    bool smaller = (double)original->len <= other->size;
+    if (operation == SET_SUBSET && !smaller) return tsc_value_bool(false);
+    if (operation == SET_SUPERSET && (double)original->len < other->size) return tsc_value_bool(false);
+    bool use_has = operation == SET_SUBSET || (smaller &&
+        (operation == SET_INTERSECTION || operation == SET_DIFFERENCE || operation == SET_DISJOINT));
+    bool predicate = operation == SET_SUBSET || operation == SET_SUPERSET || operation == SET_DISJOINT;
+    tsc_set_t* volatile result = predicate ? NULL : tsc_set_new(sizeof(tsc_value_t), TSC_KEY_VALUE, 0);
+    if (operation == SET_DIFFERENCE) set_composition_copy(result, receiver);
+    tsc_sync_iterator_t* volatile iterator = NULL;
+    if (!use_has) {
+        iterator = TSC_GC_MALLOC(sizeof(*iterator));
+        *iterator = tsc_sync_iterator_open_with_method(other->object, other->keys);
+    }
+    if (operation == SET_UNION || operation == SET_SYMMETRIC_DIFFERENCE)
+        set_composition_copy(result, receiver);
+    if (use_has) {
+        collection_iterator_t* volatile cursor = operation == SET_DIFFERENCE
+            ? collection_cursor(false, tsc_value_set(result), COLLECTION_VALUES) : source;
+        tsc_value_t key, value;
+        while (collection_step(cursor, &key, &value)) {
+            void* volatile value_root = tsc_value_gc_root(value);
+            bool found = set_like_has(other, value);
+            if (operation == SET_SUBSET && !found) return tsc_value_bool(false);
+            if (operation == SET_DISJOINT && found) return tsc_value_bool(false);
+            if (operation == SET_INTERSECTION && found) set_composition_add(result, value);
+            if (operation == SET_DIFFERENCE && found) set_composition_delete(result, value);
+            (void)value_root;
+        }
+    } else {
+        tsc_value_t value;
+        while (tsc_sync_iterator_step(iterator, &value)) {
+            void* volatile value_root = tsc_value_gc_root(value);
+            bool found = collection_find(source, value) != TSC_BKT_EMPTY;
+            if ((operation == SET_SUPERSET && !found) || (operation == SET_DISJOINT && found)) {
+                tsc_sync_iterator_close(iterator); return tsc_value_bool(false);
+            }
+            if (operation == SET_UNION || (operation == SET_INTERSECTION && found)) set_composition_add(result, value);
+            if (operation == SET_DIFFERENCE || (operation == SET_SYMMETRIC_DIFFERENCE && found))
+                set_composition_delete(result, value);
+            if (operation == SET_SYMMETRIC_DIFFERENCE && !found) set_composition_add(result, value);
+            (void)value_root;
+        }
+    }
+    (void)receiver_root; (void)actuals;
+    return predicate ? tsc_value_bool(true) : tsc_value_set(result);
+}
+
 static tsc_value_t collection_method_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
     const collection_method_t* method = env;
     collection_iterator_t* source = collection_cursor(method->is_map, receiver, method->operation);
@@ -872,6 +910,14 @@ static collection_intrinsics_t* collection_intrinsics(bool is_map) {
             (void)function_root;
         }
         if (!is_map) tsc_object_define(state->prototype, tsc_str_from_lit("keys", 4), values_method, true, false, true);
+        if (!is_map) {
+            for (size_t index = 0; index < sizeof(set_composition_methods) / sizeof(*set_composition_methods); ++index) {
+                tsc_str_t* name = tsc_str_from_cstr(set_composition_methods[index].name);
+                tsc_value_t function = tsc_value_function_builtin_named(set_composition_apply,
+                    (void*)&set_composition_methods[index].operation, 1, name);
+                tsc_object_define(state->prototype, name, function, true, false, true);
+            }
+        }
         tsc_object_t* descriptor = tsc_object_new();
         tsc_object_set(descriptor, tsc_str_from_lit("get", 3), tsc_value_function_builtin_named(
             collection_species_get, NULL, 0, tsc_str_from_lit("get [Symbol.species]", 20)));

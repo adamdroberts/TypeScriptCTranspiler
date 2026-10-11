@@ -1655,13 +1655,6 @@ tsc_set_t* tsc_set_set_value_codec(tsc_set_t* set,
 tsc_set_t* tsc_set_require_native_representation(tsc_set_t* set, size_t element_size, int key_kind,
     tsc_array_box_element_fn box_value, tsc_array_unbox_element_fn unbox_value);
 /* Set composition helpers — both operands must be Set<T> with matching es/kk. */
-tsc_set_t* tsc_set_union(const tsc_set_t* a, const tsc_set_t* b);
-tsc_set_t* tsc_set_intersection(const tsc_set_t* a, const tsc_set_t* b);
-tsc_set_t* tsc_set_difference(const tsc_set_t* a, const tsc_set_t* b);
-tsc_set_t* tsc_set_symmetric_difference(const tsc_set_t* a, const tsc_set_t* b);
-bool tsc_set_is_subset_of(const tsc_set_t* a, const tsc_set_t* b);
-bool tsc_set_is_superset_of(const tsc_set_t* a, const tsc_set_t* b);
-bool tsc_set_is_disjoint_from(const tsc_set_t* a, const tsc_set_t* b);
 
 /* ------------- console ------------- */
 void tsc_console_log_n(size_t n, ...);

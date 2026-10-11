@@ -1,0 +1,11 @@
+const owner = new Set<number>([1, 2, 3]);
+const other: ReadonlySetLike<number> = new Map<number, string>([[2, "two"], [4, "four"]]);
+const combined: Set<number> = owner.union(other);
+console.log("union:", Array.from(combined).join(","));
+console.log("intersection:", Array.from(owner.intersection(other)).join(","));
+console.log("difference:", Array.from(owner.difference(other)).join(","));
+console.log("symmetric:", Array.from(owner.symmetricDifference(other)).join(","));
+console.log("predicates:", owner.isSubsetOf(other), owner.isSupersetOf(other), owner.isDisjointFrom(other));
+let total = 0;
+for (const value of combined) total += value;
+console.log("typed-consumer:", combined.has(4), combined.size, total);
