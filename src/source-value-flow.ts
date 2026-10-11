@@ -46,7 +46,7 @@ type Atom =
     | { readonly tag: "unknown" }
     | { readonly tag: "opaque-object" }
     | { readonly tag: "text-operation"; readonly operation: "add" | "template"; readonly parts: readonly Cell[] }
-    | { readonly tag: "promise"; readonly value: Cell }
+    | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
@@ -54,7 +54,7 @@ interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: b
 interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; list?: readonly ListPart[]; }
 interface FunctionOwner {
     readonly node: FunctionNode; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
-    readonly returns: Cell; readonly receiver: Cell;
+    readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell;
 }
 interface Call { readonly node: ts.CallExpression | ts.NewExpression; readonly callee: Cell; readonly receiver: Cell; readonly result: Cell; }
 interface EvaluationRecord {
@@ -79,6 +79,18 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
+
+function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
+    if (ts.isComputedPropertyName(node) || ts.isTemplateSpan(node)) return [node.expression];
+    if (ts.isElementAccessExpression(node)) return [node.argumentExpression];
+    if (ts.isPrefixUnaryExpression(node) && node.operator !== ts.SyntaxKind.ExclamationToken || ts.isPostfixUnaryExpression(node))
+        return [node.operand];
+    if (ts.isBinaryExpression(node) && (NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind) ||
+        node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
+        BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind) && node.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+            node.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)) return [node.left, node.right];
+    return null;
+}
 
 function unwrap(node: ts.Expression): ts.Expression {
     while (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) ||
@@ -112,6 +124,7 @@ function propertyName(node: ts.Node | undefined): string | null {
  * Property discovery never asks TypeScript to infer a receiver/member type. */
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
+    private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
@@ -162,9 +175,34 @@ class SourceValueFlow {
         }
         for (const file of program.getSourceFiles()) {
             if (file.isDeclarationFile) continue;
-            const worklist: ts.Node[] = [file];
+            const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: null}];
             while (worklist.length) {
-                const node = worklist.pop()!;
+                const {node, handler} = worklist.pop()!;
+                if (handler) this.exceptionHandlers.set(node, handler);
+                if (ts.isTryStatement(node)) {
+                    const caught = node.catchClause ? this.newCell() : handler;
+                    if (node.catchClause?.variableDeclaration) this.bind(node.catchClause.variableDeclaration.name, caught!);
+                    worklist.push({node: node.tryBlock, handler: caught});
+                    if (node.catchClause) worklist.push({node: node.catchClause, handler});
+                    if (node.finallyBlock) worklist.push({node: node.finallyBlock, handler});
+                    continue;
+                }
+                if (ts.isThrowStatement(node) && handler) this.copy(this.cell(node.expression), handler);
+                const operands = handler && conversionOperands(node);
+                if (handler && operands) {
+                    const inputs = operands.map(operand => this.cell(operand));
+                    // Primitive conversion failures are Error objects. An
+                    // opaque coercion can invoke user code and throw any value;
+                    // it cannot disappear beside a known explicit throw.
+                    this.publish(handler, this.opaqueObject);
+                    this.rule(inputs, () => {
+                        if (inputs.some(input => [...input.values].some(atom => atom.tag !== "primitive" && atom.tag !== "non-string")))
+                            this.publish(handler, this.unknown);
+                    });
+                }
+                if (handler && ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    (ts.isPropertyAccessExpression(node.left) || ts.isElementAccessExpression(node.left)))
+                    this.publish(handler, this.unknown);
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
                 if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
                     const target = unwrap(node.left);
@@ -180,9 +218,17 @@ class SourceValueFlow {
                         });
                     }
                 }
-                if (functionNode(node)) this.function(node);
-                if (ts.isCallExpression(node) || ts.isNewExpression(node)) this.cell(node);
-                node.forEachChild(child => { worklist.push(child); });
+                if (functionNode(node)) {
+                    const owner = this.function(node);
+                    // Computed method names execute in the defining context;
+                    // formals and bodies execute in the function activation.
+                    node.forEachChild(child => { worklist.push({node: child,
+                        handler: child === node.body || ts.isParameter(child) ? owner.throws : handler}); });
+                    continue;
+                }
+                if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
+                    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node)) this.cell(node);
+                node.forEachChild(child => { worklist.push({node: child, handler}); });
             }
         }
     }
@@ -312,9 +358,9 @@ class SourceValueFlow {
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !declaration.getSourceFile().isDeclarationFile && sourceDeclarationIntroducesBinding(declaration));
     }
-    private property(base: Cell, key: string): Cell {
+    private property(base: Cell, key: string, context?: ts.Node): Cell {
         const result = this.newCell();
-        this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result); });
+        this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context)); });
         return result;
     }
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
@@ -326,13 +372,20 @@ class SourceValueFlow {
         if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
         return owner;
     }
-    private read(atom: Atom, base: Cell, key: string, result: Cell): void {
-        if (atom.tag === "unknown" || atom.tag === "opaque-object") { this.publish(result, this.unknown); return; }
+    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell): void {
+        if (atom.tag === "unknown" || atom.tag === "opaque-object") {
+            this.publish(result, this.unknown);
+            if (handler) this.publish(handler, this.unknown);
+            return;
+        }
         const owner = this.ordinaryOwner(atom);
         if (owner) {
             this.copy(this.field(owner, key), result);
             const getter = owner.getters.get(key);
-            if (getter) { this.copy(base, getter.receiver); this.copy(getter.returns, result); }
+            if (getter) {
+                this.copy(base, getter.receiver); this.copy(getter.returns, result);
+                if (handler) this.copy(getter.throws, handler);
+            }
         }
         if (atom.tag === "function") {
             if (key === "constructor") this.publish(result, this.intrinsic("constructor", atom.owner.kind));
@@ -370,7 +423,7 @@ class SourceValueFlow {
             for (const [index, element] of entry.name.elements.entries()) {
                 if (!ts.isBindingElement(element)) continue;
                 const key = ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
-                const selected = element.dotDotDotToken ? entry.value : key === null ? this.empty : this.property(entry.value, key);
+                const selected = element.dotDotDotToken ? entry.value : key === null ? this.empty : this.property(entry.value, key, entry.name);
                 if (element.initializer) this.copy(this.cell(element.initializer), selected);
                 worklist.push({ name: element.name, value: selected });
             }
@@ -379,18 +432,25 @@ class SourceValueFlow {
     private function(node: FunctionNode): FunctionOwner {
         let owner = this.functions.get(node);
         if (owner) return owner;
-        owner = { node, kind: functionKindForDeclaration(node), fields: this.owner(node), returns: this.newCell(),
+        owner = { node, kind: functionKindForDeclaration(node), fields: this.owner(node), returns: this.newCell(), throws: this.newCell(),
             receiver: this.newCell() };
         this.functions.set(node, owner);
         if (node.body && !ts.isBlock(node.body)) this.copy(this.cell(node.body), owner.returns);
         else if (node.body) {
             const worklist: ts.Node[] = [...node.body.statements];
+            let hasValueReturn = false;
             while (worklist.length) {
                 const item = worklist.pop()!;
                 if (functionNode(item) || ts.isClassLike(item)) continue;
-                if (ts.isReturnStatement(item) && item.expression) this.copy(this.cell(item.expression), owner.returns);
+                if (ts.isReturnStatement(item) && item.expression) {
+                    hasValueReturn = true;
+                    this.copy(this.cell(item.expression), owner.returns);
+                }
                 item.forEachChild(child => { worklist.push(child); });
             }
+            // Without a value-return statement, any normal completion is
+            // undefined; the exception cell remains a separate outcome.
+            if (!hasValueReturn) this.publish(owner.returns, this.primitive(undefined));
         }
         return owner;
     }
@@ -474,7 +534,7 @@ class SourceValueFlow {
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
             this.copy(this.binding(node), result);
-            for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text), result);
+            for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (this.isAmbientIdentifier(node)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copy(this.globalBinding(node.text),result);
@@ -515,7 +575,7 @@ class SourceValueFlow {
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
             const key = propertyName(node);
             if (key !== null) {
-                this.copy(this.property(this.cell(node.expression), key), result);
+                this.copy(this.property(this.cell(node.expression), key, node), result);
                 const base = unwrap(node.expression);
                 if (ts.isIdentifier(base) && ["Object", "Reflect"].includes(base.text) &&
                     (this.checker.getSymbolAtLocation(base)?.declarations ?? []).every(declaration => declaration.getSourceFile().isDeclarationFile)) {
@@ -541,7 +601,15 @@ class SourceValueFlow {
         } else if (ts.isAwaitExpression(node)) {
             const operand = this.cell(node.expression);
             this.rule([operand], () => { for (const atom of operand.values) {
-                if (atom.tag === "promise") this.copy(atom.value, result!); else this.publish(result!, atom);
+                if (atom.tag === "promise") {
+                    this.copy(atom.value, result!);
+                    const handler = this.exceptionHandlers.get(node);
+                    if (handler) this.copy(atom.rejection, handler);
+                } else {
+                    this.publish(result!, atom);
+                    const handler = this.exceptionHandlers.get(node);
+                    if (handler && atom.tag !== "primitive" && atom.tag !== "non-string") this.publish(handler, this.unknown);
+                }
             } });
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
             // Successful [[Construct]] always produces an Object, even when
@@ -574,7 +642,10 @@ class SourceValueFlow {
                     const invocation = worklist.pop()!; this.watch(rule, invocation.target);
                     for (const atom of invocation.target.values) {
                         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
-                            this.publish(result!, ts.isNewExpression(node) ? this.opaqueObject : this.unknown); continue;
+                            this.publish(result!, ts.isNewExpression(node) ? this.opaqueObject : this.unknown);
+                            const handler = this.exceptionHandlers.get(node);
+                            if (handler) this.publish(handler, this.unknown);
+                            continue;
                         }
                         const argv = invocation.args;
                         const signature = invocation.receiver.id + ":" + (argv?.map(cell => cell.id).join(",") ?? "unknown");
@@ -611,8 +682,12 @@ class SourceValueFlow {
                                 if (parameter.initializer) this.bind(parameter.name, this.cell(parameter.initializer));
                             }
                             if (atom.owner.kind.includes("generator")) this.publish(result!, { tag: "generator", owner: atom.owner });
-                            else if (atom.owner.kind === "async") this.publish(result!, { tag: "promise", value: atom.owner.returns });
-                            else this.copy(atom.owner.returns, result!);
+                            else if (atom.owner.kind === "async") this.publish(result!, { tag: "promise", value: atom.owner.returns, rejection: atom.owner.throws });
+                            else {
+                                this.copy(atom.owner.returns, result!);
+                                const handler = this.exceptionHandlers.get(node);
+                                if (handler) this.copy(atom.owner.throws, handler);
+                            }
                         } else if (atom.tag === "operation") {
                             if (atom.operation === "bind") {
                                 let value = boundValues.get(signature);

@@ -28784,6 +28784,8 @@ class Emitter {
         pieces.push(
             `tsc_value_t ${keyTemp} = ${this.coerce(key, T_VALUE, keyNode)}`,
             `void* volatile ${keyRoot} = tsc_value_gc_root(${keyTemp}); (void)${keyRoot}`,
+            `${keyTemp} = tsc_value_to_property_key(${keyTemp})`,
+            `${keyRoot} = tsc_value_gc_root(${keyTemp})`,
             `tsc_value_t ${valueTemp} = ${this.coerce(value, T_VALUE, valueNode)}`,
             `void* volatile ${valueRoot} = tsc_value_gc_root(${valueTemp}); (void)${valueRoot}`,
             `if (!${define}(tsc_value_object(${object}), ${keyTemp}, ${valueTemp})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
@@ -32518,37 +32520,25 @@ class Emitter {
         };
         const emitCatch = (error: string): void => {
             const clause = statement.catchClause!;
-            let symbol: ts.Symbol | undefined;
-            if (clause.variableDeclaration) {
-                const declaration = clause.variableDeclaration;
-                if (!ts.isIdentifier(declaration.name)) unsupported(declaration, "catch binding must be simple identifier");
-                symbol = this.symbolForIdentifier(declaration.name);
-                if (symbol) this.catchValueSymbols.add(symbol);
-                const name = mangleIdent(declaration.name.text);
-                const cell = this.currentFunctionCellForSymbol(symbol);
-                if (cell) this.emitCaptureCellInitialization(buf, cell, error);
-                else {
-                    buf.line(`tsc_value_t ${name} = ${error};`);
-                    if (symbol) this.emitLocalDynamicRoot(buf, symbol, name, "catch");
-                }
-                if (this.sourceEnvironmentEnabled(clause.getSourceFile())) {
-                    const scope = this.freshTemp("_source_catch_scope");
-                    const value = cell ? `*${cell.cellName}` : name;
-                    const root = cell?.rootCellName ?? this.freshTemp("_source_catch_root");
-                    const initialized = cell?.initializedCellName ?? this.freshTemp("_source_catch_initialized");
-                    if (!cell?.rootCellName) {
-                        buf.line(`void** ${root} = (void**)TSC_GC_MALLOC(sizeof(void*));`);
-                        buf.line(`*${root} = tsc_value_gc_root(${value});`);
-                    }
-                    if (!cell?.initializedCellName) buf.line(`bool* ${initialized} = (bool*)TSC_GC_MALLOC(sizeof(bool));`);
-                    buf.line(`*${initialized} = true;`);
-                    buf.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = { .previous = tsc_environment_current(), .record = tsc_environment_new(tsc_environment_current(), false) };`);
-                    buf.line(`(void)tsc_environment_swap(${scope}.record);`);
-                    buf.line(`tsc_environment_alias(${scope}.record, &(tsc_environment_binding_ref_t){ ${this.stringLit(declaration.name.text)}, (tsc_async_cell_ref_t){ (void*)&(${value}), ${root}, ${initialized} }, true, false, false });`);
-                }
-            }
-            try { this.emitBlock(buf, clause.block); } finally {
-                if (symbol) this.catchValueSymbols.delete(symbol);
+            const declaration = clause.variableDeclaration;
+            if (!declaration) { this.emitBlock(buf, clause.block); return; }
+            const bindings = this.createScopeLexicalBindings(buf, [declaration]);
+            this.lexicalBindingScopes.push(bindings);
+            for (const symbol of bindings.keys()) this.catchValueSymbols.add(symbol);
+            try {
+                this.emitBindingInitializationValue(buf, declaration.name, error, undefined,
+                    (target, identifier, value) => {
+                        const symbol = this.symbolForIdentifier(identifier);
+                        const binding = symbol && bindings.get(symbol);
+                        if (!binding) unsupported(identifier, "missing catch binding plan");
+                        target.line(`${binding.value} = ${value};`);
+                        target.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
+                        target.line(`${binding.initialized} = true;`);
+                    });
+                this.emitBlock(buf, clause.block);
+            } finally {
+                for (const symbol of bindings.keys()) this.catchValueSymbols.delete(symbol);
+                if (this.lexicalBindingScopes.pop() !== bindings) throw new Error("catch binding scope corruption");
             }
         };
         emitProtected(scope, () => this.emitBlock(buf, statement.tryBlock));
@@ -46679,7 +46669,9 @@ class Emitter {
         const hasAccessor = ol.properties.some((property) =>
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
-        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor ||
+        const computedEffects = ol.properties.some(property => "name" in property && property.name &&
+            ts.isComputedPropertyName(property.name) && !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(property.name, new Set()));
+        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor || computedEffects ||
             ol.properties.some(property => ts.isMethodDeclaration(property) && this.requestedFunctionActivationBindings(property).has("home-object")) ? undefined :
             this.asyncAwaitReturnContextTypes.get(ol) ??
             this.checker.getContextualType(ol) ??
@@ -46699,7 +46691,8 @@ class Emitter {
                     continue;
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
+                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
@@ -46724,7 +46717,8 @@ class Emitter {
                     expr = prop.name;
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
+                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object method key is not representable");
                         }
@@ -46746,7 +46740,8 @@ class Emitter {
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
+                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object accessor key is not representable");
                         }

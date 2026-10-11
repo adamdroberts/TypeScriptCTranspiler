@@ -815,3 +815,5 @@ Duplicate simple formals share the existing parameter cell and mapped-arguments 
 Non-String eval argument admission now uses the source graph normal-result category and the existing eval identity return path. Numeric magnitudes require no source registry entries; text-converting host and constructor consumers still require a finite source proof. No new public runtime API is added.
 
 Merged unknown source facts are frontend admission evidence. Explicit eval manifests continue to select the existing native registry, and unregistered runtime strings retain the existing dispatch guard. No public runtime API changes.
+
+Catch-pattern initialization reuses ordinary environment aliases, TDZ cells and GC roots. Computed object literal keys use the existing ToPropertyKey operation before initializing their values. No public runtime API changes.

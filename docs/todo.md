@@ -591,3 +591,5 @@ Duplicate sloppy simple formals now use ordered ABI slots and a canonical parame
 Non-String numeric/Boolean result admission and completeness of text-operation operands now share the source-value graph. Unresolved expression facts now survive merged paths; thrown-value flow and precise dynamic actual-callee selection remain open, along with declaration/eval/Annex B semantics and exhaustive host/clause evidence.
 
 Unresolved expression joins now retain one Unknown fact through the source graph and stable admission guard. Complete thrown-value flow, declaration/eval/Annex B semantics, precise object-environment actual-callee selection, and exhaustive host/clause evidence remain open.
+
+Explicit thrown-value and async rejection flow now share canonical handler cells; ordinary catch patterns use the existing lexical binding tree. Precise user coercion, setter/proxy and generator-resumption exceptions, normal-completion source facts, declaration/eval/Annex B semantics, intrinsic result identities and exhaustive eligible host/clause evidence remain open. Opaque exception sources require explicit admission.

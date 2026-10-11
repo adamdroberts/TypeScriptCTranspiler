@@ -5019,3 +5019,5 @@ Fixed native compilation and binding ownership for duplicate sloppy simple param
 Eval now accepts non-String normal numeric and Boolean results through the shared source-value graph. Fixed its declaration to accept omitted and unknown-valued arguments; unbounded numeric conversion to source text retains explicit unknown-source admission.
 
 Retain unresolved source-value facts through joins, calls, properties and argument Lists. Mixed known/unknown source now requires explicit admission; removed the syntax-only restriction that rejected a valid eval manifest.
+
+Preserve caught source values through explicit throws, calls, getters and async rejection. Lower ordinary catch patterns through the shared binding tree and retain computed object key effects and conversion order.
