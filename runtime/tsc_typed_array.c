@@ -227,7 +227,7 @@ static tsc_value_t define_member(tsc_value_t owner,const member_t* member,tsc_st
     }else define_value(owner,name,function,true,true);
     (void)function_root;return function;
 }
-typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE,COPY_WITHIN,FILL,REVERSE,SLICE,SUBARRAY,SET,TO_REVERSED,WITH,SORT,TO_SORTED} traversal_kind_t;
+typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE,COPY_WITHIN,FILL,REVERSE,SLICE,SUBARRAY,SET,TO_REVERSED,WITH,SORT,TO_SORTED,JOIN,LOCALE_STRING} traversal_kind_t;
 typedef struct {const char* name;traversal_kind_t kind;bool reverse;size_t arity;} traversal_t;
 static const traversal_t traversals[]={
 #define TSC_TYPED_METHOD(name, kind, reverse, arity) {#name,kind,reverse,arity},
@@ -358,6 +358,10 @@ static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t recei
 }
 static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
     const traversal_t* operation=environment;void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;
+    if(operation->kind==JOIN||operation->kind==LOCALE_STRING){
+        size_t length=require_witness(require_typed(receiver)).length;
+        return tsc_value_stringify_indexed_range(receiver,length,operation->kind==JOIN?argument(actuals,0):tsc_value_undefined(),operation->kind==LOCALE_STRING);
+    }
     if(operation->kind==SORT||operation->kind==TO_SORTED){
         tsc_value_t comparator=argument(actuals,0);void* volatile comparator_root=tsc_value_gc_root(comparator);
         if(!tsc_value_is_undefined(comparator)&&!tsc_value_is_callable(comparator))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray sort comparator is not callable"));
@@ -457,6 +461,7 @@ static typed_realm_t* typed_realm(void){
         const traversal_t* operation=&traversals[index];tsc_value_t function=tsc_value_function_named_kind(traversal_apply,NULL,(void*)operation,operation->arity,key(operation->name),TSC_FUNCTION_IDENTITY_BUILTIN);
         void* volatile function_root=tsc_value_gc_root(function);define_value(realm->abstract.prototype,key(operation->name),function,true,true);(void)function_root;
     }
+    define_value(realm->abstract.prototype,key("toString"),tsc_value_get_prop(tsc_value_array(tsc_array_prototype()),key("toString")),true,true);
     for(size_t index=0;index<TSC_ELEMENT_COUNT;++index){
         intrinsic_t* intrinsic=&realm->concrete[index];const element_t* element=&elements[index];
         initialize_intrinsic(intrinsic,element->name,3,concrete_construct,(void*)element,realm->abstract.constructor,realm->abstract.prototype);

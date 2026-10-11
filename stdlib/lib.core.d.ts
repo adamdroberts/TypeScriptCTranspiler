@@ -724,6 +724,9 @@ interface TypedArray<T> extends Iterable<T> {
     with(index: number, value: T, ...ignored: any[]): TypedArray<T>;
     sort(comparator?: (left: T, right: T) => number, ...ignored: any[]): this;
     toSorted(comparator?: (left: T, right: T) => number, ...ignored: any[]): TypedArray<T>;
+    join(separator?: string, ...ignored: any[]): string;
+    toLocaleString(reserved1?: any, reserved2?: any, ...ignored: any[]): string;
+    toString(...ignored: any[]): string;
 }
 interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     readonly prototype: V;

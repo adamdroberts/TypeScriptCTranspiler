@@ -384,6 +384,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Added TypedArray string methods through one shared rooted Array/TypedArray range kernel, private view lengths, the actual Array toString alias and selected non-402 locale semantics.
+
 - Added TypedArray sort/toSorted through the shared retained stable value sorter, numeric/BigInt defaults, fresh writeback validity and intrinsic copy owners.
 
 - Added shared TypedArray copy/mutation operations with ordered coercion, live bounds, overlap/raw-byte handling, species Lists and intrinsic change-by-copy owners.

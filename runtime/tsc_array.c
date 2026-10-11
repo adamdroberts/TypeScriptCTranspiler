@@ -781,22 +781,8 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
     const tsc_value_t array = tsc_value_to_object(this_arg);
     void* volatile array_gc_root = tsc_value_gc_root(array);
     (void)array_gc_root;
-    const size_t len = (size_t)tsc_value_to_length(tsc_value_get_prop(array, tsc_str_from_lit("length", 6)));
-    tsc_str_t* volatile out = tsc_str_from_lit("", 0);
-    tsc_str_t* volatile sep = tsc_str_from_lit(",", 1);
-    tsc_str_t* volatile method_name = tsc_str_from_lit("toLocaleString", 14);
-    tsc_array_t* volatile empty_args = tsc_array_new(sizeof(tsc_value_t), 0);
-    for (size_t i = 0; i < len; i++) {
-        if (i > 0) out = tsc_str_concat(out, sep);
-        const tsc_value_t value = tsc_value_get_index(array, (double)i);
-        if (!tsc_value_is_nullish(value)) {
-            tsc_value_t result = tsc_value_invoke(value, method_name, empty_args);
-            void* volatile result_gc_root = tsc_value_gc_root(result);
-            (void)result_gc_root;
-            out = tsc_str_concat(out, tsc_value_to_string(result));
-        }
-    }
-    return tsc_value_string(out);
+    const size_t len = tsc_value_length_of_array_like(array);
+    return tsc_value_stringify_indexed_range(array,len,tsc_value_undefined(),true);
 }
 
 static tsc_value_t array_prototype_at(void* env, tsc_value_t this_arg, tsc_array_t* args) {

@@ -7800,15 +7800,30 @@ tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index) {
     return tsc_value_get_index(recv, at);
 }
 
-tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
-    const size_t len = tsc_value_length_of_array_like(recv);
-    tsc_str_t* sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
-    tsc_str_t* out = tsc_str_from_lit("", 0);
+tsc_value_t tsc_value_stringify_indexed_range(tsc_value_t recv, size_t len, tsc_value_t separator, bool locale) {
+    void* volatile receiver_root=tsc_value_gc_root(recv);
+    void* volatile separator_root=tsc_value_gc_root(separator);
+    tsc_str_t* volatile sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
+    tsc_str_t* volatile out = tsc_str_from_lit("", 0);
+    tsc_array_t* volatile empty_args=locale?tsc_array_new(sizeof(tsc_value_t),0):NULL;
+    tsc_str_t* volatile method_name=locale?tsc_str_from_lit("toLocaleString",14):NULL;
     for (size_t i = 0; i < len; ++i) {
         if (i > 0) out = tsc_str_concat(out, sep);
-        out = tsc_str_concat(out, value_join_part(tsc_value_get_index(recv, (double)i)));
+        tsc_value_t value=tsc_value_get_index(recv,(double)i);void* volatile value_root=tsc_value_gc_root(value);
+        if(locale&&!tsc_value_is_nullish(value)){
+            value=tsc_value_invoke(value,method_name,empty_args);value_root=tsc_value_gc_root(value);
+            out=tsc_str_concat(out,tsc_value_to_string(value));
+        }else if(!locale)out=tsc_str_concat(out,value_join_part(value));
+        (void)value_root;
     }
+    (void)receiver_root;(void)separator_root;
     return tsc_value_string(out);
+}
+tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
+    void* volatile receiver_root=tsc_value_gc_root(recv);void* volatile separator_root=tsc_value_gc_root(separator);
+    size_t length=tsc_value_length_of_array_like(recv);
+    tsc_value_t result=tsc_value_stringify_indexed_range(recv,length,separator,false);
+    (void)receiver_root;(void)separator_root;return result;
 }
 
 tsc_value_t tsc_value_method_pop(tsc_value_t recv) {
