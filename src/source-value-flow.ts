@@ -501,7 +501,8 @@ class SourceValueFlow {
     }
     private property(base: Cell, key: string, context?: ts.Node): Cell {
         const result = this.newCell();
-        const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule); });
+        const activation = context ? this.enclosingActivation(context) : null;
+        const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, activation); });
         return result;
     }
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
@@ -527,7 +528,7 @@ class SourceValueFlow {
         if(!owner){owner={fields:new Map(),getters:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
         return owner;
     }
-    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule): void {
+    private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule, activation?: FunctionOwner | null): void {
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.unknown);
@@ -543,6 +544,8 @@ class SourceValueFlow {
             this.copy(this.field(owner, key), result);
             const getter = owner.getters.get(key);
             if (getter) {
+                if (activation && rule) this.watch(rule,activation.active);
+                if (!activation || activation.active.values.size) this.publish(getter.active,this.primitive(true));
                 this.copy(base, getter.receiver); this.copy(getter.returns, result);
                 if (handler) this.copy(getter.throws, handler);
             }
