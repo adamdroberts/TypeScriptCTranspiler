@@ -600,6 +600,6 @@ The E2E case lifecycle now removes successful generated artifacts and preserves 
 
 Catch BoundNames and declaration-owner early errors now follow the canonical source-tree worklist. Complete binding-pattern grammar validation, eval/Annex B declaration interactions, opaque effect precision and eligible exhaustive target evidence remain open. The full E2E runs use the immutable runner-cleanup revision.
 
-An unused eval of a compiler-known invalid catch fragment currently returns normally in the CLI probe; its runtime SyntaxError effect still needs repair. Mutable array/List location projection and complete host/intrinsic effect identities also remain open.
+Discarded direct and indirect eval calls now reject invalid catch fragments through the shared admission validator and preserve the runtime SyntaxError. Mutable array/List location projection and complete host/intrinsic effect identities remain open.
 
-Rest binding placement, initializer and trailing-comma restrictions now use the shared source-tree validator across declaration owners. Unused eval SyntaxError effects, mutable array/List location projection, complete opaque/intrinsic effect identities and eligible exhaustive target evidence remain open.
+Rest binding placement, initializer and trailing-comma restrictions now use the shared source-tree validator across declaration owners. Mutable array/List location projection, complete opaque/intrinsic effect identities and eligible exhaustive target evidence remain open.

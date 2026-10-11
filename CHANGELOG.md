@@ -5029,3 +5029,5 @@ Release successful E2E case artifacts after validation to prevent temporary inod
 Reject invalid catch BoundNames and catch declaration collisions before evaluation, preserving simple-identifier var redeclarations and separate function/static-block owners. Var initializers now use the active environment Reference, including simple catch shadows.
 
 Reject malformed rest binding grammar consistently before lowering, including nested patterns, object rest and formal parameter rest; preserve valid shared binding initialization.
+
+Verify runtime SyntaxError from discarded direct and indirect eval of invalid catch fragments; clear the superseded admission gap.
