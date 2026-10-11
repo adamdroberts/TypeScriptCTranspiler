@@ -22645,6 +22645,7 @@ class Emitter {
                 return;
             }
             if (node !== owner && ts.isClassLike(node)) {
+                if (ts.isClassDeclaration(node) && node.name) addEnvironmentBinding(node.name);
                 /* ClassDefinitionEvaluation creates each method closure while
                  * the class definition is evaluated. Feed every supported
                  * method through the same enclosing capture-cell collection;

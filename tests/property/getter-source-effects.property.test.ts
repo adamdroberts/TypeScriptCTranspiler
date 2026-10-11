@@ -35,10 +35,7 @@ test("getter reads activate shared effects through owner and activation edges",(
 });
 test("getter effects close native eval sources and deep activation propagation matches Node",async()=>{
  const pieces=['function check(name,value){print(name+":"+value);}'];
- for(const[index,source]of sources('C.toString=()=>"41;";').entries()){
-  const subject=source.replace(/\b(C|Reader|Child|reader|read|Holder)\b/g,name=>name+index);
-  pieces.push(subject.replace(`eval(C${index}.toString());`,`check("effect${index}",eval(C${index}.toString()));`));
- }
+ for(const[index,source]of sources('C.toString=()=>"41;";').entries())pieces.push('{'+source.replace('eval(C.toString());',`check("effect${index}",eval(C.toString()));`)+'}');
  pieces.push('class Target {}var owner={get touch(){Target.toString=()=>"67;";return 1;}};');
  for(let index=0;index<512;index++)pieces.push(`var holder${index}={get touch(){return ${index?'holder'+(index-1):'owner'}.touch;}};`);
  pieces.push('if(NATIVE_GC)$262.gc();holder511.touch;check("deep",eval(Target.toString()));');

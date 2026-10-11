@@ -5051,3 +5051,5 @@ Preserve native static binding storage across protected completions and resolve 
 Close public instance-field callable sources and default/explicit constructor delegation through reactive owner cells. Share Object.prototype method descriptors between the runtime and source graph; preserve abrupt source outcomes.
 
 Include getter activation effects in the shared property source graph, preserving inactive reads and closing getter-induced eval source replacements.
+
+Retain local class declaration cells for direct eval through the canonical binding collection. Restore block-scoped getter-effect coverage and verify TDZ, mutation, inner names and escaped/iteration identities against Node.

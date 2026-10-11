@@ -614,4 +614,4 @@ Retained class definition text and inherited static/member identities now use th
 
 Native static file/namespace bindings now keep their declared storage in protected completion regions, while automatic locals keep retained cells. Qualified namespace reads, writes, GC roots and calls use canonical symbol/value paths; the fixed signature-specific namespace invocation path is removed. Node properties and focused native checks are scoped evidence, not a full storage or clause claim.
 
-Getter reads now activate shared source effects with generated Node/native evidence. Complete setter/descriptor/coercion effects, local eval class binding cells and exhaustive eligible target gates remain open.
+Getter reads now activate shared source effects with generated Node/native evidence. Local class declarations now have shared retained eval binding cells with independent Node/native evidence. Complete setter/descriptor/coercion effects, lexical/eval partitions and exhaustive eligible target gates remain open.
