@@ -111,6 +111,7 @@ typedef enum { ACT_START, ACT_STEP, ACT_WAIT_STEP, ACT_RESULT, ACT_CALLBACK, ACT
 typedef struct helper_activation {
     struct helper_activation* parent;
     iterator_helper_t* helper;
+    tsc_realm_t* realm;
     helper_phase_t phase;
     bool close_request, inner_step, skip_value, entered;
     int close_index;
@@ -120,17 +121,19 @@ typedef struct helper_activation {
     bool failed;
 } helper_activation_t;
 typedef struct { helper_activation_t* top; tsc_value_t result; void* result_root; bool failed; tsc_value_t error; void* error_root; } helper_work_t;
-static iterator_helper_t* helper_native_link(tsc_value_t method, tsc_value_t receiver, bool close) {
+static iterator_helper_t* helper_native_link(tsc_value_t method, tsc_value_t receiver, bool close, tsc_realm_t** realm) {
     if (!value_is_box(method) || value_tag(method) != TSC_VALUE_TAG_FUNCTION ||
         !value_is_box(receiver) || value_tag(receiver) != TSC_VALUE_TAG_OBJECT) return NULL;
     tsc_function_identity_t* identity = value_ptr(method);
     tsc_object_t* object = value_ptr(receiver);
-    return identity->kind == TSC_FUNCTION_IDENTITY_BUILTIN && identity->code.generic == helper_resume &&
-        (identity->env != NULL) == close ? object->iterator_helper : NULL;
+    if (identity->kind != TSC_FUNCTION_IDENTITY_BUILTIN || identity->code.generic != helper_resume ||
+        (identity->env != NULL) != close || !object->iterator_helper) return NULL;
+    *realm = identity->realm;
+    return object->iterator_helper;
 }
-static void helper_push(helper_work_t* work, iterator_helper_t* helper, bool close) {
+static void helper_push(helper_work_t* work, iterator_helper_t* helper, bool close, tsc_realm_t* realm) {
     helper_activation_t* activation = TSC_GC_MALLOC(sizeof(*activation));
-    *activation = (helper_activation_t){ .parent = work->top, .helper = helper, .close_request = close };
+    *activation = (helper_activation_t){ .parent = work->top, .helper = helper, .realm = realm, .close_request = close };
     work->top = activation;
 }
 static void helper_complete(helper_work_t* work, tsc_value_t value, bool done) {
@@ -196,8 +199,9 @@ static void helper_iteration(helper_work_t* work) {
         if (state->operation == HELPER_TAKE && !state->infinite) mpz_sub_ui(state->remaining->value, state->remaining->value, 1);
         if (a->skip_value && !state->infinite) mpz_sub_ui(state->remaining->value, state->remaining->value, 1);
         if (a->record->done) { a->result = tsc_iterator_result(tsc_value_undefined(), true); a->result_root = tsc_value_gc_root(a->result); a->phase = ACT_RESULT; return; }
-        iterator_helper_t* child = helper_native_link(a->record->next_method, a->record->iterator, false);
-        if (child) { a->phase = ACT_WAIT_STEP; helper_push(work, child, false); return; }
+        tsc_realm_t* child_realm = NULL;
+        iterator_helper_t* child = helper_native_link(a->record->next_method, a->record->iterator, false, &child_realm);
+        if (child) { a->phase = ACT_WAIT_STEP; helper_push(work, child, false, child_realm); return; }
         a->result = tsc_value_apply_function(a->record->next_method, a->record->iterator,
             tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 0)));
         a->result_root = tsc_value_gc_root(a->result); a->phase = ACT_RESULT;
@@ -252,8 +256,9 @@ static void helper_iteration(helper_work_t* work) {
         tsc_value_t method = tsc_value_get_prop(record->iterator, tsc_str_from_lit("return", 6));
         if (tsc_value_is_nullish(method)) return;
         void* volatile method_root = tsc_value_gc_root(method);
-        iterator_helper_t* child = helper_native_link(method, record->iterator, true);
-        if (child) { a->phase = ACT_WAIT_CLOSE; helper_push(work, child, true); return; }
+        tsc_realm_t* child_realm = NULL;
+        iterator_helper_t* child = helper_native_link(method, record->iterator, true, &child_realm);
+        if (child) { a->phase = ACT_WAIT_CLOSE; helper_push(work, child, true, child_realm); return; }
         tsc_value_t result = tsc_value_apply_function(method, record->iterator,
             tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 0)));
         if (!tsc_value_is_object(result)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator return returned a non-object"));
@@ -272,11 +277,16 @@ static tsc_value_t helper_resume(void* env, tsc_value_t receiver, tsc_array_t* a
     if (!object || !object->iterator_helper)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Iterator helper receiver lacks its internal slot"));
     helper_work_t* volatile work = TSC_GC_MALLOC(sizeof(*work));
-    memset(work, 0, sizeof(*work)); helper_push(work, object->iterator_helper, env != NULL);
+    tsc_realm_t* caller_realm = tsc_realm_current();
+    memset(work, 0, sizeof(*work)); helper_push(work, object->iterator_helper, env != NULL, caller_realm);
     while (work->top) {
         TSC_TRY_FRAME(frame); tsc_try_push(&frame);
-        if (setjmp(frame.jb) == 0) helper_iteration(work);
+        if (setjmp(frame.jb) == 0) {
+            (void)tsc_realm_swap(work->top->realm);
+            helper_iteration(work);
+        }
         else helper_fail_current(work, tsc_current_error_value());
+        (void)tsc_realm_swap(caller_realm);
         tsc_try_pop();
     }
     if (work->failed) tsc_throw_value(work->error);

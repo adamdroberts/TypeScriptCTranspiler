@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Preserve captured next/return method Realms in the Iterator helper activation worklist, fixing cross-realm reentrancy TypeError origin and restoring callers after normal and abrupt steps. Add Node vm differential checks and a deep alternating-Realm graph; complete host Realm capability remains open.
+
 - Route RegExp source values through ordinary encoded owners from literal creation to stored calls and suspension. Delete the native source CType and fresh-shape purity predecessors; verify mutation, constructor identity, private brands and retained owners against Node.
 
 - Release matcher and input roots when RegExp iterators complete, preserve abrupt exec retry behavior, and expose shared Iterator helpers to typed RegExp iterator consumers. Strengthen matchAll comparisons with a direct Node oracle and native collector evidence.
