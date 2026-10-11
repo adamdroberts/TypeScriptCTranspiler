@@ -823,3 +823,5 @@ The canonical global binding definition includes frontend normal call-result cat
 Var initialization uses the shared binding tree and assignment Reference factory. Each leaf resolves in its active catch or with scope, so catch shadows receive initializer assignments while outer var storage remains intact. No public runtime API changes.
 
 Rest binding grammar is validated before native lowering. The existing binding initialization and iterator operations remain unchanged; no public runtime API changes.
+
+Source List analysis now shares length and index locations with property analysis. Native arrays, argument Lists and Function source dispatch retain their existing runtime operations; no public runtime API changes.

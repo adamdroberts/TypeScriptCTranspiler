@@ -5031,3 +5031,5 @@ Reject invalid catch BoundNames and catch declaration collisions before evaluati
 Reject malformed rest binding grammar consistently before lowering, including nested patterns, object rest and formal parameter rest; preserve valid shared binding initialization.
 
 Verify runtime SyntaxError from discarded direct and indirect eval of invalid catch fragments; clear the superseded admission gap.
+
+Project mutable argument Lists through canonical length and index locations, preserving indexed extension, length writes and rest/snapshot ownership across call adapters. Refresh constructor records and fail closed on unknown or cyclic shapes.

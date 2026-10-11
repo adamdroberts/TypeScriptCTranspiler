@@ -54,7 +54,7 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; list?: readonly ListPart[]; }
+interface ObjectOwner { readonly fields: Map<string, Cell>; readonly getters: Map<string, FunctionOwner>; readonly shape: Cell; listLength?: Cell; listSources?: readonly Cell[]; }
 interface FunctionOwner {
     readonly node: FunctionNode; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell;
@@ -143,7 +143,7 @@ class SourceValueFlow {
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
-    private readonly invocations: Array<{ kind: DynamicFunctionKind; args: readonly Cell[] | null }> = [];
+    private readonly invocations = new Map<ts.Node, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
     private readonly evaluationInvocations = new Map<ts.Node, Map<string, EvaluationRecord>>();
     private readonly intrinsicAtoms = new Map<string, Atom>();
     private readonly operations = new Map<Operation, Atom>();
@@ -362,7 +362,17 @@ class SourceValueFlow {
             const owner=this.ordinaryOwner(atom);
             if(owner){
                 if(key===null){this.publish(owner.shape,this.unknown);for(const field of owner.fields.values())this.publish(field,this.unknown);}
-                else this.copy(value,this.field(owner,key));
+                else {
+                    this.copy(value,this.field(owner,key));
+                    const index = Number(key);
+                    if (owner.listLength && String(index) === key && Number.isInteger(index) && index >= 0 && index < 0xffffffff) {
+                        const length = owner.listLength;
+                        this.rule([length], () => {
+                            for (const atom of [...length.values]) if (atom.tag === "primitive" && typeof atom.value === "number")
+                                this.publish(length, this.primitive(Math.max(atom.value, index + 1)));
+                        });
+                    }
+                }
             }
             if(atom.tag==="global"){
                 if(key===null)this.publish(this.globalMutation,this.unknown);
@@ -513,43 +523,53 @@ class SourceValueFlow {
         return owner;
     }
     private lists(cell: Cell): Array<readonly Cell[] | null> {
-        // List shape is a source-owned sequence graph, never an expanding set
-        // of retained lengths. Cyclic spread dependencies have no finite
-        // proof and retain the existing manifest/runtime diagnostic boundary.
-        const pending = [{ cell, finish: false }], active = new Set<Cell>();
-        const values = new Map<Cell, Array<readonly Cell[] | null>>();
-        while (pending.length) {
-            const task = pending.pop()!;
-            if (values.has(task.cell)) continue;
-            if (task.finish) {
-                active.delete(task.cell);
-                const alternatives: Array<readonly Cell[] | null> = [];
-                if ([...task.cell.values].some(atom => atom.tag === "unknown" || atom.tag === "opaque-object")) alternatives.push(null);
-                for (const atom of task.cell.values) if (atom.tag === "object" && atom.owner.list) {
-                    let lists: Array<readonly Cell[] | null> = [[]];
-                    for (const part of atom.owner.list) {
-                        const tails = part.spread ? values.get(part.cell) ?? [null] : [[part.cell]];
-                        lists = lists.flatMap(prefix => tails.map(tail => prefix && tail ? [...prefix, ...tail] : null));
-                    }
-                    for (const list of lists) {
-                        if (!list) { alternatives.push(null); continue; }
-                        const locations = list.map((source, index) => {
-                            const location = this.field(atom.owner, String(index));
-                            this.copy(source, location);
-                            return location;
-                        });
-                        alternatives.push(locations);
-                    }
+        // Every actual List projects the owner's canonical length and index
+        // locations. Literal/rest initialization and mutations publish into
+        // those same cells; the rule worklist closes their dependencies.
+        const alternatives: Array<readonly Cell[] | null> = [];
+        for (const atom of cell.values) {
+            if (atom.tag !== "object" || !atom.owner.listLength) {
+                alternatives.push(null);
+                continue;
+            }
+            const owner = atom.owner;
+            const proof = this.primitiveChoiceProof(owner.listLength!);
+            if (owner.shape.values.has(this.unknown) || !proof.primitiveComplete) {
+                alternatives.push(null);
+                continue;
+            }
+            for (const value of proof.values) {
+                const length = typeof value === "bigint" ? NaN : Number(value);
+                if (!Number.isInteger(length) || length < 0 || length > 0xffffffff) {
+                    alternatives.push(null);
+                    continue;
                 }
-                values.set(task.cell, alternatives.length ? alternatives : [null]);
-            } else {
-                if (active.has(task.cell)) return [null];
-                active.add(task.cell); pending.push({ ...task, finish: true });
-                for (const atom of task.cell.values) if (atom.tag === "object" && atom.owner.list)
-                    for (const part of atom.owner.list) if (part.spread) pending.push({ cell: part.cell, finish: false });
+                const locations: Cell[] = [];
+                for (let index = 0; index < length; index++) {
+                    const key = String(index);
+                    const existing = owner.fields.get(key);
+                    const location = existing ?? this.field(owner, key);
+                    if (!existing) this.publish(location, this.primitive(undefined));
+                    locations.push(location);
+                }
+                alternatives.push(locations);
             }
         }
-        return values.get(cell) ?? [null];
+        return alternatives.length && !alternatives.includes(null) ? alternatives : [null];
+    }
+    private cyclicListShape(owner: ObjectOwner): boolean {
+        const pending = [{ owner, finish: false }];
+        const active = new Set<ObjectOwner>(), completed = new Set<ObjectOwner>();
+        while (pending.length) {
+            const task = pending.pop()!;
+            if (task.finish) { active.delete(task.owner); completed.add(task.owner); continue; }
+            if (completed.has(task.owner)) continue;
+            if (active.has(task.owner)) return true;
+            active.add(task.owner); pending.push({ ...task, finish: true });
+            for (const source of task.owner.listSources ?? []) for (const atom of source.values)
+                if (atom.tag === "object" && atom.owner.listLength) pending.push({ owner: atom.owner, finish: false });
+        }
+        return false;
     }
     private arguments(parts: readonly ListPart[]): Array<readonly Cell[] | null> {
         let choices: Array<readonly Cell[] | null> = [[]];
@@ -607,17 +627,23 @@ class SourceValueFlow {
             this.publish(result, { tag: "object", owner });
             if (ts.isArrayLiteralExpression(node)) {
                 const parts = node.elements.map(element => ({ cell: this.cell(ts.isSpreadElement(element) ? element.expression : element), spread: ts.isSpreadElement(element) }));
-                owner.list = parts;
+                owner.listLength = this.field(owner, "length");
+                owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
                 const seen = new Set<string>();
                 let rule: Rule;
                 rule = this.rule(parts.map(part => part.cell), () => {
                     for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
+                    if (this.cyclicListShape(owner)) {
+                        this.publish(owner.listLength!, this.unknown);
+                        return;
+                    }
                     for (const list of this.arguments(parts)) {
                         if (!list) continue;
                         const key = list.map(cell => cell.id).join(",");
                         if (seen.has(key)) continue;
                         seen.add(key);
                         list.forEach((value, index) => this.copy(value, this.field(owner, String(index))));
+                        this.publish(owner.listLength!, this.primitive(list.length));
                     }
                 });
             }
@@ -681,6 +707,9 @@ class SourceValueFlow {
             };
             let rule: Rule;
             rule = this.rule([call.callee, call.receiver, ...parts.map(part => part.cell)], () => {
+                let constructors = this.invocations.get(node);
+                if (!constructors) { constructors = new Map(); this.invocations.set(node, constructors); }
+                constructors.clear();
                 let evaluations = this.evaluationInvocations.get(node);
                 if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(node,evaluations); }
                 evaluations.clear();
@@ -719,9 +748,10 @@ class SourceValueFlow {
                                 receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : this.empty, args });
                             continue;
                         }
+                        if (atom.tag === "intrinsic" && atom.domain === "constructor")
+                            constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: argv });
                         if ((atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                         if (atom.tag === "intrinsic" && atom.domain === "constructor") {
-                            this.invocations.push({ kind: atom.kind, args: argv });
                             for (const value of this.generated.get(atom.kind) ?? []) this.copy(value, result!);
                         } else if (atom.tag === "builtin") {
                             if (!ts.isNewExpression(node)) {
@@ -745,8 +775,10 @@ class SourceValueFlow {
                             for (const [index, parameter] of atom.owner.node.parameters.filter(parameter => !ts.isIdentifier(parameter.name) || parameter.name.text !== "this").entries()) {
                                 if (parameter.dotDotDotToken) {
                                     const rest: Cell = this.newCell();
-                                    const restOwner: ObjectOwner = {fields:new Map(),getters:new Map(),shape:this.newCell(),
-                                        list:argv?.slice(index).map(cell=>({cell,spread:false}))};
+                                    const restOwner: ObjectOwner = {fields:new Map(),getters:new Map(),shape:this.newCell()};
+                                    restOwner.listLength = this.field(restOwner, "length");
+                                    if (argv) this.publish(restOwner.listLength, this.primitive(Math.max(0, argv.length - index)));
+                                    else this.publish(restOwner.listLength, this.unknown);
                                     for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.copy(value,this.field(restOwner,String(offset)));
                                     this.publish(rest, {tag:"object",owner:restOwner});
                                     this.bind(parameter.name, rest);
@@ -833,7 +865,8 @@ class SourceValueFlow {
             const input = pending.pop()!; if (visited.has(input)) continue; visited.add(input); this.watch(rule, input);
             for (const atom of input.values) if (atom.tag === "object") {
                 this.watch(rule, atom.owner.shape);
-                for (const part of atom.owner.list ?? []) if (part.spread) pending.push(part.cell);
+                if (atom.owner.listLength) pending.push(atom.owner.listLength);
+                for (const field of atom.owner.fields.values()) pending.push(field);
             }
         }
     }
@@ -904,7 +937,7 @@ class SourceValueFlow {
             if (!changed) break;
         }
         return {
-            constructors: this.invocations.map(invocation => {
+            constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const choices = invocation.args?.map(cell => this.choices(cell));
                 return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null};
             }),
