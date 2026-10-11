@@ -28620,7 +28620,7 @@ class Emitter {
         object: string,
         key: EmitResult,
         keyNode: ts.Expression,
-        value: EmitResult,
+        emitValue: () => EmitResult,
         valueNode: ts.Node,
         kind: "data" | "getter" | "setter",
         prefix: string,
@@ -28629,6 +28629,16 @@ class Emitter {
         const keyRoot = this.freshTemp(`${prefix}_key_root`);
         const valueTemp = this.freshTemp(`${prefix}_value`);
         const valueRoot = this.freshTemp(`${prefix}_value_root`);
+        const definition = ts.isExpression(valueNode) ? this.unwrapTransparentExpression(valueNode) : valueNode;
+        const scope = new Map<ts.Expression, string>();
+        if (ts.isClassExpression(definition) && !definition.name) scope.set(definition,`tsc_value_to_internal_property_key(${keyTemp})`);
+        this.classFieldNameScopes.push(scope);
+        let value: EmitResult;
+        try { value=emitValue(); } finally { this.classFieldNameScopes.pop(); }
+        const inferName = kind === "data" && (ts.isMethodDeclaration(definition) || ts.isArrowFunction(definition) ||
+            ts.isFunctionExpression(definition) && !definition.name || ts.isClassExpression(definition) && !definition.name);
+        const namePrefix = kind === "getter" ? 'tsc_str_from_lit("get", 3)'
+            : kind === "setter" ? 'tsc_str_from_lit("set", 3)' : "NULL";
         const define = kind === "data"
             ? "tsc_value_create_data_property"
             : kind === "getter"
@@ -28641,6 +28651,10 @@ class Emitter {
             `${keyRoot} = tsc_value_gc_root(${keyTemp})`,
             `tsc_value_t ${valueTemp} = ${this.coerce(value, T_VALUE, valueNode)}`,
             `void* volatile ${valueRoot} = tsc_value_gc_root(${valueTemp}); (void)${valueRoot}`,
+            ...(inferName || kind !== "data" ? [
+                `${valueTemp} = tsc_value_function_with_property_name(${valueTemp}, tsc_value_to_internal_property_key(${keyTemp}), ${namePrefix})`,
+                `${valueRoot} = tsc_value_gc_root(${valueTemp})`,
+            ] : []),
             `if (!${define}(tsc_value_object(${object}), ${keyTemp}, ${valueTemp})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
         );
     }
@@ -46699,9 +46713,8 @@ class Emitter {
         const hasAccessor = ol.properties.some((property) =>
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
-        const computedEffects = ol.properties.some(property => "name" in property && property.name &&
-            ts.isComputedPropertyName(property.name) && !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(property.name, new Set()));
-        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor || computedEffects ||
+        const computedNames = ol.properties.some(property => "name" in property && property.name && ts.isComputedPropertyName(property.name));
+        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor || computedNames ||
             ol.properties.some(property => ts.isMethodDeclaration(property) && this.requestedFunctionActivationBindings(property).has("home-object")) ? undefined :
             this.asyncAwaitReturnContextTypes.get(ol) ??
             this.checker.getContextualType(ol) ??
@@ -46721,19 +46734,17 @@ class Emitter {
                     continue;
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
-                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name)) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object key must be a string/number literal");
                         }
                         const key = this.emitExpr(prop.name.expression);
-                        const value = ordinary ? this.emitOrdinaryObjectExpression(prop.initializer) : this.emitExpr(prop.initializer);
                         this.emitComputedObjectLiteralDefinition(
                             pieces,
                             obj,
                             key,
                             prop.name.expression,
-                            value,
+                            () => ordinary ? this.emitOrdinaryObjectExpression(prop.initializer) : this.emitExpr(prop.initializer),
                             prop.initializer,
                             "data",
                             "_obj_property",
@@ -46747,19 +46758,17 @@ class Emitter {
                     expr = prop.name;
                 } else if (ts.isMethodDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
-                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name)) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object method key is not representable");
                         }
                         const key = this.emitExpr(prop.name.expression);
-                        const value = this.emitHomeObjectClosure(prop, `tsc_value_object(${obj})`);
                         this.emitComputedObjectLiteralDefinition(
                             pieces,
                             obj,
                             key,
                             prop.name.expression,
-                            value,
+                            () => this.emitHomeObjectClosure(prop, `tsc_value_object(${obj})`),
                             prop,
                             "data",
                             "_obj_method",
@@ -46770,19 +46779,17 @@ class Emitter {
                     expr = prop;
                 } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
-                    if (staticName === null || ts.isComputedPropertyName(prop.name) &&
-                        !this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, new Set())) {
+                    if (staticName === null || ts.isComputedPropertyName(prop.name)) {
                         if (!ts.isComputedPropertyName(prop.name)) {
                             unsupported(prop.name, "dynamic object accessor key is not representable");
                         }
                         const key = this.emitExpr(prop.name.expression);
-                        const value = this.emitHomeObjectClosure(prop, `tsc_value_object(${obj})`);
                         this.emitComputedObjectLiteralDefinition(
                             pieces,
                             obj,
                             key,
                             prop.name.expression,
-                            value,
+                            () => this.emitHomeObjectClosure(prop, `tsc_value_object(${obj})`),
                             prop,
                             ts.isGetAccessorDeclaration(prop) ? "getter" : "setter",
                             "_obj_accessor",

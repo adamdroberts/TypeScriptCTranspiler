@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget } from "./emit/binding-tree";
-import { callableName, expectedArgumentCount, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
+import { callableNameInput, expectedArgumentCount, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
@@ -68,7 +68,7 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<string, Cell>; readonly accessors: Map<string|null, {get:Cell;set:Cell}>; readonly shape: Cell; own?: Map<string, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
+interface ObjectOwner { readonly fields: Map<string, Cell>; readonly accessors: Map<string|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell}[]; own?: Map<string, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -536,6 +536,30 @@ class SourceValueFlow {
         }
         return null;
     }
+    private projectMemberKeys(name: string | ts.PropertyName, context: ts.Node, project: (key: string | null) => void, owner?: ObjectOwner): void {
+        if (typeof name === "string") { project(name); return; }
+        if (!ts.isComputedPropertyName(name)) { project(propertyName(name)); return; }
+        const key = this.cell(name.expression), selected = new Set<string | null>(), defined = this.newCell();
+        if (owner) (owner.computedDefinitions ??= []).push({key,defined});
+        let rule!: Rule;
+        rule = this.rule([key], () => {
+            const keys = this.propertyKeyNames(key, rule, context);
+            for (const value of keys === null ? [null] : keys ?? []) if (!selected.has(value)) {
+                selected.add(value); project(value); this.publish(defined,value===null?this.unknown:this.primitive(value));
+            }
+        });
+    }
+    private definitionsReady(owner: ObjectOwner, rule: Rule | undefined): boolean {
+        for (const definition of owner.computedDefinitions ?? []) {
+            if (!rule) return false;
+            this.watch(rule,definition.defined);
+            const keys=this.propertyKeyNames(definition.key,rule);
+            if(keys===undefined)return false;
+            if(keys===null){if(!definition.defined.values.has(this.unknown))return false;}
+            else if(keys.some(key=>!definition.defined.values.has(this.primitive(key))))return false;
+        }
+        return true;
+    }
     private computedProperty(base: Cell, key: Cell, context: ts.Node): Cell {
         const result = this.newCell(), selected = new Set<string>();
         let rule!: Rule;
@@ -620,6 +644,7 @@ class SourceValueFlow {
                 const owner=this.ordinaryOwner(atom);
                 if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.publish(this.opaqueMutation,this.unknown));continue;}
                 this.watch(rule,owner.shape);
+                if(!this.definitionsReady(owner,rule))continue;
                 if(owner.shape.values.has(this.unknown)){incomplete();continue;}
                 const names=key?keys!:[...new Set([...owner.fields.keys(),...owner.accessors.keys()])];
                 // Intrinsic/function metadata and exotic own-key collections
@@ -632,7 +657,7 @@ class SourceValueFlow {
                     const accessor=owner.accessors.get(name);
                     const present=presence.values.has(this.primitive(true));
                     if(!present && !data.values.size && !accessor){
-                        if(key)this.publish(result,atom.tag==="object"?this.primitive(undefined):this.unknown);
+                        if(key && atom.tag==="object")this.publish(result,this.primitive(undefined));
                         continue;
                     }
                     if(key && presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));
@@ -757,6 +782,7 @@ class SourceValueFlow {
             if (visited.has(owner)) continue;
             visited.add(owner);
             if(rule)this.watch(rule,owner.shape);
+            if(!this.definitionsReady(owner,rule))continue;
             this.copy(this.field(owner, key), result);
             for (const name of [key,null]) {
                 const accessor=owner.accessors.get(name);
@@ -836,9 +862,10 @@ class SourceValueFlow {
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
-        const name = this.newCell(), spelling = callableName(node, propertyName);
-        this.publish(name, spelling === null ? this.unknown : this.primitive(spelling));
+        const name = this.newCell(), input = callableNameInput(node);
         this.defineField(owner.fields, "name", name);
+        this.projectMemberKeys(input.key, input.definition ?? node, key =>
+            this.publish(name, key === null ? this.unknown : this.primitive(input.prefix ? `${input.prefix} ${key}` : key)));
         owner.fields.prototype = this.callablePrototype(owner.kind);
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
@@ -859,33 +886,41 @@ class SourceValueFlow {
                 });
                 this.copy(this.property(base,"prototype"),prototype.prototype!);
             } else this.copy(this.objectPrototype(),prototype.prototype!);
-            const initializers: {key:string|null;value:Cell}[]=[];
+            const initializers: {keys:Cell;value:Cell}[]=[];
             for (const member of node.members) {
                 if (ts.isConstructorDeclaration(member) || ts.isClassStaticBlockDeclaration(member)) continue;
-                const key = propertyName(member.name), isStatic = (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
+                const isStatic = (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
                 const target = isStatic ? owner.fields : prototype;
                 if (member.name && ts.isPrivateIdentifier(member.name)) continue;
                 if (!isStatic && ts.isPropertyDeclaration(member)) {
-                    const value=member.initializer?this.cell(member.initializer):this.newCell();
+                    const value=member.initializer?this.cell(member.initializer):this.newCell(),keys=this.newCell();
                     if (!member.initializer)this.publish(value,this.primitive(undefined));
-                    initializers.push({key,value});continue;
+                    this.projectMemberKeys(member.name,member,key=>this.publish(keys,key===null?this.unknown:this.primitive(key)));
+                    initializers.push({keys,value});continue;
                 }
-                if (key === null) {this.publish(target.shape,this.unknown);if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(target,null,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);continue;}
-                if (ts.isMethodDeclaration(member)) this.defineField(target,key,this.cell(member));
-                if (ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) this.defineAccessor(target,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
-                if (isStatic && ts.isPropertyDeclaration(member)) {
-                    this.publish(this.presence(target,key),this.primitive(true));
-                    if (member.initializer) this.copy(this.cell(member.initializer),this.field(target,key));
-                    else this.publish(this.field(target,key),this.primitive(undefined));
-                }
+                if (!member.name) continue;
+                this.projectMemberKeys(member.name,member,key=>{
+                    if(key===null)this.publish(target.shape,this.unknown);
+                    if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(target,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
+                    else if(key!==null){
+                        if(ts.isMethodDeclaration(member))this.defineField(target,key,this.cell(member));
+                        if(isStatic&&ts.isPropertyDeclaration(member)){
+                            const value=member.initializer?this.cell(member.initializer):this.newCell();
+                            if(!member.initializer)this.publish(value,this.primitive(undefined));
+                            this.defineField(target,key,value);
+                        }
+                    }
+                },target);
             }
-            this.rule([owner.receiver],()=>{
+            let fieldsRule!:Rule;
+            fieldsRule=this.rule([owner.receiver,...initializers.map(field=>field.keys)],()=>{
                 for(const receiver of owner.receiver.values){
                     const instance=this.ordinaryOwner(receiver);
                     if(!instance)continue;
                     for(const initializer of initializers){
-                        if(initializer.key===null)this.publish(instance.shape,this.unknown);
-                        else this.defineField(instance,initializer.key,initializer.value);
+                        const keys=this.propertyKeyNames(initializer.keys,fieldsRule);
+                        if(keys===null)this.publish(instance.shape,this.unknown);
+                        else for(const key of keys??[])this.defineField(instance,key,initializer.value);
                     }
                 }
             });
@@ -1067,16 +1102,16 @@ class SourceValueFlow {
             }
             if (ts.isObjectLiteralExpression(node)) for (const member of node.properties) {
                 if(ts.isSpreadAssignment(member)){this.publish(owner.shape,this.unknown);continue;}
-                const key = "name" in member ? propertyName(member.name) : null;
-                if(ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&key==="__proto__")continue;
-                if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member)){
-                    this.defineAccessor(owner,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);continue;
-                }
-                if (key !== null) {
-                    if (ts.isPropertyAssignment(member)) this.defineField(owner,key,this.cell(member.initializer));
-                    if (ts.isShorthandPropertyAssignment(member)) this.defineField(owner,key,this.cell(member.name));
-                    if (ts.isMethodDeclaration(member)) this.defineField(owner,key,this.cell(member));
-                }
+                if(ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&propertyName(member.name)==="__proto__")continue;
+                this.projectMemberKeys(member.name,member,key=>{
+                    if(key===null)this.publish(owner.shape,this.unknown);
+                    if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(owner,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
+                    else if(key!==null){
+                        if(ts.isPropertyAssignment(member))this.defineField(owner,key,this.cell(member.initializer));
+                        if(ts.isShorthandPropertyAssignment(member))this.defineField(owner,key,this.cell(member.name));
+                        if(ts.isMethodDeclaration(member))this.defineField(owner,key,this.cell(member));
+                    }
+                },owner);
             }
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
             if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.onActive(node,()=>this.publish(this.opaqueMutation,this.unknown));return;}

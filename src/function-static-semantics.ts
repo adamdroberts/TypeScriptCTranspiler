@@ -28,12 +28,17 @@ export const NAME_EVALUATING_ASSIGNMENTS: ReadonlySet<ts.SyntaxKind> = new Set([
     ts.SyntaxKind.AmpersandAmpersandEqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken,
 ]);
 
-/** Shared syntactic SetFunctionName input. Null retains an unresolved property key. */
-export function callableName(
+export interface CallableNameInput {
+    readonly key: string | ts.PropertyName;
+    readonly definition?: ts.Node;
+    readonly prefix?: "get" | "set";
+}
+
+/** Canonical SetFunctionName input before property-key projection. */
+export function callableNameInput(
     node: ts.Node,
-    propertyName: (name: ts.PropertyName, definition: ts.Node) => string | null,
     declarationFor?: (name: ts.Identifier) => ts.Declaration | undefined,
-): string | null {
+): CallableNameInput {
     const transparent = (node: ts.Node): node is ts.ParenthesizedExpression | ts.AsExpression |
         ts.TypeAssertion | ts.SatisfiesExpression | ts.NonNullExpression =>
         ts.isParenthesizedExpression(node) || ts.isAsExpression(node) ||
@@ -45,34 +50,44 @@ export function callableName(
     if (ts.isIdentifier(current)) {
         const declaration = declarationFor?.(current);
         if (declaration && (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)))
-            return declaration.name?.text ?? (isDefault(declaration) ? "default" : current.text);
+            return {key: declaration.name?.text ?? (isDefault(declaration) ? "default" : current.text)};
         if (declaration && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
             let initializer: ts.Node | undefined = declaration.initializer;
             while (initializer && transparent(initializer)) initializer = initializer.expression;
-            return initializer && (ts.isFunctionExpression(initializer) || ts.isClassExpression(initializer)) && initializer.name
-                ? initializer.name.text : declaration.name.text;
+            return {key: initializer && (ts.isFunctionExpression(initializer) || ts.isClassExpression(initializer)) && initializer.name
+                ? initializer.name.text : declaration.name.text};
         }
-        return declaration && ts.isExportAssignment(declaration) ? "default" : current.text;
+        return {key: declaration && ts.isExportAssignment(declaration) ? "default" : current.text};
     }
     if (ts.isFunctionDeclaration(current) || ts.isClassDeclaration(current))
-        return current.name?.text ?? (isDefault(current) ? "default" : "");
-    if ((ts.isFunctionExpression(current) || ts.isClassExpression(current)) && current.name) return current.name.text;
+        return {key: current.name?.text ?? (isDefault(current) ? "default" : "")};
+    if ((ts.isFunctionExpression(current) || ts.isClassExpression(current)) && current.name) return {key: current.name.text};
     if (ts.isMethodDeclaration(current) || ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current)) {
-        const name = propertyName(current.name, current);
-        return name === null ? null : ts.isGetAccessorDeclaration(current) ? `get ${name}` :
-            ts.isSetAccessorDeclaration(current) ? `set ${name}` : name;
+        return {key: current.name, definition: current,
+            prefix: ts.isGetAccessorDeclaration(current) ? "get" : ts.isSetAccessorDeclaration(current) ? "set" : undefined};
     }
     if (ts.isFunctionExpression(current) || ts.isArrowFunction(current) || ts.isClassExpression(current)) {
         let parent = current.parent;
         while (parent && transparent(parent)) parent = parent.parent;
-        if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return parent.name.text;
-        if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return propertyName(parent.name, parent);
+        if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return {key: parent.name.text};
+        if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return {key: parent.name, definition: parent};
         if (parent && ts.isBinaryExpression(parent) && NAME_EVALUATING_ASSIGNMENTS.has(parent.operatorToken.kind)) {
-            if (ts.isIdentifier(parent.left)) return parent.left.text;
+            if (ts.isIdentifier(parent.left)) return {key: parent.left.text};
         }
-        if (parent && ts.isExportAssignment(parent) && !parent.isExportEquals) return "default";
+        if (parent && ts.isExportAssignment(parent) && !parent.isExportEquals) return {key: "default"};
     }
-    return "";
+    return {key: ""};
+}
+
+/** Native formatting resolves the same input consumed by the source graph. */
+export function callableName(
+    node: ts.Node,
+    propertyName: (name: ts.PropertyName, definition: ts.Node) => string | null,
+    declarationFor?: (name: ts.Identifier) => ts.Declaration | undefined,
+): string | null {
+    const input = callableNameInput(node, declarationFor);
+    const key = typeof input.key === "string" ? input.key : propertyName(input.key, input.definition!);
+    return key === null ? null : input.prefix ? `${input.prefix} ${key}` : key;
 }
 
 function pushChildren(worklist: ts.Node[], node: ts.Node): void {
