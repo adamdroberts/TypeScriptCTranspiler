@@ -722,6 +722,8 @@ interface TypedArray<T> extends Iterable<T> {
     set(source: ArrayLike<T>, offset?: number, ...ignored: any[]): void;
     toReversed(...ignored: any[]): TypedArray<T>;
     with(index: number, value: T, ...ignored: any[]): TypedArray<T>;
+    sort(comparator?: (left: T, right: T) => number, ...ignored: any[]): this;
+    toSorted(comparator?: (left: T, right: T) => number, ...ignored: any[]): TypedArray<T>;
 }
 interface TypedArrayConstructor<T, V extends TypedArray<T>> {
     readonly prototype: V;

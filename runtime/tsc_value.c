@@ -8010,7 +8010,7 @@ static void value_sort_validate_compare_fn(tsc_value_t compare_fn) {
     }
 }
 
-static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right) {
+static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right, bool numeric) {
     if (tsc_value_is_undefined(left)) return tsc_value_is_undefined(right) ? 0.0 : 1.0;
     if (tsc_value_is_undefined(right)) return -1.0;
     if (!tsc_value_is_undefined(compare_fn)) {
@@ -8021,22 +8021,37 @@ static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_v
         double cmp = tsc_value_to_number(tsc_value_apply_function(compare_fn, tsc_value_undefined(), tsc_value_array(args)));
         return isnan(cmp) ? 0.0 : cmp;
     }
-    return (double)tsc_str_cmp(tsc_value_to_string(left), tsc_value_to_string(right));
+    if (numeric) {
+        if (value_is_box(left) && value_tag(left) == TSC_VALUE_TAG_BIGINT)
+            return (double)tsc_bigint_cmp(tsc_value_as_bigint(left), tsc_value_as_bigint(right));
+        double x=tsc_value_to_number(left), y=tsc_value_to_number(right);
+        if (isnan(x)) return isnan(y) ? 0 : 1;
+        if (isnan(y)) return -1;
+        if (x==0 && y==0) return signbit(x)==signbit(y) ? 0 : signbit(x) ? -1 : 1;
+        return x<y ? -1 : x>y ? 1 : 0;
+    }
+    tsc_str_t* volatile left_string=tsc_value_to_string(left);
+    tsc_str_t* volatile right_string=tsc_value_to_string(right);
+    return (double)tsc_str_cmp(left_string,right_string);
 }
 
-static void value_sort_array_values(tsc_array_t* a, tsc_value_t compare_fn) {
+void tsc_value_sort_values(tsc_array_t* input, tsc_value_t compare_fn, bool numeric) {
+    tsc_array_t* volatile a=input;
+    void* volatile compare_root=tsc_value_gc_root(compare_fn);
+    tsc_array_use_value_storage(a);
     for (size_t i = 1; i < a->len; i++) {
         tsc_value_t key = TSC_ARR(tsc_value_t, a, i);
         void* volatile key_gc_root = tsc_value_gc_root(key); (void)key_gc_root;
         size_t j = i;
         while (j > 0) {
             tsc_value_t prev = TSC_ARR(tsc_value_t, a, j - 1);
-            if (value_sort_compare(compare_fn, prev, key) <= 0) break;
+            if (value_sort_compare(compare_fn, prev, key, numeric) <= 0) break;
             tsc_array_store_raw(a, j, &prev);
             j--;
         }
         tsc_array_store_raw(a, j, &key);
     }
+    (void)compare_root;
 }
 
 tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
@@ -8052,7 +8067,7 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
         tsc_value_t value = tsc_value_get_index(recv, (double)i);
         tsc_array_push_raw(a, &value);
     }
-    value_sort_array_values(a, compare_fn);
+    tsc_value_sort_values(a, compare_fn, false);
     for (size_t i = 0; i < a->len; i++) {
         if (!tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i))) {
             tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Array.prototype.sort could not write array-like element"));
@@ -8074,7 +8089,7 @@ tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv, tsc_value_t compare_fn)
     const size_t len = tsc_value_length_of_array_like(recv);
     tsc_array_t* out = value_array_result_new(len);
     for (size_t i = 0; i < len; ++i) tsc_array_push_value(out, tsc_value_get_index(recv, (double)i));
-    value_sort_array_values(out, compare_fn);
+    tsc_value_sort_values(out, compare_fn, false);
     return tsc_value_array(out);
 }
 

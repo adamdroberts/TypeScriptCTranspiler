@@ -227,7 +227,7 @@ static tsc_value_t define_member(tsc_value_t owner,const member_t* member,tsc_st
     }else define_value(owner,name,function,true,true);
     (void)function_root;return function;
 }
-typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE,COPY_WITHIN,FILL,REVERSE,SLICE,SUBARRAY,SET,TO_REVERSED,WITH} traversal_kind_t;
+typedef enum {AT,INCLUDES,INDEX_OF,FOR_EACH,MAP,FILTER,SOME,EVERY,FIND,FIND_INDEX,REDUCE,COPY_WITHIN,FILL,REVERSE,SLICE,SUBARRAY,SET,TO_REVERSED,WITH,SORT,TO_SORTED} traversal_kind_t;
 typedef struct {const char* name;traversal_kind_t kind;bool reverse;size_t arity;} traversal_t;
 static const traversal_t traversals[]={
 #define TSC_TYPED_METHOD(name, kind, reverse, arity) {#name,kind,reverse,arity},
@@ -358,6 +358,17 @@ static tsc_value_t mutation_apply(const traversal_t* operation,tsc_value_t recei
 }
 static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
     const traversal_t* operation=environment;void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;
+    if(operation->kind==SORT||operation->kind==TO_SORTED){
+        tsc_value_t comparator=argument(actuals,0);void* volatile comparator_root=tsc_value_gc_root(comparator);
+        if(!tsc_value_is_undefined(comparator)&&!tsc_value_is_callable(comparator))tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray sort comparator is not callable"));
+        tsc_object_t* object=require_typed(receiver);size_t length=require_witness(object).length;
+        tsc_value_t result=operation->kind==SORT?receiver:tsc_typed_array_create_from_constructor(tsc_typed_array_constructor_value(owner_kind(object)),length_arguments(length));void* volatile result_root=tsc_value_gc_root(result);
+        tsc_array_t* volatile values=tsc_array_new(sizeof(tsc_value_t),length);tsc_array_use_value_storage(values);
+        for(size_t index=0;index<length;++index){tsc_value_t value=tsc_integer_indexed_get(object,(double)index);void* volatile value_root=tsc_value_gc_root(value);tsc_array_push_raw(values,&value);(void)value_root;}
+        tsc_value_sort_values(values,comparator,true);
+        for(size_t index=0;index<length;++index)(void)tsc_value_set_prop(result,tsc_str_from_num((double)index),TSC_ARR(tsc_value_t,values,index));
+        (void)comparator_root;(void)result_root;return result;
+    }
     if(operation->kind>=COPY_WITHIN)return mutation_apply(operation,receiver,actuals);
     tsc_object_t* object=require_typed(receiver);
     if(!object->is_buffer&&!tsc_typed_array_witness(object->class_ptr).valid)tsc_throw_error(TSC_ERROR_TYPE,key("TypedArray traversal view is outside its buffer"));
