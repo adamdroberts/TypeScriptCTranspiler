@@ -22,6 +22,132 @@ export function expectedArgumentCount(node: ts.FunctionLikeDeclaration): number 
     return length;
 }
 
+type BodyCompletion = {readonly kind: "normal" | "throw"} |
+    {readonly kind: "return"; readonly value: ts.Expression | null} |
+    {readonly kind: "break" | "continue"; readonly label: string | null};
+export interface FunctionBodyCompletions {
+    readonly normal: boolean;
+    readonly returns: readonly (ts.Expression | null)[];
+    readonly reachable: ReadonlySet<ts.Node>;
+    readonly complete: boolean;
+}
+
+/** One statement tree and iterative completion worklist. Sequence composition
+ * stops at abrupt completions; finally replaces or preserves incoming records. */
+export function functionBodyCompletions(body: ts.Block): FunctionBodyCompletions {
+    const normal: BodyCompletion = {kind: "normal"}, thrown: BodyCompletion = {kind: "throw"};
+    type Summary = {flow: Set<BodyCompletion>; children: ts.Node[]; live: ts.Node[]};
+    const summaries = new Map<ts.Node, Summary>();
+    let complete = true;
+    const truth = (expression: ts.Expression | undefined): boolean | undefined => {
+        if (!expression) return true;
+        while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+        if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+        if (expression.kind === ts.SyntaxKind.FalseKeyword || expression.kind === ts.SyntaxKind.NullKeyword) return false;
+        if (ts.isNumericLiteral(expression)) return Number(expression.text) !== 0;
+        if (ts.isStringLiteralLike(expression)) return expression.text.length > 0;
+        return undefined;
+    };
+    const compose = (left: Set<BodyCompletion>, right: Set<BodyCompletion>): Set<BodyCompletion> =>
+        new Set([...left].filter(value => value !== normal).concat(left.has(normal) ? [...right] : []));
+    const children = (node: ts.Node): ts.Node[] => {
+        if (ts.isBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)) return [...node.statements];
+        if (ts.isIfStatement(node)) return [node.thenStatement, ...(node.elseStatement ? [node.elseStatement] : [])];
+        if (ts.isTryStatement(node)) return [node.tryBlock, ...(node.catchClause ? [node.catchClause.block] : []), ...(node.finallyBlock ? [node.finallyBlock] : [])];
+        if (ts.isSwitchStatement(node)) return [...node.caseBlock.clauses];
+        if (ts.isIterationStatement(node, false) || ts.isLabeledStatement(node) || ts.isWithStatement(node)) return [node.statement];
+        return [];
+    };
+    const worklist = [{node: body as ts.Node, finish: false}];
+    while (worklist.length) {
+        const {node, finish} = worklist.pop()!;
+        if (!finish) {
+            worklist.push({node, finish: true});
+            for (const child of children(node)) worklist.push({node: child, finish: false});
+            continue;
+        }
+        const nodes = children(node), live = [...nodes];
+        let flow = new Set<BodyCompletion>();
+        const child = (node: ts.Node): Set<BodyCompletion> => summaries.get(node)!.flow;
+        if (ts.isBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+            flow.add(normal); live.length = 0;
+            for (const statement of nodes) {
+                if (flow.has(normal) || ts.isFunctionDeclaration(statement)) live.push(statement);
+                flow = compose(flow, child(statement));
+            }
+        } else if (ts.isReturnStatement(node)) {
+            flow.add({kind: "return", value: node.expression ?? null});
+            if (node.expression) flow.add(thrown);
+        } else if (ts.isThrowStatement(node)) flow.add(thrown);
+        else if (ts.isBreakStatement(node) || ts.isContinueStatement(node))
+            flow.add({kind: ts.isBreakStatement(node) ? "break" : "continue", label: node.label?.text ?? null});
+        else if (ts.isIfStatement(node)) {
+            const condition = truth(node.expression); live.length = 0;
+            if (condition !== false) {live.push(node.thenStatement); for (const value of child(node.thenStatement)) flow.add(value);}
+            if (condition !== true) {
+                if (node.elseStatement) {live.push(node.elseStatement); for (const value of child(node.elseStatement)) flow.add(value);}
+                else flow.add(normal);
+            }
+            if (condition === undefined) flow.add(thrown);
+        } else if (ts.isIterationStatement(node, false)) {
+            const iterable = ts.isForInStatement(node) || ts.isForOfStatement(node);
+            const condition = iterable ? undefined : ts.isForStatement(node) ? truth(node.condition)
+                : ts.isWhileStatement(node) || ts.isDoStatement(node) ? truth(node.expression) : undefined;
+            const executes = ts.isDoStatement(node) || condition !== false;
+            if (!executes) live.length = 0;
+            const labels = new Set<string>();
+            let labeled: ts.Node = node;
+            while (labeled.parent && ts.isLabeledStatement(labeled.parent) && labeled.parent.statement === labeled) {
+                labels.add(labeled.parent.label.text); labeled = labeled.parent;
+            }
+            let repeats = false;
+            if (executes) for (const value of child(node.statement)) {
+                if (value.kind === "break" && value.label === null) flow.add(normal);
+                else if (value === normal || value.kind === "continue" && (value.label === null || labels.has(value.label))) repeats = true;
+                else flow.add(value);
+            }
+            if (!ts.isDoStatement(node) && condition !== true || repeats && condition !== true) flow.add(normal);
+            if (condition === undefined || iterable || ts.isForStatement(node) && node.initializer) flow.add(thrown);
+        } else if (ts.isLabeledStatement(node)) {
+            for (const value of child(node.statement)) flow.add(value.kind === "break" && value.label === node.label.text ? normal : value);
+        } else if (ts.isSwitchStatement(node)) {
+            let suffix = new Set<BodyCompletion>([normal]);
+            for (let index = nodes.length - 1; index >= 0; index--) {
+                suffix = compose(child(nodes[index]!), suffix);
+                for (const value of suffix) flow.add(value.kind === "break" && value.label === null ? normal : value);
+            }
+            if (!node.caseBlock.clauses.some(ts.isDefaultClause)) flow.add(normal);
+            flow.add(thrown);
+        } else if (ts.isTryStatement(node)) {
+            const tried = child(node.tryBlock); live.length = 0; live.push(node.tryBlock);
+            flow = new Set([...tried].filter(value => value !== thrown || !node.catchClause));
+            if (node.catchClause && tried.has(thrown)) {
+                live.push(node.catchClause.block);
+                for (const value of child(node.catchClause.block)) flow.add(value);
+                if (node.catchClause.variableDeclaration && !ts.isIdentifier(node.catchClause.variableDeclaration.name)) flow.add(thrown);
+            }
+            if (node.finallyBlock && flow.size) {
+                live.push(node.finallyBlock);
+                const final = child(node.finallyBlock);
+                flow = new Set([...(final.has(normal) ? flow : []), ...[...final].filter(value => value !== normal)]);
+            }
+        } else if (ts.isWithStatement(node)) {flow = new Set(child(node.statement)); flow.add(thrown);}
+        else if (ts.isExpressionStatement(node) || ts.isVariableStatement(node) || ts.isClassDeclaration(node)) {flow.add(normal); flow.add(thrown);}
+        else if (ts.isEmptyStatement(node) || ts.isDebuggerStatement(node) || ts.isFunctionDeclaration(node) ||
+            ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) flow.add(normal);
+        else {complete = false; flow.add(normal); flow.add(thrown);}
+        summaries.set(node, {flow, children: nodes, live});
+    }
+    const reachable = new Set<ts.Node>(), pending: ts.Node[] = [body];
+    while (pending.length) {
+        const node = pending.pop()!; if (reachable.has(node)) continue; reachable.add(node);
+        if (ts.isBlock(node) && node.parent && ts.isCatchClause(node.parent)) reachable.add(node.parent);
+        pending.push(...summaries.get(node)!.live);
+    }
+    const flow = summaries.get(body)!.flow;
+    return {normal: flow.has(normal), returns: [...flow].filter((value): value is Extract<BodyCompletion, {kind: "return"}> => value.kind === "return").map(value => value.value), reachable, complete};
+}
+
 /** Assignment productions that perform NamedEvaluation for an identifier reference. */
 export const NAME_EVALUATING_ASSIGNMENTS: ReadonlySet<ts.SyntaxKind> = new Set([
     ts.SyntaxKind.EqualsToken, ts.SyntaxKind.BarBarEqualsToken,

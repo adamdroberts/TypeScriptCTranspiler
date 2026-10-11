@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget } from "./emit/binding-tree";
-import { callableNameInput, expectedArgumentCount, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
+import { callableNameInput, expectedArgumentCount, functionBodyCompletions, type FunctionBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
@@ -73,6 +73,7 @@ interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
     base?: Cell;
+    completion?: FunctionBodyCompletions;
 }
 interface EvaluationRecord {
     readonly node: ts.Node; readonly operation: "eval" | "eval-script" | "agent-start";
@@ -155,6 +156,7 @@ function propertyName(node: ts.Node | undefined): string | null {
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
+    private readonly exceptionCells = new Set<Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
@@ -236,10 +238,15 @@ class SourceValueFlow {
             const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: null}];
             while (worklist.length) {
                 const {node, handler} = worklist.pop()!;
+                if ((ts.isStatement(node) || ts.isCatchClause(node)) && !ts.isFunctionDeclaration(node)) {
+                    const activation = this.enclosingActivation(node);
+                    if (activation?.completion && !activation.completion.reachable.has(node)) continue;
+                }
                 if (handler) this.exceptionHandlers.set(node, handler);
                 if (ts.isTryStatement(node)) {
-                    const caught = node.catchClause ? this.newCell() : handler;
-                    if (node.catchClause?.variableDeclaration) this.bind(node.catchClause.variableDeclaration.name, caught!);
+                    const caught = node.catchClause ? this.exceptionCell() : handler;
+                    if (node.catchClause?.variableDeclaration && (!this.enclosingActivation(node)?.completion ||
+                        this.enclosingActivation(node)!.completion!.reachable.has(node.catchClause))) this.bind(node.catchClause.variableDeclaration.name, caught!);
                     worklist.push({node: node.tryBlock, handler: caught});
                     if (node.catchClause) worklist.push({node: node.catchClause, handler});
                     if (node.finallyBlock) worklist.push({node: node.finallyBlock, handler});
@@ -253,11 +260,20 @@ class SourceValueFlow {
                     // Primitive conversion failures are Error objects. An
                     // opaque coercion can invoke user code and throw any value;
                     // it cannot disappear beside a known explicit throw.
-                    this.publish(handler, this.opaqueObject);
-                    this.rule(inputs, () => {
-                        if (inputs.some(input => [...input.values].some(atom => atom.tag !== "primitive" && atom.tag !== "non-string" &&
-                            !(propertyKey && (atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source")))))
-                            this.publish(handler, this.unknown);
+                    let conversionRule!: Rule;
+                    conversionRule = this.rule(inputs, () => {
+                        const states = inputs.map(input => this.primitiveState(input, conversionRule, !propertyKey));
+                        if (states.some(state => state.proof.primitiveComplete && !state.proof.values.length)) return;
+                        for (const input of inputs) {
+                            const state = this.primitiveState(input, conversionRule, !propertyKey);
+                            if (state.unresolved) this.publish(handler, this.unknown);
+                        }
+                        if (states.some(state => state.pending)) return;
+                        const plus = ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken);
+                        const mixedBigInt = plus && states[0]!.proof.values.some(left => states[1]!.proof.values.some(right =>
+                            typeof left !== "string" && typeof right !== "string" && (typeof left === "bigint") !== (typeof right === "bigint")));
+                        if (states.some(state => !state.proof.primitiveComplete) || mixedBigInt ||
+                            !propertyKey && !plus && !ts.isTemplateSpan(node)) this.publish(handler, this.opaqueObject);
                     });
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
@@ -296,6 +312,7 @@ class SourceValueFlow {
         }
     }
     private newCell(): Cell { return { id: this.nextCell++, values: new Set(), users: new Set() }; }
+    private exceptionCell(): Cell {const cell = this.newCell(); this.exceptionCells.add(cell); return cell;}
     private enclosingActivation(node: ts.Node): FunctionOwner | null {
         let child = node, parent = node.parent;
         while (parent) {
@@ -566,7 +583,7 @@ class SourceValueFlow {
                     this.invoke(context, callee, receiver, [], returned);
                     this.rule([method], () => {
                         for (const value of method.values) {
-                            if (value.tag === "pending-source" || value.tag === "unknown" || value.tag === "opaque-object") this.publish(result, value);
+                            if (value.tag === "pending-source" || value.tag === "unknown" || value.tag === "opaque-object" || value.tag === "abrupt") this.publish(result, value);
                             else if (value.tag === "function" || value.tag === "bound" || value.tag === "operation" ||
                                 value.tag === "intrinsic" || value.tag === "builtin" && value.normalResult !== "not-callable") this.publish(callee, value);
                             else advance(index + 1);
@@ -589,23 +606,8 @@ class SourceValueFlow {
      * remain outside this finite source domain and fail closed. */
     private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node): readonly string[] | null | undefined {
         key = this.stringHintPrimitives(key, context);
-        this.watchText(rule, key);
-        if (!key.values.size) return undefined;
-        const proof = this.primitiveChoiceProof(key);
+        const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) return [...new Set(proof.values.map(String))];
-        const worklist = [key], visited = new Set<Cell>();
-        let pending = false, unresolved = false;
-        while (worklist.length) {
-            const cell = worklist.pop()!;
-            if (visited.has(cell)) continue;
-            visited.add(cell);
-            if (!cell.values.size) pending = true;
-            for (const value of cell.values) {
-                if (value.tag === "text-operation") worklist.push(...value.parts);
-                else if (value.tag === "pending-source") pending = true;
-                else if (value.tag !== "primitive" && value.tag !== "abrupt") unresolved = true;
-            }
-        }
         if (pending && !unresolved) return undefined;
         if (context) {
             const handler = this.exceptionHandlers.get(context);
@@ -613,6 +615,25 @@ class SourceValueFlow {
             this.onActive(context, () => this.publish(this.opaqueMutation, this.unknown));
         }
         return null;
+    }
+    private primitiveState(root: Cell, rule: Rule, nonString = false): {proof: PrimitiveChoiceProof; pending: boolean; pendingSource: boolean; unresolved: boolean} {
+        this.watchText(rule, root);
+        const proof = this.primitiveChoiceProof(root);
+        if (proof.primitiveComplete) return {proof, pending: false, pendingSource: false, unresolved: false};
+        const worklist = [root], visited = new Set<Cell>();
+        let pending = false, pendingSource = false, unresolved = false;
+        while (worklist.length) {
+            const cell = worklist.pop()!;
+            if (visited.has(cell)) continue;
+            visited.add(cell);
+            if (!cell.values.size) pending = true;
+            for (const value of cell.values) {
+                if (value.tag === "text-operation") worklist.push(...value.parts);
+                else if (value.tag === "pending-source") pending = pendingSource = true;
+                else if (value.tag !== "primitive" && value.tag !== "abrupt" && !(nonString && value.tag === "non-string")) unresolved = true;
+            }
+        }
+        return {proof, pending, pendingSource, unresolved};
     }
     private stringHintCell(source: Cell, context: ts.Node): Cell {
         let contexts = this.stringConversions.get(source);
@@ -624,6 +645,8 @@ class SourceValueFlow {
             const choices = this.stringHintTexts(source, rule, context);
             if (choices === null) this.publish(result, this.unknown);
             else if (choices?.length === 0) this.publish(result, this.abrupt);
+            else if (choices === undefined && this.primitiveState(this.stringHintPrimitives(source, context), rule).pendingSource)
+                this.publish(result, this.pendingSource);
             else for (const choice of choices ?? []) this.publish(result, this.text(choice));
         });
         return result;
@@ -860,6 +883,10 @@ class SourceValueFlow {
         return owner;
     }
     private read(atom: Atom, base: Cell, key: string, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
+        if (atom.tag === "abrupt") {this.publish(result, atom); return;}
+        if (atom.tag === "primitive" && (atom.value === null || atom.value === undefined)) {
+            this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); return;
+        }
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.unknown);
@@ -950,7 +977,7 @@ class SourceValueFlow {
         const activation = ts.isClassLike(node) ? node.members.find(ts.isConstructorDeclaration) ?? null : node;
         const constructor = ts.isClassLike(node) && activation ? this.function(activation) : null;
         owner = { definition: node, node: activation, kind: functionKindForDeclaration(node), fields: this.owner(node),
-            returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.newCell(),
+            returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.exceptionCell(),
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
@@ -1020,20 +1047,14 @@ class SourceValueFlow {
         }
         if (node.body && !ts.isBlock(node.body)) this.copy(this.cell(node.body), owner.returns);
         else if (node.body) {
-            const worklist: ts.Node[] = [...node.body.statements];
-            let hasValueReturn = false;
-            while (worklist.length) {
-                const item = worklist.pop()!;
-                if (functionNode(item) || ts.isClassLike(item)) continue;
-                if (ts.isReturnStatement(item) && item.expression) {
-                    hasValueReturn = true;
-                    this.copy(this.cell(item.expression), owner.returns);
-                }
-                item.forEachChild(child => { worklist.push(child); });
+            const completion = owner.completion = functionBodyCompletions(node.body);
+            if (!completion.complete) {this.publish(owner.returns, this.unknown); this.publish(owner.throws, this.unknown);}
+            for (const value of completion.returns) {
+                if (value) this.copy(this.cell(value), owner.returns);
+                else this.publish(owner.returns, this.primitive(undefined));
             }
-            // Without a value-return statement, any normal completion is
-            // undefined; the exception cell remains a separate outcome.
-            if (!hasValueReturn) this.publish(owner.returns, this.primitive(undefined));
+            if (completion.normal) this.publish(owner.returns, this.primitive(undefined));
+            else if (!completion.returns.length) this.publish(owner.returns, this.abrupt);
         }
         return owner;
     }
@@ -1310,6 +1331,7 @@ class SourceValueFlow {
             while (worklist.length) {
                 const invocation = worklist.pop()!; this.watch(rule, invocation.target);
                 for (const atom of invocation.target.values) {
+                    if (atom.tag === "abrupt") {this.publish(result!, atom); continue;}
                     if (atom.tag === "pending-source") {this.publish(result!,atom);continue;}
                     if (atom.tag === "unknown" || atom.tag === "opaque-object") {
                         this.publish(result!, invocation.construct ? this.opaqueObject : this.unknown);
@@ -1346,11 +1368,19 @@ class SourceValueFlow {
                             receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : constructedReceiver, args });
                         continue;
                     }
+                    const constructorArguments = atom.tag === "intrinsic" && atom.domain === "constructor" ? convertArguments(argv) : undefined;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
-                        const converted = convertArguments(argv);
-                        for (const argument of converted ?? []) this.watchText(rule, argument);
-                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: converted });
+                        for (const argument of constructorArguments ?? []) this.watchText(rule, argument);
+                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: constructorArguments ?? null });
                     }
+                    const noArguments = (constructorArguments === undefined ? argv : constructorArguments)?.some(argument => {
+                        const proof = this.primitiveChoiceProof(argument);
+                        return proof.primitiveComplete && !proof.values.length;
+                    });
+                    if (noArguments && !(atom.tag === "operation" && ["eval", "eval-script", "agent-start"].includes(atom.operation))) {
+                        this.publish(result!, this.abrupt); continue;
+                    }
+                    if (constructorArguments?.some(argument => !this.primitiveChoiceProof(argument).primitiveComplete)) continue;
                     // Delegation remains an evolving graph edge: its
                     // target may acquire facts after this call is handled.
                     if (atom.tag === "function" && invocation.construct && ts.isClassLike(atom.owner.definition) && !atom.owner.node && atom.owner.base && !invocation.boundPath.has(atom)) {
@@ -1358,7 +1388,7 @@ class SourceValueFlow {
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
                     if (invocation.construct) this.publish(result!,{tag:"object",owner:this.owner(node)});
-                    const evolvingPrimitiveResult = atom.tag === "builtin" && atom.normalResult === "primitive-string";
+                    const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && atom.normalResult === "primitive-string";
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                         const generated = this.generated.get(atom.kind);
@@ -1383,7 +1413,7 @@ class SourceValueFlow {
                         }
                         const handler = this.exceptionHandlers.get(node);
                         if (handler) {
-                            this.publish(handler, this.opaqueObject);
+                            if (atom.normalResult !== "primitive-string" || invocation.construct) this.publish(handler, this.opaqueObject);
                             // Coercion can call arbitrary user code. A
                             // result category cannot erase its exceptions.
                             if (atom.normalResult === "unknown" || argv === null || atom.normalResult !== "primitive-string" && argv.some(argument =>
@@ -1447,8 +1477,12 @@ class SourceValueFlow {
                         if(atom.operation==="host-print"){
                             this.publish(result!,this.primitive(undefined));
                             const handler=this.exceptionHandlers.get(node);
-                            if(handler && (argv===null||argv.some(argument=>[...argument.values].some(value=>
-                                value.tag!=="primitive"&&value.tag!=="non-string"&&value.tag!=="abrupt"&&value.tag!=="pending-source"))))this.publish(handler,this.unknown);
+                            if (argv === null) {if (handler) this.publish(handler, this.unknown);}
+                            else for (const argument of argv) {
+                                const converted = this.stringHintPrimitives(argument, node);
+                                if (handler && this.primitiveState(converted, rule, true).unresolved) this.publish(handler, this.unknown);
+                                else this.watchText(rule, converted);
+                            }
                         }
                         if(PROPERTY_MUTATIONS.has(atom.operation)){
                             const handler=this.exceptionHandlers.get(node);
@@ -1531,6 +1565,7 @@ class SourceValueFlow {
                             const direct = atom.operation === "eval" && invocation.direct;
                             const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
                             evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
+                            if (noArguments) {this.publish(result!, this.abrupt); continue;}
                             if (source) {
                                 this.watchText(rule, source);
                                 for (const text of this.primitiveChoiceProof(source).values) {
@@ -1642,6 +1677,8 @@ class SourceValueFlow {
             // impossible branch. Seal them only after the known graph closes,
             // then propagate the same interned top fact through normal edges.
             let changed = false;
+            for (const cell of this.exceptionCells) if (!cell.values.size) {this.publish(cell, this.abrupt); changed = true;}
+            if (changed) continue;
             for (const [node, cell] of this.cells) if (!cell.values.size) {
                 const activation = this.enclosingActivation(node);
                 if (activation && !activation.active.values.size) continue;
