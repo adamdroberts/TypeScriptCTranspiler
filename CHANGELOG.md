@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Closed eval source analysis now projects represented own descriptors through the canonical owner graph, retaining data/accessor callable identities without executing getters. Added independent Node/native partitions, deep owner projection and dual-memory CLI checks; unresolved attributes, coercions, spread and exotic metadata still fail closed.
+
 - Closed source admission now invokes getters and setters through one canonical call worklist, retaining receivers, RHS Lists, reachable effects and throws. Descriptor/global accessors and indirect eval share this path; removed the getter-only predecessor and added Node/native partitions plus deep activation and dual-memory CLI checks.
 
 - Closed eval now admits finite primitive String conversion through canonical binding metadata and the shared dependency tree, including aliases, forwarded Lists, late results and prefix facts. Immutable global data facts now survive opaque writes according to the canonical attributes. Added Node differential model/native checks and dual-memory CLI coverage.
