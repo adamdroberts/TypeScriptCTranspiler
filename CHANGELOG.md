@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Correct prototype rejection regressions to assert TypeError identity rather than host-specific printed error text. Compare array/function prototype behavior directly with Node and both native memory modes.
+
 - Execute lazy Iterator helpers and concat through one retained state/worklist, preserving captured records, callback indices, dropped-value behavior and close/error precedence without native helper-depth recursion. Release completed helper payloads; add differential and collector evidence plus typed pipelines. Full cross-realm and eligible target conformance remain open.
 
 - Add the ordinary Iterator constructor/from owners, retained raw-result wrappers and shared constructor/toStringTag accessor semantics. Verify derived construction, captured next and private slots against Node; lazy helpers, Iterator.concat and exhaustive eligible conformance remain open.

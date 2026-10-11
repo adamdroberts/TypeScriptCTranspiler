@@ -19,5 +19,5 @@ console.log("locked change:", Reflect.setPrototypeOf(fn, otherProto));
 try {
   console.log("object locked change:", Object.setPrototypeOf(fn, otherProto) === fn);
 } catch (err: any) {
-  console.log("object locked change:", err);
+  console.log("object locked change:", err instanceof TypeError);
 }
