@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Correct the Reflect.get Buffer receiver regression: indexed data ignores a primitive receiver, while the inherited length getter brands its actual receiver and can read a different Buffer. Verify observable receiver effects against Node.
+
 - Install Set composition on ordinary owners through shared set-like records and insertion/iterator worklists. Preserve observable validation, mutations, copy timing and early iterator closing; accept typed set-like operands and delete fixed native/emitter predecessors.
 
 - Correct stale collection consumers to materialize Map/Set iterators before using array indexing or joins, and iterate Map keys explicitly in wordcount. Node confirms the existing output contracts.
