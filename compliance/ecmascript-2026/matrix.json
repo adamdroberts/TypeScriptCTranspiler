@@ -3014,8 +3014,8 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["String", "RegExp", "Unicode and well-formed strings"],
-      "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": ["string_object_methods", "regex_pcre2"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_string.c"] },
-      "knownGaps": ["PCRE2 behavior is not yet demonstrated equivalent to every ECMA-262 RegExp algorithm."]
+      "localEvidence": { "property": ["tests/property/regexp-split-protocol.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["string_object_methods", "regex_pcre2", "regexp_split_protocol"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#RegExp"], "implementation": ["runtime/tsc_string.c", "runtime/tsc_regexp_api.c#tsc_regexp_split_apply", "runtime/tsc_regexp.c", "runtime/tsc_value.c#tsc_value_method_split"] },
+      "knownGaps": ["The canonical UTF-16 RegExp engine replaced PCRE2, and ordinary match/search/replace/matchAll paths exist. Species-aware Symbol.split has local Node differential evidence for live RegExpExec records, encoded capture Lists, coercion/error order and retained capture graphs. Complete engine syntax/semantic partitions, object-model/cross-realm behavior and exhaustive eligible clause evidence remain open."]
     },
     {
       "id": "indexed-collections",

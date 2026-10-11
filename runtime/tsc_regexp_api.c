@@ -548,39 +548,54 @@ tsc_value_t tsc_regexp_replace_apply(void* env, tsc_value_t receiver, tsc_array_
     return tsc_value_string(tsc_str_from_units_range(output.units, 0, output.len));
 }
 
-tsc_array_t* tsc_str_split_regex_limit(const tsc_str_t* string, const tsc_regexp_t* re, uint32_t limit) {
-    size_t len; const uint16_t* units = tsc_str_utf16_units(string, &len);
-    size_t* captures = regexp_captures(re);
-    tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), 4);
-    if (!limit) return result;
-    if (!len) {
-        if (!regexp_find(re, units, len, 0, true, captures)) {
-            tsc_str_t* part = (tsc_str_t*)string; tsc_array_push_raw(result, &part);
-        }
-        return result;
+tsc_value_t tsc_regexp_split_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    if (!tsc_value_is_object(receiver))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp split called on non-object"));
+    tsc_str_t* volatile string = tsc_value_to_string(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined());
+    tsc_value_t constructor = tsc_value_species_constructor(receiver, tsc_regexp_constructor_value());
+    void* volatile constructor_root = tsc_value_gc_root(constructor);
+    tsc_str_t* volatile flags = tsc_value_to_string(tsc_value_get_prop(receiver, tsc_str_from_lit("flags", 5)));
+    bool unicode = tsc_str_includes(flags, tsc_str_from_lit("u", 1), 0) || tsc_str_includes(flags, tsc_str_from_lit("v", 1), 0);
+    if (!tsc_str_includes(flags, tsc_str_from_lit("y", 1), 0)) flags = tsc_str_concat(flags, tsc_str_from_lit("y", 1));
+    tsc_array_t* volatile actual = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(actual, receiver); tsc_array_push_value(actual, tsc_value_string(flags));
+    tsc_value_t splitter = tsc_value_construct(constructor, tsc_value_array(actual));
+    void* volatile splitter_root = tsc_value_gc_root(splitter);
+    tsc_array_t* volatile result = tsc_array_new(sizeof(tsc_value_t), 0);
+    tsc_array_use_value_storage(result);
+    uint32_t limit = split_limit_from_value(args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined());
+    if (!limit) return tsc_value_array(result);
+    size_t length; const uint16_t* units = tsc_str_utf16_units(string, &length);
+    if (!length) {
+        if (regexp_exec_value(splitter, string) == tsc_value_null()) tsc_array_push_value(result, tsc_value_string(string));
+        return tsc_value_array(result);
     }
     size_t copied = 0, offset = 0;
-    while (offset < len) {
-        if (!regexp_find(re, units, len, offset, true, captures) || captures[1] == copied) {
-            offset = (size_t)regexp_advance(units, len, offset, re->unicode || re->unicode_sets); continue;
+    while (offset < length) {
+        regexp_set_last_index_value(splitter, tsc_value_num(offset));
+        tsc_value_t match = regexp_exec_value(splitter, string);
+        void* volatile match_root = tsc_value_gc_root(match);
+        if (match == tsc_value_null()) offset = (size_t)regexp_advance(units, length, offset, unicode);
+        else {
+            double end_number = tsc_value_to_length(tsc_value_get_prop(splitter, tsc_str_from_lit("lastIndex", 9)));
+            size_t end = end_number >= (double)length ? length : (size_t)end_number;
+            if (end == copied) offset = (size_t)regexp_advance(units, length, offset, unicode);
+            else {
+                tsc_array_push_value(result, tsc_value_string(tsc_str_from_units_range(units, copied, offset - copied)));
+                if (result->len == limit) return tsc_value_array(result);
+                copied = end;
+                size_t captures = tsc_value_length_of_array_like(match);
+                for (size_t index = 1; index < captures; ++index) {
+                    tsc_array_push_value(result, tsc_value_get_index(match, index));
+                    if (result->len == limit) return tsc_value_array(result);
+                }
+                offset = copied;
+            }
         }
-        tsc_str_t* part = tsc_str_from_units_range(units, copied, offset - copied);
-        tsc_array_push_raw(result, &part);
-        if (result->len == limit) return result;
-        copied = captures[1];
-        for (size_t i = 1; i <= re->capture_count; i++) {
-            part = regexp_capture(units, captures, i); tsc_array_push_raw(result, &part);
-            if (result->len == limit) return result;
-        }
-        offset = copied;
+        (void)match_root;
     }
-    tsc_str_t* tail = tsc_str_from_units_range(units, copied, len - copied);
-    tsc_array_push_raw(result, &tail);
-    return result;
-}
-tsc_array_t* tsc_str_split_regex(const tsc_str_t* string, const tsc_regexp_t* re) {
-    return tsc_str_split_regex_limit(string, re, UINT32_MAX);
-}
-tsc_array_t* tsc_str_split_regex_limit_num(const tsc_str_t* string, const tsc_regexp_t* re, double limit) {
-    return tsc_str_split_regex_limit(string, re, split_limit_from_num(limit));
+    tsc_array_push_value(result, tsc_value_string(tsc_str_from_units_range(units, copied, length - copied)));
+    (void)constructor_root; (void)splitter_root;
+    return tsc_value_array(result);
 }

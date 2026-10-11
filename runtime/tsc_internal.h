@@ -844,6 +844,7 @@ tsc_value_t tsc_regexp_test_apply(void* env, tsc_value_t receiver, tsc_array_t* 
 tsc_value_t tsc_regexp_match_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_search_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_replace_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_regexp_split_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_regexp_match_all_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 tsc_value_t tsc_value_to_object(tsc_value_t value);
 tsc_str_t* tsc_string_get_substitution(const tsc_str_t* matched, const tsc_str_t* string,

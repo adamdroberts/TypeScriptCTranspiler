@@ -27,6 +27,7 @@ interface SymbolConstructor {
     readonly matchAll: unique symbol;
     readonly search: unique symbol;
     readonly replace: unique symbol;
+    readonly split: unique symbol;
     (description?: any, ...ignored: any[]): symbol;
     for(key: any, ...ignored: any[]): symbol;
     keyFor(sym: any, ...ignored: any[]): string | undefined;
@@ -225,6 +226,7 @@ interface String extends Iterable<string> {
     search(re?: RegExp | string, ...ignored: any[]): number;
     search(searcher: { [Symbol.search](string: string): any }, ...ignored: any[]): any;
     split(separator: string | RegExp, limit?: number, ...ignored: any[]): string[];
+    split(splitter: { [Symbol.split](string: string, limit?: number): any }, limit?: number, ...ignored: any[]): any;
     concat(...strings: string[]): string;
     [n: number]: string;
     [Symbol.iterator](): IterableIterator<string>;
@@ -791,6 +793,7 @@ interface RegExpStringIterator<T> extends IterableIterator<T> {
     [Symbol.iterator](): RegExpStringIterator<T>;
 }
 interface RegExp {
+    [Symbol.split](string?: string, limit?: number, ...ignored: any[]): any[];
     constructor: Function;
     [Symbol.match](string?: string): RegExpMatchArray | null;
     [Symbol.matchAll](string?: string): RegExpStringIterator<RegExpExecArray>;

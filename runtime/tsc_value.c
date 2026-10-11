@@ -8395,17 +8395,6 @@ tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_
     }
     const tsc_str_t* string = tsc_value_to_string(recv);
     uint32_t split_limit = split_limit_from_value(limit);
-    const tsc_regexp_t* native_regexp = tsc_value_has_symbol_prop(
-        separator,
-        tsc_symbol_split()
-    )
-        ? NULL
-        : string_native_regexp(separator);
-    if (native_regexp) {
-        return tsc_value_array(value_array_from_string_array(
-            tsc_str_split_regex_limit(string, native_regexp, split_limit)
-        ));
-    }
     const tsc_str_t* separator_string = tsc_value_to_string(separator);
     if (split_limit == 0) {
         return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
@@ -8434,13 +8423,6 @@ tsc_array_t* value_array_from_string_array(const tsc_array_t* strings) {
         tsc_array_push_raw(out, &value);
     }
     return out;
-}
-
-tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* re, tsc_value_t limit) {
-    if (!value_is_box(recv) || value_tag(recv) != TSC_VALUE_TAG_STRING) return tsc_value_undefined();
-    return tsc_value_array(value_array_from_string_array(
-        tsc_str_split_regex_limit((const tsc_str_t*)value_ptr(recv), re, split_limit_from_value(limit))
-    ));
 }
 
 /* String match/search preserve the receiver until symbol dispatch has had

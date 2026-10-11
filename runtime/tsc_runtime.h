@@ -362,9 +362,6 @@ tsc_str_t* tsc_regexp_escape(const tsc_str_t* input);
 struct tsc_array* tsc_regexp_exec(const tsc_regexp_t* re, const tsc_str_t* s);
 bool tsc_regexp_test(const tsc_regexp_t* re, const tsc_str_t* s);
 tsc_value_t tsc_regexp_prototype_value(void);
-struct tsc_array* tsc_str_split_regex(const tsc_str_t* s, const tsc_regexp_t* re);
-struct tsc_array* tsc_str_split_regex_limit(const tsc_str_t* s, const tsc_regexp_t* re, uint32_t limit);
-struct tsc_array* tsc_str_split_regex_limit_num(const tsc_str_t* s, const tsc_regexp_t* re, double limit);
 
 /* ------------- crypto ------------- */
 tsc_value_t tsc_crypto_digest_create_value(bool hmac,struct tsc_array* args);
@@ -1504,7 +1501,6 @@ tsc_value_t tsc_value_method_substr(tsc_value_t recv, tsc_value_t start, tsc_val
 tsc_value_t tsc_value_method_replace(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement);
 tsc_value_t tsc_value_method_replace_all(tsc_value_t recv, tsc_value_t search, tsc_value_t replacement);
 tsc_value_t tsc_value_method_split(tsc_value_t recv, tsc_value_t separator, tsc_value_t limit);
-tsc_value_t tsc_value_method_split_regex(tsc_value_t recv, const tsc_regexp_t* re, tsc_value_t limit);
 tsc_value_t tsc_value_method_match(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_search(tsc_value_t recv, tsc_value_t pattern);
 tsc_value_t tsc_value_method_match_all(tsc_value_t recv, tsc_value_t pattern);

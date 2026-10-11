@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Replace native regex split shortcuts with the species-aware Symbol.split protocol and shared RegExpExec, retaining arbitrary captures in an encoded List with live property and coercion ordering. Add typed/custom protocol consumers, Node differential partitions and retained-capture stress; full target conformance remains open.
+
 - Correct prototype rejection regressions to assert TypeError identity rather than host-specific printed error text. Compare array/function prototype behavior directly with Node and both native memory modes.
 
 - Execute lazy Iterator helpers and concat through one retained state/worklist, preserving captured records, callback indices, dropped-value behavior and close/error precedence without native helper-depth recursion. Release completed helper payloads; add differential and collector evidence plus typed pipelines. Full cross-realm and eligible target conformance remain open.

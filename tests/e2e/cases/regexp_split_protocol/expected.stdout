@@ -1,0 +1,5 @@
+captures: a|,|b|;|c
+limit: a|b
+unicode: A|😀|B
+custom: text:3
+original: a|b 2
