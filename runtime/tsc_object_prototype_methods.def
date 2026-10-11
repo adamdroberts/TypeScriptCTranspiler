@@ -1,0 +1,11 @@
+/* Canonical Object.prototype method descriptors and normal-result traits. */
+TSC_OBJECT_PROTOTYPE_METHOD(hasOwnProperty, 1.0, object_prototype_has_own_property, NULL, BOOLEAN)
+TSC_OBJECT_PROTOTYPE_METHOD(isPrototypeOf, 1.0, object_prototype_is_prototype_of, NULL, BOOLEAN)
+TSC_OBJECT_PROTOTYPE_METHOD(propertyIsEnumerable, 1.0, object_prototype_property_is_enumerable, NULL, BOOLEAN)
+TSC_OBJECT_PROTOTYPE_METHOD(toLocaleString, 0.0, object_prototype_to_locale_string, NULL, UNKNOWN)
+TSC_OBJECT_PROTOTYPE_METHOD(toString, 0.0, object_prototype_to_string, NULL, UNKNOWN)
+TSC_OBJECT_PROTOTYPE_METHOD(valueOf, 0.0, object_prototype_value_of, NULL, OBJECT)
+TSC_OBJECT_PROTOTYPE_METHOD(__defineGetter__, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_GETTER, NON_STRING)
+TSC_OBJECT_PROTOTYPE_METHOD(__defineSetter__, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_SETTER, NON_STRING)
+TSC_OBJECT_PROTOTYPE_METHOD(__lookupGetter__, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_GETTER, UNKNOWN)
+TSC_OBJECT_PROTOTYPE_METHOD(__lookupSetter__, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_SETTER, UNKNOWN)

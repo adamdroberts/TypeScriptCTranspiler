@@ -205,16 +205,10 @@ tsc_value_t tsc_value_object_prototype(void) {
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
         tsc_realm_state_set(&object_prototype_realm_state_key, prototype);
-        object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property, NULL);
-        object_prototype_define_method(prototype, "isPrototypeOf", 13, 1.0, object_prototype_is_prototype_of, NULL);
-        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, 1.0, object_prototype_property_is_enumerable, NULL);
-        object_prototype_define_method(prototype, "toLocaleString", 14, 0.0, object_prototype_to_locale_string, NULL);
-        object_prototype_define_method(prototype, "toString", 8, 0.0, object_prototype_to_string, NULL);
-        object_prototype_define_method(prototype, "valueOf", 7, 0.0, object_prototype_value_of, NULL);
-        object_prototype_define_method(prototype, "__defineGetter__", 16, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_GETTER);
-        object_prototype_define_method(prototype, "__defineSetter__", 16, 2.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_DEFINE_SETTER);
-        object_prototype_define_method(prototype, "__lookupGetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_GETTER);
-        object_prototype_define_method(prototype, "__lookupSetter__", 16, 1.0, object_prototype_legacy_accessor, (void*)(uintptr_t)OBJECT_LOOKUP_SETTER);
+        #define TSC_OBJECT_PROTOTYPE_METHOD(name, arity, fn, env, result) \
+            object_prototype_define_method(prototype, #name, sizeof(#name) - 1, arity, fn, env);
+        #include "tsc_object_prototype_methods.def"
+        #undef TSC_OBJECT_PROTOTYPE_METHOD
         /* Complete the reciprocal intrinsic link before user code can read
          * an inherited constructor, even when no global Object read has
          * occurred. Reentry sees the already published prototype. */

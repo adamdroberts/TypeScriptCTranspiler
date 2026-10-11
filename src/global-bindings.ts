@@ -13,6 +13,16 @@ export interface RuntimeGlobalBinding {
     normalResult?: "non-string" | "boolean" | "object" | "unknown" | "not-callable" | "primitive-string";
 }
 
+export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<RuntimeGlobalBinding["normalResult"]>> = new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_object_prototype_methods.def"), "utf8")
+        .split(/\r?\n/).filter(line => line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD"))
+        .map(line => {
+            const row = /^TSC_OBJECT_PROTOTYPE_METHOD\((\w+), [^,]+, [^,]+, .*?, (BOOLEAN|OBJECT|UNKNOWN|NON_STRING)\)$/.exec(line);
+            if (!row) throw new Error("invalid canonical Object.prototype method descriptor");
+            return [row[1]!,row[2]!.toLowerCase().replaceAll("_","-") as NonNullable<RuntimeGlobalBinding["normalResult"]>] as const;
+        }),
+);
+
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
     [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
         + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_typed_array.def"), "utf8")

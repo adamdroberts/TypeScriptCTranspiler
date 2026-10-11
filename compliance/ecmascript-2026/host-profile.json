@@ -40,6 +40,7 @@
     "runtime/tsc_weak_collection.c",
     "runtime/tsc_node_embed.cc",
     "runtime/tsc_object.c",
+    "runtime/tsc_object_prototype_methods.def",
     "runtime/tsc_promise.c",
     "runtime/tsc_module.c",
     "runtime/tsc_private.c",

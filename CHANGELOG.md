@@ -5047,3 +5047,5 @@ Retain inherited callable source text through the shared prototype graph, share 
 Close retained class and inherited member text through the shared callable/prototype graph. Tie source effects to activation cells and share construction result facts across new and Reflect.construct.
 
 Preserve native static binding storage across protected completions and resolve namespace reads, writes and calls through canonical symbol storage and callable-value adapters. Remove the signature-specific namespace call path.
+
+Close public instance-field callable sources and default/explicit constructor delegation through reactive owner cells. Share Object.prototype method descriptors between the runtime and source graph; preserve abrupt source outcomes.
