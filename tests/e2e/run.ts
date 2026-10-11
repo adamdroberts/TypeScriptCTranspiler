@@ -226,136 +226,148 @@ async function main(): Promise<void> {
         const entry = c.generatedSource === undefined
             ? c.entry
             : path.join(tmpRoot, c.name + (c.generatedSourceKind === "javascript" ? ".js" : ".ts"));
-        if (c.generatedSource !== undefined) {
-            await fs.writeFile(entry, c.generatedSource);
-        }
-        process.stdout.write(`e2e: ${c.name} … `);
-        if (c.dispatch && !c.dispatchSerial && !dispatchAvailable) {
-            console.log("SKIP (libdispatch not installed)");
-            skipped++;
-            continue;
-        }
-        let compileStderr = "";
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-            compileStderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-            return (originalStderrWrite as (...writeArgs: unknown[]) => boolean).call(process.stderr, chunk, ...args);
-        }) as typeof process.stderr.write;
-        let r;
+        let retainArtifacts = true;
         try {
-            r = await compile({
-                entry,
-                output: bin,
-                buildDir,
-                noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",
-                dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
-                release: c.release,
-                emitCOnly: c.emitCOnly,
-                nativeAddonManifest: c.nativeAddonManifest,
-                dynamicRequireManifest: c.dynamicRequireManifest,
-                runtimeCodeManifest: c.runtimeCodeManifest,
-                unsafeEval: c.unsafeEval,
-                customConditions: c.customConditions,
-            });
-        } finally {
-            process.stderr.write = originalStderrWrite;
-        }
-        if (c.expectedExitCode !== undefined) {
-            if (r.exitCode !== c.expectedExitCode) {
-                console.log(`EXIT MISMATCH (expected ${c.expectedExitCode}, got ${r.exitCode})`);
+            if (c.generatedSource !== undefined) {
+                await fs.writeFile(entry, c.generatedSource);
+            }
+            process.stdout.write(`e2e: ${c.name} … `);
+            if (c.dispatch && !c.dispatchSerial && !dispatchAvailable) {
+                console.log("SKIP (libdispatch not installed)");
+                skipped++;
+                continue;
+            }
+            let compileStderr = "";
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+                compileStderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+                return (originalStderrWrite as (...writeArgs: unknown[]) => boolean).call(process.stderr, chunk, ...args);
+            }) as typeof process.stderr.write;
+            let r;
+            try {
+                r = await compile({
+                    entry,
+                    output: bin,
+                    buildDir,
+                    noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",
+                    dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
+                    release: c.release,
+                    emitCOnly: c.emitCOnly,
+                    nativeAddonManifest: c.nativeAddonManifest,
+                    dynamicRequireManifest: c.dynamicRequireManifest,
+                    runtimeCodeManifest: c.runtimeCodeManifest,
+                    unsafeEval: c.unsafeEval,
+                    customConditions: c.customConditions,
+                });
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
+            if (c.expectedExitCode !== undefined) {
+                if (r.exitCode !== c.expectedExitCode) {
+                    console.log(`EXIT MISMATCH (expected ${c.expectedExitCode}, got ${r.exitCode})`);
+                    failed++;
+                    continue;
+                }
+                if (c.expectedStderrContains !== undefined) {
+                    const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
+                    const missing = needles.find((needle) => !compileStderr.includes(needle));
+                    if (missing !== undefined) {
+                        console.log("COMPILE STDERR MISSING EXPECTED SUBSTRING");
+                        console.log("---expected substring---");
+                        process.stdout.write(missing);
+                        console.log("---captured compile stderr---");
+                        process.stdout.write(compileStderr);
+                        console.log("---end---");
+                        failed++;
+                        continue;
+                    }
+                }
+                console.log("OK");
+                passed++;
+                retainArtifacts = false;
+                continue;
+            }
+            if (r.exitCode !== 0) {
+                console.log("COMPILE FAIL (exit " + r.exitCode + ")");
                 failed++;
                 continue;
             }
-            if (c.expectedStderrContains !== undefined) {
-                const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
-                const missing = needles.find((needle) => !compileStderr.includes(needle));
+            if (c.expectedMainCContains !== undefined) {
+                const nativePkgNode = path.resolve(casesDir, "../../../node_modules/native-pkg/build/Release/native.node");
+                const needles = c.expectedMainCContains
+                    .replaceAll("{{ENTRY}}", c.entry)
+                    .replaceAll("{{NATIVE_PKG_NODE}}", nativePkgNode)
+                    .split(/\r?\n/)
+                    .filter((line) => line.length > 0);
+                const missing = needles.find((needle) => !r.mainC.includes(needle));
                 if (missing !== undefined) {
-                    console.log("COMPILE STDERR MISSING EXPECTED SUBSTRING");
+                    console.log("MAINC MISSING EXPECTED SUBSTRING");
                     console.log("---expected substring---");
                     process.stdout.write(missing);
-                    console.log("---captured compile stderr---");
-                    process.stdout.write(compileStderr);
                     console.log("---end---");
                     failed++;
                     continue;
                 }
             }
-            console.log("OK");
-            passed++;
-            continue;
-        }
-        if (r.exitCode !== 0) {
-            console.log("COMPILE FAIL (exit " + r.exitCode + ")");
-            failed++;
-            continue;
-        }
-        if (c.expectedMainCContains !== undefined) {
-            const nativePkgNode = path.resolve(casesDir, "../../../node_modules/native-pkg/build/Release/native.node");
-            const needles = c.expectedMainCContains
-                .replaceAll("{{ENTRY}}", c.entry)
-                .replaceAll("{{NATIVE_PKG_NODE}}", nativePkgNode)
-                .split(/\r?\n/)
-                .filter((line) => line.length > 0);
-            const missing = needles.find((needle) => !r.mainC.includes(needle));
-            if (missing !== undefined) {
-                console.log("MAINC MISSING EXPECTED SUBSTRING");
-                console.log("---expected substring---");
-                process.stdout.write(missing);
-                console.log("---end---");
+            if (c.expectedMainCNotContains !== undefined) {
+                const needles = c.expectedMainCNotContains.split(/\r?\n/).filter((line) => line.length > 0);
+                const present = needles.find((needle) => r.mainC.includes(needle));
+                if (present !== undefined) {
+                    console.log("MAINC CONTAINS FORBIDDEN SUBSTRING");
+                    console.log("---forbidden substring---");
+                    process.stdout.write(present);
+                    console.log("---end---");
+                    failed++;
+                    continue;
+                }
+            }
+            if (c.emitCOnly) {
+                console.log("OK");
+                passed++;
+                retainArtifacts = false;
+                continue;
+            }
+            const run = await runBinary(bin, c.runEnv);
+            if (run.code !== 0) {
+                console.log(`RUN FAIL (exit ${run.code})`);
+                if (run.stderr) console.log(run.stderr);
                 failed++;
                 continue;
             }
-        }
-        if (c.expectedMainCNotContains !== undefined) {
-            const needles = c.expectedMainCNotContains.split(/\r?\n/).filter((line) => line.length > 0);
-            const present = needles.find((needle) => r.mainC.includes(needle));
-            if (present !== undefined) {
-                console.log("MAINC CONTAINS FORBIDDEN SUBSTRING");
-                console.log("---forbidden substring---");
-                process.stdout.write(present);
-                console.log("---end---");
-                failed++;
-                continue;
+            if (c.expectedStderrContains !== undefined) {
+                const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
+                const missing = needles.find((needle) => !run.stderr.includes(needle));
+                if (missing !== undefined) {
+                    console.log("STDERR MISSING EXPECTED SUBSTRING");
+                    console.log("---expected substring---");
+                    process.stdout.write(missing);
+                    console.log("---actual---");
+                    process.stdout.write(run.stderr);
+                    console.log("---end---");
+                    failed++;
+                    continue;
+                }
             }
-        }
-        if (c.emitCOnly) {
-            console.log("OK");
-            passed++;
-            continue;
-        }
-        const run = await runBinary(bin, c.runEnv);
-        if (run.code !== 0) {
-            console.log(`RUN FAIL (exit ${run.code})`);
-            if (run.stderr) console.log(run.stderr);
-            failed++;
-            continue;
-        }
-        if (c.expectedStderrContains !== undefined) {
-            const needles = c.expectedStderrContains.split(/\r?\n/).filter((line) => line.length > 0);
-            const missing = needles.find((needle) => !run.stderr.includes(needle));
-            if (missing !== undefined) {
-                console.log("STDERR MISSING EXPECTED SUBSTRING");
-                console.log("---expected substring---");
-                process.stdout.write(missing);
+            if (run.stdout !== c.expected) {
+                console.log("STDOUT MISMATCH");
+                console.log("---expected---");
+                process.stdout.write(c.expected ?? "");
                 console.log("---actual---");
-                process.stdout.write(run.stderr);
+                process.stdout.write(run.stdout);
                 console.log("---end---");
                 failed++;
                 continue;
             }
+            console.log("OK");
+            passed++;
+            retainArtifacts = false;
+        } finally {
+            if (!retainArtifacts && process.env.TSC2C_E2E_KEEP_PASSED !== "1") {
+                await fs.rm(buildDir, {recursive: true, force: true});
+                await fs.rm(bin, {force: true});
+                if (c.generatedSource !== undefined) await fs.rm(entry, {force: true});
+            }
         }
-        if (run.stdout !== c.expected) {
-            console.log("STDOUT MISMATCH");
-            console.log("---expected---");
-            process.stdout.write(c.expected ?? "");
-            console.log("---actual---");
-            process.stdout.write(run.stdout);
-            console.log("---end---");
-            failed++;
-            continue;
-        }
-        console.log("OK");
-        passed++;
     }
     console.log(`\n${passed} passed, ${failed} failed${skipped > 0 ? `, ${skipped} skipped` : ""}`);
     process.exit(failed === 0 && (!failOnSkip || skipped === 0) ? 0 : 1);

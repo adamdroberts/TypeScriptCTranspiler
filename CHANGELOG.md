@@ -5023,3 +5023,5 @@ Retain unresolved source-value facts through joins, calls, properties and argume
 Preserve caught source values through explicit throws, calls, getters and async rejection. Lower ordinary catch patterns through the shared binding tree and retain computed object key effects and conversion order.
 
 Admit intrinsic non-String eval results through canonical Realm binding metadata. Route reflection operations by intrinsic owner identity, including aliases and replaced properties. Preserve descriptor and reflected property writes through the same source graph.
+
+Release successful E2E case artifacts after validation to prevent temporary inode exhaustion. Preserve failed artifacts and support TSC2C_E2E_KEEP_PASSED=1 for debugging.
