@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
-import { callableName, expectedArgumentCount } from "./function-static-semantics";
+import { callableName, expectedArgumentCount, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
@@ -248,7 +248,7 @@ class SourceValueFlow {
                     });
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
-                if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+                if (ts.isBinaryExpression(node) && NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind)) {
                     const target = unwrap(node.left);
                     if (ts.isIdentifier(target)) this.onActive(node,()=>this.writeBinding(target, this.cell(node.right)));
                     else if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
@@ -1010,7 +1010,7 @@ class SourceValueFlow {
             this.copy(this.cell(node.whenTrue), result); this.copy(this.cell(node.whenFalse), result);
         } else if (ts.isBinaryExpression(node)) {
             if ([ts.SyntaxKind.CommaToken, ts.SyntaxKind.EqualsToken].includes(node.operatorToken.kind)) this.copy(this.cell(node.right), result);
-            else if ([ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+            else if (NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) || [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
                 this.copy(this.cell(node.left), result); this.copy(this.cell(node.right), result);
             } else if (node.operatorToken.kind === ts.SyntaxKind.PlusToken)
                 this.publish(result, { tag: "text-operation", operation: "add", parts: [this.cell(node.left), this.cell(node.right)] });

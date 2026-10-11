@@ -1,0 +1,12 @@
+let assigned: any;
+assigned = function() {};
+console.log(eval("'" + assigned.name + "'"));
+let logical: any = null;
+logical ??= () => 0;
+console.log(eval("'" + logical.name + "'"));
+let parenthesized: any;
+(parenthesized) = function() {};
+console.log(eval("'" + parenthesized.name + "'"));
+let explicit: any;
+explicit = function inner() {};
+console.log(eval("'" + explicit.name + "'"));

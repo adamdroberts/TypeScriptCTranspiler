@@ -22,6 +22,12 @@ export function expectedArgumentCount(node: ts.FunctionLikeDeclaration): number 
     return length;
 }
 
+/** Assignment productions that perform NamedEvaluation for an identifier reference. */
+export const NAME_EVALUATING_ASSIGNMENTS: ReadonlySet<ts.SyntaxKind> = new Set([
+    ts.SyntaxKind.EqualsToken, ts.SyntaxKind.BarBarEqualsToken,
+    ts.SyntaxKind.AmpersandAmpersandEqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+
 /** Shared syntactic SetFunctionName input. Null retains an unresolved property key. */
 export function callableName(
     node: ts.Node,
@@ -61,6 +67,9 @@ export function callableName(
         while (parent && transparent(parent)) parent = parent.parent;
         if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return parent.name.text;
         if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return propertyName(parent.name, parent);
+        if (parent && ts.isBinaryExpression(parent) && NAME_EVALUATING_ASSIGNMENTS.has(parent.operatorToken.kind)) {
+            if (ts.isIdentifier(parent.left)) return parent.left.text;
+        }
         if (parent && ts.isExportAssignment(parent) && !parent.isExportEquals) return "default";
     }
     return "";
