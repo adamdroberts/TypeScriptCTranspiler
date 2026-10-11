@@ -152,6 +152,9 @@ typedef enum {
     TSC_INTRINSIC_DEFAULT_SYMBOL_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE,
+#define TSC_TYPED_ARRAY(name, width, format) TSC_INTRINSIC_DEFAULT_##name##_PROTOTYPE,
+#include "tsc_typed_array.def"
+#undef TSC_TYPED_ARRAY
     TSC_INTRINSIC_DEFAULT_ARRAY_BUFFER_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_ITERATOR_PROTOTYPE,
     TSC_INTRINSIC_DEFAULT_TEXT_ENCODER_PROTOTYPE,
@@ -862,6 +865,24 @@ bool tsc_re_match_at(
 );
 
 bool tsc_integer_indexed_key(const tsc_object_t* object, const tsc_str_t* key, double* index);
+typedef enum {TSC_NUMERIC_SIGNED, TSC_NUMERIC_UNSIGNED, TSC_NUMERIC_FLOAT,
+    TSC_NUMERIC_BIG_SIGNED, TSC_NUMERIC_BIG_UNSIGNED, TSC_NUMERIC_CLAMPED} tsc_numeric_format_t;
+typedef enum {
+#define TSC_TYPED_ARRAY(name, width, format) TSC_ELEMENT_##name,
+#include "tsc_typed_array.def"
+#undef TSC_TYPED_ARRAY
+    TSC_ELEMENT_COUNT
+} tsc_element_kind_t;
+typedef struct {tsc_array_buffer_t* buffer; size_t offset, length; bool tracking; tsc_element_kind_t kind;} tsc_typed_array_t;
+typedef struct {uint8_t* data; size_t length; bool valid;} tsc_typed_array_witness_t;
+uint64_t tsc_numeric_number_to_bits(double, tsc_numeric_format_t, size_t);
+tsc_value_t tsc_numeric_bits_to_value(uint64_t, tsc_numeric_format_t, size_t);
+tsc_typed_array_witness_t tsc_typed_array_witness(const tsc_typed_array_t*);
+tsc_value_t tsc_typed_array_constructor_value(tsc_element_kind_t);
+tsc_value_t tsc_typed_array_prototype_value(tsc_element_kind_t);
+tsc_value_t tsc_typed_array_element_get(const tsc_object_t*, size_t);
+void tsc_typed_array_element_set(tsc_object_t*, double, tsc_value_t);
+bool tsc_typed_array_fixed_length(const tsc_object_t*);
 bool tsc_integer_indexed_valid(const tsc_object_t* object, double index);
 size_t tsc_integer_indexed_length(const tsc_object_t* object);
 tsc_value_t tsc_integer_indexed_get(const tsc_object_t* object, double index);

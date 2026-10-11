@@ -13,6 +13,9 @@ TSC_GLOBAL_INTRINSIC(Proxy, tsc_proxy_constructor_value())
 TSC_GLOBAL_INTRINSIC(Date, tsc_date_constructor_value())
 TSC_GLOBAL_INTRINSIC(DataView, tsc_data_view_constructor_value())
 TSC_GLOBAL_INTRINSIC(ArrayBuffer, tsc_array_buffer_constructor_value())
+#define TSC_TYPED_ARRAY(name, width, format) TSC_GLOBAL_INTRINSIC(name, tsc_typed_array_constructor_value(TSC_ELEMENT_##name))
+#include "tsc_typed_array.def"
+#undef TSC_TYPED_ARRAY
 TSC_GLOBAL_INTRINSIC(Iterator, tsc_iterator_constructor_value())
 TSC_GLOBAL_INTRINSIC(TextEncoder, tsc_text_encoder_constructor_value())
 TSC_GLOBAL_INTRINSIC(TextDecoder, tsc_text_decoder_constructor_value())

@@ -682,6 +682,51 @@ interface ArrayBufferConstructor {
     isView(value: any, ...ignored: any[]): boolean;
 }
 declare var ArrayBuffer: ArrayBufferConstructor;
+interface TypedArray<T> extends Iterable<T> {
+    readonly length: number;
+    readonly byteLength: number;
+    readonly byteOffset: number;
+    readonly buffer: ArrayBuffer;
+    readonly BYTES_PER_ELEMENT: number;
+    [index: number]: T;
+    keys(): IteratorObject<number>;
+    values(): IteratorObject<T>;
+    entries(): IteratorObject<[number, T]>;
+    [Symbol.iterator](): IteratorObject<T>;
+}
+interface TypedArrayConstructor<T, V extends TypedArray<T>> {
+    readonly prototype: V;
+    readonly name: string;
+    readonly length: number;
+    readonly BYTES_PER_ELEMENT: number;
+    new(length?: number, ...ignored: any[]): V;
+    new(buffer: ArrayBuffer, byteOffset?: number, length?: number, ...ignored: any[]): V;
+    new(values: Iterable<T> | ArrayLike<T>, ...ignored: any[]): V;
+}
+interface Int8Array extends TypedArray<number> {}
+declare var Int8Array: TypedArrayConstructor<number, Int8Array>;
+interface Uint8Array extends TypedArray<number> {}
+declare var Uint8Array: TypedArrayConstructor<number, Uint8Array>;
+interface Uint8ClampedArray extends TypedArray<number> {}
+declare var Uint8ClampedArray: TypedArrayConstructor<number, Uint8ClampedArray>;
+interface Int16Array extends TypedArray<number> {}
+declare var Int16Array: TypedArrayConstructor<number, Int16Array>;
+interface Uint16Array extends TypedArray<number> {}
+declare var Uint16Array: TypedArrayConstructor<number, Uint16Array>;
+interface Int32Array extends TypedArray<number> {}
+declare var Int32Array: TypedArrayConstructor<number, Int32Array>;
+interface Uint32Array extends TypedArray<number> {}
+declare var Uint32Array: TypedArrayConstructor<number, Uint32Array>;
+interface Float16Array extends TypedArray<number> {}
+declare var Float16Array: TypedArrayConstructor<number, Float16Array>;
+interface Float32Array extends TypedArray<number> {}
+declare var Float32Array: TypedArrayConstructor<number, Float32Array>;
+interface Float64Array extends TypedArray<number> {}
+declare var Float64Array: TypedArrayConstructor<number, Float64Array>;
+interface BigInt64Array extends TypedArray<bigint> {}
+declare var BigInt64Array: TypedArrayConstructor<bigint, BigInt64Array>;
+interface BigUint64Array extends TypedArray<bigint> {}
+declare var BigUint64Array: TypedArrayConstructor<bigint, BigUint64Array>;
 interface DataView {
     constructor: DataViewConstructor;
     readonly buffer: ArrayBuffer;

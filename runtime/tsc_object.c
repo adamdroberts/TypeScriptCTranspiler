@@ -1096,7 +1096,9 @@ bool tsc_integer_indexed_key(const tsc_object_t* object, const tsc_str_t* key, d
     return true;
 }
 size_t tsc_integer_indexed_length(const tsc_object_t* object) {
-    return object && object->is_buffer ? ((const tsc_buffer_t*)object->class_ptr)->len : 0;
+    if (!object || !object->is_typed_array) return 0;
+    if (object->is_buffer) return ((const tsc_buffer_t*)object->class_ptr)->len;
+    return tsc_typed_array_witness(object->class_ptr).length;
 }
 bool tsc_integer_indexed_valid(const tsc_object_t* object, double index) {
     return isfinite(index) && index >= 0 && !(index == 0 && signbit(index)) &&
@@ -1104,9 +1106,11 @@ bool tsc_integer_indexed_valid(const tsc_object_t* object, double index) {
 }
 tsc_value_t tsc_integer_indexed_get(const tsc_object_t* object, double index) {
     if (!tsc_integer_indexed_valid(object, index)) return tsc_value_undefined();
-    return tsc_value_num(((const tsc_buffer_t*)object->class_ptr)->data[(size_t)index]);
+    return object->is_buffer ? tsc_value_num(((const tsc_buffer_t*)object->class_ptr)->data[(size_t)index])
+        : tsc_typed_array_element_get(object, (size_t)index);
 }
 void tsc_integer_indexed_set(tsc_object_t* object, double index, tsc_value_t value) {
+    if (!object->is_buffer) { tsc_typed_array_element_set(object, index, value); return; }
     tsc_object_t* volatile owner_root = object;
     void* volatile value_root = tsc_value_gc_root(value);
     double number = tsc_value_to_number(value);
@@ -1381,6 +1385,7 @@ bool tsc_object_is_extensible(const tsc_object_t* o) {
 
 
 bool tsc_object_prevent_extensions(tsc_object_t* o) {
+    if (o->is_typed_array && !tsc_typed_array_fixed_length(o)) return false;
     if (o->is_proxy) {
         if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'preventExtensions' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("preventExtensions", 17));

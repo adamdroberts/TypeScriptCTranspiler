@@ -3562,6 +3562,9 @@ static tsc_value_t value_intrinsic_default_prototype(
         case TSC_INTRINSIC_DEFAULT_TEXT_DECODER_PROTOTYPE: return tsc_text_decoder_prototype_value();
         case TSC_INTRINSIC_DEFAULT_DATA_VIEW_PROTOTYPE:
             return tsc_data_view_prototype_value();
+#define TSC_TYPED_ARRAY(name, width, format) case TSC_INTRINSIC_DEFAULT_##name##_PROTOTYPE: return tsc_typed_array_prototype_value(TSC_ELEMENT_##name);
+#include "tsc_typed_array.def"
+#undef TSC_TYPED_ARRAY
         case TSC_INTRINSIC_DEFAULT_DATE_PROTOTYPE:
             return date_prototype_value();
         case TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE:
@@ -8928,12 +8931,7 @@ static tsc_value_t buffer_method_apply(void* env, tsc_value_t receiver, tsc_arra
     tsc_panic("unknown Buffer method descriptor");
 }
 
-static tsc_value_t buffer_length_getter(void* env, tsc_value_t receiver) {
-    (void)env;
-    return tsc_value_num((double)tsc_value_as_buffer(receiver)->len);
-}
-
-typedef struct { tsc_object_t* prototype; tsc_object_t* uint8_prototype; tsc_object_t* typed_array_prototype; } buffer_intrinsics_t;
+typedef struct { tsc_object_t* prototype; } buffer_intrinsics_t;
 static const char buffer_intrinsics_key = 0;
 
 tsc_value_t tsc_buffer_prototype_value(void) {
@@ -8943,17 +8941,12 @@ tsc_value_t tsc_buffer_prototype_value(void) {
     state = tsc_realm_state_get(&buffer_intrinsics_key);
     if (!state) {
         state = TSC_GC_MALLOC(sizeof(*state));
-        state->typed_array_prototype = tsc_object_new();
-        state->uint8_prototype = tsc_object_new_with_prototype(tsc_value_object(state->typed_array_prototype));
-        state->prototype = tsc_object_new_with_prototype(tsc_value_object(state->uint8_prototype));
+        state->prototype = tsc_object_new_with_prototype(tsc_typed_array_prototype_value(TSC_ELEMENT_Uint8Array));
         tsc_realm_state_set(&buffer_intrinsics_key, state);
-        tsc_object_define_accessor(state->typed_array_prototype, tsc_str_from_lit("length", 6),
-            buffer_length_getter, NULL, true, NULL, NULL, true, false, true, true, true);
-        tsc_object_define_accessor(state->typed_array_prototype, tsc_str_from_lit("byteLength", 10),
-            buffer_length_getter, NULL, true, NULL, NULL, true, false, true, true, true);
         for (size_t index = 0; index < sizeof(buffer_methods) / sizeof(buffer_methods[0]); ++index) {
             const buffer_method_t* method = &buffer_methods[index];
-            tsc_object_t* owner = method->operation >= BUFFER_KEYS ? state->typed_array_prototype : state->prototype;
+            if (method->operation >= BUFFER_KEYS) continue;
+            tsc_object_t* owner = state->prototype;
             tsc_value_t function = tsc_value_function_builtin_named(buffer_method_apply, (void*)method,
                 method->arity, tsc_str_from_cstr(method->function_name));
             void* volatile function_root = tsc_value_gc_root(function);
@@ -8961,8 +8954,6 @@ tsc_value_t tsc_buffer_prototype_value(void) {
             tsc_object_define(owner, tsc_str_from_cstr(method->name), function, true, owner == state->prototype, true);
             if (str_lit_eq(tsc_str_from_cstr(method->name), "toString"))
                 tsc_object_define(state->prototype, tsc_str_from_lit("toLocaleString", 14), function, true, true, true);
-            if (method->operation == BUFFER_VALUES)
-                tsc_object_define(owner, tsc_symbol_property_key(tsc_symbol_well_known(TSC_WELL_KNOWN_SYMBOL_ITERATOR)), function, true, false, true);
             if (method->operation == BUFFER_NUMBER && method->number_kind == TSC_BUFFER_UNSIGNED) {
                 // Uint spellings are aliases of the very same callable.
                 tsc_str_t* name = tsc_str_from_cstr(method->name);

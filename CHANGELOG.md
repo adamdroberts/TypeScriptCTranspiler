@@ -384,6 +384,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Added ordinary TypedArray constructors and shared numeric element storage with live resizable/detached ArrayBuffer witnesses, generic integer-indexed hooks and retained iterators.
+
 - Preserve admitted enum member constants as scalar reads in canonical source-value and continuation contexts.
 
 - Retained Realm owners for first-class host base64 functions, including actual global mutation and saved callees through suspension.

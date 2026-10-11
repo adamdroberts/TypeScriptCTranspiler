@@ -1,0 +1,8 @@
+shared: 1 3 2
+resize: 5 2 1
+copy: 1 5 false
+bigint: 1n -1n 1n
+clamped: 0 2 2 255
+bounds: 0 0 0 undefined
+recover: 2 0
+detach: 0 undefined

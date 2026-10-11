@@ -12,7 +12,10 @@ export interface RuntimeGlobalBinding {
 }
 
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
-    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
+    [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
+        + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_typed_array.def"), "utf8")
+            .matchAll(/^TSC_TYPED_ARRAY\((\w+), /gm)]
+            .map(([, name]) => `TSC_GLOBAL_INTRINSIC(${name}, collection)`).join("\n"))
         .matchAll(/^TSC_GLOBAL_(INTRINSIC|FUNCTION|VALUE)\((\w+), (.*)\)$/gm)]
         .map(([, kind, name, operands]) => {
             const attributes = operands!.match(/, (true|false), (true|false)$/);
