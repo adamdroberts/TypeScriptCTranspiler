@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Route RegExp source values through ordinary encoded owners from literal creation to stored calls and suspension. Delete the native source CType and fresh-shape purity predecessors; verify mutation, constructor identity, private brands and retained owners against Node.
+
 - Release matcher and input roots when RegExp iterators complete, preserve abrupt exec retry behavior, and expose shared Iterator helpers to typed RegExp iterator consumers. Strengthen matchAll comparisons with a direct Node oracle and native collector evidence.
 
 - Replace native regex split shortcuts with the species-aware Symbol.split protocol and shared RegExpExec, retaining arbitrary captures in an encoded List with live property and coercion ordering. Add typed/custom protocol consumers, Node differential partitions and retained-capture stress; full target conformance remains open.

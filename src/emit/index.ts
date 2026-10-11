@@ -44,7 +44,6 @@ import {
     T_DISPATCH_QUEUE,
     T_FS_STATS,
     T_NUMBER,
-    T_REGEXP,
     T_STRING,
     T_SYMBOL,
     T_URL,
@@ -1531,9 +1530,6 @@ class Emitter {
             if (this.isSideEffectFreeEventPropertyRead(expr, seenConsts)) {
                 return true;
             }
-            if (this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts)) {
-                return true;
-            }
             if (this.isSideEffectFreeProcessPrimitiveMetadataRead(expr)) {
                 return true;
             }
@@ -1643,12 +1639,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
@@ -1777,12 +1767,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
@@ -1981,9 +1965,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeProcessStdioMethodCall(recv, method, call.arguments, seenConsts)) {
@@ -2685,7 +2666,6 @@ class Emitter {
                     this.isSideEffectFreeStringMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeArrayMethodCall(recv, method, call.arguments, seenConsts) ||
                     this.isSideEffectFreeBuiltinObjectPrototypeMethodCall(recv, method, call.arguments, seenConsts) ||
-                    this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts) ||
 
                     this.isSideEffectFreePrimitiveObjectStringMethodCall(call, seenConsts)
                 ) {
@@ -2810,7 +2790,7 @@ class Emitter {
             return true;
         }
         return method === "test" &&
-            this.isSideEffectFreeRegExpMethodCall(recv, method, call.arguments, seenConsts);
+            false;
     }
 
     private isSideEffectFreePrimitiveArrayAtMethodCall(
@@ -6090,8 +6070,7 @@ class Emitter {
             case "replaceAll":
                 return args.length >= 2 &&
                     (
-                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
-                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)
                     ) &&
                     this.isSideEffectFreeStringCoercion(args[1]!, seenConsts) &&
                     allArgsPure(2);
@@ -6099,16 +6078,14 @@ class Emitter {
                 return args.length >= 1 &&
                     args.length <= 2 &&
                     (
-                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) ||
-                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                        this.isSideEffectFreeStringCoercion(args[0]!, seenConsts)
                     ) &&
                     (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
             case "match":
             case "search":
                 return args.length >= 1 &&
                     (
-                        this.isSideEffectFreeRegExpPatternString(args[0]!, seenConsts) ||
-                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                        false
                     ) &&
                     allArgsPure(1);
             default:
@@ -6131,12 +6108,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
@@ -6214,12 +6185,6 @@ class Emitter {
         if (this.isSideEffectFreeBuiltinStringOperand(unwrapped, seenConsts)) {
             return true;
         }
-        if (this.isSideEffectFreeRegExpStringPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
@@ -6278,20 +6243,6 @@ class Emitter {
         return !!init && this.isSideEffectFreeStringCoercion(init, seenConsts);
     }
 
-    private isSideEffectFreeRegExpPatternString(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const pattern = this.sideEffectFreeStringLiteralText(expr, seenConsts);
-        if (pattern === null) return false;
-        try {
-            new RegExp(pattern);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
     private isSideEffectFreeGlobalCall(
         call: ts.CallExpression,
         seenConsts: Set<ts.Symbol>,
@@ -6338,7 +6289,7 @@ class Emitter {
         }
         if (name === "RegExp") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
-                this.isSideEffectFreeRegExpConstructorArgs(call.arguments, seenConsts);
+                false;
         }
         if (name === "AggregateError") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
@@ -6444,7 +6395,7 @@ class Emitter {
         ]);
         if (!pureErrorConstructors.has(name) || !this.isUnshadowedGlobalIdentifier(ctorExpr, name)) {
             if (!this.isUnshadowedGlobalIdentifier(ctorExpr, name)) return false;
-            if (name === "RegExp") return this.isSideEffectFreeRegExpConstructorArgs(args, seenConsts);
+            if (name === "RegExp") return false;
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "Map") {
                 return args.length === 0 ||
@@ -7171,44 +7122,6 @@ class Emitter {
         );
     }
 
-    private isSideEffectFreeRegExpDescriptorNumberValueRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        const valueReceiver = this.sideEffectFreeDescriptorValueReceiver(unwrapped, seenConsts);
-        if (valueReceiver === null) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-            return !!init && this.isSideEffectFreeRegExpDescriptorNumberValueRead(init, seenConsts);
-        }
-        const descriptorExpr = this.unwrapSideEffectFreeStaticExpression(valueReceiver);
-        const targetDescriptorExpr = this.sideEffectFreeObjectTargetReturningOperand(
-            descriptorExpr,
-            seenConsts,
-        );
-        if (targetDescriptorExpr) {
-            return this.isSideEffectFreeRegExpDescriptorNumberValueRead(
-                ts.factory.createPropertyAccessExpression(targetDescriptorExpr, "value"),
-                new Set(seenConsts),
-            );
-        }
-        if (
-            ts.isCallExpression(descriptorExpr) &&
-            this.isObjectOrReflectGetOwnPropertyDescriptorCall(descriptorExpr, seenConsts)
-        ) {
-            const key = this.sideEffectFreeObjectPropertyReadKey(descriptorExpr.arguments[1]!, seenConsts);
-            if (key === "value") {
-                return this.isSideEffectFreeRegExpDescriptorNumberValueRead(
-                    ts.factory.createPropertyAccessExpression(descriptorExpr.arguments[0]!, "value"),
-                    new Set(seenConsts),
-                );
-            }
-            return key === "lastIndex" &&
-                this.isSideEffectFreeFreshRegExpOperand(descriptorExpr.arguments[0]!, seenConsts);
-        }
-        return false;
-    }
-
     private isSideEffectFreeErrorStringMethodCall(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -7525,12 +7438,6 @@ class Emitter {
             return true;
         }
         if (this.isSideEffectFreeObjectPrototypeReadonlyCall(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpPropertyRead(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpStringMethodCall(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeArrayStringMethodCall(unwrapped, seenConsts)) {
@@ -10611,102 +10518,6 @@ class Emitter {
         return index !== null && Number.isInteger(index);
     }
 
-    private isSideEffectFreeRegExpConstructorArgs(
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (args.length < 1 || args.length > 2) return false;
-        const pattern = this.sideEffectFreeStringLiteralText(args[0]!, seenConsts);
-        if (pattern === null) return false;
-        const flags = args[1]
-            ? this.sideEffectFreeStringLiteralText(args[1], seenConsts)
-            : "";
-        if (flags === null) return false;
-        try {
-            new RegExp(pattern, flags);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    private isSideEffectFreeRegExpMethodCall(
-        recv: ts.Expression,
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!this.isSideEffectFreeFreshRegExpOperand(recv, seenConsts)) return false;
-        const allArgsPure = (from = 0): boolean =>
-            Array.from(args).slice(from).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        switch (method) {
-            case "exec":
-            case "test":
-                return args.length >= 1 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                    allArgsPure(1);
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return allArgsPure();
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreeRegExpPropertyRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!ts.isPropertyAccessExpression(expr)) return false;
-        const fields = new Set([
-            "source",
-            "flags",
-            "global",
-            "hasIndices",
-            "ignoreCase",
-            "multiline",
-            "dotAll",
-            "sticky",
-            "unicode",
-        ]);
-        return fields.has(expr.name.text) &&
-            this.isSideEffectFreeFreshRegExpOperand(expr.expression, seenConsts);
-    }
-
-    private isSideEffectFreeRegExpStringPropertyRead(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return ts.isPropertyAccessExpression(expr) &&
-            (expr.name.text === "source" || expr.name.text === "flags") &&
-            this.isSideEffectFreeRegExpPropertyRead(expr, seenConsts);
-    }
-
-    private isSideEffectFreeRegExpStringMethodCall(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (!ts.isCallExpression(unwrapped) || !ts.isPropertyAccessExpression(unwrapped.expression)) {
-            const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-            return !!init && this.isSideEffectFreeRegExpStringMethodCall(init, seenConsts);
-        }
-        const method = unwrapped.expression.name.text;
-        return (
-            method === "toString" ||
-            method === "toLocaleString"
-        ) &&
-            this.isSideEffectFreeRegExpMethodCall(
-                unwrapped.expression.expression,
-                method,
-                unwrapped.arguments,
-                seenConsts,
-            );
-    }
-
     private isSideEffectFreeProcessPrimitiveMetadataRead(expr: ts.Expression): boolean {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return false;
         if (!this.isUnshadowedGlobalIdentifier(expr.expression, "process")) return false;
@@ -11235,33 +11046,6 @@ class Emitter {
             recv.name.text === "EventEmitter" &&
             ts.isIdentifier(recv.expression) &&
             this.isEventsModuleIdentifier(recv.expression);
-    }
-
-    private isSideEffectFreeFreshRegExpOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isRegularExpressionLiteral(unwrapped)) return true;
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "RegExp")
-        ) {
-            return this.isSideEffectFreeRegExpConstructorArgs(unwrapped.arguments, seenConsts);
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "RegExp")
-        ) {
-            return this.isSideEffectFreeRegExpConstructorArgs(
-                unwrapped.arguments ?? ts.factory.createNodeArray(),
-                seenConsts,
-            );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshRegExpOperand(init, seenConsts);
     }
 
     private isSideEffectFreeNumericParserArgs(
@@ -12154,9 +11938,6 @@ class Emitter {
         ) {
             return true;
         }
-        if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
-            return true;
-        }
         if (this.isSideEffectFreeDescriptorBooleanFlagRead(unwrapped, seenConsts)) {
             return true;
         }
@@ -12574,9 +12355,6 @@ class Emitter {
                 return true;
         }
         if (ts.isNumericLiteral(unwrapped) || ts.isBigIntLiteral(unwrapped)) {
-            return true;
-        }
-        if (this.isSideEffectFreeRegExpDescriptorNumberValueRead(unwrapped, seenConsts)) {
             return true;
         }
         if (this.isSideEffectFreeDescriptorBooleanFlagRead(unwrapped, seenConsts)) {
@@ -21236,7 +21014,6 @@ class Emitter {
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||
-            type.kind === "regexp" ||
             type.kind === "date" ||
             type.kind === "url" ||
             type.kind === "urlsearchparams" ||
@@ -31452,8 +31229,7 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        return this.isSideEffectFreeFreshRegExpOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
+        return this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
@@ -32719,8 +32495,8 @@ class Emitter {
             const pattern = text.slice(1, lastSlash);
             const flags = text.slice(lastSlash + 1);
             return {
-                c: `tsc_regexp_new(tsc_str_from_lit("${escapeCString(pattern)}", ${utf8ByteLen(pattern)}), tsc_str_from_lit("${escapeCString(flags)}", ${utf8ByteLen(flags)}))`,
-                ty: T_REGEXP,
+                c: `tsc_value_regexp(tsc_regexp_new(tsc_str_from_lit("${escapeCString(pattern)}", ${utf8ByteLen(pattern)}), tsc_str_from_lit("${escapeCString(flags)}", ${utf8ByteLen(flags)})))`,
+                ty: T_VALUE,
             };
         }
         if (expr.kind === ts.SyntaxKind.TrueKeyword) return { c: "true", ty: T_BOOLEAN };
@@ -33249,7 +33025,6 @@ class Emitter {
             case "set":
             case "promise":
             case "eventemitter":
-            case "regexp":
             case "url":
             case "urlsearchparams":
             case "date":
@@ -34684,7 +34459,7 @@ class Emitter {
             });
         }
         const raw = this.emitExpr(node.expression);
-        const receiver = (this.isPrivatePropertyReference(node) || ["function", "regexp", "buffer", "array"].includes(raw.ty.kind) ||
+        const receiver = (this.isPrivatePropertyReference(node) || ["function", "buffer", "array"].includes(raw.ty.kind) ||
             raw.ty.kind === "class" && !!this.findClassDecl(raw.ty.className!))
             ? { c: this.coerce(raw, T_VALUE, node.expression), ty: T_VALUE } : raw;
         if (receiver.ty.kind !== "value") return null;
@@ -34842,7 +34617,7 @@ class Emitter {
         }
         // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function", "environment",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "url", "urlsearchparams", "date", "buffer", "fsstats", "function", "environment",
         ];
         const leftIsNull = left.ty.kind === "void";
         const rightIsNull = right.ty.kind === "void";
@@ -34917,7 +34692,7 @@ class Emitter {
         }
 
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
         ];
         const leftIsPointer = pointerKinds.includes(left.ty.kind);
         const rightIsPointer = pointerKinds.includes(right.ty.kind);
@@ -38183,8 +37958,6 @@ class Emitter {
             return this.emitEventTargetMethod(call, recv, memberName);
         if (recv.ty.kind === "event")
             return this.emitEventMethod(call, recv, memberName);
-        if (recv.ty.kind === "regexp")
-            return this.emitRegexpMethod(call, recv, memberName);
         if (this.ordinaryNativeOwners.has(recv.ty.kind))
             return this.emitDynamicNamedPropertyCall(call, recv, memberName,
                 ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
@@ -38441,14 +38214,6 @@ class Emitter {
     ): EmitResult {
         return this.emitDynamicNamedPropertyCall(call, recv, method,
             ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken);
-    }
-
-    private emitRegexpMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        return this.emitDynamicNamedPropertyCall(call, recv, method, false);
     }
 
     private emitMapGroupBy(call: ts.CallExpression): EmitResult {
@@ -41459,7 +41224,7 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "buffer", "url", "urlsearchparams", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "buffer", "url", "urlsearchparams", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
             unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/arraybuffer/dataview/textencoder/textdecoder/void in this subset");
         }
@@ -46474,9 +46239,6 @@ class Emitter {
         if (recv.ty.kind === "set" && pa.name.text === "size") {
             return { c: `tsc_set_size(${recv.c})`, ty: T_NUMBER };
         }
-        if (recv.ty.kind === "regexp") {
-            return { c: `tsc_value_get_prop(tsc_value_regexp(${recv.c}), ${this.stringLit(pa.name.text)})`, ty: T_VALUE };
-        }
         if (recv.ty.kind === "event") {
             switch (pa.name.text) {
                 case "type":
@@ -47092,7 +46854,6 @@ class Emitter {
         if (r.ty.kind === "eventemitter") return `tsc_str_from_lit("[object EventEmitter]", 21)`;
         if (r.ty.kind === "event") return `tsc_str_from_lit("[object Event]", 14)`;
         if (r.ty.kind === "eventtarget") return `tsc_str_from_lit("[object EventTarget]", 20)`;
-        if (r.ty.kind === "regexp") return `tsc_value_to_string(tsc_value_regexp(${r.c}))`;
         if (r.ty.kind === "url" || r.ty.kind === "urlsearchparams")
             return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;
@@ -47256,7 +47017,7 @@ class Emitter {
         // null (void) → any pointer type: emit typed NULL. Check before the
         // string-coerce branch since string is a pointer type too.
         const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
+            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
         ];
         if (r.ty.kind === "void" && pointerKinds.includes(target.kind)) {
             return `((${target.c})NULL)`;
@@ -47282,8 +47043,6 @@ class Emitter {
                     return this.nativeCollectionRepresentation(r.c, target, node);
                 case "date":
                     return `tsc_value_as_date(${r.c})`;
-                case "regexp":
-                    return `tsc_value_as_regexp(${r.c})`;
                 case "buffer":
                     return `tsc_value_as_buffer(${r.c})`;
                 case "url":
@@ -47353,8 +47112,6 @@ class Emitter {
                 return `tsc_value_fs_stats(${r.c})`;
             case "date":
                 return `tsc_value_date(${r.c})`;
-            case "regexp":
-                return `tsc_value_regexp(${r.c})`;
             case "map":
                 return `tsc_value_map(${this.collectionWithValueCodecs(r.c, r.ty, node)})`;
             case "set":
@@ -47900,7 +47657,7 @@ function requireNumber(node: ts.Node, t: CType): void {
 
 function isPointerKind(t: CType): boolean {
     const pointerKinds: readonly CType["kind"][] = [
-        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "regexp", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
+        "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "event", "eventtarget", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
     ];
     return pointerKinds.includes(t.kind);
 }

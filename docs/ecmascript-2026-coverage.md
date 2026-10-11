@@ -1501,7 +1501,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-properties-of-date-instances` — Properties of Date Instances: exact disposition and partitions missing.
 - [ ] **Text Processing** (`sec-text-processing`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: String; RegExp; Unicode and well-formed strings.
-  - Linked local regression evidence: property: tests/property/regexp-split-protocol.property.test.ts, tests/property/regexp-iterator-gc.property.test.ts, tests/property/regexp-match-all.property.test.ts; E2E: string_object_methods, regex_pcre2, regexp_split_protocol, regexp_iterator_helpers.
+  - Linked local regression evidence: property: tests/property/regexp-split-protocol.property.test.ts, tests/property/regexp-iterator-gc.property.test.ts, tests/property/regexp-match-all.property.test.ts, tests/property/regexp-ordinary-source.property.test.ts; E2E: string_object_methods, regex_pcre2, regexp_split_protocol, regexp_iterator_helpers, regexp_ordinary_source.
   - Known blockers: The canonical UTF-16 RegExp engine replaced PCRE2, and ordinary match/search/replace/matchAll paths exist. Species-aware Symbol.split has local Node differential evidence for live RegExpExec records, encoded capture Lists, coercion/error order and retained capture graphs. Complete engine syntax/semantic partitions, object-model/cross-realm behavior and exhaustive eligible clause evidence remain open.
   - [ ] `sec-text-processing` — Text Processing: exact disposition and partitions missing.
   - [ ] `sec-string-objects` — String Objects: exact disposition and partitions missing.
