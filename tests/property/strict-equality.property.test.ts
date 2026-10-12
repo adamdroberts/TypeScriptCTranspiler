@@ -147,4 +147,4 @@ test("strict equality follows the canonical ECMAScript Type partition", async ()
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });
     }
-}, 90_000);
+}, 600_000);

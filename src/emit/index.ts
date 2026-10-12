@@ -1,3 +1,4 @@
+import {sourceNumericOperation, SOURCE_NUMERIC_OPERATION_FUNCTIONS, SOURCE_BINARY_NUMERIC_OPERATIONS, SOURCE_PREFIX_NUMERIC_OPERATIONS, SOURCE_UPDATE_NUMERIC_OPERATIONS} from "../source-numeric-operations";
 import { consoleOperations } from "../console-operations";
 import { cryptoDigestExports } from "../crypto-digest-owners";
 import { bufferStaticResults } from "../buffer-statics";
@@ -172,54 +173,6 @@ type WellKnownSymbolName = keyof typeof WELL_KNOWN_SYMBOL_RUNTIME_FUNCTIONS;
 
 /** Source operators and their assignment aliases share one numeric kernel
  * selection. References own evaluation/storage; runtime ToNumeric owns values. */
-interface SourceNumericOperation {
-    form: "binary" | "prefix" | "update" | "relational";
-    token: ts.SyntaxKind;
-    assignment?: ts.SyntaxKind;
-    kernel: string;
-    result: "value" | "number" | "boolean";
-    relation?: "<" | "<=" | ">" | ">=";
-}
-const SOURCE_NUMERIC_OPERATIONS: readonly SourceNumericOperation[] = [
-    { form: "binary", token: ts.SyntaxKind.PlusToken, assignment: ts.SyntaxKind.PlusEqualsToken, kernel: "tsc_value_add", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.MinusToken, assignment: ts.SyntaxKind.MinusEqualsToken, kernel: "tsc_value_sub", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.AsteriskToken, assignment: ts.SyntaxKind.AsteriskEqualsToken, kernel: "tsc_value_mul", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.SlashToken, assignment: ts.SyntaxKind.SlashEqualsToken, kernel: "tsc_value_div", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.PercentToken, assignment: ts.SyntaxKind.PercentEqualsToken, kernel: "tsc_value_mod", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.AsteriskAsteriskToken, assignment: ts.SyntaxKind.AsteriskAsteriskEqualsToken, kernel: "tsc_value_pow", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.AmpersandToken, assignment: ts.SyntaxKind.AmpersandEqualsToken, kernel: "tsc_value_bit_and", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.BarToken, assignment: ts.SyntaxKind.BarEqualsToken, kernel: "tsc_value_bit_or", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.CaretToken, assignment: ts.SyntaxKind.CaretEqualsToken, kernel: "tsc_value_bit_xor", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.LessThanLessThanToken, assignment: ts.SyntaxKind.LessThanLessThanEqualsToken, kernel: "tsc_value_shl", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.GreaterThanGreaterThanToken, assignment: ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, kernel: "tsc_value_shr", result: "value" },
-    { form: "binary", token: ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, assignment: ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken, kernel: "tsc_value_ushr", result: "value" },
-    { form: "prefix", token: ts.SyntaxKind.PlusToken, kernel: "tsc_value_to_number", result: "number" },
-    { form: "prefix", token: ts.SyntaxKind.MinusToken, kernel: "tsc_value_neg", result: "value" },
-    { form: "prefix", token: ts.SyntaxKind.TildeToken, kernel: "tsc_value_bit_not", result: "value" },
-    { form: "update", token: ts.SyntaxKind.PlusPlusToken, kernel: "tsc_value_inc", result: "value" },
-    { form: "update", token: ts.SyntaxKind.MinusMinusToken, kernel: "tsc_value_dec", result: "value" },
-    { form: "relational", token: ts.SyntaxKind.LessThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<" },
-    { form: "relational", token: ts.SyntaxKind.LessThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<=" },
-    { form: "relational", token: ts.SyntaxKind.GreaterThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">" },
-    { form: "relational", token: ts.SyntaxKind.GreaterThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">=" },
-];
-const SOURCE_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
-    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary")
-        .flatMap(operation => [[operation.token, operation.kernel] as const,
-            ...(operation.assignment === undefined ? [] : [[operation.assignment, operation.kernel] as const])]),
-);
-const SOURCE_BINARY_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
-    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "binary" || operation.form === "relational")
-        .map(operation => [operation.token, operation]),
-);
-const SOURCE_PREFIX_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
-    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "prefix")
-        .map(operation => [operation.token, operation]),
-);
-const SOURCE_UPDATE_NUMERIC_OPERATIONS: ReadonlyMap<ts.SyntaxKind, SourceNumericOperation> = new Map(
-    SOURCE_NUMERIC_OPERATIONS.filter(operation => operation.form === "update")
-        .map(operation => [operation.token, operation]),
-);
 
 interface EmitResult {
     c: string;
@@ -34072,10 +34025,10 @@ class Emitter {
 
             case ts.SyntaxKind.EqualsEqualsToken:
             case ts.SyntaxKind.EqualsEqualsEqualsToken:
-                return this.emitEquality(bin, left, right, false);
+                return this.emitEquality(bin, left, right);
             case ts.SyntaxKind.ExclamationEqualsToken:
             case ts.SyntaxKind.ExclamationEqualsEqualsToken:
-                return this.emitEquality(bin, left, right, true);
+                return this.emitEquality(bin, left, right);
 
         }
         unsupported(bin, `binary operator ${ts.SyntaxKind[op]}`);
@@ -34845,173 +34798,11 @@ class Emitter {
         bin: ts.BinaryExpression,
         left: EmitResult,
         right: EmitResult,
-        negate: boolean,
     ): EmitResult {
-        const strict =
-            bin.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-            bin.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
-        if (strict) return this.emitStrictEquality(bin, left, right, negate);
-
-        if (left.ty.kind === "value" && (this.isUndefinedExpression(bin.right) || this.isNullExpression(bin.right))) {
-            const literal = this.isUndefinedExpression(bin.right) ? "tsc_value_undefined()" : "tsc_value_null()";
-            const value = this.coerce(left, T_VALUE, bin.left);
-            const c = `tsc_value_abstract_eq(${value}, ${literal})`;
-            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
-        }
-        if (right.ty.kind === "value" && (this.isUndefinedExpression(bin.left) || this.isNullExpression(bin.left))) {
-            const literal = this.isUndefinedExpression(bin.left) ? "tsc_value_undefined()" : "tsc_value_null()";
-            const value = this.coerce(right, T_VALUE, bin.right);
-            const c = `tsc_value_abstract_eq(${literal}, ${value})`;
-            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
-        }
-        if (left.ty.kind === "value" || right.ty.kind === "value" || left.ty.kind === "function" || right.ty.kind === "function") {
-            const r = this.emitDynamicBinary("tsc_value_abstract_eq", T_BOOLEAN, bin, left, right);
-            return { c: negate ? `(!${r.c})` : r.c, ty: T_BOOLEAN };
-        }
-        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-            const c = `tsc_bigint_eq(${left.c}, ${right.c})`;
-            return { c: negate ? `(!${c})` : `(${c})`, ty: T_BOOLEAN };
-        }
-        if (left.ty.kind === "string" && right.ty.kind === "string") {
-            const c = `tsc_str_eq(${left.c}, ${right.c})`;
-            return { c: negate ? `(!${c})` : `(${c})`, ty: T_BOOLEAN };
-        }
-        if (left.ty.kind === right.ty.kind && left.ty.kind !== "unsupported") {
-            const op = negate ? "!=" : "==";
-            return { c: `(${left.c} ${op} ${right.c})`, ty: T_BOOLEAN };
-        }
-        // Compare pointer-valued types (array, class, map, set, regexp, string) to null.
-        const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "url", "urlsearchparams", "date", "buffer", "fsstats", "function", "environment",
-        ];
-        const leftIsNull = left.ty.kind === "void";
-        const rightIsNull = right.ty.kind === "void";
-        const leftIsPtr = pointerKinds.includes(left.ty.kind);
-        const rightIsPtr = pointerKinds.includes(right.ty.kind);
-        if ((leftIsPtr && rightIsNull) || (leftIsNull && rightIsPtr)) {
-            const op = negate ? "!=" : "==";
-            const ptrSide = leftIsPtr ? left.c : right.c;
-            return { c: `(${ptrSide} ${op} NULL)`, ty: T_BOOLEAN };
-        }
-        unsupported(bin, `cross-type equality ${left.ty.c} vs ${right.ty.c}`);
-    }
-
-    private emitStrictEquality(
-        bin: ts.BinaryExpression,
-        left: EmitResult,
-        right: EmitResult,
-        negate: boolean,
-    ): EmitResult {
-        if (left.ty.kind === "unsupported" || right.ty.kind === "unsupported") {
-            unsupported(bin, `strict equality on ${left.ty.c} vs ${right.ty.c}`);
-        }
-        if (left.ty.kind === "value" || right.ty.kind === "value" || left.ty.kind === "function" || right.ty.kind === "function") {
-            const result = this.emitDynamicBinary("tsc_value_eq", T_BOOLEAN, bin, left, right);
-            return { c: negate ? `(!${result.c})` : result.c, ty: T_BOOLEAN };
-        }
-
-        if (left.ty.kind === "void" && right.ty.kind === "void") {
-            const leftKind = this.equalityNullishKind(bin.left);
-            const rightKind = this.equalityNullishKind(bin.right);
-            if (!leftKind || !rightKind) {
-                unsupported(bin, "strict equality cannot distinguish an unclassified static nullish value");
-            }
-            return this.emitEvaluatedEqualityConstant(left, right, leftKind === rightKind, negate);
-        }
-
-        if (left.ty.kind === "bigint" && right.ty.kind === "bigint") {
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: left, node: bin.left },
-                    { value: right, node: bin.right },
-                ],
-                ([leftValue, rightValue]) => {
-                    const equal = `tsc_bigint_eq(${leftValue}, ${rightValue})`;
-                    return negate ? `(!${equal})` : equal;
-                },
-            );
-        }
-        if (left.ty.kind === "string" && right.ty.kind === "string") {
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: left, node: bin.left },
-                    { value: right, node: bin.right },
-                ],
-                ([leftValue, rightValue]) => {
-                    const equal = `tsc_str_eq(${leftValue}, ${rightValue})`;
-                    return negate ? `(!${equal})` : equal;
-                },
-            );
-        }
-        if (left.ty.kind === right.ty.kind) {
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: left, node: bin.left },
-                    { value: right, node: bin.right },
-                ],
-                ([leftValue, rightValue]) => `(${leftValue} ${negate ? "!=" : "=="} ${rightValue})`,
-            );
-        }
-
-        const pointerKinds: readonly CType["kind"][] = [
-            "string", "bigint", "symbol", "array", "class", "map", "set", "promise", "eventemitter", "url", "urlsearchparams", "date", "buffer", "fsstats", "function",
-        ];
-        const leftIsPointer = pointerKinds.includes(left.ty.kind);
-        const rightIsPointer = pointerKinds.includes(right.ty.kind);
-        if (
-            (leftIsPointer && right.ty.kind === "void") ||
-            (left.ty.kind === "void" && rightIsPointer)
-        ) {
-            const nullishExpression = left.ty.kind === "void" ? bin.left : bin.right;
-            const pointerExpression = leftIsPointer ? bin.left : bin.right;
-            const nullishKind = this.equalityNullishKind(nullishExpression);
-            if (!nullishKind) {
-                unsupported(bin, "strict equality cannot distinguish an unclassified static nullish value");
-            }
-            const pointerNullish = this.expressionNullishKinds(pointerExpression);
-            if (pointerNullish.hasNull && pointerNullish.hasUndefined) {
-                unsupported(bin, "strict equality requires boxed storage for a pointer union containing both null and undefined");
-            }
-            const canRepresentKind = nullishKind === "null"
-                ? pointerNullish.hasNull
-                : pointerNullish.hasUndefined;
-            if (!canRepresentKind) {
-                return this.emitEvaluatedEqualityConstant(left, right, false, negate);
-            }
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: left, node: bin.left },
-                    { value: right, node: bin.right },
-                ],
-                ([leftValue, rightValue]) => {
-                    const pointer = leftIsPointer ? leftValue : rightValue;
-                    return `(${pointer} ${negate ? "!=" : "=="} NULL)`;
-                },
-            );
-        }
-
-        // ECMAScript Strict Equality returns false when the operand Types differ.
-        // Evaluate both operands through one ordered worklist before materialising
-        // that constant; C's operand evaluation order is not JavaScript's order.
-        return this.emitEvaluatedEqualityConstant(left, right, false, negate);
-    }
-
-    private emitEvaluatedEqualityConstant(
-        left: EmitResult,
-        right: EmitResult,
-        equal: boolean,
-        negate: boolean,
-    ): EmitResult {
-        const result = negate ? !equal : equal;
-        return this.emitSequencedExpr(
-            T_BOOLEAN,
-            [{ value: left }, { value: right }],
-            () => result ? "true" : "false",
-        );
+        const operation = sourceNumericOperation(bin);
+        if (!operation || operation.form !== "equality") unsupported(bin,"unrepresented equality operation");
+        const result = this.emitDynamicBinary(operation.kernel,T_BOOLEAN,bin,left,right);
+        return {c:operation.negate ? `(!${result.c})` : result.c,ty:T_BOOLEAN};
     }
 
     private equalityNullishKind(expr: ts.Expression): "null" | "undefined" | null {

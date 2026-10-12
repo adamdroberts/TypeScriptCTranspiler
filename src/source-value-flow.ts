@@ -1,3 +1,4 @@
+import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget } from "./emit/binding-tree";
@@ -35,7 +36,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for";
-type Primitive = string | number | bigint | boolean | null | undefined | symbol;
+type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
 const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
@@ -46,17 +47,12 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     ["BigInt", (value: Primitive) => BigInt(value as string | number | bigint | boolean)],
     ["numeric", (value: Primitive) => typeof value === "bigint" ? value : Number(value)],
 ]);
-const PRIMITIVE_PREFIX_OPERATIONS: ReadonlyMap<ts.PrefixUnaryOperator, (value: Primitive) => Primitive> = new Map<ts.PrefixUnaryOperator, (value: Primitive) => Primitive>([
-    [ts.SyntaxKind.PlusToken, (value: Primitive) => +(value as number)],
-    [ts.SyntaxKind.MinusToken, (value: Primitive) => -(value as number)],
-    [ts.SyntaxKind.TildeToken, (value: Primitive) => ~(value as number)],
-    [ts.SyntaxKind.ExclamationToken, (value: Primitive) => !value],
-]);
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
     readonly primitiveComplete: boolean;
     readonly textComplete: boolean;
 }
+interface PrimitiveReadiness {pending:boolean; pendingSource:boolean; unresolved:boolean; scalarUnresolved:boolean;}
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 type Atom =
     | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
@@ -67,16 +63,40 @@ type Atom =
     | { readonly tag: "bound"; readonly target: Cell; readonly receiver: Cell; readonly prefix: readonly Cell[] | null; readonly fields: ObjectOwner }
     | { readonly tag: "primitive"; readonly value: Primitive }
     | { readonly tag: "non-string" }
+    | { readonly tag: "unknown-string" }
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "add" | "template" | "bound-name" | "prefix" | "coerce"; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
-interface Cell { readonly id: number; readonly values: Set<Atom>; readonly users: Set<Rule>; }
+class SourceFacts extends Set<Atom> {
+    readonly sources = new Set<SourceFacts>();
+    override *[Symbol.iterator](): SetIterator<Atom> {
+        const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>(), values = new Set<Atom>();
+        while (pending.length) {
+            const facts = pending.pop()!;
+            if (visited.has(facts)) continue; visited.add(facts);
+            for (const value of Set.prototype.values.call(facts) as SetIterator<Atom>) if (!values.has(value)) {values.add(value); yield value;}
+            for (const source of facts.sources) pending.push(source);
+        }
+    }
+    override has(atom: Atom): boolean {
+        const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
+        while (pending.length) {
+            const facts = pending.pop()!;
+            if (visited.has(facts)) continue; visited.add(facts);
+            if (Set.prototype.has.call(facts,atom)) return true;
+            for (const source of facts.sources) pending.push(source);
+        }
+        return false;
+    }
+    override get size(): number {let size=0; for (const _ of this) size++; return size;}
+}
+interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
 interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
 interface FunctionOwner {
@@ -90,23 +110,7 @@ interface EvaluationRecord {
     readonly direct: boolean; readonly source: Cell | null; readonly unknown: boolean;
 }
 
-// A finite grammar partition, independent of value, operand and graph counts.
-const NUMERIC_BINARY_RESULTS = new Set<ts.SyntaxKind>([
-    ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.AsteriskAsteriskToken,
-    ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.LessThanLessThanToken,
-    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
-    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
-    ts.SyntaxKind.MinusEqualsToken, ts.SyntaxKind.AsteriskEqualsToken, ts.SyntaxKind.AsteriskAsteriskEqualsToken,
-    ts.SyntaxKind.SlashEqualsToken, ts.SyntaxKind.PercentEqualsToken, ts.SyntaxKind.LessThanLessThanEqualsToken,
-    ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
-    ts.SyntaxKind.AmpersandEqualsToken, ts.SyntaxKind.BarEqualsToken, ts.SyntaxKind.CaretEqualsToken,
-]);
-const RELATIONAL_BINARY_OPERATIONS = new Set<ts.SyntaxKind>([
-    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
-]);
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
-    ...RELATIONAL_BINARY_OPERATIONS, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
-    ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
 // Initial intrinsic member identities, installed on their canonical owners.
@@ -124,14 +128,13 @@ const CALLABLE_FORWARDING_OPERATIONS: ReadonlyMap<string, Operation> = new Map([
 ]);
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
-    if (ts.isComputedPropertyName(node) || ts.isTemplateSpan(node)) return [node.expression];
+    if (ts.isComputedPropertyName(node)) return [node.expression];
     if (ts.isElementAccessExpression(node)) return [node.argumentExpression];
-    if (ts.isPrefixUnaryExpression(node) && node.operator !== ts.SyntaxKind.ExclamationToken || ts.isPostfixUnaryExpression(node))
-        return [node.operand];
-    if (ts.isBinaryExpression(node) && (NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind) ||
-        node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
-        BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind) && node.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
-            node.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)) return [node.left, node.right];
+    const operation = sourceNumericOperation(node);
+    if (operation) return ts.isBinaryExpression(node) ? [node.left, node.right] : [(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand];
+    if (ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind) &&
+        node.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken && node.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)
+        return [node.left, node.right];
     return null;
 }
 
@@ -179,6 +182,7 @@ class SourceValueFlow {
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
+    private queueCursor = 0;
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
     private readonly accessorDefinitions = new Map<Cell,ts.Node>();
     private readonly accessorCallees = new Map<Cell,Cell>();
@@ -213,6 +217,7 @@ class SourceValueFlow {
     private readonly realm: Atom = { tag: "realm-record" };
     private nextCell = 0;
     private readonly booleanResult = this.newCell();
+    private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
@@ -224,6 +229,11 @@ class SourceValueFlow {
     private readonly stringConversions = new Map<Cell, Map<ts.Node, Map<boolean, Cell>>>();
     private readonly orderedConversions = new Map<ts.Node, Map<string, readonly Cell[]>>();
     private readonly numericConversions = new Map<Cell, Map<ts.Node, Map<string, Cell>>>();
+    private readonly numericWrites = new Map<ts.Node, Cell>();
+    private readonly primitiveProofCache = new Map<Cell, PrimitiveChoiceProof>();
+    private readonly primitiveProofParents = new Map<Cell, Set<Cell>>();
+    private readonly primitiveReadyCache = new Map<Cell, PrimitiveReadiness>();
+    private readonly primitiveChanges = new Set<Cell>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
@@ -281,17 +291,13 @@ class SourceValueFlow {
                     continue;
                 }
                 if (ts.isThrowStatement(node) && handler) this.copy(this.cell(node.expression), handler);
-                const operands = handler && conversionOperands(node);
+                const operands = handler && !sourceNumericOperation(node) && conversionOperands(node);
                 if (handler && operands) {
                     const propertyKey = ts.isComputedPropertyName(node) || ts.isElementAccessExpression(node);
                     const addition = ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken);
-                    const numeric = ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node) || ts.isBinaryExpression(node) &&
-                        NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind);
-                    const relational = ts.isBinaryExpression(node) && RELATIONAL_BINARY_OPERATIONS.has(node.operatorToken.kind);
                     const raw = operands.map(operand => this.cell(operand));
-                    const inputs = propertyKey || ts.isTemplateSpan(node) ? this.convertList(raw, node, "string")
-                        : addition ? this.convertList(raw, node, "default") : numeric ? this.convertList(raw, node, "numeric")
-                        : relational ? this.convertList(raw, node, "number") : raw;
+                    const inputs = propertyKey ? this.convertList(raw, node, "string")
+                        : addition ? this.convertList(raw, node, "default") : raw;
                     // Primitive conversion failures are Error objects. An
                     // opaque coercion can invoke user code and throw any value;
                     // it cannot disappear beside a known explicit throw.
@@ -309,7 +315,7 @@ class SourceValueFlow {
                             typeof left !== "string" && typeof right !== "string" && (typeof left === "bigint") !== (typeof right === "bigint")));
                         const symbolConversion = !propertyKey && states.some(state => state.proof.values.some(value => typeof value === "symbol"));
                         if (states.some(state => !state.proof.primitiveComplete) || mixedBigInt || symbolConversion ||
-                            !propertyKey && !plus && !ts.isTemplateSpan(node)) this.publish(handler, this.opaqueObject);
+                            !propertyKey && !plus) this.publish(handler, this.opaqueObject);
                     });
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
@@ -318,7 +324,7 @@ class SourceValueFlow {
                     this.onActive(node, () => this.writeTarget(node.left, value, node));
                 }
                 if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node))
-                    this.onActive(node, () => this.writeTarget(node.operand, this.cell(node), node));
+                    this.onActive(node, () => this.writeTarget(node.operand, this.updateStored(node), node));
                 if (ts.isDeleteExpression(node)) {
                     const target = unwrap(node.expression);
                     if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
@@ -343,12 +349,22 @@ class SourceValueFlow {
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
                     ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node) ||
-                    ts.isExpression(node) && conversionOperands(node)) this.cell(node);
+                    ts.isTemplateExpression(node) || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
                 node.forEachChild(child => { worklist.push({node: child, handler}); });
             }
         }
     }
-    private newCell(): Cell { return { id: this.nextCell++, values: new Set(), users: new Set() }; }
+    private newCell(): Cell { return { id: this.nextCell++, values: new SourceFacts(), users: new Set() }; }
+    private updateStored(node: ts.Node): Cell {
+        let value = this.numericWrites.get(node);
+        if (!value) {value = this.newCell(); this.numericWrites.set(node,value);}
+        return value;
+    }
+    private primitiveTuples(parts: readonly (readonly Primitive[])[]): Primitive[][] {
+        let tuples: Primitive[][] = [[]];
+        for (const values of parts) tuples = tuples.flatMap(prefix => values.map(value => [...prefix,value]));
+        return tuples;
+    }
     private exceptionCell(): Cell {const cell = this.newCell(); this.exceptionCells.add(cell); return cell;}
     private enclosingActivation(node: ts.Node): FunctionOwner | null {
         let child = node, parent = node.parent;
@@ -367,7 +383,27 @@ class SourceValueFlow {
     }
     private publish(cell: Cell, atom: Atom): void {
         if (cell.values.has(atom)) return;
-        cell.values.add(atom); for (const user of cell.users) this.schedule(user);
+        if (atom.tag === "text-operation") for (const part of atom.parts) {
+            let parents = this.primitiveProofParents.get(part);
+            if (!parents) {parents = new Set(); this.primitiveProofParents.set(part,parents);}
+            parents.add(cell);
+        }
+        cell.values.add(atom);
+        this.primitiveChanges.add(cell);
+        for (const user of cell.users) this.schedule(user);
+    }
+    private flushPrimitiveChanges(): void {
+        if (!this.primitiveChanges.size) return;
+        const pending = [...this.primitiveChanges], visited = new Set<Cell>();
+        this.primitiveChanges.clear();
+        while (pending.length) {
+            const value = pending.pop()!;
+            if (visited.has(value)) continue; visited.add(value);
+            this.primitiveProofCache.delete(value);
+            this.primitiveReadyCache.delete(value);
+            for (const user of value.users) this.schedule(user);
+            for (const parent of this.primitiveProofParents.get(value) ?? []) pending.push(parent);
+        }
     }
     private schedule(rule: Rule): void { if (!rule.queued) { rule.queued = true; this.queue.push(rule); } }
     private rule(inputs: readonly Cell[], run: () => void): Rule {
@@ -384,7 +420,12 @@ class SourceValueFlow {
         if (!destinations) { destinations = new Set(); this.copies.set(from, destinations); }
         if (destinations.has(into)) return;
         destinations.add(into);
-        this.rule([from], () => { for (const value of from.values) this.publish(into, value); });
+        into.values.sources.add(from.values);
+        let parents = this.primitiveProofParents.get(from);
+        if (!parents) {parents = new Set(); this.primitiveProofParents.set(from,parents);}
+        parents.add(into);
+        this.primitiveChanges.add(into);
+        for (const user of into.users) this.schedule(user);
     }
     private opaqueEffect(context?: ts.Node): void {
         if (!context) {this.publish(this.opaqueMutation, this.unknown); return;}
@@ -443,6 +484,20 @@ class SourceValueFlow {
             if (declaration && callableDefinition(declaration)) this.copy(this.cell(declaration), cell);
         }
         return cell;
+    }
+    private bindingMayBeUninitialized(node: ts.Identifier): boolean {
+        for (const value of this.bindingSymbol(node)?.declarations ?? []) {
+            if (value.getSourceFile().isDeclarationFile || !sourceDeclarationIntroducesBinding(value)) continue;
+            let declaration: ts.Node | undefined = value;
+            while (declaration && !ts.isVariableDeclaration(declaration) && !ts.isSourceFile(declaration) && !ts.isFunctionLike(declaration)) declaration = declaration.parent;
+            if (!declaration || !ts.isVariableDeclaration(declaration) || !ts.isVariableDeclarationList(declaration.parent) ||
+                declaration.parent.flags & ts.NodeFlags.BlockScoped) continue;
+            if (!declaration.initializer || declaration.getSourceFile() !== node.getSourceFile() ||
+                this.enclosingActivation(declaration) !== this.enclosingActivation(node) || node.getStart() <= declaration.initializer.getEnd()) return true;
+            for (let parent: ts.Node | undefined = declaration.parent; parent && !ts.isSourceFile(parent) && !ts.isFunctionLike(parent); parent = parent.parent)
+                if (!ts.isVariableDeclarationList(parent) && !ts.isVariableStatement(parent) && !ts.isBlock(parent)) return true;
+        }
+        return false;
     }
     private withBindingObjects(node: ts.Identifier): Cell[] {
         const symbol = this.bindingSymbol(node);
@@ -507,7 +562,7 @@ class SourceValueFlow {
             if (!atom) {atom = {tag: "primitive", value}; this.symbolPrimitives.set(value, atom);}
             return atom;
         }
-        const key = typeof value + ":" + String(value);
+        const key = typeof value + ":" + (typeof value === "number" && Object.is(value,-0) ? "-0" : String(value));
         let atom = this.primitives.get(key);
         if (!atom) { atom = { tag: "primitive", value }; this.primitives.set(key, atom); }
         return atom;
@@ -633,7 +688,7 @@ class SourceValueFlow {
         let rule!: Rule;
         rule = this.rule([source], () => {
             for (const atom of source.values) {
-                if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source") {
+                if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "unknown-string" || atom.tag === "text-operation" || atom.tag === "abrupt" || atom.tag === "pending-source") {
                     this.publish(result, atom); continue;
                 }
                 const owner = this.ordinaryOwner(atom);
@@ -687,7 +742,7 @@ class SourceValueFlow {
                     });
                     this.rule([returned], () => {
                         for (const value of returned.values) {
-                            if (value.tag === "primitive" || value.tag === "non-string" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
+                            if (value.tag === "primitive" || value.tag === "non-string" || value.tag === "unknown-string" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
                             else advance(index + 1);
                         }
                     });
@@ -712,7 +767,7 @@ class SourceValueFlow {
                 });
                 this.rule([returned], () => {
                     for (const value of returned.values) {
-                        if (["primitive", "non-string", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
+                        if (["primitive", "non-string", "unknown-string", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
                         else invalid();
                     }
                 });
@@ -818,20 +873,40 @@ class SourceValueFlow {
         this.watchText(rule, root);
         const proof = this.primitiveChoiceProof(root);
         if (proof.primitiveComplete) return {proof, pending: false, pendingSource: false, unresolved: false};
-        const worklist = [root], visited = new Set<Cell>();
-        let pending = false, pendingSource = false, unresolved = false;
-        while (worklist.length) {
-            const cell = worklist.pop()!;
-            if (visited.has(cell)) continue;
-            visited.add(cell);
-            if (!cell.values.size) pending = true;
+        const state = this.primitiveReadiness(root);
+        return {proof,pending:state.pending,pendingSource:state.pendingSource,unresolved:nonString ? state.scalarUnresolved : state.unresolved};
+    }
+    private primitiveReadiness(root: Cell): PrimitiveReadiness {
+        this.flushPrimitiveChanges();
+        const cached = this.primitiveReadyCache.get(root); if (cached) return cached;
+        const pending = [root], states = new Map<Cell,PrimitiveReadiness>();
+        while (pending.length) {
+            const cell = pending.pop()!;
+            if (states.has(cell) || this.primitiveReadyCache.has(cell)) continue;
+            const state:PrimitiveReadiness = {pending:!cell.values.size,pendingSource:false,unresolved:false,scalarUnresolved:false};
             for (const value of cell.values) {
-                if (value.tag === "text-operation") worklist.push(...value.parts);
-                else if (value.tag === "pending-source") pending = pendingSource = true;
-                else if (value.tag !== "primitive" && value.tag !== "abrupt" && !(nonString && value.tag === "non-string")) unresolved = true;
+                if (value.tag === "text-operation") for (const part of value.parts) pending.push(part);
+                else if (value.tag === "pending-source") state.pending = state.pendingSource = true;
+                else if (value.tag !== "primitive" && value.tag !== "abrupt") {
+                    state.unresolved = true; state.scalarUnresolved ||= value.tag !== "non-string" && value.tag !== "unknown-string";
+                }
             }
+            states.set(cell,state);
         }
-        return {proof, pending, pendingSource, unresolved};
+        const worklist = [...states.keys()], queued = new Set(worklist);
+        while (worklist.length) {
+            const cell = worklist.pop()!; queued.delete(cell);
+            const state = states.get(cell)!;
+            const before = [state.pending,state.pendingSource,state.unresolved].join(":");
+            for (const value of cell.values) if (value.tag === "text-operation") for (const part of value.parts) {
+                const child = states.get(part) ?? this.primitiveReadyCache.get(part)!;
+                state.pending ||= child.pending; state.pendingSource ||= child.pendingSource; state.unresolved ||= child.unresolved;
+            }
+            if (before !== [state.pending,state.pendingSource,state.unresolved].join(":"))
+                for (const parent of this.primitiveProofParents.get(cell) ?? []) if (states.has(parent) && !queued.has(parent)) {queued.add(parent); worklist.push(parent);}
+        }
+        for (const [cell,state] of states) this.primitiveReadyCache.set(cell,state);
+        return states.get(root)!;
     }
     private stringHintCell(source: Cell, context: ts.Node, descriptiveSymbols = false): Cell {
         let contexts = this.stringConversions.get(source);
@@ -843,7 +918,7 @@ class SourceValueFlow {
         let rule!: Rule;
         rule = this.rule([source], () => {
             const choices = this.stringHintTexts(source, rule, context, descriptiveSymbols);
-            if (choices === null) this.publish(result, this.unknown);
+            if (choices === null) this.publish(result, this.unknownString);
             else if (choices?.length === 0) this.publish(result, this.abrupt);
             else if (choices === undefined && this.primitiveState(this.primitiveConversion(source, context), rule).pendingSource)
                 this.publish(result, this.pendingSource);
@@ -1294,6 +1369,7 @@ class SourceValueFlow {
             }
             const owner = atom.owner;
             const proof = this.primitiveChoiceProof(owner.listLength!);
+            if (!proof.primitiveComplete && this.primitiveReadiness(owner.listLength!).pending) continue;
             if (this.opaqueShape(owner,context,true) || !proof.primitiveComplete) {
                 alternatives.push(null);
                 continue;
@@ -1315,7 +1391,7 @@ class SourceValueFlow {
                 alternatives.push(locations);
             }
         }
-        return alternatives.length && !alternatives.includes(null) ? alternatives : [null];
+        return alternatives.includes(null) ? [null] : alternatives;
     }
     private cyclicListShape(owner: ObjectOwner): boolean {
         const pending = [{ owner, finish: false }];
@@ -1349,29 +1425,47 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         if (callableDefinition(node)) { this.publish(result, { tag: "function", owner: this.function(node) }); return; }
-        if (ts.isPrefixUnaryExpression(node) && PRIMITIVE_PREFIX_OPERATIONS.has(node.operator)) {
-            this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [node.operator === ts.SyntaxKind.ExclamationToken ? this.cell(node.operand) : this.primitiveConversion(this.cell(node.operand), node, "number")]});
+        const operation = sourceNumericOperation(node);
+        if (operation) {
+            const operands = ts.isBinaryExpression(node) ? [this.cell(node.left), this.cell(node.right)] : [this.cell((node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand)];
+            const converted = operation.form === "equality" ? operands : this.convertList(operands, node, operation.conversion as PrimitiveHint | "numeric");
+            const computed = operation.form === "update" ? this.newCell() : result;
+            this.publish(computed, {tag: "text-operation", operation: "numeric", numeric: operation, parts: converted});
+            if (operation.form === "update") {
+                this.copy(ts.isPostfixUnaryExpression(node) ? converted[0]! : computed, result);
+                // A shared mutable location has no versioned scalar value.
+                // Retain its numeric category after normal conversion instead
+                // of feeding expression values back into the location graph.
+                const stored = this.updateStored(node);
+                let write!: Rule;
+                write = this.rule([converted[0]!], () => {
+                    const state = this.primitiveState(converted[0]!, write, true);
+                    if (state.pending) return;
+                    this.publish(stored, state.proof.primitiveComplete && !state.proof.values.length ? this.abrupt : this.nonString);
+                });
+            }
+            const handler = this.exceptionHandlers.get(node);
+            if (handler || operation.conversion === "equality") {
+                let rule!: Rule;
+                rule = this.rule(converted, () => {
+                    const states = converted.map(input => this.primitiveState(input,rule,true));
+                    if (states.some(state => state.pending || state.proof.primitiveComplete && !state.proof.values.length)) return;
+                    if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.onActive(node,()=>this.opaqueEffect(node));
+                    if (!handler || operation.conversion === "none") return;
+                    if (states.some(state => state.unresolved)) this.publish(handler,this.unknown);
+                    if (states.some(state => !state.proof.primitiveComplete)) this.publish(handler,this.opaqueObject);
+                    for (const tuple of this.primitiveTuples(states.map(state => state.proof.values))) {
+                        try {operation.evaluate(tuple);} catch {this.publish(handler,this.opaqueObject);}
+                    }
+                });
+            }
             return;
         }
-        // These grammar operations can throw, but every normal result is
-        // non-String independently of their operands and numeric magnitudes.
-        if (ts.isDeleteExpression(node) ||
-            ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
-            if (ts.isBinaryExpression(node) && RELATIONAL_BINARY_OPERATIONS.has(node.operatorToken.kind))
-                this.convertList([this.cell(node.left), this.cell(node.right)], node, "number");
+        if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
+            this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [this.cell(node.operand)]}); return;
+        }
+        if (ts.isDeleteExpression(node) || ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
             this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
-        }
-        if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node) ||
-            ts.isBinaryExpression(node) && NUMERIC_BINARY_RESULTS.has(node.operatorToken.kind)) {
-            const operands = ts.isBinaryExpression(node) ? [this.cell(node.left), this.cell(node.right)] : [this.cell(node.operand)];
-            const converted = this.convertList(operands, node, "numeric");
-            let rule!: Rule;
-            rule = this.rule(converted, () => {
-                const states = converted.map(input => this.primitiveState(input, rule, true));
-                if (states.some(state => state.proof.primitiveComplete && !state.proof.values.length)) this.publish(result, this.abrupt);
-                else if (!states.some(state => state.pending)) this.publish(result, this.nonString);
-            });
-            return;
         }
         if (ts.isVoidExpression(node)) { this.publish(result, this.primitive(undefined)); return; }
         if (ts.isTypeOfExpression(node)) {
@@ -1386,6 +1480,7 @@ class SourceValueFlow {
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
             this.copy(this.binding(node), result);
+            if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (this.isAmbientIdentifier(node)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
@@ -1469,19 +1564,34 @@ class SourceValueFlow {
                 if (key !== null) this.copy(this.property(this.cell(node.expression), key, node), result);
             }
         } else if (ts.isConditionalExpression(node)) {
-            this.copy(this.cell(node.whenTrue), result); this.copy(this.cell(node.whenFalse), result);
+            const condition = this.cell(node.condition), whenTrue = this.cell(node.whenTrue), whenFalse = this.cell(node.whenFalse);
+            // The branch cells own unresolved values. Sealing this dependent
+            // result with top would survive their later finite publication.
+            this.normalResults.set(result,this.abrupt);
+            let rule!: Rule;
+            rule = this.rule([condition], () => {
+                const state = this.primitiveState(condition,rule,true);
+                if (state.pending && !state.unresolved) return;
+                const truth = new Set(state.proof.values.map(Boolean));
+                if (!state.proof.primitiveComplete) for (const value of condition.values) {
+                    if (value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "primitive") continue;
+                    if (value.tag === "unknown" || value.tag === "non-string" || value.tag === "text-operation") {truth.add(false); truth.add(true);}
+                    else truth.add(true);
+                }
+                if (state.proof.primitiveComplete && !state.proof.values.length) this.publish(result,this.abrupt);
+                for (const value of truth) this.copy(value ? whenTrue : whenFalse,result);
+            });
         } else if (ts.isBinaryExpression(node)) {
             if ([ts.SyntaxKind.CommaToken, ts.SyntaxKind.EqualsToken].includes(node.operatorToken.kind)) this.copy(this.cell(node.right), result);
             else if (NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) || [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
                 this.copy(this.cell(node.left), result); this.copy(this.cell(node.right), result);
-            } else if (node.operatorToken.kind === ts.SyntaxKind.PlusToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken)
-                this.publish(result, { tag: "text-operation", operation: "add", parts: this.convertList([this.cell(node.left), this.cell(node.right)], node, "default") });
+            }
         } else if (ts.isTemplateExpression(node)) {
             const parts: Cell[] = [];
             const literal = (text: string): void => { const cell = this.newCell(); this.publish(cell, this.text(text)); parts.push(cell); };
             literal(node.head.text);
             for (const span of node.templateSpans) { parts.push(this.cell(span.expression)); literal(span.literal.text); }
-            this.publish(result, { tag: "text-operation", operation: "template", parts });
+            this.publish(result, { tag: "text-operation", operation: "template", parts: this.convertList(parts,node,"text") });
         } else if (ts.isAwaitExpression(node)) {
             const operand = this.cell(node.expression);
             this.rule([operand], () => { for (const atom of operand.values) {
@@ -1547,13 +1657,22 @@ class SourceValueFlow {
             while (worklist.length) {
                 const invocation = worklist.pop()!; this.watch(rule, invocation.target);
                 for (const atom of invocation.target.values) {
+                    const signature = invocation.construct + ":" + invocation.receiver.id + ":" + (invocation.args?.map(cell => cell.id).join(",") ?? "unknown");
                     if (atom.tag === "abrupt") {this.publish(result!, atom); continue;}
+                    if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "unknown-string" || atom.tag === "text-operation") {
+                        this.publish(result,this.abrupt);
+                        const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler,this.opaqueObject);
+                        continue;
+                    }
                     if (atom.tag === "pending-source") {this.publish(result!,atom);continue;}
                     if (atom.tag === "unknown" || atom.tag === "opaque-object") {
                         this.publish(result!, invocation.construct ? this.opaqueObject : this.unknown);
                         const handler = this.exceptionHandlers.get(node);
                         if (handler) this.publish(handler, this.unknown);
-                        this.onActive(node,()=>{
+                        // Provenance distinguishes captured reads. After an
+                        // opaque callee is selected its invocation effects
+                        // share one signature, independent of origin count.
+                        if (!handled(this.unknown,signature)) this.onActive(node,()=>{
                             this.opaqueEffect(node);
                             this.writeProperty(invocation.receiver,null,this.empty,false);
                             for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false);
@@ -1565,7 +1684,6 @@ class SourceValueFlow {
                         const activation = this.enclosingActivation(node);
                         if (activation) {this.watch(rule,activation.active);if(!activation.active.values.size)continue;}
                     }
-                    const signature = invocation.construct + ":" + invocation.receiver.id + ":" + (argv?.map(cell => cell.id).join(",") ?? "unknown");
                     if (atom.tag === "bound") {
                         if (invocation.boundPath.has(atom)) continue;
                         const boundPath = new Set(invocation.boundPath); boundPath.add(atom);
@@ -1650,10 +1768,11 @@ class SourceValueFlow {
                         }
                         const stringValue = atom.normalResult === "primitive-string" && argv?.[0]
                             ? this.stringHintCell(argv[0], node, !invocation.construct) : undefined;
+                        if (stringValue && !invocation.construct) this.normalResults.set(result,this.abrupt);
                         if (stringValue) this.watch(rule, stringValue);
                         if (!invocation.construct) {
                             if (atom.normalResult === "primitive-string") {
-                                if (argv === null) this.publish(result!, this.unknown);
+                                if (argv === null) this.publish(result!, this.unknownString);
                                 else if (argv.length === 0) this.publish(result!, this.primitive(""));
                                 else {
                                     this.copy(stringValue!, result!);
@@ -1861,8 +1980,10 @@ class SourceValueFlow {
                                     }
                                     for (const value of generated ?? []) this.copy(value, result!);
                                 }
-                                if (atom.operation === "eval") for (const value of source.values)
-                                    if ((value.tag !== "text-operation" || value.operation === "prefix") && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
+                                if (atom.operation === "eval") for (const value of source.values) {
+                                    if (value.tag === "unknown-string") this.publish(result,this.unknown);
+                                    else if ((value.tag !== "text-operation" || value.operation === "prefix" || value.operation === "numeric" && value.numeric!.conversion !== "default") && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
+                                }
                             } else if (argv && atom.operation === "eval") this.publish(result!, this.primitive(undefined));
                         }
                         if (atom.operation === "prototype" && argv?.[0]) {
@@ -1891,71 +2012,95 @@ class SourceValueFlow {
         }
     }
     private watchText(rule: Rule, root: Cell): void {
-        const worklist = [root], visited = new Set<Cell>();
-        while (worklist.length) {
-            const cell = worklist.pop()!; if (visited.has(cell)) continue; visited.add(cell); this.watch(rule, cell);
-            for (const atom of cell.values) if (atom.tag === "text-operation") worklist.push(...atom.parts);
-        }
+        // Publication walks the reverse dependency graph and wakes these
+        // subscribers when any primitive part changes.
+        this.watch(rule,root);
     }
     private choices(root: Cell): string[] | null {
         const proof = this.primitiveChoiceProof(root);
         return proof.primitiveComplete ? [...new Set(proof.values.map(String))] : null;
     }
     private primitiveChoiceProof(root: Cell): PrimitiveChoiceProof {
+        this.flushPrimitiveChanges();
         const incomplete: PrimitiveChoiceProof = { values: [], primitiveComplete: false, textComplete: false };
         const pending = [{ cell: root, finish: false }], active = new Set<Cell>(), proofs = new Map<Cell, PrimitiveChoiceProof>();
+        const path:Cell[] = [], positions = new Map<Cell,number>(), cycles = new Set<Cell>();
         while (pending.length) {
             const task = pending.pop()!;
             if (proofs.has(task.cell)) continue;
+            const cached = this.primitiveProofCache.get(task.cell);
+            if (cached) {proofs.set(task.cell,cached); continue;}
             if (task.finish) {
                 active.delete(task.cell);
-                const choices = new Set<Primitive>();
+                positions.delete(task.cell); path.pop();
+                const choices = new Map<Atom, Primitive>();
+                const add = (value: Primitive): void => {choices.set(this.primitive(value),value);};
                 let primitiveComplete = task.cell.values.size > 0, textComplete = true;
                 for (const atom of task.cell.values) {
-                    if (atom.tag === "primitive") choices.add(atom.value);
+                    if (atom.tag === "primitive") add(atom.value);
                     else if (atom.tag === "abrupt") continue;
                     else if (atom.tag === "text-operation") {
                         const complete = atom.parts.every(part => proofs.get(part)?.primitiveComplete);
                         const booleanPrefix = atom.operation === "prefix" && atom.operator === ts.SyntaxKind.ExclamationToken;
-                        primitiveComplete &&= complete || booleanPrefix;
-                        textComplete &&= complete || atom.operation === "prefix" || atom.operation === "coerce";
-                        if (!complete && booleanPrefix) { choices.add(false); choices.add(true); continue; }
-                        let combinations: Primitive[][] = [[]];
-                        for (const part of atom.parts) combinations = combinations.flatMap(prefix => (proofs.get(part)?.values ?? []).map(value => [...prefix, value]));
+                        const noNormal = atom.parts.some(part => proofs.get(part)?.primitiveComplete && !proofs.get(part)!.values.length);
+                        const booleanResult = atom.operation === "numeric" && atom.numeric!.result === "boolean" && !noNormal &&
+                            atom.parts.every(part => !this.primitiveReadiness(part).pending);
+                        primitiveComplete &&= complete || booleanPrefix || booleanResult || noNormal;
+                        textComplete &&= complete || atom.operation === "prefix" || atom.operation === "coerce" || atom.operation === "numeric" && atom.numeric!.conversion !== "default";
+                        if (noNormal) continue;
+                        if (!complete && booleanResult) {add(false); add(true); continue;}
+                        if (!complete && booleanPrefix) { add(false); add(true); continue; }
+                        // An incomplete operand cannot prove a finite result
+                        // collection. Enumerating partial cyclic choices can
+                        // manufacture an unbounded String language here.
+                        if (!complete) continue;
+                        const combinations = this.primitiveTuples(atom.parts.map(part => proofs.get(part)?.values ?? []));
                         for (const tuple of combinations) {
                             if (atom.operation === "prefix") {
                                 // Primitive operators have no user callbacks. Abrupt
                                 // numeric conversions contribute no normal choice.
-                                try { choices.add(PRIMITIVE_PREFIX_OPERATIONS.get(atom.operator!)!(tuple[0]!)); } catch {}
+                                add(!tuple[0]);
+                            } else if (atom.operation === "numeric") {
+                                try {add(atom.numeric!.evaluate(tuple));} catch {}
                             } else if (atom.operation === "coerce") {
-                                try {choices.add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
-                            } else if (atom.operation === "bound-name") choices.add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
-                            else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) choices.add(tuple.map(String).join(""));}
-                            else {
-                                const [left, right] = tuple;
-                                if (typeof left === "symbol" || typeof right === "symbol") continue;
-                                if (typeof left === "string" || typeof right === "string") choices.add(String(left) + String(right));
-                                else if (typeof left === "bigint" && typeof right === "bigint") choices.add(left + right);
-                                else if (typeof left !== "bigint" && typeof right !== "bigint") choices.add(Number(left) + Number(right));
-                            }
+                                try {add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
+                            } else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
+                            else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) add(tuple.map(String).join(""));}
                         }
-                    } else primitiveComplete = false;
+                    } else {primitiveComplete = false; if (atom.tag === "unknown-string") textComplete = false;}
                 }
-                proofs.set(task.cell, {values: [...choices], primitiveComplete, textComplete});
+                if (cycles.has(task.cell)) {
+                    const booleanDomain = [...task.cell.values].every(atom => atom.tag === "abrupt" ||
+                        atom.tag === "primitive" && typeof atom.value === "boolean" || atom.tag === "text-operation" &&
+                        (atom.operation === "prefix" || atom.operation === "numeric" && atom.numeric!.result === "boolean"));
+                    proofs.set(task.cell,{values:booleanDomain ? [false,true] : [],primitiveComplete:booleanDomain,textComplete});
+                } else proofs.set(task.cell, {values: [...choices.values()], primitiveComplete, textComplete});
             } else {
-                if (active.has(task.cell)) return incomplete;
-                active.add(task.cell); pending.push({ ...task, finish: true });
+                // A cyclic value edge has no finite scalar proof. Continue
+                // the postorder pass so its consumer can still prove a
+                // non-String result independently of the unknown magnitude.
+                if (active.has(task.cell)) {
+                    for (let index=positions.get(task.cell)!; index<path.length; index++) cycles.add(path[index]!);
+                    continue;
+                }
+                active.add(task.cell); positions.set(task.cell,path.length); path.push(task.cell); pending.push({ ...task, finish: true });
                 for (const atom of task.cell.values) if (atom.tag === "text-operation") for (const cell of atom.parts) pending.push({ cell, finish: false });
             }
         }
+        for (const [cell,proof] of proofs) this.primitiveProofCache.set(cell,proof);
         return proofs.get(root) ?? incomplete;
     }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
-            while (this.initializers.length || this.queue.length) {
+            while (this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
                 if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
-                else { const rule = this.queue.pop()!; rule.queued = false; rule.run(); }
+                else if (this.primitiveChanges.size) this.flushPrimitiveChanges();
+                else {
+                    const rule = this.queue[this.queueCursor++]!; rule.queued = false; rule.run();
+                    if (this.queueCursor * 2 >= this.queue.length) {this.queue.splice(0,this.queueCursor); this.queueCursor=0;}
+                }
             }
+            this.queue.length = 0; this.queueCursor = 0;
             // Empty expression facts mean unresolved value flow, not an
             // impossible branch. Seal them only after the known graph closes,
             // then propagate the same interned top fact through normal edges.

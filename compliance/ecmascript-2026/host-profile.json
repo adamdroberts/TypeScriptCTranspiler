@@ -60,6 +60,7 @@
     "src/dynamic-require.ts",
     "src/ecmascript-source.ts",
     "src/function-static-semantics.ts",
+    "src/source-numeric-operations.ts",
     "src/tail-position.ts",
     "src/function-constructor-source.ts",
     "src/eval-source.ts",

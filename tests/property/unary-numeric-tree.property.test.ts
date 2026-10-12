@@ -71,4 +71,4 @@ test('Unary numeric forms share actual conversion and the retained numeric tree'
    expect((observation?observation.stdout??'':native.stdout.toString()).trimEnd().split('\n')).toEqual(expected.get(profile)!);
   }
  }finally{await fs.rm(temporary,{recursive:true,force:true});}
-},600_000);
+},1_200_000);

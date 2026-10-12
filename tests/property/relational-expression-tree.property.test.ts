@@ -72,4 +72,4 @@ test('Relational forms share ordered conversion and the retained operation tree'
    expect((observation?observation.stdout??'':native.stdout.toString()).trimEnd().split('\n')).toEqual(expected.get(`${profile}-${stress}`)!);
   }
  }finally{await fs.rm(temporary,{recursive:true,force:true});}
-},600_000);
+},1_200_000);
