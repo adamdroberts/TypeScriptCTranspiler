@@ -96,6 +96,7 @@ tsc_agent_t* tsc_agent_new(void);
 tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent);
 void tsc_agent_release(tsc_agent_t* agent);
 bool tsc_agent_owns_jobs(void);
+uint64_t tsc_agent_next_module_async_evaluation_order(void);
 void tsc_agent_hold(tsc_agent_t* agent,bool value);
 tsc_array_buffer_t* tsc_shared_array_buffer_clone(tsc_array_buffer_t* source);
 tsc_value_t tsc_test262_agent_object(void);

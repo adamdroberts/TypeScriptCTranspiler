@@ -24,7 +24,6 @@ struct tsc_module_graph {
     tsc_module_record_t* records;
 };
 typedef struct { tsc_module_record_t* record; size_t next; bool entered, waiting; } module_frame_t;
-static uint64_t module_async_order;
 
 static void module_execution_rejected(tsc_module_record_t* record, tsc_value_t error);
 static void module_execution_fulfilled(tsc_module_record_t* record);
@@ -219,7 +218,7 @@ tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
             }
             if (record->pending_dependencies || record->definition->has_tla) {
                 record->async_active = true;
-                record->async_order = ++module_async_order;
+                record->async_order = tsc_agent_next_module_async_evaluation_order();
                 if (!record->pending_dependencies) module_execute_async(record);
             } else (void)module_execute(record);
             if (record->ancestor_index == record->dfs_index) {

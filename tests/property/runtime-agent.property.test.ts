@@ -22,7 +22,7 @@ test('Runtime agents isolate execution state, jobs and waiter completion and rel
 #endif
 typedef struct node {
  tsc_agent_t* agent;tsc_realm_t* realm;tsc_environment_t* environment;tsc_parse_unit_t* unit;
- tsc_promise_t* promise;struct node* next;size_t observed,expected;bool policy;
+ tsc_promise_t* promise;struct node* next;size_t observed,expected;uint64_t module_order;bool policy;
 } node_t;
 static tsc_agent_t* primary;
 static unsigned primary_jobs;
@@ -43,13 +43,18 @@ static tsc_value_t switch_probe(void* env,tsc_value_t receiver,tsc_array_t* args
  return tsc_value_undefined();
 }
 static void check_execution_state(void){
+ if(tsc_agent_next_module_async_evaluation_order()!=0)abort();
  tsc_agent_t* other=tsc_agent_new();
  tsc_call_activation_t first={0},second={0};
  tsc_call_activation_push(&first,NULL,tsc_value_num(1),tsc_value_undefined());
  tsc_agent_t* previous=tsc_agent_swap(other);
+ if(tsc_agent_next_module_async_evaluation_order()!=0)abort();
+ tsc_realm_t* original_realm=tsc_realm_current();tsc_realm_t* another_realm=tsc_realm_new();tsc_realm_swap(another_realm);
+ if(tsc_agent_next_module_async_evaluation_order()!=1)abort();
+ tsc_realm_swap(original_realm);
  tsc_call_activation_push(&second,NULL,tsc_value_num(2),tsc_value_undefined());
  if(tsc_value_as_num(tsc_call_receiver())!=2)abort();
- tsc_agent_swap(previous);if(tsc_value_as_num(tsc_call_receiver())!=1)abort();
+ tsc_agent_swap(previous);if(tsc_value_as_num(tsc_call_receiver())!=1||tsc_agent_next_module_async_evaluation_order()!=1)abort();
  tsc_agent_swap(other);tsc_call_activation_pop(&second);tsc_agent_swap(previous);tsc_call_activation_pop(&first);
  tsc_try_frame_t outer={0},inner={0};tsc_try_push(&outer);
  if(setjmp(outer.jb))abort();
@@ -65,6 +70,13 @@ static void job(void* env){node_t* node=env;
  if(tsc_agent_current()!=node->agent||tsc_realm_current()!=node->realm||tsc_environment_current()!=node->environment||tsc_parse_unit_current()!=node->unit||tsc_atomics_can_block()!=node->policy)abort();
  ++node->observed;
 }
+static const char module_node_key;
+static tsc_value_t module_leaf(void){return tsc_value_promise(((node_t*)tsc_realm_state_get(&module_node_key))->promise);}
+static tsc_value_t module_parent(void){job(tsc_realm_state_get(&module_node_key));return tsc_value_undefined();}
+static const size_t module_parent_requests[]={1};
+static const tsc_module_definition_t module_definitions[]={
+ {module_parent,module_parent_requests,1,false},{module_leaf,NULL,0,true}
+};
 static void second_job(void* env){job(env);tsc_queue_microtask(job,env);}
 static node_t* make_node(tsc_array_buffer_t* storage,size_t jobs,bool policy){
  node_t* node=TSC_GC_MALLOC(sizeof(*node));memset(node,0,sizeof(*node));node->agent=tsc_agent_new();node->policy=policy;
@@ -75,13 +87,21 @@ static node_t* make_node(tsc_array_buffer_t* storage,size_t jobs,bool policy){
  tsc_process_next_tick(job,node);tsc_set_immediate(job,node);tsc_set_timeout(job,node,0);node->expected+=3;
  double cancelled=tsc_set_timeout(job,node,0);tsc_clear_timeout(cancelled);
  node->promise=tsc_promise_pending();tsc_promise_add_callback(node->promise,job,node);++node->expected;
+ tsc_realm_state_set(&module_node_key,node);
+ tsc_module_graph_t* graph=tsc_module_graph_new(module_definitions,2);
+ tsc_promise_t* completion=tsc_module_evaluate(graph,0);
+ if(!tsc_promise_is_pending(completion)||tsc_module_evaluate(graph,0)!=completion||tsc_agent_next_module_async_evaluation_order()!=2)abort();
+ node->module_order=3;
+ tsc_promise_add_callback(completion,job,node);node->expected+=2;
  tsc_atomic_waiter_t* waiter=tsc_atomic_waiter_new(storage->shared_storage,storage->data,0,4,0,INFINITY,node->promise);
  if(tsc_atomic_waiter_begin(waiter)!=TSC_WAIT_PENDING)abort();
  tsc_agent_swap(previous);return node;
 }
 static void run_node(node_t* node){
  tsc_agent_t* previous=tsc_agent_swap(node->agent);
+ if(tsc_agent_next_module_async_evaluation_order()!=node->module_order++)abort();
  tsc_run_event_loop();
+ if(tsc_agent_next_module_async_evaluation_order()!=node->module_order++)abort();
  if(node->observed!=node->expected||tsc_promise_is_pending(node->promise))abort();
  tsc_agent_swap(previous);
 }

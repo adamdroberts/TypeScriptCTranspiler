@@ -50,6 +50,7 @@ struct tsc_agent {
     size_t next_tick_len,next_tick_cap,microtask_len,microtask_cap;
     size_t immediate_len,immediate_cap,timeout_len,timeout_cap;
     double next_timer_id;
+    uint64_t module_async_evaluation_count;
     bool owns_jobs,can_block,retired;
     bool held;
     struct tsc_agent* next;
@@ -73,6 +74,12 @@ tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent){
     tsc_agent_t* previous=g_current_agent;g_current_agent=agent;return previous;
 }
 bool tsc_agent_owns_jobs(void){return tsc_agent_current()->owns_jobs;}
+uint64_t tsc_agent_next_module_async_evaluation_order(void) {
+    tsc_agent_t* agent = tsc_agent_current();
+    if (agent->module_async_evaluation_count == UINT64_MAX)
+        tsc_panic("module async evaluation order exhausted");
+    return agent->module_async_evaluation_count++;
+}
 void tsc_agent_hold(tsc_agent_t* agent,bool value){__atomic_store_n(&agent->held,value,__ATOMIC_SEQ_CST);tsc_runtime_wake_event_loop();}
 static bool agent_held(void){return __atomic_load_n(&tsc_agent_current()->held,__ATOMIC_SEQ_CST);}
 tsc_environment_t** tsc_agent_environment_slot(void){return &tsc_agent_current()->environment;}
