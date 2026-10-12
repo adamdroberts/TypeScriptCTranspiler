@@ -28,7 +28,9 @@ export function assignmentTargetFromBinding(binding: ts.BindingName): ts.Express
     return targets.get(binding)!;
 }
 
-function unwrapExpression(expression:ts.Expression):ts.Expression{
+/** Preserve the original leaf/checker identity while erasing transparent
+ * wrappers for Reference and storage classification, at arbitrary depth. */
+export function unwrapTransparentExpression(expression:ts.Expression):ts.Expression{
     while(ts.isParenthesizedExpression(expression)||ts.isAsExpression(expression)||
         ts.isTypeAssertionExpression(expression)||ts.isNonNullExpression(expression)||ts.isSatisfiesExpression(expression))
         expression=expression.expression;
@@ -43,7 +45,7 @@ export function normalizeAssignmentTarget(
     expression: ts.Expression,
     assignmentTargets: Map<ts.Identifier, ts.Expression>,
 ): ts.BindingName | null {
-    const targetExpression = unwrapExpression(expression);
+    const targetExpression = unwrapTransparentExpression(expression);
     if (ts.isIdentifier(targetExpression)) return targetExpression;
     if (ts.isPropertyAccessExpression(targetExpression) || ts.isElementAccessExpression(targetExpression)) {
         const placeholder = ts.factory.createIdentifier(
@@ -72,7 +74,7 @@ export function normalizeAssignmentTarget(
                 ));
                 continue;
             }
-            const value = unwrapExpression(element);
+            const value = unwrapTransparentExpression(element);
             const assignment = ts.isBinaryExpression(value) &&
                 value.operatorToken.kind === ts.SyntaxKind.EqualsToken
                 ? value
@@ -116,7 +118,7 @@ export function normalizeAssignmentTarget(
                 continue;
             }
             if (!ts.isPropertyAssignment(property)) return null;
-            const value = unwrapExpression(property.initializer);
+            const value = unwrapTransparentExpression(property.initializer);
             const assignment = ts.isBinaryExpression(value) &&
                 value.operatorToken.kind === ts.SyntaxKind.EqualsToken
                 ? value

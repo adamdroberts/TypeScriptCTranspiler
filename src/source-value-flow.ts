@@ -1,7 +1,7 @@
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
-import { normalizeAssignmentTarget } from "./emit/binding-tree";
+import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
 import { callableNameInput, expectedArgumentCount, functionBodyCompletions, type FunctionBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import * as path from "node:path";
@@ -138,11 +138,6 @@ function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     return null;
 }
 
-function unwrap(node: ts.Expression): ts.Expression {
-    while (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) ||
-        ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node)) node = node.expression;
-    return node;
-}
 function functionNode(node: ts.Node): node is FunctionNode {
     return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) ||
         ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isConstructorDeclaration(node);

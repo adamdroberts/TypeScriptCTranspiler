@@ -17,7 +17,7 @@ import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
-import { normalizeAssignmentTarget } from "./binding-tree";
+import { normalizeAssignmentTarget, unwrapTransparentExpression } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
 import { callableName, expectedArgumentCount } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
@@ -1246,7 +1246,7 @@ class Emitter {
             for (const clause of current.heritageClauses ?? []) {
                 if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
                 for (const heritage of clause.types) {
-                    const expression = this.unwrapTransparentExpression(heritage.expression);
+                    const expression = unwrapTransparentExpression(heritage.expression);
                     if (!ts.isIdentifier(expression)) return true;
                     const base = this.classDeclForConstructorIdentifier(expression);
                     if (base) pending.push(base);
@@ -6201,7 +6201,7 @@ class Emitter {
         call: ts.CallExpression,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        const callee = this.unwrapTransparentExpression(call.expression);
+        const callee = unwrapTransparentExpression(call.expression);
         if (!ts.isIdentifier(callee)) return false;
         if (this.isRuntimeGlobalReference(callee)) return false;
         const name = callee.text;
@@ -6308,7 +6308,7 @@ class Emitter {
         seenConsts: Set<ts.Symbol>,
     ): boolean {
         if (ts.isIdentifier(expr.expression) && this.isRuntimeGlobalReference(expr.expression)) return false;
-        const ctorExpr = this.unwrapTransparentExpression(expr.expression);
+        const ctorExpr = unwrapTransparentExpression(expr.expression);
         if (!ts.isIdentifier(ctorExpr)) return false;
         const name = ctorExpr.text;
         const args = expr.arguments ?? ts.factory.createNodeArray();
@@ -13661,7 +13661,7 @@ class Emitter {
     }
 
     private hasDynamicJsonModuleRepresentation(expression: ts.Expression): boolean {
-        const current = this.unwrapTransparentExpression(expression);
+        const current = unwrapTransparentExpression(expression);
         if (ts.isIdentifier(current)) {
             return !!this.jsonModuleBindingForImportIdentifier(current) ||
                 !!this.moduleNamespacePlanForIdentifier(current);
@@ -14142,7 +14142,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectAssignValueExportCall(right)
             : null;
@@ -14218,7 +14218,7 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsObjectAssignWholeValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (
             !ts.isCallExpression(cur) ||
             !ts.isPropertyAccessExpression(cur.expression) ||
@@ -14267,7 +14267,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectFromEntriesValueExportCall(right, true)
             : null;
@@ -14457,7 +14457,7 @@ class Emitter {
     }
 
     private isCommonJsObjectFromEntriesExportValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isIdentifier(cur)) return !!this.requireBindingModuleExportsDeclaration(cur);
@@ -14602,14 +14602,14 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur) || !this.isCommonJsModuleExportsObjectFromEntriesValueCall(cur)) return true;
-        const source = this.unwrapTransparentExpression(cur.arguments[0]!);
+        const source = unwrapTransparentExpression(cur.arguments[0]!);
         let resolvedSource = source;
         if (ts.isIdentifier(source)) {
             const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(source);
             if (!initializer) return true;
-            resolvedSource = this.unwrapTransparentExpression(initializer);
+            resolvedSource = unwrapTransparentExpression(initializer);
         }
         if (ts.isCallExpression(resolvedSource) && this.objectStaticCallName(resolvedSource) === "entries") return false;
         return !(
@@ -14883,7 +14883,7 @@ class Emitter {
     }
 
     private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
-        const cur = this.unwrapTransparentExpression(source);
+        const cur = unwrapTransparentExpression(source);
         if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
         const factoryObject = this.commonJsLocalFactoryReturnedObjectLiteral(cur) ??
             this.commonJsZeroArgFactoryReturnedObjectLiteral(cur);
@@ -15186,7 +15186,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertiesValueExportCall(right)
             : null;
@@ -15274,7 +15274,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectCreateValueExportCall(right)
             : null;
@@ -15861,7 +15861,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertyValueExportCall(right)
             : null;
@@ -15883,7 +15883,7 @@ class Emitter {
         ) {
             return null;
         }
-        const right = this.unwrapTransparentExpression(expr.right);
+        const right = unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertyValueExportCallEntries(right)
             : null;
@@ -16048,7 +16048,7 @@ class Emitter {
     }
 
     private isCommonJsModuleExportsDefaultInitializerValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isClassExpression(cur)) {
@@ -16100,7 +16100,7 @@ class Emitter {
     }
 
     private isCommonJsModuleExportsSpreadValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isIdentifier(cur)) {
             return !!this.untypedJsLiteralVariableDeclaration(cur) ||
@@ -16118,13 +16118,13 @@ class Emitter {
     }
 
     private isCommonJsModuleExportsArraySpreadValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         return this.isCommonJsModuleExportsDefaultInitializerValue(cur) ||
             this.isCommonJsModuleExportsSpreadValue(cur);
     }
 
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
         if (ts.isClassExpression(cur)) {
@@ -16161,7 +16161,7 @@ class Emitter {
     }
 
     private isTopLevelCommonJsThisExpression(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (cur.kind !== ts.SyntaxKind.ThisKeyword || !this.isJavaScriptSourceFile(cur.getSourceFile())) {
             return false;
         }
@@ -16221,7 +16221,7 @@ class Emitter {
     }
 
     private isCommonJsRuntimeComputedModuleExportsValue(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) {
             return true;
         }
@@ -16285,7 +16285,7 @@ class Emitter {
     }
 
     private objectStaticCallName(expr: ts.Expression): string | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         return ts.isCallExpression(cur) &&
             ts.isPropertyAccessExpression(cur.expression) &&
             ts.isIdentifier(cur.expression.expression) &&
@@ -16340,26 +16340,26 @@ class Emitter {
     }
 
     private commonJsReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isObjectLiteralExpression(cur)) return cur;
         if (!ts.isCallExpression(cur) || cur.arguments.length < 1) return null;
         const callName = this.objectStaticCallName(cur);
         if (callName === "assign" && cur.arguments.length === 2) {
-            const target = this.unwrapTransparentExpression(cur.arguments[0]!);
+            const target = unwrapTransparentExpression(cur.arguments[0]!);
             if (ts.isObjectLiteralExpression(target) && target.properties.length === 0) {
                 return this.commonJsReturnedObjectLiteral(cur.arguments[1]!) ??
                     this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[1]!);
             }
         }
         if (callName === "defineProperties" && cur.arguments.length === 2) {
-            const descriptors = this.unwrapTransparentExpression(cur.arguments[1]!);
+            const descriptors = unwrapTransparentExpression(cur.arguments[1]!);
             if (ts.isObjectLiteralExpression(descriptors) && descriptors.properties.length === 0) {
                 return this.commonJsReturnedObjectLiteral(cur.arguments[0]!) ??
                     this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
             }
         }
         if (callName === "defineProperty" && cur.arguments.length === 3) {
-            const descriptor = this.unwrapTransparentExpression(cur.arguments[2]!);
+            const descriptor = unwrapTransparentExpression(cur.arguments[2]!);
             if (ts.isObjectLiteralExpression(descriptor) && descriptor.properties.length === 0) {
                 return this.commonJsReturnedObjectLiteral(cur.arguments[0]!) ??
                     this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
@@ -16474,19 +16474,19 @@ class Emitter {
         if (!ts.isCallExpression(cur)) return null;
         const callName = this.objectStaticCallName(cur);
         if (callName === "assign" && cur.arguments.length === 2) {
-            const target = this.unwrapTransparentExpression(cur.arguments[0]!);
+            const target = unwrapTransparentExpression(cur.arguments[0]!);
             if (ts.isObjectLiteralExpression(target) && target.properties.length === 0) {
                 return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[1]!, functions, aliases);
             }
         }
         if (callName === "defineProperties" && cur.arguments.length === 2) {
-            const descriptors = this.unwrapTransparentExpression(cur.arguments[1]!);
+            const descriptors = unwrapTransparentExpression(cur.arguments[1]!);
             if (ts.isObjectLiteralExpression(descriptors) && descriptors.properties.length === 0) {
                 return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
             }
         }
         if (callName === "defineProperty" && cur.arguments.length === 3) {
-            const descriptor = this.unwrapTransparentExpression(cur.arguments[2]!);
+            const descriptor = unwrapTransparentExpression(cur.arguments[2]!);
             if (ts.isObjectLiteralExpression(descriptor) && descriptor.properties.length === 0) {
                 return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
             }
@@ -16621,7 +16621,7 @@ class Emitter {
         factory: { fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] },
         factoryParameterNames: ReadonlySet<string>,
     ): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur)) return false;
         if (this.commonJsFactoryInvocationMatchesCall(cur, factory, factoryParameterNames)) return true;
         const callName = this.objectStaticCallName(cur);
@@ -16766,7 +16766,7 @@ class Emitter {
         for (let index = 0; index < outer.parameters.length; index++) {
             const param = outer.parameters[index]!;
             if (!ts.isIdentifier(param.name)) continue;
-            const arg = this.unwrapTransparentExpression(call.arguments[index]!);
+            const arg = unwrapTransparentExpression(call.arguments[index]!);
             const fn = this.commonJsDirectFactoryFunctionForExpression(arg, call.getSourceFile());
             if (fn) factories.set(param.name.text, fn);
         }
@@ -16863,7 +16863,7 @@ class Emitter {
     }
 
     private isCommonJsWrapperArgumentExpression(expr: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expr);
+        const unwrapped = unwrapTransparentExpression(expr);
         return this.isCommonJsRequireCallee(unwrapped) ||
             this.isCommonJsModuleThisArg(unwrapped) ||
             this.isCommonJsExportsTargetExpression(unwrapped) ||
@@ -17446,7 +17446,7 @@ class Emitter {
             return T_VALUE;
         }
         let valueNode = this.commonJsExportValueNode(node);
-        if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
+        if (ts.isExpression(valueNode)) valueNode = unwrapTransparentExpression(valueNode);
         if (ts.isFunctionExpression(valueNode) || ts.isArrowFunction(valueNode) || ts.isMethodDeclaration(valueNode)) {
             return this.closureDeclarationCType(valueNode);
         }
@@ -17511,7 +17511,7 @@ class Emitter {
     }
 
     private commonJsDefaultValueContainsNull(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (cur.kind === ts.SyntaxKind.NullKeyword) return true;
         if (ts.isArrayLiteralExpression(cur)) {
             return cur.elements.some((element) =>
@@ -18425,7 +18425,7 @@ class Emitter {
         const initializer = (expression: ts.Expression, owner: ts.Node, followAlias: boolean): string | null => {
             if (owners.has(owner)) return null;
             owners.add(owner);
-            const current = this.unwrapTransparentExpression(expression);
+            const current = unwrapTransparentExpression(expression);
             const direct = this.requireCallSpecifier(current);
             if (direct) return direct;
             if (followAlias && ts.isIdentifier(current)) pending.push(current);
@@ -18707,7 +18707,7 @@ class Emitter {
     ): CommonJsObjectAssignExportEntry[] | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
         if (!assignment) return null;
-        const right = this.unwrapTransparentExpression(assignment.right);
+        const right = unwrapTransparentExpression(assignment.right);
         if (ts.isObjectLiteralExpression(right)) return null;
         if (this.commonJsIifeReturnedObjectLiteral(right)) return null;
         if (this.commonJsLocalFactoryReturnedObjectLiteral(right)) return null;
@@ -18751,7 +18751,7 @@ class Emitter {
         if (this.isCommonJsSourceFile(sf)) return null;
         for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
-            const right = chain ? this.unwrapTransparentExpression(chain.right) : null;
+            const right = chain ? unwrapTransparentExpression(chain.right) : null;
             if (
                 chain &&
                 right &&
@@ -18790,7 +18790,7 @@ class Emitter {
     private commonJsModuleExportsMutableObjectWrapperWholeValue(sf: ts.SourceFile): boolean {
         for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
-            const right = chain ? this.unwrapTransparentExpression(chain.right) : null;
+            const right = chain ? unwrapTransparentExpression(chain.right) : null;
             if (
                 right &&
                 ts.isCallExpression(right) &&
@@ -18842,7 +18842,7 @@ class Emitter {
     }
 
     private commonJsWholeModuleRequireInitializerType(expr: ts.Expression): CType | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isCallExpression(cur)) {
             const decl = this.requireCallModuleExportsDeclaration(cur);
             return decl ? this.commonJsExportedCType(decl) : null;
@@ -19365,7 +19365,7 @@ class Emitter {
     }
 
     private moduleNamespacePlanForExpression(expression: ts.Expression): ModuleNamespacePlan | null {
-        const unwrapped = this.unwrapTransparentExpression(expression);
+        const unwrapped = unwrapTransparentExpression(expression);
         return ts.isIdentifier(unwrapped)
             ? this.moduleNamespacePlanForIdentifier(unwrapped)
             : null;
@@ -19740,7 +19740,7 @@ class Emitter {
     }
 
     private isSocketAddressConstructor(expr: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expr);
+        const unwrapped = unwrapTransparentExpression(expr);
         if (
             ts.isPropertyAccessExpression(unwrapped) &&
             ts.isIdentifier(unwrapped.expression) &&
@@ -19850,7 +19850,7 @@ class Emitter {
     }
 
     private isBufferConstructorExpression(expr: ts.Expression): boolean {
-        const unwrapped = this.unwrapTransparentExpression(expr);
+        const unwrapped = unwrapTransparentExpression(expr);
         if (ts.isIdentifier(unwrapped)) {
             return this.isUnshadowedGlobalIdentifier(unwrapped, "Buffer") ||
                 this.isNamedImportFrom(unwrapped, ["buffer", "node:buffer"], "Buffer");
@@ -20219,7 +20219,7 @@ class Emitter {
     private localLexicalBindingIdentifier(
         expression: ts.Expression,
     ): { id: ts.Identifier; reference: LocalLexicalReference } | null {
-        const target = this.unwrapTransparentExpression(expression);
+        const target = unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
         const raw = this.checker.getSymbolAtLocation(target);
         if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
@@ -20405,7 +20405,7 @@ class Emitter {
     private localModuleLexicalBindingIdentifier(
         expression: ts.Expression,
     ): { id: ts.Identifier; binding: ModuleLexicalBindingPlan } | null {
-        const target = this.unwrapTransparentExpression(expression);
+        const target = unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
         const raw = this.checker.getSymbolAtLocation(target);
         if (!raw || (raw.flags & ts.SymbolFlags.Alias) !== 0) return null;
@@ -20599,7 +20599,7 @@ class Emitter {
     }
 
     private ordinaryNativeGlobalConstructor(expression: ts.Expression): string | null {
-        const value = this.unwrapTransparentExpression(expression);
+        const value = unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(value)) return null;
         for (const owner of this.ordinaryNativeOwners.values()) {
             if (owner.globalConstructor && this.isUnshadowedGlobalIdentifier(value, owner.globalConstructor))
@@ -20671,12 +20671,12 @@ class Emitter {
         if (this.canonicalSourceValueInputs) return this.canonicalSourceValueInputs;
         const inputs = this.canonicalSourceValueInputs = new Map<ts.Node, Set<ts.Node>>();
         const declarationFor = (expression: ts.Expression): ts.Node | undefined => {
-            let target = this.unwrapTransparentExpression(expression);
+            let target = unwrapTransparentExpression(expression);
             // Unchecked References borrow the containing owner. A property
             // symbol query first infers the whole receiver alias chain.
             if (this.isJavaScriptSourceFile(target.getSourceFile())) {
                 while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))
-                    target = this.unwrapTransparentExpression(target.expression);
+                    target = unwrapTransparentExpression(target.expression);
             }
             let symbol = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(target) ? target.name : target);
             if (!symbol && ts.isElementAccessExpression(target) && ts.isStringLiteralLike(target.argumentExpression))
@@ -20694,7 +20694,7 @@ class Emitter {
         const write = (target: ts.Expression, value: ts.Node): void => {
             const targets = [target];
             while (targets.length) {
-                const reference = this.unwrapTransparentExpression(targets.pop()!);
+                const reference = unwrapTransparentExpression(targets.pop()!);
                 if (ts.isArrayLiteralExpression(reference)) {
                     for (const element of reference.elements)
                         if (!ts.isOmittedExpression(element)) targets.push(ts.isSpreadElement(element) ? element.expression : element);
@@ -20738,7 +20738,7 @@ class Emitter {
                 // Reverse the owner-alias edge as well as the read edge. A
                 // later write through either name must choose a shared codec.
                 input(declarationFor(node.initializer), node);
-                const value = this.unwrapTransparentExpression(node.initializer);
+                const value = unwrapTransparentExpression(node.initializer);
                 if (ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) input(value, node);
             }
             if (ts.isBindingElement(node)) {
@@ -20758,7 +20758,7 @@ class Emitter {
                 // Source formals already receive canonical actual values.
                 // The owner/callee edges preserve escape and mutation facts
                 // without asking the checker to infer an argument signature.
-                const callee = this.unwrapTransparentExpression(node.expression);
+                const callee = unwrapTransparentExpression(node.expression);
                 const values = Array.from(node.arguments ?? [], argument => ts.isSpreadElement(argument) ? argument.expression : argument);
                 if (ts.isCallExpression(node)) {
                     // An ordinary callee can retain or mutate every actual
@@ -20904,7 +20904,7 @@ class Emitter {
             if (ts.isCallExpression(node)) {
                 const declaration = this.checker.getResolvedSignature(node)?.getDeclaration();
                 if (declaration && !this.isAmbientDeclaration(declaration)) dependency(declaration);
-                const callee = this.unwrapTransparentExpression(node.expression);
+                const callee = unwrapTransparentExpression(node.expression);
                 if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
                     const receiverTypes = [this.checker.getTypeAtLocation(callee.expression)];
                     const seenTypes = new Set<ts.Type>();
@@ -22370,7 +22370,7 @@ class Emitter {
         expression: ts.Expression,
         seen = new Set<ts.Symbol>(),
     ): ts.FunctionLikeDeclaration | null {
-        const current = this.unwrapTransparentExpression(expression);
+        const current = unwrapTransparentExpression(expression);
         if (ts.isFunctionExpression(current) || ts.isArrowFunction(current)) {
             return current;
         }
@@ -23013,7 +23013,7 @@ class Emitter {
 
     private isDirectEvalSyntax(node: ts.Node): node is ts.CallExpression {
         if (!ts.isCallExpression(node) || node.questionDotToken) return false;
-        const callee = this.unwrapTransparentExpression(node.expression);
+        const callee = unwrapTransparentExpression(node.expression);
         return ts.isIdentifier(callee) && callee.text === "eval";
     }
 
@@ -24912,7 +24912,7 @@ class Emitter {
 
     private emitClassFieldInitializer(member: ts.PropertyDeclaration): EmitResult {
         if (!member.initializer) return { c: "tsc_value_undefined()", ty: T_VALUE };
-        const source = this.unwrapTransparentExpression(member.initializer);
+        const source = unwrapTransparentExpression(member.initializer);
         const scope = new Map<ts.Expression, string>();
         if (ts.isClassExpression(source) && !source.name)
             scope.set(source, this.classMemberPropertyKey(member.name).propertyKey);
@@ -25489,7 +25489,7 @@ class Emitter {
         if (ts.isPropertyDeclaration(member)) {
             if (!nativeStorage) {
                 const initializer = this.retainClassElementInitializer(member, pieces, isStatic(member) ? constructor : prototype);
-                const source = member.initializer && this.unwrapTransparentExpression(member.initializer);
+                const source = member.initializer && unwrapTransparentExpression(member.initializer);
                 const inferred = !!source && (ts.isArrowFunction(source) ||
                     ts.isFunctionExpression(source) && !source.name);
                 pieces.push(privateMember
@@ -25545,7 +25545,7 @@ class Emitter {
             return { c: "tsc_value_undefined()", ty: T_VALUE };
         const scope = new Map<ts.Expression, string>();
         if (ts.isPropertyDeclaration(member) && member.initializer) {
-            const source = this.unwrapTransparentExpression(member.initializer);
+            const source = unwrapTransparentExpression(member.initializer);
             if (ts.isClassExpression(source) && !source.name)
                 scope.set(source, "tsc_value_to_internal_property_key(tsc_value_get_index(tsc_call_arguments(), 0.0))");
         }
@@ -26630,7 +26630,7 @@ class Emitter {
             if (!cfgReturnContextType) return this.emitExpr(expression);
             const contextualAggregates: ts.Expression[] = [];
             const visitAggregate = (node: ts.Expression): void => {
-                const value = this.unwrapTransparentExpression(node);
+                const value = unwrapTransparentExpression(node);
                 if (ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) {
                     contextualAggregates.push(value);
                     this.asyncAwaitReturnContextTypes.set(value, cfgReturnContextType);
@@ -27759,7 +27759,7 @@ class Emitter {
                                 ty: sourceType,
                             };
                         } else {
-                            const expression = this.unwrapTransparentExpression(stateNode.expression);
+                            const expression = unwrapTransparentExpression(stateNode.expression);
                             const objectTruthinessWrapper = stateNode.branch &&
                                 ts.isCallExpression(expression) &&
                                 ts.isIdentifier(expression.expression) &&
@@ -28582,7 +28582,7 @@ class Emitter {
         const keyRoot = this.freshTemp(`${prefix}_key_root`);
         const valueTemp = this.freshTemp(`${prefix}_value`);
         const valueRoot = this.freshTemp(`${prefix}_value_root`);
-        const definition = ts.isExpression(valueNode) ? this.unwrapTransparentExpression(valueNode) : valueNode;
+        const definition = ts.isExpression(valueNode) ? unwrapTransparentExpression(valueNode) : valueNode;
         const scope = new Map<ts.Expression, string>();
         if (ts.isClassExpression(definition) && !definition.name) scope.set(definition,`tsc_value_to_internal_property_key(${keyTemp})`);
         this.classFieldNameScopes.push(scope);
@@ -28635,7 +28635,7 @@ class Emitter {
         // contextual assignment type cannot introduce a nullish runtime arm,
         // and querying it can force TypeScript's late-bound property resolver
         // back into a function assigned to that same computed property.
-        const expression = this.unwrapTransparentExpression(node);
+        const expression = unwrapTransparentExpression(node);
         if (ts.isFunctionExpression(expression) || ts.isArrowFunction(expression)) {
             return this.boxPhysicalValue(value, node);
         }
@@ -29856,7 +29856,7 @@ class Emitter {
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isClassDeclaration(decl) && !this.isAmbientDeclaration(decl)) return decl;
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
-            const init = this.unwrapTransparentExpression(decl.initializer);
+            const init = unwrapTransparentExpression(decl.initializer);
             if (ts.isIdentifier(init)) {
                 const declared = this.checker.getTypeAtLocation(decl.name);
                 if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
@@ -30059,7 +30059,7 @@ class Emitter {
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
             const declared = this.checker.getTypeAtLocation(decl.name);
             if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
-            const init = this.unwrapTransparentExpression(decl.initializer);
+            const init = unwrapTransparentExpression(decl.initializer);
             if (ts.isIdentifier(init)) {
                 return this.classExpressionForConstructorIdentifier(init, seen);
             }
@@ -30071,7 +30071,7 @@ class Emitter {
         if (!decl.initializer) return null;
         const declared = this.checker.getTypeAtLocation(decl.name);
         if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
-        const init = this.unwrapTransparentExpression(decl.initializer);
+        const init = unwrapTransparentExpression(decl.initializer);
         if (!ts.isIdentifier(init)) return null;
         const target = this.classDeclForConstructorIdentifier(init);
         if (!target || !ts.canHaveDecorators(target) || (ts.getDecorators(target) ?? []).length === 0) {
@@ -30093,7 +30093,7 @@ class Emitter {
         value: EmitResult,
     ): EmitResult {
         if (!element.initializer) return value;
-        const initializer = this.unwrapTransparentExpression(element.initializer);
+        const initializer = unwrapTransparentExpression(element.initializer);
         if (ts.isYieldExpression(initializer) || this.nodeContainsYield(element.initializer)) {
             unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
         }
@@ -31449,7 +31449,7 @@ class Emitter {
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
-            const asyncReturnExpr = this.unwrapTransparentExpression(r.expression);
+            const asyncReturnExpr = unwrapTransparentExpression(r.expression);
             if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0 &&
                 !this.conditionValueScopes.some(scope => scope.has(r.expression!))) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
@@ -33131,9 +33131,9 @@ class Emitter {
     }
 
     private emitTaggedTemplate(tt: ts.TaggedTemplateExpression): EmitResult {
-        if (this.unwrapTransparentExpression(tt.tag).flags & ts.NodeFlags.OptionalChain)
+        if (unwrapTransparentExpression(tt.tag).flags & ts.NodeFlags.OptionalChain)
             return this.emitOrdinaryExpressionGraph(tt);
-        const tag = this.unwrapTransparentExpression(tt.tag);
+        const tag = unwrapTransparentExpression(tt.tag);
         if (ts.isIdentifier(tag) && this.withEnvironmentReferenceName(tag)) return this.emitCapturedBindingCall(tt, tag);
         if (this.isSuperProperty(tag)) return this.emitSuperPropertyCall(tt, tag);
         if (ts.isPropertyAccessExpression(tag)) {
@@ -33179,7 +33179,7 @@ class Emitter {
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
         prefix: boolean,
     ): EmitResult | null {
-        const target = this.unwrapTransparentExpression(operand);
+        const target = unwrapTransparentExpression(operand);
         if (!ts.isIdentifier(target)) return null;
         const reference = this.sourceReferencePlan(target);
         if (!reference) return null;
@@ -33206,7 +33206,7 @@ class Emitter {
      * shares this rejection path after performing the evaluations required by
      * its operator. */
     private immutableImportBindingIdentifier(expression: ts.Expression): ts.Identifier | null {
-        const target = this.unwrapTransparentExpression(expression);
+        const target = unwrapTransparentExpression(expression);
         if (!ts.isIdentifier(target)) return null;
         const symbol = this.checker.getSymbolAtLocation(target);
         if (!symbol || (symbol.flags & ts.SymbolFlags.Alias) === 0) return null;
@@ -33434,7 +33434,7 @@ class Emitter {
 
     private emitNativeConstAssignment(bin: ts.BinaryExpression, op: ts.SyntaxKind): EmitResult | null {
         if (op !== ts.SyntaxKind.EqualsToken) return null;
-        const target = this.unwrapTransparentExpression(bin.left);
+        const target = unwrapTransparentExpression(bin.left);
         if (!ts.isIdentifier(target)) return null;
         const symbol = this.symbolForIdentifier(target);
         let declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
@@ -33467,7 +33467,7 @@ class Emitter {
         op: ts.SyntaxKind.PlusPlusToken | ts.SyntaxKind.MinusMinusToken,
         prefix: boolean,
     ): EmitResult {
-        const operand = expression.operand;
+        const operand = unwrapTransparentExpression(expression.operand);
         const importUpdate = this.emitImmutableImportUpdate(operand, op);
         if (importUpdate) return importUpdate;
         const sourceUpdate = this.emitSourceReferenceUpdate(operand, op, prefix);
@@ -33500,7 +33500,7 @@ class Emitter {
     }
 
     private emitDelete(del: ts.DeleteExpression): EmitResult {
-        const expr = this.unwrapTransparentExpression(del.expression);
+        const expr = unwrapTransparentExpression(del.expression);
         if (expr.flags & ts.NodeFlags.OptionalChain) return this.emitOrdinaryExpressionGraph(del);
         if (this.isSuperProperty(expr)) return this.emitCapturedPropertyReference(expr, () =>
             `(tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("Cannot delete a super property")), tsc_value_undefined())`)!;
@@ -33861,7 +33861,7 @@ class Emitter {
             results.set(expression, { c: name, ty: T_VALUE });
         };
         while (pending.length > 0) {
-            const work = pending.pop()!, expression = this.unwrapTransparentExpression(work.expression);
+            const work = pending.pop()!, expression = unwrapTransparentExpression(work.expression);
             const prefix = ts.isPrefixUnaryExpression(expression)
                 ? SOURCE_PREFIX_NUMERIC_OPERATIONS.get(expression.operator) : undefined;
             const operation = ts.isBinaryExpression(expression)
@@ -33909,7 +33909,7 @@ class Emitter {
         const pending: { expression: ts.Expression; exit: boolean; skipRight?: boolean }[] =
             [{ expression: root, exit: false }];
         while (pending.length > 0) {
-            const work = pending.pop()!, expression = this.unwrapTransparentExpression(work.expression);
+            const work = pending.pop()!, expression = unwrapTransparentExpression(work.expression);
             if (work.exit) {
                 if (!ts.isBinaryExpression(expression)) throw new Error("logical worklist node is not a binary expression");
                 const left = results.get(expression.left)!;
@@ -34105,7 +34105,7 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
-        const target = this.unwrapTransparentExpression(bin.left);
+        const target = unwrapTransparentExpression(bin.left);
         if (!ts.isIdentifier(target)) return null;
         const reference = this.sourceReferencePlan(target);
         if (!reference) return null;
@@ -34155,7 +34155,7 @@ class Emitter {
     private rootedNativeFieldReference(expression: ts.Expression): {
         setup: string[]; get: string; set: (value: string) => string;
     } | null {
-        const expr = this.unwrapTransparentExpression(expression);
+        const expr = unwrapTransparentExpression(expression);
         if (!ts.isPropertyAccessExpression(expr) && !ts.isElementAccessExpression(expr)) return null;
         if (this.isSuperProperty(expr)) return null;
         const field = ts.isPropertyAccessExpression(expr) ? expr.name.text
@@ -34229,7 +34229,7 @@ class Emitter {
         target: ts.Expression,
         owner: ts.BinaryExpression,
     ): (value: string) => string {
-        const identifier = this.unwrapTransparentExpression(target);
+        const identifier = unwrapTransparentExpression(target);
         if (ts.isIdentifier(identifier) && !this.immutableImportBindingIdentifier(identifier)) {
             const reference = this.sourceReferencePlan(identifier);
             if (reference) {
@@ -34315,7 +34315,7 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult {
-        const target = this.unwrapTransparentExpression(bin.left);
+        const target = unwrapTransparentExpression(bin.left);
         if (op === ts.SyntaxKind.EqualsToken && (ts.isArrayLiteralExpression(target) || ts.isObjectLiteralExpression(target)))
             return this.emitPatternAssignment(bin);
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
@@ -34407,27 +34407,29 @@ class Emitter {
         op: ts.SyntaxKind,
     ): EmitResult | null {
         if (op !== ts.SyntaxKind.EqualsToken) return null;
+        const left = unwrapTransparentExpression(bin.left);
         let key: EmitResult | null = null;
-        if (ts.isPropertyAccessExpression(bin.left) && this.isProcessEnvObject(bin.left.expression)) {
-            const keyText = bin.left.name.text;
+        if (ts.isPropertyAccessExpression(left) && this.isProcessEnvObject(left.expression)) {
+            const keyText = left.name.text;
             key = {
                 c: `tsc_str_from_lit("${escapeCString(keyText)}", ${utf8ByteLen(keyText)})`,
                 ty: T_STRING,
             };
-        } else if (ts.isElementAccessExpression(bin.left) && this.isProcessEnvObject(bin.left.expression)) {
-            key = this.emitExpr(bin.left.argumentExpression);
+        } else if (ts.isElementAccessExpression(left) && this.isProcessEnvObject(left.expression)) {
+            key = this.emitExpr(left.argumentExpression);
         } else {
             return null;
         }
 
         const rhs = this.emitExpr(bin.right);
         return this.emitSequencedExpr(T_STRING, [
-            { value: key, target: T_STRING, node: ts.isElementAccessExpression(bin.left) ? bin.left.argumentExpression : bin.left },
+            { value: key, target: T_STRING, node: ts.isElementAccessExpression(left) ? left.argumentExpression : left },
             { value: rhs, target: T_STRING, node: bin.right },
         ], ([name, value]) => `({ tsc_process_env_set(${name}, ${value}); ${value}; })`);
     }
 
     private isEventEmitterDefaultMaxListenersAccess(expr: ts.Expression): boolean {
+        expr = unwrapTransparentExpression(expr);
         if (!ts.isPropertyAccessExpression(expr)) return false;
         if (expr.name.text !== "defaultMaxListeners") return false;
         const recv = expr.expression;
@@ -34457,7 +34459,7 @@ class Emitter {
         );
     }
     private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
-        const expr = this.unwrapTransparentExpression(expression);
+        const expr = unwrapTransparentExpression(expression);
         const fsNames = ["fs", "node:fs"];
         if (ts.isIdentifier(expr)) {
             let receiver: ts.Node=expr;
@@ -34699,7 +34701,7 @@ class Emitter {
         bin: ts.BinaryExpression,
         op: ts.SyntaxKind,
     ): EmitResult | null {
-        const left = bin.left;
+        const left = unwrapTransparentExpression(bin.left);
         if (!(ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left))) return null;
         if (ts.isPropertyAccessExpression(left) &&
             (!ts.isIdentifier(left.name) && !ts.isPrivateIdentifier(left.name) || ts.isIdentifier(left.name) && this.namespaceMemberName(left.name))) return null;
@@ -34741,12 +34743,14 @@ class Emitter {
     }
 
     private nativeBindingIdentifier(expr: ts.Expression): ts.Identifier | null {
+        expr = unwrapTransparentExpression(expr);
         if (ts.isIdentifier(expr)) return expr;
         if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return expr.name;
         return null;
     }
 
     private storageType(expr: ts.Expression): CType {
+        expr=unwrapTransparentExpression(expr);
         expr=this.nativeBindingIdentifier(expr)??expr;
         if (ts.isIdentifier(expr)) {
             if (this.test262ScriptGlobalBindingName(expr)) return T_VALUE;
@@ -34762,6 +34766,7 @@ class Emitter {
     }
 
     private emitLvalue(expr: ts.Expression): string {
+        expr = unwrapTransparentExpression(expr);
         if (ts.isIdentifier(expr)) return this.identifierRead(expr);
         if (ts.isPropertyAccessExpression(expr)) {
             if (ts.isIdentifier(expr.name)) {
@@ -34806,7 +34811,7 @@ class Emitter {
     }
 
     private equalityNullishKind(expr: ts.Expression): "null" | "undefined" | null {
-        const unwrapped = this.unwrapTransparentExpression(expr);
+        const unwrapped = unwrapTransparentExpression(expr);
         if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "null";
         if (this.isUnshadowedUndefinedExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
             return "undefined";
@@ -35062,9 +35067,9 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
-        if ((call.flags | this.unwrapTransparentExpression(call.expression).flags) & ts.NodeFlags.OptionalChain)
+        if ((call.flags | unwrapTransparentExpression(call.expression).flags) & ts.NodeFlags.OptionalChain)
             return this.emitOrdinaryExpressionGraph(call);
-        const withTarget = this.unwrapTransparentExpression(call.expression);
+        const withTarget = unwrapTransparentExpression(call.expression);
         if (ts.isIdentifier(withTarget) && this.withEnvironmentReferenceName(withTarget)) {
             return this.emitCapturedBindingCall(call, withTarget);
         }
@@ -35619,14 +35624,14 @@ class Emitter {
 
     private isSupportedInlineBindingDefault(element: ts.BindingElement): boolean {
         if (!element.initializer || !ts.isIdentifier(element.name)) return false;
-        const value = this.unwrapTransparentExpression(element.initializer);
+        const value = unwrapTransparentExpression(element.initializer);
         return this.isSupportedInlineLiteral(value) || ts.isRegularExpressionLiteral(value);
     }
 
     private isSupportedInlineClosureDefault(parameter: ts.ParameterDeclaration): boolean {
         const initializer = parameter.initializer;
         if (!initializer) return true;
-        const value = this.unwrapTransparentExpression(initializer);
+        const value = unwrapTransparentExpression(initializer);
         if (this.isSupportedInlineLiteral(value) || ts.isRegularExpressionLiteral(value)) return true;
         const preceding = this.precedingParameterSymbols(parameter);
         let supported = true;
@@ -35656,7 +35661,7 @@ class Emitter {
                 const isJsonStaticCall = method === "parse" && node.arguments.length === 1;
                 const isJsonStringifyCall = method === "stringify" && node.arguments.length === 1;
                 const isPromiseTryLiteralCallback = method === "try" && node.arguments.length === 1 && (() => {
-                    const callback = this.unwrapTransparentExpression(node.arguments[0]!);
+                    const callback = unwrapTransparentExpression(node.arguments[0]!);
                     if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return false;
                     if (callback.parameters.length !== 0 || this.nodeContainsYield(callback)) return false;
                     const body = ts.isBlock(callback.body)
@@ -35664,7 +35669,7 @@ class Emitter {
                             ? callback.body.statements[0].expression
                             : undefined
                         : callback.body;
-                    return !!body && this.isSupportedInlineLiteral(this.unwrapTransparentExpression(body));
+                    return !!body && this.isSupportedInlineLiteral(unwrapTransparentExpression(body));
                 })();
                 const isPromiseStaticCall =
                     (method === "resolve" && node.arguments.length <= 1) ||
@@ -39323,7 +39328,7 @@ class Emitter {
     private resolveDnsLookupStaticAlias(expr: ts.Expression): ts.Expression {
         const origin = expr;
         const seen = new Set<ts.Symbol>();
-        let current = this.unwrapTransparentExpression(expr);
+        let current = unwrapTransparentExpression(expr);
         while (ts.isIdentifier(current)) {
             const symbol = this.symbolForIdentifier(current);
             const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
@@ -39348,7 +39353,7 @@ class Emitter {
                 unsupported(origin, "dns lookup static option const aliases must be acyclic");
             }
             seen.add(symbol);
-            current = this.unwrapTransparentExpression(declaration.initializer);
+            current = unwrapTransparentExpression(declaration.initializer);
         }
         return current;
     }
@@ -39520,7 +39525,7 @@ class Emitter {
 
     private shouldEvaluateSideEffectfulVoidDefault(options: ts.Expression): boolean {
         const resolved = this.resolveSideEffectFreeEarlierConstExpression(options);
-        const unwrapped = this.unwrapTransparentExpression(resolved);
+        const unwrapped = unwrapTransparentExpression(resolved);
         return ts.isVoidExpression(unwrapped) && !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.expression);
     }
 
@@ -40991,7 +40996,7 @@ class Emitter {
         const delayNode = isAfter ? call.arguments[0]! : null;
         const queueNode = call.arguments[isAfter ? 1 : 0]!;
         const taskArgNode = call.arguments[isAfter ? 2 : 1]!;
-        const taskFn = this.unwrapTransparentExpression(taskArgNode);
+        const taskFn = unwrapTransparentExpression(taskArgNode);
         if (!ts.isArrowFunction(taskFn) && !ts.isFunctionExpression(taskFn)) {
             unsupported(taskArgNode, "dispatch task must be an inline arrow or function expression in this subset");
         }
@@ -41080,7 +41085,7 @@ class Emitter {
             if (ts.isSpreadElement(element)) {
                 unsupported(element, "dispatch.group task list does not support spread elements in this subset");
             }
-            const task = this.unwrapTransparentExpression(element);
+            const task = unwrapTransparentExpression(element);
             if (!ts.isArrowFunction(task) && !ts.isFunctionExpression(task)) {
                 unsupported(element, "dispatch.group tasks must be inline arrows or function expressions in this subset");
             }
@@ -41333,32 +41338,18 @@ class Emitter {
         return this.emitTimersPromisesOperation(call, `scheduler.${name}`);
     }
 
-    private unwrapTransparentExpression(expr: ts.Expression): ts.Expression {
-        let cur = expr;
-        while (
-            ts.isParenthesizedExpression(cur) ||
-            ts.isAsExpression(cur) ||
-            ts.isTypeAssertionExpression(cur) ||
-            ts.isNonNullExpression(cur) ||
-            ts.isSatisfiesExpression(cur)
-        ) {
-            cur = cur.expression;
-        }
-        return cur;
-    }
-
     private isUndefinedLikeExpression(expr: ts.Expression): boolean {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         return (ts.isIdentifier(cur) && cur.text === "undefined") || ts.isVoidExpression(cur);
     }
 
     private isNullExpression(expr: ts.Expression): boolean {
-        return this.unwrapTransparentExpression(expr).kind === ts.SyntaxKind.NullKeyword;
+        return unwrapTransparentExpression(expr).kind === ts.SyntaxKind.NullKeyword;
     }
 
     private isZeroDelayLiteral(expr: ts.Expression): boolean {
         const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
-        const cur = this.unwrapTransparentExpression(resolved);
+        const cur = unwrapTransparentExpression(resolved);
         if (this.isUndefinedLikeExpression(cur)) return true;
         const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(resolved, new Set());
         return value !== null && value === 0;
@@ -41388,7 +41379,7 @@ class Emitter {
 
     private emitRequiredStringArgument(expr: ts.Expression): EmitResult {
         const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
-        const unwrapped = this.unwrapTransparentExpression(resolved);
+        const unwrapped = unwrapTransparentExpression(resolved);
         if (this.isUndefinedExpression(unwrapped)) {
             return { c: `tsc_str_from_lit("undefined", 9)`, ty: T_STRING };
         }
@@ -44924,16 +44915,16 @@ class Emitter {
     }
 
     private staticObjectKeysValuesIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const indices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
         if (indices.length === 0) return [];
 
-        const call = this.unwrapTransparentExpression(cur.expression);
+        const call = unwrapTransparentExpression(cur.expression);
         if (!ts.isCallExpression(call) || call.arguments.length !== 1) return [];
-        const callee = this.unwrapTransparentExpression(call.expression);
+        const callee = unwrapTransparentExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
-        const target = this.unwrapTransparentExpression(callee.expression);
+        const target = unwrapTransparentExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return [];
         const method = callee.name.text;
         if (method !== "keys" && method !== "values" && method !== "getOwnPropertyNames") return [];
@@ -44973,23 +44964,23 @@ class Emitter {
     }
 
     private staticObjectEntriesIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const tupleIndices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
         if (tupleIndices.length !== 1) return [];
         const tupleIndex = tupleIndices[0]!;
         if (tupleIndex !== 0 && tupleIndex !== 1) return [];
 
-        const inner = this.unwrapTransparentExpression(cur.expression);
+        const inner = unwrapTransparentExpression(cur.expression);
         if (!ts.isElementAccessExpression(inner) || !inner.argumentExpression) return [];
         const indices = this.staticFiniteNumericIndexValues(inner.argumentExpression);
         if (indices.length === 0) return [];
 
-        const call = this.unwrapTransparentExpression(inner.expression);
+        const call = unwrapTransparentExpression(inner.expression);
         if (!ts.isCallExpression(call) || call.arguments.length !== 1) return [];
-        const callee = this.unwrapTransparentExpression(call.expression);
+        const callee = unwrapTransparentExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
-        const target = this.unwrapTransparentExpression(callee.expression);
+        const target = unwrapTransparentExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object" || callee.name.text !== "entries") return [];
 
         const object = this.staticObjectMapExpression(call.arguments[0]!);
@@ -45027,7 +45018,7 @@ class Emitter {
     }
 
     private staticObjectMapIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const keys = this.staticFinitePropertyKeyTexts(cur.argumentExpression);
         if (keys.length === 0) return [];
@@ -45075,11 +45066,11 @@ class Emitter {
     }
 
     private unwrapObjectPreservingWrapperExpression(expr: ts.Expression): ts.Expression {
-        let cur = this.unwrapTransparentExpression(expr);
+        let cur = unwrapTransparentExpression(expr);
         while (ts.isCallExpression(cur)) {
-            const callee = this.unwrapTransparentExpression(cur.expression);
+            const callee = unwrapTransparentExpression(cur.expression);
             if (!ts.isPropertyAccessExpression(callee)) break;
-            const target = this.unwrapTransparentExpression(callee.expression);
+            const target = unwrapTransparentExpression(callee.expression);
             if (!ts.isIdentifier(target) || target.text !== "Object") break;
             const method = callee.name.text;
             const validArity =
@@ -45089,7 +45080,7 @@ class Emitter {
                         ? cur.arguments.length === 2
                         : false;
             if (!validArity) break;
-            cur = this.unwrapTransparentExpression(cur.arguments[0]!);
+            cur = unwrapTransparentExpression(cur.arguments[0]!);
         }
         return cur;
     }
@@ -45103,7 +45094,7 @@ class Emitter {
     }
 
     private staticIndexedAccessPropertyTexts(expr: ts.Expression): string[] {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const indices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
         if (indices.length === 0) return [];
@@ -45161,14 +45152,14 @@ class Emitter {
     }
 
     private staticArrayLiteralExpression(expr: ts.Expression): ts.ArrayLiteralExpression | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isArrayLiteralExpression(cur)) return cur;
         if (!ts.isIdentifier(cur)) return null;
         const sym = this.symbolForIdentifier(cur);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
         if ((ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) === 0) return null;
-        const init = this.unwrapTransparentExpression(decl.initializer);
+        const init = unwrapTransparentExpression(decl.initializer);
         return ts.isArrayLiteralExpression(init) ? init : null;
     }
 
@@ -45200,14 +45191,14 @@ class Emitter {
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
     ): number[] | null {
-        const cur = this.unwrapTransparentExpression(expr);
+        const cur = unwrapTransparentExpression(expr);
         if (ts.isNumericLiteral(cur)) return [Number(cur.text)];
         if (
             ts.isPrefixUnaryExpression(cur) &&
             (cur.operator === ts.SyntaxKind.PlusToken || cur.operator === ts.SyntaxKind.MinusToken) &&
-            ts.isNumericLiteral(this.unwrapTransparentExpression(cur.operand))
+            ts.isNumericLiteral(unwrapTransparentExpression(cur.operand))
         ) {
-            const operand = this.unwrapTransparentExpression(cur.operand) as ts.NumericLiteral;
+            const operand = unwrapTransparentExpression(cur.operand) as ts.NumericLiteral;
             const value = Number(operand.text);
             return [cur.operator === ts.SyntaxKind.MinusToken ? -value : value];
         }
@@ -45503,7 +45494,7 @@ class Emitter {
     }
 
     private isSuppressedErrorExpression(expr: ts.Expression): boolean {
-        const type = this.checker.getTypeAtLocation(this.unwrapTransparentExpression(expr));
+        const type = this.checker.getTypeAtLocation(unwrapTransparentExpression(expr));
         return type.getSymbol()?.getName() === "SuppressedError" ||
             type.aliasSymbol?.getName() === "SuppressedError";
     }
@@ -45668,9 +45659,9 @@ class Emitter {
     }
 
     private emitNew(n: ts.NewExpression): EmitResult {
-        if (this.unwrapTransparentExpression(n.expression).flags & ts.NodeFlags.OptionalChain)
+        if (unwrapTransparentExpression(n.expression).flags & ts.NodeFlags.OptionalChain)
             return this.emitOrdinaryExpressionGraph(n);
-        const target = this.unwrapTransparentExpression(n.expression);
+        const target = unwrapTransparentExpression(n.expression);
         if (ts.isIdentifier(target) && this.withEnvironmentReferenceName(target)) return this.emitDynamicValueConstruct(n, this.emitExpr(target));
         if (
             ts.isPropertyAccessExpression(n.expression) &&
@@ -45705,7 +45696,7 @@ class Emitter {
         }
         const importedHostModuleOwner = this.importedHostModuleOwner(n.expression);
         if (importedHostModuleOwner) return this.emitDynamicValueConstruct(n, importedHostModuleOwner);
-        const ctorExpr = this.unwrapTransparentExpression(n.expression);
+        const ctorExpr = unwrapTransparentExpression(n.expression);
         if (!ts.isIdentifier(ctorExpr)) {
             const ctor = this.emitExpr(n.expression);
             if (ctor.ty.kind === "value") {
@@ -46979,7 +46970,7 @@ class Emitter {
             : element.kind === "function" ? "FUNCTION" : element.kind === "void" || element.kind === "never" ? "UNDEFINED"
             : element.kind === "unsupported" ? "UNSUPPORTED" : "OBJECT";
         const fresh = value.ty.kind === "array" && ts.isExpression(node) &&
-            ts.isArrayLiteralExpression(this.unwrapTransparentExpression(node));
+            ts.isArrayLiteralExpression(unwrapTransparentExpression(node));
         return `tsc_array_require_native_representation(${boxed}, sizeof(${element.c}), ` +
             `${codec?.box ?? "NULL"}, ${codec?.unbox ?? "NULL"}, TSC_NATIVE_ELEMENT_${kind}, ${fresh ? "true" : "false"})`;
     }
@@ -47139,7 +47130,7 @@ class Emitter {
             case "never":
                 if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                 if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) {
-                    const unwrapped = this.unwrapTransparentExpression(node);
+                    const unwrapped = unwrapTransparentExpression(node);
                     if (ts.isVoidExpression(unwrapped)) {
                         return `({ (void)(${r.c}); tsc_value_undefined(); })`;
                     }
@@ -47164,7 +47155,7 @@ class Emitter {
         let definition: ts.Node | null = null;
         if (ts.isClassLike(node) || ts.isFunctionLike(node)) definition = node;
         else if (ts.isExpression(node)) {
-            const expression = this.unwrapTransparentExpression(node);
+            const expression = unwrapTransparentExpression(node);
             definition = this.functionLikeForExpression(expression);
             if (!definition && ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.name)) {
                 const symbol = this.symbolForIdentifier(expression.name);

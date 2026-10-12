@@ -1,7 +1,7 @@
 import { definitionEvaluationChildren } from "./module-evaluation";
 import {classExpressionFromDeclaration} from './class-definition';
 import ts from "typescript";
-import { normalizeAssignmentTarget, assignmentTargetFromBinding } from "./binding-tree";
+import { normalizeAssignmentTarget, assignmentTargetFromBinding, unwrapTransparentExpression as unwrapExpression } from "./binding-tree";
 import { planResumableExpression, type ResumableExpressionState, type ResumableClassDefinition } from "./resumable-expression";
 import { directLexicalDeclarations, lexicalDeclarationsFromList } from "./lexical-declarations";
 import {
@@ -482,15 +482,6 @@ export function planAsyncControlFlowGraph(
         };
         visit(node);
         return ok;
-    };
-    const unwrapExpression = (expression: ts.Expression): ts.Expression => {
-        let current = expression;
-        while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) ||
-            ts.isTypeAssertionExpression(current) || ts.isNonNullExpression(current) ||
-            ts.isSatisfiesExpression(current)) {
-            current = current.expression;
-        }
-        return current;
     };
     const collectBindingIdentifiers = (name: ts.BindingName): readonly ts.Identifier[] => {
         if (ts.isIdentifier(name)) return [name];

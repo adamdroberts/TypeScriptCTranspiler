@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Preserve canonical Reference identity through transparent expression wrappers for updates, assignments and retained planning. Test: `transparent_reference`.
+
 - Closed scalar source facts and native equality now share numeric lowering descriptors, rooted value comparisons and ordered conversion dependencies, retaining arithmetic, primitive comparison, conditional choices, signed zero and abrupt results. Removed the private descriptor and coarse evaluator predecessors; added dependency-invalidated proof caching, Node/native semantic partitions, a deep tree and dual-memory CLI coverage.
 
 - Closed source conversion now shares string/number/default hints, ordered primitive conversion Lists and finite Number/BigInt/unary facts. Opaque property effects preserve provably earlier captures and close later or repeated reads. Removed string-only ordering and constructor-local conversion predecessors; added Node/native semantic partitions, a deep prototype tree and dual-memory CLI coverage.

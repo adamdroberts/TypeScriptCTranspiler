@@ -2,7 +2,7 @@ import { definitionEvaluationChildren } from "./module-evaluation";
 import {classDefinitionPlan,sourceClassDefinition} from './class-definition';
 import ts from "typescript";
 import { isTailPositionCall } from "../tail-position";
-import { normalizeAssignmentTarget } from "./binding-tree";
+import { normalizeAssignmentTarget, unwrapTransparentExpression as transparent } from "./binding-tree";
 
 export type ResumableValueSlot = number;
 export type ResumableExpressionTarget = number;
@@ -95,14 +95,6 @@ export interface ResumableExpressionFailure {
 export type ResumableExpressionPlan =
     | { readonly kind: "graph"; readonly graph: ResumableExpressionGraph }
     | { readonly kind: "unsupported"; readonly failure: ResumableExpressionFailure };
-
-function transparent(expression: ts.Expression): ts.Expression {
-    let node = expression;
-    while (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) ||
-        ts.isTypeAssertionExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node))
-        node = node.expression;
-    return node;
-}
 
 /** One continuation worklist lowers an expression tree. IDs and value slots
  * come exclusively from its collections; no suspension count, call arity,
