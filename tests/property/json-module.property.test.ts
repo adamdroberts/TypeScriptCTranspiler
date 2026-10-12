@@ -87,7 +87,7 @@ test("JSON Modules derive every root partition and import form from one syntheti
             expect(result.exitCode).toBe(0);
 
             const process = Bun.spawnSync([executable], { stdout: "pipe", stderr: "pipe" });
-            expect(process.exitCode).toBe(0);
+            expect({ exitCode: process.exitCode, stderr: process.stderr.toString(), stdout: process.exitCode ? process.stdout.toString() : "" }).toEqual({ exitCode: 0, stderr: "", stdout: "" });
             expect(process.stderr.toString()).toBe("");
             expect(process.stdout.toString()).toBe(expected);
         }

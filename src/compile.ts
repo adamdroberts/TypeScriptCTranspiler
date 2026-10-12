@@ -16,6 +16,7 @@ import * as os from "node:os";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
+import { ecmaParseGoal } from "./ecmascript-source";
 import { buildModuleGraph } from "./resolve";
 import {
     emitProgram,
@@ -168,7 +169,7 @@ function moduleStaticSemanticsDiagnostics(
     const failures: ModuleStaticSemanticsFailure[] = [];
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
-        if (!hasModuleSyntax(sourceFile) && !explicitModuleRoots.has(path.resolve(sourceFile.fileName))) continue;
+        if (!hasModuleSyntax(sourceFile) && !explicitModuleRoots.has(path.resolve(sourceFile.fileName)) && ecmaParseGoal(sourceFile) !== "module") continue;
         const failure = earlyModuleStaticSemanticsFailure(sourceFile);
         if (failure) failures.push(failure);
     }
@@ -743,6 +744,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         additionalRoots: opts.additionalRoots,
         moduleRoots: opts.moduleRoots,
         isolatedScriptRoots: opts.isolatedScriptRoots,
+        initializationEntries: opts.initializationEntries,
         ignoreCheckJsDirectiveRoots: opts.ignoreCheckJsDirectiveRoots,
         dynamicRequires,
         customConditions: opts.customConditions,

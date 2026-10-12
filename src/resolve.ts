@@ -1,5 +1,6 @@
 import ts from "typescript";
 import * as path from "node:path";
+import { sourceUnitFileName } from "./program";
 import {
     commonJsRequireSpecifierArgument,
     filterSpecifiersByStaticAffix,
@@ -145,7 +146,7 @@ export function buildModuleGraph(
                         options,
                         ts.sys,
                     ).resolvedModule;
-                    const depId = resolved ? fileToModuleId.get(resolved.resolvedFileName) : undefined;
+                    const depId = resolved ? fileToModuleId.get(sourceUnitFileName(program, resolved.resolvedFileName, "module")) : undefined;
                     if (!resolved || !depId) continue;
                     info.resolvedDynamicSpecifiers.set(specifier, depId);
                 }
@@ -160,7 +161,7 @@ export function buildModuleGraph(
                     ts.sys,
                 );
                 const mod = resolved.resolvedModule;
-                const depId = mod ? fileToModuleId.get(mod.resolvedFileName) : undefined;
+                const depId = mod ? fileToModuleId.get(sourceUnitFileName(program, mod.resolvedFileName, "module")) : undefined;
                 if (mod && depId) {
                     const requestError = staticModuleRequestResolutionError(request, mod.resolvedFileName);
                     if (requestError) {

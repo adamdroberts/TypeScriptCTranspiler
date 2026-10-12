@@ -20988,8 +20988,8 @@ class Emitter {
         const evalStrict = this.test262EvalEntryModes.get(path.resolve(sf.fileName));
         if (evalStrict !== undefined) return true;
         return !!(this.options.sourceEval || this.options.test262Observation) &&
-            (this.isJavaScriptSourceFile(sf) || !!this.options.sourceEval) &&
-            (!ts.isExternalModule(sf) || this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)));
+            (this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)) ||
+                (this.isJavaScriptSourceFile(sf) || !!this.options.sourceEval) && !ts.isExternalModule(sf));
     }
 
     private isTest262EvalSourceFile(sf: ts.SourceFile): boolean {

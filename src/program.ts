@@ -1,6 +1,7 @@
 import ts from "typescript";
 import * as path from "node:path";
 import * as url from "node:url";
+import { createHash } from "node:crypto";
 import {
     commonJsRequireSpecifierArgument,
     filterSpecifiersByStaticAffix,
@@ -14,7 +15,7 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
-import { createEcmaSourceFile, ecmaImportAttributesParserShadow } from "./ecmascript-source";
+import { createEcmaSourceFile, ecmaImportAttributesParserShadow, type EcmaParseGoal } from "./ecmascript-source";
 import {
     dynamicImportCalls,
     dynamicImportSpecifiersFromCall,
@@ -29,6 +30,8 @@ export interface BuildProgramOpts {
     moduleRoots?: readonly string[];
     /** Script records isolated for static binding while retaining Script runtime semantics. */
     isolatedScriptRoots?: readonly string[];
+    /** Ordered source bodies evaluated at startup, before stored source calls. */
+    initializationEntries?: readonly string[];
     /** Exact JavaScript records whose source-level `@ts-check` directive is ignored out of band. */
     ignoreCheckJsDirectiveRoots?: readonly string[];
     dynamicRequires?: DynamicRequireManifest;
@@ -40,6 +43,24 @@ export interface BuiltProgram {
     checker: ts.TypeChecker;
     entrySourceFile: ts.SourceFile;
     libCoreDts: string;
+}
+
+interface SourceUnit {
+    readonly sourcePath: string;
+    readonly goal: EcmaParseGoal;
+    readonly fileName: string;
+    readonly initialBody: boolean;
+}
+const programSourceUnits = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();
+const programUnitFiles = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();
+const sourceUnitKey = (sourcePath: string, goal: EcmaParseGoal): string => JSON.stringify([path.resolve(sourcePath), goal]);
+
+/** Resolve an ECMAScript source identity without conflating its parse goals. */
+export function sourceUnitFileName(program: ts.Program, sourcePath: string, goal: EcmaParseGoal): string {
+    return programSourceUnits.get(program)?.get(sourceUnitKey(sourcePath, goal))?.fileName ?? path.resolve(sourcePath);
+}
+export function sourceUnitBodyIncluded(program: ts.Program, sourceFile: ts.SourceFile): boolean {
+    return programUnitFiles.get(program)?.get(path.resolve(sourceFile.fileName))?.initialBody ?? true;
 }
 
 /** Locate package root (where package.json lives) relative to this file. */
@@ -84,19 +105,52 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         opts.entry,
         ...(opts.additionalRoots ?? []),
     ].map((filename) => path.resolve(filename)))];
-    const discoveredRoots = sourceRoots.flatMap((root) =>
-        collectStaticRequireRoots(root, compilerOptions, opts.dynamicRequires)
-    );
-    const rootNames = [libCoreDts, ...new Set([...sourceRoots, ...discoveredRoots])];
-
-    const moduleRoots = new Set((opts.moduleRoots ?? []).map((filename) => path.resolve(filename)));
+    const reachableModuleTargets = new Set<string>();
+    const discoveredRoots = collectStaticRequireRoots(sourceRoots, compilerOptions, opts.dynamicRequires, reachableModuleTargets);
+    const moduleTargets = new Set([...(opts.moduleRoots ?? []).map(filename => path.resolve(filename)), ...reachableModuleTargets]);
     const isolatedScriptRoots = new Set(
         (opts.isolatedScriptRoots ?? []).map((filename) => path.resolve(filename)),
     );
+    const units = new Map<string, SourceUnit>();
+    const initializationEntries = new Set((opts.initializationEntries ?? [opts.entry]).map(entry => path.resolve(entry)));
+    const materializedUnits = new Map<string, SourceUnit>();
+    const unit = (sourcePath: string, goal: EcmaParseGoal): SourceUnit => {
+        const key = sourceUnitKey(sourcePath, goal);
+        const existing = units.get(key);
+        if (existing) return existing;
+        const source = path.resolve(sourcePath);
+        const fileName = goal === "module" && isolatedScriptRoots.has(source)
+            ? path.join(path.dirname(source), `__tsc2c_source_unit_${createHash("sha256").update(key).digest("hex")}${path.extname(source)}`)
+            : source;
+        if (fileName !== source && ts.sys.fileExists(fileName)) throw new Error("source unit identity collides with a physical file");
+        const record = { sourcePath: source, goal, fileName, initialBody: goal === "module" || initializationEntries.has(source) };
+        units.set(key, record);
+        materializedUnits.set(fileName, record);
+        return record;
+    };
+    for (const source of isolatedScriptRoots) unit(source, "script");
+    for (const source of moduleTargets) unit(source, "module");
+    const moduleRoots = new Set([...moduleTargets].map(source => unit(source, "module").fileName));
+    const rootNames = [libCoreDts, ...new Set([
+        ...sourceRoots.map(source => isolatedScriptRoots.has(source) ? unit(source, "script").fileName : moduleTargets.has(source) ? unit(source, "module").fileName : source),
+        ...discoveredRoots.map(source => moduleTargets.has(source) ? unit(source, "module").fileName : source),
+        ...[...reachableModuleTargets].map(source => unit(source, "module").fileName),
+    ])];
     const ignoreCheckJsDirectiveRoots = new Set(
         (opts.ignoreCheckJsDirectiveRoots ?? []).map((filename) => path.resolve(filename)),
     );
     const compilerHost = ts.createCompilerHost(compilerOptions);
+    const readFile = compilerHost.readFile.bind(compilerHost);
+    const fileExists = compilerHost.fileExists.bind(compilerHost);
+    compilerHost.readFile = fileName => readFile(materializedUnits.get(path.resolve(fileName))?.sourcePath ?? fileName);
+    compilerHost.fileExists = fileName => fileExists(materializedUnits.get(path.resolve(fileName))?.sourcePath ?? fileName);
+    compilerHost.resolveModuleNames = (names, containingFile) => names.map(name => {
+        const sourcePath = materializedUnits.get(path.resolve(containingFile))?.sourcePath ?? containingFile;
+        const resolved = ts.resolveModuleName(name, sourcePath, compilerOptions, compilerHost).resolvedModule;
+        if (!resolved) return undefined;
+        const target = units.get(sourceUnitKey(resolved.resolvedFileName, "module"));
+        return target ? { ...resolved, resolvedFileName: target.fileName } : resolved;
+    });
     const getSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
         let sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
@@ -118,7 +172,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             (sourceFile as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat =
                 (original as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat;
         }
-        if (sourceFile && (
+        if (sourceFile && !(sourceFile.flags & ts.NodeFlags.JsonFile) && (
             moduleRoots.has(path.resolve(sourceFile.fileName)) ||
             isolatedScriptRoots.has(path.resolve(sourceFile.fileName))
         )) {
@@ -129,7 +183,10 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             // GlobalDeclarationInstantiation. Their emitter goal remains Script.
             (sourceFile as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= sourceFile;
         }
-        if (sourceFile && ignoreCheckJsDirectiveRoots.has(path.resolve(sourceFile.fileName))) {
+        const sourceUnit = materializedUnits.get(path.resolve(fileName));
+        if (sourceFile && sourceUnit && !(sourceFile.flags & ts.NodeFlags.JsonFile))
+            (sourceFile as ts.SourceFile & { ecmaParseGoal?: EcmaParseGoal }).ecmaParseGoal = sourceUnit.goal;
+        if (sourceFile && ignoreCheckJsDirectiveRoots.has(materializedUnits.get(path.resolve(sourceFile.fileName))?.sourcePath ?? path.resolve(sourceFile.fileName))) {
             // Test262 harness files contain editor-facing `@ts-check` directives.
             // Disable only the compiler metadata flag: SourceFile.text and the
             // runner-attested input bytes remain exactly unchanged.
@@ -147,6 +204,8 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         options: compilerOptions,
         host: compilerHost,
     });
+    programSourceUnits.set(program, units);
+    programUnitFiles.set(program, materializedUnits);
 
     const checker = program.getTypeChecker();
     const entrySourceFile = program.getSourceFile(opts.entry);
@@ -158,13 +217,14 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
 }
 
 function collectStaticRequireRoots(
-    entry: string,
+    entries: readonly string[],
     compilerOptions: ts.CompilerOptions,
     dynamicRequires: DynamicRequireManifest | undefined,
+    moduleTargets: Set<string>,
 ): string[] {
     const roots: string[] = [];
-    const seen = new Set<string>([path.resolve(entry)]);
-    const queue = [path.resolve(entry)];
+    const queue = entries.map(entry => path.resolve(entry));
+    const seen = new Set<string>(queue);
     while (queue.length > 0) {
         const fileName = queue.shift()!;
         const sourceText = ts.sys.readFile(fileName);
@@ -182,6 +242,7 @@ function collectStaticRequireRoots(
             const importSpec = moduleImportSpecifier(stmt);
             if (importSpec) {
                 const resolvedFile = resolveTypeScriptModuleName(importSpec, fileName, compilerOptions);
+                if (resolvedFile) moduleTargets.add(resolvedFile);
                 if (resolvedFile && !seen.has(resolvedFile)) {
                     seen.add(resolvedFile);
                     roots.push(resolvedFile);
@@ -190,6 +251,7 @@ function collectStaticRequireRoots(
             }
             for (const specifier of dynamicModuleSpecifiers(stmt)) {
                 const resolvedFile = resolveTypeScriptModuleName(specifier, fileName, compilerOptions);
+                if (resolvedFile) moduleTargets.add(resolvedFile);
                 if (resolvedFile && !seen.has(resolvedFile)) {
                     seen.add(resolvedFile);
                     roots.push(resolvedFile);

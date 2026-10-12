@@ -4,6 +4,8 @@ import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
 import { callableNameInput, expectedArgumentCount, functionBodyCompletions, type FunctionBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
+import { sourceUnitBodyIncluded } from "./program";
+import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
@@ -75,6 +77,7 @@ type Atom =
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
 class SourceFacts extends Set<Atom> {
     readonly sources = new Set<SourceFacts>();
+    private readonly memberships = new Set<Atom>();
     override *[Symbol.iterator](): SetIterator<Atom> {
         const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>(), values = new Set<Atom>();
         while (pending.length) {
@@ -85,11 +88,16 @@ class SourceFacts extends Set<Atom> {
         }
     }
     override has(atom: Atom): boolean {
+        if (Set.prototype.has.call(this, atom) || this.memberships.has(atom)) return true;
         const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
         while (pending.length) {
             const facts = pending.pop()!;
             if (visited.has(facts)) continue; visited.add(facts);
-            if (Set.prototype.has.call(facts,atom)) return true;
+            if (Set.prototype.has.call(facts,atom) || facts.memberships.has(atom)) {
+                // Facts and copy edges only grow. A positive membership proof
+                // remains valid throughout this graph's monotone solution.
+                this.memberships.add(atom); return true;
+            }
             for (const source of facts.sources) pending.push(source);
         }
         return false;
@@ -175,6 +183,9 @@ class SourceValueFlow {
     private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
+    private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
+    private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
+    private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
     private queueCursor = 0;
@@ -215,6 +226,10 @@ class SourceValueFlow {
     private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
+    private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
+    private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
+    private readonly sourceStarts = new WeakMap<ts.Node, number>();
+    private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -268,6 +283,8 @@ class SourceValueFlow {
         }
         for (const file of program.getSourceFiles()) {
             if (file.isDeclarationFile) continue;
+            if (!sourceUnitBodyIncluded(program, file) && !(entries.evaluations ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName)) &&
+                !(entries.functions ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName))) continue;
             const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: null}];
             while (worklist.length) {
                 const {node, handler} = worklist.pop()!;
@@ -313,7 +330,7 @@ class SourceValueFlow {
                             !propertyKey && !plus) this.publish(handler, this.opaqueObject);
                     });
                 }
-                if (ts.isVariableDeclaration(node) && node.initializer) this.bind(node.name, this.cell(node.initializer));
+                if (ts.isVariableDeclaration(node) && node.initializer) this.onActive(node, () => this.bind(node.name, this.cell(node.initializer!)));
                 if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
                     const value = NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) ? this.cell(node.right) : this.cell(node);
                     this.onActive(node, () => this.writeTarget(node.left, value, node));
@@ -373,10 +390,51 @@ class SourceValueFlow {
     }
     private onActive(node: ts.Node, action: () => void): void {
         const owner = this.enclosingActivation(node);
-        if (!owner) action();
-        else this.rule([owner.active],()=>{if(owner.active.values.size)action();});
+        const guards = this.guards(node);
+        if (!owner && !guards.length) action();
+        else {
+            let rule!: Rule;
+            rule = this.rule([...(owner ? [owner.active] : []), ...guards.map(guard => guard.condition)],()=>{
+                if ((!owner || owner.active.values.size) && this.guardsAllow(guards,rule)) action();
+            });
+        }
+    }
+    private guards(node: ts.Node): readonly {condition: Cell; truthy: boolean}[] {
+        const previous = this.executionGuards.get(node); if (previous) return previous;
+        const guards: {condition: Cell; truthy: boolean}[] = [];
+        for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
+            if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) break;
+            if (ts.isPropertyDeclaration(parent) && child === parent.initializer && !(ts.getModifiers(parent) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) break;
+            if (ts.isIfStatement(parent) && child !== parent.expression)
+                guards.push({condition:this.cell(parent.expression),truthy:child === parent.thenStatement});
+            if (ts.isConditionalExpression(parent) && child !== parent.condition)
+                guards.push({condition:this.cell(parent.condition),truthy:child === parent.whenTrue});
+        }
+        this.executionGuards.set(node,guards);return guards;
+    }
+    private guardsAllow(guards: readonly {condition: Cell; truthy: boolean}[], rule: Rule): boolean {
+        for (const guard of guards) {
+            this.watchText(rule,guard.condition);
+            const state = this.primitiveState(guard.condition,rule);
+            if (state.pending) return false;
+            if (state.proof.primitiveComplete && !state.proof.values.some(value => !!value === guard.truthy)) return false;
+        }
+        return true;
     }
     private publish(cell: Cell, atom: Atom): void {
+        if (atom.tag === "object" || atom.tag === "function" || atom.tag === "generator") {
+            let values = this.ownerAtoms.get(atom.owner);
+            if (!values) {values = new Map(); this.ownerAtoms.set(atom.owner, values);}
+            const previous = values.get(atom.tag);
+            if (previous) atom = previous;
+            else values.set(atom.tag, atom);
+        } else if (atom.tag === "promise") {
+            let rejections = this.promiseAtoms.get(atom.value);
+            if (!rejections) {rejections = new WeakMap(); this.promiseAtoms.set(atom.value, rejections);}
+            const previous = rejections.get(atom.rejection);
+            if (previous) atom = previous;
+            else rejections.set(atom.rejection, atom);
+        }
         if (cell.values.has(atom)) return;
         if (atom.tag === "text-operation") for (const part of atom.parts) {
             let parents = this.primitiveProofParents.get(part);
@@ -423,20 +481,39 @@ class SourceValueFlow {
         for (const user of into.users) this.schedule(user);
     }
     private opaqueEffect(context?: ts.Node): void {
-        if (!context) {this.publish(this.opaqueMutation, this.unknown); return;}
+        if (!context || this.dynamicContext(context)) {this.publish(this.opaqueMutation, this.unknown); return;}
         let effect = this.opaqueEffects.get(context);
         if (!effect) {effect = {tag: "unknown", origin: context}; this.opaqueEffects.set(context, effect);}
         this.publish(this.opaqueMutation, effect);
     }
+    private dynamicContext(node: ts.Node): boolean {
+        const pending: ts.Node[] = [];
+        let current: ts.Node | undefined = node, dynamic = false;
+        while (current) {
+            const known = this.dynamicContexts.get(current);
+            if (known !== undefined) {dynamic = known; break;}
+            pending.push(current);
+            if (ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
+            current = current.parent;
+        }
+        for (const visited of pending) this.dynamicContexts.set(visited, dynamic);
+        return dynamic;
+    }
+    private sourceFile(node: ts.Node): ts.SourceFile {
+        let source = this.sourceFiles.get(node);
+        if (!source) {source = node.getSourceFile(); this.sourceFiles.set(node, source);}
+        return source;
+    }
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
         const effect = atom.origin;
-        if (effect.getSourceFile() !== context.getSourceFile()) return true;
+        if (this.sourceFile(effect) !== this.sourceFile(context)) return true;
         // Source order proves capture only in an acyclic top-level activation.
         // A later spelling in a function or loop may run before this read.
-        for (const node of [effect, context]) for (let parent: ts.Node | undefined = node; parent; parent = parent.parent)
-            if (ts.isFunctionLike(parent) || ts.isIterationStatement(parent, false)) return true;
-        if (context.getEnd() <= effect.getStart()) return false;
+        if (this.dynamicContext(effect) || this.dynamicContext(context)) return true;
+        let start = this.sourceStarts.get(effect);
+        if (start === undefined) {start = effect.getStart(this.sourceFile(effect)); this.sourceStarts.set(effect,start);}
+        if (context.getEnd() <= start) return false;
         if (argumentsRead && effect === context) return false;
         if (ts.isCallExpression(effect) || ts.isNewExpression(effect)) {
             for (let parent: ts.Node | undefined = context; parent; parent = parent.parent) {
@@ -453,6 +530,7 @@ class SourceValueFlow {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
+        if (!context || this.dynamicContext(context)) return from;
         let contexts = this.readCaptures.get(from);
         if (!contexts) {contexts = new Map(); this.readCaptures.set(from,contexts);}
         let phases = contexts.get(context);
@@ -1501,7 +1579,7 @@ class SourceValueFlow {
                 if (isStatic) this.copy(this.cell(parent),result);
                 else this.copy(this.function(parent).receiver,result);
             }
-            else this.publish(result, this.global);
+            else this.publish(result, ecmaParseGoal(node.getSourceFile()) === "module" ? this.primitive(undefined) : this.global);
         } else if (ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node)) {
             const owner = this.owner(node);
             this.publish(result, { tag: "object", owner });
@@ -1637,7 +1715,9 @@ class SourceValueFlow {
             if (signatures.has(signature)) return true; signatures.add(signature); return false;
         };
         let rule: Rule;
-        rule = this.rule([callee, receiver, ...parts.map(part => part.cell)], () => {
+        const guards = this.guards(node);
+        rule = this.rule([callee, receiver, ...parts.map(part => part.cell), ...guards.map(guard => guard.condition)], () => {
+            if (!this.guardsAllow(guards,rule)) return;
             let constructors = this.invocations.get(rule);
             if (!constructors) { constructors = new Map(); this.invocations.set(rule, constructors); }
             constructors.clear();
@@ -1808,13 +1888,18 @@ class SourceValueFlow {
                         }
                         for (const [index, parameter] of (atom.owner.node?.parameters ?? []).filter(parameter => !ts.isIdentifier(parameter.name) || parameter.name.text !== "this").entries()) {
                             if (parameter.dotDotDotToken) {
-                                const rest: Cell = this.newCell();
-                                const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};
-                                restOwner.listLength = this.field(restOwner, "length");
-                                if (argv) this.publish(restOwner.listLength, this.primitive(Math.max(0, argv.length - index)));
-                                else this.publish(restOwner.listLength, this.unknown);
+                                let location = this.restLocations.get(parameter);
+                                if (!location) {
+                                    const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};
+                                    restOwner.listLength = this.field(restOwner, "length");
+                                    location = {value:this.newCell(),owner:restOwner};
+                                    this.restLocations.set(parameter,location);
+                                    this.publish(location.value, {tag:"object",owner:restOwner});
+                                }
+                                const rest = location.value, restOwner = location.owner;
+                                if (argv) this.publish(restOwner.listLength!, this.primitive(Math.max(0, argv.length - index)));
+                                else this.publish(restOwner.listLength!, this.unknown);
                                 for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.copy(value,this.field(restOwner,String(offset)));
-                                this.publish(rest, {tag:"object",owner:restOwner});
                                 this.bind(parameter.name, rest);
                             } else if (argv?.[index]) this.bind(parameter.name, argv[index]!);
                             if (parameter.initializer) this.bind(parameter.name, this.cell(parameter.initializer));
@@ -2134,10 +2219,23 @@ class SourceValueFlow {
     }
 }
 
+type SourceValueSolution = ReturnType<SourceValueFlow["solve"]>;
+const sourceValueSolutions = new WeakMap<ts.Program, Map<string, SourceValueSolution>>();
+function sourceValueSolution(program: ts.Program, entries: SourceValueGraphEntries): SourceValueSolution {
+    const key = JSON.stringify([
+        (entries.functions ?? []).map(entry => [entry.kind ?? "ordinary", entry.parameters, entry.body, entry.entry]),
+        (entries.evaluations ?? []).map(entry => [entry.source, entry.entry]),
+    ]);
+    let solutions = sourceValueSolutions.get(program);
+    if (!solutions) {solutions = new Map(); sourceValueSolutions.set(program,solutions);}
+    let solution = solutions.get(key);
+    if (!solution) {solution = new SourceValueFlow(program, entries).solve(); solutions.set(key,solution);}
+    return solution;
+}
 export function sourceConstructorInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): ConstructorInvocation[] {
-    return new SourceValueFlow(program, entries).solve().constructors;
+    return sourceValueSolution(program, entries).constructors.slice();
 }
 
 export function sourceEvaluationInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): EvaluationInvocation[] {
-    return new SourceValueFlow(program, entries).solve().evaluations;
+    return sourceValueSolution(program, entries).evaluations.slice();
 }
