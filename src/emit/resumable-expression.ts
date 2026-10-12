@@ -443,7 +443,8 @@ export function planResumableExpression(expression: ts.Expression, options: { as
             sourceWorklist.push({ node, expanded: true });
             for(const child of children)sourceWorklist.push({node:child,expanded:false});
         } else {
-            let found = ts.isAwaitExpression(node) || ts.isYieldExpression(node) || !!(node.flags & ts.NodeFlags.OptionalChain) || isTailPositionCall(node);
+            let found = ts.isAwaitExpression(node) || ts.isYieldExpression(node) || !!(node.flags & ts.NodeFlags.OptionalChain) || isTailPositionCall(node) ||
+                ts.isCallExpression(node) && transparent(node.expression) !== node.expression;
             for(const child of children)found ||= decomposed.get(child)??false;
             decomposed.set(node, found);
         }

@@ -28,6 +28,11 @@ export interface DnsLookupOptionAliasDepthSpec {
     depth: number;
 }
 
+export interface GroupingReferenceDepthSpec {
+    generator: "grouping-reference-depth";
+    depth: number;
+}
+
 export interface StrictEqualityExpressionDepthSpec {
     generator: "strict-equality-expression-depth";
     depth: number;
@@ -156,6 +161,7 @@ export type GeneratedCaseSpec =
     | AsyncLogicalExpressionDepthSpec
     | DispatchCaptureWorklistWidthSpec
     | DnsLookupOptionAliasDepthSpec
+    | GroupingReferenceDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleStaticSemanticsWidthSpec
@@ -249,7 +255,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -675,6 +681,18 @@ function dnsLookupOptionAliasDepthSource(depth: number): string {
         "});",
         'console.log("dns alias stress sync");',
         "",
+    ].join("\n");
+}
+
+function groupingReferenceDepthSource(depth: number): string {
+    const group = (value: string): string => "(".repeat(depth) + value + ")".repeat(depth);
+    return [
+        "let calls = 0;",
+        "function leaf(): any { calls++; return { value: 7 }; }",
+        "const owner = { value: 19 };",
+        `const returned = ${group("owner.value")}++;`,
+        `const value = ${group("leaf()")};`,
+        'console.log("grouping depth:", returned === 19 && owner.value === 20 && value.value === 7 && calls === 1);',
     ].join("\n");
 }
 
@@ -1581,6 +1599,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return dispatchCaptureWorklistWidthSource(spec.width);
         case "dns-lookup-option-alias-depth":
             return dnsLookupOptionAliasDepthSource(spec.depth);
+        case "grouping-reference-depth":
+            return groupingReferenceDepthSource(spec.depth);
         case "strict-equality-expression-depth":
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":

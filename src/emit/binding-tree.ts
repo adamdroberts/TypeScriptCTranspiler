@@ -30,10 +30,14 @@ export function assignmentTargetFromBinding(binding: ts.BindingName): ts.Express
 
 /** Preserve the original leaf/checker identity while erasing transparent
  * wrappers for Reference and storage classification, at arbitrary depth. */
-export function unwrapTransparentExpression(expression:ts.Expression):ts.Expression{
-    while(ts.isParenthesizedExpression(expression)||ts.isAsExpression(expression)||
-        ts.isTypeAssertionExpression(expression)||ts.isNonNullExpression(expression)||ts.isSatisfiesExpression(expression))
-        expression=expression.expression;
+export function unwrapTransparentExpression(
+    expression:ts.Expression, boundary?:(node:ts.Expression)=>boolean,
+):ts.Expression{
+    while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) ||
+        ts.isTypeAssertionExpression(expression) || ts.isNonNullExpression(expression) || ts.isSatisfiesExpression(expression)) {
+        if (boundary?.(expression)) break;
+        expression = expression.expression;
+    }
     return expression;
 }
 

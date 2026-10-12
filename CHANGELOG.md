@@ -305,6 +305,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Lower grouped values iteratively and preserve grouped typeof/call References through the shared operation graph. Test: `grouping_reference_depth`.
+
 - Preserve canonical Reference identity through transparent expression wrappers for updates, assignments and retained planning. Test: `transparent_reference`.
 
 - Closed scalar source facts and native equality now share numeric lowering descriptors, rooted value comparisons and ordered conversion dependencies, retaining arithmetic, primitive comparison, conditional choices, signed zero and abrupt results. Removed the private descriptor and coarse evaluator predecessors; added dependency-invalidated proof caching, Node/native semantic partitions, a deep tree and dual-memory CLI coverage.

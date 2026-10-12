@@ -2652,6 +2652,53 @@
         }
       ],
       "rationale": "The exact intrinsic clause binds reciprocal independent properties, one reviewed generated argument-List stress, typed native execution, declaration and implementation anchors, and its complete pinned clause query. Full signed-report and host eligibility gates remain separate."
+    },
+    {
+      "clause": "sec-grouping-operator-runtime-semantics-evaluation",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "preserved-expression-completion-and-reference",
+          "title": "Grouping preserves the underlying expression completion, Reference identity and call receiver at arbitrary nesting depth",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "tree",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-grouping-operator-runtime-semantics-evaluation"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/grouping-evaluation.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "grouping_reference_depth"
+            ],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#emitExpr",
+              "src/emit/binding-tree.ts#unwrapTransparentExpression",
+              "src/emit/resumable-expression.ts#planResumableExpression"
+            ]
+          },
+          "rationale": "The grouping Evaluation algorithm delegates to its Expression without GetValue. Independent Node/native properties distinguish value and Reference results, receiver and direct-eval identity, optional-call boundaries and abrupt completions. One iterative syntax-tree projection retains original leaf/override identity and lowers a wrapper chain to one C grouping layer; the separate generated native case stresses the same path without counting fixture families."
+        }
+      ],
+      "rationale": "Exact terminal runtime Evaluation evidence only; grouping grammar and early-error clauses remain independent open work."
     }
   ],
   "groups": [

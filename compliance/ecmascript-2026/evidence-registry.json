@@ -2234,6 +2234,48 @@
       "targets": [
         "sec-date.now#ordinary-static-list-integral-clock-time"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/grouping-evaluation.property.test.ts",
+      "targets": [
+        "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "grouping_reference_depth",
+      "targets": [
+        "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
+      ],
+      "stressReview": {
+        "dimension": "parenthesized value and Reference expression-tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One generated positive native case checks a retained property Reference and effectful value leaf through the iterative wrapper projection. The review does not promote successive depths or fixture counts.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitExpr",
+      "targets": [
+        "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/binding-tree.ts#unwrapTransparentExpression",
+      "targets": [
+        "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/resumable-expression.ts#planResumableExpression",
+      "targets": [
+        "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
+      ]
     }
   ]
 }

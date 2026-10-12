@@ -220,6 +220,16 @@
       ],
       "reason": "The historical ES5 Number prototype object metadata maps to its current ordinary-object, primitive-data and prototype contract; child methods have their own disjoint section prefixes.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "11.1.6_",
+      "clauses": [
+        "sec-grouping-operator-runtime-semantics-evaluation"
+      ],
+      "reason": "The pinned ES5 grouping section exercises preservation of Expression completion and Reference identity; current grammar and early-error clauses are separate obligations. Matching uses the metadata section boundary, never fixture names.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [

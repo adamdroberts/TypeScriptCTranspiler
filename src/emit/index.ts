@@ -32378,6 +32378,16 @@ class Emitter {
     }
 
     private emitExpr(expr: ts.Expression): EmitResult {
+        let grouped = false;
+        const inner = unwrapTransparentExpression(expr, node => {
+            if (this.expressionOverride(node) || (node.flags & ts.NodeFlags.OptionalChain) || isTailPositionCall(node)) return true;
+            grouped ||= ts.isParenthesizedExpression(node);
+            return false;
+        });
+        if (inner !== expr) {
+            const result = this.emitExpr(inner);
+            return grouped ? { c: `(${result.c})`, ty: result.ty } : result;
+        }
         const override = this.expressionOverride(expr);
         if (override) return override;
         if ((expr.flags & ts.NodeFlags.OptionalChain) || isTailPositionCall(expr)) return this.emitOrdinaryExpressionGraph(expr);
@@ -32793,13 +32803,6 @@ class Emitter {
                 ty,
             };
         }
-        if (ts.isParenthesizedExpression(expr)) {
-            const inner = this.emitExpr(expr.expression);
-            return {
-                c: `(${inner.c})`,
-                ty: inner.ty,
-            };
-        }
         if (ts.isTypeOfExpression(expr)) return this.emitTypeOf(expr);
         if (ts.isDeleteExpression(expr)) return this.emitDelete(expr);
         if (ts.isVoidExpression(expr)) return this.emitVoidExpression(expr);
@@ -32818,10 +32821,6 @@ class Emitter {
         if (ts.isElementAccessExpression(expr)) return this.emitElementAccess(expr);
         if (ts.isArrayLiteralExpression(expr)) return this.emitArrayLiteral(expr);
         if (ts.isObjectLiteralExpression(expr)) return this.emitObjectLiteral(expr);
-        if (ts.isNonNullExpression(expr)) return this.emitExpr(expr.expression);
-        if (ts.isAsExpression(expr)) return this.emitExpr(expr.expression);
-        if (ts.isTypeAssertionExpression(expr)) return this.emitExpr(expr.expression);
-        if (ts.isSatisfiesExpression(expr)) return this.emitExpr(expr.expression);
 
         unsupported(expr, `expression kind ${ts.SyntaxKind[expr.kind]}`);
     }
@@ -32835,40 +32834,41 @@ class Emitter {
     }
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
-        if (ts.isIdentifier(to.expression) && !this.classNameBindingForIdentifier(to.expression) && (
-            this.withEnvironmentReferenceName(to.expression) ||
-            this.test262ScriptGlobalBindingName(to.expression) ||
-            this.isSourceGlobalReference(to.expression) ||
-            this.ordinaryNativeGlobalConstructor(to.expression) ||
-            this.isUnresolvedParameterScopeReference(to.expression) ||
-            !this.symbolForIdentifier(to.expression)
+        const operand = unwrapTransparentExpression(to.expression);
+        if (ts.isIdentifier(operand) && !this.classNameBindingForIdentifier(operand) && (
+            this.withEnvironmentReferenceName(operand) ||
+            this.test262ScriptGlobalBindingName(operand) ||
+            this.isSourceGlobalReference(operand) ||
+            this.ordinaryNativeGlobalConstructor(operand) ||
+            this.isUnresolvedParameterScopeReference(operand) ||
+            !this.symbolForIdentifier(operand)
         )) {
             return {
-                c: `tsc_environment_reference_typeof_strict(${this.test262GlobalBindingKey(to.expression.text)}, ${this.nodeIsInStrictMode(to) ? "true" : "false"})`,
+                c: `tsc_environment_reference_typeof_strict(${this.test262GlobalBindingKey(operand.text)}, ${this.nodeIsInStrictMode(to) ? "true" : "false"})`,
                 ty: T_STRING,
             };
         }
         // `typeof` performs GetValue for resolvable lexical References, so an
         // uninitialized module slot must throw rather than being folded from
         // its declared or initializer type.
-        const moduleLexical = ts.isIdentifier(to.expression)
-            ? this.moduleLexicalBindingForIdentifier(to.expression)
+        const moduleLexical = ts.isIdentifier(operand)
+            ? this.moduleLexicalBindingForIdentifier(operand)
             : null;
-        const localLexical = ts.isIdentifier(to.expression)
-            ? this.localLexicalReferenceForIdentifier(to.expression)
+        const localLexical = ts.isIdentifier(operand)
+            ? this.localLexicalReferenceForIdentifier(operand)
             : null;
-        const scriptGlobal = ts.isIdentifier(to.expression)
-            ? this.test262ScriptGlobalBindingName(to.expression)
+        const scriptGlobal = ts.isIdentifier(operand)
+            ? this.test262ScriptGlobalBindingName(operand)
             : null;
         const staticResult = moduleLexical || localLexical || scriptGlobal
             ? null
-            : this.sideEffectFreeTypeofString(to.expression, new Set());
+            : this.sideEffectFreeTypeofString(operand, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
-        const inner = this.emitExpr(to.expression);
-        const result = this.typeofName(to.expression, inner.ty);
-        const nullishResult = this.nullishTypeofName(to.expression);
+        const inner = this.emitExpr(operand);
+        const result = this.typeofName(operand, inner.ty);
+        const nullishResult = this.nullishTypeofName(operand);
         if (inner.ty.kind === "value" || inner.ty.kind === "function") {
-            return { c: `tsc_value_typeof(${this.coerce(inner, T_VALUE, to.expression)})`, ty: T_STRING };
+            return { c: `tsc_value_typeof(${this.coerce(inner, T_VALUE, operand)})`, ty: T_STRING };
         }
         if (nullishResult && isPointerKind(inner.ty) && nullishResult !== result) {
             const tv = this.freshTemp("_typeof");
@@ -32988,58 +32988,6 @@ class Emitter {
             }
         }
         return this.checker.getTypeAtLocation(expr);
-    }
-
-    private emitTypeofComparison(
-        bin: ts.BinaryExpression,
-        negate: boolean,
-    ): EmitResult | null {
-        const left = this.typeofComparisonSide(bin.left, bin.right);
-        if (left) {
-            const c = this.emitTypeofEquals(left.expr, left.expected);
-            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
-        }
-        const right = this.typeofComparisonSide(bin.right, bin.left);
-        if (right) {
-            const c = this.emitTypeofEquals(right.expr, right.expected);
-            return { c: negate ? `(!${c})` : c, ty: T_BOOLEAN };
-        }
-        return null;
-    }
-
-    private typeofComparisonSide(
-        maybeTypeof: ts.Expression,
-        maybeExpected: ts.Expression,
-    ): { expr: ts.Expression; expected: string } | null {
-        if (!ts.isTypeOfExpression(maybeTypeof)) return null;
-        if (!ts.isStringLiteral(maybeExpected)) return null;
-        return { expr: maybeTypeof.expression, expected: maybeExpected.text };
-    }
-
-    private emitTypeofEquals(expr: ts.Expression, expected: string): string {
-        if (ts.isIdentifier(expr) && (
-            this.test262ScriptGlobalBindingName(expr) ||
-            this.isSourceGlobalReference(expr) ||
-            this.ordinaryNativeGlobalConstructor(expr)
-        )) {
-            return `tsc_str_eq(` +
-                `tsc_environment_reference_typeof_strict(${this.test262GlobalBindingKey(expr.text)}, ${this.nodeIsInStrictMode(expr) ? "true" : "false"}), ` +
-                `${this.stringLit(expected)})`;
-        }
-        const inner = this.emitExpr(expr);
-        if (inner.ty.kind === "value" || inner.ty.kind === "function") {
-            const tv = this.freshTemp("_typeofv");
-            return `({ tsc_value_t ${tv} = ${this.coerce(inner, T_VALUE, expr)}; tsc_str_eq(tsc_value_typeof(${tv}), ${this.stringLit(expected)}); })`;
-        }
-        const result = this.typeofName(expr, inner.ty);
-        const nullishResult = this.nullishTypeofName(expr);
-        const resultValue = result === expected ? "true" : "false";
-        if (nullishResult && isPointerKind(inner.ty) && nullishResult !== result) {
-            const tv = this.freshTemp("_typeof");
-            const nullishValue = nullishResult === expected ? "true" : "false";
-            return `({ ${inner.ty.c} ${tv} = ${inner.c}; ${tv} != NULL ? ${resultValue} : ${nullishValue}; })`;
-        }
-        return `({ (void)(${inner.c}); ${resultValue}; })`;
     }
 
     private emitBoolExpr(expr: ts.Expression): string {
@@ -33991,19 +33939,6 @@ class Emitter {
             return this.emitInstanceOf(bin);
         }
 
-        if (
-            op === ts.SyntaxKind.EqualsEqualsToken ||
-            op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-            op === ts.SyntaxKind.ExclamationEqualsToken ||
-            op === ts.SyntaxKind.ExclamationEqualsEqualsToken
-        ) {
-            const typeofComparison = this.emitTypeofComparison(
-                bin,
-                op === ts.SyntaxKind.ExclamationEqualsToken ||
-                    op === ts.SyntaxKind.ExclamationEqualsEqualsToken,
-            );
-            if (typeofComparison) return typeofComparison;
-        }
 
         if (SOURCE_BINARY_NUMERIC_OPERATIONS.has(op)) return this.emitNumericExpression(bin);
 
@@ -35067,9 +35002,9 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
-        if ((call.flags | unwrapTransparentExpression(call.expression).flags) & ts.NodeFlags.OptionalChain)
-            return this.emitOrdinaryExpressionGraph(call);
         const withTarget = unwrapTransparentExpression(call.expression);
+        if (((call.flags | withTarget.flags) & ts.NodeFlags.OptionalChain) || withTarget !== call.expression)
+            return this.emitOrdinaryExpressionGraph(call);
         if (ts.isIdentifier(withTarget) && this.withEnvironmentReferenceName(withTarget)) {
             return this.emitCapturedBindingCall(call, withTarget);
         }

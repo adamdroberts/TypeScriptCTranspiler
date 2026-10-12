@@ -712,7 +712,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-template-literals-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-grouping-operator` — The Grouping Operator: exact disposition and partitions missing.
   - [ ] `sec-grouping-operator-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
-  - [ ] `sec-grouping-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
+  - [ ] `sec-grouping-operator-runtime-semantics-evaluation` — Runtime Semantics: Evaluation
+    - [ ] `preserved-expression-completion-and-reference` (algorithm, unbounded): Grouping preserves the underlying expression completion, Reference identity and call receiver at arbitrary nesting depth.
   - [ ] `sec-left-hand-side-expressions` — Left-Hand-Side Expressions: exact disposition and partitions missing.
   - [ ] `sec-static-semantics` — Static Semantics: exact disposition and partitions missing.
   - [ ] `sec-left-hand-side-expressions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
