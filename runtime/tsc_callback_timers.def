@@ -1,0 +1,9 @@
+/* Name, operation, function length, action, queue, delay index, actuals start, module export.
+ * Runtime owners and compiler global/import admission project this collection. */
+TSC_CALLBACK_TIMER_OPERATION(setTimeout, TIMEOUT, 2, SCHEDULE, DELAYED, 1, 2, true)
+TSC_CALLBACK_TIMER_OPERATION(setInterval, INTERVAL, 2, REPEAT, DELAYED, 1, 2, true)
+TSC_CALLBACK_TIMER_OPERATION(setImmediate, IMMEDIATE, 1, SCHEDULE, IMMEDIATE, -1, 1, true)
+TSC_CALLBACK_TIMER_OPERATION(clearTimeout, CLEAR_TIMEOUT, 1, CLEAR, DELAYED, -1, -1, true)
+TSC_CALLBACK_TIMER_OPERATION(clearInterval, CLEAR_INTERVAL, 1, CLEAR, DELAYED, -1, -1, true)
+TSC_CALLBACK_TIMER_OPERATION(clearImmediate, CLEAR_IMMEDIATE, 1, CLEAR, IMMEDIATE, -1, -1, true)
+TSC_CALLBACK_TIMER_OPERATION(queueMicrotask, MICROTASK, 1, SCHEDULE, MICROTASK, -1, -1, false)

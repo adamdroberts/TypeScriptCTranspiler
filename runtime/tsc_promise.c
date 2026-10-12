@@ -1257,10 +1257,12 @@ typedef struct {
     int delay_argument, payload_argument, options_argument;
     tsc_timers_queue_t queue;
     bool interval;
+    double length;
+    bool scheduler;
 } tsc_timers_promise_descriptor_t;
 static const tsc_timers_promise_descriptor_t timers_promise_operations[] = {
-#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval) \
-    [TSC_TIMERS_PROMISE_##operation] = { name, delay, payload, options, TSC_TIMERS_QUEUE_##queue, interval },
+#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval, length, scheduler) \
+    [TSC_TIMERS_PROMISE_##operation] = { name, delay, payload, options, TSC_TIMERS_QUEUE_##queue, interval, length, scheduler },
 #include "tsc_timers_promises.def"
 #undef TSC_TIMERS_PROMISE_OPERATION
 };
@@ -1879,3 +1881,69 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
     }
     return state->iterator;
 }
+
+/* Module exports and scheduler members borrow one Realm-owned operation List.
+ * Immutable named exports retain their original callable cells even when the
+ * default ordinary object is mutated. */
+typedef struct timers_promise_owner timers_promise_owner_t;
+typedef struct {timers_promise_owner_t* owner;const tsc_timers_promise_descriptor_t* operation;tsc_value_t value;void* root;} timers_promise_member_t;
+struct timers_promise_owner {
+    tsc_object_t* object;
+    tsc_object_t* namespace_object;
+    tsc_object_t* scheduler;
+    tsc_object_t* scheduler_prototype;
+    tsc_symbol_t* scheduler_brand;
+    timers_promise_member_t members[TSC_TIMERS_PROMISE_OPERATION_COUNT];
+    tsc_value_t scheduler_constructor;
+    void* scheduler_constructor_root;
+};
+static const char timers_promise_owner_key;
+static tsc_value_t timers_promise_export_get(void* environment,tsc_value_t receiver){(void)receiver;return ((timers_promise_member_t*)environment)->value;}
+static tsc_value_t timers_promise_default_get(void* environment,tsc_value_t receiver){(void)receiver;return tsc_value_object(((timers_promise_owner_t*)environment)->object);}
+static tsc_value_t timers_promise_scheduler_get(void* environment,tsc_value_t receiver){(void)receiver;return tsc_value_object(((timers_promise_owner_t*)environment)->scheduler);}
+static void timers_promise_throw_code(const char* code,const char* message){
+    tsc_value_t error=tsc_value_error(tsc_error_new_named(tsc_str_from_lit("TypeError",9),tsc_str_from_cstr(message)));
+    (void)tsc_value_set_prop(error,tsc_str_from_lit("code",4),tsc_value_string(tsc_str_from_cstr(code)));tsc_throw_value(error);
+}
+static tsc_value_t timers_promise_scheduler_construct(void* environment,tsc_value_t receiver,tsc_array_t* arguments){
+    (void)environment;(void)receiver;(void)arguments;timers_promise_throw_code("ERR_ILLEGAL_CONSTRUCTOR","Illegal constructor");return tsc_value_undefined();
+}
+static tsc_value_t timers_promise_scheduler_apply(void* environment,tsc_value_t receiver,tsc_array_t* arguments){
+    (void)environment;(void)receiver;(void)arguments;tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Class constructor Scheduler cannot be invoked without new"));return tsc_value_undefined();
+}
+static tsc_value_t timers_promise_member_apply(void* environment,tsc_value_t receiver,tsc_array_t* arguments){
+    timers_promise_member_t* member=environment;
+    if(member->operation->scheduler && !tsc_value_is_truthy(tsc_value_get_symbol_prop(receiver,member->owner->scheduler_brand)))
+        timers_promise_throw_code("ERR_INVALID_THIS","Value of this must be of type Scheduler");
+    return tsc_timers_promises_call((tsc_timers_promise_operation_t)(member->operation-timers_promise_operations),arguments);
+}
+static timers_promise_owner_t* timers_promise_owner(void){
+    timers_promise_owner_t* state=tsc_realm_state_get(&timers_promise_owner_key);if(state)return state;
+    state=TSC_GC_MALLOC(sizeof(*state));memset(state,0,sizeof(*state));tsc_realm_state_set(&timers_promise_owner_key,state);
+    state->object=tsc_object_new();state->namespace_object=tsc_module_namespace_new();state->scheduler=tsc_object_new();state->scheduler_prototype=tsc_object_new();state->scheduler_brand=tsc_symbol_new(tsc_str_from_lit("kScheduler",10));
+    tsc_object_set_prototype_of(state->scheduler,tsc_value_object(state->scheduler_prototype));
+    (void)tsc_value_set_symbol_prop(tsc_value_object(state->scheduler),state->scheduler_brand,tsc_value_bool(true));
+    state->scheduler_constructor=tsc_value_function_named_kind(timers_promise_scheduler_apply,timers_promise_scheduler_construct,state,0,tsc_str_from_lit("Scheduler",9),TSC_FUNCTION_IDENTITY_BUILTIN);
+    state->scheduler_constructor_root=tsc_value_gc_root(state->scheduler_constructor);
+    tsc_function_identity_t* constructor=state->scheduler_constructor_root;
+    constructor->construct_allocates_receiver=false;tsc_function_identity_set_own_prototype(constructor,tsc_value_object(state->scheduler_prototype));constructor->func_prototype_writable=false;
+    (void)tsc_value_define_property_desc(tsc_value_object(state->scheduler_prototype),tsc_str_from_lit("constructor",11),state->scheduler_constructor,true,true,true,false,true,true,true);
+    for(size_t index=0;index<TSC_TIMERS_PROMISE_OPERATION_COUNT;++index){
+        timers_promise_member_t* member=&state->members[index];member->owner=state;member->operation=&timers_promise_operations[index];
+        const char* basename=strrchr(member->operation->name,'.');basename=basename?basename+1:member->operation->name;tsc_str_t* name=tsc_str_from_cstr(basename);
+        member->value=tsc_value_function_named_kind(timers_promise_member_apply,NULL,member,member->operation->length,name,TSC_FUNCTION_IDENTITY_BUILTIN);member->root=tsc_value_gc_root(member->value);
+        if(member->operation->scheduler){
+            (void)tsc_value_define_property_desc(tsc_value_object(state->scheduler_prototype),name,member->value,true,true,true,false,true,true,true);
+        }else{
+            (void)tsc_object_set(state->object,name,member->value);
+            (void)tsc_object_define_accessor(state->namespace_object,name,timers_promise_export_get,member,true,NULL,NULL,false,true,true,false,true);
+        }
+    }
+    (void)tsc_object_set(state->object,tsc_str_from_lit("scheduler",9),tsc_value_object(state->scheduler));
+    (void)tsc_object_define_accessor(state->namespace_object,tsc_str_from_lit("scheduler",9),timers_promise_scheduler_get,state,true,NULL,NULL,false,true,true,false,true);
+    (void)tsc_object_define_accessor(state->namespace_object,tsc_str_from_lit("default",7),timers_promise_default_get,state,true,NULL,NULL,false,true,true,false,true);
+    tsc_module_namespace_finalize(state->namespace_object);return state;
+}
+tsc_value_t tsc_timers_promises_module_value(bool namespace_object){timers_promise_owner_t* state=timers_promise_owner();return tsc_value_object(namespace_object?state->namespace_object:state->object);}
+
+tsc_value_t tsc_timers_promises_export_value(tsc_str_t* name){return tsc_value_get_prop(tsc_timers_promises_module_value(true),name);}

@@ -61,3 +61,7 @@ TSC_GLOBAL_VALUE(globalThis, built_value, true, true)
 TSC_GLOBAL_VALUE(undefined, tsc_value_undefined(), false, false)
 TSC_GLOBAL_VALUE(NaN, tsc_value_num(NAN), false, false)
 TSC_GLOBAL_VALUE(Infinity, tsc_value_num(INFINITY), false, false)
+
+#define TSC_CALLBACK_TIMER_OPERATION(name, operation, length, action, queue, delay, actuals, module_export) TSC_GLOBAL_INTRINSIC(name, tsc_callback_timer_value(TSC_CALLBACK_TIMER_##operation), NON_STRING)
+#include "tsc_callback_timers.def"
+#undef TSC_CALLBACK_TIMER_OPERATION

@@ -28,6 +28,7 @@
     "runtime/tsc_core.c",
     "runtime/tsc_environment.c",
     "runtime/tsc_global_bindings.def",
+    "runtime/tsc_callback_timers.def",
     "runtime/tsc_timers_promises.def",
     "runtime/tsc_dispatch.c",
     "runtime/tsc_internal.h",

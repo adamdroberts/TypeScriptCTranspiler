@@ -35,7 +35,9 @@ export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = n
 );
 
 export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = new Map(
-    [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
+    [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8") + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_callback_timers.def"), "utf8")
+            .matchAll(/^TSC_CALLBACK_TIMER_OPERATION\((\w+), /gm)]
+            .map(([, name]) => `TSC_GLOBAL_INTRINSIC(${name}, collection, NON_STRING)`).join("\n")
         + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_typed_array.def"), "utf8")
             .matchAll(/^TSC_TYPED_ARRAY\((\w+), /gm)]
             .map(([, name]) => `TSC_GLOBAL_INTRINSIC(${name}, collection, OBJECT)`).join("\n"))

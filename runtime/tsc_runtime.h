@@ -1785,6 +1785,15 @@ void tsc_process_drain_next_ticks(void);
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env);
 void tsc_drain_microtasks(void);
 void tsc_drain_microtasks_and_next_ticks(void);
+typedef enum {
+#define TSC_CALLBACK_TIMER_OPERATION(name, operation, length, action, queue, delay, actuals, module_export) TSC_CALLBACK_TIMER_##operation,
+#include "tsc_callback_timers.def"
+#undef TSC_CALLBACK_TIMER_OPERATION
+    TSC_CALLBACK_TIMER_OPERATION_COUNT
+} tsc_callback_timer_operation_t;
+tsc_value_t tsc_callback_timer_value(tsc_callback_timer_operation_t operation);
+tsc_value_t tsc_callback_timers_module_value(bool namespace_object);
+tsc_value_t tsc_callback_timers_export_value(tsc_str_t* name);
 double tsc_set_immediate(tsc_immediate_fn_t fn, void* env);
 void tsc_clear_immediate(double id);
 void tsc_unref_immediate(double id);
@@ -1797,12 +1806,14 @@ void tsc_unref_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
 typedef enum {
-#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval) TSC_TIMERS_PROMISE_##operation,
+#define TSC_TIMERS_PROMISE_OPERATION(name, operation, delay, payload, options, queue, interval, length, scheduler) TSC_TIMERS_PROMISE_##operation,
 #include "tsc_timers_promises.def"
 #undef TSC_TIMERS_PROMISE_OPERATION
     TSC_TIMERS_PROMISE_OPERATION_COUNT
 } tsc_timers_promise_operation_t;
 tsc_value_t tsc_timers_promises_call(tsc_timers_promise_operation_t operation, tsc_array_t* arguments);
+tsc_value_t tsc_timers_promises_module_value(bool namespace_object);
+tsc_value_t tsc_timers_promises_export_value(tsc_str_t* name);
 bool tsc_fs_libuv_pending(void);
 void tsc_fs_libuv_run_once(bool block);
 

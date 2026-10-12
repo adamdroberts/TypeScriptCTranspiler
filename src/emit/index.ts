@@ -11,7 +11,7 @@ import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
 import { runtimeGlobalBindings } from "../global-bindings";
 import { canonicalParameterBindingSymbol, sourceDeclarationIntroducesBinding } from "../source-bindings";
-import { timersPromiseOperations } from "../timers-promises-operations";
+import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
@@ -13560,10 +13560,10 @@ class Emitter {
         const asyncLexicalName = sym ? this.asyncAwaitLexicalStorageNames.get(sym) : undefined;
         if (asyncLexicalName) return asyncLexicalName;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isFunctionDeclaration(decl) && !this.isTopLevelValueDeclaration(decl)) {
+        if (decl && !this.isAmbientDeclaration(decl) && ts.isFunctionDeclaration(decl) && !this.isTopLevelValueDeclaration(decl)) {
             return this.localFunctionCName(decl);
         }
-        if (decl && ts.isFunctionDeclaration(decl) && decl.name && this.isTopLevelValueDeclaration(decl)) {
+        if (decl && !this.isAmbientDeclaration(decl) && ts.isFunctionDeclaration(decl) && decl.name && this.isTopLevelValueDeclaration(decl)) {
             return this.declaredName(decl.name);
         }
         const moduleVar = sym ? this.moduleVarBindings.get(sym) : undefined;
@@ -19817,29 +19817,6 @@ class Emitter {
             this.isNamespaceImportFrom(expr, ["stream", "node:stream"]) ||
             this.isDefaultImportFrom(expr, ["stream", "node:stream"])
         );
-    }
-
-    private isTimersModuleIdentifier(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && (
-            this.isNamespaceImportFrom(expr, ["timers", "node:timers"]) ||
-            this.isDefaultImportFrom(expr, ["timers", "node:timers"])
-        );
-    }
-
-    private isTimersPromisesModuleIdentifier(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && (
-            this.isNamespaceImportFrom(expr, ["timers/promises", "node:timers/promises"]) ||
-            this.isDefaultImportFrom(expr, ["timers/promises", "node:timers/promises"])
-        );
-    }
-
-    private isTimersPromisesSchedulerReceiver(expr: ts.Expression): boolean {
-        if (ts.isIdentifier(expr)) {
-            return this.isNamedImportFrom(expr, ["timers/promises", "node:timers/promises"], "scheduler");
-        }
-        return ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "scheduler" &&
-            this.isTimersPromisesModuleIdentifier(expr.expression);
     }
 
     private isBufferModuleIdentifier(expr: ts.Expression): boolean {
@@ -32745,7 +32722,7 @@ class Emitter {
                 ? this.emitProcessPropertyRead(processNamedImport)
                 : null;
             if (processProp) return processProp;
-            if (declaration && ts.isVariableDeclaration(declaration) &&
+            if (declaration && (ts.isVariableDeclaration(declaration) || ts.isFunctionDeclaration(declaration)) &&
                 this.isAmbientDeclaration(declaration)) {
                 unsupported(expr, "ambient host value requires an ordinary runtime owner");
             }
@@ -34426,6 +34403,8 @@ class Emitter {
             return null;
         }
         const modules = [
+            { names: ["timers", "node:timers"], value: "tsc_callback_timers_module_value", export: "tsc_callback_timers_export_value", members: callbackTimerOperations },
+            { names: ["timers/promises", "node:timers/promises"], value: "tsc_timers_promises_module_value", export: "tsc_timers_promises_export_value", members: new Set([...timersPromiseOperations.keys()].map(name => name.split(".")[0]!)) },
             { names: ["url", "node:url"], value: "tsc_url_module_value", export: "tsc_url_module_export_value", members: new Set(["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"]) },
             { names: ["console", "node:console"], value: "tsc_console_module_value", export: "tsc_console_module_export_value", members: consoleOperations },
         ];
@@ -35123,29 +35102,6 @@ class Emitter {
         if (this.ordinaryNativeGlobalConstructor(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
         }
-        if (name === "queueMicrotask") {
-            return this.emitQueuedCallbackCall(call, "tsc_queue_microtask", false, true);
-        }
-        const timersPromisesNamed = ["setTimeout", "setInterval", "setImmediate"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["timers/promises", "node:timers/promises"], exported));
-        if (timersPromisesNamed) {
-            return this.emitTimersPromisesCall(call, timersPromisesNamed);
-        }
-        if (name === "setImmediate") {
-            return this.emitSetImmediateCall(call);
-        }
-        if (name === "clearImmediate") {
-            return this.emitClearTimerCall(call, "tsc_clear_immediate");
-        }
-        if (name === "setTimeout") {
-            return this.emitSetTimeoutCall(call);
-        }
-        if (name === "setInterval") {
-            return this.emitSetIntervalCall(call);
-        }
-        if (name === "clearTimeout" || name === "clearInterval") {
-            return this.emitClearTimerCall(call, "tsc_clear_timeout");
-        }
         const bufferBase64Named = ["atob", "btoa"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], exported));
         if (bufferBase64Named) {
@@ -35154,11 +35110,6 @@ class Emitter {
         const bufferTranscodeNamed = this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], "transcode");
         if (bufferTranscodeNamed) {
             return this.emitBufferTranscodeCall(call);
-        }
-        const timersNamed = ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["timers", "node:timers"], exported));
-        if (timersNamed) {
-            return this.emitTimersCall(call, timersNamed);
         }
         const eventsNamed = ["listenerCount", "getEventListeners", "once", "on", "setMaxListeners", "getMaxListeners"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["events", "node:events"], exported));
@@ -37239,18 +37190,6 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
             return this.emitFsCall(call, memberName);
-        }
-
-        if (this.isTimersModuleIdentifier(recvExpr)) {
-            return this.emitTimersCall(call, memberName);
-        }
-
-        if (this.isTimersPromisesModuleIdentifier(recvExpr)) {
-            return this.emitTimersPromisesCall(call, memberName);
-        }
-
-        if (this.isTimersPromisesSchedulerReceiver(recvExpr)) {
-            return this.emitTimersPromisesSchedulerCall(call, memberName);
         }
 
         if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
@@ -40837,29 +40776,6 @@ class Emitter {
         });
     }
 
-    private emitClearTimerCall(call: ts.CallExpression, runtime: string): EmitResult {
-        const specs: SequencedCallArg[] = [];
-        for (let i = 0; i < call.arguments.length; i++) {
-            const arg = call.arguments[i]!;
-            const value = this.emitExpr(arg);
-            if (i === 0 && this.isUndefinedLikeExpression(arg)) {
-                specs.push({
-                    value: { c: `((void)(${value.c}), 0.0)`, ty: T_NUMBER },
-                    target: T_NUMBER,
-                    node: arg,
-                });
-                continue;
-            }
-            specs.push({
-                value,
-                target: i === 0 ? T_NUMBER : undefined,
-                node: arg,
-            });
-        }
-        return this.emitSequencedExpr(T_VOID, specs, (args) =>
-            `${runtime}(${args[0] ?? "0.0"})`,
-        );
-    }
 
     private emitBase64Call(call: ts.CallExpression, name: string): EmitResult {
         if (name !== "btoa" && name !== "atob") unsupported(call, `${name}`);
@@ -40897,9 +40813,6 @@ class Emitter {
         ], ([sourceVal, fromVal, toVal]) => `tsc_buffer_transcode(${sourceVal}, ${fromVal}, ${toVal})`);
     }
 
-    private emitSetImmediateCall(call: ts.CallExpression): EmitResult {
-        return this.emitQueuedCallbackCall(call, "tsc_set_immediate");
-    }
 
     private emitImmediateCallbackSchedule(
         call: ts.CallExpression,
@@ -41226,52 +41139,7 @@ class Emitter {
         return name;
     }
 
-    private emitSetTimeoutCall(call: ts.CallExpression): EmitResult {
-        return this.emitQueuedCallbackCall(call, "tsc_set_timeout", true);
-    }
 
-    private emitSetIntervalCall(call: ts.CallExpression): EmitResult {
-        return this.emitQueuedCallbackCall(call, "tsc_set_interval", true);
-    }
-
-    private emitTimersCall(call: ts.CallExpression, name: string): EmitResult {
-        switch (name) {
-            case "setTimeout":
-                return this.emitSetTimeoutCall(call);
-            case "setInterval":
-                return this.emitSetIntervalCall(call);
-            case "setImmediate":
-                return this.emitSetImmediateCall(call);
-            case "clearTimeout":
-            case "clearInterval":
-                return this.emitClearTimerCall(call, "tsc_clear_timeout");
-            case "clearImmediate":
-                return this.emitClearTimerCall(call, "tsc_clear_immediate");
-        }
-        unsupported(call, `timers.${name}`);
-    }
-
-    private emitTimersPromisesOperation(call: ts.CallExpression, name: string): EmitResult {
-        const operation = timersPromiseOperations.get(name);
-        if (!operation) unsupported(call, `timers/promises unsupported operation ${name}`);
-        const result = operation.interval ? T_VALUE :
-            this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
-        if (!operation.interval && result.kind !== "promise")
-            unsupported(call, `timers/promises.${name} result must be Promise<T>`);
-        const actuals = this.emitSpreadCallArgumentList(call.arguments);
-        return this.emitSequencedExpr(result, [{ value: actuals, node: call }], ([argumentsList]) => {
-            const invocation = `tsc_timers_promises_call(${operation.constant}, ${argumentsList})`;
-            return operation.interval ? invocation : `tsc_value_as_promise(${invocation})`;
-        });
-    }
-
-    private emitTimersPromisesCall(call: ts.CallExpression, name: string): EmitResult {
-        return this.emitTimersPromisesOperation(call, name);
-    }
-
-    private emitTimersPromisesSchedulerCall(call: ts.CallExpression, name: string): EmitResult {
-        return this.emitTimersPromisesOperation(call, `scheduler.${name}`);
-    }
 
     private isUndefinedLikeExpression(expr: ts.Expression): boolean {
         const cur = unwrapTransparentExpression(expr);
@@ -45859,13 +45727,13 @@ class Emitter {
                 { value: name, target: T_VALUE, node: pa.name },
             ], ([base, key]) => `tsc_value_private_get(${base}, ${key})`);
         }
+        const importedHostModuleOwner = this.importedHostModuleOwner(pa);
+        if (importedHostModuleOwner) return importedHostModuleOwner;
         if (ts.isIdentifier(pa.name)) {
             const name=this.namespaceMemberName(pa.name);
             if (name) return this.emitExpr(pa.name);
         }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
-        const importedHostModuleOwner = this.importedHostModuleOwner(pa);
-        if (importedHostModuleOwner) return importedHostModuleOwner;
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };

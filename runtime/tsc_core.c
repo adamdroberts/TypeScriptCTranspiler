@@ -2596,3 +2596,92 @@ tsc_value_t tsc_current_error_value(void) {
     return g_current_throw.initialized ? g_current_throw.value
         : tsc_value_string(tsc_str_from_lit("(unknown error)", 15));
 }
+
+/* Ordinary callback timer owners retain one complete actual-argument vector.
+ * The native handle ABI remains numeric; owner objects do not invent another
+ * callback calling convention or reinterpret source declaration ownership. */
+typedef enum { TIMER_SCHEDULE, TIMER_REPEAT, TIMER_CLEAR } callback_timer_action_t;
+typedef enum { TIMER_DELAYED, TIMER_IMMEDIATE, TIMER_MICROTASK } callback_timer_queue_t;
+typedef struct {
+    const char* name;
+    double length;
+    callback_timer_action_t action;
+    callback_timer_queue_t queue;
+    int delay_index, actuals_start;
+    bool module_export;
+} callback_timer_descriptor_t;
+static const callback_timer_descriptor_t callback_timer_operations[] = {
+#define TSC_CALLBACK_TIMER_OPERATION(name, operation, length, action, queue, delay, actuals, module_export) {#name, length, TIMER_##action, TIMER_##queue, delay, actuals, module_export},
+#include "tsc_callback_timers.def"
+#undef TSC_CALLBACK_TIMER_OPERATION
+};
+typedef struct { tsc_value_t callback; void* callback_root; tsc_array_t* actuals; } callback_timer_capture_t;
+static void callback_timer_invoke(void* environment) {
+    callback_timer_capture_t* capture = environment;
+    (void)tsc_value_apply_function(capture->callback, tsc_value_undefined(), tsc_value_array(capture->actuals));
+}
+static tsc_value_t callback_timer_apply(void* environment, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    const callback_timer_descriptor_t* operation = environment;
+    size_t count = args ? args->len : 0;
+    if (operation->action == TIMER_CLEAR) {
+        if (count) {
+            double id = tsc_value_to_number(TSC_ARR(tsc_value_t, args, 0));
+            if (operation->queue == TIMER_IMMEDIATE) tsc_clear_immediate(id);
+            else tsc_clear_timeout(id);
+        }
+        return tsc_value_undefined();
+    }
+    tsc_value_t callback = count ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!tsc_value_is_callable(callback)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("timer callback must be callable"));
+    callback_timer_capture_t* capture = TSC_GC_MALLOC(sizeof(*capture));
+    *capture = (callback_timer_capture_t){callback, tsc_value_gc_root(callback), tsc_array_new(sizeof(tsc_value_t), 1)};
+    for (size_t index = (size_t)operation->actuals_start; index < count; ++index)
+        tsc_array_push_value(capture->actuals, TSC_ARR(tsc_value_t, args, index));
+    double delay = operation->delay_index >= 0 && (size_t)operation->delay_index < count
+        ? tsc_value_to_number(TSC_ARR(tsc_value_t, args, operation->delay_index)) : 0.0;
+    if (operation->queue == TIMER_MICROTASK) {
+        tsc_queue_microtask(callback_timer_invoke, capture);
+        return tsc_value_undefined();
+    }
+    double id = operation->queue == TIMER_IMMEDIATE ? tsc_set_immediate(callback_timer_invoke, capture)
+        : operation->action == TIMER_REPEAT ? tsc_set_interval(callback_timer_invoke, capture, delay)
+        : tsc_set_timeout(callback_timer_invoke, capture, delay);
+    return tsc_value_num(id);
+}
+typedef struct {
+    tsc_value_t functions[TSC_CALLBACK_TIMER_OPERATION_COUNT];
+    void* function_roots[TSC_CALLBACK_TIMER_OPERATION_COUNT];
+    tsc_object_t* object;
+    tsc_object_t* namespace_object;
+} callback_timer_realm_t;
+static const char callback_timer_realm_key;
+static tsc_value_t callback_timer_export_get(void* environment, tsc_value_t receiver) {(void)receiver;return *(tsc_value_t*)environment;}
+static callback_timer_realm_t* callback_timer_realm(void) {
+    callback_timer_realm_t* state = tsc_realm_state_get(&callback_timer_realm_key);
+    if (state) return state;
+    state = TSC_GC_MALLOC(sizeof(*state));memset(state, 0, sizeof(*state));tsc_realm_state_set(&callback_timer_realm_key, state);
+    state->object = tsc_object_new();state->namespace_object = tsc_module_namespace_new();
+    for (size_t index = 0; index < TSC_CALLBACK_TIMER_OPERATION_COUNT; ++index) {
+        const callback_timer_descriptor_t* operation = &callback_timer_operations[index];
+        tsc_str_t* name = tsc_str_from_cstr(operation->name);
+        state->functions[index] = tsc_value_function_named_kind(callback_timer_apply, NULL, (void*)operation, operation->length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->function_roots[index] = tsc_value_gc_root(state->functions[index]);
+        if (!operation->module_export) continue;
+        (void)tsc_object_set(state->object, name, state->functions[index]);
+        (void)tsc_object_define_accessor(state->namespace_object, name, callback_timer_export_get, &state->functions[index], true, NULL, NULL, false, true, true, false, true);
+    }
+    tsc_value_t* exports = TSC_GC_MALLOC(sizeof(*exports));*exports = tsc_value_object(state->object);
+    (void)tsc_object_define_accessor(state->namespace_object, tsc_str_from_lit("default", 7), callback_timer_export_get, exports, true, NULL, NULL, false, true, true, false, true);
+    tsc_module_namespace_finalize(state->namespace_object);
+    return state;
+}
+tsc_value_t tsc_callback_timer_value(tsc_callback_timer_operation_t operation) {
+    if ((unsigned)operation >= TSC_CALLBACK_TIMER_OPERATION_COUNT) tsc_panic("invalid callback timer operation");
+    return callback_timer_realm()->functions[operation];
+}
+tsc_value_t tsc_callback_timers_module_value(bool namespace_object) {
+    callback_timer_realm_t* state = callback_timer_realm();return tsc_value_object(namespace_object ? state->namespace_object : state->object);
+}
+
+tsc_value_t tsc_callback_timers_export_value(tsc_str_t* name){return tsc_value_get_prop(tsc_callback_timers_module_value(true),name);}
