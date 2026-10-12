@@ -36,3 +36,20 @@ export function declarativeSourceBindingSymbol(checker: ts.TypeChecker, node: ts
         checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
     return canonicalParameterBindingSymbol(checker, node, symbol);
 }
+
+/** Follow one alias graph while preserving whether its binding denotes a
+ * Module namespace. JSON defaults and namespaces share a checker target. */
+export function sourceBindingTarget(checker: ts.TypeChecker, symbol: ts.Symbol | undefined): {
+    readonly symbol: ts.Symbol | undefined;
+    readonly namespace: boolean;
+} {
+    let namespace = false;
+    const seen = new Set<ts.Symbol>();
+    while (symbol && symbol.flags & ts.SymbolFlags.Alias) {
+        if (seen.has(symbol)) return { symbol: undefined, namespace };
+        seen.add(symbol);
+        namespace ||= (symbol.declarations ?? []).some(declaration => ts.isNamespaceImport(declaration) || ts.isNamespaceExport(declaration));
+        symbol = checker.getImmediateAliasedSymbol(symbol);
+    }
+    return { symbol, namespace };
+}

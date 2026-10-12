@@ -10,7 +10,7 @@ import * as path from "node:path";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
-import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding} from "./source-bindings";
+import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
 import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
@@ -186,6 +186,8 @@ class SourceValueFlow {
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
+    private readonly moduleNamespaces = new Map<ts.SourceFile, {value: Cell; owner: ObjectOwner}>();
+    private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol; owner: ObjectOwner}[] = [];
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
     private queueCursor = 0;
@@ -543,12 +545,21 @@ class SourceValueFlow {
     private bindingSymbol(node: ts.Identifier): ts.Symbol | undefined {
         // Ordinary checker lookup stops at with. Resolve the declarative
         // fallback separately; object-record candidates remain graph edges.
-        let symbol = declarativeSourceBindingSymbol(this.checker, node);
-        if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = this.checker.getAliasedSymbol(symbol);
-        return symbol;
+        return sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol;
     }
     private binding(node: ts.Identifier): Cell {
-        const symbol = this.bindingSymbol(node);
+        const origin = declarativeSourceBindingSymbol(this.checker, node);
+        const projected = sourceBindingTarget(this.checker, origin), symbol = projected.symbol;
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (declaration && ts.isSourceFile(declaration)) {
+            if (projected.namespace) return this.moduleNamespace(declaration, symbol!);
+            if (declaration.flags & ts.NodeFlags.JsonFile) {
+                const expression = declaration.statements[0];
+                if (expression && ts.isExpressionStatement(expression)) return this.cell(expression.expression);
+            }
+        }
+        if (declaration && ts.isExportAssignment(declaration)) return this.cell(declaration.expression);
+        if (declaration && callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) return this.cell(declaration);
         if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) return this.globalBinding(node.text);
         let cell = this.bindings.get(symbol);
         if (!cell) {
@@ -557,6 +568,39 @@ class SourceValueFlow {
             if (declaration && callableDefinition(declaration)) this.copy(this.cell(declaration), cell);
         }
         return cell;
+    }
+    private moduleNamespace(source: ts.SourceFile, symbol: ts.Symbol): Cell {
+        const existing = this.moduleNamespaces.get(source); if (existing) return existing.value;
+        const owner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
+        const value = this.newCell(); this.moduleNamespaces.set(source,{value,owner});
+        this.publish(owner.prototype!,this.primitive(null)); this.publish(value,{tag:"object",owner});
+        this.moduleNamespacePending.push({source,symbol,owner});
+        return value;
+    }
+    private initializeModuleNamespace(source: ts.SourceFile, symbol: ts.Symbol, owner: ObjectOwner): void {
+        if (source.flags & ts.NodeFlags.JsonFile) {
+            const expression = source.statements[0];
+            if (expression && ts.isExpressionStatement(expression)) this.defineField(owner,"default",this.cell(expression.expression));
+        } else {
+            for (const exported of this.checker.getExportsOfModule(symbol)) {
+                const target = sourceBindingTarget(this.checker, exported);
+                const declaration = target.symbol?.valueDeclaration ?? target.symbol?.declarations?.[0];
+                if (!declaration) continue;
+                let selected: Cell;
+                if (ts.isSourceFile(declaration) && target.namespace) selected = this.moduleNamespace(declaration,target.symbol!);
+                else if (ts.isSourceFile(declaration) && declaration.flags & ts.NodeFlags.JsonFile) {
+                    const expression = declaration.statements[0];
+                    selected = expression && ts.isExpressionStatement(expression) ? this.cell(expression.expression) : this.newCell();
+                } else if (ts.isExportAssignment(declaration)) selected = this.cell(declaration.expression);
+                else if (callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) selected = this.cell(declaration);
+                else {
+                    selected = this.bindings.get(target.symbol!) ?? this.newCell();
+                    this.bindings.set(target.symbol!,selected);
+                    if (callableDefinition(declaration)) this.copy(this.cell(declaration),selected);
+                }
+                this.defineField(owner,exported.getName(),selected);
+            }
+        }
     }
     private bindingMayBeUninitialized(node: ts.Identifier): boolean {
         for (const value of this.bindingSymbol(node)?.declarations ?? []) {
@@ -1585,7 +1629,7 @@ class SourceValueFlow {
             this.publish(result, { tag: "object", owner });
             if(ts.isObjectLiteralExpression(node)){
                 owner.prototype=this.newCell();
-                const prototype=node.properties.find(member=>ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&propertyName(member.name)==="__proto__") as ts.PropertyAssignment|undefined;
+                const prototype=!(node.getSourceFile().flags & ts.NodeFlags.JsonFile) ? node.properties.find(member=>ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&propertyName(member.name)==="__proto__") as ts.PropertyAssignment|undefined : undefined;
                 if(prototype){const value=this.cell(prototype.initializer);this.rule([value],()=>{for(const atom of value.values){
                     if(this.ordinaryOwner(atom)||atom===this.primitive(null)||atom.tag==="pending-source")this.publish(owner.prototype!,atom);
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,this.unknown);
@@ -1617,7 +1661,7 @@ class SourceValueFlow {
             }
             if (ts.isObjectLiteralExpression(node)) for (const member of node.properties) {
                 if(ts.isSpreadAssignment(member)){this.publish(owner.shape,this.unknown);continue;}
-                if(ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&propertyName(member.name)==="__proto__")continue;
+                if(!(node.getSourceFile().flags & ts.NodeFlags.JsonFile)&&ts.isPropertyAssignment(member)&&!ts.isComputedPropertyName(member.name)&&propertyName(member.name)==="__proto__")continue;
                 this.projectMemberKeys(member.name,member,key=>{
                     if(key===null)this.publish(owner.shape,this.unknown);
                     if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(owner,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
@@ -2172,8 +2216,9 @@ class SourceValueFlow {
     }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
-            while (this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
-                if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
+            while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
+                if (this.moduleNamespacePending.length) { const namespace = this.moduleNamespacePending.pop()!; this.initializeModuleNamespace(namespace.source,namespace.symbol,namespace.owner); }
+                else if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
                 else if (this.primitiveChanges.size) this.flushPrimitiveChanges();
                 else {
                     const rule = this.queue[this.queueCursor++]!; rule.queued = false; rule.run();
