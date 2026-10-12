@@ -2793,7 +2793,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `string-trimming` — standard, tracking: `ready-for-verification`; `sec-string.prototype.trim`, `sec-string.prototype.trimstart`, `sec-string.prototype.trimend`, `String.prototype.trimleft`, `String.prototype.trimright`.
 - [ ] `super` — standard, tracking: `todo`; no clause mapping.
 - [ ] `symbols-as-weakmap-keys` — standard, tracking: `todo`; no clause mapping.
-- [ ] `tail-call-optimization` — standard, tracking: `todo`; no clause mapping.
+- [ ] `tail-call-optimization` — standard, tracking: `ready-for-verification`; `sec-call`, `sec-evaluatecall`, `sec-function-calls-runtime-semantics-evaluation`, `sec-isintailposition`, `sec-preparefortailcall`, `sec-static-semantics-hascallintailposition`, `sec-tail-position-calls`.
 - [ ] `template` — standard, tracking: `todo`; no clause mapping.
 - [ ] `top-level-await` — standard, tracking: `todo`; no clause mapping.
 - [ ] `u180e` — standard, tracking: `ready-for-verification`; `sec-unicode-format-control-characters`, `sec-white-space`.
