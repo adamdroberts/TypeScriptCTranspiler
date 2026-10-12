@@ -12339,10 +12339,8 @@ class Emitter {
             // may have installed a lexical binding that shadows an intrinsic.
             return false;
         }
-        const sym = this.symbolForIdentifier(id);
-        if (!sym) return true;
         const source = id.getSourceFile();
-        return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source && !this.isAmbientDeclaration(decl));
+        return !this.sourceBindingDeclarations(id).some(declaration => declaration.getSourceFile() === source);
     }
 
     /** Type-only ambient declarations do not create source runtime bindings,
@@ -12357,12 +12355,17 @@ class Emitter {
     }
 
     private isOutOfBandIdentifier(id: ts.Identifier): boolean {
-        const symbol = this.symbolForIdentifier(id);
-        return !symbol || (symbol.declarations ?? []).every((declaration) =>
-            this.isAmbientDeclaration(declaration) ||
-            !this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) ||
-            !sourceDeclarationIntroducesBinding(declaration)
-        );
+        return this.sourceBindingDeclarations(id).length === 0;
+    }
+
+    /** Binding syntax owns the local Reference even when the checker projects
+     * an import alias to a synthetic SourceFile or an ambient host export. */
+    private sourceBindingDeclarations(id: ts.Identifier): readonly ts.Declaration[] {
+        const symbols = new Set([this.checker.getSymbolAtLocation(id), this.symbolForIdentifier(id)]);
+        return [...new Set([...symbols].flatMap(symbol => symbol?.declarations ?? []))].filter(declaration =>
+            !this.isAmbientDeclaration(declaration) &&
+            this.graph.fileToModuleId.has(path.resolve(declaration.getSourceFile().fileName)) &&
+            sourceDeclarationIntroducesBinding(declaration));
     }
 
     private test262HostGlobalBindingName(id: ts.Identifier): string | null {

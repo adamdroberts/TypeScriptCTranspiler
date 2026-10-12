@@ -39,11 +39,16 @@ function subjectSource(): string {
     );
     return [
         ...imports,
+        "import undefined from './number.json' with { type: 'json' };",
+        "import NaN from './number.json' with { type: 'json' };",
+        "import Math from './identity.json' with { type: 'json' };",
+        "import Promise from './string.json' with { type: 'json' };",
         "import identity1 from './identity.json' with { type: 'json' };",
         "import { default as identity2 } from './identity.json' with { type: 'json' };",
         "import * as identityNamespace from './identity.json' with { type: 'json' };",
         "import * as numberNamespace from './number.json' with { type: 'json' };",
         ...observations,
+        "console.log('shadowed:' + typeof undefined + ':' + String(Number.isNaN(NaN)) + ':' + Math.token + ':' + Promise);",
         "console.log('identity:' + String(identity1 === identity2) + ':' + String(identityNamespace.default === identity1));",
         "console.log('identity-namespace:' + Object.getOwnPropertyNames(identityNamespace).join(',') + ':' + String(Object.getPrototypeOf(identityNamespace) === null) + ':' + String(Object.isExtensible(identityNamespace)));",
         "console.log('number-namespace:' + String(Object.getOwnPropertyNames(numberNamespace).length) + ':' + String(numberNamespace.default));",
@@ -58,6 +63,7 @@ test("JSON Modules derive every root partition and import form from one syntheti
     const entry = path.join(temporary, "subject.js");
     const expected = [
         ...rootPartitions.map((partition) => `${partition.label}:${partition.expected}`),
+        "shadowed:number:false:identity:module value",
         "identity:true:true",
         "identity-namespace:default:true:false",
         "number-namespace:1:262",
@@ -67,11 +73,15 @@ test("JSON Modules derive every root partition and import form from one syntheti
     try {
         await Promise.all([
             fs.writeFile(entry, subjectSource(), "utf8"),
+            fs.writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n', "utf8"),
             ...rootPartitions.map((partition) =>
                 fs.writeFile(path.join(temporary, `${partition.label}.json`), partition.source, "utf8")
             ),
             fs.writeFile(path.join(temporary, "identity.json"), '{"token":"identity"}\n', "utf8"),
         ]);
+        const oracle = Bun.spawnSync(["node", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+        expect(oracle.stdout.toString()).toBe(expected);
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);
