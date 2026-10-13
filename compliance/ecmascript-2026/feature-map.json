@@ -155,9 +155,11 @@
     {
       "tag": "Error.isError",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-error.iserror"
+      ],
+      "rationale": "Every pinned Test262 metadata anchor carrying this standard feature resolves to Error.isError. The private owner witness, ordinary callable metadata, cross-Realm behavior and source actual-List effects now have scoped Node/native verification inputs. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "FinalizationRegistry",

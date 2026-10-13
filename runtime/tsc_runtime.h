@@ -1067,6 +1067,8 @@ double tsc_value_to_index(tsc_value_t value);
 tsc_value_t tsc_value_map(struct tsc_map* m);
 tsc_value_t tsc_value_set(struct tsc_set* s);
 tsc_value_t tsc_value_error(struct tsc_error* e);
+/* Tests the private ErrorData witness without property access or Proxy forwarding. */
+bool tsc_value_is_error(tsc_value_t value);
 tsc_value_t tsc_value_buffer(struct tsc_buffer* b);
 tsc_value_t tsc_value_url(struct tsc_url* url);
 tsc_value_t tsc_value_url_search_params(struct tsc_url_search_params* params);

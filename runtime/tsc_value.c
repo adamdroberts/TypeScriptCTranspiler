@@ -852,6 +852,11 @@ typedef struct {
 
 static const char error_intrinsics_realm_state_key = 0;
 
+static tsc_value_t error_is_error_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver;
+    return tsc_value_bool(tsc_value_is_error(args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined()));
+}
+
 static tsc_value_t error_constructor_apply(void* env, tsc_value_t this_arg, tsc_array_t* args);
 static tsc_value_t error_constructor_construct(void* env, tsc_value_t receiver, tsc_array_t* args);
 
@@ -1004,6 +1009,13 @@ static void error_intrinsics_initialize(void) {
                 true
             );
         }
+        for (size_t i = 1; i < TSC_ERROR_KIND_COUNT; ++i)
+            tsc_function_identity_set_prototype(value_ptr(error_intrinsics[i].constructor),
+                error_intrinsics[TSC_ERROR_ERROR].constructor);
+        tsc_value_define_property_desc(error_intrinsics[TSC_ERROR_ERROR].constructor,
+            tsc_str_from_lit("isError", 7),
+            tsc_value_function_builtin_named(error_is_error_apply, NULL, 1, tsc_str_from_lit("isError", 7)),
+            true, true, true, false, true, true, true);
         state->initialization_state = 2;
     }
     tsc_runtime_unlock();
@@ -9287,12 +9299,14 @@ bool tsc_util_types_is_regexp(tsc_value_t v) {
     return false;
 }
 
-bool tsc_util_types_is_native_error(tsc_value_t v) {
-    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
-        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-        return o->is_error;
-    }
-    return false;
+bool tsc_value_is_error(tsc_value_t value) {
+    if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_OBJECT) return false;
+    const tsc_object_t* owner = value_ptr(value);
+    return owner && !owner->is_proxy && owner->is_error;
+}
+
+bool tsc_util_types_is_native_error(tsc_value_t value) {
+    return tsc_value_is_error(value);
 }
 
 bool tsc_util_types_is_promise(tsc_value_t v) {

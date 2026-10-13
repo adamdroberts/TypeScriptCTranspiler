@@ -3873,6 +3873,62 @@
         "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
         "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/error-brand.property.test.ts",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "error_brand_depth",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ],
+      "stressReview": {
+        "dimension": "retained ErrorData owner graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated owner graph retains actual errors with changed prototypes and distinguishes inherited fake owners independently of fixture shape or owner count.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "error_brand",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#ErrorConstructorProperties",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_is_error",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#error_intrinsics_initialize",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#SourceValueFlow",
+      "targets": [
+        "sec-error.iserror#private-error-data-brand"
+      ]
     }
   ]
 }

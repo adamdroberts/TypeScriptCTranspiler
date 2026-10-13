@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface ErrorBrandDepthSpec { generator:"error-brand-depth"; depth:number; }
 export interface MapInsertionDepthSpec { generator:"map-insertion-depth"; depth:number; }
 export interface DescriptorProjectionDepthSpec { generator:"descriptor-projection-depth"; depth:number; }
 export interface PrototypeValidationDepthSpec { generator:"prototype-validation-depth"; depth:number; }
@@ -221,6 +222,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | ErrorBrandDepthSpec
     | MapInsertionDepthSpec
     | DescriptorProjectionDepthSpec
     | PrototypeValidationDepthSpec
@@ -327,7 +329,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1781,6 +1783,11 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "error-brand-depth":
+            return `// @ts-nocheck\nlet errorBrandGraph=null;\n` +
+                `for(let index=0;index<${spec.depth};index++){const value=new TypeError('retained');Object.setPrototypeOf(value,null);errorBrandGraph={value,next:errorBrandGraph}}\n` +
+                `while(errorBrandGraph!==null){if(!Error.isError(errorBrandGraph.value)||Error.isError(Object.create(errorBrandGraph.value)))throw new Error('error data owner');errorBrandGraph=errorBrandGraph.next}\n` +
+                `console.log('error-brand-depth:',true);\n`;
         case "map-insertion-depth":
             return `// @ts-nocheck\nconst mapInsertionOwners=new Map();let mapInsertionGraph=null;\n` +
                 `for(let index=0;index<${spec.depth};index++){const key={index};const value=mapInsertionOwners.getOrInsertComputed(key,()=>({key}));mapInsertionGraph={key,value,next:mapInsertionGraph}}\n` +

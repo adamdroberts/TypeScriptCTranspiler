@@ -1274,7 +1274,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-error-constructor` — The Error Constructor: exact disposition and partitions missing.
   - [ ] `sec-error-message` — Error ( _message_ [ , _options_ ] ): exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-error-constructor` — Properties of the Error Constructor: exact disposition and partitions missing.
-  - [ ] `sec-error.iserror` — Error.isError ( _arg_ ): exact disposition and partitions missing.
+  - [ ] `sec-error.iserror` — Error.isError ( _arg_ )
+    - [ ] `private-error-data-brand` (intrinsic, unbounded): Private ErrorData brand survives owner, prototype and Realm changes.
   - [ ] `sec-error.prototype` — Error.prototype: exact disposition and partitions missing.
   - [ ] `sec-properties-of-the-error-prototype-object` — Properties of the Error Prototype Object: exact disposition and partitions missing.
   - [ ] `sec-error.prototype.constructor` — Error.prototype.constructor: exact disposition and partitions missing.
@@ -2655,7 +2656,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `DataView.prototype.getUint16` — standard, tracking: `todo`; no clause mapping.
 - [ ] `DataView.prototype.getUint32` — standard, tracking: `todo`; no clause mapping.
 - [ ] `DataView.prototype.setUint8` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Error.isError` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Error.isError` — standard, tracking: `ready-for-verification`; `sec-error.iserror`.
 - [ ] `FinalizationRegistry` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Float16Array` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Float32Array` — standard, tracking: `todo`; no clause mapping.

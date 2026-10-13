@@ -21,11 +21,13 @@ test("native Error formatting retains root Types, ordering and genuine callbacks
  }
  const pure='let body="37;";try{null.value;}catch(error){String(error);}eval(body);';expect(graph([{path:"main.js",source:pure}]).error).toBeNull();
  const abrupt='let body="41;";const value={name:Symbol.iterator,get message(){body=opaque();return "";}};try{Error.prototype.toString.call(value);}catch(error){}eval(body);';expect(graph([{path:"main.js",source:abrupt}]).error).toBeNull();
+ const boxed='try{throw Object(0);}catch(error){eval(String(error));}',boxedProof=graph([{path:"main.js",source:boxed}]);
+ expect(boxedProof.error).toBeNull();expect(boxedProof.directEvalSources.map(entry=>entry.source)).toEqual(['0']);
+ const boxedNode=Bun.spawnSync(['node','-e',boxed],{stdout:'pipe',stderr:'pipe'});expect({code:boxedNode.exitCode,stderr:boxedNode.stderr.toString()}).toEqual({code:0,stderr:''});
  for(const source of [
   'let body="43;";Error.prototype.toString=function(){body=opaque();return "";};try{null.value;}catch(error){String(error);}eval(body);',
   'let body="47;";Object.defineProperty(Error.prototype,"name",{get(){body=opaque();return "";}});try{null.value;}catch(error){String(error);}eval(body);',
   'let body="53;";try{throw {toString(){body=opaque();return "";}};}catch(error){String(error);}eval(body);',
-  'try{throw Object(0);}catch(error){eval(String(error));}',
   'eval(Error.prototype.toString.call({get name(){return opaque();},message:""}));',
   'eval(Error.prototype.toString.call({name:"",get message(){return opaque();}}));',
  ])expect({source,error:graph([{path:"main.js",source}]).error}).toMatchObject({error:expect.stringContaining("direct eval source is not a finite static string expression")});

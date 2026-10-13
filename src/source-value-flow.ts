@@ -45,7 +45,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "util-format" | "native-require" | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -155,6 +155,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
+    ["Error", new Map([["isError", "error-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["getPrototypeOf", "prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
@@ -1746,7 +1747,7 @@ class SourceValueFlow {
                     this.publish(value,this.primitive("JSON"));this.defineField(fields,tag,value);
                 }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
-                if(runtimeErrorKinds.has(key))this.defineField(fields,"prototype",this.errorPrototype(key));
+                if(runtimeErrorKinds.has(key)){this.defineField(fields,"prototype",this.errorPrototype(key));if(key!=="Error")fields.prototype=this.globalBinding("Error");}
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
                 if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
                 if(key==="Promise"){
@@ -2285,12 +2286,12 @@ class SourceValueFlow {
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
-        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format")) {
+        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format"||atom.operation==="error-brand")) {
             let owner=this.intrinsicOwners.get(atom);
             if(!owner) {
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
                 this.copy(this.opaqueMutation,owner.shape);
-                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
+                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:atom.operation==="error-brand"?{name:"isError",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
                 this.publish(name,this.primitive(descriptor.name));this.publish(length,this.primitive(descriptor.length));
                 this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }
@@ -3528,6 +3529,15 @@ class SourceValueFlow {
                     if (atom.tag === "operation" && invocation.construct) {
                         this.publish(result,this.abrupt);
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
+                        continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="error-brand") {
+                        // ErrorData is private and cannot invoke coercion or
+                        // property hooks. Unknown owners retain both Boolean
+                        // alternatives without escaping their ordinary fields.
+                        this.publish(result,this.primitive(false));
+                        const input=argument(0);
+                        if(input){this.watch(rule,input);if(this.primitiveKinds(input)&KIND_OBJECT)this.publish(result,this.primitive(true));}
                         continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="util-format") {

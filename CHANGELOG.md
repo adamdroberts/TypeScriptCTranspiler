@@ -1,3 +1,5 @@
+Added Error.isError through the private ErrorData owner witness, shared with native util error classification. Native error constructors inherit Error, and the source graph preserves pure Boolean call facts. Independent Node/native partitions, foreign Realm checks and one shared retained-owner stress verify the feature.
+
 Added ordinary Map.getOrInsert/getOrInsertComputed owners using the shared collection lookup/store, preserving callback validation, canonical keys, live mutation and abrupt completion. Independent Node/native properties, borrowed Realm checks and a shared retained-owner CLI stress verify the methods.
 
 Projected native descriptors from one ordered own-slot record, preserving presence and bypassing inherited field setters. Legacy lookup uses own descriptor slots and one retained prototype worklist. Shared iterator-result creation now preserves own value/done fields, replacing duplicate builders; independent Node/native properties and a shared deep CLI input verify the repair.

@@ -1,0 +1,6 @@
+brand: true false false
+inherited: true true
+changed prototype: true
+proxies: false false
+actuals: false true 2
+subclass: true

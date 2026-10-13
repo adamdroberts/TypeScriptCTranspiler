@@ -989,6 +989,7 @@ interface ErrorOptions {
     cause?: any;
 }
 interface ErrorConstructorProperties<E extends Error> {
+    isError(value?: any, ...ignored: any[]): boolean;
     readonly name: string;
     readonly length: number;
     prototype: E;
