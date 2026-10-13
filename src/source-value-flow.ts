@@ -187,6 +187,7 @@ class SourceValueFlow {
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleNamespaces = new Map<ts.SourceFile, {value: Cell; owner: ObjectOwner}>();
+    private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
     private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol; owner: ObjectOwner}[] = [];
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
@@ -1613,6 +1614,15 @@ class SourceValueFlow {
                     });
                 }
             }
+        } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
+            const source = node.getSourceFile();
+            let metadata = this.moduleMetadata.get(source);
+            if (!metadata) {
+                metadata = this.newCell(); this.moduleMetadata.set(source,metadata);
+                const owner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
+                this.publish(owner.prototype!,this.primitive(null)); this.publish(metadata,{tag:"object",owner});
+            }
+            this.copy(metadata,result);
         } else if (node.kind === ts.SyntaxKind.ThisKeyword) {
             let parent: ts.Node | undefined = node.parent;
             let member: ts.Node = node;

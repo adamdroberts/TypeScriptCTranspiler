@@ -18,6 +18,7 @@ typedef struct tsc_module_record {
     tsc_value_t error;
     void* error_root;
     struct tsc_module_record* error_source;
+    tsc_object_t* import_meta;
 } tsc_module_record_t;
 struct tsc_module_graph {
     size_t count;
@@ -158,6 +159,20 @@ tsc_module_graph_t* tsc_module_graph_new(const tsc_module_definition_t* definiti
                 tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module request is outside its retained graph"));
     }
     return graph;
+}
+
+tsc_value_t tsc_module_import_meta(tsc_module_graph_t* graph, size_t index) {
+    if (index >= graph->count) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module is outside its retained graph"));
+    tsc_module_record_t* record = &graph->records[index];
+    if (!record->import_meta) {
+        tsc_object_t* object = tsc_object_new();
+        (void)tsc_object_set_prototype_of(object, tsc_value_null());
+        /* The native host uses the specified defaults: an empty property List
+         * and no extraordinary finalization. The decoded owner is retained
+         * by this Module Record, independently of later evaluation state. */
+        record->import_meta = object;
+    }
+    return tsc_value_object(record->import_meta);
 }
 
 tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {

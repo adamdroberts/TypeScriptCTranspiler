@@ -1331,6 +1331,7 @@ typedef struct {
     bool has_tla;
 } tsc_module_definition_t;
 tsc_module_graph_t* tsc_module_graph_new(const tsc_module_definition_t* definitions, size_t count);
+tsc_value_t tsc_module_import_meta(tsc_module_graph_t* graph, size_t index);
 tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index);
 size_t tsc_module_error_source_index(tsc_module_graph_t* graph, size_t index);
 void tsc_module_require_sync(tsc_module_graph_t* graph, size_t index);

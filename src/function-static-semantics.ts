@@ -431,6 +431,11 @@ export function earlyFunctionStaticSemanticsFailure(
     ];
     while (worklist.length > 0) {
         const { node, allowAwait, allowYield } = worklist.pop()!;
+        if (ts.isMetaProperty(node) && node.name.getText(sourceFile) !==
+            (node.keywordToken === ts.SyntaxKind.ImportKeyword ? "meta" : "target"))
+            return { node, message: "MetaProperty requires its literal token spelling" };
+        if (!module && ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword)
+            return { node, message: "import.meta requires the Module parse goal" };
         // The TypeScript AST also calls a JavaScript class's `extends` operand
         // a TypeNode. Its expression is ordinary ECMAScript syntax; only an
         // attached type-argument List belongs to the TypeScript grammar.

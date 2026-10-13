@@ -1080,6 +1080,7 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
 
+        for (const declaration of this.moduleFunctionDeclarations.keys()) markTopLevelFunction(declaration);
         for (const modId of emitOrder) {
             const info = this.graph.modules.get(modId);
             if (info) visit(info.sf);
@@ -32449,6 +32450,14 @@ class Emitter {
                 unsupported(expr, "`this` outside of a class method or function this parameter");
             if (fnThis) return this.readThisBinding(fnThis);
             return { c: "self", ty: classType(this.currentClass!) };
+        }
+
+        if (ts.isMetaProperty(expr) && expr.keywordToken === ts.SyntaxKind.ImportKeyword) {
+            const source = expr.getSourceFile(), moduleId = this.graph.fileToModuleId.get(source.fileName);
+            if (!moduleId || ecmaParseGoal(source) !== "module" || this.isCommonJsSourceFile(source) ||
+                this.isTest262ScriptSourceFile(source) || this.isTest262EvalSourceFile(source))
+                unsupported(expr, "import.meta requires an ECMAScript Module source unit");
+            return { c: `tsc_module_import_meta(mod_runtime_graph(), ${this.moduleRuntimeIndex(moduleId)})`, ty: T_VALUE };
         }
 
         if (

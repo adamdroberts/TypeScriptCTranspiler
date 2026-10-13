@@ -118,7 +118,34 @@ export function createEcmaSourceFile(
         : languageVersion;
     let shadow = ecmaImportAttributesParserShadow(source);
     let sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
-    goal ??= ts.isExternalModule(sourceFile) || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
+    // TypeScript rejects ImportMeta as an unparenthesized `new` callee. Parse
+    // every ImportMeta through the same length-preserving identifier shadow,
+    // then restore the original MetaProperty nodes before binding. Literal
+    // intervals keep text in regular expressions and templates out of the
+    // token worklist, while their interpolation expressions remain visible.
+    const literals = new Map<number,number>(), literalWorklist: ts.Node[] = [sourceFile];
+    while (literalWorklist.length) {
+        const node = literalWorklist.pop()!;
+        if (ts.isLiteralExpression(node) || ts.isTemplateLiteralToken(node)) literals.set(node.getStart(sourceFile),node.end);
+        ts.forEachChild(node, child => {literalWorklist.push(child);});
+    }
+    const importMetaTokens = new Set<number>();
+    const metaScanner = ts.createScanner(ts.ScriptTarget.ESNext,true,ts.LanguageVariant.Standard,shadow);
+    for (;;) {
+        const token = metaScanner.scan(); if (token === ts.SyntaxKind.EndOfFileToken) break;
+        const start = metaScanner.getTokenPos(), end = metaScanner.getTextPos(), literalEnd = literals.get(start);
+        if (literalEnd !== undefined) {metaScanner.setTextPos(literalEnd);continue;}
+        if (token !== ts.SyntaxKind.ImportKeyword || metaScanner.hasUnicodeEscape()) continue;
+        if (metaScanner.scan() === ts.SyntaxKind.DotToken && metaScanner.scan() === ts.SyntaxKind.Identifier && metaScanner.getTokenValue() === "meta") importMetaTokens.add(start);
+        metaScanner.setTextPos(end);
+    }
+    if (importMetaTokens.size) {
+        const characters = shadow.split("");
+        for (const start of importMetaTokens) characters.splice(start,6,..."_meta_");
+        shadow = characters.join("");
+        sourceFile = ts.createSourceFile(filename,shadow,parserOptions,setParentNodes,scriptKind);
+    }
+    goal ??= ts.isExternalModule(sourceFile) || importMetaTokens.size > 0 || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
     // Contextual identifier tokens share one offset-preserving parser shadow.
     // Reparse to a fixed point because correcting one Statement body can
     // expose another body in the recovered tree. Each source token is added
@@ -175,6 +202,19 @@ export function createEcmaSourceFile(
             }
             node.forEachChild(child => { worklist.push(child); });
         }
+    }
+    const metaWorklist: ts.Node[] = [sourceFile];
+    while (metaWorklist.length) {
+        const node = metaWorklist.pop()!;
+        if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && importMetaTokens.has(node.expression.getStart(sourceFile))) {
+            const restored = node as unknown as ts.MetaProperty;
+            Object.assign(restored,{kind:ts.SyntaxKind.MetaProperty,keywordToken:ts.SyntaxKind.ImportKeyword});
+            (sourceFile as ts.SourceFile & {flags:ts.NodeFlags}).flags |=
+                (ts.NodeFlags as typeof ts.NodeFlags & {PossiblyContainsImportMeta:ts.NodeFlags}).PossiblyContainsImportMeta;
+            delete (node as unknown as {expression?:ts.Expression}).expression;
+            if (goal === "module") (sourceFile as ts.SourceFile & {externalModuleIndicator?:ts.Node}).externalModuleIndicator ??= restored;
+        }
+        ts.forEachChild(node, child => {metaWorklist.push(child);});
     }
     if (shadow !== source) {
         (sourceFile as ts.SourceFile & { text: string }).text = source;

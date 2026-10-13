@@ -12,6 +12,9 @@ interface ImportCallOptions {
     with?: ImportAttributes;
 }
 
+// The native host selects the specified default import.meta property List.
+interface ImportMeta {}
+
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
     readonly [Symbol.toStringTag]: string;
