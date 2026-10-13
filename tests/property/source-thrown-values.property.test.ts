@@ -36,10 +36,16 @@ test('one exception-value graph routes protected throws, call/getter outcomes an
    expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([[value+';']]);
   }
   for(const body of ['if(flag)throw "31;";external();','var object=flag?{get value(){throw "31;";}}:external;object.value;',
-      'if(flag)throw "31;";var object={valueOf(){throw "37;";}};object-1;',
       'if(flag)throw "31;";var key={toString(){throw external;}};({[key]:0});']){
    await fs.writeFile(entry,`try{${body}}catch(source){eval(source);}`);
    expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([null]);
+  }
+  const knownThrow='try{if(flag)throw "31;";var object={valueOf(){throw "37;";}};object-1;}catch(source){eval(source);}';
+  await fs.writeFile(entry,knownThrow);
+  expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices?.slice().sort())).toEqual([["31;","37;"]]);
+  for(const flag of [false,true]){
+   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm");const context={flag:process.argv[1]==="true"};vm.createContext(context);new vm.Script(process.argv[2]).runInContext(context);process.stdout.write(String(context.result));',String(flag),knownThrow.replace('eval(source);','result=eval(source);')],{stdout:'pipe',stderr:'pipe'});
+   expect({exit:node.exitCode,stderr:node.stderr.toString(),value:node.stdout.toString()}).toEqual({exit:0,stderr:'',value:flag?'31':'37'});
   }
  }finally{await fs.rm(directory,{recursive:true,force:true});}
 },30_000);

@@ -327,6 +327,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Retain primitive kind domains in the source worklist and project actual catch/return reachability without inventing numeric exceptions. Add Node/native coercion, throw and inactive-source partitions with a deep conversion tree.
+
 - Share Script global variable and lexical source locations across independently parsed roots, preserve Module/local ownership and pass the same roots to final admission. Add Node/native declaration and mutation partitions with a deep forwarding graph.
 
 - Preserve unbounded numeric source-key domains through retained scalar facts and project finite owner locations with one shared key worklist. Add Node/native source-context and opaque-effect partitions with a deep prototype graph.

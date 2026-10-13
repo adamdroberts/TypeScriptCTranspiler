@@ -66,6 +66,9 @@ interface PrimitiveChoiceProof {
 }
 interface PrimitiveReadiness {pending:boolean; pendingSource:boolean; unresolved:boolean; scalarUnresolved:boolean;}
 interface ListPart { readonly cell: Cell; readonly spread: boolean; }
+const KIND_UNDEFINED=1,KIND_NULL=2,KIND_BOOLEAN=4,KIND_NUMBER=8,KIND_BIGINT=16,KIND_STRING=32,KIND_SYMBOL=64,KIND_OBJECT=128,KIND_FUNCTION=256;
+const KIND_PRIMITIVE=KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_BIGINT|KIND_STRING|KIND_SYMBOL;
+const KIND_NUMERIC=KIND_NUMBER|KIND_BIGINT,KIND_ALL=KIND_PRIMITIVE|KIND_OBJECT|KIND_FUNCTION;
 type Atom =
     | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
@@ -74,7 +77,7 @@ type Atom =
     | { readonly tag: "operation"; readonly operation: Operation }
     | { readonly tag: "bound"; readonly target: Cell; readonly receiver: Cell; readonly prefix: readonly Cell[] | null; readonly fields: ObjectOwner }
     | { readonly tag: "primitive"; readonly value: Primitive }
-    | { readonly tag: "non-string"; readonly domain?: "numeric" }
+    | { readonly tag: "non-string"; readonly kinds?: number }
     | { readonly tag: "unknown-string" }
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
@@ -190,6 +193,7 @@ class SourceValueFlow {
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
+    private readonly catchGuards = new Map<ts.CatchClause, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
     private readonly globalLexicals = new Map<string, Cell>();
@@ -227,7 +231,7 @@ class SourceValueFlow {
     private readonly symbolRegistry = new Map<string, symbol>();
     private readonly wellKnownSymbols = new Map([...runtimeWellKnownSymbolDescriptions].map(([name, description]) => [name, Symbol(description)]));
     private readonly nonString: Atom = { tag: "non-string" };
-    private readonly numericValue: Atom = { tag: "non-string", domain: "numeric" };
+    private readonly numericValues = new Map<number, Atom>();
     private readonly unknown: Atom = { tag: "unknown" };
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly abrupt: Atom = {tag:"abrupt"};
@@ -270,6 +274,7 @@ class SourceValueFlow {
     private readonly numericConversions = new Map<Cell, Map<ts.Node, Map<string, Cell>>>();
     private readonly numericWrites = new Map<ts.Node, Cell>();
     private readonly primitiveProofCache = new Map<Cell, PrimitiveChoiceProof>();
+    private readonly primitiveKindCache = new Map<Cell, number>();
     private readonly primitiveProofParents = new Map<Cell, Set<Cell>>();
     private readonly primitiveReadyCache = new Map<Cell, PrimitiveReadiness>();
     private readonly primitiveChanges = new Set<Cell>();
@@ -359,6 +364,10 @@ class SourceValueFlow {
                 if (handler) this.exceptionHandlers.set(node, handler);
                 if (ts.isTryStatement(node)) {
                     const caught = node.catchClause ? this.exceptionCell() : handler;
+                    if (node.catchClause && caught) {
+                        const condition=this.catchCondition(node.catchClause);
+                        this.rule([caught],()=>{for(const atom of caught.values)this.publish(condition,this.primitive(atom.tag!=="abrupt"));});
+                    }
                     if (node.catchClause?.variableDeclaration && (!this.enclosingActivation(node)?.completion ||
                         this.enclosingActivation(node)!.completion!.reachable.has(node.catchClause))) this.bind(node.catchClause.variableDeclaration.name, caught!);
                     worklist.push({node: node.tryBlock, handler: caught});
@@ -442,6 +451,11 @@ class SourceValueFlow {
         return tuples;
     }
     private exceptionCell(): Cell {const cell = this.newCell(); this.exceptionCells.add(cell); return cell;}
+    private catchCondition(clause: ts.CatchClause): Cell {
+        let condition=this.catchGuards.get(clause);
+        if(!condition){condition=this.newCell();this.catchGuards.set(clause,condition);}
+        return condition;
+    }
     private enclosingActivation(node: ts.Node): FunctionOwner | null {
         let child = node, parent = node.parent;
         while (parent) {
@@ -473,6 +487,9 @@ class SourceValueFlow {
                 guards.push({condition:this.cell(parent.expression),truthy:child === parent.thenStatement});
             if (ts.isConditionalExpression(parent) && child !== parent.condition)
                 guards.push({condition:this.cell(parent.condition),truthy:child === parent.whenTrue});
+            if (ts.isCatchClause(parent) && child === parent.block) {
+                guards.push({condition:this.catchCondition(parent),truthy:true});
+            }
         }
         this.executionGuards.set(node,guards);return guards;
     }
@@ -517,6 +534,7 @@ class SourceValueFlow {
             const value = pending.pop()!;
             if (visited.has(value)) continue; visited.add(value);
             this.primitiveProofCache.delete(value);
+            this.primitiveKindCache.delete(value);
             this.primitiveReadyCache.delete(value);
             for (const user of value.users) this.schedule(user);
             for (const parent of this.primitiveProofParents.get(value) ?? []) pending.push(parent);
@@ -1025,7 +1043,7 @@ class SourceValueFlow {
             if (state.pending) return;
             if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
             if (!handler) return;
-            if (!state.proof.primitiveComplete) this.publish(handler, this.opaqueObject);
+            if (!state.proof.primitiveComplete && !this.primitiveNumericConversionSafe(input, conversion)) this.publish(handler, this.opaqueObject);
             for (const value of state.proof.values) {
                 try {NUMERIC_CONVERSIONS.get(conversion)!(value);} catch {this.publish(handler, this.opaqueObject);}
             }
@@ -1207,9 +1225,71 @@ class SourceValueFlow {
         return key.values.size > 0 && [...key.values].every(atom =>
             atom.tag === "abrupt" ||
             atom.tag === "primitive" && (typeof atom.value === "number" || typeof atom.value === "bigint") ||
-            atom.tag === "non-string" && atom.domain === "numeric" ||
+            atom.tag === "non-string" && !!atom.kinds && !(atom.kinds & ~KIND_NUMERIC) ||
             atom.tag === "text-operation" && (atom.operation === "coerce" ||
                 atom.operation === "numeric" && atom.numeric!.result !== "boolean" && atom.numeric!.conversion !== "default"));
+    }
+    /** Normal-value categories are independent of concrete value extent.
+     * Operand effects and Reference failures remain on their own graph edges. */
+    private primitiveKinds(root: Cell): number {
+        this.flushPrimitiveChanges();
+        const cached=this.primitiveKindCache.get(root);if(cached!==undefined)return cached;
+        const pending=[{cell:root,finish:false}],active=new Set<Cell>(),kinds=new Map<Cell,number>();
+        while(pending.length){
+            const task=pending.pop()!;
+            if(kinds.has(task.cell))continue;
+            const known=this.primitiveKindCache.get(task.cell);if(known!==undefined){kinds.set(task.cell,known);continue;}
+            if(!task.finish){
+                if(active.has(task.cell)){kinds.set(task.cell,KIND_ALL);continue;}
+                active.add(task.cell);pending.push({...task,finish:true});
+                for(const atom of task.cell.values)if(atom.tag==="text-operation")for(const part of atom.parts)pending.push({cell:part,finish:false});
+                continue;
+            }
+            active.delete(task.cell);let mask=0;
+            const numeric=(mask:number)=> (mask&KIND_BIGINT?KIND_BIGINT:0)|(mask&~(KIND_BIGINT|KIND_SYMBOL)?KIND_NUMBER:0);
+            for(const atom of task.cell.values){
+                if(atom.tag==="abrupt")continue;
+                if(atom.tag==="primitive")mask|=atom.value===null?KIND_NULL:({undefined:KIND_UNDEFINED,boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]!;
+                else if(atom.tag==="non-string")mask|=atom.kinds??(KIND_PRIMITIVE&~KIND_STRING);
+                else if(atom.tag==="unknown-string")mask|=KIND_STRING;
+                else if(atom.tag==="text-operation"){
+                    const parts=atom.parts.map(part=>kinds.get(part)??KIND_ALL);
+                    if(atom.operation==="prefix"||atom.operation==="numeric"&&atom.numeric!.result==="boolean")mask|=KIND_BOOLEAN;
+                    else if(atom.operation==="coerce")mask|=atom.conversion==="numeric"?numeric(parts[0]!):atom.conversion==="BigInt"?KIND_BIGINT:KIND_NUMBER;
+                    else if(atom.operation==="numeric"){
+                        if(atom.numeric!.result==="number")mask|=KIND_NUMBER;
+                        else if(atom.numeric!.conversion==="default"){
+                            if(parts.some(part=>part&KIND_STRING))mask|=KIND_STRING;
+                            const operands=parts.map(numeric);
+                            if(operands.every(part=>part&KIND_NUMBER))mask|=KIND_NUMBER;
+                            if(operands.every(part=>part&KIND_BIGINT))mask|=KIND_BIGINT;
+                        }else{
+                            const operands=parts.map(numeric);
+                            if(operands.every(part=>part&KIND_NUMBER))mask|=KIND_NUMBER;
+                            if(operands.every(part=>part&KIND_BIGINT))mask|=KIND_BIGINT;
+                        }
+                    }else mask|=KIND_STRING;
+                }else if(atom.tag==="unknown"||atom.tag==="pending-source")mask|=KIND_ALL;
+                else if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="operation"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")||atom.tag==="builtin"&&atom.normalResult!=="not-callable")mask|=KIND_FUNCTION;
+                else mask|=KIND_OBJECT;
+            }
+            kinds.set(task.cell,mask);
+        }
+        for(const [cell,mask]of kinds)this.primitiveKindCache.set(cell,mask);
+        return kinds.get(root)??KIND_ALL;
+    }
+    private primitiveNumericConversionSafe(input: Cell, conversion: string): boolean {
+        const kinds=this.primitiveKinds(input);
+        if(!kinds||kinds&(KIND_SYMBOL|KIND_OBJECT|KIND_FUNCTION))return false;
+        if(conversion==="BigInt")return !(kinds&~(KIND_BIGINT|KIND_BOOLEAN));
+        return conversion!=="length"||!(kinds&KIND_BIGINT);
+    }
+    private numericOperationCannotThrow(operation: SourceNumericOperation, inputs: readonly Cell[]): boolean {
+        if(operation.conversion==="none")return true;
+        if(operation.form==="update")return false;
+        const kinds=inputs.map(input=>this.primitiveKinds(input));
+        if(kinds.some(kinds=>!kinds||kinds&~(KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING)))return false;
+        return true;
     }
     private writeTarget(raw: ts.Expression, value: Cell, context: ts.Node, mode: "set"|"delete" = "set"): void {
         const target = unwrap(raw);
@@ -1754,7 +1834,16 @@ class SourceValueFlow {
             const completion = owner.completion = functionBodyCompletions(node.body);
             if (!completion.complete) {this.publish(owner.returns, this.unknown); this.publish(owner.throws, this.unknown);}
             for (const value of completion.returns) {
-                if (value) this.copy(this.cell(value), owner.returns);
+                if (value) {
+                    const input=this.cell(value),guards=this.guards(value);
+                    if(!guards.length)this.copy(input,owner.returns);
+                    else {
+                        let rule!:Rule;
+                        rule=this.rule([input,...guards.map(guard=>guard.condition)],()=>{
+                            if(this.guardsAllow(guards,rule))this.copy(input,owner.returns);
+                        });
+                    }
+                }
                 else this.publish(owner.returns, this.primitive(undefined));
             }
             if (completion.normal) this.publish(owner.returns, this.primitive(undefined));
@@ -1863,7 +1952,12 @@ class SourceValueFlow {
                 write = this.rule([converted[0]!], () => {
                     const state = this.primitiveState(converted[0]!, write, true);
                     if (state.pending) return;
-                    this.publish(stored, state.proof.primitiveComplete && !state.proof.values.length ? this.abrupt : this.numericValue);
+                    if(state.proof.primitiveComplete&&!state.proof.values.length)this.publish(stored,this.abrupt);
+                    else {
+                        const kinds=this.primitiveKinds(converted[0]!)&KIND_NUMERIC||KIND_NUMERIC;
+                        let value=this.numericValues.get(kinds);if(!value){value={tag:"non-string",kinds};this.numericValues.set(kinds,value);}
+                        this.publish(stored,value);
+                    }
                 });
             }
             const handler = this.exceptionHandlers.get(node);
@@ -1874,8 +1968,10 @@ class SourceValueFlow {
                     if (states.some(state => state.pending || state.proof.primitiveComplete && !state.proof.values.length)) return;
                     if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.onActive(node,()=>this.opaqueEffect(node));
                     if (!handler || operation.conversion === "none") return;
+                    if(operation.form==="update"||ts.isBinaryExpression(node)&&operation.assignment===node.operatorToken.kind)
+                        this.publish(handler,this.opaqueObject);
                     if (states.some(state => state.unresolved)) this.publish(handler,this.unknown);
-                    if (states.some(state => !state.proof.primitiveComplete)) this.publish(handler,this.opaqueObject);
+                    if (states.some(state => !state.proof.primitiveComplete) && !this.numericOperationCannotThrow(operation,converted)) this.publish(handler,this.opaqueObject);
                     for (const tuple of this.primitiveTuples(states.map(state => state.proof.values))) {
                         try {operation.evaluate(tuple);} catch {this.publish(handler,this.opaqueObject);}
                     }
@@ -1891,8 +1987,13 @@ class SourceValueFlow {
         }
         if (ts.isVoidExpression(node)) { this.publish(result, this.primitive(undefined)); return; }
         if (ts.isTypeOfExpression(node)) {
-            for (const value of ["undefined", "object", "boolean", "number", "bigint", "string", "symbol", "function"])
-                this.publish(result, this.text(value));
+            const operand=this.cell(node.expression);let rule!:Rule;
+            rule=this.rule([operand],()=>{
+                this.watchText(rule,operand);
+                const kinds=this.primitiveKinds(operand);
+                for(const [mask,name]of [[KIND_UNDEFINED,"undefined"],[KIND_NULL|KIND_OBJECT,"object"],[KIND_BOOLEAN,"boolean"],[KIND_NUMBER,"number"],[KIND_BIGINT,"bigint"],[KIND_STRING,"string"],[KIND_SYMBOL,"symbol"],[KIND_FUNCTION,"function"]] as const)
+                    if(kinds&mask)this.publish(result,this.text(name));
+            });
             return;
         }
         if (ts.isStringLiteralLike(node)) this.publish(result, this.text(node.text));
@@ -1902,23 +2003,23 @@ class SourceValueFlow {
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
             const ambient=this.isAmbientIdentifier(node);
-            if(ambient)this.copyRead(this.binding(node),result,node);
-            else this.copy(this.binding(node),result);
+            const binding=this.binding(node);
+            if(ambient)this.copyRead(binding,result,node);
+            else this.copy(binding,result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (ambient && !this.globalLexicals.has(node.text)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copyRead(this.globalBinding(node.text),result,node);
-                if (node.text !== "globalThis") {
-                    this.publish(this.globalReceiver,this.global);
-                    const owner=this.ordinaryOwner(this.global)!;
-                    let linked=false;
-                    this.rule([owner.shape],()=>{
-                        if(!linked && (owner.accessors.has(node.text) || owner.accessors.has(null))){
-                            linked=true;this.copy(this.property(this.globalReceiver,node.text,node),result);
-                        }
-                    });
-                }
+            }
+            if(node.text!=="globalThis"&&binding===this.globals.get(node.text)) {
+                this.publish(this.globalReceiver,this.global);
+                const owner=this.ordinaryOwner(this.global)!;let linked=false;
+                this.rule([owner.shape],()=>{
+                    if(!linked&&(owner.accessors.has(node.text)||owner.accessors.has(null))) {
+                        linked=true;this.copy(this.property(this.globalReceiver,node.text,node),result);
+                    }
+                });
             }
         } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
             const source = node.getSourceFile();
@@ -2080,13 +2181,21 @@ class SourceValueFlow {
         let rule: Rule;
         const guards = this.guards(node);
         rule = this.rule([callee, receiver, ...parts.map(part => part.cell), ...guards.map(guard => guard.condition)], () => {
-            if (!this.guardsAllow(guards,rule)) return;
             let constructors = this.invocations.get(rule);
             if (!constructors) { constructors = new Map(); this.invocations.set(rule, constructors); }
             constructors.clear();
             let evaluations = this.evaluationInvocations.get(rule);
             if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(rule,evaluations); }
             evaluations.clear();
+            if (!this.guardsAllow(guards,rule)) {
+                const unreachable=guards.some(guard=>{
+                    const proof=this.primitiveChoiceProof(guard.condition);
+                    return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
+                });
+                if(unreachable)for(const atom of callee.values)if(atom.tag==="operation"&&atom.operation==="eval")
+                    evaluations.set("unreachable",{node,operation:"eval",direct,source:null,unknown:false});
+                return;
+            }
             for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
             const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
                 ...this.arguments(parts,node).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
@@ -2632,6 +2741,10 @@ class SourceValueFlow {
             for (const [node, cell] of this.cells) if (!cell.values.size) {
                 const activation = this.enclosingActivation(node);
                 if (activation && !activation.active.values.size) continue;
+                if(this.guards(node).some(guard=>{
+                    const proof=this.primitiveChoiceProof(guard.condition);
+                    return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
+                })){this.publish(cell,this.abrupt);changed=true;continue;}
                 // [[Construct]] either throws or returns an Object. Its
                 // properties and conversion remain opaque, but eval retains
                 // the object unchanged without needing a source-text proof.
