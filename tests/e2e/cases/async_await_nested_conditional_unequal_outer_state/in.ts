@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { delay } from "../../helpers/virtual-delay";
 
 async function declaration(outer: boolean, inner: boolean): Promise<string> {
     let result = "declaration-initial";
